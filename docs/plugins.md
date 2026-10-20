@@ -526,7 +526,7 @@ command    = "import"     # one of its [[commands]]: run with the file's absolut
 - **A plugin never takes AutoDoc's own extensions:** `.md`, `.txt`, `.yaml`, `.yml`, `.mmd`, `.csv`,
   `.tsv` and the derived formats (`.html`, `.pdf`, `.docx`, …). So a note a plugin writes and opens
   never comes back to it.
-- **Two plugins claiming one extension:** the first in the Plugins list opens it.
+- **Two plugins claiming one extension:** the first in the Plugins list opens it. Manage plugins… shows the other's row with `opens .ipynb: shadowed by <name>`.
 - Creating a file (File › New file…, a draft's first save) opens it, and is not handed to a plugin.
 
 ### Calls (`calls = [...]`, protocol 3)

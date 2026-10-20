@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
@@ -42,6 +43,9 @@ type pluginEntry struct {
 	dir    string
 	m      manifest
 	reason string
+	// shadowed are the claims of its [open] an earlier plugin in the list opens instead (openerOf),
+	// as Manage plugins… says them: "opens .ipynb: shadowed by <name>"
+	shadowed []string
 }
 
 func (e pluginEntry) key() string {
@@ -95,7 +99,23 @@ func discoverPlugins(dir string) []pluginEntry {
 		}
 		out = append(out, *e)
 	}
+	for i := range out {
+		if out[i].reason != "" {
+			continue
+		}
+		for _, ext := range out[i].m.Open.Extensions {
+			if j := openerOf(out, ext); j != i && j >= 0 {
+				out[i].shadowed = append(out[i].shadowed, "opens "+ext+": shadowed by "+out[j].m.Name)
+			}
+		}
+	}
 	return out
+}
+
+// openerOf is the index of the plugin in list whose [open] claims ext (protocol 9, ADR 1792457255):
+// the first that runs; -1 when none does. A later claimant is shadowed.
+func openerOf(list []pluginEntry, ext string) int {
+	return slices.IndexFunc(list, func(e pluginEntry) bool { return e.reason == "" && slices.Contains(e.m.Open.Extensions, ext) })
 }
 
 // readPlugin reads one plugin's directory; nil when it holds no plugin.toml.

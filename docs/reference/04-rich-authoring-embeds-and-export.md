@@ -215,7 +215,7 @@ plan.lab/out/<cell key>/02.png     an image
 plan.lab/out/<cell key>/03.chart.json   a Vega-Lite chart (and .csv for a table)
 ```
 
-The cell key is a hash of the fence's language and its code, so a cell's outputs belong to that exact code: editing a cell hides its old outputs until it runs again, and a fence of another language holding the same text never shows them. The HTML preview and export draw each cell's outputs right after its fence, in name order; `--gui`'s Rendered View draws them under the fence, off the cursor (text, charts, tables and images). Opening an `.ipynb` hands it to the plugin, which writes the lab note beside it and opens that.
+The cell key is a hash of the fence's language and its code, so a cell's outputs belong to that exact code: editing a cell hides its old outputs until it runs again, and a fence of another language holding the same text never shows them. The HTML preview and export draw each cell's outputs right after its fence, in name order; `--gui`'s Rendered View draws them under the fence, off the cursor (text, every diagram and chart, tables and images). Opening an `.ipynb` hands it to the plugin, which writes the lab note beside it and opens that.
 
 ---
 

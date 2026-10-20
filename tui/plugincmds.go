@@ -208,14 +208,10 @@ func (pl *plugins) pluginEntry(target string) {
 	}
 }
 
-// opener is the plugin whose [open] claims p's extension (protocol 9, ADR 1792457255): the first in
-// the list that runs; false when none does.
+// opener is the plugin whose [open] claims p's extension (openerOf); false when none does.
 func (pl *plugins) opener(p string) (pluginEntry, bool) {
-	ext := kind.Ext(p)
-	for _, e := range pl.pluginList {
-		if e.reason == "" && slices.Contains(e.m.Open.Extensions, ext) {
-			return e, true
-		}
+	if i := openerOf(pl.pluginList, kind.Ext(p)); i >= 0 {
+		return pl.pluginList[i], true
 	}
 	return pluginEntry{}, false
 }

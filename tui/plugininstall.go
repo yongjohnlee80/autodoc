@@ -421,7 +421,11 @@ func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 	if source == "" {
 		source = "local: put in the folder by hand"
 	}
-	return rowOf{"key": m.e.dir, "name": m.e.label(), "place": pl.placement(m.e), "commit": m.commit, "source": source}
+	name := m.e.label()
+	if len(m.e.shadowed) > 0 {
+		name += " — " + strings.Join(m.e.shadowed, " · ")
+	}
+	return rowOf{"key": m.e.dir, "name": name, "place": pl.placement(m.e), "commit": m.commit, "source": source}
 }
 
 // managedRow is the manager's row i, as listed.

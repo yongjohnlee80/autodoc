@@ -4,6 +4,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"image"
 	_ "image/gif" // decoders: the Rendered view draws a PNG, a JPEG or a GIF
@@ -12,7 +13,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
@@ -66,36 +70,131 @@ func (r *embedRenderer) cellOutputs(lines []string, b guiwidget.Block) (note str
 	return note, lab.Outputs(os.DirFS(filepath.Dir(note)), lab.OutDir(note), lab.CellKey(lab.FenceLang(info), code))
 }
 
-// layCell lays out the fence b as golib does, then each output file under it, one under another,
-// as the block's picture. Only the first diagram or chart is asked of the host, which keeps one
-// diagram per block: any further one is laid out as its source.
+// layCell lays out the fence b as code, then each output file under it, one under another, as the
+// block's picture. The host keeps one diagram request per block, so the cell's diagrams and charts
+// are one request (cellDiagrams), and the fence itself, a cell in its kernel's language, asks none.
 func (r *embedRenderer) layCell(b guiwidget.Block, lines []string, note string, files []string, width float32, t *gui.TextShaper, th guiwidget.Theme, host guiwidget.DiagramHost) guiwidget.BlockLayout {
-	out := r.MarkdownRenderer.LayOut(b, lines, width, false, t, th, host)
+	out := r.MarkdownRenderer.LayOut(b, lines, width, false, t, th, nil)
 	under := pictureHeight(out) // golib's own picture under the fence's lines, which the stack takes first
-	var stack cellStack
-	if out.Picture != nil {
-		stack.add(out.Picture, out.PictureSize)
+	type output struct {
+		pic  imagePicture // an image's picture; otherwise md is the output as Markdown
+		md   string
+		part int // the index of its diagram or chart in parts; -1 for none
 	}
-	diagram := host
+	var outputs []output
+	var parts []guiwidget.DiagramRequest
 	for _, f := range files {
 		if pic, ok := r.image(note, f, width); ok {
-			stack.add(pic, pic.size)
+			outputs = append(outputs, output{pic: pic, part: -1})
 			continue
 		}
 		md, ok := export.OutputMarkdown(note, f, embedTableRows)
 		if !ok {
 			continue
 		}
-		bl := r.layEmbed(b, md, width, t, th, diagram)
-		if lang := strings.TrimLeft(strings.SplitN(md, "\n", 2)[0], "`"); lang == "mermaid" || lang == "vega-lite" {
-			diagram = nil
+		o := output{md: md, part: -1}
+		if lang, src, ok := diagramSource(md); ok {
+			o.part = len(parts)
+			parts = append(parts, guiwidget.DiagramRequest{Lang: lang, Src: src, Width: width, Scale: t.Scale(), Theme: th})
 		}
-		stack.add(bl.Picture, bl.PictureSize)
+		outputs = append(outputs, o)
+	}
+	var drawn cellAnswers
+	if len(parts) > 0 && host != nil && r.diagrams != nil {
+		drawn, _ = host.Diagram(cellDiagrams{d: r.diagrams, parts: parts}, b, cellRequest(parts)).Pic.(cellAnswers)
+	}
+	var stack cellStack
+	if out.Picture != nil {
+		stack.add(out.Picture, out.PictureSize)
+	}
+	for _, o := range outputs {
+		switch {
+		case o.pic.img != nil:
+			stack.add(o.pic, o.pic.size)
+		case o.part >= 0 && o.part < len(drawn) && drawn[o.part].State != guiwidget.Declined && drawn[o.part].Pic != nil:
+			stack.add(drawn[o.part].Pic, drawn[o.part].Size)
+		default: // text, a table, or a diagram not drawn (yet): its Markdown as golib lays it
+			bl := r.layEmbed(b, o.md, width, t, th, nil)
+			stack.add(bl.Picture, bl.PictureSize)
+		}
 	}
 	out.Picture, out.PictureSize = stack, gui.Size{W: width, H: stack.height}
 	out.Height += stack.height - under
 	return out
 }
+
+// cellDiagramLang is the language of a cell's request for its outputs' diagrams: no fence's, so the
+// host never shows another block's picture for it while it is pending.
+const cellDiagramLang = "autodoc/lab-cell"
+
+// cellRequest is a cell's one request of the host for its diagrams and charts: its source is every
+// part's, so a rerun's changed outputs are a new request.
+func cellRequest(parts []guiwidget.DiagramRequest) guiwidget.DiagramRequest {
+	var src strings.Builder
+	for _, p := range parts {
+		src.WriteString(p.Lang + " " + strconv.Itoa(len(p.Src)) + "\n" + p.Src)
+	}
+	return guiwidget.DiagramRequest{Lang: cellDiagramLang, Src: src.String(), Width: parts[0].Width, Scale: parts[0].Scale, Theme: parts[0].Theme}
+}
+
+// cellDiagrams asks d for each of a cell's diagrams and charts under the host's one request: its
+// context and its ready. It calls ready once, when the last pending part is ready: the host then
+// asks again and cancels this request's context, which would withdraw a part still being laid out.
+type cellDiagrams struct {
+	d     guiwidget.Diagrammer
+	parts []guiwidget.DiagramRequest
+}
+
+func (c cellDiagrams) Diagram(ctx context.Context, _ guiwidget.DiagramRequest, ready func()) guiwidget.DiagramAnswer {
+	answers := make(cellAnswers, len(c.parts))
+	var left atomic.Int32
+	left.Store(1) // the asking's own: no part's ready ends the wait while parts are still being asked
+	done := func() {
+		if left.Add(-1) == 0 {
+			ready()
+		}
+	}
+	state := guiwidget.Ready
+	for i, p := range c.parts {
+		left.Add(1)
+		var once sync.Once
+		answers[i] = c.d.Diagram(ctx, p, func() { once.Do(done) })
+		if answers[i].State == guiwidget.Pending {
+			state = guiwidget.Pending
+		} else {
+			left.Add(-1) // answered: its ready is never called
+		}
+	}
+	if state == guiwidget.Pending {
+		done()
+	}
+	return guiwidget.DiagramAnswer{State: state, Pic: answers, Size: answers.size()}
+}
+
+// cellAnswers are a cell's parts' answers, in its outputs' order: the picture the host keeps for the
+// cell, which layCell takes apart to draw each diagram under its own output.
+type cellAnswers []guiwidget.DiagramAnswer
+
+func (a cellAnswers) drawn() cellStack {
+	var stack cellStack
+	for _, p := range a {
+		if p.Pic != nil && p.State != guiwidget.Declined {
+			stack.add(p.Pic, p.Size)
+		}
+	}
+	return stack
+}
+
+func (a cellAnswers) size() gui.Size {
+	var s gui.Size
+	for _, it := range a.drawn().items {
+		s.W, s.H = max(s.W, it.size.W), s.H+it.size.H
+	}
+	return s
+}
+
+// Paint draws the parts drawn, one under another; layCell draws them among the cell's other outputs.
+func (a cellAnswers) Paint(c gui.Canvas) { a.drawn().Paint(c) }
 
 // pictureHeight is the height of the picture golib laid out under a block's lines; the block's height
 // counts it, and the stack replaces it.

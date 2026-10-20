@@ -4,6 +4,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -11,7 +12,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/lab"
 )
@@ -111,6 +114,112 @@ func TestAnEmbeddedImageIsDrawn(t *testing.T) {
 	}
 	if _, on := layOut(r, lines, 2, true, nil); on.Picture != nil {
 		t.Errorf("the image line on the cursor drew %T", on.Picture)
+	}
+}
+
+// partsDiagrammer draws each diagram at once, a picture as high as its source is long, but for those
+// hold names, which it answers Pending, their ready kept (and called while asked, when during is set).
+type partsDiagrammer struct {
+	hold    func(guiwidget.DiagramRequest) bool
+	during  bool
+	asked   []guiwidget.DiagramRequest
+	readies []func()
+}
+
+func (d *partsDiagrammer) Diagram(_ context.Context, req guiwidget.DiagramRequest, ready func()) guiwidget.DiagramAnswer {
+	d.asked = append(d.asked, req)
+	if d.hold == nil || !d.hold(req) {
+		return guiwidget.DiagramAnswer{State: guiwidget.Ready, Pic: partPic(req.Src), Size: gui.Size{W: 100, H: float32(len(req.Src))}}
+	}
+	d.readies = append(d.readies, ready)
+	if d.during {
+		ready()
+	}
+	return guiwidget.DiagramAnswer{State: guiwidget.Pending}
+}
+
+type partPic string
+
+func (partPic) Paint(gui.Canvas) {}
+
+// forwardHost asks the Diagrammer at once, as the window's host does, and keeps what it was asked.
+type forwardHost struct{ asked []guiwidget.DiagramRequest }
+
+func (h *forwardHost) Diagram(d guiwidget.Diagrammer, _ guiwidget.Block, req guiwidget.DiagramRequest) guiwidget.DiagramAnswer {
+	h.asked = append(h.asked, req)
+	return d.Diagram(context.Background(), req, func() {})
+}
+
+// Every diagram and chart a cell's run left is drawn under its fence, each in its output's place
+// (Lector #264 r0): the host is asked once for the cell, its one request per block, and the fence, a
+// cell, asks for none of its own.
+func TestEveryDiagramOfACellIsDrawn(t *testing.T) {
+	key := lab.CellKey("python", "print(1)")
+	out := "plan.lab/out/" + key + "/"
+	notes := labNote(t, "plan.lab.md", map[string][]byte{
+		out + "01.mmd":        []byte("graph TD\n  A-->B"),
+		out + "02.txt":        []byte("1\n"),
+		out + "03.mmd":        []byte("graph TD\n  C-->D-->E"),
+		out + "04.chart.json": []byte(`{"mark": "bar"}`),
+	})
+	d, host := &partsDiagrammer{}, &forwardHost{}
+	r := notes.Renderer(d)(NoteRendererSpec{tuidecl.MarkdownSpec{Mermaid: true}})
+	_, bl := layOut(r, labLines, 0, false, host)
+	if len(host.asked) != 1 || host.asked[0].Lang != cellDiagramLang {
+		t.Fatalf("the host was asked %+v; want the cell's one request", host.asked)
+	}
+	stack, ok := bl.Picture.(cellStack)
+	if !ok || len(stack.items) != 4 {
+		t.Fatalf("the cell's picture: %T %+v; want its four outputs", bl.Picture, bl.Picture)
+	}
+	for i, want := range map[int]partPic{0: "graph TD\n  A-->B", 2: "graph TD\n  C-->D-->E", 3: `{"mark": "bar"}`} {
+		if got, ok := stack.items[i].pic.(partPic); !ok || got != want || stack.items[i].size.H != float32(len(want)) {
+			t.Errorf("output %d: %T %q at %+v; want the picture of %q", i+1, stack.items[i].pic, got, stack.items[i].size, want)
+		}
+	}
+	if _, ok := stack.items[1].pic.(laidBlock); !ok {
+		t.Errorf("the text output: %T; want it laid out as text", stack.items[1].pic)
+	}
+}
+
+// A cell's diagrams are one request of the host: Ready when every part is, and otherwise Pending,
+// its ready called once, when the last part pending is ready (and not before), whenever it is.
+func TestACellsDiagramsAreReadyTogether(t *testing.T) {
+	parts := []guiwidget.DiagramRequest{{Lang: "mermaid", Src: "a"}, {Lang: "vega-lite", Src: "{}"}, {Lang: "mermaid", Src: "c"}}
+	ask := func(d *partsDiagrammer) (guiwidget.DiagramAnswer, *int) {
+		calls := new(int)
+		return cellDiagrams{d: d, parts: parts}.Diagram(context.Background(), cellRequest(parts), func() { *calls++ }), calls
+	}
+
+	a, calls := ask(&partsDiagrammer{})
+	if drawn, _ := a.Pic.(cellAnswers); a.State != guiwidget.Ready || len(drawn) != 3 || *calls != 0 || a.Size.H != 4 {
+		t.Errorf("every part drawn at once: %v %+v, ready called %d times", a.State, a.Pic, *calls)
+	}
+
+	d := &partsDiagrammer{hold: func(r guiwidget.DiagramRequest) bool { return r.Lang == "mermaid" }}
+	a, calls = ask(d)
+	drawn, _ := a.Pic.(cellAnswers)
+	if a.State != guiwidget.Pending || len(drawn) != 3 || drawn[1].State != guiwidget.Ready || len(d.readies) != 2 {
+		t.Fatalf("two parts pending: %v %+v, %d readies", a.State, drawn, len(d.readies))
+	}
+	d.readies[0]()
+	d.readies[0]()
+	if *calls != 0 {
+		t.Fatalf("ready called with a part still pending")
+	}
+	d.readies[1]()
+	if *calls != 1 {
+		t.Errorf("ready called %d times once every part was ready; want once", *calls)
+	}
+
+	_, calls = ask(&partsDiagrammer{hold: func(guiwidget.DiagramRequest) bool { return true }, during: true})
+	if *calls != 1 {
+		t.Errorf("parts ready while asked: ready called %d times; want once", *calls)
+	}
+
+	other := []guiwidget.DiagramRequest{{Lang: "mermaid", Src: "a\n"}, {Lang: "vega-lite", Src: "{}"}, {Lang: "mermaid", Src: "c"}}
+	if cellRequest(parts) == cellRequest(other) {
+		t.Error("two cells' diagrams are one request")
 	}
 }
 

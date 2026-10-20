@@ -247,17 +247,27 @@ func (r *embedRenderer) embeddedImage(lines []string, b guiwidget.Block, width f
 // ready, or when it is declined (a chart that is not JSON), md is laid out as golib lays it, the
 // source as code.
 func (r *embedRenderer) layEmbed(b guiwidget.Block, md string, width float32, t *gui.TextShaper, th guiwidget.Theme, host guiwidget.DiagramHost) guiwidget.BlockLayout {
-	injected := strings.Split(md, "\n")
-	if lang := strings.TrimLeft(injected[0], "`"); (lang == "mermaid" || lang == "vega-lite") && host != nil && r.diagrams != nil && len(injected) > 2 {
-		src := strings.Join(injected[1:len(injected)-1], "\n")
+	if lang, src, ok := diagramSource(md); ok && host != nil && r.diagrams != nil {
 		a := host.Diagram(r.diagrams, b, guiwidget.DiagramRequest{Lang: lang, Src: src, Width: width, Scale: t.Scale(), Theme: th})
 		if a.State != guiwidget.Declined && a.Pic != nil {
 			return guiwidget.BlockLayout{Picture: a.Pic, PictureSize: a.Size, Height: a.Size.H}
 		}
 	}
 	// no host: the lines are not the buffer's, so no diagram is asked for them
+	injected := strings.Split(md, "\n")
 	bl := r.MarkdownRenderer.LayOut(guiwidget.Block{From: 0, To: len(injected)}, injected, width, false, t, th, nil)
 	return guiwidget.BlockLayout{Picture: laidBlock{bl: bl, width: width}, PictureSize: gui.Size{W: width, H: bl.Height}, Height: bl.Height}
+}
+
+// diagramSource is the language and source of md when it is a diagram's or a chart's fence, as
+// export.EmbedMarkdown writes one.
+func diagramSource(md string) (lang, src string, ok bool) {
+	lines := strings.Split(md, "\n")
+	lang = strings.TrimLeft(lines[0], "`")
+	if (lang != "mermaid" && lang != "vega-lite") || len(lines) <= 2 {
+		return "", "", false
+	}
+	return lang, strings.Join(lines[1:len(lines)-1], "\n"), true
 }
 
 // laidBlock paints a block golib laid out, as the editor paints its blocks: its ground, then each
