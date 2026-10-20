@@ -7,13 +7,13 @@ package tui
 
 const prefAgentEdge = "tui.agent.edge"
 
-// agentEdges are where the agent opens, in the order the Preferences dialog offers them; the top
+// agentEdges are where the agent opens, in the order the Preferences dialog offers them; the bottom
 // first, as it opens by default.
-var agentEdges = []string{"top", "bottom", "left", "right", "center"}
+var agentEdges = []string{"bottom", "top", "left", "right", "center"}
 
-var agentEdgeLabels = []string{"top", "bottom", "left", "right", "centre"}
+var agentEdgeLabels = []string{"bottom", "top", "left", "right", "centre"}
 
-const defaultAgentEdge = "top"
+const defaultAgentEdge = "bottom"
 
 // agentDefault is a place's size and length before the user sets them: half the Window across the
 // edge and its full length along it, so an agent's CLI has room; 80 by 80 centred.
