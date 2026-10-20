@@ -16,12 +16,14 @@ Window Splits,Ctrl+w s / :split,Normal,Horizontal Split,Split current editor win
 Window Splits,Ctrl+w h/j/k/l,Normal,Focus Split,Move focus left or down or up or right across splits and docked panels
 Window Splits,Ctrl+w q / Ctrl+w =,Normal,Close / Balance,Close active split window or equalize split dimensions
 Buffer Tabs,gt / gT,Normal,Next / Prev Tab,Cycle forward or backward through open multi-buffer tabs
-Buffer Tabs,SPC b d,Normal,Close Buffer,Close current buffer tab (prompts if unsaved modifications exist)
-Leader Chords,SPC f,Normal,Find Files,Open fuzzy file picker across the active workspace
-Leader Chords,SPC s,Normal,Hybrid Search,Open live BM25 + Vector + Frontmatter query picker
-Leader Chords,SPC o,Normal,Document Outline,Focus or toggle the heading hierarchy Outline panel
-Leader Chords,SPC r,Normal,Relations Inspector,Focus or toggle the Backlinks and Outgoing wikilinks panel
-Leader Chords,SPC t,Normal,Todo Board,Focus or toggle the .todo-list task panel
+Buffer Tabs,SPC B,Normal,Switch Buffer,Pick one of the open buffers
+Buffer Tabs,SPC C / :bd,Normal,Close Buffer,Close the shown buffer (asks about unsaved changes)
+Leader Chords,SPC / or SPC SPC,Normal,Search,Search the workspace (full text / links / backlinks / frontmatter / embeddings)
+Leader Chords,SPC o,Normal,Open a Document,A filter over the workspace's files with a preview
+Leader Chords,SPC f,Normal,Open a File Anywhere,The file dialog: any file on the machine
+Leader Chords,SPC O,Normal,Document Outline,List the file's headings; Enter jumps to one
+Leader Chords,SPC l,Normal,Relations,Focus or toggle the links panel: the note's links and backlinks
+Leader Chords,SPC x,Normal,Todo Board,Focus or toggle the .todo-list task panel
 Leader Chords,SPC e,Normal,Files Explorer,Focus or toggle the left workspace Files tree panel
 Leader Chords,SPC `,Normal,Terminal Tabs,Toggle bottom embedded PTY TerminalTabs drawer
 Rendered View,Ctrl+T,Normal / Insert,Toggle Rendered View,Switch between Markdown source and the native Rendered View in --gui (Mermaid / Vega-Lite / CSV)

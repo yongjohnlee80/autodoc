@@ -1,7 +1,6 @@
 flowchart LR
     subgraph LeftDock["Left Dock Slot (Collapsible)"]
         FILES["Files Tree Panel (Workspace Explorer)"]
-        OUTLINE["Outline Panel (Heading Hierarchy)"]
     end
 
     subgraph CenterStage["Center Workspace Stage"]
@@ -12,13 +11,12 @@ flowchart LR
 
     subgraph RightDock["Right Dock Slot (Inspector)"]
         REL["Relations Panel (Backlinks / Outgoing / 2-Hop Graph)"]
-        PREV["Live Preview & Rendered Embed Inspector"]
+        PREV["HTML Preview (SPC H)"]
         CARDS["Lua Plugin Cards & Frontmatter Schema Diagnostics"]
     end
 
     TABS --> PAGE
     FILES --> PAGE
-    OUTLINE --> PAGE
     PAGE --> REL
     PAGE --> PREV
     PAGE --> CARDS
