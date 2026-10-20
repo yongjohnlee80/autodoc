@@ -234,9 +234,10 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 		return
 	}
 	r := pl.running[key]
-	if e.m.Card() && id == pluginToggle && r != nil && !r.hidden {
+	if e.m.Card() && id == pluginToggle && r != nil && !r.hidden && pl.c.PanelShown(cardPanelID(e.m.Name)) {
 		// the toggle hides a shown card, its plugin running on, signed in (ADR 1792300990 §4.1);
-		// Plugins › Turn off is the way to stop it
+		// Plugins › Turn off is the way to stop it. A card the dock hid is not shown: the toggle
+		// shows it again, as the plugin's other commands do
 		pl.hideCard(r)
 		return
 	}

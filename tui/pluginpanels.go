@@ -184,12 +184,15 @@ func (pl *plugins) syncCard(name string) {
 	pl.c.Set("App."+id+"Length", length)
 }
 
-// showCard opens the card's panel, its plugin running: focused, when focus says so. A panel already
-// open stays as it is but for the focus.
+// showCard opens the card's panel, its plugin running: focused, when focus says so. A panel the dock
+// hid is shown again as it was (a minimized Drawer's open restores it), and one shown stays as it is
+// but for the focus.
 func (pl *plugins) showCard(r *pluginRun, focus bool) {
 	id := cardPanelID(r.e.m.Name)
 	if !pl.c.PanelOpen(id) {
 		pl.syncCard(r.e.m.Name)
+	}
+	if !pl.c.PanelShown(id) {
 		pl.c.Keep(pl.c.View(id, "open"))
 	}
 	if focus {

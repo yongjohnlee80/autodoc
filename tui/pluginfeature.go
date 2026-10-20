@@ -298,6 +298,9 @@ type pluginHost interface {
 	Keep(err error)
 	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
 	PanelOpen(id string) bool
+	// PanelShown reports whether panel id is open and not hidden by the dock (a minimized panel is
+	// open, and shown by its open again)
+	PanelShown(id string) bool
 	// DockPanel forgets a panel's floating rectangle: a card's, moved to another edge
 	DockPanel(id string)
 	// PageSize is the page's size in cells, as last laid out; 0 before its first layout. A card's
@@ -367,6 +370,8 @@ func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
 }
 func (c core) BrowseFolder() string { return c.h.browseFolder() }
+
+func (c core) PanelShown(id string) bool { return c.h.panelOpen[id] && !c.h.panelHidden(id) }
 
 func (c core) PageSize() (w, h int) {
 	ed, ok := c.h.editor.(interface{ Context() *tuicore.Context })

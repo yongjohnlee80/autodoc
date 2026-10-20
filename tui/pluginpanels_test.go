@@ -565,3 +565,31 @@ func TestACardViewBetweenRunsDrawsNothingAndTakesNothing(t *testing.T) {
 		t.Fatal("the view still shows a run that went")
 	}
 }
+
+// A card the dock hid is shown again by its plugin's commands, the toggle among them: the dock's
+// hide is a minimize, the panel still open, and a command that brings the card up restores it, as
+// the dock's own icon does. The toggle does not close a card the dock hid.
+func TestACardTheDockHidComesBackForItsCommands(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n"+
+		"[[commands]]\nid = \"again\"\ntitle = \"Run again\"\nkey = \"a\"\n")
+	_, r, _ := cardTUI(t, dir, nil)
+	run := r.openPlugin("card")
+	r.waitShown(t, "open ")
+	id := cardPanelID("card")
+	hide := func() {
+		onLoop(r, func() bool { r.h.hidePanel(id); return true }) // the dock's click on a shown card
+		r.s.WaitFor(t, "hidden by the dock", func(string) bool { return r.hidden(id) })
+	}
+
+	hide()
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("card", "again"); return true })
+	r.s.WaitFor(t, "shown for its command", func(string) bool { return !r.hidden(id) && r.panelShown("card") })
+
+	hide()
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("card", pluginToggle); return true })
+	r.s.WaitFor(t, "shown for its toggle, not closed", func(string) bool { return !r.hidden(id) && r.panelShown("card") })
+	if onLoop(r, func() *pluginRun { return r.h.plugins.running["card"] }) != run {
+		t.Fatal("bringing the card back started its plugin again")
+	}
+}
