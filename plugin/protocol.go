@@ -74,6 +74,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -185,21 +186,41 @@ type Position struct{ Line, Col int }
 type Range struct{ Start, End Position }
 
 // Document is plugin.document: the note open in the editor, as it stands, saved or not. Path is ""
-// when none is open. TooLarge says the note was too large to send: Path, Workspace and Version are
-// set, and the rest is empty. Version rises with every edit, so a plugin can drop a stale answer.
+// when none is open. TooLarge says the note was too large to send: Path, Workspace, Root and Version
+// are set, and the rest is empty. Version rises with every edit, so a plugin can drop a stale answer.
 type Document struct {
+	// Path is the note's path in its workspace, a slash path under Root; the absolute path of a
+	// file outside every workspace, whose Workspace and Root are ""; "" for a draft
 	Path, Workspace string
-	Text            string
-	Cursor          Position
-	Selection       []Range
-	Version         int
-	TooLarge        bool
+	// Root is the workspace's folder on this machine, absolute: what a plugin reading or writing
+	// beside the note joins Path to (File). "" outside every workspace, and from a host that does
+	// not send it (one before ADR 1792457255's lab files).
+	Root      string
+	Text      string
+	Cursor    Position
+	Selection []Range
+	Version   int
+	TooLarge  bool
 	// CursorByte and SelectionBytes are Cursor and Selection as byte offsets into Text, each
 	// selection range [start, end): the host counts them from the same grapheme clusters as the
 	// columns, so a plugin slicing Text never counts clusters itself. Sent from protocol 4 on;
 	// before it they are 0 and nil.
 	CursorByte     int
 	SelectionBytes [][2]int
+}
+
+// File is the note's file on this machine: Root joined with Path, or Path when it is absolute (a file
+// outside every workspace); "" for a draft, and for a workspace's note whose Root was not sent.
+func (d Document) File() string {
+	switch {
+	case d.Path == "":
+		return ""
+	case filepath.IsAbs(d.Path):
+		return d.Path
+	case d.Root == "":
+		return ""
+	}
+	return filepath.Join(d.Root, filepath.FromSlash(d.Path))
 }
 
 // Key is a key typed into the dialog. Key is its text for a printable key (" " for Space), or one of
@@ -277,6 +298,9 @@ func DocumentParamsAt(protocol int, d Document) []any { return one(documentWire(
 
 func documentWire(protocol int, d Document) map[string]any {
 	m := map[string]any{"path": d.Path, "workspace": d.Workspace, "version": d.Version}
+	if d.Root != "" {
+		m["root"] = d.Root // a key an older plugin ignores, in every protocol's document
+	}
 	if d.TooLarge {
 		m["too_large"] = true
 		return m
@@ -587,7 +611,7 @@ func readDocument(m map[string]any) (Document, error) {
 	if !ok {
 		return Document{}, fmt.Errorf("%w: plugin.document wants version", ErrParams)
 	}
-	d := Document{Path: str(m, "path"), Workspace: str(m, "workspace"), Version: v, TooLarge: flag(m, "too_large")}
+	d := Document{Path: str(m, "path"), Workspace: str(m, "workspace"), Root: str(m, "root"), Version: v, TooLarge: flag(m, "too_large")}
 	if d.TooLarge {
 		return d, nil
 	}

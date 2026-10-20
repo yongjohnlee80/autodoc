@@ -9,7 +9,7 @@ Plugin -> Host,host.close / plugin.close,1,"{}","Requests surface close or initi
 Manifest,[dialog] modal = false,2,"boolean (default true)","Turns a dialog into a non-modal docked card panel alongside the editor"
 Manifest,kind = service,2,"start = use | launch","Runs headless without a UI surface; started on first command/feed or at TUI launch"
 Host -> Plugin,plugin.focus,2,"{focused}","Notifies a docked card when it acquires or releases keyboard focus"
-Host -> Plugin,plugin.document,2,"{path, workspace, text, cursor, selection, version, too_large}","Sent on start and 300ms after editing/cursor pause under [feed] document = true"
+Host -> Plugin,plugin.document,2,"{path, workspace, root, text, cursor, selection, version, too_large}","Sent on start and 300ms after editing/cursor pause under [feed] document = true"
 Host -> Plugin,plugin.command,2,"{id} (or {id, document} in P4+)","Fires when user invokes a [[commands]] entry from SPC p or the Plugins menu"
 Manifest,calls = [...],3,"list of exact command IDs","Whitelists AutoDoc catalog commands (e.g. file.save, buffer.new) the plugin may call"
 Plugin -> Host,host.call / plugin.result,3,"{call, id, args} -> {call, ok, error}","Executes a whitelisted host command on the UI loop and returns matched result by call number"
