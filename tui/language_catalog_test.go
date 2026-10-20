@@ -68,8 +68,10 @@ func goTableText(t *testing.T) map[string]string {
 			put("autodoc.choice."+slugOf(l), l)
 		}
 	}
-	for n, l := range themeMenuLabels {
-		put("autodoc.theme."+n, l)
+	for _, l := range themes.MenuLabels() {
+		if l.Text != l.Name {
+			put("autodoc.theme."+l.Name, l.Text)
+		}
 	}
 	put("autodoc.help.keys", helpKeys)
 	put("autodoc.help.rest", helpRest)

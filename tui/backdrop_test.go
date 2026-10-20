@@ -71,16 +71,12 @@ func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
 	r.keys(t, decltest.Alt('o'))
 	r.s.WaitForText(t, "Editor mode")
 	r.keys(t, key('t'))
-	for _, n := range themes.Names() {
-		label, ok := themeMenuLabels[n]
-		if !ok {
-			label = n
-		}
-		r.s.WaitForText(t, strings.ReplaceAll(label, "&", ""))
+	labels := themes.MenuLabels()
+	for _, l := range labels {
+		r.s.WaitForText(t, strings.ReplaceAll(l.Text, "&", ""))
 	}
-	// the last golib names, a theme added after the first five once golib ships more
-	last := themes.Names()[len(themes.Names())-1]
-	label := themeMenuLabels[last]
+	// the last golib lists, a theme added after the first five once golib ships more
+	last, label := labels[len(labels)-1].Name, labels[len(labels)-1].Text
 	amp := strings.Index(label, "&")
 	if amp < 0 || amp+1 >= len(label) {
 		t.Fatalf("%s's menu label %q has no access key", last, label)
