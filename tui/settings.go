@@ -185,11 +185,9 @@ func asText(stored []string) (text, derived []string) {
 	return text, derived
 }
 
-// textsNote says which stored text types the Edit tab dropped, and why; "" for none. It is in
-// English: the dialog's is textsNoteIn's, in the UI's language.
-func textsNote(derived []string) string { return textsNoteIn(inEnglish{}, derived) }
-
-func textsNoteIn(t wording, derived []string) string {
+// textsNote says which stored text types the Edit tab dropped, and why; "" for none. It is in t's
+// language.
+func textsNote(t wording, derived []string) string {
 	if len(derived) == 0 {
 		return ""
 	}
@@ -668,7 +666,7 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	}
 	h.set("App.settingsProviderState", providerState)
 	_, dropped := asText(w.textExtensions)
-	h.set("App.settingsTextsNote", textsNoteIn(core{h}, dropped))
+	h.set("App.settingsTextsNote", textsNote(core{h}, dropped))
 	h.set("App.settingsTextsNoted", len(dropped) > 0)
 	h.set("App.settingsDocsOffered", len(base.derived) > 0)
 	h.set("App.settingsDocsLabel", h.trf("autodoc.text.settings.documents", strings.Join(base.derived, ", ")))
@@ -676,7 +674,7 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	// short, so the files frame fits: the excludes code brings are written where the user sees
 	// them, in the exclude field
 	h.set("App.settingsCodeLabel", h.trf("autodoc.text.settings.code", strings.Join(base.registered, ", ")))
-	h.set("App.settingsTodoNote", todoExcludedNoteIn(core{h}, w))
+	h.set("App.settingsTodoNote", todoExcludedNote(core{h}, w))
 	h.set("App.settingsTodoNoted", len(w.todoExcluded) > 0)
 	h.set("App.settingsDestState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.destConn.where(core{h})))
 	h.set("App.settingsSourceState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.source.where(core{h})))
@@ -923,12 +921,9 @@ func (h *Host) saved(name string, c map[string]any) {
 }
 
 // todoExcludedNote says which exclude patterns keep a todo store of w out of the index (ADR
-// 1792015212 §2.3): its tasks open in no workspace, without relations; "" for none.
-//
-// It is in English: the dialog's is todoExcludedNoteIn's, in the UI's language.
-func todoExcludedNote(w wsInfo) string { return todoExcludedNoteIn(inEnglish{}, w) }
-
-func todoExcludedNoteIn(t wording, w wsInfo) string {
+// 1792015212 §2.3): its tasks open in no workspace, without relations; "" for none. It is in t's
+// language.
+func todoExcludedNote(t wording, w wsInfo) string {
 	if len(w.todoExcluded) == 0 {
 		return ""
 	}
@@ -973,13 +968,9 @@ func settingsArgs(fn func(settingsForm)) Command {
 // ---- the manager's right-hand pane ----
 
 // managerDetail is workspace w's settings as the manager shows them beside the list: its Edit
-// settings, then its Advanced ones; the databases only where the edition offers them. It is in
-// English: the manager's is managerDetailIn's, in the UI's language.
-func managerDetail(w wsInfo, databases bool, registered []string) string {
-	return managerDetailIn(inEnglish{}, w, databases, registered)
-}
-
-func managerDetailIn(t wording, w wsInfo, databases bool, registered []string) string {
+// settings, then its Advanced ones; the databases only where the edition offers them. It is in t's
+// language.
+func managerDetail(t wording, w wsInfo, databases bool, registered []string) string {
 	none := func(s string) string {
 		if s == "" {
 			return t.Tr("autodoc.text.settings.none")
@@ -1052,5 +1043,5 @@ func (h *Host) showManagerDetail() {
 		h.set("App.managerDetail", h.tr("autodoc.text.settings.no_workspace_add_makes_one"))
 		return
 	}
-	h.set("App.managerDetail", managerDetailIn(core{h}, w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
+	h.set("App.managerDetail", managerDetail(core{h}, w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
 }

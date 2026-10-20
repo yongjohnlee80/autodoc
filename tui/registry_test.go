@@ -212,7 +212,7 @@ func TestTheAuditLineComparesFullCommits(t *testing.T) {
 		{&e, regC3, notAt},
 		{&never, regC2, "never audited"},
 	} {
-		if got := auditLine(c.e, c.commit); got != c.want {
+		if got := auditLine(inEnglish{}.Trf, c.e, c.commit); got != c.want {
 			t.Errorf("%.12s: %q, want %q", c.commit, got, c.want)
 		}
 	}
@@ -228,13 +228,13 @@ func TestTheInstallCardsSayTheAuditAboveTheRisk(t *testing.T) {
 	}
 	e := testEntry("plugin", "echo", "https://github.com/example/echo", regC2)
 	c := &candidate{m: manifest{Name: "echo", Command: []string{"x"}}, repo: e.Repo, commit: regC2, entry: &e}
-	q := pluginQuestion(c, "Echo")
+	q := pluginQuestion(inEnglish{}.Trf, c, "Echo")
 	line := "✓ audited by claude-opus-5-5 on 2026-10-10 at this commit"
 	if !strings.Contains(q, "at    2222222\n") || !strings.Contains(q, line+"\n\n"+pluginRisk) {
 		t.Errorf("the audited card:\n%s", q)
 	}
 	c.entry = nil
-	if q := pluginQuestion(c, "Echo"); strings.Contains(q, "audited") || !strings.Contains(q, "\n\n"+pluginRisk) {
+	if q := pluginQuestion(inEnglish{}.Trf, c, "Echo"); strings.Contains(q, "audited") || !strings.Contains(q, "\n\n"+pluginRisk) {
 		t.Errorf("a card for a repo the registry does not list:\n%s", q)
 	}
 }

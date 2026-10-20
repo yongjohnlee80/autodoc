@@ -182,6 +182,9 @@ func (h *Host) state() map[string]any {
 	for k, v := range h.languageState() {
 		st[k] = v
 	}
+	for _, k := range []string{"App.htmlPreviewTitle", "App.settingsTitle", "App.arrangeTitle", "App.managerHelp", "App.fileNameError"} {
+		st[k] = "" // each dialog's opener composes it (languageState)
+	}
 	for k, v := range h.aboutState() {
 		st[k] = v
 	}
@@ -192,19 +195,15 @@ func (h *Host) state() map[string]any {
 	return st
 }
 
-// languageState is the text state starts with, in the UI's language, until what it titles opens
-// and says its own: a switch sets it again (languageChanged), so a dialog not yet opened, or one
-// shown before its first answer, speaks the new language.
+// languageState is the text state starts with that nothing replaces, in the UI's language: a switch
+// sets it again (languageChanged). A dialog whose opener composes its text (the HTML preview's
+// title, Arrange's, the settings', the manager's help, the file name's note) starts with none, so a
+// switch never resets an open one's.
 func (h *Host) languageState() map[string]any {
 	return map[string]any{
-		"App.diagramTitle":     h.tr("autodoc.text.state.mermaid_preview"),
-		"App.htmlPreviewTitle": h.tr("autodoc.text.state.html_preview"),
-		"App.settingsTitle":    h.tr("autodoc.text.state.workspace_settings"),
-		"App.arrangeTitle":     h.tr("autodoc.text.state.arrange_a_panel"),
-		"App.managerHelp":      h.tr("autodoc.text.workspace.add_a_directory_edit_or_advanced_the_one_under_t"),
-		"App.fileNameError":    h.tr("autodoc.text.files.save_the_draft_a_path_in_the_workspace_md_is_add"),
-		"App.aboutText":        h.aboutTextNow(),
-		"App.aboutLog":         h.trf("autodoc.text.help.log", h.aboutInfo.Log),
+		"App.diagramTitle": h.tr("autodoc.text.state.mermaid_preview"),
+		"App.aboutText":    h.aboutTextNow(),
+		"App.aboutLog":     h.trf("autodoc.text.help.log", h.aboutInfo.Log),
 	}
 }
 

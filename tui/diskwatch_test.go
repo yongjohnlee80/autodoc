@@ -131,8 +131,8 @@ func TestAModifiedFileIsAskedAboutOnEnter(t *testing.T) {
 	if strings.Contains(r.s.String(), "while it had unsaved changes") || !strings.HasPrefix(r.editorText(), "X") {
 		t.Fatalf("the shown, modified buffer was asked about, or changed:\n%s", r.s.String())
 	}
-	if !strings.Contains(r.file().title(), "changed on disk") {
-		t.Fatalf("the title %q has no badge", r.file().title())
+	if !strings.Contains(r.file().title(englishText), "changed on disk") {
+		t.Fatalf("the title %q has no badge", r.file().title(englishText))
 	}
 
 	r.openOnDisk(t, "b.md")

@@ -274,9 +274,7 @@ type kbApply struct {
 	refused                         []string // "path: why"
 }
 
-// String is how far the apply got, in English; text says it in the UI's language.
-func (a kbApply) String() string { return a.text(inEnglish{}) }
-
+// text is how far the apply got, in t's language.
 func (a kbApply) text(t wording) string {
 	s := t.Trf("autodoc.text.kbtype.created_kept", len(a.created), len(a.kept))
 	if len(a.updated) > 0 {

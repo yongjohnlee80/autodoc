@@ -196,23 +196,20 @@ func slugOf(s string) string {
 
 // choiceLabels are the choosers' rows in AutoDoc's words, by their App.* source: a ComboBox's rows
 // are text, so they are composed in the UI's language (choiceState), their keys English.
-var choiceLabels = func() map[string][]string {
-	m := map[string][]string{
-		"App.keymaps":           keymapLabels,
-		"App.edges":             edges,
-		"App.yesNo":             {"yes", "no"},
-		"App.openAsChoices":     openAsLabels,
-		"App.diskReloadChoices": diskReloadLabels,
-		"App.indentMarkModes":   indentMarkLabels,
-		"App.corners":           cornerLabels,
-		"App.toastSeconds":      {"1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"},
-		"App.policies":          policyChoices,
-		"App.destinations":      destinationLabels,
-		"App.vectorIndexes":     indexLabels,
-		"App.sourceEngines":     sourceLabels,
-	}
-	return m
-}()
+var choiceLabels = map[string][]string{
+	"App.keymaps":           keymapLabels,
+	"App.edges":             edges,
+	"App.yesNo":             {"yes", "no"},
+	"App.openAsChoices":     openAsLabels,
+	"App.diskReloadChoices": diskReloadLabels,
+	"App.indentMarkModes":   indentMarkLabels,
+	"App.corners":           cornerLabels,
+	"App.toastSeconds":      {"1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"},
+	"App.policies":          policyChoices,
+	"App.destinations":      destinationLabels,
+	"App.vectorIndexes":     indexLabels,
+	"App.sourceEngines":     sourceLabels,
+}
 
 // featureChoiceLabels are the choosers a feature owns (the GlobeMap's and the Mindmap's, in the GUI
 // build), by their App.* source: the feature sets them through choiceModel, and sets them again on a

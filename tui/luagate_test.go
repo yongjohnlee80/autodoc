@@ -100,7 +100,7 @@ end }`))
 // A script's grant asks in a sentence per capability, one AutoDoc does not know said as such, and
 // how Not now answers.
 func TestALuaGrantNamesEachCapability(t *testing.T) {
-	got := luaGrantText([]string{"workspace.read", "workspace.write", "settings", "clipboard", "agents", "commands", "rockets"})
+	got := luaGrantText(inEnglish{}.Trf, []string{"workspace.read", "workspace.write", "settings", "clipboard", "agents", "commands", "rockets"})
 	for _, want := range []string{
 		"workspace.read: read the workspace's documents, search them and follow their links\n",
 		"workspace.write: write, rename and remove documents and tasks\n",

@@ -170,7 +170,7 @@ func (pl *plugins) showPluginQuestion(c *candidate) {
 		title = "autodoc.text.plugininstall.update_the_plugin"
 	}
 	pl.c.Set("App.pluginConfirmTitle", pl.c.Trf(title, pluginTitle(c)))
-	pl.c.Set("App.pluginQuestion", pluginQuestionIn(pl.c.Trf, c, pluginTitle(c)))
+	pl.c.Set("App.pluginQuestion", pluginQuestion(pl.c.Trf, c, pluginTitle(c)))
 }
 
 // hidePlugin takes c's PluginConfirm down when another candidate's card replaces it: closed, it
@@ -184,22 +184,17 @@ func (pl *plugins) hidePlugin(c *candidate) {
 
 func pluginTitle(c *candidate) string { return cmp.Or(c.m.Title, c.m.Name) }
 
-// pluginQuestion is PluginConfirm's text, in English: what the plugin is, where it came from, what
-// its build runs and what it starts, its audit and the risk, what its manifest declares it does in
-// AutoDoc, and what Audit… does.
-func pluginQuestion(c *candidate, title string) string {
-	return pluginQuestionIn(inEnglish{}.Trf, c, title)
-}
-
-// pluginQuestionIn is pluginQuestion in the language trf (a Core's Trf, or inEnglish{}.Trf) says it
-// in: a line each, its label and its value.
-func pluginQuestionIn(trf func(string, ...any) string, c *candidate, title string) string {
+// pluginQuestion is PluginConfirm's text: what the plugin is, where it came from, what its build runs
+// and what it starts, its audit and the risk, what its manifest declares it does in AutoDoc, and what
+// Audit… does. It is in the language trf (a Core's Trf, or inEnglish{}.Trf) says it in: a line each,
+// its label and its value.
+func pluginQuestion(trf func(string, ...any) string, c *candidate, title string) string {
 	build := trf("autodoc.text.plugininstall.nothing_it_has_no_build_step")
 	if len(c.m.Install.Build) > 0 {
 		build = strings.Join(c.m.Install.Build, " ")
 	}
 	audit := ""
-	if line := auditLineIn(trf, c.entry, c.commit); line != "" {
+	if line := auditLine(trf, c.entry, c.commit); line != "" {
 		audit = line + "\n\n" // above the risk, which stays word for word
 	}
 	q := fmt.Sprintf("%s (%s)\n%s\n%s\n\n%s\n%s\n\n%s%s",
@@ -436,7 +431,11 @@ func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 	}
 	name := m.e.label()
 	if len(m.e.shadowed) > 0 {
-		name += " — " + strings.Join(m.e.shadowed, " · ")
+		claims := make([]string, len(m.e.shadowed))
+		for i, s := range m.e.shadowed {
+			claims[i] = pl.c.Trf("autodoc.text.plugininstall.opens_shadowed_by", s.ext, s.by)
+		}
+		name += " — " + strings.Join(claims, " · ")
 	}
 	return rowOf{"key": m.e.dir, "name": name, "place": pl.placement(m.e), "commit": m.commit, "source": source}
 }

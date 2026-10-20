@@ -16,7 +16,7 @@ func TestLuaGrantsOf(t *testing.T) {
 	if g := luaGrantsOf("not json"); g != nil {
 		t.Fatalf("a broken preference gave %v", g)
 	}
-	if txt := luaGrantText([]string{"clipboard", "teleport"}); !strings.Contains(txt, "clipboard: read and write the clipboard") ||
+	if txt := luaGrantText(inEnglish{}.Trf, []string{"clipboard", "teleport"}); !strings.Contains(txt, "clipboard: read and write the clipboard") ||
 		!strings.Contains(txt, "teleport: a capability AutoDoc does not know") {
 		t.Fatalf("the card says %q", txt)
 	}

@@ -32,7 +32,7 @@ func TestAnUnansweredSearchSaysWhatItWaitsOn(t *testing.T) {
 	r.keys(t, decltest.Type("zebra")...)
 	english := make([]string, len(searchWaits))
 	for i, id := range searchWaits {
-		english[i] = englishText(id)
+		english[i] = regexp.QuoteMeta(englishText(id))
 	}
 	waits := regexp.MustCompile(`([-\\|/]) (` + strings.Join(english, "|") + `)…`)
 	frames := map[string]bool{}

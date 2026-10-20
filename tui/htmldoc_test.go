@@ -235,7 +235,7 @@ func TestRefusalNoticesSayWhy(t *testing.T) {
 		{"../../outside.png", "kb", "outside the workspace kb", "add the folder"},
 		{"../assets/a.css", "", "add the folder as a workspace", ""},
 	} {
-		got := refusalNotice(c.src, c.ws)
+		got := refusalNotice(inEnglish{}.Trf, c.src, c.ws)
 		if !strings.Contains(got, c.want) || c.not != "" && strings.Contains(got, c.not) || !strings.Contains(got, c.src) {
 			t.Errorf("%q in %q: %q, want it to say %q (and not %q)", c.src, c.ws, got, c.want, c.not)
 		}
