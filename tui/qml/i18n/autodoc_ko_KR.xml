@@ -2699,7 +2699,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.agent_profiles">
         <source>agent profiles</source>
-        <translation>에이전트 프로필</translation>
+        <translation>프로필</translation>
     </message>
     <message id="autodoc.key.agents">
         <source>agents…</source>
@@ -2815,11 +2815,11 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.search_or_spc_again">
         <source>search (or SPC again)</source>
-        <translation>검색 (또는 SPC 한 번 더)</translation>
+        <translation>검색 (SPC 한 번 더)</translation>
     </message>
     <message id="autodoc.key.send_the_page_to_an_agent">
         <source>send the page to an agent</source>
-        <translation>페이지를 에이전트에 보내기</translation>
+        <translation>에이전트에 페이지 전송</translation>
     </message>
     <message id="autodoc.key.send_the_selection_or_the_clipboard">
         <source>send the selection or the clipboard</source>
@@ -2827,7 +2827,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.set_file_a_adds_d_clears">
         <source>set (file), a adds, d clears</source>
-        <translation>설정 (파일), a 추가, d 지우기</translation>
+        <translation>설정 (파일), a 추가, d 삭제</translation>
     </message>
     <message id="autodoc.key.set_for_this_machine_only">
         <source>set for this machine only</source>
@@ -2855,7 +2855,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>메뉴 표시/포커스 또는 숨기기</translation>
+        <translation>메뉴 표시/숨기기</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>

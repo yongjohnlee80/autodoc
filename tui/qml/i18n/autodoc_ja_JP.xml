@@ -2699,7 +2699,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.agent_profiles">
         <source>agent profiles</source>
-        <translation>エージェントプロファイル</translation>
+        <translation>プロファイル</translation>
     </message>
     <message id="autodoc.key.agents">
         <source>agents…</source>
@@ -2707,7 +2707,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.ai_agent">
         <source>AI agent</source>
-        <translation>AI エージェント</translation>
+        <translation>エージェント</translation>
     </message>
     <message id="autodoc.key.arrange_a_panel">
         <source>arrange a panel</source>
@@ -2775,7 +2775,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.open_a_file_anywhere">
         <source>open a file anywhere</source>
-        <translation>任意の場所のファイルを開く</translation>
+        <translation>外部ファイルを開く</translation>
     </message>
     <message id="autodoc.key.open_the_task_s_file_or_a_month">
         <source>open the task's file, or a month</source>
@@ -2819,7 +2819,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.send_the_page_to_an_agent">
         <source>send the page to an agent</source>
-        <translation>ページをエージェントに送る</translation>
+        <translation>エージェントにページ送信</translation>
     </message>
     <message id="autodoc.key.send_the_selection_or_the_clipboard">
         <source>send the selection or the clipboard</source>
@@ -2827,7 +2827,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.set_file_a_adds_d_clears">
         <source>set (file), a adds, d clears</source>
-        <translation>設定 (ファイル)、a で追加、d で消去</translation>
+        <translation>設定、a 追加、d 消去</translation>
     </message>
     <message id="autodoc.key.set_for_this_machine_only">
         <source>set for this machine only</source>
@@ -2855,7 +2855,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>メニューを表示/フォーカス、または隠す</translation>
+        <translation>メニューの表示/非表示</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -2879,15 +2879,15 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.the_editor_mode_vim_text">
         <source>the editor mode (Vim, Text)</source>
-        <translation>エディターモード (Vim、Text)</translation>
+        <translation>編集モード (Vim、Text)</translation>
     </message>
     <message id="autodoc.key.the_explorer">
         <source>the explorer</source>
-        <translation>エクスプローラー</translation>
+        <translation>エクスプローラ</translation>
     </message>
     <message id="autodoc.key.the_file_s_outline">
         <source>the file's outline</source>
-        <translation>ファイルのアウトライン</translation>
+        <translation>アウトライン</translation>
     </message>
     <message id="autodoc.key.the_links">
         <source>the links</source>

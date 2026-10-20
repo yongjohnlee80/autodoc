@@ -2699,7 +2699,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.agent_profiles">
         <source>agent profiles</source>
-        <translation>perfis de agente</translation>
+        <translation>perfis</translation>
     </message>
     <message id="autodoc.key.agents">
         <source>agents…</source>
@@ -2751,11 +2751,11 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.manage_workspaces">
         <source>manage workspaces</source>
-        <translation>gerenciar espaços de trabalho</translation>
+        <translation>gerenciar espaços</translation>
     </message>
     <message id="autodoc.key.maximize_panel">
         <source>maximize panel</source>
-        <translation>maximizar painel</translation>
+        <translation>maximizar</translation>
     </message>
     <message id="autodoc.key.move_the_store">
         <source>move the store</source>
@@ -2775,11 +2775,11 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.open_a_file_anywhere">
         <source>open a file anywhere</source>
-        <translation>abrir um arquivo de qualquer lugar</translation>
+        <translation>abrir arquivo externo</translation>
     </message>
     <message id="autodoc.key.open_the_task_s_file_or_a_month">
         <source>open the task's file, or a month</source>
-        <translation>abrir o arquivo da tarefa, ou um mês</translation>
+        <translation>abrir a tarefa ou o mês</translation>
     </message>
     <message id="autodoc.key.plugin_commands">
         <source>plugin commands</source>
@@ -2815,19 +2815,19 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.search_or_spc_again">
         <source>search (or SPC again)</source>
-        <translation>buscar (ou SPC de novo)</translation>
+        <translation>buscar (SPC de novo)</translation>
     </message>
     <message id="autodoc.key.send_the_page_to_an_agent">
         <source>send the page to an agent</source>
-        <translation>enviar a página a um agente</translation>
+        <translation>enviar página a um agente</translation>
     </message>
     <message id="autodoc.key.send_the_selection_or_the_clipboard">
         <source>send the selection or the clipboard</source>
-        <translation>enviar a seleção ou a área de transferência</translation>
+        <translation>enviar seleção ou o que foi copiado</translation>
     </message>
     <message id="autodoc.key.set_file_a_adds_d_clears">
         <source>set (file), a adds, d clears</source>
-        <translation>definir (arquivo), a adiciona, d limpa</translation>
+        <translation>definir; a adiciona, d limpa</translation>
     </message>
     <message id="autodoc.key.set_for_this_machine_only">
         <source>set for this machine only</source>
@@ -2855,7 +2855,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>mostrar/focar ou ocultar o menu</translation>
+        <translation>mostrar ou ocultar o menu</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -2867,7 +2867,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.switch_workspace">
         <source>switch workspace</source>
-        <translation>trocar de espaço de trabalho</translation>
+        <translation>trocar espaço de trabalho</translation>
     </message>
     <message id="autodoc.key.the_agent_panel">
         <source>the agent panel</source>
@@ -2879,7 +2879,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.the_editor_mode_vim_text">
         <source>the editor mode (Vim, Text)</source>
-        <translation>o modo do editor (Vim, Texto)</translation>
+        <translation>modo do editor (Vim, Texto)</translation>
     </message>
     <message id="autodoc.key.the_explorer">
         <source>the explorer</source>
@@ -2887,7 +2887,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.the_file_s_outline">
         <source>the file's outline</source>
-        <translation>a estrutura do arquivo</translation>
+        <translation>estrutura do arquivo</translation>
     </message>
     <message id="autodoc.key.the_links">
         <source>the links</source>
