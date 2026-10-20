@@ -971,6 +971,14 @@
         <source>show/focus or hide the menu</source>
         <translation>show/focus or hide the menu</translation>
     </message>
+    <message id="autodoc.cmd.view.redraw">
+        <source>draw the Rendered view again</source>
+        <translation>draw the Rendered view again</translation>
+    </message>
+    <message id="autodoc.cmd.view.redraw.help">
+        <source>lay the Rendered view out again, the note unchanged: what it draws from beside the note changed (a lab note's cell outputs, which the Jupyter plugin runs this for)</source>
+        <translation>lay the Rendered view out again, the note unchanged: what it draws from beside the note changed (a lab note's cell outputs, which the Jupyter plugin runs this for)</translation>
+    </message>
     <message id="autodoc.cmd.view.status_line">
         <source>the status line</source>
         <translation>the status line</translation>

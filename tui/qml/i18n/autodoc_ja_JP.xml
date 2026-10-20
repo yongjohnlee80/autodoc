@@ -971,6 +971,14 @@
         <source>show/focus or hide the menu</source>
         <translation>メニューを表示/フォーカス、または隠す</translation>
     </message>
+    <message id="autodoc.cmd.view.redraw">
+        <source>draw the Rendered view again</source>
+        <translation>レンダリング表示を描き直す</translation>
+    </message>
+    <message id="autodoc.cmd.view.redraw.help">
+        <source>lay the Rendered view out again, the note unchanged: what it draws from beside the note changed (a lab note's cell outputs, which the Jupyter plugin runs this for)</source>
+        <translation>レンダリング表示を描き直す（ノートはそのまま）: 表示がノートの隣から読むものが変わったとき（ラボノートのセルの出力。Jupyter プラグインが実行後に呼ぶ）</translation>
+    </message>
     <message id="autodoc.cmd.view.status_line">
         <source>the status line</source>
         <translation>ステータスライン</translation>

@@ -971,6 +971,14 @@
         <source>show/focus or hide the menu</source>
         <translation>메뉴 표시/포커스 또는 숨기기</translation>
     </message>
+    <message id="autodoc.cmd.view.redraw">
+        <source>draw the Rendered view again</source>
+        <translation>렌더링 보기를 다시 그리기</translation>
+    </message>
+    <message id="autodoc.cmd.view.redraw.help">
+        <source>lay the Rendered view out again, the note unchanged: what it draws from beside the note changed (a lab note's cell outputs, which the Jupyter plugin runs this for)</source>
+        <translation>렌더링 보기를 다시 배치하기(노트는 그대로): 보기가 노트 옆에서 읽는 것이 바뀌었을 때(랩 노트 셀의 출력, Jupyter 플러그인이 실행 후 호출)</translation>
+    </message>
     <message id="autodoc.cmd.view.status_line">
         <source>the status line</source>
         <translation>상태 줄</translation>

@@ -971,6 +971,14 @@
         <source>show/focus or hide the menu</source>
         <translation>显示/聚焦或隐藏菜单</translation>
     </message>
+    <message id="autodoc.cmd.view.redraw">
+        <source>draw the Rendered view again</source>
+        <translation>重新绘制渲染视图</translation>
+    </message>
+    <message id="autodoc.cmd.view.redraw.help">
+        <source>lay the Rendered view out again, the note unchanged: what it draws from beside the note changed (a lab note's cell outputs, which the Jupyter plugin runs this for)</source>
+        <translation>重新排布渲染视图（笔记不变）：视图从笔记旁读取的内容已改变（实验笔记单元格的输出，Jupyter 插件运行后调用）</translation>
+    </message>
     <message id="autodoc.cmd.view.status_line">
         <source>the status line</source>
         <translation>状态栏</translation>
