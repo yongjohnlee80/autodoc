@@ -73,7 +73,7 @@ Its manifest declares:
 | Command | On the card | What it does |
 |---|---|---|
 | Run cell or selection | `SPC p j r` | The cell under the cursor (its fence lines included). With a selection, the selection alone: its outputs show on the card but are not kept, since they belong to no cell. |
-| Run all cells | `SPC p j a` | Every cell in order, stopping at the first that fails. Then it removes the output folders no fence of the note has any more. |
+| Run all cells | `SPC p j a` | Every cell in order, stopping at the first that fails. When every cell has run, it then removes the output folders no fence of the note has any more; a Run all that fails or is interrupted leaves them. |
 | Interrupt kernel | `SPC p j x` | Stops the run: SIGINT to the kernel's process group, or `interrupt_request` for a kernel whose spec asks for messages. |
 | Restart kernel | `SPC p j s` | Starts the kernel afresh, its variables gone. One restart at a time. |
 | Choose kernel… | `SPC p j k` | Lists the installed kernels (↑↓, Enter; `q` leaves). The pick holds for this session; add `kernel: <name>` to the front matter to keep it. |
@@ -96,7 +96,7 @@ A cell's outputs are files in `<note>.lab/out/<cell key>/`, named `01`, `02`, �
 
 ![The files a kernel's outputs are kept as](jupyter-output-files.csv)
 
-- **A run writes its files to a hidden folder** beside the cell's, then swaps it in. A reader sees the older run's outputs or the new run's, never a mix, and no file of an older run survives a rerun.
+- **A run writes its files to a hidden folder** beside the cell's, then swaps it in. A reader sees the older run's outputs or the new run's, never a mix, though for the moment between the swap's two renames it may see none; no file of an older run survives a rerun.
 - A **`clear_output`** from the kernel drops what the run had kept so far, as Jupyter does.
 - **Where they're drawn:**
   - the HTML preview and export draw each cell's outputs right after its fence, in name order;
