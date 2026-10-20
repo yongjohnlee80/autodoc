@@ -1,23 +1,23 @@
 stateDiagram-v2
-    [*] --> Normal: Launch Editor (Vim Mode Default)
+    [*] --> Normal: Vim mode (the default)
 
-    state "Normal Mode (Navigation & Operators)" as Normal
-    state "Insert Mode (Prose & Auto-Pairs)" as Insert
-    state "Visual Mode (Char / Line / Block)" as Visual
-    state "Command Mode (:w :q)" as Command
+    state "Normal (motions, operators, SPC)" as Normal
+    state "Insert (typing)" as Insert
+    state "Visual (character, line, block)" as Visual
+    state "Command line (:w :q :find :b ...)" as Command
     state "Picker (SPC o, SPC /, SPC B)" as Picker
+    state "Text mode (modeless)" as Text
     state "Rendered View (Ctrl+T, --gui)" as RenderedView
-    state "Inline Embed Source Editor" as EmbedEdit
 
-    Normal --> Insert: i / a / o / O / cw
-    Insert --> Normal: Esc / Ctrl+[
+    Normal --> Insert: i / a / I / A / o / O
+    Insert --> Normal: Esc
     Normal --> Visual: v / V / Ctrl+v
     Visual --> Normal: Esc / y / d / c / > / <
-    Normal --> Command: : (Colon)
+    Normal --> Command: : or Ctrl+;
     Command --> Normal: Enter / Esc
     Normal --> Picker: SPC o / SPC SPC / SPC B
-    Picker --> Normal: Enter (Open Target) / Esc
-    Normal --> RenderedView: Ctrl+T (--gui)
+    Picker --> Normal: Enter (open) / Esc
+    Normal --> Text: SPC k
+    Text --> Normal: Ctrl+Space k
+    Normal --> RenderedView: Ctrl+T
     RenderedView --> Normal: Ctrl+T
-    RenderedView --> EmbedEdit: Click Embedded Diagram or Chart
-    EmbedEdit --> RenderedView: Ctrl+s / Esc (Auto-Render Updated Asset)

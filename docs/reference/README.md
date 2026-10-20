@@ -36,7 +36,7 @@ Open this folder (`docs/reference/`) as a workspace in `autodoc --gui` and press
 2. **[Chapter 02: 5-Minute Quickstart & Workspace Registration](./02-quickstart-and-workspaces.md)**
    Installing the single binary, registering your first workspace, tuning `include`/`exclude`/`section_tokens`, and understanding how the `watch-before-scan` follower converges on external Git edits.
 3. **[Chapter 03: Mastering the Modal Editor, Panels & Navigation](./03-modal-editor-and-panels.md)**
-   Navigating the 120-column distraction-free page, switching between Vim modal editing and Modeless mode, managing multi-buffer tabs and splits, folding headings, and docking panels (`Files`, `Outline`, `Relations`, `Todos`, `Results`, `TerminalTabs`).
+   The 120-column page and its breadcrumb, the Vim and Text editor modes, buffers, SPC's leader keys, the panels (the explorer, the links, the todos, the terminal, the AI agent, the HTML preview), preferences, files changed on disk, and the command line.
 4. **[Chapter 04: Rich Authoring — Mermaid (`.mmd`), Vega-Lite (`.chart.json`), CSVs & Export](./04-rich-authoring-embeds-and-export.md)**
    Using the `<note-stem>/` companion resource directory convention to embed native vector diagrams, quantitative charts, CSV tables, and self-contained data-URI images—plus exporting offline HTML pages (`autodoc --export`).
 
