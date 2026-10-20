@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -199,6 +200,25 @@ func TestAStaleKBTypePickNeverLands(t *testing.T) {
 	}
 	if _, err := os.Stat(stages[b]); !os.IsNotExist(err) {
 		t.Fatal("B's stage was kept after another pick")
+	}
+}
+
+// A pick that is no KB type says why under the field, and stages nothing.
+func TestAPickThatIsNoKBTypeSaysWhy(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "the workspaces", func(string) bool { return len(r.listed()) > 0 })
+	r.h.kbStage = func(_ context.Context, url string) stagedKBType {
+		return stagedKBType{url: url, err: errors.New("no kbtype.toml at its root")}
+	}
+	r.openAdd(t)
+	r.h.p.Post(func() { r.h.kbTypePicked(1) })
+	summary := func() string {
+		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.kbTypeSummary"); return v.Raw })
+	}
+	r.s.WaitFor(t, "the refusal", func(string) bool { return summary() == "not a KB type: no kbtype.toml at its root" })
+	if onLoop(r, func() bool { return r.h.kbStaged != nil }) {
+		t.Fatal("a type is staged after a refused pick")
 	}
 }
 
