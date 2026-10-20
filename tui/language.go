@@ -3,6 +3,7 @@ package tui
 import (
 	"cmp"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -93,12 +94,27 @@ func (h *Host) tr(id string) string {
 
 // trf is tr with its %1, %2 … filled with args, as Qt's QString::arg: a sentence is translated whole
 // and then filled, so no language sees it assembled from fragments.
-func (h *Host) trf(id string, args ...any) string {
-	s := h.tr(id)
-	for i := len(args) - 1; i >= 0; i-- { // %10 before %1
-		s = strings.ReplaceAll(s, "%"+strconv.Itoa(i+1), fmt.Sprint(args[i]))
+func (h *Host) trf(id string, args ...any) string { return fill(h.tr(id), args...) }
+
+// argRef is a %1 … %99 in a message, which fill fills.
+var argRef = regexp.MustCompile(`%[1-9][0-9]?`)
+
+// fill is s with each %N its argument, in one pass, so an argument that says "%1" itself (a path, a
+// command, a search) is shown as it is. A %N past the arguments stays, but for a two-digit one whose
+// first digit names one ("%10" with one argument): the argument, then the digit, as Qt's arg.
+func fill(s string, args ...any) string {
+	if len(args) == 0 {
+		return s
 	}
-	return s
+	return argRef.ReplaceAllStringFunc(s, func(ref string) string {
+		if n, _ := strconv.Atoi(ref[1:]); n <= len(args) {
+			return fmt.Sprint(args[n-1])
+		}
+		if n := int(ref[1] - '0'); len(ref) == 3 && n <= len(args) {
+			return fmt.Sprint(args[n-1]) + ref[2:]
+		}
+		return ref
+	})
 }
 
 // englishCatalog is autodoc_en.xml, for text composed before the program has its App.
