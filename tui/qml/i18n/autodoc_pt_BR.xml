@@ -2775,7 +2775,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.open_a_file_anywhere">
         <source>open a file anywhere</source>
-        <translation>abrir arquivo externo</translation>
+        <translation>abrir por caminho</translation>
     </message>
     <message id="autodoc.key.open_the_task_s_file_or_a_month">
         <source>open the task's file, or a month</source>
@@ -2855,7 +2855,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>mostrar ou ocultar o menu</translation>
+        <translation>ver/focar/ocultar o menu</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>

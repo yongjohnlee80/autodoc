@@ -2775,7 +2775,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.open_a_file_anywhere">
         <source>open a file anywhere</source>
-        <translation>外部ファイルを開く</translation>
+        <translation>パスを指定して開く</translation>
     </message>
     <message id="autodoc.key.open_the_task_s_file_or_a_month">
         <source>open the task's file, or a month</source>
@@ -2827,7 +2827,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.set_file_a_adds_d_clears">
         <source>set (file), a adds, d clears</source>
-        <translation>設定、a 追加、d 消去</translation>
+        <translation>設定(ファイル)、a追加、d消去</translation>
     </message>
     <message id="autodoc.key.set_for_this_machine_only">
         <source>set for this machine only</source>
@@ -2855,7 +2855,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>メニューの表示/非表示</translation>
+        <translation>メニューを表示・移動・隠す</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
