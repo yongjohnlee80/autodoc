@@ -31,8 +31,7 @@ type agents struct {
 	editorTokens        map[string]string
 	editingAgent        string
 	editingAgentProfile *agentProfile // exact record shown in the form; stale edits are refused
-	// the setup card (agentsetup.go): whether it is the first run's, and the CLIs it lists
-	setupFirst     bool
+	// the setup card (agentsetup.go): the CLIs it lists
 	setupFound     []agentCLI
 	setupCLIs      *tuidecl.ListModel
 	switchingAgent string
@@ -83,7 +82,7 @@ func (a *agents) Catalog() []Entry {
 	return []Entry{
 		builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.toggleAgent),
 		builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.openAgentProfiles),
-		builtin("agent.setup", "set up an agent", "App.openAgentSetup()", func() { a.openAgentSetup(false) }),
+		builtin("agent.setup", "set up an agent", "App.openAgentSetup()", a.openAgentSetup),
 	}
 }
 
@@ -130,7 +129,7 @@ func (a *agents) Commands() map[string]Command {
 		"App.saveAgentProfile":     threeStrings("a name, command and codename", a.saveAgentProfile),
 		"App.removeAgent":          oneNumber("a row", a.removeAgent),
 		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
-		"App.openAgentSetup":       none(func() { a.openAgentSetup(false) }),
+		"App.openAgentSetup":       none(a.openAgentSetup),
 		"App.agentSetupPicked":     numberAndString("a row and the name", a.agentSetupPicked),
 		"App.agentSetupConfirm":    numberAndString("a row and the name", a.agentSetupConfirm),
 		"App.agentSetupDecline":    none(a.agentSetupDecline),

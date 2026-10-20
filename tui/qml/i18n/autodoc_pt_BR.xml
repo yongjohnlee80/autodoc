@@ -3361,10 +3361,6 @@ O QUE UMA TECLA PRECISA
         <source>the agent %1's command was not found (%2): check it in System › Agent profiles…</source>
         <translation>o comando do agente %1 não foi encontrado (%2): verifique em Sistema › Perfis de agente…</translation>
     </message>
-    <message id="autodoc.notice.agentsetup.the_first_prompt_was_not_sent">
-        <source>the first prompt was not sent: %1</source>
-        <translation>o primeiro prompt não foi enviado: %1</translation>
-    </message>
     <message id="autodoc.notice.agenttabs.the_agent_could_not_restart">
         <source>the agent could not restart: %1</source>
         <translation>o agente não pôde reiniciar: %1</translation>
@@ -5114,10 +5110,6 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.text.agentsetup.no">
         <source>&amp;No</source>
         <translation>&amp;Não</translation>
-    </message>
-    <message id="autodoc.text.agentsetup.this_prompt">
-        <source>this prompt</source>
-        <translation>este prompt</translation>
     </message>
     <message id="autodoc.text.arrange.arrange">
         <source>arrange %1</source>

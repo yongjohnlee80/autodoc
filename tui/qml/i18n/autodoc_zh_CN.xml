@@ -3361,10 +3361,6 @@ WHAT A KEY NEEDS
         <source>the agent %1's command was not found (%2): check it in System › Agent profiles…</source>
         <translation>未找到智能体 %1 的命令(%2)：请在“系统 › 智能体配置…”中检查</translation>
     </message>
-    <message id="autodoc.notice.agentsetup.the_first_prompt_was_not_sent">
-        <source>the first prompt was not sent: %1</source>
-        <translation>首条提示未发送：%1</translation>
-    </message>
     <message id="autodoc.notice.agenttabs.the_agent_could_not_restart">
         <source>the agent could not restart: %1</source>
         <translation>智能体无法重启：%1</translation>
@@ -5114,10 +5110,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentsetup.no">
         <source>&amp;No</source>
         <translation>否(&amp;N)</translation>
-    </message>
-    <message id="autodoc.text.agentsetup.this_prompt">
-        <source>this prompt</source>
-        <translation>此提示</translation>
     </message>
     <message id="autodoc.text.arrange.arrange">
         <source>arrange %1</source>
