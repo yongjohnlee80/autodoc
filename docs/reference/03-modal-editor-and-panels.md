@@ -54,8 +54,8 @@ Synthesizing architecture documents or conducting code reviews frequently requir
 Every opened document resides in an in-memory buffer tab shown across the top of the editor stage. Unsaved buffers display a modified indicator (`●`).
 
 - Cycle forward and backward across tabs with `gt` and `gT` (or `Alt+1` through `Alt+9` to jump by tab index).
-- Switch across open buffers by fuzzy title search with `SPC b b`.
-- Close the active buffer tab with `SPC b d` or `:bd`.
+- Switch across open buffers with `SPC B` (a picker over them).
+- Close the active buffer tab with `SPC C` or `:bd`.
 
 ### Horizontal and Vertical Window Splits
 
@@ -80,13 +80,15 @@ AutoDoc computes fold ranges automatically from your document's YAML frontmatter
 
 ## 3.4 Leader (`SPC`) Chords and Command Pickers
 
-In Normal mode, pressing the **Spacebar (`SPC`)** activates AutoDoc's mnemonic Leader chord tree. If you pause for 200 ms after pressing `SPC`, a pop-up key-hint overlay displays all available sub-chords for that prefix:
+In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/keys.go` binds them:
 
-- **`SPC f` (Find Files)**: Launches the workspace file picker with instant fuzzy path matching and a live preview pane.
-- **`SPC s` (Hybrid Search)**: Opens the unified search modal supporting full-text BM25 queries, semantic similarity, and structured frontmatter filters (e.g., `type:review reviewer:juliet status:approved`).
-- **`SPC g` (Graph Navigation)**: Opens sub-chords for `SPC g b` (incoming backlinks to the current note), `SPC g o` (outgoing wikilinks), `SPC g d` (broken link diagnostics), and `SPC g n` (2-hop neighborhood graph).
-- **`SPC t` (Todo Actions)**: Opens sub-chords for `SPC t l` (toggle Todo board panel), `SPC t n` (create new `.todo-list/` task), `SPC t s` (cycle task status), and `SPC t a` (assign task owner).
-- **`SPC w` (Workspace Switcher)**: Switches the active workspace or attaches a secondary workspace to the current session.
+- **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` goes back; `SPC B` switches buffer.
+- **File:** `SPC n` a new file; `SPC C` closes the buffer; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
+- **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC M` maximizes a panel; `SPC h` the notifications.
+- **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles.
+- **Manage:** `SPC w` switches workspace; `SPC W` manages workspaces; `SPC s` the search models; `SPC ,` the editor preferences; `SPC k` the editor mode (Vim, Text).
+- **Window:** `SPC m` shows, focuses or hides the menu; `SPC .` the right-click menu; `SPC t` the status line; `SPC L` arranges a panel; and `SPC Tab`, below.
+- **Help:** `SPC ?` help; `SPC A` about; `SPC Q` quit.
 - **`SPC Tab` (Go to a widget)**: Opens the Go-to picker over the places the keyboard can go: the editor, every panel, and each terminal and agent tab, never the menu bar. Tab and Shift+Tab move its cursor; Enter goes there, opening a closed panel. `:go <name>` does the same from the command line (`:go explorer`, `:go terminal/lua`), and **F6 / Shift+F6** step the keyboard through the open widgets.
 - **The dock (the menu bar's right end)**: one icon per widget. **✎** is the editor, and it comes first. Then comes each panel that is open, or running on with its drawer closed: a terminal with a shell, an agent, a plugin card whose plugin runs. A tab belongs to its panel's icon. A click on a shown panel hides it, not closed: it keeps everything it holds (a GlobeMap keeps its picture, view and filter), its icon is dimmed, and the keyboard goes back to the editor. A click on a hidden panel shows it again as it was, with the keyboard in it, as the Go-to picker does; a closed panel opens. **✎** hides every shown panel and remembers them; its next click shows the same ones again, unless a panel was opened, shown or closed in between. Opening a note from the GlobeMap, the Mindmap or the Links drawer hides it the same way, so the dock brings it back. A hidden panel leaves the dock only when it is closed for real. With the bar on auto-hide, it stays shown while the dock lists more than the editor, and the page moves down a row while it does.
 
@@ -100,10 +102,10 @@ Surrounding the central 120-column editor stage are three collapsible dock slots
 
 ![Workspace Panel Docking Layout Around the 120-Column Editor](panel-docking-layout.mmd)
 
-### Left Dock: `Files` and `Outline`
+### Left Dock: `Files`, and the Outline
 
 1. **`Files` (`SPC e`)**: Displays the canonical workspace directory tree, filtered by your workspace's `include` and `exclude` globs. Companion resource directories (`<note-stem>/`) are visually grouped beneath their parent `.md` document so diagrams and charts never clutter the top-level file list. Pressing `a` inside `Files` creates a new document from a `_templates/` archetype; `r` renames the file and automatically updates incoming `[[wikilinks]]` across the workspace.
-2. **`Outline` (`SPC o`)**: Renders a live, synchronized tree of the current document's Markdown headings (`H1`–`H6`) alongside embedded figure captions. As your cursor moves in the editor, the active heading highlights in `Outline`; pressing `Enter` on any outline node jumps the editor viewport directly to that section.
+2. **The Outline (`SPC O`)**: Go › Outline… lists the file's headings, unsaved ones too, and `Enter` jumps to the one chosen. It is a list over the page, not a docked panel.
 
 ### Right Dock: `Relations`, `Preview`, and `Plugin Cards`
 
@@ -116,8 +118,8 @@ Surrounding the central 120-column editor stage are three collapsible dock slots
 
 ### Bottom Dock: `Todos`, `Results`, and `TerminalTabs`
 
-1. **`Todos` (`SPC t l`)**: An interactive kanban/table view of the workspace's `.todo-list/{open,deferred,completed,archived}/` store. You can filter tasks by tag, priority, or assignee, press `Enter` to jump to a task's linked ADR/review document, or press `s` to transition status through the daemon's `todos.status` verb.
-2. **`Results`**: Whenever you execute a workspace-wide search (`SPC s`) and press `Ctrl+q`, the ranked hits pin into the persistent bottom `Results` table so you can step through matches one by one using `]q` and `[q`.
+1. **`Todos` (`SPC x`)**: An interactive kanban/table view of the workspace's `.todo-list/{open,deferred,completed,archived}/` store. You can filter tasks by tag, priority, or assignee, press `Enter` to jump to a task's linked ADR/review document, or press `s` to transition status through the daemon's `todos.status` verb.
+2. **`Results`**: Whenever you execute a workspace-wide search (`SPC /`) and press `Ctrl+q`, the ranked hits pin into the persistent bottom `Results` table so you can step through matches one by one using `]q` and `[q`.
 3. **`TerminalTabs` (`SPC \``)**: A built-in multiplexed PTY terminal drawer rooted at the workspace directory. You can run `git status`, execute test suites, or invoke `autodoc --call` scripts in multiple terminal tabs without leaving the AutoDoc window.
 
 ---
