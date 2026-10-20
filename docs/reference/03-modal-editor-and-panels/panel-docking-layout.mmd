@@ -1,23 +1,35 @@
 flowchart LR
-    subgraph LeftDock["Left Dock Slot (Collapsible)"]
-        FILES["Files Tree Panel (Workspace Explorer)"]
+    subgraph Left["Left edge (the default)"]
+        FILES["Explorer (SPC e)"]
+        TODOS["Todos (SPC x)"]
     end
 
-    subgraph CenterStage["Center Workspace Stage"]
-        TABS["Multi-Buffer Tab Bar (Buffer Tabs & Modified Indicators)"]
-        PAGE["120-Column Centered Editor Page (Splits: Ctrl+w s / Ctrl+w v)"]
-        BOTTOM["Bottom Dock Slot (Todos / Search Results Table / TerminalTabs)"]
+    subgraph Center["The page"]
+        TABS["Buffers (H / L, SPC B)"]
+        PAGE["The page: 120 columns, centred"]
     end
 
-    subgraph RightDock["Right Dock Slot (Inspector)"]
-        REL["Relations Panel (Backlinks / Outgoing / 2-Hop Graph)"]
-        PREV["HTML Preview (SPC H)"]
-        CARDS["Lua Plugin Cards & Frontmatter Schema Diagnostics"]
+    subgraph Right["Right edge (the default)"]
+        REL["Links: Relations (SPC l)"]
+    end
+
+    subgraph Bottom["Bottom edge (the default)"]
+        TERM["Terminal (SPC `)"]
+        AGENT["AI agent (SPC g)"]
+    end
+
+    subgraph Other["Placed by their own rules"]
+        PREV["HTML Preview pane (SPC H, --gui)"]
+        CARDS["Plugin cards (SPC p): where the plugin's manifest places them"]
+        RESULTS["Results (Go › Results)"]
     end
 
     TABS --> PAGE
     FILES --> PAGE
+    TODOS --> PAGE
     PAGE --> REL
+    TERM --> PAGE
+    AGENT --> PAGE
     PAGE --> PREV
     PAGE --> CARDS
-    BOTTOM --> PAGE
+    PAGE --> RESULTS

@@ -1,7 +1,7 @@
 Chapter,Title,Part,Primary Surfaces,Mermaid Diagrams (.mmd),Vega-Lite Charts (.chart.json),Reference Tables (.csv)
 01,What Is AutoDoc? Architecture & File-Canonical Guarantee,Part I: Foundations,--serve / --ui / --gui / --call,daemon-topology.mmd; client-rpc-flow.mmd,memory-footprint-comparison.chart.json,surface-feature-matrix.csv
 02,5-Minute Quickstart & Workspace Registration,Part I: Foundations,--ui / --gui / --call,workspace-boot-sequence.mmd,indexing-throughput.chart.json,workspace-settings-reference.csv
-03,Mastering the Modal Editor & Dockable Panels,Part I: Foundations,--ui / --gui,editor-mode-state-machine.mmd; panel-docking-layout.mmd,editor-frame-latency.chart.json,complete-keybinding-reference.csv
+03,Mastering the Modal Editor & Dockable Panels,Part I: Foundations,--ui / --gui,editor-mode-state-machine.mmd; panel-docking-layout.mmd,leader-keys-by-group.chart.json,complete-keybinding-reference.csv
 04,Rich Authoring: Mermaid (.mmd) & Vega-Lite (.chart.json) & CSVs,Part I: Foundations,--gui / --export,embed-resolution-pipeline.mmd,supported-vegalite-marks-gallery.chart.json,embed-limits-and-types.csv
 05,The 3-Stage Hybrid Search Pipeline,Part II: Search & Graphs,--ui / --gui / --call,three-stage-retrieval-funnel.mmd,retrieval-accuracy-by-stage.chart.json; query-latency-breakdown.chart.json,query-grammar-reference.csv
 06,Configuring Local & Cloud Embeddings and Rerankers,Part II: Search & Graphs,--serve / config.toml,provider-routing-architecture.mmd,model-accuracy-vs-vram.chart.json,provider-config-matrix.csv

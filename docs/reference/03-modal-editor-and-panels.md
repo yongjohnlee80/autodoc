@@ -1,80 +1,69 @@
 # Chapter 3: Modal Editor and Panels
 
-Both `autodoc --ui` (the terminal TUI) and `autodoc --gui` (the native Gio desktop application) are built around the same high-speed, zero-lag authoring environment: a **120-column centered page editor** surrounded by workspace awareness panels. Rather than forcing technical writers to choose between a heavyweight IDE and a bare-bones note taker, AutoDoc brings authentic modal editing, structural Markdown folding, multi-buffer tabs, window splits, and live knowledge-graph panels into a unified workspace.
+Both `autodoc --ui` (the terminal TUI) and `autodoc --gui` (the native desktop application) show the same thing: one **page**, 120 columns wide and centred, and **panels** that open over it from its sides. The page edits in one of two editor modes, **Vim** (modal, the default) or **Text** (modeless). Every open file is a **buffer**, and the leader key, `SPC`, reaches the rest.
 
 ---
 
-## 3.1 The 120-Column Centered Page Editor
+## 3.1 The Page
 
-Prose readability degrades rapidly when lines stretch across an entire ultrawide monitor. AutoDoc formats the central editor stage as a balanced **120-column page** with automatic responsive margins, soft-wrap awareness at word boundaries, and hanging indents for bulleted lists, numbered lists, and blockquotes.
+- **Width**: the page is 120 columns wide and centred, with the ruler at its edge. Preferences sets the width.
+- **Wrap and line numbers**: long lines wrap at the page's width. Line numbers can show. Both are under View › Wrap long lines and View › Line numbers, or in Preferences.
+- **The breadcrumb**: the page's frame names the file, then where the cursor is, separated by `›`. In Markdown that is the headings above the cursor; in YAML, the key path.
+- **The outline**: `SPC O` (Go › Outline…) lists the file's headings, unsaved ones too, and `Enter` jumps there.
+- **Frontmatter**: once the workspace has a schema, the line over the page names a file's frontmatter problems. In the GUI's Rendered View, a note's frontmatter is hidden.
 
-Key structural features of the page editor include:
+![AutoDoc's Leader Keys on SPC's Card, by Group](leader-keys-by-group.chart.json)
 
-- **Frontmatter Header Folding**: YAML frontmatter blocks at the top of a document are syntax-highlighted and can be collapsed into a compact single-line badge showing `type`, `status`, and `tags` so you can focus immediately on the prose body.
-- **Heading Breadcrumb Bar**: As you scroll through long specifications or ADRs, a pinned top breadcrumb bar displays your exact structural location (e.g., `GlobalKB > adrs/0042-sqlite-wal-lease.md > §1.2 Single-Writer Lease`).
-- **Live Wikilink & Tag Completion**: Typing `[[` in Insert mode triggers an inline completion menu backed by the daemon's `graph` index, allowing fuzzy matching by document title, slug, or heading anchor (`[[0042-sqlite-wal-lease#1.2 Single-Writer Lease]]`).
-
-![Illustrative Editor Frame Render Profile vs 16.6ms (60 FPS) Budget](editor-frame-latency.chart.json)
-
-Because the buffer engine maintains an incremental piece-table and row-level syntax cache in pure Go rather than a browser DOM, interactive editing operations stay well inside the **16.6 ms** frame budget required for 60 FPS rendering (as illustrated in the latency profile above).
+The chart counts the keys SPC's card lists (§3.4), as `tui/keys.go` binds them.
 
 ---
 
-## 3.2 Vim Modal Editing vs. Modeless Mode
+## 3.2 The Editor Modes: Vim and Text
 
-AutoDoc defaults to **Vim modal editing**, giving experienced terminal and Neovim users immediate muscle-memory compatibility. However, teams with mixed editor preferences can toggle **Modeless Mode** at any time via `:modeless` or inside the Preferences dialog (`SPC ,`, stored in the SQLite preferences table via `preference.set`).
+The page edits in the **Vim** mode (modal, the default) or the **Text** mode (modeless). `SPC k` switches between them, and so does Options › Editor mode. In the Text mode, `Ctrl+Space` is the leader, so the switch is `Ctrl+Space k`. The choice is a preference the daemon keeps, so `--ui` and `--gui` share it.
 
-![Editor Mode State Machine and Transitions](editor-mode-state-machine.mmd)
+![The Editor's Modes and Views](editor-mode-state-machine.mmd)
 
-### Modal Editing States (`Normal`, `Insert`, `Visual`, `Command`)
+### The Vim mode
 
-1. **Normal Mode**: The default navigation and manipulation state. Supports standard motions (`h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg`, `G`), structural Markdown section motions (`]]` next heading, `[[` previous heading), operators (`d`, `c`, `y`, `>`, `<`), text objects (`iw`, `aw`, `i"`, `i[`, `ip` inner paragraph, `is` inner section), and dot-repeat (`.`).
-2. **Insert Mode**: Entered via `i`, `a`, `I`, `A`, `o`, or `O`. Supports smart Markdown list continuation (pressing `Enter` on a `- ` or `1. ` list item automatically inserts the next bullet or incremented number; pressing `Tab` / `Shift+Tab` indents or outdents the list item).
-3. **Visual Mode**: Supports character-wise (`v`), line-wise (`V`), and rectangular block (`Ctrl+v`) selection. Selecting lines in Visual mode and pressing `>` or `<` shifts indentation cleanly, while pressing `[[` wraps the selection in a wikilink.
-4. **Command Mode (`:`)**: Pressing `:` opens the command-line bar at the bottom of the screen for file operations (`:w`, `:q`, `:wq`, `:e <path>`), split creation (`:split`, `:vsplit`), search/replace (`:%s/old/new/g`), and direct RPC execution (`:call index.status`).
+1. **Normal**:
+   - motions: `h` `j` `k` `l`, `w` `b` `e`, `0` `$`, `gg` `G`, and `{` `}` by paragraph (`[` and `]` move by paragraph too);
+   - operators: `d`, `c`, `y`, `>`, `<`, and `g~` `gu` `gU`;
+   - text objects: `iw` `aw`, `iW` `aW`, `i"` `i'`, `` i` ``, `i(` (`ib`), `i{` (`iB`), `i[`, `i<`, `ip` (a paragraph) and `is` (a sentence);
+   - `.` repeats the last change;
+   - `H` and `L` show the buffer before or after the shown one;
+   - `Ctrl+O` and `Ctrl+I` step back and forward along the jumps, across documents too;
+   - `?` shows the Vim keys' card.
+2. **Insert**: entered with `i`, `a`, `I`, `A`, `o` or `O`; `Esc` goes back to Normal. In the GUI's Rendered View, `Enter` on a Markdown list item continues the list, and `Tab` / `Shift+Tab` nest the item or bring it out.
+3. **Visual**: character-wise `v`, line-wise `V`, or a block with `Ctrl+v`. `>` and `<` shift the lines selected.
+4. **The command line**: `:` opens it in Normal mode, and `Ctrl+;` opens it in either editor mode. Its commands are in §3.8.
 
-### Modeless Mode (`F2` or `:modeless`)
+### The Text mode
 
-When Modeless Mode is active, typing inserts text directly without mode transitions, and standard desktop shortcuts apply:
+Typing types. The keys are an ordinary text editor's:
 
-- `Ctrl+S`: Save current buffer
-- `Ctrl+F`: Find in buffer / `Ctrl+Shift+F`: Hybrid workspace search
-- `Ctrl+T`: Toggle Rendered View (`--gui` only: the terminal's `--ui` has no Rendered View)
-- `Ctrl+Z` / `Ctrl+Y`: Undo and Redo
-- `Ctrl+B` / `Ctrl+I`: Toggle `**bold**` or `*italic*` around selection
+- `Ctrl+S` saves;
+- `Ctrl+Z` / `Ctrl+Y` undo and redo;
+- `Ctrl+X` / `Ctrl+C` / `Ctrl+V` cut, copy and paste;
+- `Ctrl+A` selects all;
+- `Ctrl+G` searches the workspace;
+- `Ctrl+T` toggles the Rendered View (`--gui` only: the terminal's `--ui` has no Rendered View);
+- `Ctrl+Space` opens SPC's card;
+- `Ctrl+;` opens the command line.
+
+Search › Find in page finds in the page.
 
 ---
 
-## 3.3 Multi-Buffer Tabs, Window Splits, and Folding
+## 3.3 Buffers
 
-Synthesizing architecture documents or conducting code reviews frequently requires cross-referencing multiple documents side by side.
+Every file opened is a buffer, and the GUI shows them as tabs. The status line (`SPC t`) shows `[+]` while the shown one has unsaved changes.
 
-### Multi-Buffer Tabs
+- `H` and `L` in Normal mode show the buffer before or after the shown one, in the order of the GUI's tabs, wrapping around.
+- `SPC B` or `:b` switches buffer from a picker, each buffer previewed with its unsaved text. `:b <number>` or `:b <name>` goes straight to one.
+- `SPC C` or `:bd` closes the shown buffer, asking first over unsaved changes.
 
-Every opened document resides in an in-memory buffer tab shown across the top of the editor stage. Unsaved buffers display a modified indicator (`●`).
-
-- Cycle forward and backward across tabs with `gt` and `gT` (or `Alt+1` through `Alt+9` to jump by tab index).
-- Switch across open buffers with `SPC B` (a picker over them).
-- Close the active buffer tab with `SPC C` or `:bd`.
-
-### Horizontal and Vertical Window Splits
-
-You can subdivide the central editor stage into multiple independent viewports viewing either different documents or different sections of the same document:
-
-- **`Ctrl+w v` (or `:vsplit`)**: Opens a vertical side-by-side split. A common workflow is keeping an ADR open in the left split while editing its companion `.mmd` Mermaid diagram or `.chart.json` specification in the right split.
-- **`Ctrl+w s` (or `:split`)**: Opens a horizontal stacked split.
-- **`Ctrl+w h / j / k / l`**: Moves cursor focus cleanly across editor splits and into adjacent docked panels.
-- **`Ctrl+w =`**: Rebalances all open splits to equal width and height.
-- **`Ctrl+w q`**: Closes the focused split viewport while keeping the underlying buffer loaded.
-
-### Structural Markdown Folding (`z` Operators)
-
-AutoDoc computes fold ranges automatically from your document's YAML frontmatter, heading hierarchy (`#` through `######`), and fenced code blocks:
-
-- **`za`**: Toggles the fold under the cursor open or closed.
-- **`zo` / `zc`**: Explicitly opens or closes the current section fold.
-- **`zM`**: Folds all sections in the document down to top-level headings—giving you an instant structural birds-eye view that you can reorder with line-wise Visual delete/paste (`V` + `d` + `p`).
-- **`zR`**: Unfolds every section across the entire buffer.
+AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the GUI's HTML preview pane (`SPC H`) sit beside or over it.
 
 ---
 
@@ -92,66 +81,73 @@ In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing ever
 - **`SPC Tab` (Go to a widget)**: Opens the Go-to picker over the places the keyboard can go: the editor, every panel, and each terminal and agent tab, never the menu bar. Tab and Shift+Tab move its cursor; Enter goes there, opening a closed panel. `:go <name>` does the same from the command line (`:go explorer`, `:go terminal/lua`), and **F6 / Shift+F6** step the keyboard through the open widgets.
 - **The dock (the menu bar's right end)**: one icon per widget. **✎** is the editor, and it comes first. Then comes each panel that is open, or running on with its drawer closed: a terminal with a shell, an agent, a plugin card whose plugin runs. A tab belongs to its panel's icon. A click on a shown panel hides it, not closed: it keeps everything it holds (a GlobeMap keeps its picture, view and filter), its icon is dimmed, and the keyboard goes back to the editor. A click on a hidden panel shows it again as it was, with the keyboard in it, as the Go-to picker does; a closed panel opens. **✎** hides every shown panel and remembers them; its next click shows the same ones again, unless a panel was opened, shown or closed in between. Opening a note from the GlobeMap, the Mindmap or the Links drawer hides it the same way, so the dock brings it back. A hidden panel leaves the dock only when it is closed for real. With the bar on auto-hide, it stays shown while the dock lists more than the editor, and the page moves down a row while it does.
 
+Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page and the panels (in Normal mode), `Ctrl+S` saves, `Ctrl+G` searches, `Ctrl+W` switches workspace, `F1` opens the help, `F11` maximizes a panel, and `Ctrl+Q` quits.
+
 ![Complete Modal Editor, Leader Chord, and Panel Keybinding Reference](complete-keybinding-reference.csv)
 
 ---
 
-## 3.5 Docking and Arranging Workspace Panels
+## 3.5 The Panels
 
-Surrounding the central 120-column editor stage are three collapsible dock slots (**Left**, **Right**, and **Bottom**). Each panel can be toggled individually via its Leader chord, resized with `Ctrl+w <` / `Ctrl+w >`, or maximized temporarily with `Ctrl+w |`.
+Each panel opens over the page from its edge. Preferences sets the edge, and `Escape` or the panel's key again closes it.
 
-![Workspace Panel Docking Layout Around the 120-Column Editor](panel-docking-layout.mmd)
+- **Moving one:** every panel moves and resizes.
+  - Alt (Option on a Mac) with the left mouse button drags it anywhere, and Alt with the right button resizes it.
+  - `SPC L` (Go › Arrange panel…) does both from the keyboard: `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` resize it, `Enter` keeps it, and `Esc` puts it back.
+  - Go › Reset panel layout docks every panel at its edge again.
+- **Maximizing one:** `SPC M` or `F11`.
 
-### Left Dock: `Files`, and the Outline
+![The Page and the Panels Around It](panel-docking-layout.mmd)
 
-1. **`Files` (`SPC e`)**: Displays the canonical workspace directory tree, filtered by your workspace's `include` and `exclude` globs. Companion resource directories (`<note-stem>/`) are visually grouped beneath their parent `.md` document so diagrams and charts never clutter the top-level file list. Pressing `a` inside `Files` creates a new document from a `_templates/` archetype; `r` renames the file and automatically updates incoming `[[wikilinks]]` across the workspace.
-2. **The Outline (`SPC O`)**: Go › Outline… lists the file's headings, unsaved ones too, and `Enter` jumps to the one chosen. It is a list over the page, not a docked panel.
+### The panels
 
-### Right Dock: `Relations`, `Preview`, and `Plugin Cards`
+1. **The explorer (`SPC e`)**: every workspace's folders and files. `Enter` on a file opens it and closes the panel.
+2. **The links (`SPC l`)**: what this file is connected to, by kind:
+   - superseded by, supersedes, sources, cited by, amends, amended by, related and `adr`;
+   - its links and its backlinks;
+   - then what names nothing, and the supersession loops.
 
-1. **`Relations` (`SPC l`)**: Displays real-time graph context for the active document, divided into three collapsible sections:
-   - **Incoming Backlinks**: Every document in the workspace that links to the current file, including the surrounding sentence snippet where the `[[wikilink]]` appears.
-   - **Outgoing Links**: All resolved and unresolved (`broken`) links originating from the current document.
-   - **Frontmatter & Todo Links**: Tasks in `.todo-list/` whose `adr:` or `review:` field references the active document.
-2. **`Preview` (`SPC H`)**: An HTML file's page (File › Preview HTML). The note editor's own Rendered View is `Ctrl+T`, in `--gui`.
-3. **`Plugin Cards`**: Renders custom contextual widgets registered by Lua plugins—such as schema validation diagnostics from `doc.validate`, Git blame summaries, or related semantic chunks.
+   `d` shows the files two links away, under the one that reaches them.
+3. **The todos (`SPC x`)**: the workspace's `.todo-list/` store, a tab for each status: Open, In progress, Deferred, Completed and Archived. `s` moves the selected task to another status, and `A` assigns it to an agent.
+4. **The terminal (`` SPC ` ``)**: your shells, in the workspace's folder. §3.8 says more.
+5. **The AI agent (`SPC g`)**: an agent CLI in a terminal of its own, started in AutoDoc's folder for the workspace.
+6. **The notifications (`SPC h`)**: what happened (a save, the connection, indexing).
+7. **The results (Go › Results)**: a table of rows a plugin returns, such as a query's.
+8. **Plugin cards (`SPC p`)**: a plugin's card, beside the page.
+9. **The HTML preview (`SPC H`)**: under `--gui`, a pane beside the editor, the note's page drawn live as you type. In the terminal, it is a preview dialog.
 
-### Bottom Dock: `Todos`, `Results`, and `TerminalTabs`
-
-1. **`Todos` (`SPC x`)**: An interactive kanban/table view of the workspace's `.todo-list/{open,deferred,completed,archived}/` store. You can filter tasks by tag, priority, or assignee, press `Enter` to jump to a task's linked ADR/review document, or press `s` to transition status through the daemon's `todos.status` verb.
-2. **`Results`**: Whenever you execute a workspace-wide search (`SPC /`) and press `Ctrl+q`, the ranked hits pin into the persistent bottom `Results` table so you can step through matches one by one using `]q` and `[q`.
-3. **`TerminalTabs` (`SPC \``)**: A built-in multiplexed PTY terminal drawer rooted at the workspace directory. You can run `git status`, execute test suites, or invoke `autodoc --call` scripts in multiple terminal tabs without leaving the AutoDoc window.
+The outline (`SPC O`) is a list over the page, not a panel.
 
 ---
 
-## 3.6 Customizing Editor and Panel Layout (`config.toml`)
+## 3.6 Preferences, and `config.toml`
 
-Every aspect of the modal editor, 120-column page geometry, and initial panel docking layout can be tailored in `~/.config/autodoc/config.toml` so both `autodoc --ui` and `autodoc --gui` open in your preferred configuration:
+The editor's and the panels' settings are **preferences**. Options › Editor preferences (`SPC ,`) sets them:
+
+- the editor mode, wrapping, line numbers, indent marks and the page's width;
+- each panel's edge;
+- the theme, the toast corner, and what to do with a file changed on disk.
+
+The daemon keeps them (`preference.set`), so `--ui` and `--gui` share them.
+
+`config.toml` (`$XDG_CONFIG_HOME/autodoc/config.toml`, else `~/.config/autodoc/config.toml`) configures the daemon itself. A setting it doesn't know is refused, not ignored:
 
 ```toml
-[editor]
-mode = "vim"                  # "vim" (default) or "modeless"
-page_columns = 120            # Target centered prose column width
-tab_width = 2                 # Spaces per indentation level in Markdown & YAML
-soft_wrap = true              # Wrap long prose lines at word boundaries cleanly
-fold_frontmatter = false      # Collapse YAML frontmatter header on buffer open
-auto_pair = true              # Auto-close brackets, quotes, and [[wikilinks]]
-relative_numbers = true       # Show relative line numbers in Normal mode
+[server]
+socket = ""        # the unix socket; empty: the default
+state_dir = ""     # the state directory; empty: the default
+data_dir = ""      # the store's directory; empty: the default
 
-[layout]
-left_dock = ["files", "outline"]
-right_dock = ["relations"]
-bottom_dock = ["todos"]
-left_width_cols = 32
-right_width_cols = 38
-bottom_height_rows = 12
-show_breadcrumbs = true
-show_tabbar = true
+[follow]
+poll_interval = "2s"   # how often to list a root that can't be watched (the default)
+
+[embedding_queue]
+max_inflight = 1   # embedding requests at once, across every workspace: 1 (the default) or 2
 ```
 
 ### Walkthrough: Reviewing an Architecture Decision
 
-To see how the editor and the docked panels work together in practice, consider reviewing a proposed ADR (`adrs/0048-hybrid-rrf-fusion.md`) and its linked benchmark task:
+To see how the editor and the panels work together in practice, consider reviewing a proposed ADR (`adrs/0048-hybrid-rrf-fusion.md`) and its linked benchmark task:
 
 1. **Open the Document (`SPC o`)**: Press `SPC o`, type `0048 rrf`, and press `Enter` to open `adrs/0048-hybrid-rrf-fusion.md` in the center page.
 2. **Survey Its Structure (`SPC O`)**: Press `SPC O` (Go › Outline…) to list the file's headings, choose `## 3. Reciprocal Rank Fusion Formula`, and press `Enter` to jump there.
@@ -162,56 +158,65 @@ To see how the editor and the docked panels work together in practice, consider 
 
 ---
 
-## 3.7 Synchronized External Editing and Conflict Prevention
+## 3.7 Files Changed on Disk
 
-Because AutoDoc is file-canonical, you might occasionally edit a document in `autodoc --ui` or `autodoc --gui` while an external tool (such as `git pull` or a background AI agent) modifies other files in the workspace:
+AutoDoc is file-canonical, so another program (`git pull`, an AI agent) may change a file you have open:
 
-- **Clean Buffers Auto-Reload**: If a buffer open in AutoDoc has no unsaved local modifications (`modified == false`) and `core/follow` detects an external change on disk, the buffer reloads the new content seamlessly while preserving your cursor line and scroll offset.
-- **Modified Buffer Protection**: If your buffer has unsaved edits (`modified == true`) when an external process modifies the underlying file on disk, AutoDoc **never overwrites your in-memory work**. Instead, a non-intrusive status banner warns you of the external change and offers `:diffdisk` to inspect the delta or `:w!` to overwrite.
+- **A file with no unsaved changes** reloads in place, as one undo step, the cursor kept. Preferences › files changed on disk can make it ask first.
+- **A file with unsaved changes** is marked "changed on disk" (`[!]`). AutoDoc asks about it when you next open or save it: keep editing, reload the disk's version, or overwrite it with yours. After a reload, `u` brings your text back.
+- **A save** writes only over the version you opened. If the file changed since, it asks the same.
+- **A file deleted on disk** keeps its text, and a save creates it again.
 
 ---
 
-## 3.8 Command-Line (`:`) Ex Commands and Search-and-Replace
+## 3.8 The Command Line (`:`)
 
-In addition to `SPC` Leader chords, AutoDoc's Command mode (`:`) provides a familiar suite of Ex commands for buffer management, split layout, and workspace-assisted editing:
-
-```text
-:w [path]              Write current buffer to disk (atomically via fsync + rename)
-:wa                    Write all modified buffers across open tabs
-:q / :q!               Close active window or quit (with force-discard option)
-:wq / :x               Save current buffer and close window
-:e <relative-path>     Open or reload a document relative to workspace root
-:split [path]          Split viewport horizontally (:sp)
-:vsplit [path]         Split viewport vertically (:vs)
-:tabnew [path]         Open a new buffer tab
-:bnext / :bprev        Switch to next or previous buffer in tab list
-:modeless              Toggle between Vim modal mode and Modeless CUA mode
-:foldopen / :foldclose Open or close the heading fold under the cursor
-:export [output.html]  Compile current buffer and companion embeds to offline HTML
-```
-
-### Structural Search and Substitution (`:%s`)
-
-AutoDoc supports regular-expression search (`/pattern`, `?pattern`, `n`, `N`, `*`, `#`) and buffer-wide substitution (`:%s/pattern/replacement/g`). When you rename a heading or refactor a frontmatter tag across a document, you can preview matches interactively with the `c` confirmation flag:
+`:` (or `Ctrl+;`) opens the command line. These are its commands:
 
 ```text
-:%s/\[\[old-adr-slug/\[\[0042-sqlite-wal-lease/gc
+:<number>               Go to that line
+:w  (:write)            Save
+:q  (:quit) / :q!       Quit; :q! discards unsaved changes
+:wq                     Save, then quit
+:x  (:exit)             Save if modified, then quit
+:find <term>            Find a term in the page
+:nohl                   Clear the find
+:replace <term> <with>  Replace each match, asking y / n; q or Esc stops
+:b [<number or name>]   Show a buffer; alone, the buffer picker
+:bd                     Close the buffer
+:go [<name>]            Go to a widget (:go explorer, :go terminal/lua); alone, the Go-to picker
+:todos                  The todos
+:terminal  (:term)      Open the terminal
+:lua [chunk]            A Lua shell, or run Lua
+:lua-reload             Reload the Lua scripts
+:lua-install <name or git URL>  Install a Lua package
+:table <cols> <rows>    Insert a Markdown table; Tab walks its cells
+:mermaid <type>         Insert a Mermaid diagram to start from
+:agent-buffer           Send the page to an agent
+:agent-forward          Send the selection, or the clipboard, to an agent
+:usage                  What AutoDoc uses
 ```
 
-For workspace-wide link refactoring, renaming a file inside the `Files` panel (`r`) or invoking `doc.rename` over RPC automatically rewrites every incoming `[[wikilink]]` across all documents in the workspace in a single coordinated batch.
+Every other command has a key or a menu row, and a Lua script reaches any of them with `autodoc.run(id)`. A plugin's commands run from `SPC p`.
 
-### Integrated `TerminalTabs` (`SPC \``) Workflows
+### Finding and Replacing
 
-The bottom `TerminalTabs` panel spawns a real pseudoterminal (PTY) shell with `$AUTODOC_WORKSPACE` and `$AUTODOC_CURRENT_DOC` exported into the shell environment. Because `$AUTODOC_CURRENT_DOC` always points to the active editor buffer, you can run one-liner outline, validation, or Git inspection commands directly against the file you are editing:
+In Normal mode, `/` and `?` find forward and back, `n` and `N` go to the next and previous match, and `*` and `#` find the word under the cursor. `:find <term>` finds from the command line, and `:replace <term> <with>` replaces each match, asking `y` or `n` at each.
+
+### The Terminal (`` SPC ` ``)
+
+The terminal runs your shells in the workspace's folder: at the bottom, or wherever Preferences puts it.
+
+- **Tabs:** each shell has a tab. `+` adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize and Hide.
+- **Keys:** every key goes to the shell, `Esc` too. `Ctrl+T` (or `Ctrl+\ Ctrl+n`) leaves for Normal mode, where `h` `j` `k` `l`, `/` and `?` move over the shell's history, `v` selects and `y` copies. `Ctrl+T`, `i` or `Enter` goes back.
+- **Closing:** `Escape` in Normal mode, or `` SPC ` `` again, hides the terminal, and its shells run on.
+
+`autodoc --call` reaches the daemon from a shell:
 
 ```bash
-# Inside TerminalTabs: inspect the heading outline of the focused editor document
-autodoc --call doc.outline '["'"$AUTODOC_WORKSPACE"'", "'"$AUTODOC_CURRENT_DOC"'"]'
-
-# Inspect recent git commits touching the active document and its companion folder
-git log -n 5 --oneline -- "$AUTODOC_CURRENT_DOC" "${AUTODOC_CURRENT_DOC%.md}/"
+# Search the workspace "kb" from the terminal
+autodoc --call search.query '["kb", "rrf fusion", {"limit": 5}]'
 ```
-
 
 ---
 

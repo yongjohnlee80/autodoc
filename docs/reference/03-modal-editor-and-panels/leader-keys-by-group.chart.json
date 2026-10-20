@@ -1,0 +1,28 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "AutoDoc's Leader Keys on SPC's Card, by Group",
+  "description": "How many leader keys each group of SPC's card holds, as tui/keys.go binds them: 33 in all.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"group": "Find", "keys": 7, "examples": "SPC / o f r j b B"},
+      {"group": "Panels", "keys": 6, "examples": "SPC e l ` x M h"},
+      {"group": "File", "keys": 5, "examples": "SPC n C O d H"},
+      {"group": "Manage", "keys": 5, "examples": "SPC w W s , k"},
+      {"group": "Window", "keys": 5, "examples": "SPC m Tab . t L"},
+      {"group": "Help", "keys": 3, "examples": "SPC ? A Q"},
+      {"group": "Agents", "keys": 2, "examples": "SPC g G"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "group", "type": "nominal", "title": "Group on SPC's card", "sort": null, "axis": {"labelAngle": 0}},
+    "y": {"field": "keys", "type": "quantitative", "title": "Leader keys"},
+    "tooltip": [
+      {"field": "group", "type": "nominal"},
+      {"field": "keys", "type": "quantitative"},
+      {"field": "examples", "type": "nominal", "title": "Keys"}
+    ]
+  }
+}
