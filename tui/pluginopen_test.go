@@ -22,6 +22,9 @@ func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 	installPluginAt(t, dir, "nb", "dialog", "session", openerManifest, 9)
 	installPluginAt(t, dir, "zz", "dialog", "session", openerManifest, 9) // after nb in the list
 	r, logs := pluginTUI(t, dir)
+	// kb entered first: entering it after the open asked where the file lies would drop the open (a
+	// TicketWorkspace), as a loaded runner's coverage job saw
+	r.ready(t)
 	nbDir := t.TempDir()
 	nb := filepath.Join(nbDir, "x.ipynb")
 	if err := os.WriteFile(nb, []byte("{\"cells\": []}\n"), 0o644); err != nil {
@@ -67,6 +70,7 @@ func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 // and keeps its outputs beside it.
 func TestAPluginsDocumentNamesItsWorkspacesRoot(t *testing.T) {
 	r, _ := pluginTUI(t, t.TempDir())
+	r.ready(t)
 	r.h.p.Post(func() { r.h.openRef(fileRef{"kb", "a.md"}, false, nil) })
 	r.waitOpen(t, "kb", "a.md")
 	root := onLoop(r, func() string { return r.h.rootOf("kb") })
