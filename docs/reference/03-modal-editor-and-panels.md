@@ -69,19 +69,19 @@ AutoDoc shows one page at a time: there are no window splits, and no folding. Th
 
 ## 3.4 Leader (`SPC`) Chords and Command Pickers
 
-In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/keys.go` binds them:
+In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/keys.go` and AutoDoc's features bind them:
 
 - **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` goes back; `SPC B` switches buffer.
 - **File:** `SPC n` a new file; `SPC C` closes the buffer; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
 - **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC M` maximizes a panel; `SPC h` the notifications.
-- **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles.
+- **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles; `SPC a` the agents' card, where `SPC a b` sends the page to an agent and `SPC a f` the selection or the clipboard.
 - **Manage:** `SPC w` switches workspace; `SPC W` manages workspaces; `SPC s` the search models; `SPC ,` the editor preferences; `SPC k` the editor mode (Vim, Text).
-- **Window:** `SPC m` shows, focuses or hides the menu; `SPC .` the right-click menu; `SPC t` the status line; `SPC L` arranges a panel; and `SPC Tab`, below.
+- **Window:** `SPC m` shows, focuses or hides the menu; `SPC .` the right-click menu; `SPC t` the status line; `SPC L` arranges a panel; `SPC p` a plugin's commands; `SPC u` your Lua keys; and `SPC Tab`, below.
 - **Help:** `SPC ?` help; `SPC A` about; `SPC Q` quit.
 - **`SPC Tab` (Go to a widget)**: Opens the Go-to picker over the places the keyboard can go: the editor, every panel, and each terminal and agent tab, never the menu bar. Tab and Shift+Tab move its cursor; Enter goes there, opening a closed panel. `:go <name>` does the same from the command line (`:go explorer`, `:go terminal/lua`), and **F6 / Shift+F6** step the keyboard through the open widgets.
 - **The dock (the menu bar's right end)**: one icon per widget. **✎** is the editor, and it comes first. Then comes each panel that is open, or running on with its drawer closed: a terminal with a shell, an agent, a plugin card whose plugin runs. A tab belongs to its panel's icon. A click on a shown panel hides it, not closed: it keeps everything it holds (a GlobeMap keeps its picture, view and filter), its icon is dimmed, and the keyboard goes back to the editor. A click on a hidden panel shows it again as it was, with the keyboard in it, as the Go-to picker does; a closed panel opens. **✎** hides every shown panel and remembers them; its next click shows the same ones again, unless a panel was opened, shown or closed in between. Opening a note from the GlobeMap, the Mindmap or the Links drawer hides it the same way, so the dock brings it back. A hidden panel leaves the dock only when it is closed for real. With the bar on auto-hide, it stays shown while the dock lists more than the editor, and the page moves down a row while it does.
 
-Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page and the panels (in Normal mode), `Ctrl+S` saves, `Ctrl+G` searches, `Ctrl+W` switches workspace, `F1` opens the help, `F11` maximizes a panel, and `Ctrl+Q` quits.
+Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page and the panels (in Normal mode), `Ctrl+S` saves, `Ctrl+G` searches, `Ctrl+W` switches workspace (in the Vim mode's Insert, `Ctrl+W` deletes the word before the cursor: `Esc` first), `F1` opens the help, `F11` maximizes the terminal or the agents, and `Ctrl+Q` quits.
 
 ![Complete Modal Editor, Leader Chord, and Panel Keybinding Reference](complete-keybinding-reference.csv)
 
@@ -89,13 +89,13 @@ Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page an
 
 ## 3.5 The Panels
 
-Each panel opens over the page from its edge. Preferences sets the edge, and `Escape` or the panel's key again closes it.
+The explorer, the links, the todos, the terminal and the AI agent each open over the page from an edge. Preferences sets the edge, and `Escape` or the panel's key again closes it.
 
 - **Moving one:** every panel moves and resizes.
   - Alt (Option on a Mac) with the left mouse button drags it anywhere, and Alt with the right button resizes it.
   - `SPC L` (Go › Arrange panel…) does both from the keyboard: `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` resize it, `Enter` keeps it, and `Esc` puts it back.
   - Go › Reset panel layout docks every panel at its edge again.
-- **Maximizing one:** `SPC M` or `F11`.
+- **Maximizing:** `SPC M` or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
 
 ![The Page and the Panels Around It](panel-docking-layout.mmd)
 
@@ -111,10 +111,10 @@ Each panel opens over the page from its edge. Preferences sets the edge, and `Es
 3. **The todos (`SPC x`)**: the workspace's `.todo-list/` store, a tab for each status: Open, In progress, Deferred, Completed and Archived. `s` moves the selected task to another status, and `A` assigns it to an agent.
 4. **The terminal (`` SPC ` ``)**: your shells, in the workspace's folder. §3.8 says more.
 5. **The AI agent (`SPC g`)**: an agent CLI in a terminal of its own, started in AutoDoc's folder for the workspace.
-6. **The notifications (`SPC h`)**: what happened (a save, the connection, indexing).
+6. **The notifications (`SPC h`, Go › Notifications…)**: a dialog listing what happened (a save, the connection, indexing). It is a dialog, not a panel: it has no edge and doesn't move.
 7. **The results (Go › Results)**: a table of rows a plugin returns, such as a query's.
 8. **Plugin cards (`SPC p`)**: a plugin's card, beside the page.
-9. **The HTML preview (`SPC H`)**: under `--gui`, a pane beside the editor, the note's page drawn live as you type. In the terminal, it is a preview dialog.
+9. **The HTML preview (`SPC H`)**: under `--gui`, a pane beside the editor, the note's page drawn live as you type. In the terminal, a dialog shows the page as an image when View › Image previews is on, the terminal confirmed kitty graphics, and a headless Chromium or Chrome is there; otherwise the page opens in the browser.
 
 The outline (`SPC O`) is a list over the page, not a panel.
 
@@ -201,7 +201,7 @@ Every other command has a key or a menu row, and a Lua script reaches any of the
 
 ### Finding and Replacing
 
-In Normal mode, `/` and `?` find forward and back, `n` and `N` go to the next and previous match, and `*` and `#` find the word under the cursor. `:find <term>` finds from the command line, and `:replace <term> <with>` replaces each match, asking `y` or `n` at each.
+In Normal mode, `/` finds in the page, `n` and `N` go to the next and previous match, and `*` and `#` find the word under the cursor, forward and back. (`?` is the Vim keys' card, not a search.) `:find <term>` finds from the command line, and `:replace <term> <with>` replaces each match, asking `y` or `n` at each.
 
 ### The Terminal (`` SPC ` ``)
 

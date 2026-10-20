@@ -9,7 +9,8 @@ Navigation,{ / },Normal,Paragraph,Move by paragraph ([ and ] too)
 Navigation,Ctrl+O / Ctrl+I,Normal,Jump List,Back and forward along the jumps; across documents too
 Navigation,SPC j / SPC b,Normal,Follow Link / Back,Go to the link under the cursor; go back to where you left
 Navigation,Ctrl+h/j/k/l,Normal,Move Between Panes,To the open panel on that side and back to the page
-Find,/ / ? / n / N,Normal,Find in Page,Find forward or back; the next or the previous match
+Find,/ / n / N,Normal,Find in Page,Find in the page; the next or the previous match
+Help,?,Normal,Vim Keys Card,Show or hide the Vim keys' card
 Find,* / #,Normal,Find the Word,Find the word under the cursor forward or back
 Buffers,H / L,Normal,Previous / Next Buffer,The buffer before or after the shown one in tab order
 Buffers,SPC B / :b,Normal,Switch Buffer,Pick one of the open buffers
@@ -25,7 +26,7 @@ Leader Chords,SPC e,Normal,Files Explorer,Focus or toggle the explorer: every wo
 Leader Chords,SPC `,Normal,Terminal,Toggle the terminal: your shells in the workspace's folder
 Leader Chords,SPC g,Normal,AI Agent,Toggle the AI agent panel
 Leader Chords,SPC L,Normal,Arrange a Panel,Move it with h j k l and resize it with H J K L
-Leader Chords,SPC M / F11,Normal,Maximize a Panel,Maximize or restore the panel
+Leader Chords,SPC M / F11,Normal,Maximize,Maximize or restore the terminal or the agents (the one with the keyboard; else the newest open)
 Rendered View,Ctrl+T,Normal / Insert / Text,Toggle Rendered View,Switch between the Markdown source and the native Rendered View in --gui (Mermaid / Vega-Lite / CSV)
-Rendered View,SPC H,Normal,Preview HTML,The note's page: a pane beside the editor in --gui; a dialog in --ui
-Window,Ctrl+S / Ctrl+W / Ctrl+Q,Normal / Text,Save / Workspace / Quit,Save; switch workspace; quit
+Rendered View,SPC H,Normal,Preview HTML,The note's page: a pane beside the editor in --gui; in --ui an image dialog when the terminal can show one; else the browser
+Window,Ctrl+S / Ctrl+W / Ctrl+Q,Normal / Text,Save / Workspace / Quit,Save; switch workspace (in Vim Insert Ctrl+W deletes a word); quit
