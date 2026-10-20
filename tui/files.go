@@ -225,6 +225,16 @@ func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landi
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
 func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
+	// a file a plugin opens (its manifest's [open], ADR 1792457255) goes to that plugin's command, by
+	// its absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
+	if h.plugins != nil {
+		if e, ok := h.plugins.opener(ref.path); ok {
+			if abs := h.pathOnDisk(ref.ws, ref.path); abs != "" {
+				h.plugins.runPluginCommandArgs(e.key(), e.m.Open.Command, []string{abs})
+				return
+			}
+		}
+	}
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
 	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {

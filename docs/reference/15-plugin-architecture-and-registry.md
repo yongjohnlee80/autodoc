@@ -26,11 +26,11 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 8
+## 15.3 Progression of Protocols 1 Through 9
 
 AutoDoc's plugin contract evolves through six cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
-![Evolution of AutoDoc Plugin Protocols 1 to 8](plugin-protocols.mmd)
+![Evolution of AutoDoc Plugin Protocols 1 to 9](plugin-protocols.mmd)
 
 ### Protocol 1: Modal Dialogs and Styled Cell Frames
 
@@ -86,6 +86,10 @@ A plugin may also ship a **Lua package** in its folder (`lua/package.toml`, `lua
 ### Protocol 8: Notifications
 
 Protocol 8 lets a plugin speak where the user is, whatever panel is open. `host.notify {message}` (the SDK's `Peer.Notify`) shows a toast in AutoDoc's corner, kept in the notification history (SPC h). A long task gives the toast an id and `ongoing`: each notice with that id updates the same toast, and one without `ongoing` ends it, its last message kept in the history. The ids are the plugin's own, so two plugins never touch each other's, and a plugin that stops has its ongoing toasts ended for it. A message is at most 1 KiB; at most 16 toasts of one plugin run at once.
+
+### Protocol 9: Opening Files
+
+Protocol 9 lets a plugin open a kind of file AutoDoc does not read itself. Its manifest's `[open]` names the extensions (`extensions = [".ipynb"]`) and one of its commands (`command = "import"`). However the file is opened (the picker, File › Open file…, the explorer, a link, back and forward, a plugin's `file.open_path`), AutoDoc runs that command with the file's absolute path, starting the plugin first when it is not running; nothing opens as text. The plugin decides what opening means: autodoc-jupyter writes an `.ipynb` as a lab note beside it and opens that. A plugin never claims AutoDoc's own extensions (`.md`, `.txt`, `.yaml`, `.csv`, `.html`, …), and nothing on the wire changes.
 
 ---
 

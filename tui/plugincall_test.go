@@ -221,7 +221,7 @@ func TestProtocolThreesCalls(t *testing.T) {
 		{"protocol = 3\n" + head + "calls = [\"a.b\", \"a.b\"]\n", `calls "a.b": twice`},
 		{"protocol = 4\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
 		{"protocol = 5\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
-		{"protocol = 9\n" + head, "protocol 9; this AutoDoc speaks 1 to 8"},
+		{"protocol = 10\n" + head, "protocol 10; this AutoDoc speaks 1 to 9"},
 	} {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)

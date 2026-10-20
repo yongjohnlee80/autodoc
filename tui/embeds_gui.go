@@ -12,6 +12,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/core/lab"
 )
 
 // A NOTE'S EMBEDS IN THE RENDERED VIEW, under --gui. In the note editor (NoteRenderer), a line that
@@ -97,6 +98,7 @@ type embedRenderer struct {
 	// editor lays blocks out from the lines it split them from
 	alone  map[int]aloneEmbed
 	joined map[guiwidget.Block]bool // the paragraphs Blocks last made one block
+	images decodedImages            // the images drawn, decoded once per file (labcells_gui.go)
 }
 
 type aloneEmbed struct{ text, dest string }
@@ -168,6 +170,12 @@ func (r *embedRenderer) LayOut(b guiwidget.Block, lines []string, width float32,
 		return r.layLines(b, lines, width, inside, t, th, host)
 	}
 	if !inside {
+		if note, files := r.cellOutputs(lines, b); len(files) > 0 {
+			return r.layCell(b, lines, note, files, width, t, th, host)
+		}
+		if pic, ok := r.embeddedImage(lines, b, width); ok {
+			return guiwidget.BlockLayout{Picture: pic, PictureSize: pic.size, Height: pic.size.H}
+		}
 		if md, ok := r.embedded(lines, b); ok {
 			return r.layEmbed(b, md, width, t, th, host)
 		}
@@ -208,29 +216,29 @@ func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, boo
 }
 
 // csvFence is the table a ```csv fence, block b, is drawn as: its rows as a .csv embed's
-// (export.CSVMarkdown). Only a whole fence, its closing fence written, is: one being typed, or
-// clipped, stays code, as does one that is not CSV.
+// (export.CSVMarkdown). Only a whole fence, its closing fence written (closedFence), is: one being
+// typed, or clipped, stays code, as does one that is not CSV.
 func csvFence(lines []string, b guiwidget.Block) (string, bool) {
-	if b.To-b.From < 2 || b.To > len(lines) {
+	info, code, ok := closedFence(lines, b)
+	if !ok || lab.FenceLang(info) != "csv" {
 		return "", false
 	}
-	open := strings.TrimLeft(lines[b.From], " ")
-	if len(lines[b.From])-len(open) > 3 || len(open) < 3 || (open[0] != '`' && open[0] != '~') {
-		return "", false
+	return export.CSVMarkdown([]byte(code), embedTableRows)
+}
+
+// embeddedImage is the picture of block b when it is a line holding an image alone in its paragraph,
+// of the open note, and the file is an image the Rendered view decodes.
+func (r *embedRenderer) embeddedImage(lines []string, b guiwidget.Block, width float32) (imagePicture, bool) {
+	ln := b.From
+	e, ok := r.alone[ln]
+	if !ok || b.To-b.From != 1 || ln >= len(lines) || lines[ln] != e.text {
+		return imagePicture{}, false
 	}
-	ch, n := open[0], 0
-	for n < len(open) && open[n] == ch {
-		n++
+	note := r.notes.file()
+	if note == "" {
+		return imagePicture{}, false
 	}
-	info := strings.Fields(open[n:])
-	if n < 3 || len(info) == 0 || !strings.EqualFold(info[0], "csv") || (ch == '`' && strings.Contains(open[n:], "`")) {
-		return "", false
-	}
-	last := strings.TrimLeft(lines[b.To-1], " ")
-	if len(lines[b.To-1])-len(last) > 3 || len(last) < n || strings.Trim(strings.TrimRight(last, " \t"), string(ch)) != "" {
-		return "", false // not closed in the block
-	}
-	return export.CSVMarkdown([]byte(strings.Join(lines[b.From+1:b.To-1], "\n")), embedTableRows)
+	return r.image(note, e.dest, width)
 }
 
 // layEmbed lays the embed of block b out as md, the Markdown its file stands for, drawn as the

@@ -9,6 +9,9 @@ import (
 
 const head = "name = \"p\"\nkind = \"dialog\"\nprotocol = 4\ncommand = [\"./p\"]\n"
 
+// openHead is a protocol-9 dialog with an import command, for [open]'s rules.
+const openHead = "name = \"p\"\nkind = \"dialog\"\nprotocol = 9\ncommand = [\"./p\"]\n[[commands]]\nid = \"import\"\ntitle = \"Import\"\n"
+
 // Each rule refuses its own case with its own reason, and a manifest that cannot run still comes
 // back with its defaults, to be listed.
 func TestParsePluginRefusesEachRule(t *testing.T) {
@@ -29,6 +32,12 @@ func TestParsePluginRefusesEachRule(t *testing.T) {
 		{head + "[dialog]\nplacements = [\"middle\"]\n", `placement "middle": want center, top`},
 		{head + "[dialog]\nesc = \"quit\"\n", `esc "quit": want close or hide`},
 		{"name = ", "plugin.toml: "},
+		{head + "[open]\nextensions = [\".ipynb\"]\ncommand = \"import\"\n", "declares [open]: needs protocol = 9"},
+		{openHead + "[open]\nextensions = [\".ipynb\"]\ncommand = \"nope\"\n", `[open]: command "nope" is none of its [[commands]]`},
+		{openHead + "[open]\ncommand = \"import\"\n", "[open]: no extensions"},
+		{openHead + "[open]\nextensions = [\".md\"]\ncommand = \"import\"\n", `[open]: ".md" is not an extension a plugin may open`},
+		{openHead + "[open]\nextensions = [\".html\"]\ncommand = \"import\"\n", `[open]: ".html" is not an extension a plugin may open`},
+		{openHead + "[open]\nextensions = [\"ipynb\"]\ncommand = \"import\"\n", `[open]: "ipynb" is not an extension a plugin may open`},
 	} {
 		m, err := ParsePlugin([]byte(c.src))
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -138,5 +147,19 @@ func TestReadPackage(t *testing.T) {
 	}
 	if _, err := ReadPluginPackage(pkg(ok, false), "usage-charts"); err == nil || !strings.Contains(err.Error(), "no init.lua in its lua folder") {
 		t.Fatalf("no init.lua: %v", err)
+	}
+}
+
+// A plugin that opens an extension says so among what it declares, and its [open] is read.
+func TestAPluginThatOpensAnExtensionDeclaresIt(t *testing.T) {
+	m, err := ParsePlugin([]byte(openHead + "[open]\nextensions = [\".ipynb\"]\ncommand = \"import\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(m.Open.Extensions, []string{".ipynb"}) || m.Open.Command != "import" {
+		t.Fatalf("[open] read as %+v", m.Open)
+	}
+	if d := m.Declares(); !slices.Contains(d, "opens .ipynb files") {
+		t.Errorf("declares %q: want it to say it opens .ipynb files", d)
 	}
 }

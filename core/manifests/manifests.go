@@ -15,10 +15,12 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
@@ -101,6 +103,13 @@ type Plugin struct {
 	Table struct {
 		Title string `toml:"title"`
 	} `toml:"table"`
+	// Open is the extensions the plugin opens (protocol 9, ADR 1792457255): a file with one of them is
+	// handed, by its absolute path, to the plugin's Command (one of its [[commands]]) in place of
+	// being opened.
+	Open struct {
+		Extensions []string `toml:"extensions"`
+		Command    string   `toml:"command"`
+	} `toml:"open"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv.
 	Install struct {
@@ -236,6 +245,9 @@ func checkProtocolTwo(m *Plugin, md toml.MetaData) string {
 	if why := checkTable(m, md); why != "" {
 		return why
 	}
+	if why := checkOpen(m, md); why != "" {
+		return why
+	}
 	switch {
 	case m.Service() && md.IsDefined("dialog"):
 		return "[dialog]: a service has no dialog"
@@ -312,6 +324,29 @@ func checkTable(m *Plugin, md toml.MetaData) string {
 	return ""
 }
 
+// checkOpen is why m's [open] cannot run ("" when it can): it needs protocol = 9, names one of the
+// plugin's own [[commands]], and claims at least one extension. A built-in or derived extension (.md,
+// .txt, .html, …) is AutoDoc's own, which a plugin never takes: so a plugin's lab file (.lab.md is
+// ".md" to kind.Ext) cannot route back to the plugin that wrote it.
+func checkOpen(m *Plugin, md toml.MetaData) string {
+	switch {
+	case !md.IsDefined("open"):
+		return ""
+	case m.Protocol < 9:
+		return "declares [open]: needs protocol = 9"
+	case !slices.ContainsFunc(m.Commands, func(c Command) bool { return c.ID == m.Open.Command }):
+		return "[open]: command " + strconv.Quote(m.Open.Command) + " is none of its [[commands]]"
+	case len(m.Open.Extensions) == 0:
+		return "[open]: no extensions"
+	}
+	for _, x := range m.Open.Extensions {
+		if !kind.ValidExtension(x) || kind.IsBuiltIn(x) || slices.Contains(kind.DerivedExtensions, x) {
+			return "[open]: " + strconv.Quote(x) + " is not an extension a plugin may open"
+		}
+	}
+	return ""
+}
+
 // Letter is a key a command may hold on the SPC p card: one lower-case letter or digit.
 func Letter(k string) bool {
 	return len(k) == 1 && (k[0] >= 'a' && k[0] <= 'z' || k[0] >= '0' && k[0] <= '9')
@@ -348,6 +383,9 @@ func (m *Plugin) Declares() []string {
 	}
 	if m.Table.Title != "" {
 		parts = append(parts, "shows a table of results ("+m.Table.Title+")")
+	}
+	if len(m.Open.Extensions) > 0 {
+		parts = append(parts, "opens "+strings.Join(m.Open.Extensions, ", ")+" files")
 	}
 	return parts
 }

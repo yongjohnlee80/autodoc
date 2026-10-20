@@ -137,6 +137,8 @@ In both cases, AutoDoc parses the first row as the table header, pads jagged row
 
 Standard image embeds (`![Screenshot](ui-overview.png)`) resolve through the exact same companion directory lookup (`<note-dir>/` then `<note-dir>/<note-stem>/`).
 
+In `--gui`'s Rendered View, a PNG, JPEG or GIF embedded alone on its line is drawn as the image, at most the page's width and in proportion; on the cursor's line it is its source. Other image types keep their line as written there, and show in the HTML preview and export.
+
 To guarantee fast rendering and prevent malicious content injection, `resolveImage` in `core/export/embed.go` verifies every image's magic bytes with `http.DetectContentType` (and validates `<svg` XML structure for `.svg` assets) rather than trusting the file extension alone. Each individual image is bounded at **6 MiB**, with a cumulative per-document budget of **32 MiB** across all embedded images on a page.
 
 ---
@@ -202,5 +204,19 @@ done
 
 ---
 
-[← Previous: Chapter 03: Modal Editor & Panels](./03-modal-editor-and-panels.md) | [Index](./README.md) | [Next: Chapter 05: Hybrid Search Pipeline →](./05-hybrid-search-pipeline.md)
+## 4.10 Lab Notes (`.lab.md`) and Cell Outputs
 
+A **lab note** is a Markdown note named `*.lab.md`: an ordinary note to search, links and every renderer, whose fenced code cells a notebook plugin (autodoc-jupyter) runs in a Jupyter kernel. A cell's outputs are files in the note's companion folder, never written into the note:
+
+```text
+plan.lab.md
+plan.lab/out/<cell key>/01.txt     text and tracebacks
+plan.lab/out/<cell key>/02.png     an image
+plan.lab/out/<cell key>/03.chart.json   a Vega-Lite chart (and .csv for a table)
+```
+
+The cell key is a hash of the fence's language and its code, so a cell's outputs belong to that exact code: editing a cell hides its old outputs until it runs again, and a fence of another language holding the same text never shows them. The HTML preview and export draw each cell's outputs right after its fence, in name order; `--gui`'s Rendered View draws them under the fence, off the cursor (text, charts, tables and images). Opening an `.ipynb` hands it to the plugin, which writes the lab note beside it and opens that.
+
+---
+
+[← Previous: Chapter 03: Modal Editor & Panels](./03-modal-editor-and-panels.md) | [Index](./README.md) | [Next: Chapter 05: Hybrid Search Pipeline →](./05-hybrid-search-pipeline.md)

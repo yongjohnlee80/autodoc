@@ -8,6 +8,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
@@ -205,6 +206,18 @@ func (pl *plugins) pluginEntry(target string) {
 	case targetCommand:
 		pl.runPluginCommand(key, id)
 	}
+}
+
+// opener is the plugin whose [open] claims p's extension (protocol 9, ADR 1792457255): the first in
+// the list that runs; false when none does.
+func (pl *plugins) opener(p string) (pluginEntry, bool) {
+	ext := kind.Ext(p)
+	for _, e := range pl.pluginList {
+		if e.reason == "" && slices.Contains(e.m.Open.Extensions, ext) {
+			return e, true
+		}
+	}
+	return pluginEntry{}, false
 }
 
 // runPluginCommand runs a plugin's command: the plugin started first when it is not running, a

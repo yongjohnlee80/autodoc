@@ -142,7 +142,7 @@ key   = "r"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 8;
+- an unknown kind, or a protocol outside 1 to 9;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
@@ -155,16 +155,20 @@ A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. 
 - a command id that is not lower-case letters, digits and -, or appears twice; a command with no
   title; a key that is not one lower-case letter or digit, or is the plugin's twice;
 - a call that is not one exact command id (`todos.*` is refused: no wildcards), is a plugin's
-  (`plugin.…`), or is listed twice.
+  (`plugin.…`), or is listed twice;
+- `[open]` under a protocol before 9; an `[open]` whose command is none of its `[[commands]]`, that
+  names no extension, or that names one AutoDoc reads itself (`.md`, `.txt`, `.yaml`, `.csv`, `.html`,
+  `.pdf`, …) or that is not a dot and 1 to 16 letters, digits, `_`, `+` or `-`.
 
 Adding a plugin from a git URL asks first. The question shows what its build runs, what it starts and
 the risk, then what it declares: "a card beside the page · reads the open note's text (feed) ·
 commands: Show / hide the stats (SPC p s)", the commands of AutoDoc's it may run: "may run
-AutoDoc's commands: file.save", and a table it shows: "shows a table of results (Results)".
+AutoDoc's commands: file.save", a table it shows: "shows a table of results (Results)", and the
+files it opens: "opens .ipynb files".
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 8**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 9**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -192,10 +196,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A plugin that posts notifications says `protocol = 8`.** It may send `host.notify` (below).
   An older AutoDoc refuses the manifest, so a plugin never reports into a host that would drop its
   messages without a word.
+- **A plugin that opens a kind of file says `protocol = 9`.** Its `[open]` names the extensions it
+  opens and the command it opens them with (below). Nothing on the wire changes. An older AutoDoc
+  refuses the manifest, so a file the plugin would translate never opens as raw text instead.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 8, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 9, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -500,6 +507,27 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
   - A card's command `toggle` is AutoDoc's own and is never sent: it starts the card, its panel open
     and focused; it opens the panel of a card that runs hidden, focused; and it closes the panel of
     a card that is shown, the plugin running on (Turn off stops it).
+
+### Opening files (`[open]`, protocol 9)
+
+```text
+[open]
+extensions = [".ipynb"]   # the files it opens
+command    = "import"     # one of its [[commands]]: run with the file's absolute path
+```
+
+- **A file with one of the extensions is handed to the plugin, not opened.** However it is opened
+  (the open picker, File › Open file…, the explorer, a link, recent files, back and forward, a
+  plugin's `file.open_path`), AutoDoc runs the plugin's `command` with one argument: the file's
+  absolute path (`plugin.command {id, args}`, as protocol 7 sends arguments). It starts the plugin
+  first when it is not running, and shows a card's panel, as any of its commands does.
+- **The plugin then does what opening means for it,** say, translate the file into a note and open
+  that through `host.call("file.open_path", path)` (listed in its `calls`).
+- **A plugin never takes AutoDoc's own extensions:** `.md`, `.txt`, `.yaml`, `.yml`, `.mmd`, `.csv`,
+  `.tsv` and the derived formats (`.html`, `.pdf`, `.docx`, …). So a note a plugin writes and opens
+  never comes back to it.
+- **Two plugins claiming one extension:** the first in the Plugins list opens it.
+- Creating a file (File › New file…, a draft's first save) opens it, and is not handed to a plugin.
 
 ### Calls (`calls = [...]`, protocol 3)
 

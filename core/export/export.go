@@ -18,6 +18,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/lab"
 )
 
 // Format is what a Markdown source is rendered as.
@@ -241,6 +242,19 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 					}
 				}
 				node.Kind = markdown.KindEmph
+			case markdown.KindCodeBlock:
+				// a lab note's cell: its outputs, files beside the note (ADR 1792457255), drawn
+				// right after its fence, in name order; a fence no run wrote for draws none
+				if embedder == nil || node.Fence == 0 || !lab.Is(options.Document) {
+					return
+				}
+				dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info)), string(node.Literal))
+				after := node
+				for _, f := range lab.Outputs(embedder.root.FS(), dir, key) {
+					if html, ok := embedder.output(f); ok {
+						after = insertAfter(after, drawn.add(html, true))
+					}
+				}
 			case markdown.KindLink:
 				if mapLink == nil {
 					return

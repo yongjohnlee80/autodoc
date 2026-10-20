@@ -141,6 +141,36 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 	return "", false, false, false
 }
 
+// output is the HTML of one output file of a lab note's cell (lab.Outputs): text in a
+// <pre class="output">, anything else as embed draws it alone in its paragraph (an image, a chart,
+// a table, a diagram); false for a file it does not draw.
+func (e *embedder) output(p string) (string, bool) {
+	if strings.ToLower(path.Ext(p)) == ".txt" {
+		data, ok := e.read(p, maxEmbedText)
+		if !ok {
+			return "", false
+		}
+		return `<pre class="output">` + stdhtml.EscapeString(string(data)) + `</pre>`, true
+	}
+	html, _, _, ok := e.embed([]byte(p), "", true)
+	return html, ok
+}
+
+// insertAfter links a paragraph holding text after node, as a sibling, and returns it: the
+// paragraph takes node's span, so a preview that follows the source finds node's lines there.
+func insertAfter(node *markdown.Node, text string) *markdown.Node {
+	p := &markdown.Node{Kind: markdown.KindParagraph, Span: node.Span, Parent: node.Parent, Prev: node, Next: node.Next}
+	t := &markdown.Node{Kind: markdown.KindText, Span: node.Span, Parent: p, Literal: []byte(text)}
+	p.FirstChild, p.LastChild = t, t
+	if node.Next != nil {
+		node.Next.Prev = p
+	} else if node.Parent != nil {
+		node.Parent.LastChild = p
+	}
+	node.Next = p
+	return p
+}
+
 // isChart reports whether p names a Vega-Lite chart: x.chart.json, as xmd names one.
 func isChart(p string) bool { return strings.HasSuffix(strings.ToLower(p), ".chart.json") }
 
@@ -338,6 +368,48 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 		return fenced("vega-lite", string(data)), true
 	}
 	return CSVMarkdown(data, rows)
+}
+
+// OutputMarkdown is one output file of a lab note's cell (lab.Outputs, a path in doc's folder) as
+// the Rendered view draws it: text as a text fence; a diagram, a chart or a table as EmbedMarkdown
+// draws it. An image is EmbedImage's, not Markdown: false.
+func OutputMarkdown(doc, p string, rows int) (string, bool) {
+	if strings.ToLower(path.Ext(p)) != ".txt" {
+		return EmbedMarkdown(doc, p, rows)
+	}
+	q, ok := embedPath(p)
+	if !ok {
+		return "", false
+	}
+	e := newEmbedder(doc, tableFit{rows: rows})
+	if e == nil {
+		return "", false
+	}
+	defer e.close()
+	data, ok := e.read(q, maxEmbedText)
+	if !ok {
+		return "", false
+	}
+	return fenced("text", string(data)), true
+}
+
+// EmbedImage is the bytes of the image dest names, found as the page finds an embed (beside doc, then
+// in its resources folder) and within the page's limit for one image, for the Rendered view to
+// draw. A file that is not an image (imageTypes), a URL, or one out of the folder is not.
+func EmbedImage(doc, dest string) ([]byte, bool) {
+	p, ok := embedPath(dest)
+	if !ok {
+		return nil, false
+	}
+	if _, image := imageTypes[strings.ToLower(path.Ext(p))]; !image {
+		return nil, false
+	}
+	e := newEmbedder(doc, tableFit{})
+	if e == nil {
+		return nil, false
+	}
+	defer e.close()
+	return e.read(p, maxEmbedImage)
 }
 
 // CSVMarkdown is CSV (a file's, or a csv fence's) as the Rendered view draws it: a Markdown table
