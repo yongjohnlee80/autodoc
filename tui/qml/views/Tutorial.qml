@@ -13,6 +13,7 @@ Dialog {
     Flex {
         direction: Tui.Vertical
         Editor {
+            cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
             id: tutorialPage
             Layout.fillHeight: true
             readOnly: true

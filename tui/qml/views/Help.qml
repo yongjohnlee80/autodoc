@@ -8,5 +8,5 @@ Dialog {
     standardButtons: Dialog.Close
     defaultButton: Dialog.Close
     helpText: qsTrId("autodoc.view.help.q_esc_or_enter_closes_scrolls")
-    Editor { readOnly: true; wrap: true; text: App.helpText }
+    Editor { cursorColor: Theme.document.cursor; readOnly: true; wrap: true; text: App.helpText }
 }

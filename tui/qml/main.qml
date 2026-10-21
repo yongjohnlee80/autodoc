@@ -615,6 +615,7 @@ Window {
         onOpened: App.panelOpened("luaCard")
         onClosed: App.panelClosed("luaCard")
         Editor {
+            cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
             id: luaCardView
             readOnly: true
             keepPlace: true
@@ -828,6 +829,7 @@ Window {
                 visible: App.todoDetailShown
                 Layout.fillHeight: true
                 Editor {
+                    cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
                     id: todoDetails
                     readOnly: true
                     text: App.todoDetail
