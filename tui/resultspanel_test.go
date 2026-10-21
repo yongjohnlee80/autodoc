@@ -490,9 +490,8 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 		tc := r.resultsCore()
 		tc.SetCursor(widget.TablePos{Row: 1})
 		tc.Select(widget.TableSelectRows, widget.TablePos{})
-		g := tc.RowNumberDigits() + 2
-		x := g + tc.Width(0) + 2 + 1 // inside the name field
-		r.h.plugins.c.ResultsTable(resultsView).HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x, Y: 3})
+		x := resultsGutter(tc) + tc.Width(0) + 2 + 1 // inside the name field
+		r.h.plugins.c.ResultsTable(resultsView).HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x, Y: resultsHeaderRows + 2})
 		return true
 	})
 	r.s.WaitForText(t, "Sort ascending by name")
