@@ -500,3 +500,17 @@ func TestTheAgentsTextSizeIsStored(t *testing.T) {
 		}
 	}
 }
+
+// The tutorial's page wears the theme's cursor, as the editor does: under sepia the terminal is told
+// sepia's, rather than left to its own colour on the light page.
+func TestTheTutorialsCursorIsTheThemes(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool { r.h.useTheme("sepia"); r.h.openTutorial(); return true })
+	r.s.WaitForText(t, fmt.Sprintf("1 of %d · Installing AutoDoc", len(tutorialPages)))
+	onLoop(r, func() bool { return r.h.p.Call("tutorialPage", "forceActiveFocus") == nil })
+	r.s.WaitFor(t, "sepia's cursor on the tutorial's page", func(string) bool {
+		c, ok := r.s.Backend.CursorColor()
+		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xb5, G: 0x54, B: 0x1f}
+	})
+}
