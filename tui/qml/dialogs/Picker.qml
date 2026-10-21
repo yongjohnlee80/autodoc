@@ -66,6 +66,7 @@ Dialog {
             Frame {
                 title: previewTitle
                 Editor {
+                    cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
                     id: preview
                     readOnly: true
                     text: previewText

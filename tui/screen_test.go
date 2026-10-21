@@ -2173,3 +2173,21 @@ func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
 	r.h.p.Post(r.h.closeFile)
 	r.s.WaitFor(t, "the draft's page", width(68))
 }
+
+// The cursor follows the theme: Options › Theme switching to sepia sends sepia's cursor colour, so
+// a light theme never keeps a dark one's cursor (or the terminal's own) on its light ground.
+func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "dark's cursor", func(string) bool {
+		c, ok := r.s.Backend.CursorColor()
+		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xff, G: 0xaf, B: 0x00}
+	})
+	r.h.p.Post(func() { r.h.useTheme("sepia") })
+	r.s.WaitFor(t, "sepia's cursor", func(string) bool {
+		c, ok := r.s.Backend.CursorColor()
+		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xb5, G: 0x54, B: 0x1f}
+	})
+}
