@@ -35,25 +35,32 @@ type screenPointer struct {
 	last   [2]int
 }
 
+// resultsHeaderRows is the rows above the table's first: the titles and the rule under them.
+const resultsHeaderRows = 2
+
+// resultsGutter is the cells before the first field: the row numbers, then the gap, the gutter's
+// rule and the gap again.
+func resultsGutter(tc *widget.TableCore) int { return tc.RowNumberDigits() + 3 }
+
 func newScreenPointer(t *testing.T, r *running) *screenPointer {
 	t.Helper()
 	// the panel tall enough for the header and every row of the kinds table
 	onLoop(r, func() bool { r.h.plugins.c.Set("App.resultsSize", 70); return true })
 	p := &screenPointer{t: t, r: r}
-	gutter := onLoop(r, func() int { return r.resultsCore().RowNumberDigits() + 2 })
+	gutter := onLoop(r, func() int { return resultsGutter(r.resultsCore()) })
 	last := fmt.Sprint(len(kindsRows))
-	// the table where the screen shows it: its header line, the first two titles at the gutter's
-	// width, and under it the last row's number in sight
+	// the table where the screen shows it: its titles line, the first two titles at the gutter's
+	// width, and under the rule the last row's number in sight
 	r.s.WaitFor(t, "the results' table on the screen, its rows in sight", func(sc string) bool {
 		lines := strings.Split(sc, "\n")
 		for y, line := range lines {
 			runes := []rune(line)
 			x := strings.Index(line, "id  name  ")
-			if x < 0 || y+len(kindsRows) >= len(lines) {
+			if x < 0 || y+resultsHeaderRows-1+len(kindsRows) >= len(lines) {
 				continue
 			}
 			x = len([]rune(line[:x])) - gutter
-			below := []rune(lines[y+len(kindsRows)])
+			below := []rune(lines[y+resultsHeaderRows-1+len(kindsRows)])
 			if x < 0 || x >= len(runes) || x+len(last) > len(below) || string(below[x:x+len(last)]) != last {
 				continue
 			}
@@ -68,7 +75,7 @@ func newScreenPointer(t *testing.T, r *running) *screenPointer {
 func (p *screenPointer) local(row, col int, hit widget.TableHit) (int, int) {
 	xy := onLoop(p.r, func() [2]int {
 		tc := p.r.resultsCore()
-		x := tc.RowNumberDigits() + 2
+		x := resultsGutter(tc)
 		for c := range col {
 			x += tc.Width(c) + 2
 		}
@@ -76,9 +83,9 @@ func (p *screenPointer) local(row, col int, hit widget.TableHit) (int, int) {
 		case widget.TableHitHeader:
 			return [2]int{x, 0}
 		case widget.TableHitGutter:
-			return [2]int{0, row + 1}
+			return [2]int{0, row + resultsHeaderRows}
 		}
-		return [2]int{x, row + 1}
+		return [2]int{x, row + resultsHeaderRows}
 	})
 	return xy[0], xy[1]
 }
