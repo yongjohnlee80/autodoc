@@ -66,16 +66,23 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 	// The wait fails when indexing stops moving, not after a fixed total: 600 notes through one
 	// writer under -race is CPU-bound work, several times slower on a loaded machine, and a fixed
 	// 60 s was a race against it (VM43, load ~10: "not both indexed in 60 s"). It fails when neither
-	// workspace's pending jobs nor documents change for indexStall, and in any case at sharedCap.
-	const sharedCap = 10 * time.Minute
-	var last [4]int64
+	// workspace's pending jobs, documents or chunks change for indexStall, and in any case at a cap
+	// inside go test's own -timeout, so the named failure comes before the runner's panic.
+	capped := start.Add(4 * time.Minute)
+	if dl, ok := t.Deadline(); ok {
+		capped = dl.Add(-30 * time.Second)
+	}
+	var last [6]int64
 	stalled := time.Now().Add(indexStall)
-	for capped := start.Add(sharedCap); ; time.Sleep(5 * time.Millisecond) {
+	for ; ; time.Sleep(5 * time.Millisecond) {
 		left := 0
-		var now [4]int64
+		var now [6]int64
 		for i, w := range all {
-			st, _ := w.s.Status(ctx)
-			now[2*i], now[2*i+1] = st.PendingJobs, st.Docs
+			st, err := w.s.Status(ctx)
+			if err != nil {
+				t.Fatalf("workspace %s: %v", w.name, err)
+			}
+			now[3*i], now[3*i+1], now[3*i+2] = st.PendingJobs, st.Docs, st.Chunks
 			if w.done != 0 {
 				continue
 			}
@@ -93,9 +100,9 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 		}
 		switch {
 		case time.Now().After(stalled):
-			t.Fatalf("not both indexed: no progress in %s (pending, docs per workspace = %v)", indexStall, last)
+			t.Fatalf("not both indexed: no progress in %s (pending, docs, chunks per workspace = %v)", indexStall, last)
 		case time.Now().After(capped):
-			t.Fatalf("not both indexed in %s, though still moving (pending, docs per workspace = %v)", sharedCap, last)
+			t.Fatalf("not both indexed by %s, though still moving (pending, docs, chunks per workspace = %v)", time.Since(start).Round(time.Second), last)
 		}
 	}
 	mu.Lock()
