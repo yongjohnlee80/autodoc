@@ -14,13 +14,18 @@ import (
 // nativeDiagramWidth is the width a diagram is laid out at to learn whether golib draws it.
 const nativeDiagramWidth = 900
 
+// nativeDiagramTheme is the theme the probe lays out with. It needs a font size: golib's Mermaid
+// sizes every length by it and refuses a size of zero as unsupported (golib/gui v0.2.11), which
+// would make every diagram look like a type it does not draw.
+var nativeDiagramTheme = guimermaid.Theme{Font: gui.Font{Size: 14}}
+
 // nativeDiagram reports whether golib's Mermaid draws src natively: nil when it does, or when the
 // source is malformed (it draws the error in place, as the window's diagrams do); the reason when
 // it does not, a diagram type it does not draw or one over a limit. Called off the loop.
 func nativeDiagram(src string) error {
 	m, release := gui.AcquireMeasurer(1)
 	defer release()
-	_, err := guimermaid.Lay(context.Background(), src, nativeDiagramWidth, guimermaid.Theme{}, m)
+	_, err := guimermaid.Lay(context.Background(), src, nativeDiagramWidth, nativeDiagramTheme, m)
 	var se *pm.SyntaxError
 	if err == nil || errors.As(err, &se) {
 		return nil
