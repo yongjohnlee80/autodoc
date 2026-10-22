@@ -111,8 +111,8 @@ func varNames(doc *markdown.Document) []string {
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
 		for c := n.FirstChild; c != nil; c = c.Next {
-			if c.Kind == markdown.KindLink && strings.HasPrefix(string(c.Dest), "$") {
-				dest, _, _ := strings.Cut(string(c.Dest), "#")
+			if c.Kind == markdown.KindLink && strings.HasPrefix(string(c.Dest()), "$") {
+				dest, _, _ := strings.Cut(string(c.Dest()), "#")
 				if d, err := url.PathUnescape(dest); err == nil {
 					dest = d
 				}

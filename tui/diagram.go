@@ -30,10 +30,10 @@ func mermaidBlock(source []byte, cursor int, read func(dest string) (string, boo
 	var walk func(*markdown.Node)
 	walk = func(node *markdown.Node) {
 		switch {
-		case node.Kind == markdown.KindCodeBlock && strings.EqualFold(strings.TrimSpace(string(node.Info)), "mermaid"):
+		case node.Kind == markdown.KindCodeBlock && strings.EqualFold(strings.TrimSpace(string(node.Info())), "mermaid"):
 			take(string(node.Literal), cursor >= node.Span.Start && cursor <= node.Span.End)
-		case node.Kind == markdown.KindImage && read != nil && isDiagramFile(string(node.Dest)):
-			if src, ok := read(string(node.Dest)); ok {
+		case node.Kind == markdown.KindImage && read != nil && isDiagramFile(string(node.Dest())):
+			if src, ok := read(string(node.Dest())); ok {
 				start, end := lineAround(source, node.Span.Start, node.Span.End)
 				take(src, cursor >= start && cursor <= end)
 			}
