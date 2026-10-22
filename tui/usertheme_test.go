@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -36,9 +38,24 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.s.WaitForText(t, "page text")
+	// A theme switch is a reload of the whole layout, not a frame's change, which decltest's
+	// WaitTimeout bounds; a file that recovers costs two (the fallback's layout reloaded by the
+	// save, then the switch back to the chosen theme), and a reload is CPU-bound Go work, raceFactor
+	// slower under -race. Each wait has a clock of its own: it only turns a switch that never comes
+	// into a failure rather than a hang.
+	reloadWait := 2 * decltest.WaitTimeout * raceFactor
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(reloadWait); !cond(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s never appeared within %s:\n%s", what, reloadWait, r.s.String())
+			}
+		}
+	}
 	waitColour := func(colour string) {
+		t.Helper()
 		want := cellColor(t, colour)
-		r.s.WaitFor(t, "custom backdrop "+colour, func(string) bool { return r.s.Backend.Snapshot()[8][2].Attrs.BG == want })
+		waitFor("custom backdrop "+colour, func() bool { return r.s.Backend.Snapshot()[8][2].Attrs.BG == want })
 	}
 	waitColour("#010203")
 	if got := onLoop(r, func() string { return r.h.theme }); got != "warm_paper" {
@@ -55,7 +72,7 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	writeUserTheme(t, file, next)
 	waitColour("#040506")
 	writeUserTheme(t, file, []byte(`Theme { app.window: "bad" }`))
-	r.s.WaitFor(t, "fallback to dark", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
+	waitFor("fallback to dark", func() bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
 	if got := onLoop(r, func() string { return r.h.core.Value() }); got != "page text\n" {
 		t.Fatalf("document lost: %q", got)
 	}
@@ -67,7 +84,7 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	if err := os.Remove(file); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "deletion fallback", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
+	waitFor("deletion fallback", func() bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
 	writeUserTheme(t, file, src)
 	waitColour("#010203")
 }
