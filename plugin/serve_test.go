@@ -399,8 +399,9 @@ func (s *slowReader) Document(d Document) {
 }
 
 // TestASlowReaderGetsOnlyTheLatestDocument: documents sent while the reader is busy are coalesced:
-// with the reader held on the first, it handles that one and then only the newest, never the 48
-// replaced while it waited; the keys among them all arrive, in order.
+// with the reader held on the first, it handles that one and then only the newest few (those still on
+// the link when it is released), never the ones replaced while it waited; the keys among them all
+// arrive, in order.
 func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 	const n = 50
 	s := newSlowReader()
@@ -451,8 +452,19 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 			t.Fatalf("documents %v: versions not strictly rising", versions)
 		}
 	}
-	if !reflect.DeepEqual(versions, []int{1, n}) {
-		t.Errorf("documents %v handled, want [1 %d]: the ones waiting behind v1 were not replaced by the newest", versions, n)
+	// While v1 is held, Serve's reader keeps taking documents off the link, each replacing the one
+	// waiting. When the sender is done, a few may still be unread: the pipe holds 64 KiB and the
+	// reader buffers 4 KiB, and each document is 64 KiB, so at most two are in flight, plus the one
+	// waiting. That bound is the link's, not the scheduler's: a busy machine cannot widen it.
+	const inFlight = 3
+	for _, v := range versions[1:] {
+		if v < n-inFlight+1 {
+			t.Errorf("documents %v handled: v%d was not replaced while v1 was held (only the last %d sent may arrive after it)", versions, v, inFlight)
+			break
+		}
+	}
+	if versions[0] != 1 {
+		t.Errorf("documents %v: the first handled is v%d, want v1, the one held", versions, versions[0])
 	}
 }
 

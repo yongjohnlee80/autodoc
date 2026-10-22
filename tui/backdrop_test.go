@@ -28,7 +28,7 @@ func TestTheScreenAroundThePageIsTheThemesBackdrop(t *testing.T) {
 			r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 			r.ready(t)
 			r.h.p.Post(func() { r.h.openPath("a.md") })
-			r.s.WaitForText(t, "page text")
+			r.waitOpened(t, "page text")
 			bg := func(x, y int) tuicore.CellColor { return r.s.Backend.Snapshot()[y][x].Attrs.BG }
 			// the page is about 64 wide on 160: columns 2 and 157 are outside it
 			r.s.WaitFor(t, "the margins in the backdrop", func(string) bool {

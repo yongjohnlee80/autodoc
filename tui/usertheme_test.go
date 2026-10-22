@@ -35,7 +35,7 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{ThemeDir: dir}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
-	r.s.WaitForText(t, "page text")
+	r.waitOpened(t, "page text")
 	// A theme switch is a reload of the whole layout, not a frame's change; a file that recovers
 	// costs two (the fallback's layout reloaded by the save, then the switch back to the chosen
 	// theme). Each wait is on daemonWait, a reload's clock, not a frame's.
