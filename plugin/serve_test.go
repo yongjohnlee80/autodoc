@@ -406,8 +406,9 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 	s := newSlowReader()
 	hs := start(t, s)
 	// registered after start, so it runs before start's own teardown: a failed test never leaves the
-	// reader held while Serve is stopped
-	t.Cleanup(func() { s.once.Do(func() {}); closeOnce(s.release) })
+	// reader held while Serve is stopped. Release only: a sync.Once.Do here would wait for the held
+	// Document's own Do, which waits for this release (Vision, #280 r0).
+	t.Cleanup(func() { closeOnce(s.release) })
 	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 2, Width: 10, Height: 5}))
 	hs.next(t)
 	for i := 1; i <= n; i++ {
