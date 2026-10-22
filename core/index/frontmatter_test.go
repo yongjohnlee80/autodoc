@@ -227,7 +227,7 @@ func TestFacetFilterAppliesBeforeTopN(t *testing.T) {
 	e.write("z-adr.md", "---\ntype: adr\n---\n"+strings.Repeat("filler words here. ", 200)+"common\n")
 	e.ix.Touch("z-adr.md")
 	e.indexedAt("z-adr.md")
-	e.eventually("all indexed", func() bool { return e.pendingJobs() == 0 })
+	e.indexing("all indexed", func() bool { return e.pendingJobs() == 0 })
 	ctx := context.Background()
 	r, err := e.ix.Search(ctx, "common", QueryOpts{Limit: 200})
 	if err != nil {
