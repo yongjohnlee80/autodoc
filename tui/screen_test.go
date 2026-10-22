@@ -46,11 +46,28 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 }
 
 // ready waits for the connection and the workspace's files, which a hidden status line cannot say.
+// It is the daemon's work (a dial, the hello, a listing), so it waits on daemonWait, not on a frame's
+// clock: under -race on a loaded VM43 it outran decltest's WaitTimeout.
 func (r *running) ready(t *testing.T) {
 	t.Helper()
-	r.s.WaitFor(t, "connected, the notes listed", func(string) bool {
+	r.waitWithin(t, "connected, the notes listed", daemonWait, func() bool {
 		return onLoop(r, func() bool { return r.h.connected && len(r.h.files.Paths) > 0 })
 	})
+}
+
+// daemonWait bounds a wait on work bigger than a frame's change, which decltest's WaitTimeout
+// bounds: a connection, a listing, a whole layout's reload. That is CPU-bound Go work, raceFactor
+// slower under -race. The clock only turns what never comes into a failure rather than a hang.
+var daemonWait = 2 * decltest.WaitTimeout * raceFactor
+
+// waitWithin polls cond until it holds, and fails after d with the screen.
+func (r *running) waitWithin(t *testing.T, what string, d time.Duration, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(d); !cond(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never appeared within %s:\n%s", what, d, r.s.String())
+		}
+	}
 }
 
 // focused says whether the widget the document declares as id has the keyboard.
