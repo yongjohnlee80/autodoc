@@ -196,27 +196,43 @@ func (e *env) indexedAt(p string) {
 	})
 }
 
-// indexing waits for cond while the indexer works. It fails only when no job finishes or starts for
-// indexStall, not after a fixed total: a scan of many notes is CPU-bound work, several times slower
-// under -race and on a loaded machine, and a fixed total was a race against it (a 61-note scan took
-// 3 s under -race on a quiet VM43 and failed eventually's 10 s under load). A scan that stalls still
-// fails, on the stall's own clock.
+// indexing waits for cond while the indexer works. It fails when indexing makes no progress for
+// indexStall (the pending jobs, the documents and the chunks all unchanged), not after a fixed total:
+// a scan of many notes is CPU-bound work, several times slower under -race and on a loaded machine,
+// and a fixed total was a race against it (a 61-note scan took 3 s under -race on a quiet VM43 and
+// failed eventually's 10 s under load). A scan that stalls still fails, on the stall's own clock, and
+// one that churns without ending fails at indexCap.
 func (e *env) indexing(what string, cond func() bool) {
 	e.t.Helper()
-	last, deadline := e.pendingJobs(), time.Now().Add(indexStall)
-	for !cond() {
-		if n := e.pendingJobs(); n != last {
-			last, deadline = n, time.Now().Add(indexStall)
+	progress := func() [3]int64 {
+		st, err := e.store.Status(context.Background())
+		if err != nil {
+			e.t.Fatal(err)
 		}
-		if time.Now().After(deadline) {
-			e.t.Fatalf("timed out waiting for %s: no indexing progress in %s (%d jobs pending)", what, indexStall, last)
+		return [3]int64{st.PendingJobs, st.Docs, st.Chunks}
+	}
+	start := time.Now()
+	last, deadline := progress(), start.Add(indexStall)
+	for !cond() {
+		if p := progress(); p != last {
+			last, deadline = p, time.Now().Add(indexStall)
+		}
+		switch {
+		case time.Now().After(deadline):
+			e.t.Fatalf("timed out waiting for %s: no indexing progress in %s (pending, docs, chunks = %v)", what, indexStall, last)
+		case time.Since(start) > indexCap:
+			e.t.Fatalf("timed out waiting for %s: indexing still busy after %s (pending, docs, chunks = %v)", what, indexCap, last)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
-// indexStall is how long indexing may make no progress before a wait on it fails.
-const indexStall = 10 * time.Second
+// indexStall is how long indexing may make no progress before a wait on it fails, and indexCap how
+// long a wait may last in all, however busy the indexer stays.
+const (
+	indexStall = 10 * time.Second
+	indexCap   = 6 * indexStall
+)
 
 func (e *env) eventually(what string, cond func() bool) {
 	e.t.Helper()
