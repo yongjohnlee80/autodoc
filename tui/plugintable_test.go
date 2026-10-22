@@ -593,10 +593,17 @@ func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
 	if !strings.Contains(cmd, `"chosen"`) {
 		t.Fatalf("the command ran on %q, want the note it was chosen on", cmd)
 	}
-	all := waitSaid(t, logs, "snap", "doc v")
-	after := slices.IndexFunc(all, func(s string) bool { return strings.HasPrefix(s, "command ") })
-	if !slices.ContainsFunc(all[after:], func(s string) bool { return strings.Contains(s, " 14 bytes") }) {
-		t.Fatalf("the newer document never followed the command: %q", all)
+	// the plugin says the newer document after the command, so it is waited for: the command's line
+	// alone does not mean the document behind it has been read yet
+	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		all := said(t, logs, "snap")
+		after := slices.IndexFunc(all, func(s string) bool { return strings.HasPrefix(s, "command ") })
+		if slices.ContainsFunc(all[after:], func(s string) bool { return strings.Contains(s, " 14 bytes") }) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the newer document never followed the command: %q", all)
+		}
 	}
 }
 
