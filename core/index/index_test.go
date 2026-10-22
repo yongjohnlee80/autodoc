@@ -186,7 +186,7 @@ func (e *env) write(p, content string) {
 // file may change while the test waits) with no job left for it.
 func (e *env) indexedAt(p string) {
 	e.t.Helper()
-	e.eventually("indexing "+p, func() bool {
+	e.indexing("indexing "+p, func() bool {
 		fi, err := e.fsys.Stat(context.Background(), p)
 		if err != nil {
 			return false
@@ -195,6 +195,28 @@ func (e *env) indexedAt(p string) {
 		return ok && v == fi.Version && e.pendingJobs() == 0
 	})
 }
+
+// indexing waits for cond while the indexer works. It fails only when no job finishes or starts for
+// indexStall, not after a fixed total: a scan of many notes is CPU-bound work, several times slower
+// under -race and on a loaded machine, and a fixed total was a race against it (a 61-note scan took
+// 3 s under -race on a quiet VM43 and failed eventually's 10 s under load). A scan that stalls still
+// fails, on the stall's own clock.
+func (e *env) indexing(what string, cond func() bool) {
+	e.t.Helper()
+	last, deadline := e.pendingJobs(), time.Now().Add(indexStall)
+	for !cond() {
+		if n := e.pendingJobs(); n != last {
+			last, deadline = n, time.Now().Add(indexStall)
+		}
+		if time.Now().After(deadline) {
+			e.t.Fatalf("timed out waiting for %s: no indexing progress in %s (%d jobs pending)", what, indexStall, last)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// indexStall is how long indexing may make no progress before a wait on it fails.
+const indexStall = 10 * time.Second
 
 func (e *env) eventually(what string, cond func() bool) {
 	e.t.Helper()
