@@ -598,7 +598,7 @@ func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
 	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		all := said(t, logs, "snap")
 		after := slices.IndexFunc(all, func(s string) bool { return strings.HasPrefix(s, "command ") })
-		if slices.ContainsFunc(all[after:], func(s string) bool { return strings.Contains(s, " 14 bytes") }) {
+		if after >= 0 && slices.ContainsFunc(all[after:], func(s string) bool { return strings.Contains(s, " 14 bytes") }) {
 			break
 		}
 		if time.Now().After(deadline) {
