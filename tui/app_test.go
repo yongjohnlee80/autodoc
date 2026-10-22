@@ -128,9 +128,9 @@ func newScanHold(after int32) *scanHold { return &scanHold{after: after, open: m
 // release lets the held reads, and every later one, through. Idempotent.
 func (h *scanHold) release() { h.once.Do(func() { close(h.open) }) }
 
-// heldFS is memfs whose reads past the hold's first wait for its release, or for ctx.
+// heldFS is a workspace's FS whose reads past the hold's first wait for its release, or for ctx.
 type heldFS struct {
-	*memfs.FS
+	vfs.FS
 	h *scanHold
 }
 
@@ -201,9 +201,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		if wsName != name {
 			fsys = committing{mem}
 		}
-		workers := 0
+		// the indexer's reads alone are held: the documents a client opens (docs) go through, or a
+		// read of one could take the hold's free reads and leave the scan with nothing pending
+		ixfs, workers := fsys, 0
 		if o.hold != nil {
-			fsys, workers = heldFS{mem, o.hold}, 1
+			ixfs, workers = heldFS{fsys, o.hold}, 1
 			t.Cleanup(o.hold.release) // a daemon stopping never waits on a held read
 		}
 		d.fs[wsName] = mem
@@ -221,7 +223,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			t.Fatal(err)
 		}
 		ixs := index.NewStore(db, row.ID)
-		ix := index.New(ixs, fsys, index.WithMatch(match), index.WithBatching(0, 5*time.Millisecond), index.WithWorkers(workers), index.WithRegistrations(derives))
+		ix := index.New(ixs, ixfs, index.WithMatch(match), index.WithBatching(0, 5*time.Millisecond), index.WithWorkers(workers), index.WithRegistrations(derives))
 		f := follow.New(fsys, ix, ix, follow.WithMatch(match), follow.WithPollInterval(20*time.Millisecond))
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
