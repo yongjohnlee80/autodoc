@@ -234,7 +234,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 					for child := node.FirstChild; child != nil; child = child.Next {
 						writeText(&alt, child, document.Source)
 					}
-					if html, block, diagram, ok := embedder.embed(node.Dest, alt.String(), alone); ok {
+					if html, block, diagram, ok := embedder.embed(node.Dest(), alt.String(), alone); ok {
 						diagrams = diagrams || diagram
 						node.Kind, node.Literal = markdown.KindText, []byte(drawn.add(html, block))
 						node.FirstChild, node.LastChild = nil, nil
@@ -245,10 +245,10 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 			case markdown.KindCodeBlock:
 				// a lab note's cell: its outputs, files beside the note (ADR 1792457255), drawn
 				// right after its fence, in name order; a fence no run wrote for draws none
-				if embedder == nil || node.Fence == 0 || !lab.Is(options.Document) {
+				if embedder == nil || node.Fence() == 0 || !lab.Is(options.Document) {
 					return
 				}
-				dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info)), string(node.Literal))
+				dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info())), string(node.Literal))
 				after := node
 				for _, f := range lab.Outputs(embedder.root.FS(), dir, key) {
 					if html, ok := embedder.output(f); ok {
@@ -259,9 +259,9 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 				if mapLink == nil {
 					return
 				}
-				if target, ok := mapLink(string(node.Dest)); ok {
+				if target, ok := mapLink(string(node.Dest())); ok {
 					id := placeholder + strconv.Itoa(len(resolved)/2)
-					node.Dest = []byte(id)
+					node.SetDest([]byte(id))
 					resolved = append(resolved, `href="`+id+`"`, `href="`+stdhtml.EscapeString(target)+`"`)
 				}
 			}

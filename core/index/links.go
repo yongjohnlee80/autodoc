@@ -73,7 +73,7 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool, 
 		for c := n.FirstChild; c != nil; c = c.Next {
 			switch c.Kind {
 			case markdown.KindWikilink, markdown.KindEmbed:
-				t := c.Target
+				t := c.Target()
 				page := strings.TrimSpace(string(t.Page))
 				if page == "" {
 					continue
@@ -105,15 +105,15 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool, 
 				continue
 			case markdown.KindLink:
 				raw := string(doc.Source[c.Span.Start:c.Span.End])
-				if l, ok := varLink(raw, string(c.Dest), vars, root, targetsFile); ok {
+				if l, ok := varLink(raw, string(c.Dest()), vars, root, targetsFile); ok {
 					if l.Name != "" {
 						out = append(out, l)
 					}
-				} else if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
+				} else if target, anchor, ok := localTarget(p, string(c.Dest())); ok && targetsFile(target) {
 					out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: target, Anchor: anchor, Kind: LinkMarkdown})
 				}
 			case markdown.KindImage:
-				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
+				if target, anchor, ok := localTarget(p, string(c.Dest())); ok && targetsFile(target) {
 					out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: exactName(wikiName(target)), Anchor: anchor, Kind: LinkEmbed})
 				}
 			}

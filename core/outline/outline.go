@@ -153,7 +153,7 @@ func headings(src []byte, lines []int) []Heading {
 				} else {
 					seen[id] = 1
 				}
-				out = append(out, Heading{ID: id, Level: c.Level, Text: text, Line: lineOf(lines, c.Span.Start), Byte: c.Span.Start})
+				out = append(out, Heading{ID: id, Level: c.Level(), Text: text, Line: lineOf(lines, c.Span.Start), Byte: c.Span.Start})
 				continue
 			}
 			walk(c)

@@ -483,7 +483,7 @@ func EmbedLines(source []byte) []EmbedLine {
 		from, to := lineOf(parent.Span.Start), lineOf(max(parent.Span.End-1, parent.Span.Start))+1
 		inline := source[end-1] == ')' // ![t](path); a reference's ends with its label's ']'
 		alone := inline && parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node && to-from == 1
-		out = append(out, EmbedLine{Line: ln, Dest: string(node.Dest), Alone: alone, From: from, To: to})
+		out = append(out, EmbedLine{Line: ln, Dest: string(node.Dest()), Alone: alone, From: from, To: to})
 	})
 	return out
 }

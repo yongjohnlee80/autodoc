@@ -30,10 +30,10 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 			raw := string(source[c.Span.Start:c.Span.End])
 			switch c.Kind {
 			case markdown.KindLink, markdown.KindAutolink:
-				found, ok = cursorLink{raw: raw, dest: string(c.Dest)}, len(c.Dest) > 0
+				found, ok = cursorLink{raw: raw, dest: string(c.Dest())}, len(c.Dest()) > 0
 			case markdown.KindWikilink:
-				if c.Target != nil && len(c.Target.Page) > 0 {
-					found, ok = cursorLink{raw: raw, dest: string(c.Target.Page), wiki: true}, true
+				if t := c.Target(); t != nil && len(t.Page) > 0 {
+					found, ok = cursorLink{raw: raw, dest: string(t.Page), wiki: true}, true
 				}
 			default:
 				walk(c)
