@@ -398,17 +398,16 @@ func (s *slowReader) Document(d Document) {
 	s.add(fmt.Sprintf("document v%d", d.Version))
 }
 
-// TestASlowReaderGetsOnlyTheLatestDocument: documents sent while the reader is busy are coalesced:
-// with the reader held on the first, it handles that one and then only the newest few (those still on
-// the link when it is released), never the ones replaced while it waited; the keys among them all
-// arrive, in order.
+// TestASlowReaderGetsOnlyTheLatestDocument: documents sent while the reader is busy, held on the
+// first, never cost a key or the newest document: the reader handles v1 first, then versions rising,
+// ending on the newest, and every key among them arrives, in order.
 func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 	const n = 50
 	s := newSlowReader()
 	hs := start(t, s)
 	// registered after start, so it runs before start's own teardown: a failed test never leaves the
 	// reader held while Serve is stopped. Release only: a sync.Once.Do here would wait for the held
-	// Document's own Do, which waits for this release (Vision, #280 r0).
+	// Document's own Do, which waits for this release.
 	t.Cleanup(func() { closeOnce(s.release) })
 	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 2, Width: 10, Height: 5}))
 	hs.next(t)
@@ -452,19 +451,31 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 			t.Fatalf("documents %v: versions not strictly rising", versions)
 		}
 	}
-	// While v1 is held, Serve's reader keeps taking documents off the link, each replacing the one
-	// waiting. When the sender is done, a few may still be unread: the pipe holds 64 KiB and the
-	// reader buffers 4 KiB, and each document is 64 KiB, so at most two are in flight, plus the one
-	// waiting. That bound is the link's, not the scheduler's: a busy machine cannot widen it.
-	const inFlight = 3
-	for _, v := range versions[1:] {
-		if v < n-inFlight+1 {
-			t.Errorf("documents %v handled: v%d was not replaced while v1 was held (only the last %d sent may arrive after it)", versions, v, inFlight)
-			break
-		}
-	}
+	// How many documents are replaced depends on the schedule: golib's rpc client decodes into its
+	// own buffer and one dispatcher feeds Serve, so a slow dispatcher hands over documents one by one
+	// after the release. The replacing itself is pinned by TestAWaitingDocumentIsReplacedByANewer.
+	// What no schedule changes: v1 first (the one held), versions rising, and never losing the newest.
 	if versions[0] != 1 {
 		t.Errorf("documents %v: the first handled is v%d, want v1, the one held", versions, versions[0])
+	}
+}
+
+// TestAWaitingDocumentIsReplacedByANewer: Serve's queue drops a document still waiting when a newer
+// arrives, the newer taking the tail; nothing else is dropped or reordered. A direct cell, so no
+// handler, link or schedule is involved.
+func TestAWaitingDocumentIsReplacedByANewer(t *testing.T) {
+	q := newQueue()
+	for _, n := range []note{{MethodDocument, []any{1}}, {MethodKey, []any{"a"}}, {MethodDocument, []any{2}}, {MethodKey, []any{"b"}}, {MethodDocument, []any{3}}} {
+		q.push(n.method, n.params)
+	}
+	q.end()
+	var got []note
+	for n, ok := q.pop(); ok; n, ok = q.pop() {
+		got = append(got, n)
+	}
+	want := []note{{MethodKey, []any{"a"}}, {MethodKey, []any{"b"}}, {MethodDocument, []any{3}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("the queue popped %v, want %v: the keys in order, then only the newest document", got, want)
 	}
 }
 
