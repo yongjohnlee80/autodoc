@@ -900,7 +900,11 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	if err := onLoop(r, func() error { return r.h.cat.run("results.markdown", nil) }); err != nil {
 		t.Fatal(err)
 	}
-	r.waitNotice(t, "insert the results: widget: the editor is read-only")
+	// the refusal is golib's ErrReadOnly, its words the sentinel's own whatever its category says
+	r.waitNotice(t, "insert the results: "+widget.ErrReadOnly.Error())
+	if err := onLoop(r, func() error { return core{r.h}.InsertBlock("x") }); !errors.Is(err, widget.ErrReadOnly) {
+		t.Fatalf("a block inserted into the read-only page: %v, want widget.ErrReadOnly", err)
+	}
 	if r.editorText() != manualPDF {
 		t.Fatalf("the read-only page changed: %q", r.editorText())
 	}

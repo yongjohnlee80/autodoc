@@ -291,7 +291,7 @@ func (pl *plugins) cardType() tuidecl.Type {
 			return nil, nil, fmt.Errorf("a PluginCard takes no children (at %s)", b.Pos)
 		}
 		var name string
-		consumed, err := tuidecl.ReadProps(b.Props, map[string]tuidecl.Field{"plugin": tuidecl.StringField(&name)})
+		consumed, err := b.ReadProps(map[string]tuidecl.Field{"plugin": tuidecl.StringField(&name)})
 		if err != nil {
 			return nil, nil, err
 		}

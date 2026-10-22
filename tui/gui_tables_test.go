@@ -26,7 +26,7 @@ func TestACSVFileIsATableInTheGUI(t *testing.T) {
 	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
 	r.waitFile(t, "a.csv")
 	type shown struct {
-		mode  guiwidget.EditorMode
+		view  widget.EditorView
 		table *widget.TableDocument
 		page  bool
 	}
@@ -34,10 +34,10 @@ func TestACSVFileIsATableInTheGUI(t *testing.T) {
 		return onLoop(r, func() shown {
 			e := r.h.editor.(*guiwidget.Editor)
 			tb, _ := e.DocumentComponent().(*widget.TableDocument)
-			return shown{e.Shown(), tb, e.DocumentComponent() == tuicore.Component(page)}
+			return shown{e.ShownView(), tb, e.DocumentComponent() == tuicore.Component(page)}
 		})
 	}
-	r.s.WaitFor(t, "the table shown", func(string) bool { s := now(); return s.mode == guiwidget.Rendered && s.table != nil })
+	r.s.WaitFor(t, "the table shown", func(string) bool { s := now(); return s.view == widget.ViewRendered && s.table != nil })
 	tb := now().table
 	if bound := onLoop(r, func() bool { return tb.Table().BoundLayout() != widget.TableLayout(tb.Table()) }); !bound {
 		t.Fatal("the GUI's table is not laid out in pixels")

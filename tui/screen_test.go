@@ -827,7 +827,7 @@ func TestEveryFieldHasALabel(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		tree, err := qml.QML{File: p}.Parse(src)
+		tree, err := qml.New(qml.WithName(p)).Parse(src)
 		if err != nil {
 			return err
 		}

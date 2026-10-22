@@ -33,7 +33,7 @@ func buildNoteRenderer(b tuidecl.Build) (tuicore.Component, []string, error) {
 	}
 	var scale float64
 	var mermaid bool
-	consumed, err := tuidecl.ReadProps(b.Props, map[string]tuidecl.Field{
+	consumed, err := b.ReadProps(map[string]tuidecl.Field{
 		"headingScale": tuidecl.NumberField(&scale),
 		"mermaid":      tuidecl.BoolField(&mermaid),
 	})
