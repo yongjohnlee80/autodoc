@@ -76,12 +76,12 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 	return startDaemonWith(t, sock, workspaces, daemonOpts{})
 }
 
-// daemonOpts change the daemon: slow slows it down (each file read waits slow, with one indexing
-// worker, and the daemon serves without waiting for the first scan); prefs are the preferences its
+// daemonOpts change the daemon: hold pauses its first scan part-way (one indexing worker, and the
+// daemon serves without waiting for the scan); prefs are the preferences its
 // store starts with, nil for the tests' own (the status line shown, which most tests read); emb
 // serves embedding providers.
 type daemonOpts struct {
-	slow    time.Duration
+	hold    *scanHold
 	prefs   map[string]string
 	emb     rpc.Embeddings
 	version string // its hello's; "" is v-test
@@ -112,14 +112,36 @@ var testPrefs = map[string]string{"tui.status.shown": "true", "tui.toast.seconds
 	// no About over the page and no look for a release: a test asks for them itself
 	"tui.about.atstart": "false", "tui.update.check": "false"}
 
-// slowFS is memfs whose reads wait.
-type slowFS struct {
-	*memfs.FS
-	d time.Duration
+// scanHold pauses a daemon's scan part-way, on the test's word rather than a clock: the first after
+// file reads go through, and every later one waits for release. A scan paced by a sleep per read
+// was a race against the test's own steps, lost whenever the host was slow enough that the scan
+// ended before the test looked (the race build on a loaded machine).
+type scanHold struct {
+	after int32
+	reads atomic.Int32
+	open  chan struct{}
+	once  sync.Once
 }
 
-func (f slowFS) Open(ctx context.Context, name string, offset int64) (io.ReadCloser, error) {
-	time.Sleep(f.d)
+func newScanHold(after int32) *scanHold { return &scanHold{after: after, open: make(chan struct{})} }
+
+// release lets the held reads, and every later one, through. Idempotent.
+func (h *scanHold) release() { h.once.Do(func() { close(h.open) }) }
+
+// heldFS is memfs whose reads past the hold's first wait for its release, or for ctx.
+type heldFS struct {
+	*memfs.FS
+	h *scanHold
+}
+
+func (f heldFS) Open(ctx context.Context, name string, offset int64) (io.ReadCloser, error) {
+	if f.h.reads.Add(1) > f.h.after {
+		select {
+		case <-f.h.open:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return f.FS.Open(ctx, name, offset)
 }
 
@@ -180,8 +202,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			fsys = committing{mem}
 		}
 		workers := 0
-		if o.slow > 0 {
-			fsys, workers = slowFS{mem, o.slow}, 1
+		if o.hold != nil {
+			fsys, workers = heldFS{mem, o.hold}, 1
+			t.Cleanup(o.hold.release) // a daemon stopping never waits on a held read
 		}
 		d.fs[wsName] = mem
 		notes := workspaces[name]
@@ -204,8 +227,8 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
 		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
-		// wait until the files are indexed, so the first listing has them (a slow daemon does not)
-		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
+		// wait until the files are indexed, so the first listing has them (a held daemon does not)
+		for deadline := time.Now().Add(10 * time.Second); o.hold == nil; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
 			if st.Docs == int64(len(notes)/2) && st.PendingJobs == 0 {
 				break
@@ -972,7 +995,9 @@ func TestProgressWhileIndexing(t *testing.T) {
 	for i := range 40 {
 		notes = append(notes, fmt.Sprintf("n%02d.md", i), "note\n")
 	}
-	d := startDaemonWith(t, "", map[string][]string{"kb": notes}, daemonOpts{slow: 50 * time.Millisecond})
+	// the scan stops after five files until the test has looked at it mid-way
+	hold := newScanHold(5)
+	d := startDaemonWith(t, "", map[string][]string{"kb": notes}, daemonOpts{hold: hold})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "the bar", func(sc string) bool { return strings.Contains(sc, "indexing ") && strings.Contains(sc, "/40") })
 	// the explorer, opened on kb mid-scan: what is indexed so far
@@ -988,6 +1013,7 @@ func TestProgressWhileIndexing(t *testing.T) {
 	if n := under(); n >= 40 {
 		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)
 	}
+	hold.release()
 	deadline := time.Now().Add(15 * time.Second)
 	for !strings.Contains(r.s.String(), "indexed 40 files") {
 		if time.Now().After(deadline) {
