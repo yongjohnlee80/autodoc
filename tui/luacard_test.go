@@ -87,7 +87,7 @@ func (r *running) cardText() string {
 		if !ok {
 			return ""
 		}
-		return e.Value()
+		return e.Core().Value()
 	})
 }
 

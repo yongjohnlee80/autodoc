@@ -40,7 +40,7 @@ func TestScriptImportsNothingOfAutoDocs(t *testing.T) {
 // engine over a golib Editor with no AutoDoc around it, under the global AutoDoc gives them, and
 // their commands edit as they do in AutoDoc.
 func TestAutoDocsScriptsRunOnABareEditor(t *testing.T) {
-	ed := widget.NewEditor(widget.WithInitialText("Intro"))
+	ed := widget.NewEditor(widget.WithCore(widget.CoreInitialText("Intro")))
 	core := ed.Core()
 	e := New(core, WithGlobal("autodoc"))
 	t.Cleanup(e.Close)
