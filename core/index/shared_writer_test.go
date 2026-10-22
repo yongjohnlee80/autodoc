@@ -63,13 +63,22 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 			w.ix.Touch(fmt.Sprintf("n%03d.md", i))
 		}
 	}
-	for deadline := time.Now().Add(60 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+	// The wait fails when indexing stops moving, not after a fixed total: 600 notes through one
+	// writer under -race is CPU-bound work, several times slower on a loaded machine, and a fixed
+	// 60 s was a race against it (VM43, load ~10: "not both indexed in 60 s"). It fails when neither
+	// workspace's pending jobs nor documents change for indexStall, and in any case at sharedCap.
+	const sharedCap = 10 * time.Minute
+	var last [4]int64
+	stalled := time.Now().Add(indexStall)
+	for capped := start.Add(sharedCap); ; time.Sleep(5 * time.Millisecond) {
 		left := 0
-		for _, w := range all {
+		var now [4]int64
+		for i, w := range all {
+			st, _ := w.s.Status(ctx)
+			now[2*i], now[2*i+1] = st.PendingJobs, st.Docs
 			if w.done != 0 {
 				continue
 			}
-			st, _ := w.s.Status(ctx)
 			if st.Docs == notes && st.PendingJobs == 0 {
 				w.done = time.Since(start)
 			} else {
@@ -79,8 +88,14 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 		if left == 0 {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("not both indexed in 60 s")
+		if now != last {
+			last, stalled = now, time.Now().Add(indexStall)
+		}
+		switch {
+		case time.Now().After(stalled):
+			t.Fatalf("not both indexed: no progress in %s (pending, docs per workspace = %v)", indexStall, last)
+		case time.Now().After(capped):
+			t.Fatalf("not both indexed in %s, though still moving (pending, docs per workspace = %v)", sharedCap, last)
 		}
 	}
 	mu.Lock()
