@@ -60,6 +60,13 @@ func (r *running) ready(t *testing.T) {
 // slower under -race. The clock only turns what never comes into a failure rather than a hang.
 var daemonWait = 2 * decltest.WaitTimeout * raceFactor
 
+// waitOpened waits for text of a note just opened: the open is a read through the daemon, a
+// round trip, so it waits on daemonWait, not a frame's clock.
+func (r *running) waitOpened(t *testing.T, text string) {
+	t.Helper()
+	r.waitWithin(t, fmt.Sprintf("the opened note's %q", text), daemonWait, func() bool { return strings.Contains(r.s.String(), text) })
+}
+
 // waitWithin polls cond until it holds, and fails after d with the screen.
 func (r *running) waitWithin(t *testing.T, what string, d time.Duration, cond func() bool) {
 	t.Helper()
@@ -2165,7 +2172,7 @@ func TestTheIndentationMarksReachTheEditor(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("ind.md") })
-	r.s.WaitForText(t, "····deep") // the cursor on the first line: marked because every line is
+	r.waitOpened(t, "····deep") // the cursor on the first line: marked because every line is
 	r.h.p.Post(func() { r.h.setIndentMarks("off") })
 	r.s.WaitFor(t, "the marks gone", func(sc string) bool {
 		return strings.Contains(sc, "    deep") && !strings.Contains(sc, "·deep")
