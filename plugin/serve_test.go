@@ -73,6 +73,32 @@ func (hs *host) served(t *testing.T) error {
 	return nil
 }
 
+// servedWhile is served for a Handler still working through a long queue: it fails only when count,
+// the calls the Handler has taken, stands still for 5 s, not after 5 s in all. 3000 keys at 200 µs
+// each on one CPU took 3.3 s under -race on a quiet VM43 and outran served's fixed 5 s under load;
+// a Serve that hangs still fails, on the stall's own clock.
+func (hs *host) servedWhile(t *testing.T, count func() int) error {
+	t.Helper()
+	const stall = 5 * time.Second
+	last, deadline := count(), time.Now().Add(stall)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case err := <-hs.serve:
+			return err
+		case <-tick.C:
+			if n := count(); n != last {
+				last, deadline = n, time.Now().Add(stall)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ServeConn did not return: the Handler took no call in %s (%d taken)", stall, last)
+				return nil
+			}
+		}
+	}
+}
+
 // recorder is a Handler that writes down each call, in order.
 type recorder struct {
 	mu     sync.Mutex
@@ -208,7 +234,7 @@ func TestAHandlerSlowerThanTheKeysDoesNotOverflowTheLink(t *testing.T) {
 		hs.send(t, MethodKey, KeyParams(Key{Key: fmt.Sprint(i)}))
 	}
 	hs.send(t, MethodClose, EmptyParams())
-	if err := hs.served(t); err != nil {
+	if err := hs.servedWhile(t, func() int { return len(r.all()) }); err != nil {
 		t.Fatalf("ServeConn = %v", err)
 	}
 	got := r.all()
@@ -349,30 +375,53 @@ func TestTheOptionalInterfacesTakeProtocolTwo(t *testing.T) {
 	}
 }
 
-// slowReader takes each document slowly, and writes down its version.
+// slowReader holds its first document until release is closed, and writes down each version: every
+// document sent meanwhile arrives while the reader is busy, on the test's word rather than a clock.
+// (A reader paced by a sleep was a race against the sender: on a loaded machine the sender slowed and
+// the reader did not, and it handled 13 of 50.)
 type slowReader struct {
 	recorder
-	lag time.Duration
+	holding chan struct{} // closed once the first document is held
+	release chan struct{}
+	once    sync.Once
+}
+
+func newSlowReader() *slowReader {
+	return &slowReader{holding: make(chan struct{}), release: make(chan struct{})}
 }
 
 func (s *slowReader) Document(d Document) {
-	time.Sleep(s.lag)
+	s.once.Do(func() {
+		close(s.holding)
+		<-s.release
+	})
 	s.add(fmt.Sprintf("document v%d", d.Version))
 }
 
-// TestASlowReaderGetsOnlyTheLatestDocument: documents sent much faster than the reader takes them
-// are coalesced: the reader sees versions strictly rising, ends on the newest, and handles far fewer
-// than were sent; the keys among them all arrive, in order.
+// TestASlowReaderGetsOnlyTheLatestDocument: documents sent while the reader is busy are coalesced:
+// with the reader held on the first, it handles that one and then only the newest, never the 48
+// replaced while it waited; the keys among them all arrive, in order.
 func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 	const n = 50
-	s := &slowReader{lag: 20 * time.Millisecond}
+	s := newSlowReader()
 	hs := start(t, s)
+	// registered after start, so it runs before start's own teardown: a failed test never leaves the
+	// reader held while Serve is stopped
+	t.Cleanup(func() { s.once.Do(func() {}); closeOnce(s.release) })
 	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 2, Width: 10, Height: 5}))
 	hs.next(t)
 	for i := 1; i <= n; i++ {
 		hs.send(t, MethodDocument, DocumentParams(Document{Path: "a.md", Text: strings.Repeat("x", 64<<10), Version: i}))
 		hs.send(t, MethodKey, KeyParams(Key{Key: fmt.Sprint(i)}))
+		if i == 1 {
+			select { // the reader holds v1, so every later document waits behind it
+			case <-s.holding:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the reader was never given the first document")
+			}
+		}
 	}
+	closeOnce(s.release)
 	hs.send(t, MethodClose, EmptyParams())
 	if err := hs.served(t); err != nil {
 		t.Fatal(err)
@@ -401,8 +450,17 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 			t.Fatalf("documents %v: versions not strictly rising", versions)
 		}
 	}
-	if len(versions) > n/5 {
-		t.Errorf("%d of %d documents handled: the waiting ones were not replaced", len(versions), n)
+	if !reflect.DeepEqual(versions, []int{1, n}) {
+		t.Errorf("documents %v handled, want [1 %d]: the ones waiting behind v1 were not replaced by the newest", versions, n)
+	}
+}
+
+// closeOnce closes c unless it is closed already.
+func closeOnce(c chan struct{}) {
+	select {
+	case <-c:
+	default:
+		close(c)
 	}
 }
 
