@@ -6,9 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -38,19 +36,12 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.s.WaitForText(t, "page text")
-	// A theme switch is a reload of the whole layout, not a frame's change, which decltest's
-	// WaitTimeout bounds; a file that recovers costs two (the fallback's layout reloaded by the
-	// save, then the switch back to the chosen theme), and a reload is CPU-bound Go work, raceFactor
-	// slower under -race. Each wait has a clock of its own: it only turns a switch that never comes
-	// into a failure rather than a hang.
-	reloadWait := 2 * decltest.WaitTimeout * raceFactor
+	// A theme switch is a reload of the whole layout, not a frame's change; a file that recovers
+	// costs two (the fallback's layout reloaded by the save, then the switch back to the chosen
+	// theme). Each wait is on daemonWait, a reload's clock, not a frame's.
 	waitFor := func(what string, cond func() bool) {
 		t.Helper()
-		for deadline := time.Now().Add(reloadWait); !cond(); time.Sleep(5 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Fatalf("%s never appeared within %s:\n%s", what, reloadWait, r.s.String())
-			}
-		}
+		r.waitWithin(t, what, daemonWait, cond)
 	}
 	waitColour := func(colour string) {
 		t.Helper()
