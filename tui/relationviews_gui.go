@@ -165,7 +165,7 @@ func relationViewType(name string, build func(relPalette) tuicore.Component, gon
 		for _, n := range names {
 			cs[n] = new(style.Color)
 		}
-		consumed, err := tuidecl.ReadProps(b.Props, paletteFields(cs))
+		consumed, err := b.ReadProps(paletteFields(cs))
 		if err != nil {
 			return nil, nil, err
 		}

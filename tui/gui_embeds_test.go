@@ -284,7 +284,7 @@ func (c *countingRenderer) LayOut(b guiwidget.Block, lines []string, width float
 // does, which lays out the blocks it shows.
 func paintedEditor(t *testing.T, r guiwidget.Renderer, text string) (editor *guiwidget.Editor, onApp func(func()), paint func()) {
 	t.Helper()
-	editor = guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithMode(guiwidget.Rendered))
+	editor = guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(tuiwidget.ViewRendered))
 	editor.SetValue(text)
 	backend := &nativeBackend{TestBackend: tuicore.NewTestBackend(100, 50, tuicore.WithTestCapabilities(tuicore.Capabilities{NativeViews: true}))}
 	app := tuicore.NewApp(editor, tuicore.WithBackend(backend))

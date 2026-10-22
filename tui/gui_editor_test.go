@@ -7,6 +7,7 @@ import (
 
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	tuiwidget "github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // Under --gui's style, main.qml's Editor is gui's Editor: the host binds it through editorWidget,
@@ -23,8 +24,8 @@ func TestTheGUIStyleBuildsTheGUIEditor(t *testing.T) {
 	}
 	rendered := onLoop(r, func() bool {
 		e := r.h.editor.(*guiwidget.Editor)
-		e.SetMode(guiwidget.Rendered)
-		return e.Mode() == guiwidget.Rendered
+		e.SetView(tuiwidget.ViewRendered)
+		return e.View() == tuiwidget.ViewRendered
 	})
 	if !rendered {
 		t.Error("the gui Editor has no Rendered view: main.qml's MarkdownRenderer did not reach it")

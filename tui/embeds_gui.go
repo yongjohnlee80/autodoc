@@ -57,7 +57,7 @@ func (n *NoteEmbeds) file() string {
 // running AutoDoc's layout takes its style from here, or its note editor has no Rendered view.
 func GUIStyle(notes *NoteEmbeds, opts ...guidecl.NativeOption) tuidecl.Style {
 	note := guidecl.WithRendererFor(NoteRendererKind, noteRenderer(notes))
-	return guidecl.Native(append([]guidecl.NativeOption{note, guidecl.WithMarkdownOptions(guiwidget.HideMetadata())}, opts...)...)
+	return guidecl.Native(append([]guidecl.NativeOption{note, guidecl.WithMarkdownOptions(guiwidget.WithHideMetadata())}, opts...)...)
 }
 
 // noteRenderer is the note editor's renderer as GUIStyle installs it: notes' embeds, drawn through
@@ -78,9 +78,9 @@ func (n *NoteEmbeds) Renderer(chain guiwidget.Diagrammer) func(tuidecl.RendererS
 		case tuidecl.MarkdownSpec:
 			m = spec
 		}
-		opts := []guiwidget.MarkdownOption{guiwidget.WithCodeLanguages(m.SourceLanguages), guiwidget.HideMetadata()}
+		opts := []guiwidget.MarkdownOption{guiwidget.WithCodeLanguages(m.SourceLanguages), guiwidget.WithHideMetadata()}
 		if m.HeadingScale > 0 {
-			opts = append(opts, guiwidget.HeadingScale(m.HeadingScale))
+			opts = append(opts, guiwidget.WithHeadingScale(m.HeadingScale))
 		}
 		if m.Mermaid {
 			opts = append(opts, guiwidget.WithDiagrams(chain))

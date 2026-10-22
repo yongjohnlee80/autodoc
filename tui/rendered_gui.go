@@ -2,14 +2,17 @@
 
 package tui
 
-import guiwidget "github.com/yongjohnlee80/golib/gui/widget"
+import (
+	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget"
+)
 
 // startRendered puts the GUI's editor in its Rendered view as the window opens: a note reads as it
 // will look, and Ctrl+T shows its source. A page the Rendered view does not read (a Go file, say)
 // shows Raw all the same (readPage withholds the view), and the user's switch holds from then on.
 func startRendered(e editorWidget) {
 	if g, ok := e.(*guiwidget.Editor); ok {
-		g.SetMode(guiwidget.Rendered)
+		g.SetView(widget.ViewRendered)
 		return
 	}
 	startTermRendered(e) // run with --ui: the terminal's editor (rendered_term.go)
@@ -20,7 +23,7 @@ func editorView(e editorWidget) string {
 	if v, ok := termView(e); ok {
 		return v
 	}
-	if g, ok := e.(*guiwidget.Editor); ok && g.Mode() == guiwidget.Rendered {
+	if g, ok := e.(*guiwidget.Editor); ok && g.View() == widget.ViewRendered {
 		return "rendered"
 	}
 	return ""
@@ -36,8 +39,8 @@ func setEditorView(e editorWidget, view string) {
 		return
 	}
 	if view == "rendered" {
-		g.SetMode(guiwidget.Rendered)
+		g.SetView(widget.ViewRendered)
 	} else {
-		g.SetMode(guiwidget.Raw)
+		g.SetView(widget.ViewRaw)
 	}
 }
