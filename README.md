@@ -651,8 +651,15 @@ The GUI needs cgo, and it is the only part that does:
 - **Linux:** `make build` is the static TUI alone, with no cgo. `make build-gui` adds the GUI,
   which needs the window system's development libraries:
   - Debian/Ubuntu: `libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev
-    libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev`;
-  - Arch: `wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa vulkan-headers`.
+    libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev`;
+  - Arch: `wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa`.
+
+  Gio's Vulkan backend is optional and is not in that list: the GUI draws through EGL/OpenGL by
+  default (a Wayland window tries EGL first unless the app asks for `app.PreferVulkan`, and X11
+  keeps Vulkan off entirely), so a build without it is a complete GUI. `make build-gui` probes for
+  `vulkan/vulkan.h` and builds `-tags gui,novulkan` when it is absent, saying so. Install
+  `libvulkan-dev` (Debian/Ubuntu) or `vulkan-headers` (Arch) to compile it in. `VULKAN=1` requires
+  it and fails naming the package; `VULKAN=0` leaves it out even where it is installed.
 
   The releases carry both: `autodoc-<tag>-linux-<arch>` (static, the TUI) and
   `autodoc-<tag>-linux-<arch>-gui`. The Neovim plugin's `build.lua` installs the `-gui` one when
