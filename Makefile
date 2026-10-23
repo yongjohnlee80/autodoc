@@ -7,13 +7,15 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)
 # LDFLAGS instead. CI clones normally and is unaffected.
 export GOFLAGS := -buildvcs=false
 
-.PHONY: build build-gui test race vet fmt cover test-lua clean
+.PHONY: build build-gui build-server test race vet fmt cover test-lua clean
 
 # `make build` is the TUI. On Linux it is static, with no cgo: modernc SQLite needs none.
 # `make build-gui` adds the GUI (--gui, golib/gui on Gio), the only thing that needs cgo, and on
 # Linux the window system's development libraries (GUI_LIBS, as pkg-config names them).
 # macOS builds with cgo either way, since golib watches the workspace roots with FSEvents there
 # (the Command Line Tools), so there `make build` is `make build-gui`: the GUI costs nothing more.
+# `make build-server` is the enterprise search server (--server, docs/enterprise): the server tag
+# adds Postgres (pgx) and the enterprise packages, which the desktop builds leave out. Static.
 GUI_LIBS := egl wayland-egl wayland-client wayland-cursor x11 xkbcommon xkbcommon-x11 x11-xcb xcursor xfixes
 
 # The Vulkan backend is optional, and not in GUI_LIBS for a reason: gio draws
@@ -62,22 +64,29 @@ build-gui:
 	esac; \
 	set -x; CGO_ENABLED=1 go build -tags "$$tags" -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
 
+build-server:
+	CGO_ENABLED=0 go build -tags server -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
+
+# The suites build with the server tag, so the server's cells run; the untagged build's one cell of
+# its own is its refusal of --server.
 test:
-	go test ./...
+	go test -tags server ./...
+	go test -run '^TestAnUntaggedBuildRefusesTheServer$$' ./app/
 
 # What CI runs: the race detector, the suite twice.
 race:
-	go test -race -count=2 -timeout 20m ./...
+	go test -race -count=2 -timeout 20m -tags server ./...
 
 vet:
 	go vet ./...
+	go vet -tags server ./...
 
 fmt:
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "gofmt would rewrite:"; echo "$$unformatted"; exit 1; fi
 
 # The coverage profile CI's policy compares, and its per-function summary.
 cover:
-	go test -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+	go test -count=1 -tags server -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
 
 # The Lua side's suites (tests/run-all.sh): a daemon built from this checkout, in headless Neovim.

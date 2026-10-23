@@ -10,7 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  # Linux builds static, the TUI alone, from Ubuntu. A Linux "-gui" build adds the GUI (--gui):
+  # Linux builds static, the TUI alone, from Ubuntu. A Linux "-server" build is the enterprise search
+  # server (--server, the server tag): static too, it adds Postgres and the enterprise packages,
+  # which every other archive leaves out. A Linux "-gui" build adds the GUI (--gui):
   # cgo, against the window system's libraries, which it then needs to run; built natively on each
   # architecture's runner. macOS builds with cgo, on a Mac: golib watches the workspace roots with
   # FSEvents there, which needs cgo and the SDK, so its one build carries the GUI too, and needs
@@ -24,6 +26,8 @@ jobs:
         include:
           - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "" }
           - { goos: linux,  goarch: arm64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "" }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "0", tags: "server", suffix: "-server" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04,     cgo: "0", tags: "server", suffix: "-server" }
           - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "1", tags: "gui", suffix: "-gui" }
           - { goos: linux,  goarch: arm64, runner: ubuntu-24.04-arm, cgo: "1", tags: "gui", suffix: "-gui" }
           - { goos: darwin, goarch: amd64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }

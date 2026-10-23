@@ -26,8 +26,9 @@
 //	autodoc --check-kbtype [dir]
 //
 // --server is the enterprise search server: headless, it indexes an enterprise's database rows
-// through .view files into a schema of the same Postgres (docs/enterprise). --check validates its
-// configuration and every view, then exits:
+// through .view files into a schema of the same Postgres (docs/enterprise). Only a build with the
+// server tag has it (server_on.go); the others refuse it. --check validates its configuration and
+// every view, then exits:
 //
 //	autodoc --server [--check | --health] server.toml
 //
@@ -49,7 +50,6 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
-	"github.com/yongjohnlee80/autodoc/enterprise/config"
 )
 
 // Options is what a main hands Main: what makes its build its own.
@@ -166,7 +166,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
-	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (docs/enterprise)")
+	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
 	health := fs.Bool("health", false, "--server: ask the running server for its health (GET /v1/health); exit 0 when ok or degraded, 1 otherwise")
 	debug := &debugFlag{}
@@ -240,23 +240,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return serveExit(stderr, runServe(ctx, *configPath, stderr, b), prof)
 		}},
 		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
-			if cfg == "" {
-				fmt.Fprintln(stderr, "autodoc: --server needs its configuration: autodoc --server [--check | --health] server.toml")
-				return 2
-			}
-			if *health {
-				return probeHealth(ctx, cfg, stdout, stderr)
-			}
-			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-			defer stop()
-			err := runServer(ctx, cfg, *check, stdout, stderr, b.version)
-			switch {
-			case err == nil || errors.Is(err, context.Canceled):
-				return 0
-			case config.IsRefusal(err):
-				return failed(err, 2)
-			}
-			return failed(err, 1)
+			return serverMode(ctx, cfg, *check, *health, stdout, stderr, b.version, failed)
 		}},
 		{flag: "call", asked: func() bool { return *call != "" }, arg: true, run: func(params string) int {
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)

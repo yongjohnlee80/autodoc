@@ -78,6 +78,12 @@ views read and `CREATE` on the database for its own schema ([the grants](views.m
 
 ## Getting started
 
+`autodoc --server` is in the server build only: a `linux-<arch>-server` [release
+archive](https://github.com/yongjohnlee80/autodoc/releases/latest), `make build-server`, or
+`go install -tags server github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`. The desktop builds
+(the TUI and the GUI) leave its Postgres and enterprise code out, and refuse `--server`, naming
+this build.
+
 1. Write a `.view` file for the rows you want searchable: **[Writing a `.view` source](views.md)**.
 2. Write `server.toml`: **[The server configuration](server-config.md)**.
 3. Check both against your database, read-only, and your embedding provider with one probe:
