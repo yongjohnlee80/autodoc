@@ -52,7 +52,21 @@ jobs:
 
       - run: go vet ./...
 
+      - run: go vet -tags server ./...
+
       - run: go build ./...
+
+      - run: go build -tags server ./...
+
+      # The desktop builds (no server tag) carry no server: none of its Postgres or enterprise code is
+      # reachable from the binary, and --server refuses, naming the build that has it.
+      - name: the untagged build has no server
+        run: |
+          if go list -deps ./cmd/autodoc | grep -E 'jackc/pgx|autodoc/core/pgstore|autodoc/enterprise|golib/dao/postgres'; then
+            echo "::error::the untagged build reaches the server's packages"
+            exit 1
+          fi
+          go test -count=1 -run '^TestAnUntaggedBuildRefusesTheServer$' ./app/
 
       # The community module never names the private one: no require, no import, in the code or
       # its tests. A commercial client builds on AutoDoc's public packages from its own module.
@@ -79,9 +93,9 @@ jobs:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
         run: |
-          go list ./... | awk '$0 != "github.com/yongjohnlee80/autodoc/tui"' > "$RUNNER_TEMP/test-packages"
+          go list -tags server ./... | awk '$0 != "github.com/yongjohnlee80/autodoc/tui"' > "$RUNNER_TEMP/test-packages"
           mapfile -t packages < "$RUNNER_TEMP/test-packages"
-          go test -race -count=2 -timeout 30m "${packages[@]}"
+          go test -race -count=2 -timeout 30m -tags server "${packages[@]}"
 
       # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
       # builds and polls its roots instead of watching them; the release builds
@@ -90,6 +104,7 @@ jobs:
         run: |
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+          CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -tags server -o /dev/null ./cmd/autodoc
 
   tui:
     name: TUI race (${{ matrix.shard }}/4)
@@ -256,7 +271,7 @@ jobs:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
         run: >-
-          go test -count=1 -timeout 20m -covermode=atomic
+          go test -count=1 -timeout 20m -tags server -covermode=atomic
           -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-head.out" ./...
 
       # The base run gets the URL only when the base tree already has
@@ -274,12 +289,19 @@ jobs:
           # The todos' dropdown: a base at #161's merge (4b37f2a) fails TestTodosLabelAStoreAndClearIt and
           # TestTodosAtTheEdges, which #164 fixes; the head still runs both. These two entries can go once
           # every base this job sees includes #164.
-          go test -count=1 -timeout 20m -skip '^(TestAPreferenceRebindsAPluginCommand|TestTodosLabelAStoreAndClearIt|TestTodosAtTheEdges)$' -covermode=atomic \
+          # A base with the server tag (app/server_on.go) builds its server only with it.
+          tags=
+          if [ -f app/server_on.go ]; then
+            tags=server
+          fi
+          go test -count=1 -timeout 20m -tags "$tags" -skip '^(TestAPreferenceRebindsAPluginCommand|TestTodosLabelAStoreAndClearIt|TestTodosAtTheEdges)$' -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
       # and nothing outside the module graph. app/gui_on.go builds only with the gui tag, which the
-      # coverage run (cgo-free) never sets: its build is the gui-linux and macOS jobs'.
+      # coverage run (cgo-free) never sets: its build is the gui-linux and macOS jobs'. The coverage
+      # run sets the server tag, so app/server_off.go is left out: its cell runs in the test job's
+      # untagged step.
       - name: enforce coverage policy
         id: coverage_policy
         continue-on-error: true
@@ -295,6 +317,7 @@ jobs:
             --maximum-file-regression 1 \
             --require-changed-files \
             --exclude '^app/gui_on\.go$' \
+            --exclude '^app/server_off\.go$' \
             --format markdown > "$RUNNER_TEMP/coverage-report.md"
           status=$?
           cat "$RUNNER_TEMP/coverage-report.md" >> "$GITHUB_STEP_SUMMARY"

@@ -57,6 +57,10 @@ Use `autodoc --gui` to open the native GUI. It shares the same daemon and store 
 and `autodoc --call`. On Linux, use a `-gui` release archive or build with `-tags gui`; the regular
 Linux release binary and Linux Homebrew formula provide the TUI without GUI support.
 
+The enterprise search server (`autodoc --server`, [docs/enterprise](docs/enterprise/README.md)) is
+in its own build: a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`.
+The other builds leave it out, and say so when asked for `--server`.
+
 **`go install` on macOS** compiles with cgo, because the daemon watches workspace roots with the
 system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
 Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,
@@ -1089,6 +1093,8 @@ enterprise's model, once per distinct text, for a web application to search with
 on every query. `autodoc --server --check server.toml` validates the configuration and every view,
 confirms each view's order against the database, read-only, and asks the embedding provider for a
 probe.
+It is in the server build only (a `linux-<arch>-server` release archive, `make build-server`, or
+`-tags server`).
 
 [`docs/enterprise/`](docs/enterprise/) has all of it: [what it is and when to use
 it](docs/enterprise/README.md), [the server configuration](docs/enterprise/server-config.md), and

@@ -118,7 +118,9 @@ proxy  = true
 
 ## systemd
 
-[`deploy/systemd/autodoc-server.service`](../../deploy/systemd/autodoc-server.service):
+[`deploy/systemd/autodoc-server.service`](../../deploy/systemd/autodoc-server.service). The binary is
+the server build (a `linux-<arch>-server` release archive, or `make build-server`); any other build
+refuses `--server`:
 
 ```sh
 install -m 0755 autodoc /usr/local/bin/autodoc
@@ -137,7 +139,7 @@ journalctl -u autodoc-server -f
 
 ## A container
 
-[`deploy/container/Dockerfile`](../../deploy/container/Dockerfile) builds a static binary onto a distroless image, which has no shell and no curl. Its healthcheck is autodoc's own probe:
+[`deploy/container/Dockerfile`](../../deploy/container/Dockerfile) builds the server build, a static binary, onto a distroless image, which has no shell and no curl. Its healthcheck is autodoc's own probe:
 
 ```sh
 docker build -f deploy/container/Dockerfile -t autodoc-server .

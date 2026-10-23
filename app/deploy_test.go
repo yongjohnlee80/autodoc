@@ -1,3 +1,5 @@
+//go:build server
+
 package app
 
 import (
@@ -69,6 +71,10 @@ func TestTheDeploymentExamplesHoldTrue(t *testing.T) {
 	}
 	if len(commands) != 3 {
 		t.Fatalf("found %d commands in the unit and the Dockerfile, want 3: %q", len(commands), commands)
+	}
+	// the image runs --server, which only a build with the server tag has
+	if !regexp.MustCompile(`(?m)^RUN .*go build -tags server `).Match(docker) {
+		t.Error("the Dockerfile builds without the server tag: its image would refuse --server")
 	}
 	// the example's API is plain HTTP behind a proxy (proxy = true): its published port is the
 	// host's loopback only, never every interface (Lector, #131 r0 P1)

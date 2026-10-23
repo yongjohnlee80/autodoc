@@ -2,7 +2,8 @@
 #
 #   docker build -f deploy/container/Dockerfile -t autodoc-server .
 #
-# The binary is static (CGO_ENABLED=0), so the image is distroless: no shell, no package manager,
+# The binary is built with the server tag, which --server needs (the desktop builds leave it out).
+# It is static (CGO_ENABLED=0), so the image is distroless: no shell, no package manager,
 # no curl. Its healthcheck is autodoc's own probe (--server --health), which reads [http] from the
 # same server.toml.
 
@@ -11,7 +12,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -o /autodoc ./cmd/autodoc
+RUN CGO_ENABLED=0 go build -tags server -trimpath -o /autodoc ./cmd/autodoc
 
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /autodoc /autodoc
