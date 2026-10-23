@@ -20,8 +20,8 @@ Dialog {
         Text { text: qsTrId("autodoc.dialog.fonts.its_size") }
         ComboBox { model: App.fontSizes; textRole: "label"; currentIndex: App.fontSizeIndex; onActivated: App.setFontSizeIndex(index) }
         Text { text: "" }
-        Text { text: qsTrId("autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a"); toolTipText: "the agents' text size: the agent panel's shells, a share of the cell size (zoom moves it too)" }
-        ComboBox { toolTipText: "the agents' text size: the agent panel's shells, a share of the cell size (zoom moves it too)"; model: App.agentScales; textRole: "label"; currentIndex: App.agentScaleIndex; onActivated: App.setAgentScaleIndex(index) }
+        Text { text: qsTrId("autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a"); toolTipText: "the shells' text size: the agent and terminal panels' shells, a share of the cell size (zoom moves it too; each panel's menu steps it, Text size)" }
+        ComboBox { toolTipText: "the shells' text size: the agent and terminal panels' shells, a share of the cell size (zoom moves it too; each panel's menu steps it, Text size)"; model: App.agentScales; textRole: "label"; currentIndex: App.agentScaleIndex; onActivated: App.setAgentScaleIndex(index) }
         Text { text: "" }
         Text { text: qsTrId("autodoc.dialog.fonts.the_prose_font_the_rendered_view_ctrl_t_and_the"); toolTipText: "the prose font: the Rendered view (Ctrl+T) and the HTML preview" }
         ComboBox { toolTipText: "the prose font: the Rendered view (Ctrl+T) and the HTML preview"; model: App.proseFonts; textRole: "label"; currentIndex: App.proseFontIndex; onActivated: App.setProseFontIndex(index) }

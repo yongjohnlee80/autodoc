@@ -1300,8 +1300,8 @@
         <translation>its size</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a">
-        <source>the agents' text size: the agent panel's shells, a share of the cell size</source>
-        <translation>the agents' text size: the agent panel's shells, a share of the cell size</translation>
+        <source>the shells' text size: the agent and terminal panels' shells, a share of the cell size</source>
+        <translation>the shells' text size: the agent and terminal panels' shells, a share of the cell size</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_cell_font_monospace_the_page_the_panels_the">
         <source>the cell font (monospace): the page, the panels, the menus</source>
@@ -2087,6 +2087,10 @@
         <source>Insert as Markdown</source>
         <translation>Insert as Markdown</translation>
     </message>
+    <message id="autodoc.gomenu.la_rger_r">
+        <source>La&amp;rger</source>
+        <translation>La&amp;rger</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>&amp;Maximize</translation>
@@ -2127,6 +2131,10 @@
         <source>Select all</source>
         <translation>Select all</translation>
     </message>
+    <message id="autodoc.gomenu.smaller_s">
+        <source>&amp;Smaller</source>
+        <translation>&amp;Smaller</translation>
+    </message>
     <message id="autodoc.gomenu.sort_ascending">
         <source>Sort ascending</source>
         <translation>Sort ascending</translation>
@@ -2134,6 +2142,10 @@
     <message id="autodoc.gomenu.sort_descending">
         <source>Sort descending</source>
         <translation>Sort descending</translation>
+    </message>
+    <message id="autodoc.gomenu.te_xt_size_x">
+        <source>Te&amp;xt size</source>
+        <translation>Te&amp;xt size</translation>
     </message>
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>

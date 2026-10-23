@@ -22,6 +22,6 @@ flowchart LR
 
 **Mande a sua página.** **SPC a** abre o cartão de agentes: **b** envia a página a um agente, **f** a seleção.
 
-Na GUI, **Opções › Fontes e zoom…** define o tamanho do texto dos agentes, como uma fração do da janela.
+Na GUI, **Opções › Fontes e zoom…** define o tamanho do texto dos agentes, como uma fração do da janela, de 50% a 150%; o menu do painel (≡) o muda de 10% em 10% (**Tamanho do texto › Menor**, **Maior**). O painel de terminal o compartilha.
 
 Mais: [Referência, Capítulo 11: Abas de terminal embutidas e entrega de tarefas a agentes com uma tecla](../../reference/11-terminal-tabs-and-agent-handoff.md) e [Referência, Capítulo 12: Integração com agentes de IA, recuperação adaptativa e RPC pela CLI](../../reference/12-ai-agent-integration-and-cli-rpc.md).

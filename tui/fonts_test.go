@@ -476,23 +476,27 @@ func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
 	}
 }
 
-// TestTheAgentsTextSizeIsStored: the Fonts dialog's agents row reads the stored share of the cell
-// size, 90% when none or an unknown one is stored, and stores the one chosen (ADR 1792350322).
+// TestTheAgentsTextSizeIsStored: the Fonts dialog's shells row reads the stored share of the cell
+// size, 50–150% by 10%: 90% when none, or one outside the range, is stored; one between steps (an
+// older 75) the nearest, the larger of two as near. It stores the one chosen (ADR 1792350322).
 func TestTheAgentsTextSizeIsStored(t *testing.T) {
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "80"}, fonts)
 	index := func() string {
 		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.agentScaleIndex"); return fmt.Sprint(v.Raw) })
 	}
-	r.s.WaitFor(t, "80% read", func(string) bool { return index() == "2" })
+	r.s.WaitFor(t, "80% read", func(string) bool { return index() == "3" })
 	onLoop(r, func() bool { r.h.openFonts(); return true })
-	r.s.WaitForText(t, "the agents' text size")
-	onLoop(r, func() bool { r.h.setAgentScaleIndex(5); return true })
-	storedPref(t, d, r, "tui.agent.text.scale", "95")
-	if got := onLoop(r, func() int { return agentScaleOf(r.h.prefs) }); got != 95 {
-		t.Errorf("chosen 95%%, the preferences hold %d", got)
+	r.s.WaitForText(t, "the shells' text size")
+	onLoop(r, func() bool { r.h.setAgentScaleIndex(8); return true })
+	storedPref(t, d, r, "tui.agent.text.scale", "130")
+	if got := onLoop(r, func() int { return agentScaleOf(r.h.prefs) }); got != 130 {
+		t.Errorf("chosen 130%%, the preferences hold %d", got)
 	}
-	for stored, want := range map[string]int{"": 90, "33": 90, "x": 90, "100": 100} {
+	onLoop(r, func() bool { r.h.stepAgentScale(+1); r.h.stepAgentScale(+1); r.h.stepAgentScale(+1); return true })
+	storedPref(t, d, r, "tui.agent.text.scale", "150") // Larger stops at the last step
+	for stored, want := range map[string]int{"": 90, "33": 90, "x": 90, "45": 90, "160": 90, "50": 50, "100": 100, "150": 150,
+		"72": 70, "75": 80, "85": 90, "95": 100} {
 		var p prefs
 		readFontPrefs(&p, map[string]any{"tui.agent.text.scale": stored})
 		if got := agentScaleOf(p); got != want {
