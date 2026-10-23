@@ -1300,8 +1300,8 @@
         <translation>字号</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a">
-        <source>the agents' text size: the agent panel's shells, a share of the cell size</source>
-        <translation>智能体文字大小：智能体面板中的 shell，按单元格大小的比例</translation>
+        <source>the shells' text size: the agent and terminal panels' shells, a share of the cell size</source>
+        <translation>shell 文字大小：智能体面板与终端面板中的 shell，按单元格大小的比例</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_cell_font_monospace_the_page_the_panels_the">
         <source>the cell font (monospace): the page, the panels, the menus</source>
@@ -2087,6 +2087,10 @@
         <source>Insert as Markdown</source>
         <translation>插入为 Markdown</translation>
     </message>
+    <message id="autodoc.gomenu.la_rger_r">
+        <source>La&amp;rger</source>
+        <translation>更大(&amp;R)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>最大化(&amp;M)</translation>
@@ -2127,6 +2131,10 @@
         <source>Select all</source>
         <translation>全选</translation>
     </message>
+    <message id="autodoc.gomenu.smaller_s">
+        <source>&amp;Smaller</source>
+        <translation>更小(&amp;S)</translation>
+    </message>
     <message id="autodoc.gomenu.sort_ascending">
         <source>Sort ascending</source>
         <translation>升序排序</translation>
@@ -2134,6 +2142,10 @@
     <message id="autodoc.gomenu.sort_descending">
         <source>Sort descending</source>
         <translation>降序排序</translation>
+    </message>
+    <message id="autodoc.gomenu.te_xt_size_x">
+        <source>Te&amp;xt size</source>
+        <translation>文字大小(&amp;X)</translation>
     </message>
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>

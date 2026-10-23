@@ -22,6 +22,6 @@ flowchart LR
 
 **Send it your page.** **SPC a** opens the agents' card: **b** sends the page to an agent, **f** the selection.
 
-In the GUI, **Options › Fonts and zoom…** sets the agents' text size, a share of the window's.
+In the GUI, **Options › Fonts and zoom…** sets the agents' text size, a share of the window's, from 50% to 150%; the panel's menu (≡) steps it by 10% (**Text size › Smaller**, **Larger**). The terminal panel shares it.
 
 More: [Reference, Chapter 11: Embedded Terminal Tabs and One-Key Agent Task Handoff](../reference/11-terminal-tabs-and-agent-handoff.md), and [Reference, Chapter 12: AI Agent Integration, Adaptive Retrieval, and CLI RPC](../reference/12-ai-agent-integration-and-cli-rpc.md).

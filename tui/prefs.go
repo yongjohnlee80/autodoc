@@ -134,8 +134,8 @@ type prefs struct {
 	// termFont is the terminals' own face (gui.font.terminal): "" the cell font's (fonts.go)
 	termFont       string
 	fontSize, zoom int
-	// agentScale is the agents panel's text, in percent of the window's (tui.agent.text.scale,
-	// fonts.go): 0 is the default, defaultAgentScale; the GUI's alone
+	// agentScale is the agent and terminal panels' text, in percent of the window's
+	// (tui.agent.text.scale, fonts.go): 0 is the default, defaultAgentScale; the GUI's alone
 	agentScale int
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string

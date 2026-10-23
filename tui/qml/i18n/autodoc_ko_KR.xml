@@ -1300,8 +1300,8 @@
         <translation>크기</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a">
-        <source>the agents' text size: the agent panel's shells, a share of the cell size</source>
-        <translation>에이전트 글자 크기: 에이전트 패널의 셸, 셀 크기에 대한 비율</translation>
+        <source>the shells' text size: the agent and terminal panels' shells, a share of the cell size</source>
+        <translation>셸 글자 크기: 에이전트 패널과 터미널 패널의 셸, 셀 크기에 대한 비율</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_cell_font_monospace_the_page_the_panels_the">
         <source>the cell font (monospace): the page, the panels, the menus</source>
@@ -2087,6 +2087,10 @@
         <source>Insert as Markdown</source>
         <translation>Markdown으로 삽입</translation>
     </message>
+    <message id="autodoc.gomenu.la_rger_r">
+        <source>La&amp;rger</source>
+        <translation>크게(&amp;r)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>최대화(&amp;m)</translation>
@@ -2127,6 +2131,10 @@
         <source>Select all</source>
         <translation>모두 선택</translation>
     </message>
+    <message id="autodoc.gomenu.smaller_s">
+        <source>&amp;Smaller</source>
+        <translation>작게(&amp;s)</translation>
+    </message>
     <message id="autodoc.gomenu.sort_ascending">
         <source>Sort ascending</source>
         <translation>오름차순 정렬</translation>
@@ -2134,6 +2142,10 @@
     <message id="autodoc.gomenu.sort_descending">
         <source>Sort descending</source>
         <translation>내림차순 정렬</translation>
+    </message>
+    <message id="autodoc.gomenu.te_xt_size_x">
+        <source>Te&amp;xt size</source>
+        <translation>글자 크기(&amp;x)</translation>
     </message>
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>

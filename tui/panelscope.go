@@ -70,6 +70,21 @@ func (s *scopedPanelHost) OpenTerminalLook() error {
 	return nil
 }
 
+// PanelTextScale is the agent and terminal panels' text size, in percent of the window's, and
+// whether it is drawn: a window's alone, since a terminal's font is its host's (fonts.go).
+func (s *scopedPanelHost) PanelTextScale() (int, bool) {
+	return agentScaleOf(s.core.h.prefs), s.core.h.gui
+}
+
+// StepPanelTextScale is Text size › Smaller (-1) or Larger (+1); none before the views exist.
+func (s *scopedPanelHost) StepPanelTextScale(dir int) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	s.core.h.stepAgentScale(dir)
+	return nil
+}
+
 // PanelMaximized is whether panel id fills the dock area now (its Drawer's changed signal): false
 // for another feature's panel, and before the views exist.
 func (s *scopedPanelHost) PanelMaximized(id string) bool {

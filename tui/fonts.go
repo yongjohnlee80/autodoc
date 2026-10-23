@@ -34,7 +34,8 @@ const (
 	prefFontSize  = "gui.font.size"
 	prefProseFont = "gui.font.prose"
 	prefZoom      = "gui.zoom"
-	// prefAgentScale is the agents panel's text, in percent of the window's (ADR 1792350322)
+	// prefAgentScale is the agent and terminal panels' text, in percent of the window's (ADR
+	// 1792350322); the key keeps its first name, the agents', so a stored choice carries over
 	prefAgentScale = "tui.agent.text.scale"
 )
 
@@ -47,13 +48,25 @@ var fontSizes = []int{10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24}
 
 const defaultFontSize = 14
 
-// agentScales are the agents panel's text sizes the Fonts dialog offers, in percent of the window's
-// text; defaultAgentScale is slightly smaller than the editor's.
-var agentScales = percents(70, 100, 5)
+// agentScales are the agent and terminal panels' text sizes, in percent of the window's text: the
+// Fonts dialog offers them, and each panel's Text size menu steps through them. defaultAgentScale
+// is slightly smaller than the editor's.
+var agentScales = percents(50, 150, 10)
 
 const defaultAgentScale = 90
 
-// agentScaleOf is p's agents text scale, in percent: the default unless set.
+// nearestAgentScale is the step n is nearest, the larger of two as near, so a choice stored between
+// steps (an older 75 or 85) keeps about its size; 0 (the default) for n outside the steps' range.
+func nearestAgentScale(n int) int {
+	lo, hi := agentScales[0], agentScales[len(agentScales)-1]
+	if n < lo || n > hi {
+		return 0
+	}
+	step := agentScales[1] - lo
+	return lo + (n-lo+step/2)/step*step
+}
+
+// agentScaleOf is p's agent and terminal panels' text scale, in percent: the default unless set.
 func agentScaleOf(p prefs) int {
 	if p.agentScale == 0 {
 		return defaultAgentScale
@@ -71,8 +84,8 @@ func readFontPrefs(p *prefs, m map[string]any) {
 	if n, err := strconv.Atoi(str(prefZoom)); err == nil && slices.Contains(zoomSteps, n) {
 		p.zoom = n
 	}
-	if n, err := strconv.Atoi(str(prefAgentScale)); err == nil && slices.Contains(agentScales, n) {
-		p.agentScale = n
+	if n, err := strconv.Atoi(str(prefAgentScale)); err == nil {
+		p.agentScale = nearestAgentScale(n)
 	}
 }
 
@@ -108,7 +121,7 @@ func (h *Host) applyFonts(p prefs) {
 	if h.fonts == nil {
 		return
 	}
-	h.agentText.apply(h, agentScaleOf(p)) // the agents panel's text, at its share of the window's
+	h.panelText.apply(h, agentScaleOf(p)) // the agent and terminal panels' text, at its share of the window's
 	want := appliedFonts{cell: p.cellFont, prose: p.proseFont, size: p.fontSize, zoom: zoomOf(p), set: true}
 	if want.cell == "" {
 		want.cell = h.defaultCellFont
@@ -243,12 +256,18 @@ func (h *Host) setProseFontIndex(i int) {
 	}
 }
 
-// setAgentScaleIndex is the Fonts dialog's agents text row: a share of the window's text.
+// setAgentScaleIndex is the Fonts dialog's shells text row: a share of the window's text.
 func (h *Host) setAgentScaleIndex(i int) {
 	if i >= 0 && i < len(agentScales) {
 		n := agentScales[i]
 		h.setPref(prefAgentScale, strconv.Itoa(n), func(p *prefs) { p.agentScale = n })
 	}
+}
+
+// stepAgentScale is a panel's Text size › Smaller (-1) or Larger (+1): the next step, stopping at
+// the ends.
+func (h *Host) stepAgentScale(dir int) {
+	h.setAgentScaleIndex(slices.Index(agentScales, agentScaleOf(h.prefs)) + dir)
 }
 
 func (h *Host) setFontSizeIndex(i int) {

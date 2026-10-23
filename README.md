@@ -290,7 +290,9 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
   has **Go to ›**, the panel's own rows (the terminal: **New**, **Close**; the agents: **Restart**,
   **Close**, **Profiles…**), **Theme and font…** (the terminals' theme, and in the GUI their font:
-  the same settings as Preferences and Fonts and zoom…; Esc puts them back), **Maximize** (the
+  the same settings as Preferences and Fonts and zoom…; Esc puts them back), in the GUI **Text
+  size ›** (the shells' text in both panels, **Smaller** and **Larger** a step of 10 % each, 50 %
+  to 150 % of the cell size; Fonts and zoom… sets it too), **Maximize** (the
   panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
   leaves every shell and agent running. Every key goes to the shell or agent, `Esc` included;
   `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
@@ -426,8 +428,9 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   itself. A build that is not a release (`dev`, or a commit after a tag) does not look. Both are on
   until you turn them off.
 - **Fonts and zoom…** (the GUI's): the cell font everything on the grid is drawn in and its size,
-  the terminals' font (the terminal's and the agents' shells, at the cell size; the cell font's
-  unless chosen), the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
+  the terminals' font (the terminal's and the agents' shells; the cell font's unless chosen) and
+  the shells' text size (a share of the cell size, 50 % to 150 % by 10 %, 90 % unless chosen),
+  the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
   applies at once. **Zoom in**, **Zoom out** and **Actual size** are below it. A zoom or a size
   that would leave the window under 80 × 20 is refused, so the screen never needs enlarging to get
   back; a stored zoom a smaller window cannot hold is drawn at the largest step it can. A

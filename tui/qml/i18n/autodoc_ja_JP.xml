@@ -1300,8 +1300,8 @@
         <translation>サイズ</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_agents_text_size_the_agent_panel_s_shells_a">
-        <source>the agents' text size: the agent panel's shells, a share of the cell size</source>
-        <translation>エージェントの文字サイズ: エージェントパネルのシェル (セルサイズに対する割合)</translation>
+        <source>the shells' text size: the agent and terminal panels' shells, a share of the cell size</source>
+        <translation>シェルの文字サイズ: エージェントパネルとターミナルパネルのシェル (セルサイズに対する割合)</translation>
     </message>
     <message id="autodoc.dialog.fonts.the_cell_font_monospace_the_page_the_panels_the">
         <source>the cell font (monospace): the page, the panels, the menus</source>
@@ -2087,6 +2087,10 @@
         <source>Insert as Markdown</source>
         <translation>Markdown として挿入</translation>
     </message>
+    <message id="autodoc.gomenu.la_rger_r">
+        <source>La&amp;rger</source>
+        <translation>大きく(&amp;r)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>最大化(&amp;m)</translation>
@@ -2127,6 +2131,10 @@
         <source>Select all</source>
         <translation>すべて選択</translation>
     </message>
+    <message id="autodoc.gomenu.smaller_s">
+        <source>&amp;Smaller</source>
+        <translation>小さく(&amp;s)</translation>
+    </message>
     <message id="autodoc.gomenu.sort_ascending">
         <source>Sort ascending</source>
         <translation>昇順に並べ替え</translation>
@@ -2134,6 +2142,10 @@
     <message id="autodoc.gomenu.sort_descending">
         <source>Sort descending</source>
         <translation>降順に並べ替え</translation>
+    </message>
+    <message id="autodoc.gomenu.te_xt_size_x">
+        <source>Te&amp;xt size</source>
+        <translation>文字サイズ(&amp;x)</translation>
     </message>
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>
