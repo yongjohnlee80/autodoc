@@ -130,12 +130,17 @@ func TestTheLinksPanelsPlaceMovesToTheExplorer(t *testing.T) {
 	}
 }
 
-// The explorer's tab as its feature keeps it: a tab the view never sends is refused, and a keyboard or
-// a close its view refuses is said, not lost.
+// The explorer's tab as its feature keeps it: a tab shown gives its list the keyboard only with the
+// drawer on screen, a tab the view never sends is refused, and a keyboard or a close its view refuses
+// is said, not lost.
 func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c := newScripted("kb")
-	c.shown = true // the drawer on screen: a tab shown gives its list the keyboard
 	e := newExplorer(c)
+	e.tabShown(linksTab) // the drawer not on screen: no keyboard to give
+	if len(c.views) != 0 {
+		t.Fatalf("a tab shown off screen called %v; want nothing", c.views)
+	}
+	c.shown = true // on screen: a tab shown gives its list the keyboard
 	e.tabShown(linksTab)
 	e.tabShown(7) // no such tab
 	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != relationsView {
