@@ -133,6 +133,8 @@ type surfaceOwner struct {
 	ended     chan struct{} // the owner has settled everything and gone
 	waiters   sync.WaitGroup
 	writerEnd chan struct{}
+	readerEnd chan struct{}
+	ackTimer  *time.Timer // the one wake for the ack's timeout, while it is pending
 
 	// the owner's alone
 	bufs     map[int]*surfaceBuffer
@@ -158,7 +160,7 @@ func newSurfaceOwnerCeiling(conn *plugin.SurfaceConn, sink surfaceSink, announce
 	s := &surfaceOwner{conn: conn, sink: sink, announce: announce, violate: violate,
 		ctl: make(chan ctlEvent), settle: make(chan settleEvent, surfaceSettleCap),
 		out: make(chan outMsg, surfaceOutCap), wake: make(chan struct{}, 1),
-		ended: make(chan struct{}), writerEnd: make(chan struct{}), bufs: map[int]*surfaceBuffer{}, nextID: 2,
+		ended: make(chan struct{}), writerEnd: make(chan struct{}), readerEnd: make(chan struct{}), bufs: map[int]*surfaceBuffer{}, nextID: 2,
 		retired: map[int]map[int]retiredID{}, retiring: map[int]int{}, ceiling: ceiling}
 	go s.read()
 	go s.write()
@@ -211,6 +213,7 @@ func (s *surfaceOwner) post(e settleEvent) {
 }
 
 func (s *surfaceOwner) read() {
+	defer close(s.readerEnd)
 	for {
 		m, g, err := s.conn.Recv()
 		select {
@@ -258,8 +261,10 @@ func (s *surfaceOwner) run() {
 	defer func() {
 		close(s.out)
 		<-s.writerEnd
-		s.conn.Close()
+		s.conn.Shutdown() // wakes the reader; the fd stays until it is done
 		close(s.ended)
+		<-s.readerEnd
+		s.conn.Close()
 	}()
 	for {
 		s.mu.Lock()
@@ -335,13 +340,25 @@ func poolPixels(g surfaceGeometry) (int, int) {
 // wake is set for it), so a new generation may start.
 func (s *surfaceOwner) paced() bool {
 	if s.gen == 0 || s.acked >= s.gen {
+		s.stopAckTimer()
 		return true
 	}
 	if left := surfaceAckTimeout - time.Since(s.genStart); left > 0 {
-		time.AfterFunc(left, s.poke)
+		if s.ackTimer == nil { // one wake per wait, not one per pass of the loop
+			s.ackTimer = time.AfterFunc(left, s.poke)
+		}
 		return false
 	}
+	s.stopAckTimer()
 	return true
+}
+
+// stopAckTimer drops the ack's wake (the owner's alone: the timer itself only pokes).
+func (s *surfaceOwner) stopAckTimer() {
+	if s.ackTimer != nil {
+		s.ackTimer.Stop()
+		s.ackTimer = nil
+	}
 }
 
 // startGeneration retires the current generation and installs g's pool.
@@ -578,8 +595,12 @@ func (s *surfaceOwner) onSettle(e settleEvent) {
 	if b.state == bufRetired {
 		b.back.unref() // the registry's own ref: destroyed now, exactly once
 		delete(s.bufs, e.id)
-		if s.retiring[b.spec.Gen]--; s.retiring[b.spec.Gen] <= 0 {
-			delete(s.retiring, b.spec.Gen)
+		if n, ok := s.retiring[b.spec.Gen]; ok { // shutdown's retirements aren't counted: they pace nothing
+			if n <= 1 {
+				delete(s.retiring, b.spec.Gen)
+			} else {
+				s.retiring[b.spec.Gen] = n - 1
+			}
 		}
 		return
 	}

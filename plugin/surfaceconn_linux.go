@@ -113,7 +113,11 @@ func (c *SurfaceConn) Recv() (map[string]any, *FDGuard, error) {
 	return m, g, nil
 }
 
-// Close shuts the socket down, which ends a Recv blocked on it, then closes it. Once.
+// Shutdown ends the socket's traffic, which wakes a Recv blocked on it, and keeps the fd: a reader
+// that loops back into Recv finds it shut, never a reused fd number. Close it once the reader is done.
+func (c *SurfaceConn) Shutdown() { unix.Shutdown(c.fd, unix.SHUT_RDWR) }
+
+// Close shuts the socket down and closes it, once. A reader must be done with it first (Shutdown).
 func (c *SurfaceConn) Close() error {
 	c.closeOnce.Do(func() {
 		unix.Shutdown(c.fd, unix.SHUT_RDWR)

@@ -49,7 +49,8 @@ func (pl *plugins) newSurfaceSink() (surfaceSink, any, bool) {
 	return streamSink{st}, st, true
 }
 
-// surfaceKinds are the frame kinds the window's caps draw, as plugin.surface names them.
+// surfaceKinds are the frame kinds the window's caps draw that a plugin may send, as plugin.surface
+// names them: memory frames, for now.
 func surfaceKinds(c extimage.Caps) []plugin.SurfaceKind {
 	var out []plugin.SurfaceKind
 	for _, t := range c.Tuples {
@@ -57,9 +58,9 @@ func surfaceKinds(c extimage.Caps) []plugin.SurfaceKind {
 		switch t.Kind {
 		case extimage.KindMemory:
 			k.Kind = "memory"
-		case extimage.KindDMABuf:
-			k.Kind = "dmabuf"
 		default:
+			// DMA-BUFs aren't offered until the SDK's registration comes with its cells (the
+			// host's admission is ready): a plugin's buffer.add of an unoffered kind is refused
 			continue
 		}
 		switch t.Format {
