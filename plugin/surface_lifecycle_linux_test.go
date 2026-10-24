@@ -2,9 +2,9 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,53 +15,57 @@ import (
 )
 
 // A full Done queue never stops the reader, whatever a consumer does between the reader's checks:
-// with a consumer draining it in bursts, every one of 100,000 outcomes is taken off the socket.
+// here it empties the queue just as the reader finds it full, the race a blocking discard loses, and
+// every outcome is still taken off the socket.
 func TestAFullDoneQueueNeverStopsTheReader(t *testing.T) {
 	host, plug := pair(t)
-	s := newSurface(plug)
-	stop := make(chan struct{})
-	defer close(stop)
-	drained := atomic.Int64{}
-	go func() { // drains the queue whole whenever it fills: the race a blocking discard loses
+	var emptied atomic.Int64
+	doneFull = func(done chan SurfaceFrameDone) {
 		for {
 			select {
-			case <-stop:
-				return
+			case <-done:
+				emptied.Add(1)
 			default:
-			}
-			if len(s.done) == cap(s.done) {
-				for range cap(s.done) {
-					select {
-					case <-s.done:
-						drained.Add(1)
-					default:
-					}
-				}
-			} else {
-				runtime.Gosched()
+				return
 			}
 		}
-	}()
-	const count = 100_000
+	}
+	s := newSurface(plug)
+	t.Cleanup(func() { // the reader is done before the hook goes; one that never ends is said, not waited on
+		closed := make(chan struct{})
+		go func() { s.Close(); close(closed) }()
+		select {
+		case <-closed:
+			doneFull = nil
+		case <-time.After(5 * time.Second):
+			t.Error("the reader never ended: it waits on the Done queue")
+		}
+	})
+	// past the queue and the socket both: a stopped reader is a full socket
+	const count = 10_000
 	var sent atomic.Int64
+	sendErr := make(chan error, 1)
 	go func() {
 		for i := range count {
-			if host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: uint64(i + 1), Outcome: "drawn"})) != nil {
+			if err := host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: uint64(i + 1), Outcome: "drawn"})); err != nil {
+				sendErr <- fmt.Errorf("outcome %d: %w", i+1, err)
 				return
 			}
 			sent.Add(1)
 		}
+		sendErr <- nil
 	}()
-	// a stopped reader is a stall: the socket fills and the sends stop (its pace, as -race's, is not)
-	for last, since := int64(-1), time.Now(); sent.Load() != count; time.Sleep(10 * time.Millisecond) {
-		if n := sent.Load(); n != last {
-			last, since = n, time.Now()
-		} else if time.Since(since) > 3*time.Second {
-			t.Fatalf("the reader stopped taking outcomes after %d of %d", n, count)
+	// a stopped reader leaves the socket full: the host's send passes its deadline, and says so
+	select {
+	case err := <-sendErr:
+		if err != nil {
+			t.Fatalf("the reader stopped taking outcomes: %v", err)
 		}
+	case <-time.After(time.Minute):
+		t.Fatalf("the outcomes never all went: %d of %d", sent.Load(), count)
 	}
-	if drained.Load() == 0 {
-		t.Fatal("the consumer never drained a full queue: the race went unexercised")
+	if emptied.Load() == 0 {
+		t.Fatal("the reader never found the queue full: the race went unexercised")
 	}
 }
 

@@ -225,6 +225,9 @@ func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64)
 	return seq, err
 }
 
+// doneFull is a test's consumer between the reader's two checks of a full Done queue: nil but in tests.
+var doneFull func(done chan SurfaceFrameDone)
+
 // presentSent is a test's pause between a frame's send and its Present's return: nil but in tests.
 var presentSent func()
 
@@ -286,6 +289,9 @@ func (s *Surface) read() {
 					case s.done <- d:
 						sent = true
 					default:
+						if doneFull != nil {
+							doneFull(s.done)
+						}
 						select {
 						case <-s.done:
 						default:
