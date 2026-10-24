@@ -330,6 +330,7 @@ func (h *Host) loadPrefs() {
 			return
 		}
 		values, migrated := migrateAgentDefault(a.v)
+		values = migrateLinksPanel(values) // readRows reads the explorer's edge from it too
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)

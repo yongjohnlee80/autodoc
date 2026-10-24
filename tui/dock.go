@@ -37,18 +37,6 @@ func (h *Host) dockTargets() []widgetTarget {
 	return out
 }
 
-// livesOnClosing reports that s's panel, its drawer closing, lives on in the dock: its own Alive, or
-// a tab running that is not closing (a strip's x hangs them all up first, and leaves the dock).
-func (h *Host) livesOnClosing(s PanelSpec) bool {
-	if s.Alive != nil && s.Alive() {
-		return true
-	}
-	if tabs, ok := h.tabsOf(s.View); ok {
-		return slices.ContainsFunc(tabs.Tabs(), func(t widget.TerminalTab) bool { return t.Running && !t.Closing })
-	}
-	return false
-}
-
 // panelAlive reports that s's panel lives on with its drawer closed: its own Alive says so, or its
 // view is a TerminalTabs with a tab running (the terminal's shells, the agents' instances).
 func (h *Host) panelAlive(s PanelSpec) bool {

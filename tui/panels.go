@@ -194,7 +194,7 @@ func (h *Host) panelClosed(name string) {
 	h.panelOpen[name] = false
 	h.dockHidden = nil // a panel closed since the editor's icon hid the others: its next click hides
 	h.showFind()
-	if h.livesOnClosing(*s) {
+	if h.panelAlive(*s) { // a strip's x has stopped its tabs already
 		h.flashDock(name) // closed into the dock, its shells or agents running on: it hid there
 	}
 	defer h.refreshDock() // a closed panel leaves the dock, unless something of it runs on
