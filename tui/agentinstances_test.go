@@ -122,9 +122,9 @@ func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 	}
 	return c.panel, nil
 }
-func (*identityHost) OpenDrawer(string)  {}
-func (*identityHost) CloseDrawer(string) {}
-func (c *identityHost) Post(fn func())   { c.posts = append(c.posts, fn) }
+func (*identityHost) OpenDrawer(string)       {}
+func (c *identityHost) CloseDrawer(id string) { c.closed = append(c.closed, id) }
+func (c *identityHost) Post(fn func())        { c.posts = append(c.posts, fn) }
 func (c *identityHost) After(d time.Duration, fn func()) {
 	c.delays = append(c.delays, d)
 	c.afters = append(c.afters, fn)

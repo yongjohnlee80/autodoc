@@ -119,3 +119,45 @@ func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
 	r.keys(t, ctrlKey('t'))
 	r.s.WaitFor(t, "back to typing", func(sc string) bool { return !strings.Contains(sc, hintProbe) })
 }
+
+// windowControl presses the terminal panel's strip control: "_" or "x", at the strip's right end.
+func windowControl(t *testing.T, r *running, which string) {
+	t.Helper()
+	x, y := cellOf(t, r.s.String(), "_   x")
+	if which == "x" {
+		x += 4
+	}
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
+}
+
+// The terminal's strip ends in _ and x: _ hides the panel with its shell running on; x asks once while
+// a shell runs, Escape keeps it, and Yes hangs it up and closes the panel.
+func TestTheTerminalsStripHidesAndStopsAndCloses(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	catInTheTerminal(t, r)
+
+	windowControl(t, r, "_")
+	r.s.WaitFor(t, "_ hid the panel", func(string) bool { return !r.termShown() })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "shown again", func(string) bool { return r.termShown() })
+	r.keys(t, decltest.Type("kept\r")...)
+	r.s.WaitFor(t, "the same cat, kept running", catPrinted("kept"))
+
+	windowControl(t, r, "x")
+	r.s.WaitForText(t, "stop the shells and close the terminal?")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "Escape: the question gone", func(sc string) bool {
+		return !strings.Contains(sc, "stop the shells and close the terminal?")
+	})
+	if !r.termShown() {
+		t.Fatal("Escape on x's question closed the terminal")
+	}
+	windowControl(t, r, "x")
+	r.s.WaitForText(t, "stop the shells and close the terminal?")
+	r.keys(t, key('y'))
+	r.s.WaitFor(t, "Yes: the terminal closed", func(string) bool { return !r.termShown() })
+	if n := onLoop(r, func() int { p, _ := r.h.terminals.panel(); return len(p.Tabs()) }); n != 0 {
+		t.Errorf("x left %d shells' tabs", n)
+	}
+}

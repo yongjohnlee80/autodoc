@@ -209,6 +209,7 @@ func terminalPreferenceState(p prefs) map[string]any {
 func (t *terminals) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleTerminal":    none(t.toggleTerminal),
+		"App.stopAllShells":     none(t.stopAllShells),
 		"App.openTerminal":      none(t.openTerminal),
 		"App.setTerminalEdge":   oneNumber("a row", t.setTerminalEdge),
 		"App.setTerminalSize":   oneNumber("a row", t.setTerminalSize),
@@ -536,6 +537,39 @@ func (t *terminals) closeShell(id widget.TerminalTabID) {
 		return
 	}
 	t.replaceActive(panel, id, active)
+}
+
+// stopAllShells is the strip's x: every shell in the panel hung up and its tab closed, then the panel
+// closed; asked once while any of them runs. _ beside it is the panel's own hide, every shell kept.
+func (t *terminals) stopAllShells() {
+	panel, err := t.panel()
+	if err != nil {
+		return
+	}
+	running := 0
+	for _, tab := range panel.Tabs() {
+		if tab.Running && !tab.Closing {
+			running++
+		}
+	}
+	stopAll := func() {
+		for _, tab := range panel.Tabs() {
+			if tab.Closing {
+				continue
+			}
+			if _, err := panel.Remove(tab.ID); err != nil {
+				t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_shell_s_tab_could_not_close", err.Error()))
+			}
+		}
+		t.closeTerminalPanel()
+	}
+	if running == 0 {
+		stopAll()
+		return
+	}
+	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.terminal.stop_the_shells_and_close_the_terminal"),
+		Text: t.c.Trf("autodoc.question.terminal.stop_every_shell_running_here", running),
+		Yes:  t.c.Tr("autodoc.question.terminal.yes_stop_them"), OnYes: stopAll})
 }
 
 // replaceActive follows tab id's removal: the shell that was active stays so, and only when id

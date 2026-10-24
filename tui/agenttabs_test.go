@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -137,5 +138,37 @@ func TestAgentTabMenuClosesAndRestartsAskingWhileItRuns(t *testing.T) {
 	a.agentTabsChanged()
 	if c.state["App.agentTitle"] != "agent" {
 		t.Errorf("the title with no tab: %v", c.state["App.agentTitle"])
+	}
+}
+
+// The strip's x stops every agent in the panel and closes it, asking once while any runs, naming how
+// many: No (the question left unanswered) keeps them all; with none running it closes at once.
+func TestTheStripsXStopsEveryAgentAndClosesThePanelAskingOnce(t *testing.T) {
+	a, c := modelAgents(t)
+	one, _ := a.profile("one")
+	two, _ := a.profile("two")
+	for _, p := range []agentProfile{one, two} {
+		if _, err := a.startInstance(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.stopAllAgents()
+	if len(c.questions) != 1 || !strings.Contains(c.questions[0].Text, "2 agents") {
+		t.Fatalf("x with two running: questions %+v", c.questions)
+	}
+	if a.instances["one"] == nil || a.instances["two"] == nil || len(c.closed) != 0 {
+		t.Fatalf("unanswered, x stopped or closed something: instances %v, closed %v", a.instances, c.closed)
+	}
+	c.questions[0].OnYes()
+	if a.instances["one"] != nil || a.instances["two"] != nil || !slices.Equal(c.closed, []string{"agent"}) {
+		t.Fatalf("Yes: instances %v, closed %v; want none, the panel closed", a.instances, c.closed)
+	}
+
+	stopped, _ := a.startInstance(one)
+	c.panel.exit(stopped.tab, 0)
+	c.closed = nil
+	a.stopAllAgents()
+	if len(c.questions) != 1 || a.instances["one"] != nil || !slices.Equal(c.closed, []string{"agent"}) {
+		t.Fatalf("none running: %d questions, instance %v, closed %v; want no question, closed", len(c.questions), a.instances["one"], c.closed)
 	}
 }

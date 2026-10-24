@@ -135,6 +135,36 @@ func (a *agents) closeAgent(code string) {
 		Yes: a.c.Tr("autodoc.question.agenttabs.yes_close_it"), OnYes: closeIt})
 }
 
+// stopAllAgents is the strip's x: every agent in the panel stopped and its tab closed, then the panel
+// closed; asked once while any of them runs. _ beside it is the panel's own hide, every agent kept.
+func (a *agents) stopAllAgents() {
+	a.syncInstances()
+	running := 0
+	for _, instance := range a.instances {
+		if instance.running && !instance.closing {
+			running++
+		}
+	}
+	stopAll := func() {
+		for code, instance := range a.instances {
+			if instance.closing {
+				continue
+			}
+			if err := a.removeInstance(code); err != nil {
+				a.c.Notify(a.c.Trf("autodoc.notice.agenttabs.the_agent_s_tab_could_not_close", err.Error()))
+			}
+		}
+		a.c.CloseDrawer("agent")
+	}
+	if running == 0 {
+		stopAll()
+		return
+	}
+	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.stop_the_agents_and_close_the_panel"),
+		Text: a.c.Trf("autodoc.question.agenttabs.stop_every_agent_running_here", running),
+		Yes:  a.c.Tr("autodoc.question.agenttabs.yes_stop_them"), OnYes: stopAll})
+}
+
 // THE AGENTS' CARD — SPC a: the page to an agent (b, :agent-buffer), the selection or the
 // clipboard (f, :agent-forward), the agent panel (g) and the profiles (G). b and f run agents.lua's
 // commands by their ids, which a user's script of the same name replaces.

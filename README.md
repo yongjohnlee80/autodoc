@@ -294,8 +294,9 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   size ›** (the shells' text in both panels, **Smaller** and **Larger** a step of 10 % each, 50 %
   to 150 % of the cell size; Fonts and zoom… sets it too), **Maximize** (the
   panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
-  leaves every shell and agent running. Every key goes to the shell or agent, `Esc` included;
-  `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
+  leaves every shell and agent running. At the strip's right end, `_` does the same, and `x`
+  stops every shell or agent in the panel and closes it, asked once while any runs. Every key goes
+  to the shell or agent, `Esc` included; `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
   `Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's.
 - **Every panel moves and resizes**: the explorer, the links, the terminal, the agent, the HTML
   preview, and in the GUI the GlobeMap and the Mindmap. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
