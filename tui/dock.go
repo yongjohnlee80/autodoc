@@ -49,7 +49,9 @@ func (h *Host) panelAlive(s PanelSpec) bool {
 	return false
 }
 
-// dockRowOf is a widget's dock row: key its :go name, its icon, its title for the tooltip.
+// dockRowOf is a widget's dock row: key its :go name, its icon, its title for the tooltip; hidden
+// while its panel is in the dock and not shown (hiddenInDock: minimized, or closed and running on, as
+// the terminal's and the agents' hide leaves them), which dims its icon; flash while it lights.
 func (h *Host) dockRowOf(_ int, t widgetTarget) rowOf {
 	icon, title := editorIcon, t.title
 	if s := h.panelSpec(t.panel); s != nil {
@@ -58,7 +60,7 @@ func (h *Host) dockRowOf(_ int, t widgetTarget) rowOf {
 	if title == "" {
 		title = t.name
 	}
-	return rowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.panelHidden(t.panel),
+	return rowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.hiddenInDock(t.panel),
 		"flash": t.panel != "" && h.dockFlashLit(t.panel)}
 }
 

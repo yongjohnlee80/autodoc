@@ -257,9 +257,9 @@ Window {
             Repeater {
                 model: App.dock
                 // a hidden panel's icon is dimmed, and lit in the bar's accent twice as it hides; a
-                // click shows or hides it (tui/dock.go)
+                // click shows or hides it (tui/dock.go). color, golib's: a Button wears no palette role
                 Button { text: model.icon; flat: true; toolTipText: model.title; onClicked: App.goDock(model.key)
-                         palette.buttonText: model.flash ? Theme.menu.accent : model.hidden ? Theme.document.lineNumber : Theme.menu.windowText }
+                         color: model.flash ? Theme.menu.accent : model.hidden ? Theme.document.lineNumber : Theme.menu.windowText }
             }
         }
     }
