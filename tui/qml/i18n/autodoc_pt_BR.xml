@@ -2551,6 +2551,8 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
+  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
   card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
@@ -2559,7 +2561,8 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
@@ -2659,6 +2662,8 @@ OS PAINÉIS
   fonte…, Maximizar (Restaurar enquanto ocupa a área de encaixe) e Ocultar, que fecha o painel e
   deixa todos os agentes rodando; Usar nos perfis
   também inicia outro.
+  O _ e o x na ponta direita da faixa ocultam o painel ou param todos os agentes e o fecham,
+  com uma só pergunta enquanto algum roda.
   SPC a b (:agent-buffer) cola a página no prompt de um agente, e SPC a f (:agent-forward)
   a seleção, senão a área de transferência: no agente em execução, ou num escolhido; SPC a é o cartão
   dos agentes, g e G nele o painel e os perfis. Nenhum Enter é adicionado: uma CLI de agente que aceita
@@ -2667,7 +2672,8 @@ OS PAINÉIS
   ou onde Preferências o puser (em cima, à esquerda, à direita ou centralizado), cada lugar com seu tamanho.
   Um shell inicia quando ele abre sem nenhum, e continua rodando enquanto oculto. Cada shell tem uma aba:
   + adiciona uma, e o menu de uma aba tem Ir para ›, Novo, Fechar, Tema e fonte…, Maximizar (Restaurar)
-  e Ocultar (o painel fechado, todos os shells rodando). Tema e fonte… (também a linha de terminal das Preferências e Opções › Fontes
+  e Ocultar (o painel fechado, todos os shells rodando). O _ da faixa faz o mesmo, e o x para
+  todos os shells e fecha o painel, com uma só pergunta enquanto algum roda. Tema e fonte… (também a linha de terminal das Preferências e Opções › Fontes
   e zoom…) define o tema dos terminais, só o texto, o fundo e o cursor, as cores próprias de um programa
   continuando as dele, e numa janela a fonte; Esc nele devolve o que havia. Toda tecla vai para o
   shell, Esc também; Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
@@ -4849,6 +4855,14 @@ O QUE UMA TECLA PRECISA
         <source>restart the agent?</source>
         <translation>reiniciar o agente?</translation>
     </message>
+    <message id="autodoc.question.agenttabs.stop_every_agent_running_here">
+        <source>%1 agents are running here. Each is stopped and its tab closed, then the panel closes.</source>
+        <translation>%1 agentes estão rodando aqui. Cada um é parado e sua aba fechada; depois o painel fecha.</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.stop_the_agents_and_close_the_panel">
+        <source>stop the agents and close the panel?</source>
+        <translation>parar os agentes e fechar o painel?</translation>
+    </message>
     <message id="autodoc.question.agenttabs.yes_close_it">
         <source>&amp;Yes, close it</source>
         <translation>Sim, fechar (&amp;y)</translation>
@@ -4856,6 +4870,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.question.agenttabs.yes_restart_it">
         <source>&amp;Yes, restart it</source>
         <translation>Sim, reiniciar (&amp;y)</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>Sim, parar (&amp;y)</translation>
     </message>
     <message id="autodoc.question.editorsocket.add_it">
         <source>&amp;Add it</source>
@@ -5026,6 +5044,18 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.question.restart.restart_the_backend">
         <source>restart the backend?</source>
         <translation>reiniciar o backend?</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_every_shell_running_here">
+        <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
+        <translation>%1 shells estão rodando aqui. Cada um é encerrado e sua aba fechada; depois o terminal fecha.</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
+        <source>stop the shells and close the terminal?</source>
+        <translation>parar os shells e fechar o terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>Sim, parar (&amp;y)</translation>
     </message>
     <message id="autodoc.question.todos.remove_its_file">
         <source>Remove %1? Its file is deleted.</source>

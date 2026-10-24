@@ -2551,6 +2551,8 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
+  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
   card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
@@ -2559,7 +2561,8 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
@@ -2659,6 +2662,7 @@ WHAT A KEY NEEDS
   字体…、最大化(占满停靠区时为“还原”)和隐藏(关闭面板，
   所有智能体继续运行)；在配置中点“使用”
   也可再启动一个。
+  标签栏右端的 _ 隐藏面板，x 停止所有智能体并关闭面板(有运行中的智能体时只询问一次)。
   SPC a b(:agent-buffer)将页面粘贴到智能体的提示符中，SPC a f(:agent-forward)
   粘贴所选内容，否则粘贴剪贴板：发送给正在运行的智能体，或所选的智能体；SPC a 打开智能体
   卡片，卡片上的 g 和 G 分别打开面板和配置。不会自动添加 Enter：支持
@@ -2667,7 +2671,8 @@ WHAT A KEY NEEDS
   或在首选项指定的位置(顶部、左侧、右侧或居中)，每个位置各有其大小。
   打开时若没有 shell 则启动一个，隐藏时仍保持运行。每个 shell 有一个标签页：
   + 添加一个，标签页菜单包含 转到 ›、新建、关闭、主题与字体…、最大化(还原)
-  和隐藏(关闭面板，所有 shell 继续运行)。主题与字体…(也可通过首选项的终端一行及“选项 › 字体
+  和隐藏(关闭面板，所有 shell 继续运行)。标签栏右端的 _ 同样隐藏，x 停止
+  所有 shell 并关闭面板(有运行中的 shell 时只询问一次)。主题与字体…(也可通过首选项的终端一行及“选项 › 字体
   与缩放…”)设置终端的主题，仅限文字、背景和光标，程序自身的
   颜色保持不变，在窗口中还可设置字体；在其中按 Esc 恢复原样。所有按键都发送给
   shell，包括 Esc;Ctrl+T(或 Ctrl+\ Ctrl+n)进入 Normal 模式，在其中 h j k l、w b e、gg G、
@@ -4849,6 +4854,14 @@ WHAT A KEY NEEDS
         <source>restart the agent?</source>
         <translation>重启智能体？</translation>
     </message>
+    <message id="autodoc.question.agenttabs.stop_every_agent_running_here">
+        <source>%1 agents are running here. Each is stopped and its tab closed, then the panel closes.</source>
+        <translation>这里有 %1 个智能体正在运行。将逐一停止并关闭其标签页，然后关闭面板。</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.stop_the_agents_and_close_the_panel">
+        <source>stop the agents and close the panel?</source>
+        <translation>停止智能体并关闭面板？</translation>
+    </message>
     <message id="autodoc.question.agenttabs.yes_close_it">
         <source>&amp;Yes, close it</source>
         <translation>是，关闭(&amp;Y)</translation>
@@ -4856,6 +4869,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.agenttabs.yes_restart_it">
         <source>&amp;Yes, restart it</source>
         <translation>是，重启(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>是，停止(&amp;Y)</translation>
     </message>
     <message id="autodoc.question.editorsocket.add_it">
         <source>&amp;Add it</source>
@@ -5026,6 +5043,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.restart.restart_the_backend">
         <source>restart the backend?</source>
         <translation>重启后端？</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_every_shell_running_here">
+        <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
+        <translation>这里有 %1 个 shell 正在运行。将逐一挂断并关闭其标签页，然后关闭终端。</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
+        <source>stop the shells and close the terminal?</source>
+        <translation>停止 shell 并关闭终端？</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>是，停止(&amp;Y)</translation>
     </message>
     <message id="autodoc.question.todos.remove_its_file">
         <source>Remove %1? Its file is deleted.</source>

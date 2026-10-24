@@ -26,6 +26,7 @@ type identityHost struct {
 	delays            []time.Duration
 	questions         []Question
 	epoch             int
+	closed            []string // the drawers CloseDrawer closed, in order
 }
 
 func newIdentityHost(raw string) *identityHost {

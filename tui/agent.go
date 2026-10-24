@@ -122,6 +122,7 @@ func (a *agents) defaultProfile() string {
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleAgent":          none(a.toggleAgent),
+		"App.stopAllAgents":        none(a.stopAllAgents),
 		"App.openAgentProfiles":    none(a.openAgentProfiles),
 		"App.startAddAgent":        none(a.startAddAgent),
 		"App.startEditAgent":       oneNumber("a row", a.startEditAgent),

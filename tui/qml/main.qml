@@ -461,6 +461,10 @@ Window {
         // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
         TerminalTabs {
             id: terminalView
+            // _ and x at the strip's right end: hide the panel, every process kept; stop them all and close it
+            windowButtons: true
+            onMinimizeRequested: App.toggleTerminal()
+            onCloseRequested: App.stopAllShells()
             onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
             // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
             hostKeys: App.terminalHostKeys
@@ -502,6 +506,10 @@ Window {
         // tab's menu goes to another, restarts or closes it, or opens the profiles
         TerminalTabs {
             id: agentView
+            // _ and x at the strip's right end: hide the panel, every process kept; stop them all and close it
+            windowButtons: true
+            onMinimizeRequested: App.toggleAgent()
+            onCloseRequested: App.stopAllAgents()
             // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
             hostKeys: App.terminalHostKeys
             emptyText: "No agent running. Press + to start one of the profiles."

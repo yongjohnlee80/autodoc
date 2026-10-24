@@ -2551,6 +2551,8 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
+  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
   card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
@@ -2559,7 +2561,8 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
@@ -2659,6 +2662,8 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
+  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
   card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
@@ -2667,7 +2672,8 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
@@ -4849,6 +4855,14 @@ WHAT A KEY NEEDS
         <source>restart the agent?</source>
         <translation>restart the agent?</translation>
     </message>
+    <message id="autodoc.question.agenttabs.stop_every_agent_running_here">
+        <source>%1 agents are running here. Each is stopped and its tab closed, then the panel closes.</source>
+        <translation>%1 agents are running here. Each is stopped and its tab closed, then the panel closes.</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.stop_the_agents_and_close_the_panel">
+        <source>stop the agents and close the panel?</source>
+        <translation>stop the agents and close the panel?</translation>
+    </message>
     <message id="autodoc.question.agenttabs.yes_close_it">
         <source>&amp;Yes, close it</source>
         <translation>&amp;Yes, close it</translation>
@@ -4856,6 +4870,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.agenttabs.yes_restart_it">
         <source>&amp;Yes, restart it</source>
         <translation>&amp;Yes, restart it</translation>
+    </message>
+    <message id="autodoc.question.agenttabs.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>&amp;Yes, stop them</translation>
     </message>
     <message id="autodoc.question.editorsocket.add_it">
         <source>&amp;Add it</source>
@@ -5026,6 +5044,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.restart.restart_the_backend">
         <source>restart the backend?</source>
         <translation>restart the backend?</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_every_shell_running_here">
+        <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
+        <translation>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</translation>
+    </message>
+    <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
+        <source>stop the shells and close the terminal?</source>
+        <translation>stop the shells and close the terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_stop_them">
+        <source>&amp;Yes, stop them</source>
+        <translation>&amp;Yes, stop them</translation>
     </message>
     <message id="autodoc.question.todos.remove_its_file">
         <source>Remove %1? Its file is deleted.</source>
