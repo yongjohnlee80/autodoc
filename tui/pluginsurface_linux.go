@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -236,7 +237,10 @@ func (s *surfaceOwner) write() {
 	for o := range s.out {
 		if !broken {
 			if err := s.conn.Send(o.msg, o.fds...); err != nil {
-				broken = true // a disconnect: what is owed is dropped, and settled locally
+				broken = true // a disconnect or a send past its timeout: what is owed is dropped, settled locally
+				if !errors.Is(err, plugin.ErrSurfaceClosed) {
+					s.fail("side channel stalled") // a peer that doesn't read: SO_SNDTIMEO ended the send
+				}
 			}
 		}
 		for _, fd := range o.fds {
@@ -260,11 +264,11 @@ func (s *surfaceOwner) emit(m map[string]any, fds ...int) {
 func (s *surfaceOwner) run() {
 	defer func() {
 		close(s.out)
-		<-s.writerEnd
-		s.conn.Shutdown() // wakes the reader; the fd stays until it is done
+		s.conn.Shutdown() // first: a send blocked on a peer that doesn't read returns now, and the reader wakes
+		<-s.writerEnd     // it closes every fd still queued
 		close(s.ended)
 		<-s.readerEnd
-		s.conn.Close()
+		s.conn.Close() // the fd only now: no Recvmsg can meet a reused number
 	}()
 	for {
 		s.mu.Lock()
@@ -288,7 +292,7 @@ func (s *surfaceOwner) run() {
 		case e := <-s.ctl:
 			if e.err != nil {
 				if !s.closed {
-					s.fail("") // the plugin's end went: its close is the run's, not a violation
+					s.fail("its side channel closed") // a surface that can't answer is the plugin's end
 				}
 				continue
 			}
@@ -716,10 +720,23 @@ func admitDMABuf(fd, w, h, offset, pitch int) string {
 	if err != nil || size <= 0 {
 		return "buffer.add: a DMA-BUF without a size"
 	}
-	if w <= 0 || h <= 0 || w > surfaceMaxPixels || h > surfaceMaxPixels || offset < 0 || pitch < w*4 {
-		return "buffer.add: an impossible layout"
+	return planeLayout(size, w, h, offset, pitch)
+}
+
+// planeLayout is the layout check against an object of size bytes. Every wire integer is bounded
+// before any arithmetic, so no product can overflow: w and h at most 4096, pitch at most 64 MiB
+// (which also fits extimage's uint32 Pitch), and offset within the object. Then the plane's end
+// (the last row needs only its pixels) is at most 2^38, well inside int64.
+func planeLayout(size int64, w, h, offset, pitch int) string {
+	switch {
+	case w <= 0 || h <= 0 || w > surfaceMaxPixels || h > surfaceMaxPixels:
+		return "buffer.add: an impossible size"
+	case pitch < w*4 || pitch > surfaceMaxBacking:
+		return "buffer.add: a pitch below its row or past 64 MiB"
+	case offset < 0 || int64(offset) > size:
+		return "buffer.add: an offset outside the DMA-BUF"
 	}
-	end := int64(offset) + int64(pitch)*int64(h-1) + int64(w)*4 // the last row needs only its pixels
+	end := int64(offset) + int64(pitch)*int64(h-1) + int64(w)*4
 	if end > size {
 		return fmt.Sprintf("buffer.add: the plane ends at %d, past the DMA-BUF's %d bytes", end, size)
 	}
@@ -733,6 +750,10 @@ func admitDMABuf(fd, w, h, offset, pitch int) string {
 // {reason: "size"}, not a violation.
 const errDMABufSize = "buffer.add: a DMA-BUF larger than its frame"
 
+// surfaceSinkOf is where a run's frames go: the window's stream (pluginsurface_gui.go), or none in
+// a terminal. A cell sets its own, so the host's whole surface path runs without a window.
+var surfaceSinkOf = (*plugins).newSurfaceSink
+
 // openSurfaceChannel is e's side channel, when e declares a surface and the window draws streams:
 // the child's end (fd 3), attach to start its owner once the run exists, and abort for a start that
 // failed. nil, nil, nil: no surface, and the plugin draws cells.
@@ -740,7 +761,7 @@ func (pl *plugins) openSurfaceChannel(e pluginEntry) (child *os.File, attach fun
 	if e.m.Surface == nil || e.m.Protocol < 10 {
 		return nil, nil, nil
 	}
-	sink, stream, ok := pl.newSurfaceSink()
+	sink, stream, ok := surfaceSinkOf(pl)
 	if !ok {
 		return nil, nil, nil
 	}

@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"image"
 	"maps"
 	"net"
 	"os"
@@ -273,6 +274,37 @@ func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
 
 // protocol 2's: a card's focus, a command, the feed's document
 func (e *echo) Focus(focused bool) { e.say(fmt.Sprintf("focus %v", focused)) }
+
+// Surface is protocol 10's: the echo plugin draws one frame into its surface, reports a caret,
+// writes the clipboard, asks for a pointer shape, and says each frame's outcome.
+func (e *echo) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
+	e.say(fmt.Sprintf("surface gen %d %.0fx%.0f", info.Gen, info.W, info.H))
+	_ = e.peer.SetCaret(plugin.Caret{X: 1, Y: 2, W: 2, H: 12, Baseline: 10})
+	_ = e.peer.WriteClipboard("from the plugin")
+	_ = e.peer.SetPointerShape("hand")
+	go func() {
+		b, err := sf.Buffer(context.Background())
+		if err != nil {
+			return
+		}
+		for i := range b.Pix {
+			b.Pix[i] = 0xff
+		}
+		if _, err := sf.Present(b, image.Rectangle{}, 1); err != nil {
+			e.say("present: " + err.Error())
+			return
+		}
+		d := <-sf.Done()
+		e.say("frame.done " + d.Outcome)
+	}()
+}
+
+func (e *echo) SurfacePointer(p plugin.SurfacePointer) {
+	e.say(fmt.Sprintf("spointer %s %s", p.Kind, p.Button))
+}
+
+func (e *echo) Paste(text string) { e.say("paste " + text) }
+
 func (e *echo) Pointer(p plugin.Pointer) {
 	e.say(fmt.Sprintf("pointer %s %s %d,%d x%d", p.Kind, p.Button, p.X, p.Y, p.Count))
 }
