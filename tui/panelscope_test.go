@@ -265,3 +265,43 @@ func TestPanelMaximizedIsOnlyOwnPanels(t *testing.T) {
 		t.Error("the terminals' feature read the agents' panel state")
 	}
 }
+
+// TestPanelTextSizeIsTheWindowsAndWaitsForTheViews: the panels' Text size is a window's alone (a
+// terminal's font is its host's), and a step before the views exist is refused. In a window it reads
+// the stored share, and a step moves both panels' share and stores it, from either panel's menu.
+func TestPanelTextSizeIsTheWindowsAndWaitsForTheViews(t *testing.T) {
+	f := &panelFixture{name: "owner", specs: []PanelSpec{fixturePanel()}}
+	h := newHost(NewSession("", nil), Options{})
+	defer h.cancel()
+	s := newScopedPanelHost(core{h}, f, f.specs)
+	if pct, drawn := s.PanelTextScale(); pct != defaultAgentScale || drawn {
+		t.Errorf("a terminal's Text size: %d%%, drawn %v", pct, drawn)
+	}
+	if err := s.StepPanelTextScale(+1); !errors.Is(err, errs.ErrPrecondition) {
+		t.Errorf("a step before attachment: %v", err)
+	}
+
+	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "70"}, &fakeFonts{})
+	read := func() [2]int {
+		return onLoop(r, func() [2]int {
+			agents, _ := r.h.agents.c.(*scopedPanelHost).PanelTextScale()
+			terminal, _ := r.h.terminals.c.(*scopedPanelHost).PanelTextScale()
+			return [2]int{agents, terminal}
+		})
+	}
+	r.s.WaitFor(t, "70% read by both panels", func(string) bool { return read() == [2]int{70, 70} })
+	if !onLoop(r, func() bool { _, drawn := r.h.terminals.c.(*scopedPanelHost).PanelTextScale(); return drawn }) {
+		t.Error("a window's Text size reads as not drawn")
+	}
+	if err := onLoop(r, func() error { return r.h.terminals.c.(*scopedPanelHost).StepPanelTextScale(+1) }); err != nil {
+		t.Fatal(err)
+	}
+	storedPref(t, d, r, "tui.agent.text.scale", "80")
+	if got := read(); got != [2]int{80, 80} {
+		t.Errorf("Larger from the terminal panel's menu: the panels read %v, want 80%% both", got)
+	}
+	if err := onLoop(r, func() error { return r.h.agents.c.(*scopedPanelHost).StepPanelTextScale(-1) }); err != nil {
+		t.Fatal(err)
+	}
+	storedPref(t, d, r, "tui.agent.text.scale", "70")
+}
