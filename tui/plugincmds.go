@@ -61,6 +61,11 @@ func (pl *plugins) refreshPlugins() {
 	rows := make([]tuidecl.Row, 0, len(pl.pluginList))
 	for _, e := range pl.pluginList {
 		key := e.key()
+		if pl.cardPending(e) { // no panel until the next start: its row says so, and opening it too
+			rows = append(rows, tuidecl.Row{"key": key, "kind": "item", "label": pl.c.Trf("autodoc.text.plugincmds.card_after_restart", e.label()),
+				"enabled": true, "target": pluginTarget(key, targetOpen)})
+			continue
+		}
 		simple := e.reason != "" || (len(e.m.Commands) == 0 && !e.m.Card() && !e.m.Service())
 		if simple {
 			rows = append(rows, tuidecl.Row{"key": key, "kind": "item", "label": e.label(),
@@ -231,6 +236,10 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 	e := pl.pluginList[i]
 	if e.reason != "" {
 		pl.c.Notify(e.label())
+		return
+	}
+	if pl.cardPending(e) {
+		pl.c.Notify(pl.cardPendingNotice(e))
 		return
 	}
 	r := pl.running[key]

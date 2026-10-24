@@ -4028,6 +4028,10 @@ WHAT A KEY NEEDS
         <source>%1 was put in the folder by hand: update it there</source>
         <translation>%1은(는) 폴더에 직접 넣은 것입니다: 그 위치에서 업데이트하세요</translation>
     </message>
+    <message id="autodoc.notice.pluginpanels.card_after_restart">
+        <source>%1 is installed: its card appears after AutoDoc restarts</source>
+        <translation>%1 설치됨: AutoDoc을 다시 시작하면 카드가 나타납니다</translation>
+    </message>
     <message id="autodoc.notice.pluginpanels.card_hidden">
         <source>%1 card hidden: %2</source>
         <translation>%1 카드 숨겨짐: %2</translation>
@@ -5525,6 +5529,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.pick.statuses">
         <source>statuses</source>
         <translation>상태</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.card_after_restart">
+        <source>%1 — its card appears after a restart</source>
+        <translation>%1 — 다시 시작하면 카드가 나타납니다</translation>
     </message>
     <message id="autodoc.text.plugincmds.close">
         <source>Close</source>
