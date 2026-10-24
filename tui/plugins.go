@@ -26,8 +26,8 @@ func (pl *plugins) loadPlugins() {
 	pl.pluginList = discoverPlugins(pl.pluginOpt.Dir)
 	pl.syncPluginEntries()
 	pl.refreshPlugins()
-	pl.sayCardsPending()
 	if pl.c.Attached() { // read anew, not at New: the program runs, and attach launched the first ones
+		pl.cardsFollowFolder()
 		pl.launchServices()
 	}
 }
@@ -51,8 +51,8 @@ func (pl *plugins) openPlugin(key string) {
 		pl.c.Notify(e.label())
 		return
 	}
-	if pl.cardPending(e) {
-		pl.c.Notify(pl.cardPendingNotice(e))
+	if pl.cardWithoutPanel(e) {
+		pl.c.Notify(pl.c.Trf("autodoc.notice.pluginpanels.card_without_panel", e.label()))
 		return
 	}
 	r, err := pl.startPlugin(e)

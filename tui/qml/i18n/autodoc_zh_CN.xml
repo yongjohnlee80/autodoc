@@ -4033,13 +4033,17 @@ WHAT A KEY NEEDS
         <source>%1 was put in the folder by hand: update it there</source>
         <translation>%1 是手动放入文件夹的：请在那里更新</translation>
     </message>
-    <message id="autodoc.notice.pluginpanels.card_after_restart">
-        <source>%1 is installed: its card appears after AutoDoc restarts</source>
-        <translation>%1 已安装：重新启动 AutoDoc 后显示其卡片</translation>
-    </message>
     <message id="autodoc.notice.pluginpanels.card_hidden">
         <source>%1 card hidden: %2</source>
         <translation>%1 卡片已隐藏：%2</translation>
+    </message>
+    <message id="autodoc.notice.pluginpanels.card_without_panel">
+        <source>%1 has no panel yet: it opens after AutoDoc restarts</source>
+        <translation>%1 尚无面板：重新启动 AutoDoc 后即可打开</translation>
+    </message>
+    <message id="autodoc.notice.pluginpanels.restart_needed">
+        <source>AutoDoc could not rebuild its screen: restart AutoDoc to show the card plugins</source>
+        <translation>AutoDoc 无法重建界面：请重新启动 AutoDoc 以显示卡片插件</translation>
     </message>
     <message id="autodoc.notice.pluginrun.answered_wrongly">
         <source>%1 answered wrongly: %2</source>
@@ -5534,10 +5538,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.pick.statuses">
         <source>statuses</source>
         <translation>状态</translation>
-    </message>
-    <message id="autodoc.text.plugincmds.card_after_restart">
-        <source>%1 — its card appears after a restart</source>
-        <translation>%1 — 重新启动后显示其卡片</translation>
     </message>
     <message id="autodoc.text.plugincmds.close">
         <source>Close</source>

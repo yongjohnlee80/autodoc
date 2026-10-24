@@ -594,8 +594,8 @@ func TestACardTheDockHidComesBackForItsCommands(t *testing.T) {
 	}
 }
 
-// pendingNotices counts the notifications that say text.
-func (r *running) pendingNotices(text string) int {
+// noticesSaying counts the notifications that say text.
+func (r *running) noticesSaying(text string) int {
 	return onLoop(r, func() int {
 		n := 0
 		for _, it := range r.h.noticeLog.items {
@@ -619,56 +619,4 @@ func (r *running) pluginRowLabel(name string) (string, bool) {
 		}
 		return "", false
 	})
-}
-
-// A card plugin added while AutoDoc runs has no panel until the next start: AutoDoc says so once as
-// it is found, its Plugins menu row says so, and opening it or running its command says so again
-// and starts nothing. Removed and added again, it is told again; a card found at the start is never
-// pending. After a restart its card opens.
-func TestACardAddedWhileRunningSaysItAppearsAfterARestart(t *testing.T) {
-	dir := t.TempDir()
-	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
-	r, _ := pluginTUIWith(t, dir, nil)
-	const said = "Card is installed: its card appears after AutoDoc restarts"
-	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n")
-	r.h.p.Post(r.h.plugins.loadPlugins)
-	r.waitNotice(t, said)
-	if n := r.pendingNotices("First is installed"); n != 0 {
-		t.Fatalf("a card found at the start was said to be pending %d times", n)
-	}
-	if label, item := r.pluginRowLabel("card"); label != "Card — its card appears after a restart" || !item {
-		t.Fatalf("the pending card's Plugins row is %q (a plain item: %v), want it to say the card appears after a restart", label, item)
-	}
-	if label, item := r.pluginRowLabel("first"); item || strings.Contains(label, "restart") {
-		t.Fatalf("the card found at the start has the row %q (a plain item: %v)", label, item)
-	}
-
-	r.h.p.Post(r.h.plugins.loadPlugins) // read again (another plugin added, say): told once
-	if run := r.openPlugin("card"); run != nil {
-		t.Fatal("opening a pending card started its plugin")
-	}
-	r.s.WaitFor(t, "opening it says so again", func(string) bool { return r.pendingNotices(said) == 2 })
-	r.h.p.Post(func() { r.h.plugins.runPluginCommand("card", "toggle") })
-	r.s.WaitFor(t, "its command says so again", func(string) bool { return r.pendingNotices(said) == 3 })
-	if onLoop(r, func() *pluginRun { return r.h.plugins.running["card"] }) != nil {
-		t.Fatal("a pending card's command started its plugin")
-	}
-
-	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
-		t.Fatal(err)
-	}
-	r.h.p.Post(r.h.plugins.loadPlugins)
-	r.s.WaitFor(t, "the card gone from the menu", func(string) bool { label, _ := r.pluginRowLabel("card"); return label == "" })
-	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
-	r.h.p.Post(r.h.plugins.loadPlugins)
-	r.s.WaitFor(t, "added again, it is told again", func(string) bool { return r.pendingNotices(said) == 4 })
-
-	again, _ := pluginTUIWith(t, dir, nil) // the next start: its panel is built with the program
-	if again.openPlugin("card") == nil {
-		t.Fatal("after a restart the card did not start")
-	}
-	waitFrame(t, again, "Card")
-	if n := again.pendingNotices(said); n != 0 {
-		t.Fatalf("after a restart the card was still said to be pending %d times", n)
-	}
 }

@@ -294,10 +294,9 @@ Each notification carries one map.
   `host.close` never stops it.
 - It stops when the user turns it off: its Plugins menu's Turn off, or Manage plugins. Its `toggle`
   while its panel is open (below) only hides it. It stops too when it exits, or when AutoDoc quits.
-- A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
-  the next start. Until then AutoDoc says so itself: once as the card is found ("<title> is
-  installed: its card appears after AutoDoc restarts"), on its Plugins menu row, and again when it is
-  opened or one of its commands is run. A plugin's own guide need not explain it.
+- A card plugin added while AutoDoc runs (installed, updated, or found when the plugins folder is read
+  again) has its panel at once: there is no restart. A removed one's panel goes with it, its plugin
+  stopped. A plugin's own guide need not mention either.
 - **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
   each with an optional `key`), and SPC p and Plugins › Commands… list them with their letters. Its
   frames are its content: a line of keys there says again what AutoDoc already shows.

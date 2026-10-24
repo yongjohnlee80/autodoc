@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"slices"
 	"strings"
 
@@ -19,10 +20,11 @@ import (
 // panel does (Alt/Option-left drag, Alt/Option-right drag, Go › Arrange panel), and keeps its size
 // and its floating rectangle in the preferences under its panel's id (tui.card_<name>.*).
 //
-// The panels are written into main.qml as the program is built, one for each card plugin found
-// then (cardPanelsQML): a plugin added while AutoDoc runs has its panel from the next start. Until
-// then it is pending (cardPending): AutoDoc says so once as it is found, its Plugins menu row says
-// so, and opening it or running its commands says so again rather than failing.
+// The panels are written into main.qml (cardPanelsQML), one for each card plugin found as the
+// program is built. Then the set follows the folder (ADR 1792848741): a card plugin added while
+// AutoDoc runs gets its panel at once, and a removed one's goes. The host stages the registry's
+// change, reloads the document with the new set (declaring the added cards' sources), and commits
+// only when the reload succeeded; a refused change puts the set back (cardPanelsChanged).
 //
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
 // its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
@@ -56,15 +58,16 @@ func cardEdge(place string) string {
 	return place
 }
 
-// cardPanel is a card plugin's panel, made for the plugin found when the program was built.
+// cardPanel is a card plugin's panel.
 type cardPanel struct {
 	name  string
-	entry pluginEntry // the manifest as it was then: its geometry's defaults
+	entry pluginEntry // the manifest as it was found: its geometry's defaults
 	view  *pluginView // the panel's PluginCard, once the document has built it
 }
 
-// fixCards are the card panels, fixed the first time they are asked for: the card plugins found
-// when the program is built. Panels, the document's text and its PluginCard type read the same.
+// fixCards are the card panels: the card plugins found when the program is built, fixed the first
+// time they are asked for; then the set reconcileCards leaves. Panels, the document's text and its
+// PluginCard type read the same.
 func (pl *plugins) fixCards() []*cardPanel {
 	if pl.cardOrder != nil {
 		return pl.cardOrder
@@ -82,31 +85,64 @@ func (pl *plugins) fixCards() []*cardPanel {
 	return pl.cardOrder
 }
 
-// cardPending reports e a card plugin found after the program was built: it has no panel until
-// AutoDoc's next start.
-func (pl *plugins) cardPending(e pluginEntry) bool {
-	return pl.cardOrder != nil && e.reason == "" && e.m.Card() && pl.cards[e.m.Name] == nil
-}
-
-// cardPendingNotice is what the user is told of the pending card e.
-func (pl *plugins) cardPendingNotice(e pluginEntry) string {
-	return pl.c.Trf("autodoc.notice.pluginpanels.card_after_restart", e.label())
-}
-
-// sayCardsPending tells the user of each card plugin found since the program was built, once while
-// it stays in the folder: removed and added again, it is told again.
-func (pl *plugins) sayCardsPending() {
-	said := map[string]bool{}
+// reconcileCards makes the card set the folder's runnable card plugins: a card that stays keeps its
+// cardPanel (and its view), a new one is appended, a gone one is dropped. It returns the names it
+// added and dropped, and undo, which puts the set back as it was.
+func (pl *plugins) reconcileCards() (added, gone []string, undo func()) {
+	prevOrder, prevCards := pl.fixCards(), pl.cards
+	runnable := map[string]pluginEntry{}
 	for _, e := range pl.pluginList {
-		if !pl.cardPending(e) {
-			continue
-		}
-		said[e.m.Name] = true
-		if !pl.pendingSaid[e.m.Name] {
-			pl.c.Notify(pl.cardPendingNotice(e))
+		if e.reason == "" && e.m.Card() {
+			runnable[e.m.Name] = e
 		}
 	}
-	pl.pendingSaid = said
+	order, cards := []*cardPanel{}, map[string]*cardPanel{}
+	for _, c := range prevOrder {
+		if _, ok := runnable[c.name]; !ok {
+			gone = append(gone, c.name)
+			continue
+		}
+		order = append(order, c)
+		cards[c.name] = c
+	}
+	for _, e := range pl.pluginList {
+		if _, ok := runnable[e.m.Name]; !ok || cards[e.m.Name] != nil {
+			continue
+		}
+		c := &cardPanel{name: e.m.Name, entry: e}
+		order = append(order, c)
+		cards[c.name] = c
+		added = append(added, c.name)
+	}
+	pl.cardOrder, pl.cards = order, cards
+	return added, gone, func() { pl.cardOrder, pl.cards = prevOrder, prevCards }
+}
+
+// cardsFollowFolder gives a card plugin found since the program was built its panel, and takes a
+// gone one's away. A gone card's plugin stops first, here: its stop hides the card (stopFor), so its
+// open panel closes and its Closed hook runs while its Drawer is there, before the host's reload
+// drops it. A card's panel is open only while its plugin runs, since a run that ends hides it.
+func (pl *plugins) cardsFollowFolder() {
+	if pl.cardOrder == nil {
+		return // the program is not built yet: it reads the folder as it is
+	}
+	added, gone, undo := pl.reconcileCards()
+	if len(added)+len(gone) == 0 {
+		return
+	}
+	for _, name := range gone {
+		if r := pl.running[name]; r != nil {
+			r.stopFor(plugin.CloseRemove, "")
+			delete(pl.running, name)
+		}
+	}
+	pl.c.CardPanelsChanged(undo)
+}
+
+// cardWithoutPanel reports a runnable card plugin the card set does not hold: one whose panel the
+// host could not add (the change was refused, and said). It opens after a restart.
+func (pl *plugins) cardWithoutPanel(e pluginEntry) bool {
+	return pl.cardOrder != nil && e.reason == "" && e.m.Card() && pl.cards[e.m.Name] == nil
 }
 
 // cardSpecs are the card panels' specs.
@@ -327,7 +363,7 @@ func (pl *plugins) cardType() tuidecl.Type {
 		pl.fixCards()
 		c := pl.cards[name]
 		if c == nil {
-			return nil, nil, fmt.Errorf("PluginCard: %q is not a card plugin found at the start (at %s)", name, b.Pos)
+			return nil, nil, fmt.Errorf("PluginCard: %q is not a card plugin (at %s)", name, b.Pos)
 		}
 		v := &pluginView{pl: pl, card: name}
 		c.view = v
@@ -378,3 +414,69 @@ type memInfo struct {
 }
 
 func (m memInfo) Size() int64 { return m.size }
+
+// cardPanelsChanged makes the registry and the document follow the card set reconcileCards left:
+// the registry's change is staged, the document reloaded with the set (the added cards' sources
+// declared as it plans), and only then the change committed. A refused stage or reload is said, the
+// card set is put back (undo), and the registry and the document are as they were (ADR 1792848741
+// §4.4). A reload that failed part-way latches the tree, and a remount would build every widget anew
+// under a host bound to the old ones (attach), so AutoDoc says it must restart instead; once latched,
+// no card reload is tried again. After the handler, as the theme switch's reload: a signal may still be emitting, and the
+// engine reconciles only between emissions.
+func (h *Host) cardPanelsChanged(undo func()) {
+	h.p.Post(func() {
+		mustRestart := func() {
+			undo()
+			h.notify(h.tr("autodoc.notice.pluginpanels.restart_needed"))
+			h.plugins.refreshPlugins()
+		}
+		if h.p.Tree().Failed() { // an earlier reload latched it: only a restart rebuilds the screen
+			mustRestart()
+			return
+		}
+		refused := func(err error) {
+			undo()
+			h.failed("plugins", err)
+			h.plugins.refreshPlugins()
+		}
+		specs, commit, err := h.reg.panels.stage(core{h}, h.plugins, h.plugins.Panels())
+		if err != nil {
+			refused(err)
+			return
+		}
+		cards := slices.DeleteFunc(slices.Clone(specs), func(s PanelSpec) bool { return !strings.HasPrefix(s.ID, cardPanelPrefix) })
+		values := h.plugins.cardState()
+		maps.Copy(values, floatState(h.prefs.panelFloat, cards))
+		fresh := map[string]any{}
+		for name, v := range values {
+			if _, declared := h.p.Tree().Lookup(name); declared {
+				h.set(name, v) // a card added again: declared the first time; set before the reload binds it
+				continue
+			}
+			fresh[name] = v
+		}
+		base, err := h.layoutBaseNow()
+		if err != nil {
+			refused(err)
+			return
+		}
+		if h.dev != "" && h.theme != "" { // -dev's file wears its own import; the screen wears h.theme
+			base = themeImport.ReplaceAll(base, []byte("import autodoc.theme."+h.theme+" "+moduleVersion))
+		}
+		src := h.plugins.withCardPanels(base)
+		if _, err := h.reloadCards(src, fresh); err != nil {
+			if h.p.Tree().Failed() { // it failed part-way and latched the tree
+				h.keep(err)
+				mustRestart()
+				return
+			}
+			refused(err)
+			return
+		}
+		commit() // only now: the panel set, the dock and Arrange never name a card with no Drawer
+		h.layoutSrc = src
+		h.reloaded()
+		h.plugins.refreshPlugins()
+		h.loadPrefs() // an added card's kept tui.card_<name>.* geometry; applyPrefs sets the panel defs
+	})
+}

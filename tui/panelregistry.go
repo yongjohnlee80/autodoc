@@ -7,6 +7,8 @@ import (
 
 // Panel is the optional Feature capability contributing drawers. The registry
 // snapshots these once per program; each feature owns its lifecycle callbacks.
+// The plugins feature's card panels are the one exception: stage and commit swap
+// them as card plugins come and go (ADR 1792848741).
 type Panel interface{ Panels() []PanelSpec }
 
 type panelRegistry struct {
@@ -16,58 +18,73 @@ type panelRegistry struct {
 }
 
 func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
-	r := &panelRegistry{specs: []PanelSpec{}}
+	var contributions []panelContribution
+	for _, f := range fs {
+		if p, ok := f.(Panel); ok {
+			contributions = append(contributions, panelContribution{feature: f, specs: p.Panels()})
+		}
+	}
+	specs, checked, err := checkSpecs(contributions)
+	if err != nil {
+		return nil, err
+	}
+	return &panelRegistry{specs: specs, contributions: checked}, nil
+}
+
+// checkSpecs validates every contribution's specs as one program's panel set: ids, views and
+// components unique across them, geometry within bounds. It returns the set in focus order and the
+// contributions with their validated copies (places cloned).
+func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribution, error) {
+	specs := []PanelSpec{}
+	out := make([]panelContribution, 0, len(contributions))
 	owners := map[string]string{}
 	views := map[string]string{}
 	components := map[string]string{}
-	for _, f := range fs {
-		p, ok := f.(Panel)
-		if !ok {
-			continue
-		}
+	for _, in := range contributions {
+		f := in.feature
 		contribution := panelContribution{feature: f}
-		for _, s := range p.Panels() {
+		for _, s := range in.specs {
 			if s.ID == "" || s.View == "" || s.Edge == nil {
-				return nil, fmt.Errorf("tui: %s contributes a panel without an id, view or edge", f.Name())
+				return nil, nil, fmt.Errorf("tui: %s contributes a panel without an id, view or edge", f.Name())
 			}
 			if prev, ok := owners[s.ID]; ok {
-				return nil, fmt.Errorf("tui: panel %s is both %s's and %s's", s.ID, prev, f.Name())
+				return nil, nil, fmt.Errorf("tui: panel %s is both %s's and %s's", s.ID, prev, f.Name())
 			}
 			if prev, ok := views[s.View]; ok {
-				return nil, fmt.Errorf("tui: panel view %s belongs to both %s and %s", s.View, prev, s.ID)
+				return nil, nil, fmt.Errorf("tui: panel view %s belongs to both %s and %s", s.View, prev, s.ID)
 			}
 			for _, id := range []string{s.ID, s.View} {
 				if prev, ok := components[id]; ok {
-					return nil, fmt.Errorf("tui: component %s is shared by panel %s and %s", id, prev, s.ID)
+					return nil, nil, fmt.Errorf("tui: component %s is shared by panel %s and %s", id, prev, s.ID)
 				}
 			}
 			if len(s.Places) > 0 {
 				if s.Default == nil || !validPercentRange(s.Size) || !validPercentRange(s.Length) {
-					return nil, fmt.Errorf("tui: panel %s has invalid geometry defaults or bounds", s.ID)
+					return nil, nil, fmt.Errorf("tui: panel %s has invalid geometry defaults or bounds", s.ID)
 				}
 				places := map[string]bool{}
 				for _, place := range s.Places {
 					if place == "" || places[place] {
-						return nil, fmt.Errorf("tui: panel %s has an empty or repeated place", s.ID)
+						return nil, nil, fmt.Errorf("tui: panel %s has an empty or repeated place", s.ID)
 					}
 					places[place] = true
 					size, length := s.Default(place)
 					if !inPercentRange(size, s.Size) || !inPercentRange(length, s.Length) {
-						return nil, fmt.Errorf("tui: panel %s defaults at %s are outside its bounds", s.ID, place)
+						return nil, nil, fmt.Errorf("tui: panel %s defaults at %s are outside its bounds", s.ID, place)
 					}
 				}
 			}
 			owners[s.ID], views[s.View] = f.Name(), s.ID
 			components[s.ID], components[s.View] = s.ID, s.ID
 			s.Places = slices.Clone(s.Places)
-			r.specs = append(r.specs, s)
+			specs = append(specs, s)
 			contribution.specs = append(contribution.specs, s)
 		}
-		r.contributions = append(r.contributions, contribution)
+		out = append(out, contribution)
 	}
 	// Priority is declared data; ties keep feature/contribution order. Built-in
 	// priorities preserve the panel order used before Feature contributions.
-	slices.SortStableFunc(r.specs, func(a, b PanelSpec) int {
+	slices.SortStableFunc(specs, func(a, b PanelSpec) int {
 		if a.Priority < b.Priority {
 			return -1
 		}
@@ -76,7 +93,37 @@ func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
 		}
 		return 0
 	})
-	return r, nil
+	return specs, out, nil
+}
+
+// stage checks f's panels replaced by own, under the same checks as at build, and changes nothing:
+// specs is the program's panel set as it would be, and commit makes it so (it cannot fail). Only
+// for a feature that contributes panels and is not PanelBound: a PanelBound feature holds its host,
+// and a rebuilt one would leave it holding the old (ADR 1792848741 §4.2).
+func (r *panelRegistry) stage(c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
+	i := slices.IndexFunc(r.contributions, func(p panelContribution) bool { return p.feature == f })
+	if i < 0 {
+		return nil, nil, fmt.Errorf("tui: %s contributes no panels", f.Name())
+	}
+	if _, bound := f.(PanelBound); bound {
+		return nil, nil, fmt.Errorf("tui: %s holds its panel host, so its panels are fixed", f.Name())
+	}
+	next := slices.Clone(r.contributions)
+	next[i] = panelContribution{feature: f, specs: own}
+	all, checked, err := checkSpecs(next)
+	if err != nil {
+		return nil, nil, err
+	}
+	return all, func() {
+		for _, s := range r.contributions[i].specs {
+			delete(r.hosts, s.ID)
+		}
+		host := newScopedPanelHost(c, f, checked[i].specs)
+		for _, s := range checked[i].specs {
+			r.hosts[s.ID] = host
+		}
+		r.contributions, r.specs = checked, all
+	}, nil
 }
 
 func validPercentRange(r [2]int) bool     { return r[0] > 0 && r[0] <= r[1] && r[1] <= 100 }

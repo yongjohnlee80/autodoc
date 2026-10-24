@@ -111,7 +111,11 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   (`Panels() []PanelSpec`). A spec names its drawer and focus view, edge, places, defaults and
   percentage bounds. Duplicate ids/views and invalid geometry are refused before state is built;
   descriptors and place slices are snapshotted. Focus follows declared priority, with stable
-  contribution order for ties. No package-global runtime panel list exists.
+  contribution order for ties. No package-global runtime panel list exists. The one exception is
+  the plugins feature's card panels, which follow the plugins folder (ADR 1792848741): the registry
+  stages that contributor's new specs under the same checks, the document is reloaded with them
+  (`ReloadWithSources` declares an added card's sources), and the change commits only when the
+  reload succeeded.
 - Panel callbacks receive a contributor-scoped `PanelHost`, not `*Host`. View calls, focus
   queries and terminal configuration are restricted to that feature's validated ids/views;
   cross-role id/view collisions are refused. Each contributor receives its own services even

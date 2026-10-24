@@ -65,13 +65,10 @@ type plugins struct {
 	clauseText                                                                              [2]string
 	resultsOrder, resultsOrderErr, resultsFilter, resultsWhereErr, resultsHint, resultsNote string
 	whereOn                                                                                 bool // a WHERE filters the view
-	// the card plugins' panels, by name and in order, fixed when the program is built
-	// (pluginpanels.go); nil until then
+	// the card plugins' panels, by name and in order: fixed when the program is built, then following
+	// the folder (pluginpanels.go); nil until then
 	cards     map[string]*cardPanel
 	cardOrder []*cardPanel
-	// pendingSaid are the card plugins found since then whose restart notice was given
-	// (sayCardsPending): each is told once while it stays in the folder
-	pendingSaid map[string]bool
 }
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {
@@ -325,6 +322,9 @@ type pluginHost interface {
 	BrowseFolder() string
 	// RootOf is workspace ws's folder, absolute; "" until it is listed (a document's Root)
 	RootOf(ws string) string
+	// CardPanelsChanged makes the registry and the document follow the card set reconcileCards
+	// left: staged, reloaded, then committed; undo puts the card set back when the change is refused
+	CardPanelsChanged(undo func())
 }
 
 // The scoped services' refusals.
@@ -339,6 +339,7 @@ func (c core) Attached() bool                          { return c.h.p != nil }
 func (c core) Overlay() (*widget.OverlayHost, bool)    { return c.h.p.Overlay() }
 func (c core) SurfaceBackend() tuicore.Backend         { return c.h.backend }
 func (c core) HasCatalog() bool                        { return c.h.cat != nil }
+func (c core) CardPanelsChanged(undo func())           { c.h.cardPanelsChanged(undo) }
 func (c core) CommandsChanged()                        { c.h.commandsChanged() }
 func (c core) RunEntry(id string, args []string) error { return c.h.cat.run(id, args) }
 func (c core) Context() context.Context                { return c.h.ctx }
