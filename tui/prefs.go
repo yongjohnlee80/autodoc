@@ -19,26 +19,25 @@ const (
 	prefTheme = "tui.theme"
 	// the GUI's theme, kept apart from the terminal's: a light page in a window, a dark one among
 	// the terminal's tools, each kept as chosen
-	prefGUITheme      = "gui.theme"
-	prefMenuHide      = "tui.menu.autohide"
-	prefStatus        = "tui.status.shown"
-	prefExplorer      = "tui.explorer.edge"
-	prefRelationsEdge = "tui.links.edge"
-	prefTodosEdge     = "tui.todos.edge"
-	prefRuler         = "tui.ruler"
-	prefKeymap        = "tui.editor.keymap"
-	prefWrap          = "tui.editor.wrap"
-	prefNumbers       = "tui.editor.linenumbers"
-	prefIndent        = "tui.editor.indentmarks"
-	prefImages        = "tui.preview.images"
-	prefMermaid       = "tui.preview.mermaid"
-	prefOpenAs        = "tui.documents.open"
-	prefDiskReload    = "tui.disk_reload"
-	prefLuaGrants     = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
-	prefCorner        = "tui.toast.corner"
-	prefAboutAt       = "tui.about.atstart"
-	prefUpdates       = "tui.update.check"
-	prefSeconds       = "tui.toast.seconds"
+	prefGUITheme   = "gui.theme"
+	prefMenuHide   = "tui.menu.autohide"
+	prefStatus     = "tui.status.shown"
+	prefExplorer   = "tui.explorer.edge" // the explorer's, with its Links tab (migrateLinksPanel)
+	prefTodosEdge  = "tui.todos.edge"
+	prefRuler      = "tui.ruler"
+	prefKeymap     = "tui.editor.keymap"
+	prefWrap       = "tui.editor.wrap"
+	prefNumbers    = "tui.editor.linenumbers"
+	prefIndent     = "tui.editor.indentmarks"
+	prefImages     = "tui.preview.images"
+	prefMermaid    = "tui.preview.mermaid"
+	prefOpenAs     = "tui.documents.open"
+	prefDiskReload = "tui.disk_reload"
+	prefLuaGrants  = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
+	prefCorner     = "tui.toast.corner"
+	prefAboutAt    = "tui.about.atstart"
+	prefUpdates    = "tui.update.check"
+	prefSeconds    = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
 	prefPluginPlace  = ".placement"
@@ -87,25 +86,25 @@ const (
 
 // prefs are the preferences as the TUI uses them.
 type prefs struct {
-	theme                       string
-	language                    string // the UI's language (language.go)
-	menuHidden, statusOn        bool
-	explorerEdge, relationsEdge string
-	todosEdge                   string // where the todos panel opens: the left edge unless chosen
-	ruler                       int
-	keymap                      string
-	keymapChosen                bool                       // a keymap was ever stored (tui.editor.keymap): the Vim question is not asked
-	wrap, lineNumbers           bool                       // the page: long lines wrapped at its width; each line's number
-	indentMarks                 string                     // which lines show their indentation as marks (indentMarks)
-	images                      bool                       // previews as images where the terminal draws them (preview.go)
-	mermaid                     string                     // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
-	openAs                      string                     // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
-	diskReload                  string                     // a clean file changed on disk: reloaded ("clean") or asked about ("ask") (diskwatch.go)
-	luaGrants                   map[string]map[string]bool // what each gated Lua script may do (luagate.go)
-	aboutAtStart                bool                       // About opens when the program starts (startup.go)
-	updateCheck                 bool                       // a newer release is looked for when the program starts (startup.go)
-	toastCorner                 string                     // where the notifications stack
-	toastSeconds                int                        // how long a finished one stays
+	theme                string
+	language             string // the UI's language (language.go)
+	menuHidden, statusOn bool
+	explorerEdge         string // where the explorer, with its Links tab, opens
+	todosEdge            string // where the todos panel opens: the left edge unless chosen
+	ruler                int
+	keymap               string
+	keymapChosen         bool                       // a keymap was ever stored (tui.editor.keymap): the Vim question is not asked
+	wrap, lineNumbers    bool                       // the page: long lines wrapped at its width; each line's number
+	indentMarks          string                     // which lines show their indentation as marks (indentMarks)
+	images               bool                       // previews as images where the terminal draws them (preview.go)
+	mermaid              string                     // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
+	openAs               string                     // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
+	diskReload           string                     // a clean file changed on disk: reloaded ("clean") or asked about ("ask") (diskwatch.go)
+	luaGrants            map[string]map[string]bool // what each gated Lua script may do (luagate.go)
+	aboutAtStart         bool                       // About opens when the program starts (startup.go)
+	updateCheck          bool                       // a newer release is looked for when the program starts (startup.go)
+	toastCorner          string                     // where the notifications stack
+	toastSeconds         int                        // how long a finished one stays
 	// the terminal: the edge it opens from; its geometry is in panelGeo
 	termEdge string
 	// termTheme is the theme the terminals' area is drawn in: "page" (or "") the page's, else one
@@ -193,10 +192,6 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			chooser("App.explorerEdgeIndex", "App.setExplorerEdge").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.explorerEdge": p.explorerEdge} }).
 			then(func(prefs) { h.dockPanel("explorer") }), // a new edge is seen at once
-		choicePref(prefRelationsEdge, "right", edges, func(p *prefs) *string { return &p.relationsEdge }).
-			chooser("App.relationsEdgeIndex", "App.setRelationsEdge").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.relationsEdge": p.relationsEdge} }).
-			then(func(prefs) { h.dockPanel(relationsPanelSpec().ID) }),
 		choicePref(prefTodosEdge, "left", edges, func(p *prefs) *string { return &p.todosEdge }).
 			chooser("App.todosEdgeIndex", "App.setTodosEdge").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.todosEdge": p.todosEdge} }).
@@ -276,6 +271,7 @@ func prefsFor(m map[string]any, gui bool) prefs {
 
 func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	m, _ = migrateAgentDefault(m)
+	m = migrateLinksPanel(m)
 	p := defaultPrefsFor(gui)
 	p.panelDefs = specs
 	readRows(&p, m, legacyPrefRows(nil, gui))
@@ -334,6 +330,7 @@ func (h *Host) loadPrefs() {
 			return
 		}
 		values, migrated := migrateAgentDefault(a.v)
+		values = migrateLinksPanel(values)
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)

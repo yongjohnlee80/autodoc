@@ -1551,10 +1551,6 @@
         <source>line numbers</source>
         <translation>números de linha</translation>
     </message>
-    <message id="autodoc.dialog.preferences.links_open_from">
-        <source>links open from</source>
-        <translation>links abrem a partir de</translation>
-    </message>
     <message id="autodoc.dialog.preferences.look_for_updates">
         <source>look for updates</source>
         <translation>procurar atualizações</translation>
@@ -2530,12 +2526,15 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are what
-  this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
-  amended by, related, adr, its links and its backlinks, then what names nothing and the
-  supersession loops. d in the links shows the files two links away, under the one that
-  reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
-  its key again closes it. Enter on a file opens it and closes the panel.
+  The explorer is one panel of two tabs: Explorer (SPC e), every workspace's folders and files,
+  and Links (SPC l), what this file is connected to, by kind: superseded by, supersedes, sources,
+  cited by, amends, amended by, related, adr, its links and its backlinks, then what names nothing
+  and the supersession loops. d in the links shows the files two links away, under the one that
+  reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
+  open it on their tab, or go to it from the other, and on their own tab close it, as Escape
+  does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
+  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
@@ -2641,12 +2640,15 @@ NOTIFICAÇÕES
   uma tarefa fica até ela terminar. Preferências define o canto e os segundos; SPC h as lista.
 
 OS PAINÉIS
-  O explorador (SPC e) mostra as pastas e arquivos de todos os espaços de trabalho; os links (SPC l) são aquilo
-  a que este arquivo se liga, por tipo: substituído por, substitui, fontes, citado por, emenda,
-  emendado por, relacionado, adr, seus links e backlinks, depois o que não nomeia nada e os
-  ciclos de substituição. d nos links mostra os arquivos a dois links de distância, sob aquele que
-  chega a eles. Cada um abre sobre a página pelo seu lado (Preferências define qual), e Escape ou
-  a tecla de novo o fecha. Enter num arquivo o abre e fecha o painel.
+  O explorador é um painel de duas abas: Explorador (SPC e), as pastas e arquivos de todos os
+  espaços de trabalho, e Links (SPC l), aquilo a que este arquivo se liga, por tipo: substituído por,
+  substitui, fontes, citado por, emenda, emendado por, relacionado, adr, seus links e backlinks,
+  depois o que não nomeia nada e os ciclos de substituição. d nos links mostra os arquivos a dois
+  links de distância, sob aquele que chega a eles. Ele abre sobre a página pelo seu lado
+  (Preferências define qual): SPC e e SPC l o abrem na sua aba, ou passam a ela a partir da outra, e
+  na própria aba o fecham, como Escape; Ctrl+PageUp e Ctrl+PageDown trocam de aba. Na ponta direita
+  da faixa, _ o oculta no dock, cujo ícone o mostra de novo como estava, e x o fecha. Enter num
+  arquivo o abre, fechando o painel a partir do Explorador e ocultando-o a partir dos Links.
   SPC j vai ao link sob o cursor: o documento que ele nomeia, senão o endereço web ou o arquivo.
   SPC b volta ao documento anterior, onde você parou (Ctrl+O recua um salto por
   vez, inclusive dentro de um documento). O menu do botão direito da página tem os dois, Ir para o link (num link)

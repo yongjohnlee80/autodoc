@@ -214,11 +214,13 @@ func TestTheEditorsIconHidesThePanelsAndShowsThemAgain(t *testing.T) {
 	}
 
 	// a panel opened in between: the next click hides it too, and brings back none
-	onLoop(r, func() bool { r.h.togglePanel("links"); return true })
-	r.s.WaitFor(t, "the links open", func(string) bool { return r.panelIsOpen("links") })
+	onLoop(r, func() bool { r.h.closeDrawer("explorer"); return true })
+	r.s.WaitFor(t, "the explorer closed", func(string) bool { return !r.panelIsOpen("explorer") })
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	r.s.WaitFor(t, "the explorer open again", func(string) bool { return r.panelIsOpen("explorer") && !r.hidden("explorer") })
 	onLoop(r, func() bool { r.h.goDock("editor"); return true })
-	r.s.WaitFor(t, "the links hidden", func(string) bool { return r.hidden("links") })
-	if !r.hidden("explorer") || !r.hidden("terminal") {
-		t.Fatal("after a panel opened in between, the editor's icon brought back panels it had hidden before")
+	r.s.WaitFor(t, "the explorer hidden", func(string) bool { return r.hidden("explorer") })
+	if !r.hidden("terminal") {
+		t.Fatal("after a panel opened in between, the editor's icon brought back a panel it had hidden before")
 	}
 }

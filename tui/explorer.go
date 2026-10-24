@@ -79,9 +79,18 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 	return rows
 }
 
-// explorer is the explorer, a feature of its own: the tree, what it listed, and its cursor.
+// The explorer's tabs (main.qml's sideTabs): the workspaces' files, and the page's links, the
+// relations feature's list (relations.go).
+const (
+	explorerTab = iota
+	linksTab
+)
+
+// explorer is the explorer, a feature of its own: the tree, what it listed, and its cursor; and the
+// drawer it shares with the links, its tab shown.
 type explorer struct {
 	c     Core
+	tab   int // the tab shown: explorerTab or linksTab
 	model *tuidecl.TreeListModel
 	top   []Workspace         // the workspaces the top level shows
 	paths map[string][]string // by workspace: its files, once listed
@@ -97,11 +106,16 @@ func newExplorer(c Core) *explorer {
 
 func (*explorer) Name() string { return "explorer" }
 
-func (e *explorer) State() map[string]any { return map[string]any{"App.explorer": e.model} }
+func (e *explorer) State() map[string]any {
+	return map[string]any{"App.explorer": e.model, "App.explorerTab": explorerTab, "App.linksTabShown": false}
+}
 
 func (e *explorer) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleExplorer":    none(e.toggle),
+		"App.explorerTabShown":  oneNumber("a tab", e.tabShown),
+		"App.hideExplorer":      none(e.hide),
+		"App.closeExplorer":     none(e.close),
 		"App.explorerActivated": oneIndex(e.activated),
 		"App.explorerMoved":     oneIndex(e.moved),
 	}
@@ -112,8 +126,49 @@ func (e *explorer) Catalog() []Entry {
 	return []Entry{builtin("explorer.toggle", "the explorer", "App.toggleExplorer()", e.toggle)}
 }
 
-// toggle opens the drawer, or closes it.
-func (e *explorer) toggle() { e.c.TogglePanel("explorer") }
+// toggle is SPC e: the drawer opened on the Explorer tab, or switched to it, or closed when it
+// shows it already (relations.go's toggle is SPC l's, for the Links tab).
+func (e *explorer) toggle() { e.c.TogglePanelTab(explorerPanelSpec().ID, explorerTab) }
+
+// tabShown is the tab view's report of tab i shown, however it was: a click on its title,
+// Ctrl+PageDown, or showTab. The heading is the tab's (main.qml).
+func (e *explorer) tabShown(i int) {
+	if i != explorerTab && i != linksTab {
+		return
+	}
+	e.tab = i
+	e.c.Set("App.explorerTab", i)
+	e.c.Set("App.linksTabShown", i == linksTab)
+}
+
+// showTab shows tab i, its view given the keyboard once the tab is laid out.
+func (e *explorer) showTab(i int) {
+	e.tabShown(i)
+	e.c.Post(func() {
+		if err := e.c.View(e.view(), "forceActiveFocus"); err != nil {
+			e.c.Failed("explorer: the keyboard", err)
+		}
+	})
+}
+
+// view is what in the drawer takes the keyboard: the tab shown's tree or list.
+func (e *explorer) view() string {
+	if e.tab == linksTab {
+		return relationsView
+	}
+	return explorerPanelSpec().View
+}
+
+// hide is the strip's _: the drawer hidden, as the dock's click hides it, its icon kept to show it
+// again as it was, on its tab, scrolled where it was.
+func (e *explorer) hide() { e.c.HidePanel(explorerPanelSpec().ID) }
+
+// close is the strip's x: the drawer closed, and out of the dock; SPC e or SPC l opens it again.
+func (e *explorer) close() {
+	if err := e.c.View(explorerPanelSpec().ID, "close"); err != nil {
+		e.c.Failed("explorer: closing", err)
+	}
+}
 
 // Listed shows the workspaces when they changed, and the workspace in use's files when the host
 // listed them anew.
@@ -257,8 +312,13 @@ func (e *explorer) FindPane() FindPane {
 	}}
 }
 
-func (*explorer) Panels() []PanelSpec {
-	return []PanelSpec{explorerPanelSpec()}
+func (e *explorer) Panels() []PanelSpec {
+	s := explorerPanelSpec()
+	s.Focus = e.view
+	s.Tab = func() int { return e.tab }
+	s.ShowTab = e.showTab
+	s.GoTabs = []string{linksTab: "relations"}
+	return []PanelSpec{s}
 }
 
 // listAll is every file of workspace ws, in path order.

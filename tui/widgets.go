@@ -23,6 +23,7 @@ type widgetTarget struct {
 	title   string               // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
 	panel   string               // the panel's id; "" for the editor
 	tab     widget.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
+	showTab func()               // shows a tabbed panel's tab (PanelSpec.GoTabs); nil for none
 	open    bool                 // the editor always; a panel by panelOpen; a tab by its panel's
 	focused bool
 	// the picker's row in the UI's language (openWidgets)
@@ -30,7 +31,7 @@ type widgetTarget struct {
 }
 
 // widgetNames are the panel ids whose :go name is not the id.
-var widgetNames = map[string]string{"links": "relations", "htmlPane": "preview", luaCardPanel: "card"}
+var widgetNames = map[string]string{"htmlPane": "preview", luaCardPanel: "card"}
 
 // widgets are the targets now.
 func (h *Host) widgets() []widgetTarget {
@@ -38,7 +39,14 @@ func (h *Host) widgets() []widgetTarget {
 	for _, s := range h.panelSpecs() {
 		name := h.widgetName(s.ID)
 		out = append(out, widgetTarget{name: name, title: h.panelTitleIn(inEnglish{}.Trf, s.ID), panel: s.ID,
-			open: h.panelOpen[s.ID], focused: h.within(s.View)})
+			open: h.panelOpen[s.ID], focused: h.within(s.focusView())})
+		for tab, goName := range s.GoTabs { // the explorer's Links tab
+			if goName != "" {
+				out = append(out, widgetTarget{name: goName, title: goName + " (" + name + ")", panel: s.ID,
+					showTab: func() { s.ShowTab(tab) }, open: h.panelOpen[s.ID],
+					focused: h.within(s.focusView()) && s.Tab() == tab})
+			}
+		}
 		if tabs, ok := h.tabsOf(s.View); ok { // the terminal's and the agent's
 			for _, tab := range tabs.Tabs() {
 				out = append(out, widgetTarget{name: name + "/" + tab.Label, title: tab.Label + " (" + name + ")",
@@ -85,6 +93,9 @@ func (h *Host) builtinWidgetName(name string) bool {
 	return false
 }
 
+// isTab reports whether t is a panel's tab, not the panel: the dock and F6 visit panels only.
+func (t widgetTarget) isTab() bool { return t.tab != "" || t.showTab != nil }
+
 // within reports whether the component id holds the keyboard.
 func (h *Host) within(id string) bool {
 	c, ok := h.p.Find(id)
@@ -110,6 +121,9 @@ func (h *Host) goTo(t widgetTarget) {
 	if s == nil {
 		return
 	}
+	if t.showTab != nil {
+		t.showTab() // first, so the panel opens on it
+	}
 	if h.panelOpen[t.panel] && h.panelHidden(t.panel) {
 		h.showPanel(t.panel) // hidden by the dock: shown as it was
 	} else if !h.panelOpen[t.panel] {
@@ -128,7 +142,7 @@ func (h *Host) goTo(t widgetTarget) {
 			return
 		}
 	}
-	h.keep(h.p.Call(s.View, "forceActiveFocus"))
+	h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
 }
 
 // widgetNamed is the target arg names: the one named exactly, else the one whose name holds it.
@@ -202,7 +216,7 @@ func (h *Host) withRowText(t widgetTarget) widgetTarget {
 		switch {
 		case t.panel == "":
 			title = h.tr("autodoc.text.widgets.the_editor")
-		case t.tab == "":
+		case !t.isTab():
 			title = h.panelTitle(t.panel)
 		}
 		t.label += " — " + title
@@ -278,7 +292,7 @@ func (h *Host) cycleWidget(dir int) {
 	var open []widgetTarget
 	at := 0
 	for _, t := range h.widgets() {
-		if !t.open || t.tab != "" {
+		if !t.open || t.isTab() {
 			continue
 		}
 		if t.focused {

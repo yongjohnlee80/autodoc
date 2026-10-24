@@ -667,9 +667,9 @@ func TestCommittedIsReadBack(t *testing.T) {
 	}
 }
 
-// TestBacklinks: SPC l opens the Links drawer over the files linking to the open one, the cursor on
-// the first, and Enter opens it, hiding the drawer (ADR 1792397302 r3); SPC l shows it again, and it
-// holds src.md's own links.
+// TestBacklinks: SPC l opens the explorer's drawer on its Links tab, over the files linking to the
+// open one, the cursor on the first, and Enter opens it, hiding the drawer (ADR 1792397302 r3); SPC l
+// shows it again, and it holds src.md's own links.
 func TestBacklinks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
@@ -679,7 +679,7 @@ func TestBacklinks(t *testing.T) {
 	r.s.WaitFor(t, "the backlink", func(sc string) bool { return strings.Contains(sc, "backlinks (1)") && strings.Contains(sc, "src.md") })
 	r.keys(t, enter())
 	r.waitFile(t, "src.md")
-	r.s.WaitFor(t, "the drawer hidden, the editor's keyboard", func(string) bool { return r.hidden("links") && r.focusedOn("editor") })
+	r.s.WaitFor(t, "the drawer hidden, the editor's keyboard", func(string) bool { return r.hidden("explorer") && r.focusedOn("editor") })
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "links (1) · d depth") // src.md's own: its link to target.md
 	r.s.WaitForText(t, "  target.md")

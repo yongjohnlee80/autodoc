@@ -338,9 +338,12 @@ Window {
 
     // ---- the panels: drawers over the page, each from the edge its preference names, in the one
     // dock style (views/Panel.qml); a panel's own keys are live while the keyboard is in it ----
+    // the explorer: the workspaces' files and the page's links, a tab each (explorer.go, relations.go),
+    // the heading the tab shown's; _ and x at the strip's right end hide it to the dock, as it is, or
+    // close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
     Panel {
         id: explorer
-        heading: qsTrId("autodoc.main.explorer_2")
+        heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
         closeOnQ: true
         edge: App.explorerEdge
         size: App.explorerSize
@@ -352,20 +355,56 @@ Window {
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
-        paneKeys: "autodoc.explorer" // its keys' commands (tui/keys.go): the scope of its FocusScope
-        // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
-        Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
-        Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
-        // ---- end of the explorer's keys ----
-        TreeView {
-            id: explorerTree
-            palette.highlight: Theme.document.highlight
-            palette.highlightedText: Theme.document.highlightedText
-            model: App.explorer
-            textRole: "label"
-            onCurrentIndexChanged: App.explorerMoved(index)
-            onActivated: App.explorerActivated(index)
+        TabView {
+            id: sideTabs
+            windowButtons: true
+            currentIndex: App.explorerTab
+            onCurrentIndexChanged: App.explorerTabShown(index)
+            onMinimizeRequested: App.hideExplorer()
+            onCloseRequested: App.closeExplorer()
+            Tab {
+                title: "Explorer"
+                // its keys' commands (tui/keys.go): the scope of its FocusScope
+                FocusScope {
+                    keyScope: "autodoc.explorer"
+                    // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
+                    Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
+                    Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
+                    // ---- end of the explorer's keys ----
+                    TreeView {
+                        id: explorerTree
+                        palette.highlight: Theme.document.highlight
+                        palette.highlightedText: Theme.document.highlightedText
+                        model: App.explorer
+                        textRole: "label"
+                        onCurrentIndexChanged: App.explorerMoved(index)
+                        onActivated: App.explorerActivated(index)
+                    }
+                }
+            }
+            Tab {
+                title: "Links"
+                FocusScope {
+                    keyScope: "autodoc.links"
+                    // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
+                    Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
+                    Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
+                    Shortcut { sequence: keyId("autodoc.links.relationsDepth"); onActivated: App.relationsDepth() }
+                    // ---- end of the links's keys ----
+                    ListView {
+                        id: relationsList
+                        palette.highlight: Theme.document.highlight
+                        palette.highlightedText: Theme.document.highlightedText
+                        model: App.relations
+                        textRole: "label"
+                        currentIndex: App.relationsIndex
+                        onCurrentIndexChanged: App.relationsMoved(index)
+                        onActivated: App.openRelation(index)
+                    }
+                }
+            }
         }
     }
     // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
@@ -406,38 +445,6 @@ Window {
                 Button { text: qsTrId("autodoc.main.close_q"); toolTipText: "close the preview"; onClicked: App.closeHTMLPane() }
                 Text { text: " "; Layout.fillWidth: true }
             }
-        }
-    }
-    Panel {
-        id: links
-        heading: App.relationsTitle
-        closeOnQ: true
-        edge: App.relationsEdge
-        size: App.linksSize
-        length: App.linksLength
-        floating: App.linksFloating
-        floatX: App.linksX; floatY: App.linksY; floatWidth: App.linksW; floatHeight: App.linksH
-        onPlaced: App.panelPlaced("links", x, y, width, height)
-        minimumSize: 15
-        onResized: App.panelResized("links", size, length)
-        onOpened: App.panelOpened("links")
-        onClosed: App.panelClosed("links")
-        paneKeys: "autodoc.links" // its keys' commands (tui/keys.go): the scope of its FocusScope
-        // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
-        Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
-        Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
-        Shortcut { sequence: keyId("autodoc.links.relationsDepth"); onActivated: App.relationsDepth() }
-        // ---- end of the links's keys ----
-        ListView {
-            id: relationsList
-            palette.highlight: Theme.document.highlight
-            palette.highlightedText: Theme.document.highlightedText
-            model: App.relations
-            textRole: "label"
-            currentIndex: App.relationsIndex
-            onCurrentIndexChanged: App.relationsMoved(index)
-            onActivated: App.openRelation(index)
         }
     }
     // the terminal: a shell in the workspace's folder, from the edge (or the centre) its preference

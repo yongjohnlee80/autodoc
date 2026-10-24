@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -40,16 +41,16 @@ func TestPaneMoveToSharedEdgeUsesRegistryOrder(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.relationsEdge = "left", "left"
+		r.h.prefs.explorerEdge, r.h.prefs.todosEdge = "left", "left"
 		r.h.keep(r.h.p.Call("explorer", "open"))
-		r.h.keep(r.h.p.Call("links", "open"))
+		r.h.keep(r.h.p.Call("todos", "open"))
 		return true
 	})
 	for i := 0; i < 128; i++ {
 		got := onLoop(r, func() string {
 			r.h.focusEditor()
 			r.h.movePane("h")
-			for _, id := range []string{"explorerTree", "relationsList", "editor"} {
+			for _, id := range []string{"explorerTree", "todoOpenTable", "editor"} {
 				if c, ok := r.h.p.Find(id); ok && r.h.p.App().FocusWithin(c) {
 					return id
 				}
@@ -92,15 +93,14 @@ func TestAnyPanelAtTheRightHidesTheFindCard(t *testing.T) {
 // TestKeyboardPanesAreThePageAndTheTreePanels: the terminal hands the keyboard back to the page or
 // to a panel that takes it.
 func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
-	got := keyboardPanes(defaultPanelSpecs())
-	want := []string{"editor", "explorerTree", "relationsList"}
-	if len(got) != len(want) {
-		t.Fatalf("keyboard panes %v, want %v", got, want)
+	if got, want := keyboardPanes(defaultPanelSpecs()), []string{"editor", "explorerTree"}; !slices.Equal(got, want) {
+		t.Errorf("keyboard panes %v, want %v", got, want)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("keyboard panes %v, want %v", got, want)
-		}
+	// the explorer on its Links tab: the tab's list takes the keyboard back too
+	specs := defaultPanelSpecs()
+	specs[0].Focus = func() string { return relationsView }
+	if got, want := keyboardPanes(specs), []string{"editor", "explorerTree", "relationsList"}; !slices.Equal(got, want) {
+		t.Errorf("keyboard panes on the Links tab %v, want %v", got, want)
 	}
 	if (&Host{}).panelView("nope") != "" {
 		t.Error("a view for a panel that does not exist")
@@ -142,9 +142,8 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.relationsEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "right", "bottom", "center"
+		r.h.prefs.explorerEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "bottom", "center"
 		r.h.panelResized("explorer", 20, 70)
-		r.h.panelResized("links", 25, 75)
 		r.h.panelResized("agent", 40, 90)
 		r.h.panelResized("terminal", 60, 80)
 		r.h.panelResized("nope", 1, 1) // no such panel: nothing
@@ -152,7 +151,6 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	})
 	want := map[string]int{
 		"tui.explorer.left.size": 20, "tui.explorer.left.length": 70,
-		"tui.links.right.size": 25, "tui.links.right.length": 75,
 		"tui.agent.bottom.size": 40, "tui.agent.bottom.length": 90,
 		"tui.terminal.center.size": 60, "tui.terminal.center.length": 80,
 	}
@@ -167,16 +165,16 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	for k, v := range want {
 		m[k] = fmt.Sprint(v)
 	}
-	m["tui.links.right.size"] = "5"
+	m["tui.explorer.left.size"] = "5"
 	var p prefs
 	readPanelPrefs(&p, m)
 	if p.panelGeo["tui.agent.bottom.size"] != 40 || p.panelGeo["tui.explorer.left.length"] != 70 {
 		t.Errorf("read back %v", p.panelGeo)
 	}
-	if _, kept := p.panelGeo["tui.links.right.size"]; kept {
+	if _, kept := p.panelGeo["tui.explorer.left.size"]; kept {
 		t.Error("a size under the minimum was kept")
 	}
-	if s, l := p.panelGeometry("links", "right"); s != 30 || l != 75 {
-		t.Errorf("links at the right: %d × %d, want the default size and the kept length", s, l)
+	if s, l := p.panelGeometry("explorer", "left"); s != 30 || l != 70 {
+		t.Errorf("the explorer at the left: %d × %d, want the default size and the kept length", s, l)
 	}
 }

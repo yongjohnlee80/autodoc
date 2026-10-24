@@ -93,7 +93,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.keys(t, enter()) // the cursor starts on the first document: new.md
 	r.waitFile(t, "new.md")
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own
-	if !r.hidden("links") || !r.focusedOn("editor") {
+	if !r.hidden("explorer") || !r.focusedOn("editor") {
 		t.Error("opening a relation left the drawer shown, or the keyboard off the editor")
 	}
 }

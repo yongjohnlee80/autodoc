@@ -97,19 +97,19 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 	return PanelSpec{ID: id, View: view, Priority: priority, Edge: edge, Places: slices.Clone(edges),
 		Keyboard: true, Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault}
 }
+
+// explorerPanelSpec is the explorer: one drawer of two tabs, the workspaces' files (explorerTree)
+// and the page's links (relationsView). The links' own panel, with its tui.links.* preferences,
+// became its tab (migrateLinksPanel).
 func explorerPanelSpec() PanelSpec {
 	s := sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
 	s.Icon = "☰"
 	return s
 }
 
-// relationsPanelSpec is the relations drawer. Its id stays "links": the geometry and float
-// preferences it keeps are stored under that id (tui.links.*).
-func relationsPanelSpec() PanelSpec {
-	s := sidePanelSpec("links", "relationsList", 20, func(p prefs) string { return p.relationsEdge })
-	s.Icon = "⇄"
-	return s
-}
+// relationsView is the Links tab's list, the relations feature's (relations.go).
+const relationsView = "relationsList"
+
 func terminalPanelSpec() PanelSpec {
 	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
 		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
@@ -127,7 +127,7 @@ func legacyPanelSpecs() []PanelSpec {
 }
 func defaultPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		explorerPanelSpec(), relationsPanelSpec(),
+		explorerPanelSpec(),
 		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
 	}
 }
