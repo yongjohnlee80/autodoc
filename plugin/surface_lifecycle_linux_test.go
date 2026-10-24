@@ -52,12 +52,13 @@ func TestAFullDoneQueueNeverStopsTheReader(t *testing.T) {
 			sent.Add(1)
 		}
 	}()
-	deadline := time.Now().Add(10 * time.Second)
-	for sent.Load() != count && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if sent.Load() != count {
-		t.Fatalf("the reader stopped taking outcomes after %d of %d", sent.Load(), count)
+	// a stopped reader is a stall: the socket fills and the sends stop (its pace, as -race's, is not)
+	for last, since := int64(-1), time.Now(); sent.Load() != count; time.Sleep(10 * time.Millisecond) {
+		if n := sent.Load(); n != last {
+			last, since = n, time.Now()
+		} else if time.Since(since) > 3*time.Second {
+			t.Fatalf("the reader stopped taking outcomes after %d of %d", n, count)
+		}
 	}
 	if drained.Load() == 0 {
 		t.Fatal("the consumer never drained a full queue: the race went unexercised")
@@ -228,4 +229,33 @@ func TestASurfaceCloseNeedsNothingFromTheHost(t *testing.T) {
 	if n := surfaceMaps(t) - before; n != 0 {
 		t.Errorf("%d mappings kept after Close", n)
 	}
+}
+
+// A presented buffer is another caller's once the host credits it, even before its Present
+// returns: the presenter never touches it after the send, so its new holder's pin and mapping stay.
+func TestAnEarlyCreditLeavesTheBuffersNewHolderItsPin(t *testing.T) {
+	s, _, _ := fakeHost(t, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a, err := s.Buffer(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b *SurfaceBuffer
+	presentSent = func() { b, err = s.Buffer(ctx) } // the credit came at once: B holds it, A not returned
+	t.Cleanup(func() { presentSent = nil })
+	if _, err := s.Present(a, image.Rectangle{}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err != nil || b != a {
+		t.Fatalf("the credit never handed the buffer on: %v", err)
+	}
+	s.Close() // every mapping not being drawn into goes
+	s.mu.Lock()
+	drawing, mapped := b.drawing, len(b.Pix)
+	s.mu.Unlock()
+	if !drawing || mapped == 0 {
+		t.Fatalf("A's Present released B's buffer: drawing %v, mapping %d bytes", drawing, mapped)
+	}
+	b.Pix[0] = 0xff // B still draws into it
 }

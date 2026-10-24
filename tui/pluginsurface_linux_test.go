@@ -95,6 +95,9 @@ type surfaceRig struct {
 	infos    chan plugin.SurfaceInfo
 	violated chan string
 	msgs     chan map[string]any
+
+	inoMu sync.Mutex
+	inos  map[uint64]bool // the inodes of the buffers sent this rig: its own, whatever else the process maps
 }
 
 func newSurfaceRig(t *testing.T) *surfaceRig { return newSurfaceRigCeiling(t, surfaceMaxBytes) }
@@ -116,7 +119,7 @@ func newSurfaceRigCeiling(t *testing.T, ceiling int64) *surfaceRig {
 		t.Fatal(err)
 	}
 	r := &surfaceRig{sink: &fakeSink{}, plug: plug, infos: make(chan plugin.SurfaceInfo, 64),
-		violated: make(chan string, 8), msgs: make(chan map[string]any, 4096)}
+		violated: make(chan string, 8), msgs: make(chan map[string]any, 4096), inos: map[uint64]bool{}}
 	r.owner = newSurfaceOwnerCeiling(host, r.sink, func(i plugin.SurfaceInfo) { r.infos <- i }, func(why string) { r.violated <- why }, ceiling)
 	go func() {
 		for {
@@ -124,6 +127,14 @@ func newSurfaceRigCeiling(t *testing.T, ceiling int64) *surfaceRig {
 			if err != nil {
 				close(r.msgs)
 				return
+			}
+			for i := range g.Len() { // before the op is read, so a cell's count after it includes them
+				var st unix.Stat_t
+				if fd := g.Take(i); unix.Fstat(fd, &st) == nil {
+					r.inoMu.Lock()
+					r.inos[st.Ino] = true
+					r.inoMu.Unlock()
+				}
 			}
 			g.CloseAll() // the plugin's memory buffers: the cells read the ops, not the pixels
 			r.msgs <- m
@@ -216,14 +227,27 @@ func (r *surfaceRig) violation(t *testing.T) string {
 	return ""
 }
 
-// surfaceMappings is how many of the host's surface memfds this process has mapped.
-func surfaceMappings(t *testing.T) int {
+// mappings is how many of this rig's surface buffers the process has mapped: by inode, so another
+// cell's owner, still tearing down, never moves the count.
+func (r *surfaceRig) mappings(t *testing.T) int {
 	t.Helper()
 	b, err := os.ReadFile("/proc/self/maps")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return strings.Count(string(b), "memfd:autodoc-surface")
+	r.inoMu.Lock()
+	defer r.inoMu.Unlock()
+	n := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 6 || !strings.HasPrefix(f[5], "/memfd:autodoc-surface") {
+			continue
+		}
+		if ino, err := strconv.ParseUint(f[4], 10, 64); err == nil && r.inos[ino] {
+			n++
+		}
+	}
+	return n
 }
 
 // One buffer is presented again and again: each time its frame's frame.done comes first, then its
@@ -304,13 +328,13 @@ func TestASurfaceFrameOfARetiredGenerationIsAnsweredRetired(t *testing.T) {
 // Many resizes with no frame leave one generation's buffers mapped, not one per resize.
 func TestManySurfaceResizesWithNoFramesStayBounded(t *testing.T) {
 	r := newSurfaceRig(t)
-	before := surfaceMappings(t)
+	before := r.mappings(t)
 	for i := range 20 {
 		g := rigGeometry
 		g.W = float32(16 + i)
 		r.pool(t, g)
 	}
-	if n := surfaceMappings(t) - before; n > plugin.MaxPoolBuffers {
+	if n := r.mappings(t) - before; n > plugin.MaxPoolBuffers {
 		t.Errorf("%d surface buffers mapped after 20 resizes, want at most %d", n, plugin.MaxPoolBuffers)
 	}
 	r.noViolation(t)
@@ -320,16 +344,16 @@ func TestManySurfaceResizesWithNoFramesStayBounded(t *testing.T) {
 // after Stream.Close: the owner ends then, and only then.
 func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	r := newSurfaceRig(t)
-	before := surfaceMappings(t)
+	before := r.mappings(t)
 	gen, ids := r.pool(t, rigGeometry)
 	r.present(t, 1, gen, ids[0])
 	h := r.sink.take(t)
 	r.owner.Close()
 	deadline := time.Now().Add(5 * time.Second)
-	for surfaceMappings(t) > before+1 && time.Now().Before(deadline) {
+	for r.mappings(t) > before+1 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if n := surfaceMappings(t) - before; n != 1 {
+	if n := r.mappings(t) - before; n != 1 {
 		t.Fatalf("%d buffers mapped after Close, want the held one alone", n)
 	}
 	select {
@@ -343,7 +367,7 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the owner did not end at the last release")
 	}
-	if n := surfaceMappings(t) - before; n != 0 {
+	if n := r.mappings(t) - before; n != 0 {
 		t.Errorf("%d buffers still mapped after the last release", n)
 	}
 }
@@ -465,14 +489,14 @@ func TestASaturatedSurfaceBudgetStillResizes(t *testing.T) {
 	big.W, big.H = 64, 64
 	one := int64(64 * 4 * 64)
 	r := newSurfaceRigCeiling(t, 3*one) // the first pool fills it exactly
-	before := surfaceMappings(t)
+	before := r.mappings(t)
 	r.pool(t, big)
 	small := rigGeometry
 	gen, _ := r.pool(t, small)
 	if gen != 2 {
 		t.Fatalf("generation %d, want 2", gen)
 	}
-	if n := surfaceMappings(t) - before; n != plugin.MaxPoolBuffers {
+	if n := r.mappings(t) - before; n != plugin.MaxPoolBuffers {
 		t.Errorf("%d buffers mapped, want the new pool alone", n)
 	}
 	r.noViolation(t)
@@ -484,23 +508,23 @@ func TestASaturatedSurfaceBudgetKeepsAHeldFrame(t *testing.T) {
 	big.W, big.H = 64, 64
 	one := int64(64 * 4 * 64)
 	r := newSurfaceRigCeiling(t, 4*one) // a pool and the one held frame
-	before := surfaceMappings(t)
+	before := r.mappings(t)
 	gen, ids := r.pool(t, big)
 	r.present(t, 1, gen, ids[0])
 	h := r.sink.take(t)
 	same := big
 	same.W = 63.5 // another geometry of the same pixels (ceil 64): a new generation, the same charge
 	r.pool(t, same)
-	if n := surfaceMappings(t) - before; n != plugin.MaxPoolBuffers+1 {
+	if n := r.mappings(t) - before; n != plugin.MaxPoolBuffers+1 {
 		t.Fatalf("%d buffers mapped, want the new pool and the held one", n)
 	}
 	h.r.complete("drawn")
 	h.f.Drop()
 	deadline := time.Now().Add(5 * time.Second)
-	for surfaceMappings(t)-before != plugin.MaxPoolBuffers && time.Now().Before(deadline) {
+	for r.mappings(t)-before != plugin.MaxPoolBuffers && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if n := surfaceMappings(t) - before; n != plugin.MaxPoolBuffers {
+	if n := r.mappings(t) - before; n != plugin.MaxPoolBuffers {
 		t.Errorf("%d buffers mapped after the held frame was dropped", n)
 	}
 	r.noViolation(t)
