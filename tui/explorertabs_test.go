@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // THE EXPLORER'S TABS — the explorer and the links, one drawer of two tabs (explorer.go): SPC e and
@@ -132,6 +134,7 @@ func TestTheLinksPanelsPlaceMovesToTheExplorer(t *testing.T) {
 // a close its view refuses is said, not lost.
 func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c := newScripted("kb")
+	c.shown = true // the drawer on screen: a tab shown gives its list the keyboard
 	e := newExplorer(c)
 	e.tabShown(linksTab)
 	e.tabShown(7) // no such tab
@@ -142,10 +145,58 @@ func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c.viewErr = errors.New("no such view")
 	e.showTab(explorerTab) // the scripted core runs a Post at once
 	e.close()
-	if want := []string{"explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.views, want) {
+	if want := []string{"relationsList.forceActiveFocus", "explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.views, want) {
 		t.Errorf("views called %v, want %v", c.views, want)
 	}
 	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.failed, want) {
 		t.Errorf("failures said %v, want %v", c.failed, want)
 	}
+}
+
+// A tab chosen in the view itself, by a click on its title or Ctrl+PageUp and Ctrl+PageDown, gives its
+// list the keyboard, so its own keys answer there (d in the links). Hidden, the drawer takes none: a
+// tab shown then leaves the keyboard where it is, and the dock's icon shows the drawer on it, its list
+// with the keyboard.
+func TestATabChosenInTheViewGivesItsListTheKeyboard(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onTab := func(what string, tab int, view string) {
+		t.Helper()
+		r.s.WaitFor(t, what, func(string) bool { return r.explorerTab() == tab && r.focusedOn(view) })
+	}
+	depth := func(what string) {
+		t.Helper()
+		r.keys(t, key('d'))
+		r.s.WaitFor(t, what+": d shows the second ring", func(sc string) bool { return strings.Contains(sc, "depth 2") })
+		r.keys(t, key('d'))
+		r.s.WaitFor(t, what+": d again, the first", func(sc string) bool { return !strings.Contains(sc, "depth 2") })
+	}
+	r.leader(t, 'e')
+	onTab("SPC e: the Explorer tab", explorerTab, "explorerTree")
+
+	x, y := cellOf(t, r.s.String(), "Links")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
+	onTab("a click on Links: its list has the keyboard", linksTab, "relationsList")
+	depth("after the click")
+
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp, Mods: tuicore.ModCtrl})
+	onTab("Ctrl+PageUp: the Explorer tab, the tree has the keyboard", explorerTab, "explorerTree")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown, Mods: tuicore.ModCtrl})
+	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", linksTab, "relationsList")
+	depth("after Ctrl+PageDown")
+
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
+	r.s.WaitFor(t, "hidden, the editor's keyboard", func(string) bool { return r.hidden("explorer") && r.focusedOn("editor") })
+	onLoop(r, func() bool { r.h.explorer.tabShown(explorerTab); return true })
+	if kept := onLoop(r, func() bool {
+		return r.h.explorer.tab == explorerTab && r.h.within("editor") && r.h.panelHidden("explorer")
+	}); !kept {
+		t.Fatal("a tab shown with the drawer hidden took the keyboard from the editor, or showed the drawer")
+	}
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
+	onTab("its icon: shown on the Explorer tab, the tree has the keyboard", explorerTab, "explorerTree")
 }

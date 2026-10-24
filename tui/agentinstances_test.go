@@ -124,7 +124,11 @@ func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 }
 func (*identityHost) OpenDrawer(string)       {}
 func (c *identityHost) CloseDrawer(id string) { c.closed = append(c.closed, id) }
-func (c *identityHost) Post(fn func())        { c.posts = append(c.posts, fn) }
+func (c *identityHost) Post(fn func()) {
+	c.postMu.Lock()
+	defer c.postMu.Unlock()
+	c.posts = append(c.posts, fn)
+}
 func (c *identityHost) After(d time.Duration, fn func()) {
 	c.delays = append(c.delays, d)
 	c.afters = append(c.afters, fn)
@@ -147,12 +151,28 @@ func (c *identityHost) Ticket(_ *uint64, _ TicketScope) Ticket {
 }
 func (c *identityHost) Ask(q Question) Asked { c.questions = append(c.questions, q); return Asked{} }
 func (c *identityHost) drainPosts() {
-	for len(c.posts) > 0 {
+	for {
+		c.postMu.Lock()
 		posts := c.posts
 		c.posts = nil
+		c.postMu.Unlock()
+		if len(posts) == 0 {
+			return
+		}
 		for _, f := range posts {
 			f()
 		}
+	}
+}
+
+// settle runs what a held removal's retirement posts, as the loop would, until done holds.
+func (c *identityHost) settle(t *testing.T, what string, done func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); !done(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never came", what)
+		}
+		c.drainPosts()
 	}
 }
 

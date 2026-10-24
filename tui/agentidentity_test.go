@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ type identityHost struct {
 	ws                wsInfo
 	configuredCommand string
 	panel             *modelPanel
+	postMu            sync.Mutex // a held removal's retirement posts from its own goroutine
 	posts             []func()
 	afters            []func()
 	delays            []time.Duration

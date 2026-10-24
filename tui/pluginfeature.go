@@ -298,9 +298,6 @@ type pluginHost interface {
 	Keep(err error)
 	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
 	PanelOpen(id string) bool
-	// PanelShown reports whether panel id is open and not hidden by the dock (a minimized panel is
-	// open, and shown by its open again)
-	PanelShown(id string) bool
 	// DockPanel forgets a panel's floating rectangle: a card's, moved to another edge
 	DockPanel(id string)
 	// SurfaceBackend is the backend the App runs on: under --gui the window's, whose streams a
