@@ -450,7 +450,8 @@ type Core interface {
 	// shown on that tab; shown on another tab, that tab; shown on it, closed (panels.go).
 	TogglePanelTab(id string, tab int)
 	// HidePanel hides an open panel, not closed: it keeps what it holds, its Closed hook does not
-	// run, and the dock shows it again as it was (dock.go).
+	// run, and the dock shows it again as it was (dock.go). The editor has the keyboard, as after the
+	// dock's own click.
 	HidePanel(id string)
 	// HasFocus reports whether the view id, or one inside it, has the keyboard: a key bound across
 	// the window that only one pane answers.
@@ -517,7 +518,7 @@ func (c core) Trf(id string, args ...any) string {
 	return c.h.trf(id, args...)
 }
 func (c core) WidgetsChanged()               { c.h.refreshDock() }
-func (c core) HidePanel(id string)           { c.h.hidePanel(id) }
+func (c core) HidePanel(id string)           { c.h.hidePanel(id); c.h.focusEditor() }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
 func (c core) Workspace() string             { return c.h.ws }
 func (c core) Prefs() prefs                  { return c.h.prefs }
