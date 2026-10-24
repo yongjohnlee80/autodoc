@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -221,7 +222,7 @@ func TestProtocolThreesCalls(t *testing.T) {
 		{"protocol = 3\n" + head + "calls = [\"a.b\", \"a.b\"]\n", `calls "a.b": twice`},
 		{"protocol = 4\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
 		{"protocol = 5\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
-		{"protocol = 10\n" + head, "protocol 10; this AutoDoc speaks 1 to 9"},
+		{fmt.Sprintf("protocol = %d\n", plugin.Protocol+1) + head, fmt.Sprintf("protocol %d; this AutoDoc speaks 1 to %d", plugin.Protocol+1, plugin.Protocol)},
 	} {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)

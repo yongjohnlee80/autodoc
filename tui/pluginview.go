@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -72,6 +73,62 @@ type pluginView struct {
 	sentW, sentH int    // the size last told to the plugin: plugin.open's, then each resize's
 	laidW, laidH int
 	menu         *widget.EditorMenu // a card's right-click menu
+	// lastSurface is the geometry a pixel surface was last painted at (pluginsurface_gui.go)
+	lastSurface surfaceGeometry
+}
+
+// NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
+// ok false otherwise, and the cells are painted (ADR 1792797354).
+func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
+
+// surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.
+func (v *pluginView) surfaceMode() bool { return v.run != nil && v.run.surface != nil }
+
+// surfacePointer is a mouse event on the surface as plugin.surface.pointer, in frame-local dp from
+// the event's cell and its position inside the cell. false: an event the surface doesn't take.
+func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer, bool) {
+	ctx := v.Context()
+	if ctx == nil {
+		return plugin.SurfacePointer{}, false
+	}
+	cp := ctx.CellPixels()
+	p := plugin.SurfacePointer{
+		X: (float32(m.X) + m.SubX) * cp.W, Y: (float32(m.Y) + m.SubY) * cp.H, Count: m.Count,
+		Ctrl: m.Mods&tuicore.ModCtrl != 0, Alt: m.Mods&tuicore.ModAlt != 0, Shift: m.Mods&tuicore.ModShift != 0,
+		Super: m.Mods&tuicore.ModSuper != 0, T: time.Now().UnixNano(),
+	}
+	switch m.Kind {
+	case tuicore.MousePress, tuicore.MouseRelease:
+		p.Kind = map[bool]string{true: "press", false: "release"}[m.Kind == tuicore.MousePress]
+		switch m.Button {
+		case tuicore.MouseLeft:
+			p.Button = "left"
+		case tuicore.MouseMiddle:
+			p.Button = "middle"
+		case tuicore.MouseRight:
+			p.Button = "right"
+		default:
+			return plugin.SurfacePointer{}, false
+		}
+	case tuicore.MouseMotion:
+		p.Kind = "move"
+	case tuicore.MouseWheel:
+		// one step is a cell's height or width, until golib's precise deltas (§4.10)
+		p.Kind = "scroll"
+		switch m.Button {
+		case tuicore.WheelUp:
+			p.DY = -cp.H
+		case tuicore.WheelDown:
+			p.DY = cp.H
+		case tuicore.WheelLeft:
+			p.DX = -cp.W
+		case tuicore.WheelRight:
+			p.DX = cp.W
+		}
+	default:
+		return plugin.SurfacePointer{}, false
+	}
+	return p, true
 }
 
 var _ tuicore.Focusable = (*pluginView)(nil)
@@ -176,6 +233,21 @@ func (v *pluginView) RequestFocus() {
 // press on it opens its menu.
 func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	r := v.run
+	if m, ok := ev.(tuicore.MouseEvent); ok && v.surfaceMode() {
+		hostMenu := r.e.m.Surface == nil || r.e.m.Surface.ContextMenu != "plugin"
+		if v.card != "" && hostMenu && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
+			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})
+		}
+		if p, ok := v.surfacePointer(m); ok {
+			r.send(plugin.MethodSurfacePointer, plugin.SurfacePointerParams(p))
+			return true
+		}
+		return false
+	}
+	if p, ok := ev.(tuicore.PasteEvent); ok && v.surfaceMode() && (r.e.m.Modal() || r.focused) {
+		r.send(plugin.MethodPaste, plugin.PasteParams(p.Text))
+		return true
+	}
 	if m, ok := ev.(tuicore.MouseEvent); ok {
 		if v.card != "" && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
 			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})

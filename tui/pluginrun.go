@@ -69,6 +69,13 @@ type pluginRun struct {
 	calls       map[int64]bool
 	dupes, busy int
 
+	// a pixel surface's (protocol 10, pluginsurface.go): its owner, the window's stream its view draws
+	// (the gui build's *gui.Stream), and, under mu, the caret its plugin last reported
+	surface       pixelSurface
+	surfaceStream any
+	caret         plugin.Caret
+	caretOK       bool
+
 	exited   chan struct{} // closed when the process has exited
 	exitErr  error
 	shutOnce sync.Once
@@ -92,14 +99,23 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 			return nil, errors.New("it is a card, and its panel comes with AutoDoc's next start")
 		}
 	}
+	surfaceChild, attachSurface, abortSurface := pl.openSurfaceChannel(e)
+	if e.m.Surface != nil && e.m.Surface.Required && surfaceChild == nil {
+		return nil, errors.New("it draws pixels, which need AutoDoc's GUI")
+	}
+	if abortSurface == nil {
+		abortSurface = func() {}
+	}
 	toPlugin, hostOut, err := os.Pipe()
 	if err != nil {
+		abortSurface()
 		return nil, err
 	}
 	hostIn, fromPlugin, err := os.Pipe()
 	if err != nil {
 		toPlugin.Close()
 		hostOut.Close()
+		abortSurface()
 		return nil, err
 	}
 	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
@@ -108,14 +124,22 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	cmd.Env = append(os.Environ(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
+	if surfaceChild != nil {
+		cmd.ExtraFiles = []*os.File{surfaceChild} // fd 3: the side channel (ADR 1792797354 §4.2)
+		cmd.Env = append(cmd.Env, plugin.SurfaceFDEnv+"=3")
+	}
 	cmd.SysProcAttr = pluginProcAttr()
 	err = cmd.Start()
 	toPlugin.Close() // the child's ends are the child's now
 	fromPlugin.Close()
+	if surfaceChild != nil {
+		surfaceChild.Close()
+	}
 	if err != nil {
 		hostIn.Close()
 		hostOut.Close()
 		log.Close()
+		abortSurface()
 		return nil, err
 	}
 
@@ -123,6 +147,9 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
 		handshake: pluginHandshake, grace: pluginGrace, termGrace: pluginTermGrace}
 	r.ctx, r.stop = context.WithCancel(pl.c.Context())
+	if attachSurface != nil {
+		attachSurface(r)
+	}
 	go func() {
 		r.exitErr = cmd.Wait()
 		log.Close()
@@ -341,6 +368,28 @@ func (r *pluginRun) onNote(method string, params []any) {
 				r.close("")
 			}
 		})
+	case plugin.MethodCaret:
+		c, ok, err := plugin.ReadCaret(params)
+		if err != nil || r.surface == nil {
+			return
+		}
+		r.mu.Lock()
+		r.caret, r.caretOK = c, ok
+		r.mu.Unlock()
+	case plugin.MethodPointerShape:
+		// golib gui's pointer-shape capability is the ADR's additive golib half (§4.10), not in the
+		// spike: the shape is logged
+		if shape, err := plugin.ReadPointerShape(params); err == nil && r.surface != nil {
+			r.log.note("host.surface.cursor " + shape + " (not drawn yet)")
+		}
+	case plugin.MethodClipboardWrite:
+		if text, err := plugin.ReadClipboardWrite(params); err == nil && r.surface != nil {
+			r.pl.c.Post(func() {
+				if v := r.view; v != nil && v.Context() != nil {
+					v.Context().CopyToClipboard(text)
+				}
+			})
+		}
 	case plugin.MethodCall:
 		r.hostCall(params)
 	case plugin.MethodTable, plugin.MethodRows, plugin.MethodTableEnd:
@@ -431,6 +480,9 @@ func (r *pluginRun) stopFor(reason, why string) {
 		r.pl.refreshPlugins()
 	}
 	r.pl.tableOwnerGone(r)
+	if r.surface != nil {
+		r.surface.Close() // retires its buffers; each is destroyed at its last holder
+	}
 	go r.shutdown()
 	if why != "" {
 		msg := why // the plugin's name and what became of it, a sentence

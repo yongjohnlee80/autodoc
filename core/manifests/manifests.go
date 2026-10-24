@@ -110,11 +110,23 @@ type Plugin struct {
 		Extensions []string `toml:"extensions"`
 		Command    string   `toml:"command"`
 	} `toml:"open"`
+	// Surface is a pixel surface (protocol 10, ADR 1792797354): the card or dialog draws frames over
+	// a side channel and takes the pointer in dp, where the host draws pixels; nil for none.
+	Surface *Surface `toml:"surface"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv.
 	Install struct {
 		Build []string `toml:"build"`
 	} `toml:"install"`
+}
+
+// Surface is a manifest's [surface]. Required refuses to open the plugin where the host draws no
+// pixels (the terminal); ContextMenu is who a right press is for, "host" (the card's menu, the
+// default) or "plugin"; TextInput is a surface that takes IME text and reports its caret.
+type Surface struct {
+	Required    bool   `toml:"required"`
+	ContextMenu string `toml:"context_menu"`
+	TextInput   bool   `toml:"text_input"`
 }
 
 // Command is one of a manifest's [[commands]]: its id (plugin.command's), its title on the menu,
@@ -246,6 +258,9 @@ func checkProtocolTwo(m *Plugin, md toml.MetaData) string {
 		return why
 	}
 	if why := checkOpen(m, md); why != "" {
+		return why
+	}
+	if why := checkSurface(m, md); why != "" {
 		return why
 	}
 	switch {
@@ -452,4 +467,22 @@ func ValidPackageName(n string) bool {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
+}
+
+// checkSurface is why m's [surface] cannot run ("" when it can): it needs protocol = 10, a dialog or
+// card to draw in, and a context_menu of host or plugin.
+func checkSurface(m *Plugin, md toml.MetaData) string {
+	switch {
+	case !md.IsDefined("surface"):
+		return ""
+	case m.Protocol < 10:
+		return "declares [surface]: needs protocol = 10"
+	case m.Service():
+		return "[surface]: a service has nothing to draw in"
+	case m.Surface.ContextMenu == "":
+		m.Surface.ContextMenu = "host"
+	case m.Surface.ContextMenu != "host" && m.Surface.ContextMenu != "plugin":
+		return fmt.Sprintf("[surface] context_menu %q: want host or plugin", m.Surface.ContextMenu)
+	}
+	return ""
 }
