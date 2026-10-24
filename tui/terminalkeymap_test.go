@@ -120,7 +120,8 @@ func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
 	r.s.WaitFor(t, "back to typing", func(sc string) bool { return !strings.Contains(sc, hintProbe) })
 }
 
-// windowControl presses the terminal panel's strip control: "_" or "x", at the strip's right end.
+// windowControl presses a panel's strip control, "_" or "x", at the strip's right end: the first
+// strip on screen with them.
 func windowControl(t *testing.T, r *running, which string) {
 	t.Helper()
 	x, y := cellOf(t, r.s.String(), "_   x")

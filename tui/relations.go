@@ -170,15 +170,6 @@ func newRelated(c Core) *related {
 
 func (*related) Name() string { return "relations" }
 
-func (r *related) Panels() []PanelSpec {
-	s := relationsPanelSpec()
-	s.Open = func(c PanelHost) {
-		r.ofPage()
-		c.OpenDrawer(relationsPanelSpec().ID)
-	}
-	return []PanelSpec{s}
-}
-
 func (r *related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
@@ -214,8 +205,12 @@ func (*related) Moved(int, int) {}
 func (*related) Reread(Page)    {}
 func (*related) Closed()        {}
 
-// toggle opens the drawer, or closes it; opening reads the relations again (panels.go).
-func (r *related) toggle() { r.c.TogglePanel(relationsPanelSpec().ID) }
+// toggle is SPC l: the explorer's drawer opened on its Links tab, or switched to it, or closed when
+// it shows it already (panels.go: togglePanelTab). Showing the tab reads the relations again.
+func (r *related) toggle() {
+	r.ofPage()
+	r.c.TogglePanelTab(explorerPanelSpec().ID, linksTab)
+}
 
 // moved is the drawer's cursor moving.
 func (r *related) moved(i int) { r.at = i }
@@ -337,7 +332,7 @@ func (r *related) moveTo(i int) {
 
 // FindPane is the drawer's rows for find, as it shows them.
 func (r *related) FindPane() FindPane {
-	return FindPane{Name: "links", View: relationsPanelSpec().View, Scope: relationsPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: "links", View: relationsView, Scope: "links", Rows: func() ([]string, int, func(int, int) error) {
 		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
 	}}
 }
@@ -351,14 +346,14 @@ func (r *related) labels() []string {
 	return out
 }
 
-// open opens the drawer's row i in the editor, the drawer hidden first, not closed, as the GlobeMap
-// is: the dock shows it again (ADR 1792397302 r3).
+// open opens the Links tab's row i in the editor, the explorer's drawer hidden first, not closed, as
+// the GlobeMap is: the dock shows it again, on this tab (ADR 1792397302 r3).
 func (r *related) open(i int) {
 	row, ok := r.rows.At(i)
 	if !ok || row.external == "" && row.path == "" {
 		return // a heading, or a relation that names nothing: the drawer stays
 	}
-	r.c.HidePanel(relationsPanelSpec().ID)
+	r.c.HidePanel(explorerPanelSpec().ID)
 	switch {
 	case row.external != "":
 		r.c.OpenAbsolute(row.external) // its workspace's file when one indexes it, else outside them all
@@ -369,7 +364,7 @@ func (r *related) open(i int) {
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
 func (r *related) depth() {
-	if !r.c.HasFocus(relationsPanelSpec().View) {
+	if !r.c.HasFocus(relationsView) {
 		return
 	}
 	r.deep = !r.deep

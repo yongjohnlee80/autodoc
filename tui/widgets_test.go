@@ -72,7 +72,7 @@ func TestGoNamesAndTheList(t *testing.T) {
 	if err := r.luaRun("go relat"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the relations", func(string) bool { return r.panelIsOpen("links") && r.focusedOn("relationsList") })
+	r.s.WaitFor(t, "the explorer on its Links tab", func(string) bool { return r.panelIsOpen("explorer") && r.focusedOn("relationsList") })
 	if err := r.luaRun("go e"); err == nil || !strings.Contains(err.Error(), "widgets match") {
 		t.Errorf(":go e: %v, want several widgets matching", err)
 	}
@@ -97,34 +97,30 @@ func TestGoNamesAndTheList(t *testing.T) {
 	}
 }
 
-// F6 steps the keyboard through the open targets, skipping the closed ones and the menu; Shift+F6
-// goes back.
+// F6 steps the keyboard through the open targets, skipping the closed ones and the menu, a panel's
+// tabs its own: the explorer once, on the tab it shows; Shift+F6 goes back.
 func TestF6CyclesTheOpenWidgets(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	onLoop(r, func() bool {
-		r.h.keep(r.h.p.Call("explorer", "open"))
-		r.h.keep(r.h.p.Call("links", "open"))
-		return true
-	})
-	r.s.WaitFor(t, "both panels open", func(string) bool { return r.panelIsOpen("explorer") && r.panelIsOpen("links") })
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("explorer", "open")); return true })
+	r.s.WaitFor(t, "the explorer open", func(string) bool { return r.panelIsOpen("explorer") })
 	onLoop(r, func() bool { r.h.focusEditor(); return true })
 	r.s.WaitFor(t, "the editor focused", func(string) bool { return r.focusedOn("editor") })
-	for _, want := range []string{"explorerTree", "relationsList", "editor", "explorerTree"} {
+	for _, want := range []string{"explorerTree", "editor", "explorerTree"} {
 		r.keys(t, f6(false))
 		r.s.WaitFor(t, "F6 to "+want, func(string) bool { return r.focusedOn(want) })
 	}
+	onLoop(r, func() bool { r.h.explorer.showTab(linksTab); return true })
+	r.s.WaitFor(t, "the Links tab's list", func(string) bool { return r.focusedOn("relationsList") })
 	for _, want := range []string{"editor", "relationsList"} {
 		r.keys(t, f6(true))
 		r.s.WaitFor(t, "Shift+F6 to "+want, func(string) bool { return r.focusedOn(want) })
 	}
-	onLoop(r, func() bool { r.h.closeDrawer("links"); r.h.focusEditor(); return true })
-	r.s.WaitFor(t, "the relations closed", func(string) bool { return !r.panelIsOpen("links") && r.focusedOn("editor") })
+	onLoop(r, func() bool { r.h.closeDrawer("explorer"); r.h.focusEditor(); return true })
+	r.s.WaitFor(t, "the explorer closed", func(string) bool { return !r.panelIsOpen("explorer") && r.focusedOn("editor") })
 	r.keys(t, f6(false))
-	r.s.WaitFor(t, "F6 to the explorer", func(string) bool { return r.focusedOn("explorerTree") })
-	r.keys(t, f6(false))
-	r.s.WaitFor(t, "F6 past the closed relations", func(string) bool { return r.focusedOn("editor") })
-	if r.panelIsOpen("links") {
+	r.s.WaitFor(t, "F6 stays: nothing else open", func(string) bool { return r.focusedOn("editor") })
+	if r.panelIsOpen("explorer") {
 		t.Fatal("F6 opened a closed panel")
 	}
 }

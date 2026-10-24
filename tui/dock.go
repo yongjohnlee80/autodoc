@@ -24,7 +24,7 @@ const editorIcon = "✎"
 func (h *Host) dockTargets() []widgetTarget {
 	var out []widgetTarget
 	for _, t := range h.widgets() {
-		if t.tab != "" {
+		if t.isTab() {
 			continue
 		}
 		if t.panel == "" || t.open {

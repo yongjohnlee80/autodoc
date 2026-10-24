@@ -26,7 +26,7 @@ How it is put together, and the convention a new feature follows, is
 | `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
 | `core/todo` | the todo system: the format, the rules and every write of a `.todo-list`; the `todos.*` verbs |
 | `rpc` | the msgpack-RPC API: every verb registered from its contract, rpc's own and the modules' |
-| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the links drawer and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
+| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the explorer's Links tab and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
 | `script` | the Lua engine for the editor's commands, exportable to other programs |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
@@ -269,13 +269,17 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
   and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
-- **The explorer** (`SPC e`): every workspace's folders and files, as a tree. **The links**
-  (`SPC l`, `Relations › Links`): what this file is connected to, by kind and direction (superseded
-  by, supersedes, sources, cited by, amends, amended by, related, adr, links, backlinks), then the
-  relations that name nothing and the supersession loops; `d` there adds the files two links away,
-  under the one that reaches them. `Enter` opens a row and closes the drawer. Each opens over the page, which
-  does not move, from the side the editor's preferences name; `Escape` or its key again closes
-  it. `SPC j` goes to the link under the cursor (the document it names, else its web address or
+- **The explorer**, one panel of two tabs. **Explorer** (`SPC e`): every workspace's folders and
+  files, as a tree. **Links** (`SPC l`, `Relations › Links`): what this file is connected to, by
+  kind and direction (superseded by, supersedes, sources, cited by, amends, amended by, related,
+  adr, links, backlinks), then the relations that name nothing and the supersession loops; `d`
+  there adds the files two links away, under the one that reaches them. It opens over the page,
+  which does not move, from the side the editor's preferences name. `SPC e` and `SPC l` open it on
+  their tab, or go to it from the other, and on their own tab close it, as `Escape` does;
+  `Ctrl+PageUp` and `Ctrl+PageDown` change tabs. At the strip's right end, `_` hides it to the
+  dock, whose icon shows it again as it was, and `x` closes it. `Enter` opens a row, closing the
+  panel from the Explorer and hiding it from the Links. The links' own panel was folded in: where
+  the explorer keeps no place of its own, it opens where the links were left. `SPC j` goes to the link under the cursor (the document it names, else its web address or
   file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
   one jump at a time, within a document too); the page's right-click menu has both.
 - **The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
@@ -298,7 +302,7 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   stops every shell or agent in the panel and closes it, asked once while any runs. Every key goes
   to the shell or agent, `Esc` included; `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
   `Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's.
-- **Every panel moves and resizes**: the explorer, the links, the terminal, the agent, the HTML
+- **Every panel moves and resizes**: the explorer, the terminal, the agent, the HTML
   preview, and in the GUI the GlobeMap and the Mindmap. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
   with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
   `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`

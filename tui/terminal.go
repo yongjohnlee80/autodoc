@@ -662,6 +662,9 @@ func keyboardPanes(specs []PanelSpec) []string {
 	for _, s := range specs {
 		if s.Keyboard {
 			out = append(out, s.View)
+			if v := s.focusView(); v != s.View { // a tabbed panel's other tab shown
+				out = append(out, v)
+			}
 		}
 	}
 	return out

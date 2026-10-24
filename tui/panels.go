@@ -7,8 +7,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE PANELS — the explorer and the relations, drawers over the page: toggled (SPC e, SPC l, the Go
-// menu), each from the edge its preference names, the page beneath never moving. Ctrl+h/j/k/l
+// THE PANELS — the explorer, with its Explorer and Links tabs, and the others, drawers over the
+// page: toggled (SPC e, SPC l, the Go menu), each from the edge its preference names, the page
+// beneath never moving. Ctrl+h/j/k/l
 // move between the page and the panels open at those edges, in Normal mode only: in Insert mode
 // they are the editor's.
 
@@ -17,6 +18,16 @@ import (
 type PanelSpec struct {
 	ID   string // the Drawer's id in the document
 	View string // what in it takes the keyboard
+	// Focus is what in it takes the keyboard now, where that changes: a tabbed panel's tab shown.
+	// nil: View.
+	Focus func() string
+	// Tab and ShowTab are a tabbed panel's tab shown and the way to show another, its view given the
+	// keyboard (togglePanelTab); nil: it has no tabs.
+	Tab     func() int
+	ShowTab func(tab int)
+	// GoTabs are :go names of its tabs, by tab, "" for none: the explorer's Links tab keeps the name
+	// its own drawer had, relations (widgets.go).
+	GoTabs []string
 	// Priority orders focus targets across features; ties keep contribution order.
 	Priority int
 	// Edge is the edge it opens from now; "center" for none.
@@ -42,6 +53,14 @@ type PanelSpec struct {
 	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
 	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
 	Alive func() bool
+}
+
+// focusView is what in s takes the keyboard now.
+func (s PanelSpec) focusView() string {
+	if s.Focus != nil {
+		return s.Focus()
+	}
+	return s.View
 }
 
 // geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
@@ -72,10 +91,10 @@ func (h *Host) panelIDs() []string {
 	return out
 }
 
-// panelView is what in the panel id takes the keyboard; "" for no such panel.
+// panelView is what in the panel id takes the keyboard now; "" for no such panel.
 func (h *Host) panelView(id string) string {
 	if s := h.panelSpec(id); s != nil {
-		return s.View
+		return s.focusView()
 	}
 	return ""
 }
@@ -105,6 +124,24 @@ func (h *Host) togglePanel(name string) {
 		return
 	}
 	h.openDrawer(name)
+}
+
+// togglePanelTab is a tabbed panel's toggle for one of its tabs (SPC e, SPC l): closed or hidden,
+// the panel shown on that tab; shown on another tab, that tab; shown on it, closed.
+func (h *Host) togglePanelTab(name string, tab int) {
+	s := h.panelSpec(name)
+	if s == nil || s.Tab == nil || s.ShowTab == nil {
+		return
+	}
+	shown := h.panelOpen[name] && !h.panelHidden(name)
+	if shown && s.Tab() == tab {
+		h.togglePanel(name)
+		return
+	}
+	s.ShowTab(tab)
+	if !shown {
+		h.togglePanel(name)
+	}
 }
 
 // openDrawer opens the drawer and gives its view the keyboard; closeDrawer closes it.
@@ -186,14 +223,14 @@ func (h *Host) movePane(dir string) {
 		}
 		for _, s := range h.panelSpecs() {
 			if s.Edge(h.prefs) == edge && h.panelOpen[s.ID] {
-				h.keep(h.p.Call(s.View, "forceActiveFocus"))
+				h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
 				return
 			}
 		}
 		return
 	}
 	for _, s := range h.panelSpecs() {
-		if c, ok := h.p.Find(s.View); ok && app.FocusWithin(c) && edge == opposite[s.Edge(h.prefs)] {
+		if c, ok := h.p.Find(s.focusView()); ok && app.FocusWithin(c) && edge == opposite[s.Edge(h.prefs)] {
 			h.keep(h.p.Call("editor", "forceActiveFocus"))
 			return
 		}

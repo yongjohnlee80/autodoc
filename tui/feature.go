@@ -446,6 +446,9 @@ type Core interface {
 	View(id, method string, args ...any) error
 	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
 	TogglePanel(id string)
+	// TogglePanelTab is a tabbed panel's toggle for one of its tabs: closed or hidden, the panel
+	// shown on that tab; shown on another tab, that tab; shown on it, closed (panels.go).
+	TogglePanelTab(id string, tab int)
 	// HidePanel hides an open panel, not closed: it keeps what it holds, its Closed hook does not
 	// run, and the dock shows it again as it was (dock.go).
 	HidePanel(id string)
@@ -539,6 +542,7 @@ func (c core) Workspaces() []Workspace {
 }
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
 func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
+func (c core) TogglePanelTab(id string, tab int)         { c.h.togglePanelTab(id, tab) }
 func (c core) SearchModelsChanged(ranker bool) {
 	if ranker {
 		c.h.loadStageRanker(true) // which searches again, once

@@ -94,7 +94,7 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 		t.Fatalf("a heading: views %v, files %v, hidden %v; want none", c.views, c.files, c.hidden)
 	}
 	r.open(1) // b.md, the drawer hidden, not closed (ADR 1792397302 r3)
-	if !slices.Equal(c.files, []string{"kb:b.md"}) || !slices.Equal(c.hidden, []string{"links"}) || len(c.views) != 0 {
+	if !slices.Equal(c.files, []string{"kb:b.md"}) || !slices.Equal(c.hidden, []string{"explorer"}) || len(c.views) != 0 {
 		t.Fatalf("opened files %v, hidden %v, views %v; want b.md, the drawer hidden", c.files, c.hidden, c.views)
 	}
 }

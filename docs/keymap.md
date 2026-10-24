@@ -49,8 +49,8 @@ A key belongs to a scope, and two commands of one scope can't share a key:
 - `global`: the Window's keys (`autodoc.window.*`), answered wherever the keyboard is.
 - each card of keys: SPC's `autodoc.leader.*`, the agents' `autodoc.agentsCard.*`, the todos'
   `autodoc.todoKeys.*`.
-- each pane with keys of its own: `autodoc.page.*` (the editor's page), `autodoc.explorer.*`,
-  `autodoc.links.*` (the links drawer), `autodoc.todos.*`, `autodoc.htmlPane.*`.
+- each pane with keys of its own: `autodoc.page.*` (the editor's page), `autodoc.explorer.*` and
+  `autodoc.links.*` (the explorer's Explorer and Links tabs), `autodoc.todos.*`, `autodoc.htmlPane.*`.
 - the dialogs': `autodoc.arrange.*`, `autodoc.picker.*`, `autodoc.goPick.*`, and
   `autodoc.terminal.mode` (a terminal's and an agent's input and Normal mode).
 - golib's widgets: a list, a tree, a table, a text field, a menu, the editor's Vim and Text modes and

@@ -242,15 +242,15 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	})
 }
 
-// TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer and the links over the
-// page, from the edges their preferences name, and the page's text moves only by the menu bar's
+// TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer, on its Explorer and its
+// Links tab, over the page, from the edge its preference names, and the page's text moves only by the menu bar's
 // row: the dock lists the drawer, so the auto-hidden bar shows, and pushes the page down one row
 // (Johno's choice, 2026-10-19, ADR 1792397302); SPC e again closes it, and the page is back. A side
 // panel takes the middle 85% of the rows, one at the top or bottom the middle 80% of the columns:
 // the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
-		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right", "tui.links.edge": "bottom"}})
+		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
@@ -288,6 +288,8 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "explorer") })
 	r.s.WaitFor(t, "the bar hidden, the page back", func(string) bool { x, y := where(); return x == x0 && y == y0 })
 
+	// at the bottom now, SPC l opens it on its Links tab, the heading the tab's
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "bottom")); return true })
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "links (1) · d depth")
 	for i, row := range strings.Split(r.s.String(), "\n") {
@@ -1265,7 +1267,7 @@ func screenRow(r *running, text string) int {
 var prefLabels = [][]string{
 	{"editor mode", "page width (40–400)", "theme", "wrap long lines", "line numbers", "indentation marks",
 		"image previews", "two-view documents", "terminal opens from", "terminal size", "terminal length", "terminal theme"},
-	{"hide the menu bar", "show the status line", "explorer opens from", "links open from", "todos open from",
+	{"hide the menu bar", "show the status line", "explorer opens from", "todos open from",
 		"agent opens from", "agent size", "agent length", "notifications in the", "a notification stays",
 		"About at startup", "look for updates"},
 }
@@ -1381,8 +1383,6 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	stored("tui.status.shown", "false")
 	post(func() { r.h.choosePrefNamed(prefExplorer, 2) })
 	stored("tui.explorer.edge", "top")
-	post(func() { r.h.choosePrefNamed(prefRelationsEdge, 3) })
-	stored("tui.links.edge", "bottom")
 	// light by name: its place is golib's order, which moves as golib ships more themes
 	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), slices.Index(r.h.themeNames(), "light")) })
 	stored("tui.theme", "light")

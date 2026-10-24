@@ -1551,10 +1551,6 @@
         <source>line numbers</source>
         <translation>行号</translation>
     </message>
-    <message id="autodoc.dialog.preferences.links_open_from">
-        <source>links open from</source>
-        <translation>链接面板打开位置</translation>
-    </message>
     <message id="autodoc.dialog.preferences.look_for_updates">
         <source>look for updates</source>
         <translation>检查更新</translation>
@@ -2530,12 +2526,15 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are what
-  this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
-  amended by, related, adr, its links and its backlinks, then what names nothing and the
-  supersession loops. d in the links shows the files two links away, under the one that
-  reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
-  its key again closes it. Enter on a file opens it and closes the panel.
+  The explorer is one panel of two tabs: Explorer (SPC e), every workspace's folders and files,
+  and Links (SPC l), what this file is connected to, by kind: superseded by, supersedes, sources,
+  cited by, amends, amended by, related, adr, its links and its backlinks, then what names nothing
+  and the supersession loops. d in the links shows the files two links away, under the one that
+  reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
+  open it on their tab, or go to it from the other, and on their own tab close it, as Escape
+  does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
+  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
@@ -2641,12 +2640,13 @@ WHAT A KEY NEEDS
   进度通知会一直显示到任务结束。首选项可设置角落位置和秒数；SPC h 列出所有通知。
 
 面板
-  资源管理器(SPC e)显示所有工作区的文件夹和文件；链接面板(SPC l)按类型列出
-  此文件关联的内容：被取代于、取代、来源、被引用于、修订、
-  被修订于、相关、adr、其链接和反向链接，以及未指向任何内容的链接和
-  取代循环。在链接面板中按 d 可显示两跳之外的文件，列在通往它们的
-  那个文件下。每个面板从其所在一侧覆盖在页面上打开(在首选项中设置)，按 Escape 或
-  再按其快捷键关闭。在文件上按 Enter 打开它并关闭面板。
+  资源管理器是一个有两个标签页的面板：资源管理器(SPC e)显示所有工作区的文件夹和文件；链接(SPC l)
+  按类型列出此文件关联的内容：被取代于、取代、来源、被引用于、修订、被修订于、相关、adr、其链接和
+  反向链接，以及未指向任何内容的链接和取代循环。在链接中按 d 可显示两跳之外的文件，列在通往它们的
+  那个文件下。面板从其所在一侧覆盖在页面上打开(在首选项中设置)：SPC e 和 SPC l 在各自的标签页打开它，
+  或从另一个标签页切换过去，在自己的标签页上则像 Escape 一样关闭它；Ctrl+PageUp 和 Ctrl+PageDown
+  切换标签页。标签栏右端的 _ 将其隐藏到停靠栏，图标可按原样再显示它，x 则关闭它。在文件上按 Enter
+  打开它：从资源管理器会关闭面板，从链接则隐藏面板。
   SPC j 转到光标下的链接：其指向的文档，否则为其网址或文件。
   SPC b 返回上一个文档，回到你离开时的位置(Ctrl+O 每次后退一次
   跳转，文档内也适用)。页面的右键菜单两者都有：转到链接(在链接上)

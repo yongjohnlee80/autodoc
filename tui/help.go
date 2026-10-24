@@ -210,12 +210,15 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are what
-  this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
-  amended by, related, adr, its links and its backlinks, then what names nothing and the
-  supersession loops. d in the links shows the files two links away, under the one that
-  reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
-  its key again closes it. Enter on a file opens it and closes the panel.
+  The explorer is one panel of two tabs: Explorer (SPC e), every workspace's folders and files,
+  and Links (SPC l), what this file is connected to, by kind: superseded by, supersedes, sources,
+  cited by, amends, amended by, related, adr, its links and its backlinks, then what names nothing
+  and the supersession loops. d in the links shows the files two links away, under the one that
+  reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
+  open it on their tab, or go to it from the other, and on their own tab close it, as Escape
+  does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
+  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)

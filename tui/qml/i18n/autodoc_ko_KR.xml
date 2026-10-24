@@ -1551,10 +1551,6 @@
         <source>line numbers</source>
         <translation>줄 번호</translation>
     </message>
-    <message id="autodoc.dialog.preferences.links_open_from">
-        <source>links open from</source>
-        <translation>링크 열리는 위치</translation>
-    </message>
     <message id="autodoc.dialog.preferences.look_for_updates">
         <source>look for updates</source>
         <translation>업데이트 확인</translation>
@@ -2530,12 +2526,15 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are what
-  this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
-  amended by, related, adr, its links and its backlinks, then what names nothing and the
-  supersession loops. d in the links shows the files two links away, under the one that
-  reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
-  its key again closes it. Enter on a file opens it and closes the panel.
+  The explorer is one panel of two tabs: Explorer (SPC e), every workspace's folders and files,
+  and Links (SPC l), what this file is connected to, by kind: superseded by, supersedes, sources,
+  cited by, amends, amended by, related, adr, its links and its backlinks, then what names nothing
+  and the supersession loops. d in the links shows the files two links away, under the one that
+  reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
+  open it on their tab, or go to it from the other, and on their own tab close it, as Escape
+  does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
+  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
@@ -2641,12 +2640,14 @@ WHAT A KEY NEEDS
   끝날 때까지 남습니다. 환경설정에서 모서리와 시간을 설정하며, SPC h로 목록을 봅니다.
 
 패널
-  탐색기(SPC e)는 모든 워크스페이스의 폴더와 파일입니다. 링크(SPC l)는 이 파일과
-  연결된 것을 종류별로 보여 줍니다: 대체한 문서, 대체된 문서, 출처, 인용한 문서, 수정, 수정한 문서,
-  관련, adr, 링크와 백링크, 그리고 아무것도 가리키지 않는 링크와 대체
-  순환. 링크에서 d를 누르면 두 단계 떨어진 파일을 그 파일에 닿는 파일 아래에
-  표시합니다. 각 패널은 자기 쪽에서 페이지 위로 열리며 (환경설정에서 설정), Escape나
-  같은 키를 다시 누르면 닫힙니다. 파일에서 Enter를 누르면 파일을 열고 패널을 닫습니다.
+  탐색기는 탭 두 개로 된 패널 하나입니다: 탐색기(SPC e)는 모든 워크스페이스의 폴더와 파일이고,
+  링크(SPC l)는 이 파일과 연결된 것을 종류별로 보여 줍니다: 대체한 문서, 대체된 문서, 출처, 인용한 문서,
+  수정, 수정한 문서, 관련, adr, 링크와 백링크, 그리고 아무것도 가리키지 않는 링크와 대체 순환.
+  링크에서 d를 누르면 두 단계 떨어진 파일을 그 파일에 닿는 파일 아래에 표시합니다. 패널은 자기
+  쪽에서 페이지 위로 열립니다(환경설정에서 설정). SPC e와 SPC l은 자기 탭으로 열거나 다른 탭에서
+  넘어가고, 자기 탭에서는 Escape처럼 닫습니다. Ctrl+PageUp과 Ctrl+PageDown으로 탭을 바꿉니다.
+  탭 줄 오른쪽 끝의 _는 독으로 숨기고(아이콘이 그대로 다시 보여 줌), x는 닫습니다. 파일에서 Enter를
+  누르면 파일을 열고, 탐색기에서는 패널을 닫고 링크에서는 숨깁니다.
   SPC j는 커서 아래 링크로 이동합니다: 링크가 가리키는 문서, 없으면 웹 주소나 파일.
   SPC b는 이전 문서의 떠났던 위치로 돌아갑니다 (Ctrl+O는 한 번에 점프 하나씩, 문서 안에서도
   뒤로 갑니다). 페이지의 오른쪽 클릭 메뉴에 둘 다 있습니다: 링크로 이동(링크 위에서)

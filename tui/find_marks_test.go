@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -90,7 +91,9 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 		t.Fatalf("the current match is %v", m)
 	}
 
-	// the links drawer opens at the right edge: the chip hides under it, and comes back after
+	// the explorer's drawer, at the right edge, opens on its Links tab: the chip hides under it, and
+	// comes back after
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "right")); return true })
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (1)")
 	r.s.WaitFor(t, "the chip hidden under the drawer", func(string) bool { y, _ := r.findChipRow(); return y < 0 })

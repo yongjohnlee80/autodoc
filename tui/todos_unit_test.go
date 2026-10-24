@@ -84,6 +84,9 @@ func (s *scriptedCore) SearchModelsChanged(ranker bool) {
 }
 func (s *scriptedCore) Post(fn func())        { fn() }
 func (s *scriptedCore) TogglePanel(id string) { s.views = append(s.views, id+".toggle") }
+func (s *scriptedCore) TogglePanelTab(id string, tab int) {
+	s.views = append(s.views, fmt.Sprintf("%s.toggle(%d)", id, tab))
+}
 func (s *scriptedCore) Page() Page            { return s.page }
 func (s *scriptedCore) Crumbs(parts []string) { s.crumbs = parts }
 func (s *scriptedCore) GoToLine(line int) {

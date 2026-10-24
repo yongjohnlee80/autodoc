@@ -117,9 +117,11 @@ type keyScope struct {
 
 // keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), the todos'
 // panel (its keys the todos feature's: its list's, and again its task buttons', never its details
-// pane's), the explorer's and the relations' panels, and the GUI's HTML preview pane.
+// pane's), the explorer's two tabs (its tree's, and the relations' Links list's), and the GUI's
+// HTML preview pane.
 var keyScopes = []keyScope{
-	{ID: "page", Indent: "            "}, {ID: "explorer", Indent: "        "}, {ID: "links", Indent: "        "},
+	{ID: "page", Indent: "            "}, {ID: "explorer", Indent: "                    "},
+	{ID: "links", Indent: "                    "},
 	{ID: "todos", Indent: "                "}, {ID: "todos", Indent: "                ", Label: "todos task buttons'"},
 	{ID: "htmlPane", Indent: "        ", Label: "HTML preview's"},
 }

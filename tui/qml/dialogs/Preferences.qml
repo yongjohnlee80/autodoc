@@ -132,11 +132,6 @@ Dialog {
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: qsTrId("autodoc.dialog.preferences.links_open_from"); Layout.preferredWidth: 21 }
-                        ComboBox { model: App.edges; textRole: "label"; currentIndex: App.relationsEdgeIndex; onActivated: App.setRelationsEdge(index) }
-                    }
-                    Flex {
-                        direction: Tui.Horizontal
                         Text { text: qsTrId("autodoc.dialog.preferences.todos_open_from"); Layout.preferredWidth: 21 }
                         ComboBox { model: App.edges; textRole: "label"; currentIndex: App.todosEdgeIndex; onActivated: App.setTodosEdge(index) }
                     }
