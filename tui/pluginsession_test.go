@@ -598,3 +598,19 @@ func TestABrokenPluginPackageIsSaidAndNotRecorded(t *testing.T) {
 		t.Fatal("a failed package's command reached its plugin")
 	}
 }
+
+// A run's shutdown is safe from any goroutine, beside the loop's stop transition: the reason it
+// sends is read under the run's lock, never raced (run under -race to observe it).
+func TestAShutdownBesideTheStopTransitionDoesNotRace(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin7(t, dir, "both", "service", "session", sessionCommands)
+	r, logs := pluginTUI(t, dir)
+	r.pluginCommand("both", "echo")
+	waitSaid(t, logs, "both", "session none")
+	run := runOf(r, "both")
+	done := make(chan struct{})
+	go func() { run.shutdown(); close(done) }() // as a test's cleanup, or a goroutine of the host's
+	onLoop(r, func() bool { run.stopFor(plugin.CloseOff, ""); return true })
+	<-done
+	waitExited(t, run)
+}

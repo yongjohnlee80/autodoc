@@ -43,7 +43,8 @@ type pluginRun struct {
 
 	ready, closing bool
 	// endReason is the run's end, sent in its plugin.close (protocol 7): set once, by the first stop
-	// (stopFor, or stopPlugins as AutoDoc quits), never changed by a later one
+	// (stopFor, or stopPlugins as AutoDoc quits), never changed by a later one. Under mu: shutdown
+	// reads it from any goroutine
 	endReason string
 	hidden    bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
 	opened    bool // plugin.open sent: at the dialog's first layout, or a service's start
@@ -457,7 +458,9 @@ func (r *pluginRun) stopFor(reason, why string) {
 		return
 	}
 	r.closing = true
+	r.mu.Lock()
 	r.endReason = reason
+	r.mu.Unlock()
 	r.pl.endNotices(r) // before the run leaves pl.running: a replacement's notices are its own
 	if r.focused {
 		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
@@ -499,7 +502,10 @@ func (r *pluginRun) shutdown() {
 		defer close(r.shutDone)
 		params := plugin.EmptyParams()
 		if r.e.m.Protocol >= 7 {
-			params = plugin.CloseParams(r.endReason)
+			r.mu.Lock()
+			reason := r.endReason
+			r.mu.Unlock()
+			params = plugin.CloseParams(reason)
 		}
 		r.out.push(outNote{plugin.MethodClose, params})
 		r.out.close()
@@ -531,7 +537,10 @@ func (pl *plugins) stopPlugins() {
 		// the quit's stop transition, as stopFor's: fenced and its reason frozen before the
 		// shutdown, so no session write is accepted after, and the slots can go
 		if !r.closing {
-			r.closing, r.endReason = true, plugin.CloseQuit
+			r.closing = true
+			r.mu.Lock()
+			r.endReason = plugin.CloseQuit
+			r.mu.Unlock()
 			pl.endNotices(r)
 		}
 		go r.shutdown()

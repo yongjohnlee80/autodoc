@@ -42,7 +42,7 @@ type SurfaceBuffer struct {
 	W, H, Pitch int
 	Format      string
 	Pix         []byte
-	drawing     bool // handed out by Buffer and not yet presented: its mapping stays until Present
+	drawing     bool // handed out by Buffer and not yet presented: its mapping stays until Present (under mu)
 }
 
 // RGBA is the buffer as an image (RGBA8 buffers only).
@@ -204,21 +204,29 @@ func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64)
 	seq := s.seq
 	s.mu.Lock()
 	s.inputTs[seq] = inputT // before the send: its frame.done may come at once
-	s.mu.Unlock()
-	err := s.conn.Send(FrameMsg(SurfaceFrame{Seq: seq, Gen: b.Gen, Buffer: b.ID, Dirty: dirty, InputT: inputT}))
-	s.sendMu.Unlock()
-	s.mu.Lock()
-	if err != nil {
-		delete(s.inputTs, seq)
-	}
+	// b is given up before the send: once sent, its credit may hand it to another caller at once,
+	// so nothing after the send touches it
 	b.drawing = false
 	if (b.Gen < s.cur || s.closed) && b.Pix != nil { // its generation, or the surface, ended while it was drawn
 		unix.Munmap(b.Pix)
 		b.Pix = nil
 	}
 	s.mu.Unlock()
+	err := s.conn.Send(FrameMsg(SurfaceFrame{Seq: seq, Gen: b.Gen, Buffer: b.ID, Dirty: dirty, InputT: inputT}))
+	s.sendMu.Unlock()
+	if presentSent != nil {
+		presentSent()
+	}
+	if err != nil {
+		s.mu.Lock()
+		delete(s.inputTs, seq)
+		s.mu.Unlock()
+	}
 	return seq, err
 }
+
+// presentSent is a test's pause between a frame's send and its Present's return: nil but in tests.
+var presentSent func()
 
 // read takes the host's side-channel ops until it goes.
 func (s *Surface) read() {
