@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -403,30 +404,55 @@ func TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts(t *testing.T) {
 	}
 }
 
+// frameRecorder is a terminal's view (tuiwidget.TerminalView) that keeps whether the last frame it
+// was handed has a cell in a face of its own: what a window's view paints its shell in.
+type frameRecorder struct {
+	frames int
+	faced  bool
+}
+
+func (f *frameRecorder) Cells(w, h int) (int, int)                       { return max(w, 1), max(h, 1) }
+func (f *frameRecorder) Pointer(e tuicore.MouseEvent) tuicore.MouseEvent { return e }
+func (f *frameRecorder) Detached()                                       {}
+func (f *frameRecorder) Frame(cells []tuicore.Cell, _, _ int, _ tuicore.Point, _ tuicore.CursorShape, _ bool) {
+	f.frames++
+	f.faced = slices.ContainsFunc(cells, func(c tuicore.Cell) bool { return c.Face != 0 })
+}
+
 // TestTheTerminalsFontIsTheirs: a stored terminals' font draws the shell's cells in a face of their
 // own, the tab strip in the window's; the Fonts dialog's terminal row lists the cell font's first
 // and the monospace families, and choosing the cell font's puts the shell back in the window's face.
+// In a window the terminal panel's shells are views of their own (paneltext_gui.go), so the face is
+// read where a view is handed it: the frame each is drawn from.
 func TestTheTerminalsFontIsTheirs(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
 	t.Setenv("PS1", "$ ")
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.font.terminal": "JetBrains Mono"}, fonts)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
-	faced := func() (shell, strip bool) {
+	rec := &frameRecorder{}
+	onLoop(r, func() bool {
+		c, _ := r.h.p.Find("terminalView")
+		tabs, ok := tuidecl.TerminalTabsOf(c)
+		if !ok {
+			t.Fatal("no terminal panel")
+		}
+		tabs.SetTerminalViews(func(*widget.Terminal) widget.TerminalView { return rec })
+		return true
+	})
+	shell := func() bool { return onLoop(r, func() bool { return rec.frames > 0 && rec.faced }) }
+	strip := func() bool {
 		for _, row := range r.s.Backend.Snapshot() {
 			for x, c := range row {
-				if c.Face != 0 {
-					shell = true
-				}
 				if x+4 < len(row) && c.Content == "s" && row[x+1].Content == "h" && row[x+2].Content == "e" && row[x+3].Content == "l" && row[x+4].Content == "l" && c.Face != 0 {
-					strip = true
+					return true
 				}
 			}
 		}
-		return shell, strip
+		return false
 	}
-	r.s.WaitFor(t, "the shell in its own face", func(string) bool { shell, _ := faced(); return shell })
-	if _, strip := faced(); strip {
+	r.s.WaitFor(t, "the shell in its own face", func(string) bool { return shell() })
+	if strip() {
 		t.Error("the tab strip took the terminals' face")
 	}
 	onLoop(r, func() bool { r.h.openFonts(); return true })
@@ -436,7 +462,7 @@ func TestTheTerminalsFontIsTheirs(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.setTerminalFontIndex(0); return true }) // the cell font's
 	storedPref(t, d, r, "gui.font.terminal", "")
-	r.s.WaitFor(t, "the shell back in the window's face", func(string) bool { shell, _ := faced(); return !shell })
+	r.s.WaitFor(t, "the shell back in the window's face", func(string) bool { return !shell() })
 }
 
 // TestTheTerminalsLookInAWindowPutsTheFontBack: in a window, Theme and font… lists the terminals'
