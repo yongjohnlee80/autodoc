@@ -26,12 +26,14 @@ type Surface struct {
 	wake    chan struct{}
 	acked   int
 
-	sendMu  sync.Mutex       // a frame's seq and its send are one step: seqs reach the host in order
-	seq     uint64           // under sendMu
-	inputTs map[uint64]int64 // a presented frame's InputT, by seq, until its frame.done (under mu)
-	done    chan SurfaceFrameDone
-	gone    chan struct{}
-	once    sync.Once
+	sendMu   sync.Mutex       // a frame's seq and its send are one step: seqs reach the host in order
+	seq      uint64           // under sendMu
+	inputTs  map[uint64]int64 // a presented frame's InputT, by seq, until its frame.done (under mu)
+	done     chan SurfaceFrameDone
+	gone     chan struct{} // closed when the side channel has ended (its reader is done)
+	once     sync.Once
+	closed   bool // under mu: no buffer is granted, and each mapping goes once nothing draws in it
+	closeOne sync.Once
 }
 
 // SurfaceBuffer is one buffer to draw into: Pix is W×H pixels of Format, Pitch bytes a row.
@@ -66,7 +68,46 @@ func (s *Surface) Info() SurfaceInfo {
 
 // Done is each frame's outcome, as the host answers it. A plugin that doesn't read it loses the
 // oldest beyond 64; the credits come through Buffer regardless.
+//
+// Done is a bounded, lossy view of the outcomes, not the wire's exactly-once delivery: when the
+// handler doesn't keep up, the oldest are dropped. Credits are never dropped: they come through
+// Buffer.
 func (s *Surface) Done() <-chan SurfaceFrameDone { return s.done }
+
+// Close ends the surface, once: no buffer is granted after it, the side channel shuts down, and
+// every mapping is reclaimed, a buffer being drawn into at its Present. Serve calls it as it ends.
+func (s *Surface) Close() {
+	s.closeOne.Do(func() {
+		s.conn.Shutdown() // wakes the reader; the fd stays until it is done
+		<-s.gone
+		s.conn.Close()
+	})
+}
+
+// reclaim is the surface's end (under mu): nothing more is granted, and every mapping not being
+// drawn into is unmapped; a drawn one goes at its Present.
+func (s *Surface) reclaim() {
+	s.closed = true
+	unmap := func(b *SurfaceBuffer) {
+		if !b.drawing && b.Pix != nil {
+			unix.Munmap(b.Pix)
+			b.Pix = nil
+		}
+	}
+	for _, bufs := range s.gens {
+		for _, b := range bufs {
+			unmap(b)
+		}
+	}
+	for _, bufs := range s.pending {
+		for _, b := range bufs {
+			unmap(b)
+		}
+	}
+	clear(s.gens)
+	clear(s.pending)
+	clear(s.free)
+}
 
 // setInfo is plugin.surface: the generation's geometry, matched with its buffers by gen.
 func (s *Surface) setInfo(i SurfaceInfo) {
@@ -83,8 +124,16 @@ func (s *Surface) setInfo(i SurfaceInfo) {
 // install makes gen current (under mu): its buffers are free, the older generations' unmapped once
 // none is drawn into; and acknowledges it to the host.
 func (s *Surface) install(gen int, bufs []*SurfaceBuffer) {
-	if gen <= s.cur {
+	if gen <= s.cur || s.closed {
 		return
+	}
+	for g, bufs := range s.pending { // halves of generations that never completed, now superseded
+		if g < gen {
+			for _, b := range bufs {
+				unix.Munmap(b.Pix)
+			}
+			delete(s.pending, g)
+		}
 	}
 	for g, old := range s.gens {
 		if g < gen {
@@ -123,6 +172,10 @@ func (s *Surface) poke() {
 func (s *Surface) Buffer(ctx context.Context) (*SurfaceBuffer, error) {
 	for {
 		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return nil, ErrSurfaceClosed
+		}
 		for id, b := range s.free {
 			if b.Gen == s.cur {
 				delete(s.free, id)
@@ -159,7 +212,7 @@ func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64)
 		delete(s.inputTs, seq)
 	}
 	b.drawing = false
-	if b.Gen < s.cur && b.Pix != nil { // its generation ended while it was drawn: the host answers "retired"
+	if (b.Gen < s.cur || s.closed) && b.Pix != nil { // its generation, or the surface, ended while it was drawn
 		unix.Munmap(b.Pix)
 		b.Pix = nil
 	}
@@ -169,7 +222,13 @@ func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64)
 
 // read takes the host's side-channel ops until it goes.
 func (s *Surface) read() {
-	defer s.once.Do(func() { close(s.gone) })
+	defer func() {
+		s.mu.Lock()
+		s.reclaim() // the peer went, or Close shut it: nothing more is granted
+		s.mu.Unlock()
+		s.once.Do(func() { close(s.gone) })
+		s.poke()
+	}()
 	for {
 		m, g, err := s.conn.Recv()
 		if err != nil {
@@ -194,9 +253,14 @@ func (s *Surface) read() {
 			}
 			g.CloseAll()
 			s.mu.Lock()
-			if s.info.Gen == gen {
+			switch {
+			case gen <= s.cur || s.closed: // a superseded generation's half: nothing will draw in it
+				for _, b := range bufs {
+					unix.Munmap(b.Pix)
+				}
+			case s.info.Gen == gen:
 				s.install(gen, bufs)
-			} else {
+			default:
 				s.pending[gen] = bufs
 			}
 			s.mu.Unlock()
@@ -208,11 +272,17 @@ func (s *Surface) read() {
 				d.InputT = s.inputTs[d.Seq]
 				delete(s.inputTs, d.Seq)
 				s.mu.Unlock()
-				select {
-				case s.done <- d:
-				default:
-					<-s.done // the oldest goes
-					s.done <- d
+				// never blocking, whatever the consumer does between the two: drop the oldest, retry
+				for sent := false; !sent; {
+					select {
+					case s.done <- d:
+						sent = true
+					default:
+						select {
+						case <-s.done:
+						default:
+						}
+					}
 				}
 			}
 		case OpBufferFree:

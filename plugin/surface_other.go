@@ -29,3 +29,5 @@ func (*Surface) Present(*SurfaceBuffer, image.Rectangle, int64) (uint64, error) 
 }
 func (*Surface) setInfo(SurfaceInfo) {}
 func openSurface() *Surface          { return nil }
+
+func (*Surface) Close() {}

@@ -376,6 +376,9 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 	defer calls.close()
 	// the side channel first, before the handler can start a process: close-on-exec at once
 	peer := &Peer{ctx: ctx, link: link, calls: calls, surface: openSurface()}
+	if peer.surface != nil {
+		defer peer.surface.Close() // after the handler's Close: its own goroutines see the surface end
+	}
 	go func() {
 		select {
 		case <-link.Done():

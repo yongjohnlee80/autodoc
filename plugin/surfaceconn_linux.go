@@ -33,6 +33,13 @@ func NewSurfacePair() (*SurfaceConn, *os.File, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// the host's sends are bounded as the link's are: a plugin that stops reading can't hold a send
+	tv := unix.NsecToTimeval(int64(WriteTimeout))
+	if err := unix.SetsockoptTimeval(fds[0], unix.SOL_SOCKET, unix.SO_SNDTIMEO, &tv); err != nil {
+		unix.Close(fds[0])
+		unix.Close(fds[1])
+		return nil, nil, err
+	}
 	return newSurfaceConn(fds[0]), os.NewFile(uintptr(fds[1]), "autodoc-surface"), nil
 }
 
@@ -72,7 +79,7 @@ func (c *SurfaceConn) Send(m map[string]any, fds ...int) error {
 		if errors.Is(err, unix.EPIPE) || errors.Is(err, unix.EBADF) || errors.Is(err, unix.ECONNRESET) {
 			return ErrSurfaceClosed
 		}
-		return err
+		return err // EAGAIN: the send's timeout passed
 	}
 	return nil
 }
