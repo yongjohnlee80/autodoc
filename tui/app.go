@@ -250,6 +250,7 @@ type Host struct {
 	// program's window collector; dockHidden are those the editor's icon hid, to show again (dock.go)
 	minimized  *widget.MinimizedWindows
 	dockHidden []string
+	dockFlash  map[string]*dockFlash // by panel: its icon flashing as it hides (dock.go)
 	widgetAt   int
 	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
