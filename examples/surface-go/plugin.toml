@@ -1,0 +1,16 @@
+name     = "surface-go"
+title    = "Pixel surface (spike)"
+kind     = "dialog"
+protocol = 10                      # a pixel surface (ADR 1792797354)
+command  = ["./bin/autodoc-surface-go"]
+
+[dialog]
+modal      = false                 # a card beside the page
+width      = 60
+placements = ["right", "left"]
+
+[surface]
+text_input = true                  # keys and IME text, with a caret for the candidate window
+
+[install]
+build = ["go", "build", "-o", "bin/autodoc-surface-go", "."]
