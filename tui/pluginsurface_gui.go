@@ -8,11 +8,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/gio/op/extimage"
 	"github.com/yongjohnlee80/golib/gui"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // A PIXEL SURFACE IN THE WINDOW: the sink is the window's gui.Stream, and the card's view is a native
 // view over its own cells that draws it (DrawStream), tells the owner the geometry it was painted at,
-// and reports the plugin's caret to the window's IME (gui.CaretView).
+// and reports the plugin's caret to the window's IME (gui.CaretView) and its pointer shape
+// (gui.PointerShapeView).
 
 type streamSink struct{ st *gui.Stream }
 
@@ -110,6 +112,19 @@ func (s surfaceView) Caret() (gui.Rect, float32, bool) {
 	c, ok := r.caret, r.caretOK
 	r.mu.Unlock()
 	return gui.Rect{X: c.X, Y: c.Y, W: c.W, H: c.H}, c.Baseline, ok
+}
+
+var _ gui.PointerShapeView = surfaceView{}
+
+// PointerShape is the plugin's last host.surface.cursor, over the surface (gui.PointerShapeView).
+func (s surfaceView) PointerShape() tuicore.PointerShape {
+	r := s.v.run
+	if r == nil {
+		return tuicore.PointerDefault
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.pointer
 }
 
 // surfaceNative is the view's native view: its surface's, when it has one.

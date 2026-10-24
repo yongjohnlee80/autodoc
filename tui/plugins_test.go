@@ -283,6 +283,7 @@ func (e *echo) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
 	_ = e.peer.SetCaret(plugin.Caret{X: 1, Y: 2, W: 2, H: 12, Baseline: 10})
 	_ = e.peer.WriteClipboard("from the plugin")
 	_ = e.peer.SetPointerShape("hand")
+	_ = e.peer.SetPointerShape("hand")
 	go func() {
 		b, err := sf.Buffer(context.Background())
 		if err != nil {

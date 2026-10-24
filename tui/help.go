@@ -223,6 +223,10 @@ THE PANELS
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
+  In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
+  follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
+  drag. A link in the editor is followed with SPC j or the menu, not a click, so it keeps the
+  I-beam.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).

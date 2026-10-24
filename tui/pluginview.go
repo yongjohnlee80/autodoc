@@ -75,6 +75,9 @@ type pluginView struct {
 	menu         *widget.EditorMenu // a card's right-click menu
 	// lastSurface is the geometry a pixel surface was last painted at (pluginsurface_gui.go)
 	lastSurface surfaceGeometry
+	// precise: the backend has told a scroll precisely (MouseEvent.ScrollX, ScrollY), so it tells
+	// every one, and a wheel step that carries none adds nothing
+	precise bool
 }
 
 // NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
@@ -83,6 +86,10 @@ func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
 
 // surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.
 func (v *pluginView) surfaceMode() bool { return v.run != nil && v.run.surface != nil }
+
+// PreciseScroll: a surface takes every precise scroll, the part a wheel step can't tell included
+// (tuicore.PreciseScroller).
+func (v *pluginView) PreciseScroll() bool { return v.surfaceMode() }
 
 // surfacePointer is a mouse event on the surface as plugin.surface.pointer, in frame-local dp from
 // the event's cell and its position inside the cell. false: an event the surface doesn't take.
@@ -113,8 +120,18 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 	case tuicore.MouseMotion:
 		p.Kind = "move"
 	case tuicore.MouseWheel:
-		// one step is a cell's height or width, until golib's precise deltas (§4.10)
 		p.Kind = "scroll"
+		if m.ScrollX != 0 || m.ScrollY != 0 || m.Button == tuicore.MouseNone {
+			v.precise = true
+			p.DX, p.DY = m.ScrollX, m.ScrollY // the precise scroll, in dp (§4.10)
+			break
+		}
+		if v.precise {
+			// a backend that tells scrolls precisely tells each on its first step: a later step of
+			// the same scroll has no more to tell
+			return plugin.SurfacePointer{}, false
+		}
+		// a backend with only steps: one step is a cell's height or width
 		switch m.Button {
 		case tuicore.WheelUp:
 			p.DY = -cp.H
@@ -242,7 +259,7 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 			r.send(plugin.MethodSurfacePointer, plugin.SurfacePointerParams(p))
 			return true
 		}
-		return false
+		return m.Kind == tuicore.MouseWheel // a wheel over the surface is its own, sent or not
 	}
 	if p, ok := ev.(tuicore.PasteEvent); ok && v.surfaceMode() && (r.e.m.Modal() || r.focused) {
 		r.send(plugin.MethodPaste, plugin.PasteParams(p.Text))

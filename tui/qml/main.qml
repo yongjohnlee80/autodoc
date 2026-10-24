@@ -400,6 +400,7 @@ Window {
                         palette.highlightedText: Theme.document.highlightedText
                         model: App.relations
                         textRole: "label"
+                        cursorShape: Tui.PointingHandCursor // a row opens its note
                         currentIndex: App.relationsIndex
                         onCurrentIndexChanged: App.relationsMoved(index)
                         onActivated: App.openRelation(index)

@@ -179,3 +179,63 @@ func TestASurfaceWithItsOwnMenuGetsTheRightPress(t *testing.T) {
 		t.Error("the host opened its menu over the plugin's own")
 	}
 }
+
+// A surface's scroll is precise, in dp: a scroll that made no wheel step is sent, and so is a
+// step that carries its scroll; once the backend has told one so, a step that carries none (a
+// later step of the same scroll) is taken and not sent. A backend with only steps sends a cell's
+// height a step. A plugin's host.surface.cursor reaches the run, the default for a name the host
+// doesn't know.
+func TestASurfaceScrollIsPreciseAndItsPointerShapeArrives(t *testing.T) {
+	withFakeSurfaces(t)
+	dir := t.TempDir()
+	installPluginAt(t, dir, "card", "dialog", "echo", surfaceCard, 10)
+	_, r, logs := cardTUI(t, dir, nil)
+	run := r.openPlugin("card")
+	r.waitShown(t, "open ")
+	waitSaid(t, logs, "card", "open ")
+	onLoop(r, func() bool {
+		v := run.view
+		if !v.PreciseScroll() {
+			t.Error("a surface does not take precise scrolls")
+		}
+		cp := v.Context().CellPixels()
+		wheel := func(b tuicore.MouseButton, dx, dy float32) (plugin.SurfacePointer, bool) {
+			return v.surfacePointer(tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: b, X: 1, Y: 1, ScrollX: dx, ScrollY: dy})
+		}
+		if p, ok := wheel(tuicore.WheelDown, 0, 0); !ok || p.DY != cp.H {
+			t.Errorf("a step from a backend with only steps: %+v (%v), want a cell's height", p, ok)
+		}
+		if p, ok := wheel(tuicore.MouseNone, 0, 2.5); !ok || p.Kind != "scroll" || p.DY != 2.5 || p.DX != 0 {
+			t.Errorf("a precise scroll with no step: %+v (%v), want its 2.5 dp", p, ok)
+		}
+		if p, ok := wheel(tuicore.WheelDown, -1, 7.25); !ok || p.DY != 7.25 || p.DX != -1 {
+			t.Errorf("a step with its scroll: %+v (%v), want -1, 7.25 dp", p, ok)
+		}
+		later := tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: 1, Y: 1}
+		if p, ok := v.surfacePointer(later); ok {
+			t.Errorf("a later step with no scroll of its own was sent as %+v", p)
+		}
+		if !v.HandleEvent(later) {
+			t.Error("a later step over the surface was not taken")
+		}
+		return true
+	})
+	onLoop(r, func() bool { run.surface.Resize(rigGeometry); return true }) // the generation its Surface starts on
+	waitSaid(t, logs, "card", "surface gen 1")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		run.mu.Lock()
+		shape := run.pointer
+		run.mu.Unlock()
+		if shape == tuicore.PointerHand {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the plugin's host.surface.cursor hand: the run holds %v", shape)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if s := pointerShapeOf("a-later-protocols-shape"); s != tuicore.PointerDefault {
+		t.Errorf("an unknown shape name is %v, want the default", s)
+	}
+}

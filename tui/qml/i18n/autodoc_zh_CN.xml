@@ -2539,6 +2539,10 @@ THE PANELS
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
+  In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
+  follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
+  drag. A link in the editor is followed with SPC j or the menu, not a click, so it keeps the
+  I-beam.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -2651,6 +2655,9 @@ WHAT A KEY NEEDS
   SPC b 返回上一个文档，回到你离开时的位置(Ctrl+O 每次后退一次
   跳转，文档内也适用)。页面的右键菜单两者都有：转到链接(在链接上)
   和后退。
+  在 GUI 中，指针表示点击会做什么：在文本上是 I 形光标，在点击会跟随链接的地方(HTML 窗格的
+  链接和链接面板的行)是手形，在可拖动调整大小的边缘和分隔线上是箭头。编辑器中的链接通过
+  SPC j 或菜单跟随，而不是点击，因此仍是 I 形光标。
   智能体面板(SPC g，转到 › 智能体)在页面上运行 AI 智能体的 CLI，默认从顶部打开，除非
   首选项设置为其他边缘或居中：使用“系统 › 智能体配置…”(SPC G)中的默认配置，
   每个配置包含名称和启动命令(claude、codex…)。
