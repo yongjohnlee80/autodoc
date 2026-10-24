@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -123,5 +125,27 @@ func TestTheLinksPanelsPlaceMovesToTheExplorer(t *testing.T) {
 	}
 	if _, wrote := m["tui.explorer.edge"]; wrote || m["tui.links.edge"] != "top" {
 		t.Errorf("the store holds %v: want the links' key alone, as it was", m)
+	}
+}
+
+// The explorer's tab as its feature keeps it: a tab the view never sends is refused, and a keyboard or
+// a close its view refuses is said, not lost.
+func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
+	c := newScripted("kb")
+	e := newExplorer(c)
+	e.tabShown(linksTab)
+	e.tabShown(7) // no such tab
+	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != relationsView {
+		t.Fatalf("after tab 7: tab %d, App.explorerTab %v, App.linksTabShown %v, view %q; want the Links tab kept",
+			e.tab, c.set["App.explorerTab"], c.set["App.linksTabShown"], e.view())
+	}
+	c.viewErr = errors.New("no such view")
+	e.showTab(explorerTab) // the scripted core runs a Post at once
+	e.close()
+	if want := []string{"explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.views, want) {
+		t.Errorf("views called %v, want %v", c.views, want)
+	}
+	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.failed, want) {
+		t.Errorf("failures said %v, want %v", c.failed, want)
 	}
 }

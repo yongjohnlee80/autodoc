@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -55,6 +56,11 @@ func TestAHiddenPanelsDockIconFlashesTwice(t *testing.T) {
 			onLoop(r, func() bool { return r.h.dockFlash["explorer"] == nil })
 	})
 
+	// a hide that fails flashes nothing, and an icon of no panel is never lit
+	if onLoop(r, func() bool { r.h.hidePanel("nope"); return r.h.dockFlash["nope"] != nil || r.h.dockFlashLit("nope") }) {
+		t.Error("a failed hide of no panel flashed")
+	}
+
 	windowControl(t, r, "x")
 	r.s.WaitFor(t, "x closed it", func(string) bool { return !r.panelIsOpen("explorer") })
 	if n := len(steps("explorer")); n != len(twice)+2 {
@@ -93,4 +99,28 @@ func (r *running) dockFlashRow(key string) bool {
 		}
 	}
 	return false
+}
+
+// The terminal's x with no shell running closes it at once, asking nothing, every tab already closing
+// left to close.
+func TestTheTerminalsXWithNoShellRunningClosesAtOnce(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	catInTheTerminal(t, r)
+	onLoop(r, func() bool {
+		panel, err := r.h.terminals.panel()
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		for _, tab := range panel.Tabs() {
+			if _, err := panel.Remove(tab.ID); err != nil {
+				t.Error(err)
+			}
+		}
+		r.h.terminals.stopAllShells() // every tab closing, none running
+		return true
+	})
+	r.s.WaitFor(t, "closed at once, nothing asked", func(sc string) bool {
+		return !r.panelIsOpen("terminal") && !strings.Contains(sc, "stop the shells")
+	})
 }

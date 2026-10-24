@@ -553,10 +553,7 @@ func (t *terminals) stopAllShells() {
 		}
 	}
 	stopAll := func() {
-		for _, tab := range panel.Tabs() {
-			if tab.Closing {
-				continue
-			}
+		for _, tab := range panel.Tabs() { // a tab already closing answers its removal as before
 			if _, err := panel.Remove(tab.ID); err != nil {
 				t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_shell_s_tab_could_not_close", err.Error()))
 			}
