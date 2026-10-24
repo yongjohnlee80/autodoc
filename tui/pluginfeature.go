@@ -69,6 +69,9 @@ type plugins struct {
 	// (pluginpanels.go); nil until then
 	cards     map[string]*cardPanel
 	cardOrder []*cardPanel
+	// pendingSaid are the card plugins found since then whose restart notice was given
+	// (sayCardsPending): each is told once while it stays in the folder
+	pendingSaid map[string]bool
 }
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {

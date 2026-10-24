@@ -4029,6 +4029,10 @@ O QUE UMA TECLA PRECISA
         <source>%1 was put in the folder by hand: update it there</source>
         <translation>%1 foi posto na pasta à mão: atualize-o lá</translation>
     </message>
+    <message id="autodoc.notice.pluginpanels.card_after_restart">
+        <source>%1 is installed: its card appears after AutoDoc restarts</source>
+        <translation>%1 está instalado: seu cartão aparece ao reiniciar o AutoDoc</translation>
+    </message>
     <message id="autodoc.notice.pluginpanels.card_hidden">
         <source>%1 card hidden: %2</source>
         <translation>cartão %1 oculto: %2</translation>
@@ -5526,6 +5530,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.text.pick.statuses">
         <source>statuses</source>
         <translation>status</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.card_after_restart">
+        <source>%1 — its card appears after a restart</source>
+        <translation>%1 — seu cartão aparece ao reiniciar</translation>
     </message>
     <message id="autodoc.text.plugincmds.close">
         <source>Close</source>

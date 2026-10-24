@@ -295,7 +295,9 @@ Each notification carries one map.
 - It stops when the user turns it off: its Plugins menu's Turn off, or Manage plugins. Its `toggle`
   while its panel is open (below) only hides it. It stops too when it exits, or when AutoDoc quits.
 - A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
-  the next start.
+  the next start. Until then AutoDoc says so itself: once as the card is found ("<title> is
+  installed: its card appears after AutoDoc restarts"), on its Plugins menu row, and again when it is
+  opened or one of its commands is run. A plugin's own guide need not explain it.
 - **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
   each with an optional `key`), and SPC p and Plugins › Commands… list them with their letters. Its
   frames are its content: a line of keys there says again what AutoDoc already shows.
@@ -500,10 +502,13 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
 
 - Each command is on the Plugins menu, under the plugin's own entry, beside Open (a dialog's or a
   card's) and Close (a card's Turn off).
-- **The SPC p card** lists every plugin command with its letter (SPC p, or Plugins › Commands…,
-  then the letter). AutoDoc's own leader letters are never a plugin's: SPC p is a card of its own.
-- **Letters.** A command's `key` binds only if no plugin earlier by name holds that letter. The other
-  is listed unbound, saying whose the letter is. The preference
+- **SPC p** (or Plugins › Commands…) chooses a plugin, then its card lists that plugin's commands
+  with their letters: SPC p, the plugin, then the letter. AutoDoc's own leader letters are never a
+  plugin's: SPC p is a card of its own.
+- **Letters.** A letter is unique within its plugin only: two plugins may both use `s`, each on its
+  own card. `q` closes the card, so it is never a command's. A command whose letter is already taken
+  on its card (`q`, or a preference that gives it another command's letter) is listed unbound,
+  saying whose the letter is: the command earlier in the manifest keeps it. The preference
   `tui.plugin.<name>.key.<id>` overrides a manifest's letter, and `""` unbinds the command. Set it
   with the daemon's `preference.set`, then restart the TUI.
 - **What a command does.**

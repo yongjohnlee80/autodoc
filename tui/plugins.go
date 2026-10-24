@@ -26,6 +26,7 @@ func (pl *plugins) loadPlugins() {
 	pl.pluginList = discoverPlugins(pl.pluginOpt.Dir)
 	pl.syncPluginEntries()
 	pl.refreshPlugins()
+	pl.sayCardsPending()
 	if pl.c.Attached() { // read anew, not at New: the program runs, and attach launched the first ones
 		pl.launchServices()
 	}
@@ -48,6 +49,10 @@ func (pl *plugins) openPlugin(key string) {
 	e := pl.pluginList[i]
 	if e.reason != "" {
 		pl.c.Notify(e.label())
+		return
+	}
+	if pl.cardPending(e) {
+		pl.c.Notify(pl.cardPendingNotice(e))
 		return
 	}
 	r, err := pl.startPlugin(e)

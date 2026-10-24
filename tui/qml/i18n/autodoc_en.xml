@@ -4029,6 +4029,10 @@ WHAT A KEY NEEDS
         <source>%1 was put in the folder by hand: update it there</source>
         <translation>%1 was put in the folder by hand: update it there</translation>
     </message>
+    <message id="autodoc.notice.pluginpanels.card_after_restart">
+        <source>%1 is installed: its card appears after AutoDoc restarts</source>
+        <translation>%1 is installed: its card appears after AutoDoc restarts</translation>
+    </message>
     <message id="autodoc.notice.pluginpanels.card_hidden">
         <source>%1 card hidden: %2</source>
         <translation>%1 card hidden: %2</translation>
@@ -5526,6 +5530,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.pick.statuses">
         <source>statuses</source>
         <translation>statuses</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.card_after_restart">
+        <source>%1 — its card appears after a restart</source>
+        <translation>%1 — its card appears after a restart</translation>
     </message>
     <message id="autodoc.text.plugincmds.close">
         <source>Close</source>

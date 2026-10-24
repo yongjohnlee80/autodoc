@@ -20,7 +20,9 @@ import (
 // and its floating rectangle in the preferences under its panel's id (tui.card_<name>.*).
 //
 // The panels are written into main.qml as the program is built, one for each card plugin found
-// then (cardPanelsQML): a plugin added while AutoDoc runs has its panel from the next start.
+// then (cardPanelsQML): a plugin added while AutoDoc runs has its panel from the next start. Until
+// then it is pending (cardPending): AutoDoc says so once as it is found, its Plugins menu row says
+// so, and opening it or running its commands says so again rather than failing.
 //
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
 // its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
@@ -78,6 +80,33 @@ func (pl *plugins) fixCards() []*cardPanel {
 		pl.cardOrder = append(pl.cardOrder, c)
 	}
 	return pl.cardOrder
+}
+
+// cardPending reports e a card plugin found after the program was built: it has no panel until
+// AutoDoc's next start.
+func (pl *plugins) cardPending(e pluginEntry) bool {
+	return pl.cardOrder != nil && e.reason == "" && e.m.Card() && pl.cards[e.m.Name] == nil
+}
+
+// cardPendingNotice is what the user is told of the pending card e.
+func (pl *plugins) cardPendingNotice(e pluginEntry) string {
+	return pl.c.Trf("autodoc.notice.pluginpanels.card_after_restart", e.label())
+}
+
+// sayCardsPending tells the user of each card plugin found since the program was built, once while
+// it stays in the folder: removed and added again, it is told again.
+func (pl *plugins) sayCardsPending() {
+	said := map[string]bool{}
+	for _, e := range pl.pluginList {
+		if !pl.cardPending(e) {
+			continue
+		}
+		said[e.m.Name] = true
+		if !pl.pendingSaid[e.m.Name] {
+			pl.c.Notify(pl.cardPendingNotice(e))
+		}
+	}
+	pl.pendingSaid = said
 }
 
 // cardSpecs are the card panels' specs.
