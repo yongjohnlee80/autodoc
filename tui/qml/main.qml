@@ -256,9 +256,10 @@ Window {
             direction: Tui.Horizontal
             Repeater {
                 model: App.dock
-                // a hidden panel's icon is dimmed; a click shows or hides it (tui/dock.go)
+                // a hidden panel's icon is dimmed, and lit in the bar's accent twice as it hides; a
+                // click shows or hides it (tui/dock.go)
                 Button { text: model.icon; flat: true; toolTipText: model.title; onClicked: App.goDock(model.key)
-                         palette.buttonText: model.hidden ? Theme.document.lineNumber : Theme.menu.windowText }
+                         palette.buttonText: model.flash ? Theme.menu.accent : model.hidden ? Theme.document.lineNumber : Theme.menu.windowText }
             }
         }
     }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"time"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -36,6 +37,18 @@ func (h *Host) dockTargets() []widgetTarget {
 	return out
 }
 
+// livesOnClosing reports that s's panel, its drawer closing, lives on in the dock: its own Alive, or
+// a tab running that is not closing (a strip's x hangs them all up first, and leaves the dock).
+func (h *Host) livesOnClosing(s PanelSpec) bool {
+	if s.Alive != nil && s.Alive() {
+		return true
+	}
+	if tabs, ok := h.tabsOf(s.View); ok {
+		return slices.ContainsFunc(tabs.Tabs(), func(t widget.TerminalTab) bool { return t.Running && !t.Closing })
+	}
+	return false
+}
+
 // panelAlive reports that s's panel lives on with its drawer closed: its own Alive says so, or its
 // view is a TerminalTabs with a tab running (the terminal's shells, the agents' instances).
 func (h *Host) panelAlive(s PanelSpec) bool {
@@ -57,12 +70,84 @@ func (h *Host) dockRowOf(_ int, t widgetTarget) rowOf {
 	if title == "" {
 		title = t.name
 	}
-	return rowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.panelHidden(t.panel)}
+	return rowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.panelHidden(t.panel),
+		"flash": t.panel != "" && h.dockFlashLit(t.panel)}
 }
 
 // newDockRows is App.dock's model.
 func (h *Host) newDockRows() *rows[widgetTarget] {
-	return newRows(tuidecl.NewListModel("key", "icon", "title", "hidden"), h.dockRowOf)
+	return newRows(tuidecl.NewListModel("key", "icon", "title", "hidden", "flash"), h.dockRowOf)
+}
+
+// A HIDE FLASHES ITS ICON (Johno, 2026-10-24): a panel hidden into the dock, however (the dock's
+// click, the editor's icon, a strip's _, the terminal's and the agents' toggles, Escape), lights its
+// icon twice, a step apart, so the eye finds where it went: lit, unlit, lit, then its hidden look.
+// A panel closed out of the dock flashes nothing. Shown again mid-flash, its icon is its own at
+// once; hidden again, the flash starts over; gone from the dock, the flash ends with it.
+
+// dockFlashStep is each step of a hide's flash, and dockFlashSteps their number: lit on the even ones.
+const (
+	dockFlashStep  = 150 * time.Millisecond
+	dockFlashSteps = 4
+)
+
+// dockFlash is one hide's flash of a panel's icon: the step it is at.
+type dockFlash struct{ step int }
+
+// flashed, when a test sets it, hears each step of a flash on the loop: the panel, and its icon lit
+// or not.
+var flashed func(id string, lit bool)
+
+// flashDock starts panel id's flash, over any under way: the older one's steps find it replaced.
+func (h *Host) flashDock(id string) {
+	if h.dockFlash == nil {
+		h.dockFlash = map[string]*dockFlash{}
+	}
+	f := &dockFlash{}
+	h.dockFlash[id] = f
+	h.refreshDock()
+	if flashed != nil {
+		flashed(id, h.dockFlashLit(id))
+	}
+	h.after(dockFlashStep, func() { h.flashNext(id, f) })
+}
+
+// flashNext is a flash's next step, on the loop: none once the flash was replaced, and the last, or
+// the panel no longer hidden in the dock, ends it.
+func (h *Host) flashNext(id string, f *dockFlash) {
+	if h.dockFlash[id] != f {
+		return
+	}
+	f.step++
+	if f.step == dockFlashSteps-1 || !h.hiddenInDock(id) { // the last step, unlit, is the hidden look
+		delete(h.dockFlash, id)
+	} else {
+		h.after(dockFlashStep, func() { h.flashNext(id, f) })
+	}
+	h.refreshDock()
+	if flashed != nil {
+		flashed(id, h.dockFlashLit(id))
+	}
+}
+
+// dockFlashLit reports whether panel id's icon is lit now: its flash at an even step, and the panel
+// still hidden in the dock.
+func (h *Host) dockFlashLit(id string) bool {
+	f := h.dockFlash[id]
+	return f != nil && f.step%2 == 0 && h.hiddenInDock(id)
+}
+
+// hiddenInDock reports whether panel id is in the dock and not shown: open and hidden, or closed and
+// living on (panelAlive).
+func (h *Host) hiddenInDock(id string) bool {
+	s := h.panelSpec(id)
+	switch {
+	case s == nil:
+		return false
+	case h.panelOpen[id]:
+		return h.panelHidden(id)
+	}
+	return h.panelAlive(*s)
 }
 
 // refreshDock lists the dock again and holds the bar shown while it lists more than the editor.
@@ -122,7 +207,13 @@ func (h *Host) hideOrShowPanels() {
 }
 
 // hidePanel hides an open panel, not closed (golib's window minimize): it keeps all it holds.
-func (h *Host) hidePanel(id string) { h.keep(h.p.Call(id, "minimize")) }
+func (h *Host) hidePanel(id string) {
+	if err := h.p.Call(id, "minimize"); err != nil {
+		h.keep(err)
+		return
+	}
+	h.flashDock(id)
+}
 
 // showPanel shows a hidden panel again as it was (a minimized Drawer's open restores it).
 func (h *Host) showPanel(id string) { h.keep(h.p.Call(id, "open")) }
