@@ -78,7 +78,7 @@ func TestTheExplorerOpensWhatIsActivated(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.toggle()
-	if want := []string{"explorerTree.toggleExpanded", "explorer.close", "explorer.toggle"}; !slices.Equal(c.views, want) {
+	if want := []string{"explorerTree.toggleExpanded", "explorer.close", "explorer.toggle(0)"}; !slices.Equal(c.views, want) {
 		t.Errorf("views called: %v, want %v", c.views, want)
 	}
 	if !slices.Equal(c.files, []string{"kb:a.md"}) {
