@@ -24,7 +24,7 @@ func BenchmarkChunk(b *testing.B) {
 	b.Run("Markdown", func(b *testing.B) {
 		b.SetBytes(int64(len(md)))
 		for b.Loop() {
-			doc := markdown.Parse(md, markdown.GFM(), markdown.Obsidian())
+			doc := markdown.Parse(md, markdown.WithGFM(), markdown.WithObsidian())
 			meta := chunk.ReadMeta(doc, "bench.md")
 			hashed(chunk.Markdown(doc, meta.Title, 512))
 		}
