@@ -168,7 +168,7 @@ files it opens: "opens .ipynb files".
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 9**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 10**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -199,10 +199,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A plugin that opens a kind of file says `protocol = 9`.** Its `[open]` names the extensions it
   opens and the command it opens them with (below). Nothing on the wire changes. An older AutoDoc
   refuses the manifest, so a file the plugin would translate never opens as raw text instead.
+- **A card or dialog that draws pixels says `protocol = 10`.** Its `[surface]` asks for a pixel
+  surface (below): frames over a side channel, and the pointer in dp. An older AutoDoc refuses the
+  manifest, so a plugin never runs where its frames would have nowhere to go.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 9, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 10, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -210,7 +213,9 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   - `AUTODOC_PLUGIN_PROTOCOL` (the manifest's protocol);
   - `AUTODOC_PLUGIN_DIR`;
   - `AUTODOC_SOCKET`, the daemon's socket, for a plugin that uses AutoDoc's API as any client does
-    (`AGENTS.md`).
+    (`AGENTS.md`);
+  - `AUTODOC_PLUGIN_SURFACE_FD=3`, for a pixel surface's side channel, when the plugin has one
+    (protocol 10, below).
 - **stdout is the protocol's.** Write anything else to stderr, which goes to the plugin's log.
 - **When it starts.**
   - A dialog or a card starts from its Plugins menu entry, or from one of its commands.
@@ -528,6 +533,69 @@ command    = "import"     # one of its [[commands]]: run with the file's absolut
   never comes back to it.
 - **Two plugins claiming one extension:** the first in the Plugins list opens it. Manage plugins… shows the other's row with `opens .ipynb: shadowed by <name>`.
 - Creating a file (File › New file…, a draft's first save) opens it, and is not handed to a plugin.
+
+### Pixel surfaces (`[surface]`, protocol 10)
+
+A card or dialog can draw pixels instead of cells: a picture of its own, a canvas, a web page
+(ADR 1792797354). In AutoDoc's GUI the surface fills the card's area; in the terminal the plugin
+draws cells, as any plugin does.
+
+```text
+protocol = 10
+
+[surface]
+required     = false     # true: a host without pixels (the terminal) doesn't open the plugin
+context_menu = "host"    # "host": a right press opens the card's menu; "plugin": it is the plugin's press
+text_input   = true      # the surface takes keys and IME text, and reports a caret
+```
+
+- **The side channel.** Frames don't travel on stdout. The plugin gets a Unix socket as fd 3,
+  named in `AUTODOC_PLUGIN_SURFACE_FD`, which carries buffer handles. Set close-on-exec on it
+  before starting any process of your own (the Go SDK does), so a child never inherits it.
+- **Generations.** After `plugin.open`, `plugin.surface {gen, w, h, scale, kinds}` gives the
+  surface's size in dp, the device scale, and the frame kinds the window draws. The side channel
+  brings the same generation's buffers: shared memory the host allocates, which the plugin maps
+  read-write. A resize, a scale change or new caps is a new generation. Match the two halves by
+  `gen`, acknowledge it (`surface.ack`), and draw only for it.
+- **Frames.** Draw into a buffer you have credit for, and send `frame {seq, gen, buffer}` with its
+  pixels complete: there is no fence. The host answers each frame's outcome (`frame.done`:
+  drawn, superseded, not_shown, unsupported, closed or retired), then the buffer's credit
+  (`buffer.free`), in that order. A frame of a retired generation, in transit across a resize, is
+  answered `retired`.
+- **Input.** The pointer comes as `plugin.surface.pointer {kind, button, x, y, dx, dy, count,
+  ctrl, alt, shift, super, t}`, in frame-local dp: move, press and release of left, middle and
+  right, scroll and leave. The Go SDK hands a busy handler consecutive moves coalesced to the
+  latest, and scrolls summed. Keys are `plugin.key`, as ever.
+- **IME.** The host keeps the composition: it draws the preedit at the caret the plugin reports
+  (`host.surface.caret {x, y, w, h, baseline}`, or `{}` for none) and sends the committed text as
+  `plugin.key`. With `text_input = false`, keys still come, but there is no caret and no IME text.
+- **The clipboard.** `host.clipboard.write {text}` writes it. A plugin reads it only by the user's
+  paste, `plugin.paste {text}`.
+- **The pointer's shape.** `host.surface.cursor {shape}` asks for it.
+- **What closes the plugin.** A malformed side-channel message, a frame for a buffer it has no
+  credit for, a repeated `seq`, or a side channel it stops reading. The close is the usual one.
+- **Today:** Linux, with shared memory; macOS and plugin-exported DMA-BUFs follow.
+
+In Go, a `Handler` that implements `plugin.SurfaceHandler` gets the surface:
+
+```go
+func (s *spike) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
+	go func() {
+		for {
+			b, err := sf.Buffer(ctx) // a credited buffer of the current generation
+			if err != nil {
+				return
+			}
+			draw(b.RGBA())
+			sf.Present(b, image.Rectangle{}, lastInputT)
+		}
+	}()
+}
+func (s *spike) SurfacePointer(p plugin.SurfacePointer) { /* p.X, p.Y in dp */ }
+```
+
+[`examples/surface-go`](../examples/surface-go) is a complete example: an animated test pattern
+with every input event drawn over it, and its frame rate and latency in its log.
 
 ### Calls (`calls = [...]`, protocol 3)
 

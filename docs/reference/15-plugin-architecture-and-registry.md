@@ -26,9 +26,9 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 9
+## 15.3 Progression of Protocols 1 Through 10
 
-AutoDoc's plugin contract evolves through six cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
+AutoDoc's plugin contract evolves through ten cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
 ![Evolution of AutoDoc Plugin Protocols 1 to 9](plugin-protocols.mmd)
 
@@ -90,6 +90,15 @@ Protocol 8 lets a plugin speak where the user is, whatever panel is open. `host.
 ### Protocol 9: Opening Files
 
 Protocol 9 lets a plugin open a kind of file AutoDoc does not read itself. Its manifest's `[open]` names the extensions (`extensions = [".ipynb"]`) and one of its commands (`command = "import"`). However the file is opened (the picker, File › Open file…, the explorer, a link, back and forward, a plugin's `file.open_path`), AutoDoc runs that command with the file's absolute path, starting the plugin first when it is not running; nothing opens as text. The plugin decides what opening means: autodoc-jupyter writes an `.ipynb` as a lab note beside it and opens that. A plugin never claims AutoDoc's own extensions (`.md`, `.txt`, `.yaml`, `.csv`, `.html`, …), and nothing on the wire changes.
+
+### Protocol 10: Pixel Surfaces
+
+Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI its area is a native view drawing a golib gui stream, and in the terminal the plugin draws cells. Frames cross a side channel, a Unix socket inherited as fd 3, never stdout:
+- The host allocates each generation's shared-memory buffers, sealed so they can't shrink, and maps them read-only.
+- The plugin presents a buffer it holds credit for.
+- The host answers each frame's outcome, then the buffer's credit, so every buffer has at most one frame in flight.
+
+The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. Linux ships first; macOS and plugin-exported DMA-BUFs follow (ADR 1792797354).
 
 ---
 
