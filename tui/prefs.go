@@ -94,6 +94,7 @@ type prefs struct {
 	todosEdge                   string // where the todos panel opens: the left edge unless chosen
 	ruler                       int
 	keymap                      string
+	keymapChosen                bool                       // a keymap was ever stored (tui.editor.keymap): the Vim question is not asked
 	wrap, lineNumbers           bool                       // the page: long lines wrapped at its width; each line's number
 	indentMarks                 string                     // which lines show their indentation as marks (indentMarks)
 	images                      bool                       // previews as images where the terminal draws them (preview.go)
@@ -285,6 +286,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	if s, ok := str(prefLuaGrants); ok {
 		p.luaGrants = luaGrantsOf(s)
 	}
+	_, p.keymapChosen = str(prefKeymap) // the first run's Vim question asks only while none is (vimquestion.go)
 	for k, v := range m {
 		readPluginPref(&p, k, v)
 	}
@@ -355,6 +357,7 @@ func (h *Host) applyPrefs(p prefs) {
 	h.record(h.p.SetMany(st))
 	h.syncPageWidth()
 	h.applyFonts(p)
+	h.applyTerminalKeymap(p)   // the terminals' normal mode for the keymap (terminalkeymap.go)
 	h.reg.preferencesChanged() // the SPC p letters the user chose among them (plugins: PreferencesChanged)
 	h.applyToastPrefs()
 	h.syncStages(true)
@@ -558,7 +561,7 @@ func (h *Host) setKeymap(name string) {
 		h.say(h.trf("autodoc.notice.prefs.no_editor_mode", strconv.Quote(name)))
 		return
 	}
-	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap = name })
+	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap, p.keymapChosen = name, true })
 	h.say(h.trf("autodoc.notice.prefs.editor_mode", keymapLabels[indexOf(keymaps, name)]))
 }
 
