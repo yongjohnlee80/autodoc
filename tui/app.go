@@ -76,8 +76,12 @@ type Host struct {
 	aboutInfo  AboutInfo // what Help › About lists (help.go)
 	connectErr error     // the last connect's failure, which About's text names (help.go), as it did when composed
 	// layoutSrc is the layout as last loaded, dev the -dev directory ("" for none), theme the one
-	// the screen wears (theme.go).
-	layoutSrc    []byte
+	// the screen wears (theme.go). layoutBase is layoutSrc before the card panels are written in:
+	// a theme switch and a card set's change both write the current set into it (pluginpanels.go).
+	layoutSrc  []byte
+	layoutBase []byte
+	// reloadCards reloads the document for a card set's change; a test replaces it to refuse one
+	reloadCards  func(src []byte, sources map[string]any) (decl.Result, error)
 	dev          string
 	theme        string
 	language     string // the UI's language, golib's tag (language.go); "" until the preferences apply
@@ -449,6 +453,9 @@ func newHost(session *Session, opt Options) *Host {
 	h.widgetRows = newWidgetRows()
 	h.dockRows = h.newDockRows()
 	h.minimized = widget.NewMinimizedWindows()
+	h.reloadCards = func(src []byte, sources map[string]any) (decl.Result, error) {
+		return h.p.ReloadWithSources(src, sources)
+	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
@@ -528,7 +535,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
 			}
 		}
-		src = h.plugins.withCardPanels(withRelationViews(src, h.gui)) // the GUI's relation views (relationmap.go), a panel for each card plugin found (pluginpanels.go)
+		h.layoutBase = withRelationViews(src, h.gui) // the GUI's relation views (relationmap.go)
+		src = h.plugins.withCardPanels(h.layoutBase) // a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key

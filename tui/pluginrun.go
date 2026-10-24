@@ -99,7 +99,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 			card = c.view
 		}
 		if card == nil {
-			return nil, errors.New("it is a card, and its panel comes with AutoDoc's next start")
+			return nil, errors.New("it is a card, and its panel is not built yet")
 		}
 	}
 	surfaceChild, attachSurface, abortSurface := pl.openSurfaceChannel(e)

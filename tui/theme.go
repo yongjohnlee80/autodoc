@@ -62,33 +62,43 @@ func (h *Host) switchTheme(name string) {
 		h.notify(err.Error())
 		name = h.defaultTheme()
 	}
-	src := h.layoutSrc
-	if h.dev != "" {
-		b, err := os.ReadFile(path.Join(h.dev, "main.qml"))
-		if err != nil {
-			h.failed("theme", err)
-			return
-		}
-		src = h.plugins.withCardPanels(withRelationViews(b, h.gui))
+	base, err := h.layoutBaseNow()
+	if err != nil {
+		h.failed("theme", err)
+		return
 	}
-	if themeOf(src) == "" {
+	if themeOf(base) == "" {
 		h.notify(h.tr("autodoc.notice.theme.main_qml_imports_no_theme_to_switch"))
 		return
 	}
-	next := themeImport.ReplaceAll(src, []byte("import autodoc.theme."+name+" "+moduleVersion))
+	nextBase := themeImport.ReplaceAll(base, []byte("import autodoc.theme."+name+" "+moduleVersion))
 	// after the handler: a menu row's signal is still being emitted, and the engine reconciles only
 	// between emissions
 	h.p.Post(func() {
+		next := h.plugins.withCardPanels(nextBase) // the card set as it is when the reload runs
 		if _, err := h.p.Reload(next); err != nil {
 			h.failed("theme", err)
 			return
 		}
-		h.layoutSrc, h.theme = next, name
+		h.layoutSrc, h.layoutBase, h.theme = next, nextBase, name
 		h.set("App.userThemes", h.userThemeRows())
 		h.set("App.builtinThemes", h.builtinThemeRows())
 		h.reg.themeChanged()
 		h.say(h.trf("autodoc.notice.theme.theme", name))
 	})
+}
+
+// layoutBaseNow is the layout before the card panels are written in: layoutBase, or -dev's
+// main.qml read again with the GUI's relation views.
+func (h *Host) layoutBaseNow() ([]byte, error) {
+	if h.dev == "" {
+		return h.layoutBase, nil
+	}
+	b, err := os.ReadFile(path.Join(h.dev, "main.qml"))
+	if err != nil {
+		return nil, err
+	}
+	return withRelationViews(b, h.gui), nil
 }
 
 func (h *Host) defaultTheme() string {

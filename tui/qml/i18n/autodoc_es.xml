@@ -4038,13 +4038,17 @@ LO QUE NECESITA UNA TECLA
         <source>%1 was put in the folder by hand: update it there</source>
         <translation>%1 se puso en la carpeta a mano: actualízalo allí</translation>
     </message>
-    <message id="autodoc.notice.pluginpanels.card_after_restart">
-        <source>%1 is installed: its card appears after AutoDoc restarts</source>
-        <translation>%1 está instalado: su tarjeta aparece al reiniciar AutoDoc</translation>
-    </message>
     <message id="autodoc.notice.pluginpanels.card_hidden">
         <source>%1 card hidden: %2</source>
         <translation>tarjeta de %1 oculta: %2</translation>
+    </message>
+    <message id="autodoc.notice.pluginpanels.card_without_panel">
+        <source>%1 has no panel yet: it opens after AutoDoc restarts</source>
+        <translation>%1 aún no tiene panel: se abre al reiniciar AutoDoc</translation>
+    </message>
+    <message id="autodoc.notice.pluginpanels.restart_needed">
+        <source>AutoDoc could not rebuild its screen: restart AutoDoc to show the card plugins</source>
+        <translation>AutoDoc no pudo reconstruir su pantalla: reinicia AutoDoc para mostrar los plugins de tarjeta</translation>
     </message>
     <message id="autodoc.notice.pluginrun.answered_wrongly">
         <source>%1 answered wrongly: %2</source>
@@ -5539,10 +5543,6 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.text.pick.statuses">
         <source>statuses</source>
         <translation>estados</translation>
-    </message>
-    <message id="autodoc.text.plugincmds.card_after_restart">
-        <source>%1 — its card appears after a restart</source>
-        <translation>%1 — su tarjeta aparece al reiniciar</translation>
     </message>
     <message id="autodoc.text.plugincmds.close">
         <source>Close</source>
