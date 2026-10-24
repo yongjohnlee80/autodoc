@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -76,6 +77,7 @@ type pluginRun struct {
 	surfaceStream any
 	caret         plugin.Caret
 	caretOK       bool
+	pointer       tuicore.PointerShape // under mu: the plugin's last host.surface.cursor
 
 	exited   chan struct{} // closed when the process has exited
 	exitErr  error
@@ -378,11 +380,18 @@ func (r *pluginRun) onNote(method string, params []any) {
 		r.caret, r.caretOK = c, ok
 		r.mu.Unlock()
 	case plugin.MethodPointerShape:
-		// golib gui's pointer-shape capability is the ADR's additive golib half (§4.10), not in the
-		// spike: the shape is logged
-		if shape, err := plugin.ReadPointerShape(params); err == nil && r.surface != nil {
-			r.log.note("host.surface.cursor " + shape + " (not drawn yet)")
+		shape, err := plugin.ReadPointerShape(params)
+		if err != nil || r.surface == nil {
+			return
 		}
+		r.mu.Lock()
+		r.pointer = pointerShapeOf(shape)
+		r.mu.Unlock()
+		r.pl.c.Post(func() { // a frame shows it, though the plugin presents none
+			if v := r.view; v != nil {
+				v.MarkDirty()
+			}
+		})
 	case plugin.MethodClipboardWrite:
 		if text, err := plugin.ReadClipboardWrite(params); err == nil && r.surface != nil {
 			r.pl.c.Post(func() {

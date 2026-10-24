@@ -2539,6 +2539,10 @@ THE PANELS
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
+  In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
+  follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
+  drag. A link in the editor is followed with SPC j or the menu, not a click, so it keeps the
+  I-beam.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -2652,6 +2656,10 @@ WHAT A KEY NEEDS
   SPC b는 이전 문서의 떠났던 위치로 돌아갑니다 (Ctrl+O는 한 번에 점프 하나씩, 문서 안에서도
   뒤로 갑니다). 페이지의 오른쪽 클릭 메뉴에 둘 다 있습니다: 링크로 이동(링크 위에서)
   과 뒤로.
+  GUI에서 포인터는 클릭이 하는 일을 알려 줍니다: 텍스트 위에서는 I자 모양, 클릭이 링크를
+  따라가는 곳(HTML 창의 링크와 링크 패널의 행)에서는 손 모양, 끌어서 크기를 바꾸는 가장자리와
+  구분선 위에서는 화살표. 편집기 안의 링크는 클릭이 아니라 SPC j나 메뉴로 따라가므로 I자
+  모양 그대로입니다.
   에이전트(SPC g, 이동 › 에이전트)는 페이지 위에서 AI 에이전트 CLI를 실행하며, 환경설정에서
   다른 가장자리나 가운데를 정하지 않으면 위쪽에서 열립니다: 시스템 › 에이전트 프로필…(SPC G)의 기본값으로,
   각 프로필은 이름과 시작 명령(claude, codex…)입니다.

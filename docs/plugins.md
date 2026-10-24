@@ -569,14 +569,17 @@ text_input   = true      # the surface takes keys and IME text, and reports a ca
   answered `retired`.
 - **Input.** The pointer comes as `plugin.surface.pointer {kind, button, x, y, dx, dy, count,
   ctrl, alt, shift, super, t}`, in frame-local dp: move, press and release of left, middle and
-  right, scroll and leave. The Go SDK hands a busy handler consecutive moves coalesced to the
-  latest, and scrolls summed. Keys are `plugin.key`, as ever.
+  right, scroll and leave. A scroll's `dx` and `dy` are its precise distance in dp, the part a
+  touchpad scrolls between wheel steps included. The Go SDK hands a busy handler consecutive
+  moves coalesced to the latest, and scrolls summed. Keys are `plugin.key`, as ever.
 - **IME.** The host keeps the composition: it draws the preedit at the caret the plugin reports
   (`host.surface.caret {x, y, w, h, baseline}`, or `{}` for none) and sends the committed text as
   `plugin.key`. With `text_input = false`, keys still come, but there is no caret and no IME text.
 - **The clipboard.** `host.clipboard.write {text}` writes it. A plugin reads it only by the user's
   paste, `plugin.paste {text}`.
-- **The pointer's shape.** `host.surface.cursor {shape}` asks for it.
+- **The pointer's shape.** `host.surface.cursor {shape}` sets the pointer over the surface, until
+  the next one: `default`, `text`, `hand`, `crosshair`, `move`, `resize-ew`, `resize-ns` or
+  `not-allowed`. A name the host doesn't know is the default.
 - **What closes the plugin.** A malformed side-channel message, a frame for a buffer it has no
   credit for, a repeated `seq`, or a side channel it stops reading. The close is the usual one.
 - **Today:** Linux, with shared memory; macOS and plugin-exported DMA-BUFs follow.

@@ -365,3 +365,31 @@ func TestGoToLinkDropsAnAnswerForAFileNoLongerOpen(t *testing.T) {
 		t.Fatalf("the late answer opened %s from doc.md", p)
 	}
 }
+
+// The links' rows are a hand: a row opens its note (main.qml's cursorShape). Only rows that hold
+// a link are; the space past the last row is not.
+func TestTheLinksRowsAreAHand(t *testing.T) {
+	d := startDaemon(t, relationsKB)
+	r := attached(t, d)
+	r.openByPicker(t, "doc.md")
+	r.waitFile(t, "doc.md")
+	r.leader(t, 'l')
+	r.waitRelations(t, docRelations)
+	regions := onLoop(r, func() []tuicore.PointerRegion {
+		// the ListView's list is its adapter node's own child, mounted, not a node of the document
+		n, _ := r.h.p.Tree().NodeByID("relationsList")
+		view, _ := r.h.p.Adapter().Component(n)
+		ctx := view.(interface{ Context() *tuicore.Context }).Context()
+		for _, c := range ctx.Children(view) {
+			if l, ok := c.(*widget.List[int]); ok {
+				return l.PointerShapes(nil)
+			}
+		}
+		t.Error("no list in the relationsList view")
+		return nil
+	})
+	// the rows that show: all of them, or as many as the panel is tall
+	if len(regions) != 1 || regions[0].Shape != tuicore.PointerHand || regions[0].Rect.H <= 0 || regions[0].Rect.H > len(docRelations) {
+		t.Fatalf("the links' rows: %+v, want a hand over at most its %d rows", regions, len(docRelations))
+	}
+}

@@ -2539,6 +2539,10 @@ THE PANELS
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
+  In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
+  follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
+  drag. A link in the editor is followed with SPC j or the menu, not a click, so it keeps the
+  I-beam.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -2653,6 +2657,10 @@ OS PAINÉIS
   SPC b volta ao documento anterior, onde você parou (Ctrl+O recua um salto por
   vez, inclusive dentro de um documento). O menu do botão direito da página tem os dois, Ir para o link (num link)
   e Voltar.
+  Na GUI o ponteiro mostra o que um clique faz: um I sobre o texto, uma mão onde um clique
+  segue um link (os links do painel HTML e as linhas dos links), setas numa borda ou divisor
+  que se arrasta. Um link no editor é seguido com SPC j ou pelo menu, não com um clique, então
+  mantém o I.
   O agente (SPC g, Ir › Agente) roda a CLI de um agente de IA sobre a página, a partir do topo, a menos que
   Preferências defina outra borda ou o centro: o padrão de Sistema › Perfis de agente… (SPC G),
   cada perfil um nome e o comando que o inicia (claude, codex…).
