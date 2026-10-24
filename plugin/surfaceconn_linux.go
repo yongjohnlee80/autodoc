@@ -80,27 +80,27 @@ func (c *SurfaceConn) Send(m map[string]any, fds ...int) error {
 }
 
 // sendmsg is one datagram, by the conn's deadline. A signal interrupts neither: an EINTR is tried
-// again against the same deadline (a host reaps its children's SIGCHLDs all the time).
+// again, against the same deadline (a host reaps its children's SIGCHLDs all the time).
 func (c *SurfaceConn) sendmsg(b, oob []byte) error {
 	if c.timeout == 0 {
 		for {
-			if err := unix.Sendmsg(c.fd, b, oob, nil, 0); err != unix.EINTR {
+			if err := sysSendmsg(c.fd, b, oob, nil, 0); err != unix.EINTR {
 				return err
 			}
 		}
 	}
 	deadline := time.Now().Add(c.timeout)
 	for {
-		err := unix.Sendmsg(c.fd, b, oob, nil, unix.MSG_DONTWAIT)
-		if err != unix.EAGAIN {
-			if err == unix.EINTR {
-				continue
-			}
+		err := sysSendmsg(c.fd, b, oob, nil, unix.MSG_DONTWAIT)
+		if err != unix.EAGAIN && err != unix.EINTR {
 			return err
 		}
-		left := time.Until(deadline)
+		left := time.Until(deadline) // before any retry: no run of interruptions outlasts it
 		if left <= 0 {
 			return unix.EAGAIN
+		}
+		if err == unix.EINTR {
+			continue
 		}
 		// room for a datagram, or the deadline; a signal's EINTR comes back here, with less time
 		ms := int((left + time.Millisecond - 1) / time.Millisecond)
@@ -109,6 +109,9 @@ func (c *SurfaceConn) sendmsg(b, oob []byte) error {
 		}
 	}
 }
+
+// sysSendmsg is the send syscall: a test's interruptions replace it.
+var sysSendmsg = unix.Sendmsg
 
 // surfaceLimits bound a datagram's decode: it is the peer's, so attacker-adjacent.
 var surfaceLimits = func() *msgpack.Limits {

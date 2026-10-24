@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -212,5 +213,33 @@ func TestASignalNeverEndsATimedSend(t *testing.T) {
 	}
 	if signals.Load() == 0 {
 		t.Fatal("no signal was sent: the interruption went unexercised")
+	}
+}
+
+// Interruptions without end never hold a timed send past its deadline: it is checked before each
+// retry, and the send says it passed.
+func TestEndlessInterruptionsEndATimedSendAtItsDeadline(t *testing.T) {
+	host, _ := pair(t)
+	host.timeout = 50 * time.Millisecond
+	var interrupting atomic.Bool
+	interrupting.Store(true)
+	sysSendmsg = func(fd int, p, oob []byte, to unix.Sockaddr, flags int) error {
+		if interrupting.Load() {
+			return unix.EINTR
+		}
+		return unix.Sendmsg(fd, p, oob, to, flags)
+	}
+	done := make(chan error, 1)
+	t.Cleanup(func() { interrupting.Store(false); <-done; sysSendmsg = unix.Sendmsg }) // the send ends first
+	start := time.Now()
+	go func() { done <- host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: 1, Outcome: "drawn"})) }()
+	select {
+	case err := <-done:
+		done <- err // for the cleanup
+		if !errors.Is(err, unix.EAGAIN) || time.Since(start) > time.Second {
+			t.Fatalf("after %v: %v, want the deadline's EAGAIN at about 50ms", time.Since(start), err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("interruptions held a timed send past its deadline") // the cleanup lets it go
 	}
 }
