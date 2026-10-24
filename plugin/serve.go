@@ -66,6 +66,16 @@ type (
 		FetchRows(f TableFetch)
 		TableClosed(id string)
 	}
+	// SurfaceHandler draws a pixel surface (protocol 10, [surface]): Surface is each generation of
+	// it (the first after Open; again at a resize, a scale or a caps change), and SurfacePointer the
+	// pointer on it in dp. Consecutive moves reach it coalesced to the latest, and consecutive
+	// scrolls summed. A host that draws no pixels never calls Surface: the plugin draws cells.
+	SurfaceHandler interface {
+		Surface(s *Surface, info SurfaceInfo)
+		SurfacePointer(p SurfacePointer)
+	}
+	// Paster takes the user's paste chord on a focused surface (protocol 10).
+	Paster interface{ Paste(text string) }
 )
 
 // Base is a Handler that does nothing: a service plugin, which has no dialog, embeds it and adds
@@ -86,6 +96,37 @@ type Peer struct {
 	protocol atomic.Int64 // plugin.open's, once opened
 	// closeReason is plugin.close's reason (protocol 7), set before Close is called
 	closeReason atomic.Value
+	// surface is the side channel's, when the host gave one (protocol 10); nil otherwise
+	surface *Surface
+}
+
+// ErrNoSurface is a surface call on a host that gave no pixel surface (protocol 10, [surface]).
+var ErrNoSurface = errors.New("plugin: the host gave no pixel surface")
+
+// SetCaret tells the host where the surface's text caret is, in frame-local dp, for its IME: it
+// draws the preedit there and places the candidate window by it. The zero Caret is none.
+func (p *Peer) SetCaret(c Caret) error {
+	if p.surface == nil {
+		return ErrNoSurface
+	}
+	return p.link.Notify(p.ctx, MethodCaret, CaretParams(c))
+}
+
+// SetPointerShape asks for the pointer's shape over the surface: "default", "text", "hand",
+// "crosshair", "move", "resize-ew", "resize-ns" or "not-allowed".
+func (p *Peer) SetPointerShape(shape string) error {
+	if p.surface == nil {
+		return ErrNoSurface
+	}
+	return p.link.Notify(p.ctx, MethodPointerShape, PointerShapeParams(shape))
+}
+
+// WriteClipboard writes text to the clipboard. A plugin reads it only by the user's paste (Paster).
+func (p *Peer) WriteClipboard(text string) error {
+	if p.surface == nil {
+		return ErrNoSurface
+	}
+	return p.link.Notify(p.ctx, MethodClipboardWrite, ClipboardWriteParams(text))
 }
 
 // ErrNoSession is a slot set on a host that opened the plugin at a protocol before 7.
@@ -333,7 +374,8 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 	}
 	defer link.Close()
 	defer calls.close()
-	peer := &Peer{ctx: ctx, link: link, calls: calls}
+	// the side channel first, before the handler can start a process: close-on-exec at once
+	peer := &Peer{ctx: ctx, link: link, calls: calls, surface: openSurface()}
 	go func() {
 		select {
 		case <-link.Done():
@@ -442,6 +484,25 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 					tf.TableClosed(id)
 				}
 			}
+		case MethodSurface:
+			if info, err := ReadSurface(n.params); err == nil && opened && peer.surface != nil {
+				peer.surface.setInfo(info)
+				if sh, ok := h.(SurfaceHandler); ok {
+					sh.Surface(peer.surface, info)
+				}
+			}
+		case MethodSurfacePointer:
+			if sh, ok := h.(SurfaceHandler); ok && opened {
+				if p, err := ReadSurfacePointer(n.params); err == nil {
+					sh.SurfacePointer(p)
+				}
+			}
+		case MethodPaste:
+			if ps, ok := h.(Paster); ok && opened {
+				if text, err := ReadPaste(n.params); err == nil {
+					ps.Paste(text)
+				}
+			}
 		case MethodClose:
 			peer.closeReason.Store(ReadClose(n.params))
 			return nil
@@ -480,9 +541,43 @@ func (q *queue) push(method string, params []any) {
 	if method == MethodDocument {
 		q.items = slices.DeleteFunc(q.items, func(n note) bool { return n.method == MethodDocument })
 	}
-	q.items = append(q.items, note{method, params})
+	if !q.coalesce(method, params) {
+		q.items = append(q.items, note{method, params})
+	}
 	q.mu.Unlock()
 	q.signal()
+}
+
+// coalesce folds a surface pointer event into the one waiting at the tail (under mu): a move
+// replaces a move, and a scroll's deltas add to a scroll's, so a busy handler never reads a
+// backlog of stale positions. A press, release or anything else ends the run.
+func (q *queue) coalesce(method string, params []any) bool {
+	if method != MethodSurfacePointer || len(q.items) == 0 {
+		return false
+	}
+	last := &q.items[len(q.items)-1]
+	if last.method != MethodSurfacePointer {
+		return false
+	}
+	a, errA := arg(last.params)
+	b, errB := arg(params)
+	if errA != nil || errB != nil || str(a, "kind") != str(b, "kind") {
+		return false
+	}
+	switch str(b, "kind") {
+	case "move":
+		last.params = params
+		return true
+	case "scroll":
+		adx, _ := dpNum(a, "dx")
+		ady, _ := dpNum(a, "dy")
+		bdx, _ := dpNum(b, "dx")
+		bdy, _ := dpNum(b, "dy")
+		b["dx"], b["dy"] = adx+bdx, ady+bdy
+		last.params = params
+		return true
+	}
+	return false
 }
 
 func (q *queue) end() {
