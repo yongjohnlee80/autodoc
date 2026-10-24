@@ -27,15 +27,14 @@ type spike struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu       sync.Mutex
-	events   []string // the latest, newest last
-	inputT   int64    // the T of the latest pointer event
-	info     plugin.SurfaceInfo
-	started  bool
-	stats    string
-	cellsW   int
-	cellsH   int
-	inFlight map[uint64]int64 // a frame's seq → the input T it shows
+	mu      sync.Mutex
+	events  []string // the latest, newest last
+	inputT  int64    // the T of the latest pointer event
+	info    plugin.SurfaceInfo
+	started bool
+	stats   string
+	cellsW  int
+	cellsH  int
 }
 
 func (s *spike) note(format string, a ...any) {
@@ -49,7 +48,6 @@ func (s *spike) note(format string, a ...any) {
 
 func (s *spike) Open(p *plugin.Peer, o plugin.Open) {
 	s.peer, s.cellsW, s.cellsH = p, o.Width, o.Height
-	s.inFlight = map[uint64]int64{}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.drawCells() // the terminal's view, and the GUI's before the first frame
 }
@@ -125,13 +123,9 @@ func (s *spike) render(sf *plugin.Surface) {
 		inputT, stats := s.inputT, s.stats
 		s.mu.Unlock()
 		paint(b, time.Since(t0), events, stats)
-		seq, err := sf.Present(b, image.Rectangle{}, inputT)
-		if err != nil {
+		if _, err := sf.Present(b, image.Rectangle{}, inputT); err != nil {
 			return
 		}
-		s.mu.Lock()
-		s.inFlight[seq] = inputT
-		s.mu.Unlock()
 	}
 }
 
@@ -149,10 +143,7 @@ func (s *spike) measure(sf *plugin.Surface) {
 		case <-s.ctx.Done():
 			return
 		case d := <-sf.Done():
-			s.mu.Lock()
-			in := s.inFlight[d.Seq]
-			delete(s.inFlight, d.Seq)
-			s.mu.Unlock()
+			in := d.InputT // the SDK keeps it from Present, so an early outcome keeps its sample
 			switch d.Outcome {
 			case "drawn":
 				drawn++

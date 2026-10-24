@@ -4,7 +4,6 @@ import (
 	"context"
 	"image"
 	"sync"
-	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 )
@@ -27,10 +26,12 @@ type Surface struct {
 	wake    chan struct{}
 	acked   int
 
-	seq  atomic.Uint64
-	done chan SurfaceFrameDone
-	gone chan struct{}
-	once sync.Once
+	sendMu  sync.Mutex       // a frame's seq and its send are one step: seqs reach the host in order
+	seq     uint64           // under sendMu
+	inputTs map[uint64]int64 // a presented frame's InputT, by seq, until its frame.done (under mu)
+	done    chan SurfaceFrameDone
+	gone    chan struct{}
+	once    sync.Once
 }
 
 // SurfaceBuffer is one buffer to draw into: Pix is W×H pixels of Format, Pitch bytes a row.
@@ -50,7 +51,8 @@ func (b *SurfaceBuffer) RGBA() *image.RGBA {
 func newSurface(conn *SurfaceConn) *Surface {
 	s := &Surface{conn: conn, gens: map[int][]*SurfaceBuffer{}, pending: map[int][]*SurfaceBuffer{},
 		free: map[int]*SurfaceBuffer{}, wake: make(chan struct{}, 1), done: make(chan SurfaceFrameDone, 64),
-		gone: make(chan struct{})}
+		inputTs: map[uint64]int64{},
+		gone:    make(chan struct{})}
 	go s.read()
 	return s
 }
@@ -143,9 +145,19 @@ func (s *Surface) Buffer(ctx context.Context) (*SurfaceBuffer, error) {
 // Present shows b. Its pixels must be complete: there is no fence. dirty, when not empty, is what
 // changed since b's last frame; inputT is the T of the latest input it shows (for latency).
 func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64) (uint64, error) {
-	seq := s.seq.Add(1)
-	err := s.conn.Send(FrameMsg(SurfaceFrame{Seq: seq, Gen: b.Gen, Buffer: b.ID, Dirty: dirty, InputT: inputT}))
+	// one step: a seq taken by one goroutine is sent before another's, so the host sees them rise
+	s.sendMu.Lock()
+	s.seq++
+	seq := s.seq
 	s.mu.Lock()
+	s.inputTs[seq] = inputT // before the send: its frame.done may come at once
+	s.mu.Unlock()
+	err := s.conn.Send(FrameMsg(SurfaceFrame{Seq: seq, Gen: b.Gen, Buffer: b.ID, Dirty: dirty, InputT: inputT}))
+	s.sendMu.Unlock()
+	s.mu.Lock()
+	if err != nil {
+		delete(s.inputTs, seq)
+	}
 	b.drawing = false
 	if b.Gen < s.cur && b.Pix != nil { // its generation ended while it was drawn: the host answers "retired"
 		unix.Munmap(b.Pix)
@@ -192,6 +204,10 @@ func (s *Surface) read() {
 		case OpFrameDone:
 			g.CloseAll()
 			if d, err := ReadFrameDoneMsg(m); err == nil {
+				s.mu.Lock()
+				d.InputT = s.inputTs[d.Seq]
+				delete(s.inputTs, d.Seq)
+				s.mu.Unlock()
 				select {
 				case s.done <- d:
 				default:

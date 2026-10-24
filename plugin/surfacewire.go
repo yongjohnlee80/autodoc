@@ -62,6 +62,8 @@ type SurfaceFrameDone struct {
 	Seq     uint64
 	Outcome string
 	WhenNS  int64
+	// InputT is the InputT the frame was presented with: the SDK's own, never on the wire.
+	InputT int64
 }
 
 // BuffersMsg is the buffers op: specs[i] is the buffer whose fd is the datagram's i-th.
