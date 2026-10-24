@@ -1,8 +1,12 @@
 package plugin
 
 import (
+	"fmt"
 	"os"
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/msgpack"
 	"golang.org/x/sys/unix"
@@ -152,4 +156,61 @@ func roundTrip(t *testing.T, m map[string]any) map[string]any {
 		t.Fatal(err)
 	}
 	return v.(map[string]any)
+}
+
+// A signal never ends a timed send: the host's sends wait on a full socket while signals (as its
+// children's SIGCHLDs; here SIGURG, at the sending thread) interrupt them, and every one goes, in order.
+func TestASignalNeverEndsATimedSend(t *testing.T) {
+	host, plug := pair(t)
+	const count = 2000
+	tid, sendErr := make(chan int, 1), make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		tid <- unix.Gettid()
+		for i := range count {
+			if err := host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: uint64(i + 1), Outcome: "drawn"})); err != nil {
+				sendErr <- fmt.Errorf("send %d: %w", i+1, err)
+				host.Shutdown() // the reader below finds the end, not a datagram that never comes
+				return
+			}
+		}
+		sendErr <- nil
+	}()
+	stop := make(chan struct{})
+	defer close(stop)
+	var signals atomic.Int64
+	go func(tid int) {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if unix.Tgkill(os.Getpid(), tid, unix.SIGURG) == nil {
+				signals.Add(1)
+			}
+			time.Sleep(20 * time.Microsecond)
+		}
+	}(<-tid)
+	time.Sleep(50 * time.Millisecond) // the socket fills: the sends wait, and are signalled
+	for i := range count {
+		if i%8 == 0 {
+			time.Sleep(200 * time.Microsecond) // a slow reader: the sends keep waiting
+		}
+		m, g, err := plug.Recv()
+		if err != nil {
+			t.Fatalf("a signal ended a send: %v (at recv %d: %v)", <-sendErr, i+1, err)
+		}
+		g.CloseAll()
+		if d, err := ReadFrameDoneMsg(m); err != nil || d.Seq != uint64(i+1) {
+			t.Fatalf("datagram %d: %+v, %v", i+1, d, err)
+		}
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("a signal ended a send: %v", err)
+	}
+	if signals.Load() == 0 {
+		t.Fatal("no signal was sent: the interruption went unexercised")
+	}
 }

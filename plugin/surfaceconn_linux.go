@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/yongjohnlee80/golib/msgpack"
 	"golang.org/x/sys/unix"
@@ -19,6 +20,7 @@ import (
 // unblocks a Recv.
 type SurfaceConn struct {
 	fd        int
+	timeout   time.Duration // a send's deadline, the host's end alone; 0: a send waits as long as it must
 	closeOnce sync.Once
 	buf, oob  []byte
 }
@@ -33,14 +35,9 @@ func NewSurfacePair() (*SurfaceConn, *os.File, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	// the host's sends are bounded as the link's are: a plugin that stops reading can't hold a send
-	tv := unix.NsecToTimeval(int64(WriteTimeout))
-	if err := unix.SetsockoptTimeval(fds[0], unix.SOL_SOCKET, unix.SO_SNDTIMEO, &tv); err != nil {
-		unix.Close(fds[0])
-		unix.Close(fds[1])
-		return nil, nil, err
-	}
-	return newSurfaceConn(fds[0]), os.NewFile(uintptr(fds[1]), "autodoc-surface"), nil
+	host := newSurfaceConn(fds[0])
+	host.timeout = WriteTimeout // the host's sends are bounded as the link's are: a plugin that stops reading can't hold one
+	return host, os.NewFile(uintptr(fds[1]), "autodoc-surface"), nil
 }
 
 func newSurfaceConn(fd int) *SurfaceConn {
@@ -75,13 +72,42 @@ func (c *SurfaceConn) Send(m map[string]any, fds ...int) error {
 	if len(fds) > 0 {
 		oob = unix.UnixRights(fds...)
 	}
-	if err := unix.Sendmsg(c.fd, b, oob, nil, 0); err != nil {
-		if errors.Is(err, unix.EPIPE) || errors.Is(err, unix.EBADF) || errors.Is(err, unix.ECONNRESET) {
-			return ErrSurfaceClosed
-		}
-		return err // EAGAIN: the send's timeout passed
+	err = c.sendmsg(b, oob)
+	if errors.Is(err, unix.EPIPE) || errors.Is(err, unix.EBADF) || errors.Is(err, unix.ECONNRESET) {
+		return ErrSurfaceClosed
 	}
-	return nil
+	return err // EAGAIN: the send's deadline passed
+}
+
+// sendmsg is one datagram, by the conn's deadline. A signal interrupts neither: an EINTR is tried
+// again against the same deadline (a host reaps its children's SIGCHLDs all the time).
+func (c *SurfaceConn) sendmsg(b, oob []byte) error {
+	if c.timeout == 0 {
+		for {
+			if err := unix.Sendmsg(c.fd, b, oob, nil, 0); err != unix.EINTR {
+				return err
+			}
+		}
+	}
+	deadline := time.Now().Add(c.timeout)
+	for {
+		err := unix.Sendmsg(c.fd, b, oob, nil, unix.MSG_DONTWAIT)
+		if err != unix.EAGAIN {
+			if err == unix.EINTR {
+				continue
+			}
+			return err
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return unix.EAGAIN
+		}
+		// room for a datagram, or the deadline; a signal's EINTR comes back here, with less time
+		ms := int((left + time.Millisecond - 1) / time.Millisecond)
+		if _, err := unix.Poll([]unix.PollFd{{Fd: int32(c.fd), Events: unix.POLLOUT}}, ms); err != nil && err != unix.EINTR {
+			return err
+		}
+	}
 }
 
 // surfaceLimits bound a datagram's decode: it is the peer's, so attacker-adjacent.
@@ -97,6 +123,9 @@ var surfaceLimits = func() *msgpack.Limits {
 // or a map that doesn't decode is ErrSurfaceWire: a violation.
 func (c *SurfaceConn) Recv() (map[string]any, *FDGuard, error) {
 	n, oobn, flags, _, err := unix.Recvmsg(c.fd, c.buf, c.oob, unix.MSG_CMSG_CLOEXEC)
+	for err == unix.EINTR { // a signal ends no receive: nothing was taken, so it is tried again
+		n, oobn, flags, _, err = unix.Recvmsg(c.fd, c.buf, c.oob, unix.MSG_CMSG_CLOEXEC)
+	}
 	g := guardRights(c.oob[:oobn])
 	switch {
 	case err != nil:

@@ -239,7 +239,7 @@ func (s *surfaceOwner) write() {
 			if err := s.conn.Send(o.msg, o.fds...); err != nil {
 				broken = true // a disconnect or a send past its timeout: what is owed is dropped, settled locally
 				if !errors.Is(err, plugin.ErrSurfaceClosed) {
-					s.fail("side channel stalled") // a peer that doesn't read: SO_SNDTIMEO ended the send
+					s.fail("side channel stalled") // a peer that doesn't read: the send's deadline passed
 				}
 			}
 		}
