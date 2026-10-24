@@ -130,8 +130,10 @@ func (e *explorer) Catalog() []Entry {
 // shows it already (relations.go's toggle is SPC l's, for the Links tab).
 func (e *explorer) toggle() { e.c.TogglePanelTab(explorerPanelSpec().ID, explorerTab) }
 
-// tabShown is the tab view's report of tab i shown, however it was: a click on its title,
-// Ctrl+PageDown, or showTab. The heading is the tab's (main.qml).
+// tabShown is tab i shown, however it was: a click on its title, Ctrl+PageDown in the view, or
+// SPC e and SPC l (showTab). The heading is the tab's (main.qml), and on screen its list takes the
+// keyboard once the tab is laid out; closed or hidden, the drawer gives it the list when it opens or
+// is shown again (PanelSpec.Focus).
 func (e *explorer) tabShown(i int) {
 	if i != explorerTab && i != linksTab {
 		return
@@ -139,17 +141,18 @@ func (e *explorer) tabShown(i int) {
 	e.tab = i
 	e.c.Set("App.explorerTab", i)
 	e.c.Set("App.linksTabShown", i == linksTab)
-}
-
-// showTab shows tab i, its view given the keyboard once the tab is laid out.
-func (e *explorer) showTab(i int) {
-	e.tabShown(i)
 	e.c.Post(func() {
+		if e.tab != i || !e.c.PanelShown(explorerPanelSpec().ID) {
+			return // another tab since, or nowhere to give the keyboard to
+		}
 		if err := e.c.View(e.view(), "forceActiveFocus"); err != nil {
 			e.c.Failed("explorer: the keyboard", err)
 		}
 	})
 }
+
+// showTab shows tab i: the panel's ShowTab, which SPC e and SPC l reach (togglePanelTab).
+func (e *explorer) showTab(i int) { e.tabShown(i) }
 
 // view is what in the drawer takes the keyboard: the tab shown's tree or list.
 func (e *explorer) view() string {

@@ -33,6 +33,7 @@ type scriptedCore struct {
 	crumbs  []string    // the breadcrumb last put on the frame
 	focused bool        // what HasFocus answers
 	viewErr error       // what View answers
+	shown   bool        // what PanelShown answers
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -82,8 +83,9 @@ func (s *scriptedCore) HasFocus(string) bool       { return s.focused }
 func (s *scriptedCore) SearchModelsChanged(ranker bool) {
 	s.views = append(s.views, fmt.Sprint("search.changed ranker=", ranker))
 }
-func (s *scriptedCore) Post(fn func())        { fn() }
-func (s *scriptedCore) TogglePanel(id string) { s.views = append(s.views, id+".toggle") }
+func (s *scriptedCore) Post(fn func())         { fn() }
+func (s *scriptedCore) TogglePanel(id string)  { s.views = append(s.views, id+".toggle") }
+func (s *scriptedCore) PanelShown(string) bool { return s.shown }
 func (s *scriptedCore) TogglePanelTab(id string, tab int) {
 	s.views = append(s.views, fmt.Sprintf("%s.toggle(%d)", id, tab))
 }

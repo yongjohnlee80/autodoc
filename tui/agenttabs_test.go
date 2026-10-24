@@ -172,3 +172,43 @@ func TestTheStripsXStopsEveryAgentAndClosesThePanelAskingOnce(t *testing.T) {
 		t.Fatalf("none running: %d questions, instance %v, closed %v; want no question, closed", len(c.questions), a.instances["one"], c.closed)
 	}
 }
+
+// x's Yes ends a Restart under way: the agent whose old incarnation is still being retired starts no
+// new one once the panel is closed. Unanswered, x keeps the restart, which starts the agent again.
+func TestTheStripsXEndsARestartUnderWay(t *testing.T) {
+	for _, yes := range []bool{false, true} {
+		a, c := modelAgents(t)
+		one, _ := a.profile("one")
+		two, _ := a.profile("two")
+		first, _ := a.startInstance(one)
+		if _, err := a.startInstance(two); err != nil {
+			t.Fatal(err)
+		}
+		held := &modelRemoval{done: make(chan struct{})}
+		c.panel.removal = held
+		chooseRow(t, c.panel.tabMenu(first.tab), "agents.restart", first.tab)
+		c.questions[0].OnYes() // restarting: its old incarnation's retirement held
+		if !first.closing || !first.restart {
+			t.Fatalf("Restart: closing %v, restart %v; want both", first.closing, first.restart)
+		}
+		a.stopAllAgents()
+		if len(c.questions) != 2 || !strings.Contains(c.questions[1].Text, "1 agents") {
+			t.Fatalf("x with two still running: questions %+v", c.questions)
+		}
+		if yes {
+			c.questions[1].OnYes()
+		}
+		close(held.done)
+		if yes {
+			c.settle(t, "the retirements", func() bool { return len(a.instances) == 0 })
+			if !slices.Equal(c.closed, []string{"agent"}) {
+				t.Errorf("Yes: closed %v, want the panel", c.closed)
+			}
+			continue
+		}
+		c.settle(t, "the restart", func() bool { again := a.instances["one"]; return again != nil && again != first && again.running })
+		if a.instances["two"] == nil || len(c.closed) != 0 {
+			t.Errorf("unanswered: two %v, closed %v; want two kept, nothing closed", a.instances["two"], c.closed)
+		}
+	}
+}

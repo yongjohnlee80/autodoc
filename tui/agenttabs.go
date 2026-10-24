@@ -146,7 +146,10 @@ func (a *agents) stopAllAgents() {
 		}
 	}
 	stopAll := func() {
-		for code := range a.instances { // an agent already closing is left to close (removeInstance)
+		for code, instance := range a.instances {
+			// a Restart under way ends with the rest: its agent, already closing, starts no new one
+			// in the panel closed; removeInstance leaves a closing one to close
+			instance.restart = false
 			if err := a.removeInstance(code); err != nil {
 				a.c.Notify(a.c.Trf("autodoc.notice.agenttabs.the_agent_s_tab_could_not_close", err.Error()))
 			}

@@ -449,6 +449,8 @@ type Core interface {
 	// TogglePanelTab is a tabbed panel's toggle for one of its tabs: closed or hidden, the panel
 	// shown on that tab; shown on another tab, that tab; shown on it, closed (panels.go).
 	TogglePanelTab(id string, tab int)
+	// PanelShown reports whether panel id is open and not hidden by the dock: on screen.
+	PanelShown(id string) bool
 	// HidePanel hides an open panel, not closed: it keeps what it holds, its Closed hook does not
 	// run, and the dock shows it again as it was (dock.go). The editor has the keyboard, as after the
 	// dock's own click.
