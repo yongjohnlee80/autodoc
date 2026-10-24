@@ -340,8 +340,8 @@ Window {
     // ---- the panels: drawers over the page, each from the edge its preference names, in the one
     // dock style (views/Panel.qml); a panel's own keys are live while the keyboard is in it ----
     // the explorer: the workspaces' files and the page's links, a tab each (explorer.go, relations.go),
-    // the heading the tab shown's; _ and x at the strip's right end hide it to the dock, as it is, or
-    // close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
+    // the heading the tab shown's; _, + and x at the strip's right end hide it to the dock, as it is,
+    // maximize it (again to restore: the Drawer's own toggleMaximize), or close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
     Panel {
         id: explorer
         heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
@@ -356,12 +356,15 @@ Window {
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
+        maximizable: true
+        onChanged: App.panelChanged("explorer", operation, maximized)
         TabView {
             id: sideTabs
             windowButtons: true
             currentIndex: App.explorerTab
             onCurrentIndexChanged: App.explorerTabShown(index)
             onMinimizeRequested: App.hideExplorer()
+            onMaximizeRequested: explorer.toggleMaximize()
             onCloseRequested: App.closeExplorer()
             Tab {
                 title: "Explorer"
@@ -470,9 +473,11 @@ Window {
         // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
         TerminalTabs {
             id: terminalView
-            // _ and x at the strip's right end: hide the panel, every process kept; stop them all and close it
+            // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
+            // Maximize does (again to restore); stop them all and close it
             windowButtons: true
             onMinimizeRequested: App.toggleTerminal()
+            onMaximizeRequested: terminal.toggleMaximize()
             onCloseRequested: App.stopAllShells()
             onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
             // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
@@ -515,9 +520,11 @@ Window {
         // tab's menu goes to another, restarts or closes it, or opens the profiles
         TerminalTabs {
             id: agentView
-            // _ and x at the strip's right end: hide the panel, every process kept; stop them all and close it
+            // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
+            // Maximize does (again to restore); stop them all and close it
             windowButtons: true
             onMinimizeRequested: App.toggleAgent()
+            onMaximizeRequested: agent.toggleMaximize()
             onCloseRequested: App.stopAllAgents()
             // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
             hostKeys: App.terminalHostKeys

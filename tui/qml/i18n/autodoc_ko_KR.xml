@@ -2533,7 +2533,7 @@ THE PANELS
   reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
   open it on their tab, or go to it from the other, and on their own tab close it, as Escape
   does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
-  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it. Enter on a file opens it, closing
   the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
@@ -2554,7 +2554,7 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
-  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  The strip's _, + and x, at its right end, hide the panel, maximize it (again to restore), or stop every agent and close it,
   asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
@@ -2564,7 +2564,7 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, + maximizes it (again to restore), and x stops
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
@@ -2650,7 +2650,7 @@ WHAT A KEY NEEDS
   링크에서 d를 누르면 두 단계 떨어진 파일을 그 파일에 닿는 파일 아래에 표시합니다. 패널은 자기
   쪽에서 페이지 위로 열립니다(환경설정에서 설정). SPC e와 SPC l은 자기 탭으로 열거나 다른 탭에서
   넘어가고, 자기 탭에서는 Escape처럼 닫습니다. Ctrl+PageUp과 Ctrl+PageDown으로 탭을 바꿉니다.
-  탭 줄 오른쪽 끝의 _는 독으로 숨기고(아이콘이 그대로 다시 보여 줌), x는 닫습니다. 파일에서 Enter를
+  탭 줄 오른쪽 끝의 _는 독으로 숨기고(아이콘이 그대로 다시 보여 줌), +는 최대화하고(한 번 더 누르면 복원), x는 닫습니다. 파일에서 Enter를
   누르면 파일을 열고, 탐색기에서는 패널을 닫고 링크에서는 숨깁니다.
   SPC j는 커서 아래 링크로 이동합니다: 링크가 가리키는 문서, 없으면 웹 주소나 파일.
   SPC b는 이전 문서의 떠났던 위치로 돌아갑니다 (Ctrl+O는 한 번에 점프 하나씩, 문서 안에서도
@@ -2671,7 +2671,7 @@ WHAT A KEY NEEDS
   글꼴…, 최대화(도킹 영역을 채운 동안은 복원), 숨기기가 있습니다. 숨기기는 패널을 닫고
   모든 에이전트를 실행 상태로 둡니다. 프로필의 사용으로도
   다른 에이전트를 시작합니다.
-  탭 줄 오른쪽 끝의 _는 패널을 숨기고, x는 모든 에이전트를 멈추고 패널을 닫습니다
+  탭 줄 오른쪽 끝의 _는 패널을 숨기고, +는 최대화하고(한 번 더 누르면 복원), x는 모든 에이전트를 멈추고 패널을 닫습니다
   (실행 중인 것이 있으면 한 번만 물음).
   SPC a b (:agent-buffer)는 페이지를 에이전트 프롬프트에 붙여 넣고, SPC a f (:agent-forward)는
   선택 영역을, 없으면 클립보드를 붙여 넣습니다: 실행 중인 에이전트 또는 선택한 에이전트에게. SPC a는 에이전트
@@ -2681,7 +2681,7 @@ WHAT A KEY NEEDS
   또는 환경설정에서 정한 곳(위, 왼쪽, 오른쪽, 가운데)에 열리고 위치마다 크기를 따로 기억합니다.
   셸이 없을 때 열면 셸이 시작되고, 숨겨져도 계속 실행됩니다. 셸마다 탭이 있습니다:
   +로 추가하며, 탭 메뉴에는 이동 ›, 새로 만들기, 닫기, 테마 및 글꼴…, 최대화(복원),
-  숨기기(패널을 닫고 모든 셸은 계속 실행)가 있습니다. 탭 줄 오른쪽 끝의 _도 같이 숨기고, x는
+  숨기기(패널을 닫고 모든 셸은 계속 실행)가 있습니다. 탭 줄 오른쪽 끝의 _도 같이 숨기고, +는 최대화하고(한 번 더 누르면 복원), x는
   모든 셸을 멈추고 패널을 닫습니다(실행 중인 것이 있으면 한 번만 물음). 테마 및 글꼴…(환경설정의 터미널 행과 옵션 › 글꼴
   및 확대/축소…에서도)은 터미널의 테마(텍스트, 배경, 커서만. 프로그램 자체의
   색상은 그대로)와 창에서의 글꼴을 설정합니다. 그 안에서 Esc를 누르면 원래대로 되돌립니다. 모든 키는

@@ -277,7 +277,7 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   which does not move, from the side the editor's preferences name. `SPC e` and `SPC l` open it on
   their tab, or go to it from the other, and on their own tab close it, as `Escape` does;
   `Ctrl+PageUp` and `Ctrl+PageDown` change tabs. At the strip's right end, `_` hides it to the
-  dock, whose icon shows it again as it was, and `x` closes it. `Enter` opens a row, closing the
+  dock, whose icon shows it again as it was, `+` maximizes it (again to restore), and `x` closes it. `Enter` opens a row, closing the
   panel from the Explorer and hiding it from the Links. The links' own panel was folded in: where
   the explorer keeps no place of its own, it opens where the links were left. `SPC j` goes to the link under the cursor (the document it names, else its web address or
   file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
@@ -298,8 +298,9 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   size ›** (the shells' text in both panels, **Smaller** and **Larger** a step of 10 % each, 50 %
   to 150 % of the cell size; Fonts and zoom… sets it too), **Maximize** (the
   panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
-  leaves every shell and agent running. At the strip's right end, `_` does the same, and `x`
-  stops every shell or agent in the panel and closes it, asked once while any runs. Every key goes
+  leaves every shell and agent running. At the strip's right end, `_` does the same, `+` maximizes the panel
+  (again to restore), as Maximize does, and `x` stops every shell or agent in the panel and closes it,
+  asked once while any runs. Every key goes
   to the shell or agent, `Esc` included; `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
   `Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's.
 - **Every panel moves and resizes**: the explorer, the terminal, the agent, the HTML

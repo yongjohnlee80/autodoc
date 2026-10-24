@@ -120,14 +120,12 @@ func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
 	r.s.WaitFor(t, "back to typing", func(sc string) bool { return !strings.Contains(sc, hintProbe) })
 }
 
-// windowControl presses a panel's strip control, "_" or "x", at the strip's right end: the first
+// windowControl presses a panel's strip control, "_", "+" or "x", at the strip's right end: the first
 // strip on screen with them.
 func windowControl(t *testing.T, r *running, which string) {
 	t.Helper()
-	x, y := cellOf(t, r.s.String(), "_   x")
-	if which == "x" {
-		x += 4
-	}
+	x, y := cellOf(t, r.s.String(), "_  +  x") // side by side, three cells apart
+	x += map[string]int{"_": 0, "+": 3, "x": 6}[which]
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
