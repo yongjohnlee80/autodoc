@@ -1859,6 +1859,26 @@
         <source>&amp;Purge…</source>
         <translation>&amp;Purge…</translation>
     </message>
+    <message id="autodoc.dialog.vimQuestion.autodoc_s_editors_and_terminals_can_work_the_vim">
+        <source>AutoDoc's editors and terminals can work the Vim way, with modes: Esc for Normal mode, i to type again. Or the way an ordinary text editor does: you just type.</source>
+        <translation>AutoDoc's editors and terminals can work the Vim way, with modes: Esc for Normal mode, i to type again. Or the way an ordinary text editor does: you just type.</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.do_you_use_vim">
+        <source>Do you use Vim?</source>
+        <translation>Do you use Vim?</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.editor_preferences_editor_mode_changes_it_at_any">
+        <source>Editor preferences… › editor mode changes it at any time.</source>
+        <translation>Editor preferences… › editor mode changes it at any time.</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.no_a_text_editor_s_keys">
+        <source>&amp;No, a text editor's keys</source>
+        <translation>&amp;No, a text editor's keys</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.yes_vim_s_keys">
+        <source>&amp;Yes, Vim's keys</source>
+        <translation>&amp;Yes, Vim's keys</translation>
+    </message>
     <message id="autodoc.dialog.workspaceManager.add">
         <source>&amp;Add…</source>
         <translation>&amp;Add…</translation>
@@ -4624,6 +4644,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.tabledoc.the_table_changed_the_edit_was_dropped">
         <source>the table changed; the edit was dropped</source>
         <translation>the table changed; the edit was dropped</translation>
+    </message>
+    <message id="autodoc.notice.terminal.normal_mode_hint">
+        <source>%1 or i returns to typing</source>
+        <translation>%1 or i returns to typing</translation>
+    </message>
+    <message id="autodoc.notice.terminal.normal_mode_hint_i">
+        <source>i returns to typing</source>
+        <translation>i returns to typing</translation>
     </message>
     <message id="autodoc.notice.terminal.the_lua_shell_could_not_start">
         <source>the Lua shell could not start (%1)</source>

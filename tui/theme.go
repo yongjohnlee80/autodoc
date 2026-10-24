@@ -148,6 +148,7 @@ func (h *Host) themeReloadError(err error) {
 func (h *Host) reloaded() {
 	h.keysChanged()
 	h.panelText.apply(h, agentScaleOf(h.prefs)) // the rebuilt agent and terminal panels get their views again
+	h.applyTerminalKeymap(h.prefs)              // and their keymap's normal mode
 	h.themesReloaded()
 }
 
@@ -158,6 +159,7 @@ func (h *Host) keysChanged() {
 	for name, text := range h.keys.cardState() {
 		h.set(name, text)
 	}
+	h.applyTerminalKeymap(h.prefs) // the normal-mode hint names the mode key as it is bound now
 	h.commandsChanged()
 }
 

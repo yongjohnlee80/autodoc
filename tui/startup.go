@@ -46,7 +46,10 @@ func (*startup) Commands() map[string]Command { return nil }
 // release (dev, a commit after a tag) looks for none: it has no release to be older than.
 func (s *startup) Started() {
 	p := s.c.Prefs()
-	if p.aboutAtStart && !agentSetupPending(p) { // the setup card is that run's first card (agentsetup.go)
+	switch {
+	case vimQuestionPending(p): // a true first run's first card, the agent setup's after it (vimquestion.go)
+		s.c.Open("vimQuestion")
+	case p.aboutAtStart && !agentSetupPending(p): // the setup card is that run's first card (agentsetup.go)
 		s.c.Open("about")
 	}
 	cur, ok := releaseVersion(s.version)

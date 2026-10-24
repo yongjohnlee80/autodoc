@@ -52,7 +52,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	registryCacheDir = func() (string, error) { return cache, nil }
-	offerAgentSetup = false // the setup cells turn it on (agentsetup_test.go)
+	offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
+	offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
 	registryURL = "http://127.0.0.1:1/index.json"
 	code := m.Run()
 	_ = os.RemoveAll(cache)

@@ -932,6 +932,7 @@ Window {
     Recent { id: recent }
     AgentProfiles { id: agentProfiles }
     AgentEdit { id: agentEdit }
+    VimQuestion { id: vimQuestion }
     AgentSetup { id: agentSetup }
     AgentSwitch { id: agentSwitch }
     RankerWindow { id: rankerWindow }

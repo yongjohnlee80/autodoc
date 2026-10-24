@@ -1859,6 +1859,26 @@
         <source>&amp;Purge…</source>
         <translation>&amp;Purgar…</translation>
     </message>
+    <message id="autodoc.dialog.vimQuestion.autodoc_s_editors_and_terminals_can_work_the_vim">
+        <source>AutoDoc's editors and terminals can work the Vim way, with modes: Esc for Normal mode, i to type again. Or the way an ordinary text editor does: you just type.</source>
+        <translation>Los editores y terminales de AutoDoc pueden funcionar a la manera de Vim, con modos: Esc para el modo Normal, i para volver a escribir. O como un editor de texto corriente: simplemente escribes.</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.do_you_use_vim">
+        <source>Do you use Vim?</source>
+        <translation>¿Usas Vim?</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.editor_preferences_editor_mode_changes_it_at_any">
+        <source>Editor preferences… › editor mode changes it at any time.</source>
+        <translation>Preferencias del editor… › modo del editor lo cambia en cualquier momento.</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.no_a_text_editor_s_keys">
+        <source>&amp;No, a text editor's keys</source>
+        <translation>No, las teclas de un editor de texto (&amp;n)</translation>
+    </message>
+    <message id="autodoc.dialog.vimQuestion.yes_vim_s_keys">
+        <source>&amp;Yes, Vim's keys</source>
+        <translation>Sí, las teclas de Vim (&amp;y)</translation>
+    </message>
     <message id="autodoc.dialog.workspaceManager.add">
         <source>&amp;Add…</source>
         <translation>&amp;Añadir…</translation>
@@ -4624,6 +4644,14 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.tabledoc.the_table_changed_the_edit_was_dropped">
         <source>the table changed; the edit was dropped</source>
         <translation>la tabla cambió; la edición se descartó</translation>
+    </message>
+    <message id="autodoc.notice.terminal.normal_mode_hint">
+        <source>%1 or i returns to typing</source>
+        <translation>%1 o i vuelve a escribir</translation>
+    </message>
+    <message id="autodoc.notice.terminal.normal_mode_hint_i">
+        <source>i returns to typing</source>
+        <translation>i vuelve a escribir</translation>
     </message>
     <message id="autodoc.notice.terminal.the_lua_shell_could_not_start">
         <source>the Lua shell could not start (%1)</source>

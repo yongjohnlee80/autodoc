@@ -50,9 +50,10 @@ func agentSetupPending(p prefs) bool {
 // lookAgentCLI is how the card finds the CLIs; a test sets its own.
 var lookAgentCLI = exec.LookPath
 
-// Started offers the setup on a first run (startup's About waits for it, startup.go).
+// Started offers the setup on a first run (startup's About waits for it, startup.go), once the
+// Vim question before it is answered (vimquestion.go opens it then).
 func (a *agents) Started() {
-	if agentSetupPending(a.c.Prefs()) {
+	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {
 		a.openAgentSetup()
 	}
 }
