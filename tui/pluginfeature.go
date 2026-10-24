@@ -303,6 +303,9 @@ type pluginHost interface {
 	PanelShown(id string) bool
 	// DockPanel forgets a panel's floating rectangle: a card's, moved to another edge
 	DockPanel(id string)
+	// SurfaceBackend is the backend the App runs on: under --gui the window's, whose streams a
+	// plugin's pixel surface draws through (pluginsurface_gui.go); nil in a test of its own
+	SurfaceBackend() tuicore.Backend
 	// PageSize is the page's size in cells, as last laid out; 0 before its first layout. A card's
 	// panel is sized from it until the user sizes it
 	PageSize() (w, h int)
@@ -334,6 +337,7 @@ var (
 
 func (c core) Attached() bool                          { return c.h.p != nil }
 func (c core) Overlay() (*widget.OverlayHost, bool)    { return c.h.p.Overlay() }
+func (c core) SurfaceBackend() tuicore.Backend         { return c.h.backend }
 func (c core) HasCatalog() bool                        { return c.h.cat != nil }
 func (c core) CommandsChanged()                        { c.h.commandsChanged() }
 func (c core) RunEntry(id string, args []string) error { return c.h.cat.run(id, args) }
