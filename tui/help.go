@@ -217,7 +217,7 @@ THE PANELS
   reaches them. It opens over the page from its side (Preferences sets which): SPC e and SPC l
   open it on their tab, or go to it from the other, and on their own tab close it, as Escape
   does; Ctrl+PageUp and Ctrl+PageDown change tabs. At the strip's right end, _ hides it to the
-  dock, whose icon shows it again as it was, and x closes it. Enter on a file opens it, closing
+  dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it. Enter on a file opens it, closing
   the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
@@ -238,7 +238,7 @@ THE PANELS
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
-  The strip's _ and x, at its right end, hide the panel or stop every agent and close it,
+  The strip's _, + and x, at its right end, hide the panel, maximize it (again to restore), or stop every agent and close it,
   asked once while any runs.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
@@ -248,7 +248,7 @@ THE PANELS
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
   + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
-  and Hide (the panel closed, every shell running on). The strip's _ does the same, and x stops
+  and Hide (the panel closed, every shell running on). The strip's _ does the same, + maximizes it (again to restore), and x stops
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
