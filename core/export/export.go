@@ -269,7 +269,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		var body bytes.Buffer
 		var renderOpts []markdownhtml.Option
 		if options.SourceSpans {
-			renderOpts = append(renderOpts, markdownhtml.SourceSpans())
+			renderOpts = append(renderOpts, markdownhtml.WithSourceSpans())
 		}
 		if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
 			return nil, err

@@ -84,7 +84,7 @@ func TestExtractLinks(t *testing.T) {
 		"[md](other.md) [up](../top.md#Sec) [root](/r/deep.md) [enc](my%20note.md) [bare](plain)\n" +
 		"[web](https://example.com/a.md) [mail](mailto:a@b.c) [self](#here) [out](../../gone.md)\n" +
 		"[code](../scripts/run.sh) [img](pic.png) <https://auto.link>\n"
-	doc := markdown.Parse([]byte(src), markdown.GFM(), markdown.Obsidian())
+	doc := markdown.Parse([]byte(src), markdown.WithGFM(), markdown.WithObsidian())
 	var got []string
 	for _, l := range extractLinks(doc, "dir/n.md", nil, nil, "") {
 		got = append(got, fmt.Sprintf("%s %s #%s %s", l.Kind, l.Name, l.Anchor, l.Raw))
@@ -105,7 +105,7 @@ func TestExtractLinks(t *testing.T) {
 	})
 	// an attachment type the workspace indexes is a file, judged by the workspace path it reaches
 	var pdf []string
-	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh) ![[../assets/d.pdf]] [e](../assets/e.pdf) ![[../other/f.pdf]]"), markdown.Obsidian()), "notes/n.md",
+	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh) ![[../assets/d.pdf]] [e](../assets/e.pdf) ![[../other/f.pdf]]"), markdown.WithObsidian()), "notes/n.md",
 		func(p string) bool {
 			return p == "doc.pdf" || strings.HasSuffix(p, ".sh") || strings.HasPrefix(p, "assets/") && strings.HasSuffix(p, ".pdf")
 		}, nil, "") {
@@ -117,7 +117,7 @@ func TestExtractLinks(t *testing.T) {
 	// file the workspace indexes; a picture it leaves out, a URL and a path out of the root are not links
 	var imgs []string
 	src = "![flow](d/flow.mmd \"height=420\") ![p](pic.png) ![n](../top.md#Sec) ![w](https://x.io/a.png) ![o](../../out.mmd) ![b](plain)\n"
-	for _, l := range extractLinks(markdown.Parse([]byte(src), markdown.GFM(), markdown.Obsidian()), "notes/n.md",
+	for _, l := range extractLinks(markdown.Parse([]byte(src), markdown.WithGFM(), markdown.WithObsidian()), "notes/n.md",
 		func(p string) bool { return strings.HasSuffix(p, ".mmd") }, nil, "") {
 		imgs = append(imgs, fmt.Sprintf("%s %s #%s %s", l.Kind, l.Name, l.Anchor, l.Raw))
 	}

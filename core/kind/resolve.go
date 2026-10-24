@@ -73,9 +73,9 @@ func (t Table[T]) Of(k Kind) T { return t.by[k] }
 // ParseMarkdown reads a workspace's Markdown: GFM with Obsidian's extensions (wikilinks, #tags,
 // frontmatter).
 func ParseMarkdown(src []byte) *markdown.Document {
-	return markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
+	return markdown.Parse(src, markdown.WithGFM(), markdown.WithObsidian())
 }
 
 // ParseDerived reads a derived document's text: GFM alone. The text is a document's, not a vault's:
 // no wikilinks or #tags, no frontmatter to check.
-func ParseDerived(src []byte) *markdown.Document { return markdown.Parse(src, markdown.GFM()) }
+func ParseDerived(src []byte) *markdown.Document { return markdown.Parse(src, markdown.WithGFM()) }
