@@ -85,7 +85,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 9 // 9: the manifest's [open] (ADR 1792457255); nothing on the wire changes
+	Protocol    = 10 // 10: [surface], the side channel, plugin.surface.* (ADR 1792797354)
 )
 
 // The notifications the host sends.
