@@ -25,6 +25,7 @@ type Surface struct {
 	free    map[int]*SurfaceBuffer
 	wake    chan struct{}
 	acked   int
+	acks    sync.WaitGroup // the acks in flight: Close waits for them before the fd goes
 
 	sendMu   sync.Mutex       // a frame's seq and its send are one step: seqs reach the host in order
 	seq      uint64           // under sendMu
@@ -78,8 +79,9 @@ func (s *Surface) Done() <-chan SurfaceFrameDone { return s.done }
 // every mapping is reclaimed, a buffer being drawn into at its Present. Serve calls it as it ends.
 func (s *Surface) Close() {
 	s.closeOne.Do(func() {
-		s.conn.Shutdown() // wakes the reader; the fd stays until it is done
+		s.conn.Shutdown() // wakes the reader, and ends an ack's send; the fd stays until both are done
 		<-s.gone
+		s.acks.Wait() // none starts after gone: install grants nothing once closed
 		s.conn.Close()
 	})
 }
@@ -156,7 +158,8 @@ func (s *Surface) install(gen int, bufs []*SurfaceBuffer) {
 	}
 	if s.acked < gen {
 		s.acked = gen
-		go s.conn.Send(map[string]any{"op": OpSurfaceAck, "gen": gen})
+		s.acks.Add(1)
+		go func() { defer s.acks.Done(); s.conn.Send(map[string]any{"op": OpSurfaceAck, "gen": gen}) }()
 	}
 }
 
