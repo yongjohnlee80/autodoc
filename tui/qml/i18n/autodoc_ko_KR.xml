@@ -2531,6 +2531,39 @@
               확대/축소…에서 글꼴도 선택). 터미널은 터미널 자체 설정이 글꼴을 정합니다. 창이
               80 × 20보다 작아지기 전에 확대가 멈춥니다: 더 확대하려면 창을 키우세요</translation>
     </message>
+    <message id="autodoc.help.layout">
+        <source>THE LAYOUT
+  The page is a window of its own, and each panel (the explorer, the terminal, the agent, the
+  results and the todos) floats over it or is tiled beside it, as its Layout says. Layout ›
+  Tiled or Float is on every window's menu, right above Go to ›: the page's buffer strip, the
+  terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
+  table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
+  the windows). The page is tiled unless you float it; every panel floats unless you tile it.
+  A tiled panel sits at its edge, a share of the base across it (the preferences
+  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  shares, and its new share is kept. When the window is too small for the page and the panels
+  tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
+  Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
+  and comes forward when it takes the keyboard; when it is minimized, the dock's editor icon
+  shows it again.
+  Ctrl+h/j/k/l go to the window placed that way, tiled, docked or floating alike. Arrange panel
+  (SPC L) moves a floating or docked panel; a tiled one is placed by its tile.</source>
+        <translation>레이아웃
+  페이지는 그 자체로 하나의 창이며, 각 패널(탐색기, 터미널, 에이전트, 결과, 태스크)은
+  레이아웃 설정에 따라 페이지 위에 떠 있거나 옆에 타일로 배치됩니다. 레이아웃 › 타일 또는
+  플로팅은 모든 창의 메뉴에서 이동 › 바로 위에 있습니다: 페이지의 버퍼 탭 줄, 터미널과
+  에이전트의 탭, 탐색기와 태스크의 ≡, 그리고 결과 표의 오른쪽 클릭 메뉴 끝. :layout [창]은
+  그 메뉴를 페이지 위에 엽니다. 인수 없이는 페이지의 것입니다 (Tab으로 창 목록). 페이지는
+  플로팅으로 바꾸지 않는 한 타일이고, 모든 패널은 타일로 바꾸지 않는 한 플로팅입니다.
+  타일 패널은 자신의 가장자리에서 기본 영역의 일정 비율을 차지합니다 (환경설정 값
+  tui.&lt;창&gt;.tileEdge 와 tui.&lt;창&gt;.tileSize). Alt와 오른쪽 드래그로 맞닿은 경계를 옮기면 새
+  비율이 유지됩니다. 창이 페이지와 타일 패널을 모두 담기에 너무 작으면, 마지막으로 타일된
+  패널이 공간이 돌아올 때까지 플로팅되었다가 스스로 다시 타일이 됩니다. 레이아웃은 계속
+  타일입니다. 플로팅 페이지는 페이지 너비까지 옮기고 크기를 바꿀 수 있고, 닫히지 않으며,
+  키보드를 받으면 앞으로 나옵니다. 최소화되었을 때는 독의 편집기 아이콘이 다시 보여 줍니다.
+  Ctrl+h/j/k/l은 타일, 도킹, 플로팅에 관계없이 그쪽에 놓인 창으로 갑니다. 패널 배치
+  (SPC L)는 플로팅이나 도킹된 패널을 옮깁니다. 타일 패널은 타일이 자리를 정합니다.</translation>
+    </message>
     <message id="autodoc.help.rest">
         <source>THE PAGE
   The file is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the

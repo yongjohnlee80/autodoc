@@ -22,7 +22,8 @@ func helpText(k keyset, cat *catalog, more map[string][]string) string {
 	if moved != "" {
 		moved += "\n\n"
 	}
-	return k.textID("autodoc.help.keys", helpKeys) + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + k.textID("autodoc.help.rest", helpRest)
+	return k.textID("autodoc.help.keys", helpKeys) + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + k.textID("autodoc.help.rest", helpRest) +
+		"\n\n" + k.textID("autodoc.help.layout", helpLayout)
 }
 
 // commandsChanged is the catalog changed: F1 is made anew once the loop is free, however many
@@ -423,3 +424,21 @@ func (h *Host) aboutState() map[string]any {
 		"App.aboutError":    "",
 	}
 }
+
+// helpLayout is the help's last section: the base's windows, tiled or floating (tilelayout.go).
+const helpLayout = `THE LAYOUT
+  The page is a window of its own, and each panel (the explorer, the terminal, the agent, the
+  results and the todos) floats over it or is tiled beside it, as its Layout says. Layout ›
+  Tiled or Float is on every window's menu, right above Go to ›: the page's buffer strip, the
+  terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
+  table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
+  the windows). The page is tiled unless you float it; every panel floats unless you tile it.
+  A tiled panel sits at its edge, a share of the base across it (the preferences
+  tui.<window>.tileEdge and tui.<window>.tileSize); Alt and a right drag move the border it
+  shares, and its new share is kept. When the window is too small for the page and the panels
+  tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
+  Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
+  and comes forward when it takes the keyboard; when it is minimized, the dock's editor icon
+  shows it again.
+  Ctrl+h/j/k/l go to the window placed that way, tiled, docked or floating alike. Arrange panel
+  (SPC L) moves a floating or docked panel; a tiled one is placed by its tile.`

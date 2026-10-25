@@ -97,6 +97,24 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
   - Go › Reset panel layout docks every panel at its edge again.
 - **Maximizing:** `SPC M` or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
 
+### Tiled or floating: the layout
+
+The page is a window of its own, and the explorer, the terminal, the agent, the results and the todos are each either **floating** (over the page, docked at an edge or anywhere you drag them, as above) or **tiled** (beside the page, sharing the screen with it). Each window's **Layout** says which.
+
+- **Choosing it:** Layout › Tiled or Float is on every window's menu, right above Go to ›:
+  - the page's buffer strip (`--gui`);
+  - the terminal's and the agent's tabs (`≡`, or a right click on the strip);
+  - the explorer's and the todos' tabs (`≡`);
+  - the results table's right-click menu, at its end.
+
+  `:layout [window]` opens it over the page, the page's when no window is named. Tab completes the windows: `editor`, `explorer`, `terminal`, `agent`, `results`, `todos`.
+- **The defaults:** the page is tiled, every panel floats. A layout is kept across restarts.
+- **Where a tiled panel goes:** at its tile's edge, a share of the screen across it. These are the preferences `tui.<window>.tileEdge` and `tui.<window>.tileSize` (a percent, 5 to 90). Alt with the right button drags the border a tiled panel shares, and its new share is kept. A tiled panel's own docked place and floating rectangle stay as they were, for when it floats again.
+- **When the room runs out:** the page needs 40 columns and 8 rows, and a panel 20 columns at the left or right, or 6 rows at the top or bottom. When the window is too small for the page and every tiled panel, the panel tiled last floats until the room comes back, then tiles again by itself. Its Layout still says Tiled: that is your choice, not the room's.
+- **A floating page** moves and resizes up to the page's width, never closes, and comes forward when it takes the keyboard. When it is minimized, the dock's editor icon shows it again.
+- **Moving between them:** `Ctrl+h` `j` `k` `l` go to the window placed that way: tiled, docked or floating alike.
+- **Arranging:** `SPC L` moves a floating or docked panel. A tiled one is placed by its tile, so `SPC L` says so and leaves it.
+
 ![The Page and the Panels Around It](panel-docking-layout.mmd)
 
 ### The panels
