@@ -1,0 +1,158 @@
+package tui
+
+import (
+	"slices"
+	"strings"
+	"testing"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
+)
+
+// tilelayout_menu_test.go: each window's Layout ›, Tiled and Float, on its menu right above Go to ›,
+// and :layout (tilelayout.go).
+
+// rowAt is where the row id is in rows, top level; -1 when it is not.
+func rowAt(rows []widget.MenuItemModel, id string) int {
+	return slices.IndexFunc(rows, func(m widget.MenuItemModel) bool { return string(m.ID) == id })
+}
+
+// wantLayoutAbove fails unless rows hold Layout › right above the row goTo, Tiled and Float radios
+// in it, the one checked as tiled says.
+func wantLayoutAbove(t *testing.T, menu string, rows []widget.MenuItemModel, goTo string, tiled bool) {
+	t.Helper()
+	l, g := rowAt(rows, "layout"), rowAt(rows, goTo)
+	if l < 0 || g != l+1 {
+		t.Fatalf("%s: Layout at %d, Go to at %d; want Layout right above Go to: %v", menu, l, g, rowIDs(rows))
+	}
+	wantLayoutChecked(t, menu, rows[l].Children, tiled)
+}
+
+// wantLayoutChecked fails unless choices are the Tiled and Float radios, the one checked as tiled
+// says.
+func wantLayoutChecked(t *testing.T, menu string, choices []widget.MenuItemModel, tiled bool) {
+	t.Helper()
+	tr, okT := menuRow(choices, "layout.tiled")
+	fl, okF := menuRow(choices, "layout.float")
+	if !okT || !okF || tr.Kind != widget.ItemKindRadio || fl.Kind != widget.ItemKindRadio {
+		t.Fatalf("%s: Layout holds %v; want the radios Tiled and Float", menu, rowIDs(choices))
+	}
+	if tr.Checked != tiled || fl.Checked == tiled {
+		t.Fatalf("%s: Tiled checked %v, Float %v; want the Layout stored, tiled %v", menu, tr.Checked, fl.Checked, tiled)
+	}
+}
+
+// The page's buffer strip and the terminal's tabs have Layout › right above Go to ›, checked as
+// stored: the page Tiled, the terminal Float. Its Tiled chosen, the terminal's Layout is Tiled,
+// and its menu says so.
+func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	wantLayoutAbove(t, "the buffer strip", onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }), "buffer.tabs.goto", true)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	wantLayoutAbove(t, "the terminal", rows, "tabs.goto", false)
+	tiled, _ := menuRow(rows, "layout.tiled")
+	onLoop(r, func() bool { tiled.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool {
+		return onLoop(r, func() string { return r.h.prefs.Value(layoutKey("terminal")) }) == layoutTiled
+	})
+	wantLayoutAbove(t, "the terminal, Tiled", onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.goto", true)
+}
+
+// The agent's tabs have Layout › right above Go to ›, Float as stored.
+func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	tab := onLoop(r, func() widget.TerminalTabID { return r.h.agents.instances["heron"].tab })
+	wantLayoutAbove(t, "the agent", onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.goto", false)
+}
+
+// The results panel has no strip: its Layout › ends its table's menu, after a separator.
+func TestTheResultsLayoutEndsItsTablesMenu(t *testing.T) {
+	r, _ := kindsTUI(t, "tablestall")
+	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.plugins.resultsMenuRows() })
+	l := rowAt(rows, "layout")
+	if l != len(rows)-1 || l < 1 || rows[l-1].Kind != widget.ItemKindSeparator {
+		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDs(rows))
+	}
+	wantLayoutChecked(t, "the results", rows[l].Children, false)
+}
+
+// glyphAt is where r's screen draws glyph inside rect, the first from the top-left; false when it
+// does not.
+func glyphAt(r *running, glyph string, in tuicore.Rect) (tuicore.Point, bool) {
+	for y, line := range strings.Split(r.s.String(), "\n") {
+		if y < in.Y || y >= in.Y+in.H {
+			continue
+		}
+		for x, g := range []rune(line) {
+			if string(g) == glyph && x >= in.X && x < in.X+in.W {
+				return tuicore.Point{X: x, Y: y}, true
+			}
+		}
+	}
+	return tuicore.Point{}, false
+}
+
+// The explorer's and the todos' tabs have a menu of their own, Layout › alone: opened as a user
+// opens them (SPC e, SPC x: the panel takes the keyboard, and comes forward), its ≡ opens the menu,
+// and Tiled chosen by its keys (a, then t) makes the window's Layout Tiled.
+func TestTheExplorersAndTheTodosTabsOfferTheirLayout(t *testing.T) {
+	for _, c := range []struct {
+		window string
+		leader rune
+	}{{"explorer", 'e'}, {"todos", 'x'}} {
+		t.Run(c.window, func(t *testing.T) {
+			d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
+			r := runTUI(t, NewSession(d.sock, nil), Options{})
+			r.ready(t)
+			r.leader(t, c.leader)
+			r.s.WaitFor(t, "the "+c.window+" open", func(string) bool { return boundsOf(r, c.window).W > 0 })
+			at, ok := glyphAt(r, "≡", boundsOf(r, c.window))
+			if !ok {
+				t.Fatalf("no ≡ on the %s's tabs:\n%s", c.window, r.s)
+			}
+			r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: at.X, Y: at.Y},
+				tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: at.X, Y: at.Y})
+			r.s.WaitForText(t, "Layout")
+			r.keys(t, key('a'))
+			r.s.WaitForText(t, "Float")
+			r.keys(t, key('t'))
+			r.s.WaitFor(t, "the "+c.window+"'s Layout Tiled", func(string) bool {
+				return onLoop(r, func() string { return r.h.prefs.Value(layoutKey(c.window)) }) == layoutTiled
+			})
+		})
+	}
+}
+
+// :layout opens the editor's Layout over the page, whose Float its key chooses; :layout terminal the
+// terminal's, whose Tiled its key chooses. A name that is no window says which are, and changes
+// nothing.
+func TestTheLayoutCommandOpensAWindowsLayout(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	layouts := func() [2]string {
+		return onLoop(r, func() [2]string {
+			return [2]string{r.h.prefs.Value(layoutKey("editor")), r.h.prefs.Value(layoutKey("terminal"))}
+		})
+	}
+	r.command(t, "layout")
+	r.s.WaitFor(t, "the editor's Layout", func(sc string) bool { return strings.Contains(sc, "Tiled") && strings.Contains(sc, "Float") })
+	r.keys(t, key('f'))
+	r.s.WaitFor(t, "the editor's Layout Float", func(string) bool { return layouts() == [2]string{layoutFloat, layoutFloat} })
+	r.command(t, "layout terminal")
+	r.s.WaitForText(t, "Float")
+	r.keys(t, key('t'))
+	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool { return layouts() == [2]string{layoutFloat, layoutTiled} })
+	r.command(t, "layout nope")
+	r.s.WaitFor(t, "the notice naming the windows", func(sc string) bool { // a toast wraps it
+		return strings.Contains(sc, "no window nope: the windows are editor,") && strings.Contains(sc, "explorer, terminal, agent, results, todos")
+	})
+	if got := layouts(); got != [2]string{layoutFloat, layoutTiled} {
+		t.Fatalf("the editor's and the terminal's Layout %v after :layout nope; want them unchanged", got)
+	}
+}

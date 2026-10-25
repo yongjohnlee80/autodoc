@@ -399,3 +399,8 @@ func menuCommand(id widget.ItemID, text string, action tuicore.Action) widget.Me
 	row.Hotkey, row.HotkeyIdx = key, at
 	return withLabelMessage(row, text)
 }
+
+// coreRowOf is a row of an EditorMenu (a table's or the page's) as a rowMaker (Layout ›).
+func coreRowOf(id, label string, run func()) widget.MenuItemModel {
+	return menuCommand(widget.ItemID(id), label, widget.CoreMenuAction{ID: tuicore.ActionID(id), Run: func(*widget.EditorCore) { run() }})
+}

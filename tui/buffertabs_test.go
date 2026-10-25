@@ -104,8 +104,8 @@ func TestABufferTabsMenu(t *testing.T) {
 	if s, _ := tabRow(onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(tabID(b)) }), "buffer.tabs.save"); !s.Enabled {
 		t.Fatal("Save not offered for b.md, which is modified")
 	}
-	if rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 3 {
-		t.Fatalf("the menu off a tab: %d rows, want New buffer, Open file and Go to", len(rows))
+	if rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 4 {
+		t.Fatalf("the menu off a tab: %d rows, want New buffer, Open file, Layout and Go to", len(rows))
 	}
 
 	runTabRow(t, r, a, "buffer.tabs.goto."+tabID(a))

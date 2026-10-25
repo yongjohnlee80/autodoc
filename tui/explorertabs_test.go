@@ -158,8 +158,9 @@ func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	}
 }
 
-// A tab chosen in the view itself, by a click on its title or Ctrl+PageUp and Ctrl+PageDown, gives its
-// list the keyboard, so its own keys answer there (d in the links). Hidden, the drawer takes none: a
+// A tab chosen in the view itself, by Ctrl+PageDown and Ctrl+PageUp, gives its list the keyboard, so
+// its own keys answer there (d in the links). Keys, not a click on a title: the strip scrolls once its
+// tabs outgrow it, and a title may be scrolled out. Hidden, the drawer takes none: a
 // tab shown then leaves the keyboard where it is, and the dock's icon shows the drawer on it, its list
 // with the keyboard.
 func TestATabChosenInTheViewGivesItsListTheKeyboard(t *testing.T) {
@@ -182,11 +183,9 @@ func TestATabChosenInTheViewGivesItsListTheKeyboard(t *testing.T) {
 	r.leader(t, 'e')
 	onTab("SPC e: the Explorer tab", explorerTab, "explorerTree")
 
-	x, y := cellOf(t, r.s.String(), "Links")
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
-		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	onTab("a click on Links: its list has the keyboard", linksTab, "relationsList")
-	depth("after the click")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown, Mods: tuicore.ModCtrl})
+	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", linksTab, "relationsList")
+	depth("after Ctrl+PageDown")
 
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp, Mods: tuicore.ModCtrl})
 	onTab("Ctrl+PageUp: the Explorer tab, the tree has the keyboard", explorerTab, "explorerTree")

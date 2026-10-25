@@ -206,8 +206,8 @@ func (h *Host) newEmptyBuffer() {
 }
 
 // bufferTabRows is the menu of the tab id ("" off a tab, with none active): New buffer, Open file
-// in a new buffer… and Go to › every buffer; then, for its buffer, Save (while it is modified),
-// Close and Close others.
+// in a new buffer…, the editor's Layout › and Go to › every buffer; then, for its buffer, Save
+// (while it is modified), Close and Close others.
 func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 	goTo := make([]widget.MenuItemModel, 0, len(h.buffers))
 	for _, o := range h.buffers {
@@ -220,8 +220,8 @@ func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),
 		// File › Open, the file chosen in a buffer of its own, even over an empty one shown
 		bufferTabRow("buffer.tabs.open", "&Open file in a new buffer…", h.openPickerNewBuffer),
-		sub,
 	}
+	rows = append(append(rows, layoutRows(core{h}, "editor", bufferTabRow)...), sub)
 	b := h.bufferOfTab(id)
 	if b == nil {
 		return rows

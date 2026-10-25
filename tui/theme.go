@@ -159,6 +159,7 @@ func (h *Host) reloaded() {
 	h.keysChanged()
 	h.panelText.apply(h, agentScaleOf(h.prefs)) // the rebuilt agent and terminal panels get their views again
 	h.applyTerminalKeymap(h.prefs)              // and their keymap's normal mode
+	h.attachTabViewMenus()                      // and the explorer's and the todos' tabs their menu
 	h.themesReloaded()
 }
 
