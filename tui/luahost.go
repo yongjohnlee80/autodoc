@@ -27,6 +27,11 @@ import (
 //	autodoc.agents.list()                  AutoDoc's agents: { codename, name, running, closing,
 //	                                       instance, orphan }, saved profiles first; a closing one
 //	                                       refuses a send
+//	autodoc.agents.resume([ref])           ok, err: a SIGCONT to the agent's tab, ref as send's, none
+//	                                       for the agents panel's tab now: an agent CLI stopped by
+//	                                       its own Ctrl+Z (or a SIGTSTP from elsewhere) runs again; a
+//	                                       running one is not disturbed. err "stale", "unavailable",
+//	                                       or why
 //	autodoc.agents.send(ref, text, cb)     text pasted to an agent, no Enter added (Core.SendText):
 //	                                       ref a codename, or { codename, instance } for that exact
 //	                                       incarnation. A
@@ -43,6 +48,7 @@ type luaHost interface {
 	readText(done func(text string, err error)) error
 	agentEntries() []AgentEntry
 	sendText(to AgentRef, text string, done func(error)) error
+	resumeAgent(to AgentRef) error
 	post(fn func())
 }
 
@@ -72,7 +78,7 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	L.SetField(eng.Global(), "plugin", pt)
 	eng.SetDomainGate("plugin", func(string, *lua.LState) string { return "" })
 	ag := L.NewTable()
-	L.SetFuncs(ag, map[string]lua.LGFunction{"list": s.luaAgentsList, "send": s.luaAgentsSend})
+	L.SetFuncs(ag, map[string]lua.LGFunction{"list": s.luaAgentsList, "send": s.luaAgentsSend, "resume": s.luaAgentsResume})
 	L.SetField(eng.Global(), "agents", ag)
 	eng.SetDomainGate("clipboard", func(string, *lua.LState) string { return "clipboard" })
 	eng.SetDomainGate("agents", func(string, *lua.LState) string { return "agents" })
@@ -235,16 +241,25 @@ func (s *scripting) luaAgentsList(L *lua.LState) int {
 	return 1
 }
 
-func (s *scripting) luaAgentsSend(L *lua.LState) int {
-	var ref AgentRef
-	switch r := L.Get(1).(type) {
+// luaAgentRef is argument n as an agent: a codename, or {codename=, instance=}; with optional, none
+// is the zero ref.
+func luaAgentRef(L *lua.LState, n int, verb string, optional bool) AgentRef {
+	switch r := L.Get(n).(type) {
 	case lua.LString:
-		ref.Codename = string(r)
+		return AgentRef{Codename: string(r)}
 	case *lua.LTable:
-		ref = AgentRef{Codename: lua.LVAsString(r.RawGetString("codename")), Instance: lua.LVAsString(r.RawGetString("instance"))}
-	default:
-		L.ArgError(1, "send needs an agent: a codename, or {codename=, instance=}")
+		return AgentRef{Codename: lua.LVAsString(r.RawGetString("codename")), Instance: lua.LVAsString(r.RawGetString("instance"))}
+	case *lua.LNilType:
+		if optional {
+			return AgentRef{}
+		}
 	}
+	L.ArgError(n, verb+" needs an agent: a codename, or {codename=, instance=}")
+	return AgentRef{}
+}
+
+func (s *scripting) luaAgentsSend(L *lua.LState) int {
+	ref := luaAgentRef(L, 1, "send", false)
 	text := L.CheckString(2)
 	cb := L.OptFunction(3, nil)
 	if s.host == nil {
@@ -261,6 +276,22 @@ func (s *scripting) luaAgentsSend(L *lua.LState) int {
 		s.later("agents.send", cb, nil, agentErr(err))
 	}
 	return 0
+}
+
+// luaAgentsResume is autodoc.agents.resume([ref]): ok, or nil and why.
+func (s *scripting) luaAgentsResume(L *lua.LState) int {
+	ref := luaAgentRef(L, 1, "resume", true)
+	err := ErrAgentUnavailable
+	if s.host != nil {
+		err = s.host.resumeAgent(ref)
+	}
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(agentErr(err)))
+		return 2
+	}
+	L.Push(lua.LTrue)
+	return 1
 }
 
 // agentErr is a delivery's failure as a script reads it.

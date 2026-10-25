@@ -52,7 +52,8 @@ A key belongs to a scope, and two commands of one scope can't share a key:
 - each pane with keys of its own: `autodoc.page.*` (the editor's page), `autodoc.explorer.*` and
   `autodoc.links.*` (the explorer's Explorer and Links tabs), `autodoc.todos.*`, `autodoc.htmlPane.*`.
 - the dialogs': `autodoc.arrange.*`, `autodoc.picker.*`, `autodoc.goPick.*`, and
-  `autodoc.terminal.mode` (a terminal's and an agent's input and Normal mode).
+  `autodoc.terminal.mode` (a terminal's and an agent's input and Normal mode) and
+  `autodoc.terminal.suspend` (the keys kept from their programs, so a program never stops on them).
 - golib's widgets: a list, a tree, a table, a text field, a menu, the editor's Vim and Text modes and
   the rest, every one by its id (`tui.list.down`, `tui.editor.vim.normal.undo`). golib's
   `tui/keymap/README.md` lists them all.
@@ -73,7 +74,8 @@ key a pane uses is legal, and the checker warns of it.
 
 F1's help opens with **YOUR KEYS**: every key your file moves, with its line. The cards (SPC's and
 the rest) name a moved key by its new keys. A terminal keeps the Window's maximize key
-(`autodoc.window.maximizePanel`) from its program, whichever key that is now.
+(`autodoc.window.maximizePanel`) and its suspend key (`autodoc.terminal.suspend`) from its program,
+whichever keys those are now.
 
 ## AutoDoc's commands
 
@@ -218,4 +220,5 @@ opens the card (SPC, then the card's key).
 | `autodoc.goPick.next` | `autodoc.goPick` | Tab |
 | `autodoc.goPick.previous` | `autodoc.goPick` | Shift+Tab |
 | `autodoc.terminal.mode` | `autodoc.terminal` | Ctrl+T |
+| `autodoc.terminal.suspend` | `autodoc.terminal` | Ctrl+Z |
 <!-- end of the generated commands -->

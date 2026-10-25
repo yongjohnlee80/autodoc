@@ -23,6 +23,7 @@ func (h *Host) builtinEntries() []Entry {
 		// File
 		builtin("file.new", "new file", "App.newFile()", h.newFile),
 		builtin("panel.maximize", "maximize or restore the terminal or agents", "App.maximizePanel()", h.maximizePanel),
+		builtin("panel.resume", "resume the terminal's or the agents' tab (SIGCONT)", "App.resumePanel()", h.resumePanel),
 		builtin("file.open", "open a document", "App.openPicker()", h.openPicker),
 		builtin("buffer.pick", "switch buffer", "App.openBuffers()", h.openBuffers),
 		builtin("buffer.close", "close the buffer", "App.closeBuffer()", h.closeShownBuffer),

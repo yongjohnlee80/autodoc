@@ -521,7 +521,7 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	}
 	rows = append(rows, closing)
 	// Hide is SPC `'s own toggle (terminal.toggle): the panel closed, every shell running on
-	return append(rows, panelRows(t.c, "terminal", t.toggleTerminal)...)
+	return append(rows, panelRows(t.c, "terminal", panel, id, t.toggleTerminal)...)
 }
 
 // closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,

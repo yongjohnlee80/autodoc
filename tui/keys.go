@@ -426,13 +426,19 @@ var dialogCommands = []keymap.Command{
 	// a terminal's and an agent's input and Normal mode, toggled (their modeKey, App.terminalModeKey):
 	// it has no Shortcut, the terminal reads it before its program does
 	dialogCommand(terminalModeID, "Ctrl+T"),
+	// kept from a terminal's or an agent's program (their hostKeys, App.terminalHostKeys): an agent CLI
+	// suspends itself on Ctrl+Z, and with no shell to fg it its tab would be dead. It has no Shortcut,
+	// so the key reaches neither the program nor anything else; panel.resume sends a SIGCONT
+	dialogCommand(suspendID, "Ctrl+Z"),
 }
 
 // terminalModeID is the terminals' mode key's command; maximizeID the Window's maximize, whose keys a
-// terminal keeps from its program (hostKeys, App.terminalHostKeys) so they reach the Window.
+// terminal keeps from its program (hostKeys, App.terminalHostKeys) so they reach the Window;
+// suspendID the keys a terminal keeps from its program and that go nowhere (Ctrl+Z).
 const (
 	terminalModeID = "autodoc.terminal.mode"
 	maximizeID     = "autodoc.window.maximizePanel"
+	suspendID      = "autodoc.terminal.suspend"
 )
 
 // keysValue is the keys the App's map gives command id, as a terminal's hostKeys and modeKey take
@@ -452,7 +458,8 @@ func (k keyset) keysValue(id string) tuidecl.Keys {
 
 // terminalKeys are the terminals' key sources, as the map binds them now.
 func (k keyset) terminalKeys() map[string]any {
-	return map[string]any{"App.terminalHostKeys": k.keysValue(maximizeID), "App.terminalModeKey": k.keysValue(terminalModeID)}
+	host := tuidecl.Keys(slices.Concat(k.keysValue(maximizeID), k.keysValue(suspendID))) // a copy: never the map's own slices
+	return map[string]any{"App.terminalHostKeys": host, "App.terminalModeKey": k.keysValue(terminalModeID)}
 }
 
 // dialogCommand declares one: its scope is its id less the last part.

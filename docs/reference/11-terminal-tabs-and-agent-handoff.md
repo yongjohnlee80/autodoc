@@ -53,6 +53,7 @@ Both the shell terminal drawer (`` SPC ` `` / `:terminal`) and the agent drawer 
   - **Go to ›** — Jump directly to any open tab by label.
   - **Restart / Close** — In the Agent Panel, **Restart** (`restartAgent`) starts a stopped agent or prompts for confirmation (`&Yes, restart it`) before terminating a running agent and respawning its updated command in a fresh tab. **Close** (`closeAgent`) stops the process and removes the tab.
   - **Profiles…** — Opens the **Agent profiles…** dialog to add, edit, or set the default agent.
+  - **Resume** — Sends the tab's program a SIGCONT, waking one that a suspend stopped. `Ctrl+Z` itself never reaches a program here; `panel.resume` (the command) and `autodoc.agents.resume` (Lua) do the same.
   - **Theme and font…** — Customizes the terminal color palette and (in `--gui`) the monospace terminal font independently of the editor's prose font.
   - **Maximize / Restore (`F11`)** — Expands the drawer to fill the entire dock area or restores its saved percentage geometry.
   - **Hide** — Closes the drawer while leaving every child shell and agent process running in the background.

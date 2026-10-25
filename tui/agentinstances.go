@@ -389,6 +389,31 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	}, done)
 }
 
+// Resume is autodoc.agents.resume: a SIGCONT to agent to's tab, to as SendText takes it, or with
+// no codename the agents panel's tab now. A stopped, closing or unknown agent is ErrAgentUnavailable,
+// an incarnation that is gone ErrAgentStale. A running agent is not disturbed.
+func (a *agents) Resume(to AgentRef) error {
+	a.syncInstances()
+	panel, err := a.runtime()
+	if err != nil {
+		return err
+	}
+	if to.Codename == "" {
+		if panel.Active() == "" {
+			return ErrAgentUnavailable
+		}
+		return panel.Resume(panel.Active())
+	}
+	instance := a.instances[to.Codename]
+	if to.Instance != "" && (instance == nil || !instance.running || instance.token != to.Instance) {
+		return ErrAgentStale
+	}
+	if instance == nil || !instance.running || instance.closing {
+		return ErrAgentUnavailable
+	}
+	return panel.Resume(instance.tab)
+}
+
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal after the owner's
 // own, a stopped agent started once the user agrees (what names what is sent), everything checked
 // again before send runs on the agent's tab, and done completed once on the loop. With submit, an

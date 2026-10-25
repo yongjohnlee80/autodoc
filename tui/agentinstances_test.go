@@ -28,6 +28,7 @@ type modelPanel struct {
 	next    int
 	sends   []string
 	pastes  []string
+	resumed []widget.TerminalTabID // each Resume's tab
 	sendErr error
 	removal *modelRemoval
 	addMenu func() []widget.MenuItemModel
@@ -80,6 +81,13 @@ func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
 	p.sends = append(p.sends, string(id)+":"+text)
 	return nil
 }
+
+// Resume keeps the tab it was asked for.
+func (p *modelPanel) Resume(id widget.TerminalTabID) error {
+	p.resumed = append(p.resumed, id)
+	return nil
+}
+
 func (p *modelPanel) SendPaste(id widget.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
