@@ -77,6 +77,7 @@ func goTableText(t *testing.T) map[string]string {
 	}
 	put("autodoc.help.keys", helpKeys)
 	put("autodoc.help.rest", helpRest)
+	put("autodoc.help.layout", helpLayout)
 	put("autodoc.help.commands", helpCommandsHead)
 	for _, g := range helpGroups {
 		put("autodoc.help.group."+slugOf(g.head), g.head)

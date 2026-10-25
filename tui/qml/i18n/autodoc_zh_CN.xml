@@ -2531,6 +2531,37 @@
               缩放…”还可选择字体)；终端的字体由其自身设置决定。缩放
               会在窗口小于 80 × 20 之前停止：放大窗口后可继续缩放</translation>
     </message>
+    <message id="autodoc.help.layout">
+        <source>THE LAYOUT
+  The page is a window of its own, and each panel (the explorer, the terminal, the agent, the
+  results and the todos) floats over it or is tiled beside it, as its Layout says. Layout ›
+  Tiled or Float is on every window's menu, right above Go to ›: the page's buffer strip, the
+  terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
+  table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
+  the windows). The page is tiled unless you float it; every panel floats unless you tile it.
+  A tiled panel sits at its edge, a share of the base across it (the preferences
+  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  shares, and its new share is kept. When the window is too small for the page and the panels
+  tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
+  Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
+  and comes forward when it takes the keyboard; when it is minimized, the dock's editor icon
+  shows it again.
+  Ctrl+h/j/k/l go to the window placed that way, tiled, docked or floating alike. Arrange panel
+  (SPC L) moves a floating or docked panel; a tiled one is placed by its tile.</source>
+        <translation>布局
+  页面本身是一个窗口，每个面板(资源管理器、终端、代理、结果和待办)按其布局设置浮于页面
+  之上或平铺在旁。布局 › 平铺或浮动出现在每个窗口菜单中“转到 ›”的正上方：页面的缓冲区
+  标签栏、终端和代理的标签、资源管理器和待办的 ≡，以及结果表右键菜单的末尾。
+  :layout [窗口] 在页面上打开它，不带参数时为页面的(Tab 列出窗口)。页面除非设为浮动否则
+  平铺；每个面板除非设为平铺否则浮动。
+  平铺的面板位于其边缘，占基础区域的一定比例(首选项 tui.&lt;窗口&gt;.tileEdge 和
+  tui.&lt;窗口&gt;.tileSize)；按住 Alt 右键拖动共享的边界，新的比例会被保留。窗口太小，容不下
+  页面和平铺的面板时，最后平铺的面板会浮动，直到空间恢复后自行重新平铺：其布局仍是平铺。
+  浮动的页面可以移动和调整大小，最宽到页面宽度，从不关闭，获得键盘时会移到最前；最小化
+  后，停靠栏的编辑器图标会让它重新显示。
+  Ctrl+h/j/k/l 转到那个方向上的窗口，无论平铺、停靠还是浮动。排列面板(SPC L)移动浮动或
+  停靠的面板；平铺的面板由其平铺位置决定。</translation>
+    </message>
     <message id="autodoc.help.rest">
         <source>THE PAGE
   The file is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the

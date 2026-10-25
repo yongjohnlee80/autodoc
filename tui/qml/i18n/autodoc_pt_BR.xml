@@ -2531,6 +2531,42 @@
               zoom… também escolhe as fontes); as configurações do terminal escolhem a fonte dele. O zoom
               para antes de a janela ficar menor que 80 × 20: aumente-a para continuar</translation>
     </message>
+    <message id="autodoc.help.layout">
+        <source>THE LAYOUT
+  The page is a window of its own, and each panel (the explorer, the terminal, the agent, the
+  results and the todos) floats over it or is tiled beside it, as its Layout says. Layout ›
+  Tiled or Float is on every window's menu, right above Go to ›: the page's buffer strip, the
+  terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
+  table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
+  the windows). The page is tiled unless you float it; every panel floats unless you tile it.
+  A tiled panel sits at its edge, a share of the base across it (the preferences
+  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  shares, and its new share is kept. When the window is too small for the page and the panels
+  tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
+  Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
+  and comes forward when it takes the keyboard; when it is minimized, the dock's editor icon
+  shows it again.
+  Ctrl+h/j/k/l go to the window placed that way, tiled, docked or floating alike. Arrange panel
+  (SPC L) moves a floating or docked panel; a tiled one is placed by its tile.</source>
+        <translation>O LAYOUT
+  A página é uma janela própria, e cada painel (o explorador, o terminal, o agente, os
+  resultados e as tarefas) flutua sobre ela ou fica lado a lado com ela, conforme o seu Layout.
+  Layout › Lado a lado ou Flutuante está no menu de cada janela, logo acima de Ir para ›: a
+  faixa de buffers da página, as abas do terminal e do agente, o ≡ do explorador e o das
+  tarefas, e o fim do menu de contexto da tabela de resultados. :layout [janela] o abre sobre a
+  página, o da página se sozinho (Tab lista as janelas). A página fica lado a lado, a menos que
+  você a faça flutuar; cada painel flutua, a menos que você o ponha lado a lado.
+  Um painel lado a lado ocupa a sua borda, uma parte da base ao longo dela (as preferências
+  tui.&lt;janela&gt;.tileEdge e tui.&lt;janela&gt;.tileSize); Alt e um arrasto com o botão direito movem a
+  borda que ele compartilha, e a nova parte é mantida. Quando a janela é pequena demais para a
+  página e os painéis lado a lado, o último posto lado a lado flutua até o espaço voltar, e
+  então volta sozinho: o seu Layout continua lado a lado. Uma página flutuante se move e muda de
+  tamanho até a largura da página, nunca fecha e vem para a frente quando recebe o teclado;
+  minimizada, o ícone do editor no dock a mostra de novo.
+  Ctrl+h/j/k/l vão para a janela posicionada naquela direção, lado a lado, acoplada ou
+  flutuante. Organizar painel (SPC L) move um painel flutuante ou acoplado; um lado a lado é
+  posicionado pelo seu lugar.</translation>
+    </message>
     <message id="autodoc.help.rest">
         <source>THE PAGE
   The file is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the

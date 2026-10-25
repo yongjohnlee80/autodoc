@@ -192,7 +192,7 @@ func TestAKeyOnACardIsNamedFromThePage(t *testing.T) {
 	if got := (keyset{keys: []Key{{Card: "lone", Seq: "x"}}}).keyName(Key{Card: "lone", Seq: "x"}, 0); got != "x" {
 		t.Errorf("a key on a card nothing opens: %q", got)
 	}
-	if helpText(keyset{}, nil, nil) != helpKeys+"\n\n\n\n"+helpRest {
+	if helpText(keyset{}, nil, nil) != helpKeys+"\n\n\n\n"+helpRest+"\n\n"+helpLayout {
 		t.Error("help without a catalog has a COMMANDS section")
 	}
 }
