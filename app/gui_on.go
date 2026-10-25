@@ -20,7 +20,7 @@ import (
 func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 	configureGUIPreferences()
 	gui.Main(func() error {
-		opts := []gui.Option{gui.WithTitle("AutoDoc")}
+		opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
 		if o.DebugRecorder != nil {
 			// --debug: the window's input path records into the same file the TUI's
 			// trace does, but wrapped: the backend closes what it is given on window
@@ -46,4 +46,14 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		return nil
 	})
 	return nil // not reached: gui.Main exits the process
+}
+
+// rendererOptions are the window's renderer, chosen as it opens: Vulkan first where it can have it,
+// OpenGL where it can't (gui.WithZeroCopyFrames), unless tui.gui.renderer's mirror at path names
+// OpenGL (prefersVulkan).
+func rendererOptions(path string) []gui.Option {
+	if prefersVulkan(path) {
+		return []gui.Option{gui.WithZeroCopyFrames()}
+	}
+	return nil
 }

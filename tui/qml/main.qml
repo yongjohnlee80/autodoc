@@ -207,6 +207,13 @@ Window {
                 MenuItem { text: "&5. Español";            group: "language"; checked: App.language_es;    onTriggered: App.setLanguage("es") }
                 MenuItem { text: "&6. Português (Brasil)"; group: "language"; checked: App.language_pt_BR; onTriggered: App.setLanguage("pt_BR") }
             }
+            // what draws the window (renderer.go), taken as it opens: the terminal draws in its own
+            Menu {
+                title: qsTrId("autodoc.main.renderer")
+                visible: App.gui
+                MenuItem { text: qsTrId("autodoc.main.renderer_auto");   group: "renderer"; checked: App.rendererAuto;   onTriggered: App.setRenderer("auto") }
+                MenuItem { text: qsTrId("autodoc.main.renderer_opengl"); group: "renderer"; checked: App.rendererOpenGL; onTriggered: App.setRenderer("opengl") }
+            }
             MenuSeparator {}
             MenuItem { text: qsTrId("autodoc.main.editor_preferences"); onTriggered: App.openPrefs() }
             // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these

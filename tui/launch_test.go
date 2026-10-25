@@ -60,6 +60,14 @@ func TestLaunchRunsAnotherClientsLayoutAndDaemon(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// the window's renderer is mirrored in the state directory, where the next start's window reads it
+	for b, _ := os.ReadFile(filepath.Join(state, guiRendererName)); strings.TrimSpace(string(b)) != RendererAuto; b, _ = os.ReadFile(filepath.Join(state, guiRendererName)) {
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("the renderer is not mirrored in the state directory: %q", b)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	cancel()
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		t.Errorf("Launch: %v", err)

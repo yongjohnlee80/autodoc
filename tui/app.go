@@ -271,6 +271,10 @@ type Host struct {
 	recoveryDir     string
 	crashDir        string
 	recoveryOffered bool
+
+	// tui.gui.renderer's mirror for the next start's window (renderer.go), and what it was last written
+	rendererFile, rendererMirrored string
+
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
 	scripts   *script.Engine
 	scripting *scripting // the daemon's verbs in the engine: autodoc.call, autodoc.<domain> (scripting.go)
@@ -370,6 +374,9 @@ type Options struct {
 	// RecoveryDir is where unsaved work is kept when AutoDoc ends without being asked to, and offered
 	// back at the next start (recovery.go); "" keeps nothing.
 	RecoveryDir string
+	// RendererFile is where tui.gui.renderer is mirrored for the next start's window, which opens
+	// before the store is read (renderer.go); "" mirrors nothing.
+	RendererFile string
 	// CrashDir is where a contained panic's crash log goes, and a fatal one's report (crash.go); ""
 	// writes none, the notice still said.
 	CrashDir string
@@ -417,7 +424,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		watches:         map[string]*diskWatch{},
