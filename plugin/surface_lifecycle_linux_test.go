@@ -45,7 +45,7 @@ func TestAFullDoneQueueNeverStopsTheReader(t *testing.T) {
 	const count = 10_000
 	var sent atomic.Int64
 	sendErr := make(chan error, 1)
-	go func() {
+	onHost(t, host, func() {
 		for i := range count {
 			if err := host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: uint64(i + 1), Outcome: "drawn"})); err != nil {
 				sendErr <- fmt.Errorf("outcome %d: %w", i+1, err)
@@ -54,7 +54,7 @@ func TestAFullDoneQueueNeverStopsTheReader(t *testing.T) {
 			sent.Add(1)
 		}
 		sendErr <- nil
-	}()
+	})
 	// a stopped reader leaves the socket full: the host's send passes its deadline, and says so
 	select {
 	case err := <-sendErr:
@@ -72,10 +72,10 @@ func TestAFullDoneQueueNeverStopsTheReader(t *testing.T) {
 // Presents from many goroutines on the real socket arrive with seqs rising, round after round.
 func TestConcurrentPresentsNeverInvertOnTheSocket(t *testing.T) {
 	host, plug := pair(t)
-	s := newSurface(plug)
+	s := surfaceOn(t, plug)
 	const rounds = 2000
 	observed := make(chan uint64, 3*rounds)
-	go func() {
+	onHost(t, host, func() {
 		for range 3 * rounds {
 			m, g, err := host.Recv()
 			if err != nil {
@@ -86,7 +86,7 @@ func TestConcurrentPresentsNeverInvertOnTheSocket(t *testing.T) {
 				observed <- f.Seq
 			}
 		}
-	}()
+	})
 	var last uint64
 	for range rounds {
 		var wg sync.WaitGroup
@@ -163,7 +163,7 @@ func surfaceMaps(t *testing.T) int {
 func TestASurfaceGrantsNothingAndKeepsNoMappingOnceTheHostGoes(t *testing.T) {
 	host, plug := pair(t)
 	before := surfaceMaps(t)
-	s := newSurface(plug)
+	s := surfaceOn(t, plug)
 	installed(t, host, s, 1, 2)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -193,7 +193,7 @@ func TestASurfaceGrantsNothingAndKeepsNoMappingOnceTheHostGoes(t *testing.T) {
 func TestASupersededGenerationsHalfIsReclaimed(t *testing.T) {
 	host, plug := pair(t)
 	before := surfaceMaps(t)
-	s := newSurface(plug)
+	s := surfaceOn(t, plug)
 	fd := memfd(t)
 	unix.Ftruncate(fd, 4096)
 	host.Send(BuffersMsg(1, []SurfaceBufferSpec{{ID: 2, Kind: "memory", Format: "rgba8", W: 1, H: 1, Pitch: 4, Size: 4096}}), fd)
@@ -218,7 +218,7 @@ func TestASurfaceCloseNeedsNothingFromTheHost(t *testing.T) {
 	host, plug := pair(t)
 	_ = host
 	before := surfaceMaps(t)
-	s := newSurface(plug)
+	s := newSurface(plug) // the cell closes it, watched: a Close that never returns is said, not waited on
 	installed(t, host, s, 1, 3)
 	done := make(chan struct{})
 	go func() { s.Close(); close(done) }()
