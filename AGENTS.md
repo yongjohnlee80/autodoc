@@ -30,9 +30,10 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 28, "name": "<your client>"}`: the protocol your client was written
-for. The daemon serves every protocol from `min_protocol` (12) to its own (25); another is
-refused, and so is every verb until the hello succeeds. A verb may be written right behind the
+`sys.hello` with `{"protocol": N, "name": "<your client>"}`, where `N` is the protocol your client was
+written for. The daemon serves every protocol from its `min_protocol` to its own; another is
+refused, and so is every verb until the hello succeeds. To learn the range first, send `sys.hello`
+with no protocol: that probe admits nothing and answers `min_protocol` and `server_protocol`. A verb may be written right behind the
 hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
 and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
