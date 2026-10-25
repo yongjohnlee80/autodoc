@@ -281,9 +281,9 @@ Window {
             TileManager.edge: Tui.Center
             TileManager.tiled: App.editorTiled
             TileManager.minimumWidth: 40; TileManager.minimumHeight: 8 // the page's least: narrower or shorter, the panel tiled last floats
+            TileManager.maximumWidth: App.pageWidth // its most, tiled: the strips beside it take the rest, and alone it is centred
             Frame {
                 title: App.fileTitle
-                maximumWidth: App.pageWidth
                 palette.window: Theme.document.window
                 palette.windowText: Theme.document.windowText
                 palette.highlight: Theme.document.highlight
