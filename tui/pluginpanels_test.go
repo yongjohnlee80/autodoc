@@ -514,6 +514,58 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 	})
 }
 
+// A card whose plugin goes while it is being arranged: after a step, the plugin's folder removed and
+// the plugins read again, the card's panel is gone, and Escape ends the arrangement, putting back
+// where it began. The keyboard goes home, as when a window closes (here the page, nothing else
+// being open); nothing panics, nothing is reported, and no preference is kept for the panel that
+// is gone.
+func TestArrangeEndsCleanlyWhenItsCardIsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
+	d, r, _ := liveCardTUI(t, dir, nil, false)
+	r.openPlugin("card")
+	waitFrame(t, r, "Card")
+	onLoop(r, func() bool { r.h.arrangePanel(); return true })
+	r.s.WaitForText(t, "arrange Card")
+	r.keys(t, key('h')) // a step: Arrange's end then puts back where it began (showFloat)
+	r.s.WaitFor(t, "the step landed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.arrange != nil && r.h.arrange.rect != nil })
+	})
+	crashes := t.TempDir()
+	type tally struct{ errs, crashes uint64 }
+	errs := func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return slices.Clone(r.h.errs) }
+	before := onLoop(r, func() tally { r.h.crashDir = crashes; return tally{uint64(len(errs())), crashSeq.Load()} })
+	kept, _ := d.db.Preferences(context.Background())
+	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
+		t.Fatal(err)
+	}
+	r.readFolder()
+	panel := cardPanelID("card")
+	r.s.WaitFor(t, "the card's panel gone", func(string) bool { return onLoop(r, func() bool { return r.h.panelSpec(panel) == nil }) })
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the page's keyboard, the arrangement ended", func(string) bool {
+		return onLoop(r, func() bool { return r.h.arrange == nil && within(r, "editor") })
+	})
+	after := onLoop(r, func() tally { return tally{uint64(len(errs())), crashSeq.Load()} })
+	if after.crashes != before.crashes {
+		paths, _ := filepath.Glob(filepath.Join(crashes, "*.log"))
+		for _, p := range paths {
+			b, _ := os.ReadFile(p)
+			t.Logf("%s", b)
+		}
+		t.Fatalf("ending an arrangement whose card was removed: %d contained panic(s)", after.crashes-before.crashes)
+	}
+	if after.errs != before.errs {
+		t.Fatalf("ending an arrangement whose card was removed recorded %d error(s): %v", after.errs-before.errs, errs())
+	}
+	m, _ := d.db.Preferences(context.Background())
+	for k, v := range m {
+		if strings.Contains(k, panel) && kept[k] != v {
+			t.Errorf("a preference was written for the panel that is gone: %s = %v", k, v)
+		}
+	}
+}
+
 // cellsDrawn is a Surface that counts the cells drawn into it, beyond its fill.
 type cellsDrawn struct {
 	tuicore.Surface
