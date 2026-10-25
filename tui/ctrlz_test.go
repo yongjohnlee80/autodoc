@@ -3,17 +3,20 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // suspendingAgent is an agent CLI as Claude Code is: its tty raw, it reads a key at a time, stops
 // itself on Ctrl+Z (0x1A) after saying so, stops on s as a suspend from elsewhere would and says it
-// resumed once continued, and echoes any other key as got-<key>.
+// resumed once continued, exits 3 on e (its tab stays, the program gone), and echoes any other key
+// as got-<key>.
 func suspendingAgent(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "suspending-agent")
@@ -26,6 +29,7 @@ while :; do
     "$(printf '\032')") printf 'suspending\r\n'; kill -STOP $$ ;;
     s) printf 'stopping\r\n'; kill -STOP $$; printf 'resumed\r\n' ;;
     q) exit 0 ;;
+    e) exit 3 ;;
     *) printf 'got-%s\r\n' "$c" ;;
   esac
 done
@@ -130,7 +134,47 @@ func TestPanelResumeWithNoPanelOpenIsANotice(t *testing.T) {
 	r.s.WaitFor(t, "the notice", func(string) bool {
 		return r.noticed("Resume is the terminal's and the agents': open one first")
 	})
-	if errs := onLoop(r, func() int { r.h.mu.Lock(); defer r.h.mu.Unlock(); return len(r.h.errs) }); errs != 0 {
-		t.Fatalf("panel.resume with no panel open kept %d errors", errs)
+	if errs := keptErrors(r); len(errs) != 0 {
+		t.Fatalf("panel.resume with no panel open kept %v", errs)
+	}
+}
+
+// exitedAgent runs the agents panel on suspendingAgent and has its CLI exit 3: the tab stays, its
+// program gone, and the panel stays open.
+func exitedAgent(t *testing.T) *running {
+	t.Helper()
+	r := runSuspendingAgent(t)
+	r.keys(t, decltest.Type("e")...)
+	r.s.WaitFor(t, "the agent exited", func(string) bool { return !r.agentRunningNow() })
+	return r
+}
+
+// keptErrors is what the host keeps, for Run.
+func keptErrors(r *running) []error {
+	return onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) })
+}
+
+// panel.resume on a tab whose program has gone keeps why, naming the panel's tab: the terminal
+// refuses a signal with nothing running.
+func TestPanelResumeOnAnExitedAgentKeepsWhy(t *testing.T) {
+	r := exitedAgent(t)
+	onLoop(r, func() bool { r.h.resumePanel(); return true })
+	errs := keptErrors(r)
+	if len(errs) != 1 || !errors.Is(errs[0], widget.ErrTerminalNotRunning) || !strings.HasPrefix(errs[0].Error(), "Resume the agent panel's tab: ") {
+		t.Fatalf("panel.resume on an exited agent kept %v, want why, naming the agent panel's tab", errs)
+	}
+}
+
+// panel.resume on an open panel with no tab says so in a notice, and keeps no error.
+func TestPanelResumeOnAnEmptyPanelIsANotice(t *testing.T) {
+	r := exitedAgent(t)
+	onLoop(r, func() bool { return r.h.agents.removeInstance("heron") == nil })
+	r.s.WaitFor(t, "its tab gone", func(string) bool {
+		return onLoop(r, func() bool { tabs, ok := r.h.tabsOf("agentView"); return ok && tabs.Active() == "" })
+	})
+	onLoop(r, func() bool { r.h.resumePanel(); return true })
+	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("Resume has no tab to wake: the panel is empty") })
+	if errs := keptErrors(r); len(errs) != 0 {
+		t.Fatalf("panel.resume on an empty panel kept %v", errs)
 	}
 }

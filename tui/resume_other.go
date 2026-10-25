@@ -2,7 +2,7 @@
 
 package tui
 
-import "os"
+import "github.com/yongjohnlee80/golib/tui/widget"
 
-// resumeSignal is none: there is no SIGCONT here, and no program stops itself on Ctrl+Z.
-var resumeSignal os.Signal
+// resumeTab refuses: there is no SIGCONT here, and no program stops itself on Ctrl+Z.
+func resumeTab(*widget.TerminalTabs, widget.TerminalTabID) error { return ErrResumeUnsupported }
