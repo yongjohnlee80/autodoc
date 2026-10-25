@@ -3,9 +3,12 @@
 package tui
 
 import (
-	"os"
 	"syscall"
+
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// resumeSignal is what Resume sends a tab's program: SIGCONT, which a stopped program runs again on.
-var resumeSignal os.Signal = syscall.SIGCONT
+// resumeTab sends tab id's program on tabs its SIGCONT, which a stopped program runs again on.
+func resumeTab(tabs *widget.TerminalTabs, id widget.TerminalTabID) error {
+	return tabs.Signal(id, syscall.SIGCONT)
+}

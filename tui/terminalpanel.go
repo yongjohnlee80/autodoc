@@ -65,13 +65,9 @@ var ErrResumeUnsupported = errs.Sentinel(errs.ErrUnsupported, "resume: no SIGCON
 
 type terminalPanel struct{ tabs *widget.TerminalTabs }
 
-// Resume is TerminalTabs.Signal with SIGCONT for that tab; where the platform has none, it says so.
-func (p terminalPanel) Resume(id widget.TerminalTabID) error {
-	if resumeSignal == nil {
-		return ErrResumeUnsupported
-	}
-	return p.tabs.Signal(id, resumeSignal)
-}
+// Resume is TerminalTabs.Signal with SIGCONT for that tab (resumeTab); where the platform has none,
+// it says so.
+func (p terminalPanel) Resume(id widget.TerminalTabID) error { return resumeTab(p.tabs, id) }
 
 func (p terminalPanel) SameOwner(other TerminalPanel) bool {
 	peer, ok := other.(terminalPanel)
