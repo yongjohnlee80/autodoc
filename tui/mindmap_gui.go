@@ -78,7 +78,7 @@ func (m *mindmap) Panels() []PanelSpec {
 		Closed: func(c PanelHost) {
 			m.open = false
 			m.seq++ // a build under way is dropped
-			c.Keep(c.RestoreKeyboardPane("editor"))
+			c.Keep(c.RestoreKeyboardHome())
 		}}}
 }
 

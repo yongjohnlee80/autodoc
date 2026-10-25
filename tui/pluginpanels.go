@@ -170,7 +170,7 @@ func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
 		Opened:  func(PanelHost) { pl.cardOpened(name) },
 		Closed: func(h PanelHost) {
 			pl.cardClosed(name)
-			h.Keep(h.RestoreKeyboardPane("editor"))
+			h.Keep(h.RestoreKeyboardHome())
 		}}
 }
 

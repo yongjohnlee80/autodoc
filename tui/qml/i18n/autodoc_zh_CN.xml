@@ -2636,7 +2636,7 @@ THE PANELS
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
-  Escape in Normal mode, or SPC ` again, hides it; the keyboard goes back where it was. When
+  Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
   Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
@@ -2751,7 +2751,7 @@ WHAT A KEY NEEDS
   shell，包括 Esc，但 Ctrl+Z 除外：程序不会因它而停止，被挂起停止的程序可用“继续”恢复;Ctrl+T(或 Ctrl+\ Ctrl+n)进入 Normal 模式，在其中 h j k l、w b e、gg G、
   Ctrl+u/d/b/f、/ 和 ? 在历史中移动，v 或 V 选择，y 复制，Ctrl+T、i 或
   Enter 返回。智能体面板的按键相同。
-  在 Normal 模式下按 Escape，或再按 SPC `，即可隐藏它；键盘焦点回到原处。
+  在 Normal 模式下按 Escape，或再按 SPC `，即可隐藏它；键盘焦点移到仍打开的最上层窗口。
   shell 退出时(exit、Ctrl+D)其标签页关闭，异常退出会保留为通知；最后一个 shell
   退出时关闭窗格，下次按 SPC ` 会启动新的 shell。
   所有面板均可移动和调整大小。按住 Alt(Mac 上为 Option)用左键可拖到任意位置，

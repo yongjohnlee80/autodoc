@@ -44,8 +44,8 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 		f := in.feature
 		contribution := panelContribution{feature: f}
 		for _, s := range in.specs {
-			if s.ID == "" || s.View == "" || s.Edge == nil {
-				return nil, nil, fmt.Errorf("tui: %s contributes a panel without an id, view or edge", f.Name())
+			if s.ID == "" || s.View == "" {
+				return nil, nil, fmt.Errorf("tui: %s contributes a panel without an id or view", f.Name())
 			}
 			if prev, ok := owners[s.ID]; ok {
 				return nil, nil, fmt.Errorf("tui: panel %s is both %s's and %s's", s.ID, prev, f.Name())
@@ -59,8 +59,8 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 				}
 			}
 			if len(s.Places) > 0 {
-				if s.Default == nil || !validPercentRange(s.Size) || !validPercentRange(s.Length) {
-					return nil, nil, fmt.Errorf("tui: panel %s has invalid geometry defaults or bounds", s.ID)
+				if s.Edge == nil || s.Default == nil || !validPercentRange(s.Size) || !validPercentRange(s.Length) {
+					return nil, nil, fmt.Errorf("tui: panel %s has no edge, or invalid geometry defaults or bounds", s.ID)
 				}
 				places := map[string]bool{}
 				for _, place := range s.Places {
@@ -169,7 +169,7 @@ func agentPanelSpec() PanelSpec {
 }
 func legacyPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙", Edge: func(prefs) string { return "right" }},
+		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙"},
 	}
 }
 func defaultPanelSpecs() []PanelSpec {

@@ -62,6 +62,9 @@ func TestPanelServicesRejectOtherFeaturesViews(t *testing.T) {
 	}
 }
 
+// Keyboard restoration is bounded to the editor and the panes that take the keyboard back, and an
+// explicit one lands where it asks: the editor, though the explorer is open over the page. (A closed
+// panel's restore goes home, the topmost window still open: TestClosingAPanelGivesTheKeyboard….)
 func TestPanelNavigationAllowsOnlyBoundedKeyboardRestoration(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
@@ -171,7 +174,7 @@ func TestOwnedPanelViewsRefuseCallsBeforeAttachment(t *testing.T) {
 	}
 	for _, err := range []error{
 		s.CallView("customView", "unused"), s.Focus("customView"), queryErr,
-		s.ConfigureTerminal("customView", "not-run", ""), s.RestoreKeyboardPane("editor"),
+		s.ConfigureTerminal("customView", "not-run", ""), s.RestoreKeyboardPane("editor"), s.RestoreKeyboardHome(),
 	} {
 		if !errors.Is(err, errs.ErrPrecondition) {
 			t.Errorf("view operation before attachment returned %v", err)

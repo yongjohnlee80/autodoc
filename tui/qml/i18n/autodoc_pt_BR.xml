@@ -2641,7 +2641,7 @@ THE PANELS
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
-  Escape in Normal mode, or SPC ` again, hides it; the keyboard goes back where it was. When
+  Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
   Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
@@ -2761,7 +2761,7 @@ OS PAINÉIS
   shell, Esc também, exceto Ctrl+Z: nenhum programa para com ela, e Continuar retoma um que uma suspensão parou; Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / e ? percorrem o histórico, v ou V seleciona e y copia, e Ctrl+T, i ou
   Enter volta. As teclas do painel de agentes são as mesmas.
-  Escape no modo Normal, ou SPC ` de novo, o oculta; o teclado volta para onde estava. Quando
+  Escape no modo Normal, ou SPC ` de novo, o oculta; o teclado vai para a janela de cima ainda aberta. Quando
   um shell sai (exit, Ctrl+D) a aba fecha, uma saída com falha fica como aviso; a saída do último
   fecha o painel, e o próximo SPC ` inicia outro.
   Todo painel se move e redimensiona. Alt (Option no Mac) com o botão esquerdo o arrasta para qualquer lugar,

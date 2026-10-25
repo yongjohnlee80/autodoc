@@ -119,13 +119,15 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 		r.h.panelResized("explorer", 20, 70)
 		r.h.panelResized("agent", 40, 90)
 		r.h.panelResized("terminal", 60, 80)
-		r.h.panelResized("nope", 1, 1) // no such panel: nothing
+		r.h.panelResized(luaCardPanel, 30, 60) // the Lua card's one place, the right
+		r.h.panelResized("nope", 1, 1)         // no such panel: nothing
 		return true
 	})
 	want := map[string]int{
 		"tui.explorer.left.size": 20, "tui.explorer.left.length": 70,
 		"tui.agent.bottom.size": 40, "tui.agent.bottom.length": 90,
 		"tui.terminal.center.size": 60, "tui.terminal.center.length": 80,
+		"tui." + luaCardPanel + ".right.size": 30, "tui." + luaCardPanel + ".right.length": 60,
 	}
 	got := onLoop(r, func() map[string]int { return r.h.prefs.panelGeo })
 	for k, v := range want {

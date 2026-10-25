@@ -200,7 +200,7 @@ func (pl *plugins) Panels() []PanelSpec {
 	s.Closed = func(c PanelHost) {
 		c.Set("App.resultsShown", false)
 		pl.resultsClosed()
-		c.Keep(c.RestoreKeyboardPane("editor"))
+		c.Keep(c.RestoreKeyboardHome())
 	}
 	return append([]PanelSpec{s}, pl.cardSpecs()...)
 }

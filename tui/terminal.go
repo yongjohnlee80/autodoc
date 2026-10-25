@@ -20,7 +20,6 @@ import (
 type terminals struct {
 	c       PanelHost
 	restore bool
-	before  string
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
 	startLua func(pty.Cmd) (widget.TerminalProcess, error)
 }
@@ -365,11 +364,9 @@ func withEntry(m map[string]int, k string, v int) map[string]int {
 	return out
 }
 
-// openTerminalPanel is the terminal's spec Open (panels.go): it remembers which pane had the
-// keyboard, for hiding it to give it back, opens the drawer, starts a shell when none runs, and
-// gives the shell the keyboard. SPC ` and Go › Terminal are togglePanel, which comes here.
+// openTerminalPanel is the terminal's spec Open (panels.go): it opens the drawer, starts a shell
+// when none runs, and gives the shell the keyboard. SPC ` and Go › Terminal are togglePanel, which comes here.
 func (t *terminals) openTerminalPanel() {
-	t.before = t.c.KeyboardPane()
 	t.c.Keep(t.c.CallView("terminal", "open"))
 	panel, err := t.panel()
 	if err != nil {
@@ -415,7 +412,6 @@ func (t *terminals) newLuaShell() {
 		return
 	}
 	if !t.c.PanelOpen("terminal") {
-		t.before = t.c.KeyboardPane()
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
 	t.startTab(luaShellLabel, TerminalConfig{Command: "lua", Start: t.startLua},
@@ -595,7 +591,7 @@ func (t *terminals) closeTerminalPanel() {
 }
 
 // terminalPanelClosed is the terminal's spec Closed: the drawer is closed, however it closed
-// (Escape inside it, SPC ` from it), and the keyboard goes back where it was.
+// (Escape inside it, SPC ` from it), and the keyboard goes to the topmost window still open.
 func (t *terminals) terminalPanelClosed() {
 	t.c.Set("App.terminalShown", false)
 	t.terminalClosed()
@@ -636,19 +632,15 @@ func termDir(root string) string {
 	return ""
 }
 
-// terminalClosed gives the keyboard back to the pane that had it when the terminal opened, when
-// the terminal had it as it closed (Escape inside it, or SPC ` from it).
+// terminalClosed gives the keyboard to the topmost window still open, as every closed panel's goes
+// (RestoreKeyboardHome), when the terminal had it as it closed (Escape inside it, or SPC ` from it).
 func (t *terminals) terminalClosed() {
 	restore := t.restore
 	t.restore = true // Escape inside the terminal closes it without passing toggleTerminal
 	if !restore {
 		return
 	}
-	target := t.before
-	if target == "" {
-		target = "editor"
-	}
-	t.c.Keep(t.c.RestoreKeyboardPane(target))
+	t.c.Keep(t.c.RestoreKeyboardHome())
 }
 
 // keyboardPanes are the panes the keyboard can come back to from the terminal: the page, then the
@@ -666,16 +658,6 @@ func keyboardPanes(specs []PanelSpec) []string {
 	return out
 }
 
-// keyboardPane is the pane with the keyboard now, of those; "" for another (a dialog's field).
-func (h *Host) keyboardPane() string {
-	for _, id := range keyboardPanes(h.panelSpecs()) {
-		if h.paneHasKeyboard(id) {
-			return id
-		}
-	}
-	return ""
-}
-
 func (h *Host) paneHasKeyboard(id string) bool {
 	c, ok := h.p.Find(id)
 	return ok && h.p.App().FocusWithin(c)
@@ -683,7 +665,7 @@ func (h *Host) paneHasKeyboard(id string) bool {
 
 // shellExited is a shell gone (exit, Ctrl+D, or it ended): its tab closes, and if it was the
 // active one the keyboard goes to the next shell; a background shell's exit moves nothing. The last one gone, the panel closes as SPC ` closes it, its geometry kept and
-// the keyboard back where it was, and the next open starts a fresh shell. A non-zero exit is kept
+// the keyboard to the topmost window still open, and the next open starts a fresh shell. A non-zero exit is kept
 // as a notice, as it may be an error. golib's Terminal says it in an App.Update, where closing the
 // drawer may move the keyboard.
 func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
