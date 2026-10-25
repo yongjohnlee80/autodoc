@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
@@ -107,13 +106,13 @@ func (h *Host) maximizePanel() {
 func (h *Host) resumePanel() {
 	target := h.panelInHand()
 	if target == "" {
-		h.keep(errors.New("Resume: neither the terminal nor the agents is open"))
+		h.notify(h.tr("autodoc.notice.panelfloat.resume_is_the_terminal_s_and_the_agents_open_one"))
 		return
 	}
 	s := h.panelSpec(target)
 	tabs, ok := h.tabsOf(s.View)
 	if !ok || tabs.Active() == "" {
-		h.keep(fmt.Errorf("Resume: the %s panel has no tab", target))
+		h.notify(h.tr("autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty"))
 		return
 	}
 	if err := (terminalPanel{tabs: tabs}).Resume(tabs.Active()); err != nil {

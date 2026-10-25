@@ -3956,6 +3956,14 @@ WHAT A KEY NEEDS
         <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
         <translation>최대화는 터미널과 에이전트에서만 됩니다: 먼저 하나를 여세요 (SPC ` 또는 SPC g)</translation>
     </message>
+    <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
+        <source>Resume has no tab to wake: the panel is empty</source>
+        <translation>재개할 탭이 없습니다: 패널이 비어 있습니다</translation>
+    </message>
+    <message id="autodoc.notice.panelfloat.resume_is_the_terminal_s_and_the_agents_open_one">
+        <source>Resume is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
+        <translation>재개는 터미널과 에이전트에서만 됩니다: 먼저 하나를 여세요 (SPC ` 또는 SPC g)</translation>
+    </message>
     <message id="autodoc.notice.plugincmds.did_not_start">
         <source>%1 did not start</source>
         <translation>%1이(가) 시작되지 않았습니다</translation>

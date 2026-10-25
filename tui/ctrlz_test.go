@@ -122,3 +122,15 @@ func TestPanelResumeWakesTheTabInHand(t *testing.T) {
 	onLoop(r, func() bool { r.h.resumePanel(); return true })
 	r.s.WaitForText(t, "resumed")
 }
+
+// panel.resume with neither the terminal nor the agents open says so in a notice, and keeps no error.
+func TestPanelResumeWithNoPanelOpenIsANotice(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	onLoop(r, func() bool { r.h.resumePanel(); return true })
+	r.s.WaitFor(t, "the notice", func(string) bool {
+		return r.noticed("Resume is the terminal's and the agents': open one first")
+	})
+	if errs := onLoop(r, func() int { r.h.mu.Lock(); defer r.h.mu.Unlock(); return len(r.h.errs) }); errs != 0 {
+		t.Fatalf("panel.resume with no panel open kept %d errors", errs)
+	}
+}
