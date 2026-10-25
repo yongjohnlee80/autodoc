@@ -150,7 +150,7 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 // became its tab (migrateLinksPanel).
 func explorerPanelSpec() PanelSpec {
 	s := sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
-	s.Icon = "☰"
+	s.Icon, s.Default = "☰", explorerDefault
 	return s
 }
 

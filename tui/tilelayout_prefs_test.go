@@ -46,13 +46,13 @@ func tiledExplorer(t *testing.T) *running {
 }
 
 // A panel whose Layout is Tiled is placed over its tile when it opens: the explorer down the left,
-// 30% of the base, the page beside it.
+// 35% of the base, the page beside it.
 func TestAPanelWhoseLayoutIsTiledIsTiledBesideThePage(t *testing.T) {
 	r := tiledExplorer(t)
-	if b := boundsOf(r, "explorer"); b.X != 0 || b.W != 30 {
-		t.Fatalf("the explorer tiled at %+v, want 30 cells down the left", b)
+	if b := boundsOf(r, "explorer"); b.X != 0 || b.W != 35 {
+		t.Fatalf("the explorer tiled at %+v, want 35 cells down the left", b)
 	}
-	if b := boundsOf(r, "editorWindow"); b.X != 30 || b.W != 70 {
+	if b := boundsOf(r, "editorWindow"); b.X != 35 || b.W != 65 {
 		t.Fatalf("the page at %+v, want the rest of the base beside the explorer", b)
 	}
 }
@@ -91,16 +91,16 @@ func TestAPanelReleasedForRoomStaysTiledAndTilesAgainWhenTheRoomReturns(t *testi
 }
 
 // A shared border's drag keeps the tile's size, and only that: the explorer's border dragged ten
-// cells right is a tile of 40%, its Layout and edge as they were, and its own place (its docked
+// cells right is a tile of 45%, its Layout and edge as they were, and its own place (its docked
 // size, its floating rectangle) untouched.
 func TestABorderDragKeepsTheTileSizeAlone(t *testing.T) {
 	r := tiledExplorer(t)
 	before := onLoop(r, func() [2]int { return [2]int{len(r.h.prefs.panelFloat), len(r.h.prefs.panelGeo)} })
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 29, Y: 10},
-		tuicore.MouseEvent{Kind: tuicore.MouseMotion, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 39, Y: 10},
-		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 39, Y: 10})
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 34, Y: 10},
+		tuicore.MouseEvent{Kind: tuicore.MouseMotion, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 44, Y: 10},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseRight, Mods: tuicore.ModAlt, X: 44, Y: 10})
 	r.s.WaitFor(t, "the tile's size kept", func(string) bool {
-		return onLoop(r, func() string { return r.h.prefs.Value(tileSizeKey("explorer")) }) == "40"
+		return onLoop(r, func() string { return r.h.prefs.Value(tileSizeKey("explorer")) }) == "45"
 	})
 	got := onLoop(r, func() [4]string {
 		return [4]string{r.h.prefs.Value(layoutKey("explorer")), r.h.prefs.Value(tileEdgeKey("explorer")),

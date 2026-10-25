@@ -27,6 +27,10 @@ const sidePanelMin = 15
 // third across, and 85% along a side or 80% along the top or bottom.
 func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
 
+// explorerDefault is the explorer's size and length before the user drags it: 35% across, so its
+// tabs have room, and its length a side panel's.
+func explorerDefault(edge string) (size, length int) { return 35, panelLength(edge) }
+
 // panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
 func (p prefs) panelGeometry(id, edge string) (size, length int) {
 	s := findPanel(p.geometrySpecs(), id)
