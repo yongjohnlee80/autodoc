@@ -264,62 +264,595 @@ Window {
         }
     }
 
-    // ---- the page: the file, centred, as wide as the ruler ----
-    Frame {
-        title: App.fileTitle
-        maximumWidth: App.pageWidth
-        palette.window: Theme.document.window
-        palette.windowText: Theme.document.windowText
-        palette.highlight: Theme.document.highlight
-        palette.highlightedText: Theme.document.highlightedText
-        palette.base: Theme.document.base
-        palette.text: Theme.document.text
-        Flex {
-        direction: Tui.Vertical
-        // the open file's frontmatter, checked against its workspace's schema as it is typed:
-        // shown only while something is wrong, and never in the way of a save
-        Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
-        // the page's keys, live while the keyboard is in the Editor (tui/keys.go's page scope)
-        FocusScope {
-            Layout.fillHeight: true
-            keyScope: "autodoc.page" // its keys' commands (tui/keys.go)
-            // ---- the page's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-            Shortcut { sequence: keyId("autodoc.page.openFind"); onActivated: App.openFind() }
-            Shortcut { sequence: keyId("autodoc.page.findNext"); onActivated: App.findNext() }
-            Shortcut { sequence: keyId("autodoc.page.findPrevious"); onActivated: App.findPrevious() }
-            // ---- end of the page's keys ----
-            Editor {
-                id: editor
-                autoIndent: true
-                contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
-                focus: true
-                palette.highlight: Theme.document.selection
-                palette.highlightedText: Theme.document.selectedText
-                keyset: App.keyset
-                ruler: App.rulerColumn
-                wrap: App.editorWrap
-                lineNumbers: App.lineNumbers
-                // a line's leading spaces as a dimmed ·, its tabs as →: off, the cursor's line, or all
-                indentMarks: App.indentMarks
-                // the theme's accent for the cursor, and its dim tone for the line numbers
-                cursorColor: Theme.document.cursor
-                lineNumberColor: Theme.document.lineNumber
-                onModeChanged: App.syncMode()
-                onTextChanged: App.edited()
-                onCursorPositionChanged: App.cursorMoved()
-                // the command line's (:) w, wq and x, and q and q!: AutoDoc's own save and quit
-                onWriteRequested: App.writeFromEditor(quit)
-                onQuitRequested: App.quitFromEditor(force)
-                SyntaxHighlighter { definition: App.syntaxDefinition }
-                // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it, the
-                // open note's embeds drawn in place (noterenderer.go); the terminal's Editor has no
-                // Rendered view and ignores it
-                NoteRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
-                // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
-                // turns it on for that file and off for any other); a terminal ignores it
-                HTMLDocumentView {}
+    // ---- the base: a tile manager (golib's), its windows the page and the tileable panels. The
+    // page is a window of its own, the fill member: tiled, it reads as the page always has. A panel
+    // is tiled while its Layout says so and it fits, else at its own place, as a drawer over the
+    // page; Layout › Tiled / Float is each one's (a panel's own keys are live while the keyboard is
+    // in it) ----
+    TileManager {
+        id: tiles
+        // the page: the file, centred, as wide as the ruler; a window of its own that never closes
+        FloatWindow {
+            id: editorWindow
+            key: "editor"
+            movable: true; resizable: true; minimizable: true
+            maximumWidth: App.pageWidth
+            TileManager.edge: Tui.Center
+            TileManager.tiled: true
+            Frame {
+                title: App.fileTitle
+                maximumWidth: App.pageWidth
+                palette.window: Theme.document.window
+                palette.windowText: Theme.document.windowText
+                palette.highlight: Theme.document.highlight
+                palette.highlightedText: Theme.document.highlightedText
+                palette.base: Theme.document.base
+                palette.text: Theme.document.text
+                Flex {
+                direction: Tui.Vertical
+                // the open file's frontmatter, checked against its workspace's schema as it is typed:
+                // shown only while something is wrong, and never in the way of a save
+                Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
+                // the page's keys, live while the keyboard is in the Editor (tui/keys.go's page scope)
+                FocusScope {
+                    Layout.fillHeight: true
+                    keyScope: "autodoc.page" // its keys' commands (tui/keys.go)
+                    // ---- the page's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    Shortcut { sequence: keyId("autodoc.page.openFind"); onActivated: App.openFind() }
+                    Shortcut { sequence: keyId("autodoc.page.findNext"); onActivated: App.findNext() }
+                    Shortcut { sequence: keyId("autodoc.page.findPrevious"); onActivated: App.findPrevious() }
+                    // ---- end of the page's keys ----
+                    Editor {
+                        id: editor
+                        autoIndent: true
+                        contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
+                        focus: true
+                        palette.highlight: Theme.document.selection
+                        palette.highlightedText: Theme.document.selectedText
+                        keyset: App.keyset
+                        ruler: App.rulerColumn
+                        wrap: App.editorWrap
+                        lineNumbers: App.lineNumbers
+                        // a line's leading spaces as a dimmed ·, its tabs as →: off, the cursor's line, or all
+                        indentMarks: App.indentMarks
+                        // the theme's accent for the cursor, and its dim tone for the line numbers
+                        cursorColor: Theme.document.cursor
+                        lineNumberColor: Theme.document.lineNumber
+                        onModeChanged: App.syncMode()
+                        onTextChanged: App.edited()
+                        onCursorPositionChanged: App.cursorMoved()
+                        // the command line's (:) w, wq and x, and q and q!: AutoDoc's own save and quit
+                        onWriteRequested: App.writeFromEditor(quit)
+                        onQuitRequested: App.quitFromEditor(force)
+                        SyntaxHighlighter { definition: App.syntaxDefinition }
+                        // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it, the
+                        // open note's embeds drawn in place (noterenderer.go); the terminal's Editor has no
+                        // Rendered view and ignores it
+                        NoteRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
+                        // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
+                        // turns it on for that file and off for any other); a terminal ignores it
+                        HTMLDocumentView {}
+                    }
+                }
+                }
             }
         }
+
+        // the explorer: the workspaces' files and the page's links, a tab each (explorer.go, relations.go),
+        // the heading the tab shown's; _, + and x at the strip's right end hide it to the dock, as it is,
+        // maximize it (again to restore: the Drawer's own toggleMaximize), or close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
+        Panel {
+            id: explorer
+            TileManager.edge: Tui.Left; TileManager.edges: "left right top bottom"; TileManager.size: 30
+            TileManager.tiled: false
+            heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
+            closeOnQ: true
+            edge: App.explorerEdge
+            size: App.explorerSize
+            length: App.explorerLength
+            floating: App.explorerFloating
+            floatX: App.explorerX; floatY: App.explorerY; floatWidth: App.explorerW; floatHeight: App.explorerH
+            onPlaced: App.panelPlaced("explorer", x, y, width, height)
+            minimumSize: 15
+            onResized: App.panelResized("explorer", size, length)
+            onOpened: App.panelOpened("explorer")
+            onClosed: App.panelClosed("explorer")
+            maximizable: true
+            onChanged: App.panelChanged("explorer", operation, maximized)
+            TabView {
+                id: sideTabs
+                windowButtons: true
+                currentIndex: App.explorerTab
+                onCurrentIndexChanged: App.explorerTabShown(index)
+                onMinimizeRequested: App.hideExplorer()
+                onMaximizeRequested: explorer.toggleMaximize()
+                onCloseRequested: App.closeExplorer()
+                Tab {
+                    title: "Explorer"
+                    // its keys' commands (tui/keys.go): the scope of its FocusScope
+                    FocusScope {
+                        keyScope: "autodoc.explorer"
+                        // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                        Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
+                        Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
+                        Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
+                        // ---- end of the explorer's keys ----
+                        TreeView {
+                            id: explorerTree
+                            palette.highlight: Theme.document.highlight
+                            palette.highlightedText: Theme.document.highlightedText
+                            model: App.explorer
+                            textRole: "label"
+                            onCurrentIndexChanged: App.explorerMoved(index)
+                            onActivated: App.explorerActivated(index)
+                        }
+                    }
+                }
+                Tab {
+                    title: "Links"
+                    FocusScope {
+                        keyScope: "autodoc.links"
+                        // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                        Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
+                        Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
+                        Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
+                        Shortcut { sequence: keyId("autodoc.links.relationsDepth"); onActivated: App.relationsDepth() }
+                        // ---- end of the links's keys ----
+                        ListView {
+                            id: relationsList
+                            palette.highlight: Theme.document.highlight
+                            palette.highlightedText: Theme.document.highlightedText
+                            model: App.relations
+                            textRole: "label"
+                            cursorShape: Tui.PointingHandCursor // a row opens its note
+                            currentIndex: App.relationsIndex
+                            onCurrentIndexChanged: App.relationsMoved(index)
+                            onActivated: App.openRelation(index)
+                        }
+                    }
+                }
+            }
+        }
+
+        // the terminal: a shell in the workspace's folder, from the edge (or the centre) its preference
+        // names, at that place's size; it keeps running while hidden (terminal.go)
+        Panel {
+            id: terminal
+            TileManager.edge: Tui.Bottom; TileManager.edges: "left right top bottom"; TileManager.size: 30
+            TileManager.tiled: false
+            heading: qsTrId("autodoc.main.terminal_2")
+            surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
+            edge: App.terminalEdge
+            size: App.terminalSize
+            length: App.terminalLength
+            floating: App.terminalFloating
+            floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
+            onPlaced: App.panelPlaced("terminal", x, y, width, height)
+            // Maximize on its tab menu: the Drawer's own (toggleMaximize), the menu told by changed
+            maximizable: true
+            onChanged: App.panelChanged("terminal", operation, maximized)
+            onResized: App.panelResized("terminal", size, length)
+            onOpened: App.panelOpened("terminal")
+            onClosed: App.panelClosed("terminal")
+            // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
+            TerminalTabs {
+                id: terminalView
+                // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
+                // Maximize does (again to restore); stop them all and close it
+                windowButtons: true
+                onMinimizeRequested: App.toggleTerminal()
+                onMaximizeRequested: terminal.toggleMaximize()
+                onCloseRequested: App.stopAllShells()
+                onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
+                // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
+                hostKeys: App.terminalHostKeys
+                emptyText: "No shell running. Press + to start one."
+                // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
+                modeKey: App.terminalModeKey
+                vimKeys: false
+                // the terminals' theme (terminal.go): its text and background, the strip's the page's
+                palette.base: App.terminalBase
+                palette.text: App.terminalText
+                // the terminals' own face, in a window (fonts.go); a terminal draws in its own font
+                cellFont: App.terminalFont
+                // a program's colours raised until they read on that background: ls's yellow and a
+                // prompt's cyan are written for a dark terminal, and wash out on a light theme
+                minimumContrast: 4.5
+                // the theme's caret colour; its shape says the mode: a block in normal, a bar typing
+                cursorColor: App.terminalCursor
+            }
+        }
+
+        // the agent: an AI agent's CLI, as its default profile says, floating over the page; it keeps
+        // running while hidden (agent.go)
+        Panel {
+            id: agent
+            TileManager.edge: Tui.Right; TileManager.edges: "left right top bottom"; TileManager.size: 35
+            TileManager.tiled: false
+            heading: App.agentTitle
+            surface: Theme.app.window   // the Window's tone, as the agent's frame has always had
+            edge: App.agentEdge
+            size: App.agentSize
+            length: App.agentLength
+            floating: App.agentFloating
+            floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
+            onPlaced: App.panelPlaced("agent", x, y, width, height)
+            maximizable: true
+            onChanged: App.panelChanged("agent", operation, maximized)
+            onOpened: App.panelOpened("agent")
+            onClosed: App.panelClosed("agent")
+            onResized: App.panelResized("agent", size, length)
+            // a tab an agent, named by its codename (agenttabs.go): + starts or goes to a profile, a
+            // tab's menu goes to another, restarts or closes it, or opens the profiles
+            TerminalTabs {
+                id: agentView
+                // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
+                // Maximize does (again to restore); stop them all and close it
+                windowButtons: true
+                onMinimizeRequested: App.toggleAgent()
+                onMaximizeRequested: agent.toggleMaximize()
+                onCloseRequested: App.stopAllAgents()
+                // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
+                hostKeys: App.terminalHostKeys
+                emptyText: "No agent running. Press + to start one of the profiles."
+                // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
+                modeKey: App.terminalModeKey
+                vimKeys: false
+                // as the terminal's: the terminals' theme and face, the contrast raised against it
+                palette.base: App.terminalBase
+                palette.text: App.terminalText
+                cellFont: App.terminalFont
+                minimumContrast: 4.5
+                cursorColor: App.terminalCursor
+                onChanged: App.agentTabsChanged()
+            }
+        }
+
+        // the results: a table a plugin sends (plugintable.go), golib's cell-cursor table over the rows
+        // loaded, which asks the plugin for more as the cursor nears their end; at the bottom unless
+        // moved. Closing it lets the table go. It acts on the table in the view: the ORDER BY bar sorts
+        // the loaded rows, and the buttons and the right-click menu are the results commands, none of
+        // which fetches a row.
+        Panel {
+            id: results
+            TileManager.edge: Tui.Bottom; TileManager.edges: "left right top bottom"; TileManager.size: 35
+            TileManager.tiled: false
+            heading: App.resultsTitle
+            closeOnQ: true
+            edge: Tui.Bottom
+            size: App.resultsSize
+            length: App.resultsLength
+            floating: App.resultsFloating
+            floatX: App.resultsX; floatY: App.resultsY; floatWidth: App.resultsW; floatHeight: App.resultsH
+            onPlaced: App.panelPlaced("results", x, y, width, height)
+            minimumSize: 10
+            onResized: App.panelResized("results", size, length)
+            onOpened: App.panelOpened("results")
+            onClosed: App.panelClosed("results")
+            Flex {
+                direction: Tui.Vertical
+                // the loaded rows tidied as SQL writes it: the clause (ORDER BY, WHERE), then its text,
+                // which Enter applies, each clause keeping its own; the line is the clause's error, the
+                // fields a word typed may be, or what the view holds of the result
+                Flex {
+                    direction: Tui.Horizontal
+                    ComboBox { id: resultsClause; model: App.resultsClauses; textRole: "label"; valueRole: "key"; maxWidth: 14
+                        currentIndex: App.resultsClauseIndex; onActivated: App.resultsClauseChosen(index, resultsText.text) }
+                    Text { text: " " }
+                    TextField {
+                        id: resultsText
+                        Layout.fillWidth: true
+                        text: App.resultsClauseText
+                        placeholderText: qsTrId("autodoc.main.over_the_loaded_rows_order_by_column_asc_desc_wh")
+                        onAccepted: App.applyResultsClause(text)
+                        onTextEdited: App.resultsClauseTyped(text)
+                    }
+                    Text { text: " " }
+                    Text { text: App.resultsSortLine }
+                }
+                TableView {
+                    id: resultsTable
+                    Layout.fillHeight: true
+                    palette.highlight: Theme.document.highlight
+                    palette.highlightedText: Theme.document.highlightedText
+                    // the cursor while the keys are elsewhere (the editor, the bar)
+                    palette.inactive.highlight: Theme.app.inactive.highlight
+                    palette.inactive.highlightedText: Theme.app.inactive.highlightedText
+                    model: App.resultsRows
+                    cellCursor: true
+                    sortable: true
+                    rowNumbers: true
+                    contextMenu: true
+                    orderBy: App.resultsOrder
+                    filter: App.resultsFilter
+                    onOrderByChanged: App.resultsOrderChanged(orderBy)
+                }
+                Flex {
+                    direction: Tui.Horizontal
+                    Text { text: " "; Layout.fillWidth: true }
+                    Button { text: qsTrId("autodoc.main.copy"); toolTipText: "the selected cells, or the cursor's, as TSV (y in the table; the right-click menu has CSV, JSON and Markdown)"; onClicked: App.copyResults() }
+                    Text { text: " " }
+                    Button { text: qsTrId("autodoc.main.export_loaded_rows"); toolTipText: "the rows loaded, as shown, into a CSV or JSON file"; onClicked: App.startExportResults() }
+                    Text { text: " " }
+                    Button { text: qsTrId("autodoc.main.insert_as_markdown"); toolTipText: "the rows loaded now, as shown, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
+                    Text { text: " " }
+                    Button { text: qsTrId("autodoc.main.close_q"); toolTipText: "close the results"; onClicked: App.toggleResults() }
+                    Text { text: " "; Layout.fillWidth: true }
+                }
+            }
+        }
+
+        // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
+        // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
+        // the window across, 80% along, centred (todosDefault), until the user sizes or places it
+        Panel {
+            id: todos
+            TileManager.edge: Tui.Left; TileManager.edges: "left right top bottom"; TileManager.size: 30
+            TileManager.tiled: false
+            heading: App.todosTitle
+            closeOnQ: true
+            edge: App.todosEdge
+            size: App.todosSize
+            length: App.todosLength
+            floating: App.todosFloating
+            floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
+            onPlaced: App.panelPlaced("todos", x, y, width, height)
+            // 25%, not the side panels' 15: the top bar's icons, and the action row's widest button,
+            // "[ Status… ]", whole inside the frame on an 80-column screen; its four fit from 55% there
+            minimumSize: 25
+            onResized: App.panelResized("todos", size, length)
+            onOpened: App.panelOpened("todos")
+            onClosed: App.panelClosed("todos")
+            Flex {
+                direction: Tui.Vertical
+                // the panel's keys, live while the keyboard is in the top bar or the tabs: NOT in the
+                // details pane below, whose read-only Editor lets the edit keys it refuses (a d s i o)
+                // bubble, and a key read there must never change or remove the task being read
+                FocusScope {
+                    Layout.fillHeight: true
+                    keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
+                    // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
+                    Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
+                    Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
+                    // ---- end of the todos's keys ----
+                    Flex {
+                        direction: Tui.Vertical
+                        // the store bar, framed, so a line runs between it and the tabs (golib's Text
+                        // cuts a rule with an ellipsis): the store shown, the others in its dropdown, on
+                        // a row of its own; under it the store's buttons, words (an icon glyph is a box in
+                        // a font that lacks it), on the right. The words and a store's name do not fit
+                        // one row of the panel's 52 columns on an 80-column screen, so each has its own.
+                        Frame {
+                            title: qsTrId("autodoc.main.store")
+                            Flex {
+                                direction: Tui.Vertical
+                                ComboBox {
+                                    id: todoStore
+                                    toolTipText: "the todo store shown: choose another (S)"
+                                    model: App.todoStores
+                                    textRole: "label"
+                                    currentIndex: App.todoStoreIndex
+                                    onActivated: App.todoStoreChosen(index)
+                                }
+                                Flex {
+                                    direction: Tui.Horizontal
+                                    Text { text: " "; Layout.fillWidth: true }
+                                    Button { text: qsTrId("autodoc.main.new"); toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
+                                    Text { text: " " }
+                                    Button { text: qsTrId("autodoc.main.load"); toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
+                                    Text { text: " " }
+                                    Button { text: qsTrId("autodoc.main.edit_l"); toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
+                                    Text { text: " " }
+                                    Button { text: qsTrId("autodoc.main.refresh"); toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
+                                    Text { text: " " }
+                                    Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
+                                }
+                            }
+                        }
+                        // a tab per status, each a numbered table of its tasks; Archived its months, and
+                        // the open month's tasks beside them
+                        TabView {
+                            id: todoTabs
+                            Layout.fillHeight: true
+                            currentIndex: App.todoTab
+                            onCurrentIndexChanged: App.todoTabShown(index)
+                            Tab {
+                                title: "Open"
+                                TableView {
+                                    id: todoOpenTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoOpenRows
+                                    currentIndex: App.todoOpenIndex
+                                    onCurrentIndexChanged: App.todoMoved(0, index)
+                                    onActivated: App.todoActivated(0, index)
+                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                }
+                            }
+                            Tab {
+                                title: "In progress"
+                                TableView {
+                                    id: todoInProgressTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoInProgressRows
+                                    currentIndex: App.todoInProgressIndex
+                                    onCurrentIndexChanged: App.todoMoved(1, index)
+                                    onActivated: App.todoActivated(1, index)
+                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                }
+                            }
+                            Tab {
+                                title: "Deferred"
+                                TableView {
+                                    id: todoDeferredTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoDeferredRows
+                                    currentIndex: App.todoDeferredIndex
+                                    onCurrentIndexChanged: App.todoMoved(2, index)
+                                    onActivated: App.todoActivated(2, index)
+                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                }
+                            }
+                            Tab {
+                                title: "Completed"
+                                TableView {
+                                    id: todoCompletedTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoCompletedRows
+                                    currentIndex: App.todoCompletedIndex
+                                    onCurrentIndexChanged: App.todoMoved(3, index)
+                                    onActivated: App.todoActivated(3, index)
+                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                }
+                            }
+                            Tab {
+                                title: "Archived"
+                                Split {
+                                    orientation: Tui.Horizontal
+                                    ratio: 0.3
+                                    TableView {
+                                        id: todoMonths
+                                        palette.highlight: Theme.document.highlight
+                                        palette.highlightedText: Theme.document.highlightedText
+                                        model: App.todoMonths
+                                        currentIndex: App.todoMonthIndex
+                                        onCurrentIndexChanged: App.todoMonthMoved(index)
+                                        onActivated: App.todoMonthChosen(index)
+                                        TableViewColumn { role: "month"; title: "MONTH"; width: 8 }
+                                        TableViewColumn { role: "count"; title: "TASKS"; width: 0 }
+                                    }
+                                    TableView {
+                                        id: todoArchivedTable
+                                        palette.highlight: Theme.document.highlight
+                                        palette.highlightedText: Theme.document.highlightedText
+                                        model: App.todoArchivedRows
+                                        currentIndex: App.todoArchivedIndex
+                                        onCurrentIndexChanged: App.todoMoved(4, index)
+                                        onActivated: App.todoActivated(4, index)
+                                        TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                        TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                    }
+                                }
+                            }
+                            // the store's workspace's variables, the same from every route to it: each value and
+                            // where it came from (todos_vars.go)
+                            Tab {
+                                title: "Variables"
+                                TableView {
+                                    id: todoVarsTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoVarsRows
+                                    currentIndex: App.todoVarsIndex
+                                    onCurrentIndexChanged: App.todoVarMoved(index)
+                                    onActivated: App.todoVarEdit()
+                                    TableViewColumn { role: "name"; title: "NAME"; width: 16 }
+                                    TableViewColumn { role: "from"; title: "FROM"; width: 9 }
+                                    TableViewColumn { role: "value"; title: "VALUE"; width: 0 }
+                                }
+                            }
+                        }
+                    }
+                }
+                // the task under the cursor's details (i, o), Markdown, rendered as the pickers' previews
+                // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
+                // scrolled, so a long description never pushes the tabs away
+                Frame {
+                    title: qsTrId("autodoc.main.details")
+                    visible: App.todoDetailShown
+                    Layout.fillHeight: true
+                    Editor {
+                        cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
+                        id: todoDetails
+                        readOnly: true
+                        text: App.todoDetail
+                        wrap: true
+                        view: Editor.Rendered
+                        SyntaxHighlighter { definition: "Markdown" }
+                        MarkdownRenderer {}
+                    }
+                }
+                // what needs the user: a file a tab could not list; hidden while there is none
+                Text { text: App.todosStatus; visible: App.todosStatusShown; wrapMode: Tui.WordWrap }
+                // the action row: one line, only the actions that apply to the task under the cursor,
+                // each its key's (its tooltip says which), the others hidden, never greyed; on a store not claimed none, only a
+                // note. Which apply follows the cursor (todos.go: syncActions), never a button's own click.
+                // the panel's keys again, live on these buttons too (the details pane above has none)
+                FocusScope {
+                    keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
+                    // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
+                    Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
+                    Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
+                    Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
+                    Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
+                    // ---- end of the todos task buttons' keys ----
+                    Flex {
+                        direction: Tui.Horizontal
+                        Text { text: qsTrId("autodoc.main.read_only_until_the_cutover"); visible: App.todoReadOnly }
+                        Button { id: todoStatusButton; text: qsTrId("autodoc.main.status"); toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
+                        Text { text: " "; visible: App.todoActAssign }
+                        Button { text: qsTrId("autodoc.main.assign"); toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
+                        Text { text: " "; visible: App.todoActRemove }
+                        Button { text: qsTrId("autodoc.main.remove_d"); toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
+                        Text { text: " "; visible: App.todoActStatus }
+                        Button { id: todoAddButton; text: qsTrId("autodoc.main.add"); toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
+                        Button { text: qsTrId("autodoc.main.set"); toolTipText: "set the value, in the KB's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
+                        Text { text: " "; visible: App.todoActVarSet }
+                        Button { text: qsTrId("autodoc.main.this_machine"); toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
+                        Text { text: " "; visible: App.todoActVarClear }
+                        Button { text: qsTrId("autodoc.main.clear_d"); toolTipText: "clear the value set here (d)"; visible: App.todoActVarClear; enabled: App.todoActVarClear; onClicked: App.todoRemove() }
+                        Text { text: " "; visible: App.todoActVarAdd }
+                        Button { text: qsTrId("autodoc.main.add"); toolTipText: "add a variable, NAME=value (a)"; visible: App.todoActVarAdd; enabled: App.todoActVarAdd; onClicked: App.todoAdd() }
+                    }
+                }
+            }
         }
     }
 
@@ -337,81 +870,9 @@ Window {
         Text { text: App.semanticLabel }
     }
 
-    // ---- the panels: drawers over the page, each from the edge its preference names, in the one
-    // dock style (views/Panel.qml); a panel's own keys are live while the keyboard is in it ----
-    // the explorer: the workspaces' files and the page's links, a tab each (explorer.go, relations.go),
-    // the heading the tab shown's; _, + and x at the strip's right end hide it to the dock, as it is,
-    // maximize it (again to restore: the Drawer's own toggleMaximize), or close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
-    Panel {
-        id: explorer
-        heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
-        closeOnQ: true
-        edge: App.explorerEdge
-        size: App.explorerSize
-        length: App.explorerLength
-        floating: App.explorerFloating
-        floatX: App.explorerX; floatY: App.explorerY; floatWidth: App.explorerW; floatHeight: App.explorerH
-        onPlaced: App.panelPlaced("explorer", x, y, width, height)
-        minimumSize: 15
-        onResized: App.panelResized("explorer", size, length)
-        onOpened: App.panelOpened("explorer")
-        onClosed: App.panelClosed("explorer")
-        maximizable: true
-        onChanged: App.panelChanged("explorer", operation, maximized)
-        TabView {
-            id: sideTabs
-            windowButtons: true
-            currentIndex: App.explorerTab
-            onCurrentIndexChanged: App.explorerTabShown(index)
-            onMinimizeRequested: App.hideExplorer()
-            onMaximizeRequested: explorer.toggleMaximize()
-            onCloseRequested: App.closeExplorer()
-            Tab {
-                title: "Explorer"
-                // its keys' commands (tui/keys.go): the scope of its FocusScope
-                FocusScope {
-                    keyScope: "autodoc.explorer"
-                    // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                    Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
-                    Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
-                    Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
-                    // ---- end of the explorer's keys ----
-                    TreeView {
-                        id: explorerTree
-                        palette.highlight: Theme.document.highlight
-                        palette.highlightedText: Theme.document.highlightedText
-                        model: App.explorer
-                        textRole: "label"
-                        onCurrentIndexChanged: App.explorerMoved(index)
-                        onActivated: App.explorerActivated(index)
-                    }
-                }
-            }
-            Tab {
-                title: "Links"
-                FocusScope {
-                    keyScope: "autodoc.links"
-                    // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                    Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
-                    Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
-                    Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
-                    Shortcut { sequence: keyId("autodoc.links.relationsDepth"); onActivated: App.relationsDepth() }
-                    // ---- end of the links's keys ----
-                    ListView {
-                        id: relationsList
-                        palette.highlight: Theme.document.highlight
-                        palette.highlightedText: Theme.document.highlightedText
-                        model: App.relations
-                        textRole: "label"
-                        cursorShape: Tui.PointingHandCursor // a row opens its note
-                        currentIndex: App.relationsIndex
-                        onCurrentIndexChanged: App.relationsMoved(index)
-                        onActivated: App.openRelation(index)
-                    }
-                }
-            }
-        }
-    }
+
+    // ---- the panels over the page, outside the tile manager: each a drawer from the edge its
+    // preference names, in the one dock style (golib's tui.panels Panel) ----
     // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
     // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
     Panel {
@@ -452,176 +913,12 @@ Window {
             }
         }
     }
-    // the terminal: a shell in the workspace's folder, from the edge (or the centre) its preference
-    // names, at that place's size; it keeps running while hidden (terminal.go)
-    Panel {
-        id: terminal
-        heading: qsTrId("autodoc.main.terminal_2")
-        surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
-        edge: App.terminalEdge
-        size: App.terminalSize
-        length: App.terminalLength
-        floating: App.terminalFloating
-        floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
-        onPlaced: App.panelPlaced("terminal", x, y, width, height)
-        // Maximize on its tab menu: the Drawer's own (toggleMaximize), the menu told by changed
-        maximizable: true
-        onChanged: App.panelChanged("terminal", operation, maximized)
-        onResized: App.panelResized("terminal", size, length)
-        onOpened: App.panelOpened("terminal")
-        onClosed: App.panelClosed("terminal")
-        // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
-        TerminalTabs {
-            id: terminalView
-            // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
-            // Maximize does (again to restore); stop them all and close it
-            windowButtons: true
-            onMinimizeRequested: App.toggleTerminal()
-            onMaximizeRequested: terminal.toggleMaximize()
-            onCloseRequested: App.stopAllShells()
-            onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
-            // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
-            hostKeys: App.terminalHostKeys
-            emptyText: "No shell running. Press + to start one."
-            // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
-            modeKey: App.terminalModeKey
-            vimKeys: false
-            // the terminals' theme (terminal.go): its text and background, the strip's the page's
-            palette.base: App.terminalBase
-            palette.text: App.terminalText
-            // the terminals' own face, in a window (fonts.go); a terminal draws in its own font
-            cellFont: App.terminalFont
-            // a program's colours raised until they read on that background: ls's yellow and a
-            // prompt's cyan are written for a dark terminal, and wash out on a light theme
-            minimumContrast: 4.5
-            // the theme's caret colour; its shape says the mode: a block in normal, a bar typing
-            cursorColor: App.terminalCursor
-        }
-    }
-
-    // the agent: an AI agent's CLI, as its default profile says, floating over the page; it keeps
-    // running while hidden (agent.go)
-    Panel {
-        id: agent
-        heading: App.agentTitle
-        surface: Theme.app.window   // the Window's tone, as the agent's frame has always had
-        edge: App.agentEdge
-        size: App.agentSize
-        length: App.agentLength
-        floating: App.agentFloating
-        floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
-        onPlaced: App.panelPlaced("agent", x, y, width, height)
-        maximizable: true
-        onChanged: App.panelChanged("agent", operation, maximized)
-        onOpened: App.panelOpened("agent")
-        onClosed: App.panelClosed("agent")
-        onResized: App.panelResized("agent", size, length)
-        // a tab an agent, named by its codename (agenttabs.go): + starts or goes to a profile, a
-        // tab's menu goes to another, restarts or closes it, or opens the profiles
-        TerminalTabs {
-            id: agentView
-            // _, + and x at the strip's right end: hide the panel, every process kept; maximize it, as
-            // Maximize does (again to restore); stop them all and close it
-            windowButtons: true
-            onMinimizeRequested: App.toggleAgent()
-            onMaximizeRequested: agent.toggleMaximize()
-            onCloseRequested: App.stopAllAgents()
-            // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
-            hostKeys: App.terminalHostKeys
-            emptyText: "No agent running. Press + to start one of the profiles."
-            // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
-            modeKey: App.terminalModeKey
-            vimKeys: false
-            // as the terminal's: the terminals' theme and face, the contrast raised against it
-            palette.base: App.terminalBase
-            palette.text: App.terminalText
-            cellFont: App.terminalFont
-            minimumContrast: 4.5
-            cursorColor: App.terminalCursor
-            onChanged: App.agentTabsChanged()
-        }
-    }
-
-    // the results: a table a plugin sends (plugintable.go), golib's cell-cursor table over the rows
-    // loaded, which asks the plugin for more as the cursor nears their end; at the bottom unless
-    // moved. Closing it lets the table go. It acts on the table in the view: the ORDER BY bar sorts
-    // the loaded rows, and the buttons and the right-click menu are the results commands, none of
-    // which fetches a row.
-    Panel {
-        id: results
-        heading: App.resultsTitle
-        closeOnQ: true
-        edge: Tui.Bottom
-        size: App.resultsSize
-        length: App.resultsLength
-        floating: App.resultsFloating
-        floatX: App.resultsX; floatY: App.resultsY; floatWidth: App.resultsW; floatHeight: App.resultsH
-        onPlaced: App.panelPlaced("results", x, y, width, height)
-        minimumSize: 10
-        onResized: App.panelResized("results", size, length)
-        onOpened: App.panelOpened("results")
-        onClosed: App.panelClosed("results")
-        Flex {
-            direction: Tui.Vertical
-            // the loaded rows tidied as SQL writes it: the clause (ORDER BY, WHERE), then its text,
-            // which Enter applies, each clause keeping its own; the line is the clause's error, the
-            // fields a word typed may be, or what the view holds of the result
-            Flex {
-                direction: Tui.Horizontal
-                ComboBox { id: resultsClause; model: App.resultsClauses; textRole: "label"; valueRole: "key"; maxWidth: 14
-                    currentIndex: App.resultsClauseIndex; onActivated: App.resultsClauseChosen(index, resultsText.text) }
-                Text { text: " " }
-                TextField {
-                    id: resultsText
-                    Layout.fillWidth: true
-                    text: App.resultsClauseText
-                    placeholderText: qsTrId("autodoc.main.over_the_loaded_rows_order_by_column_asc_desc_wh")
-                    onAccepted: App.applyResultsClause(text)
-                    onTextEdited: App.resultsClauseTyped(text)
-                }
-                Text { text: " " }
-                Text { text: App.resultsSortLine }
-            }
-            TableView {
-                id: resultsTable
-                Layout.fillHeight: true
-                palette.highlight: Theme.document.highlight
-                palette.highlightedText: Theme.document.highlightedText
-                // the cursor while the keys are elsewhere (the editor, the bar)
-                palette.inactive.highlight: Theme.app.inactive.highlight
-                palette.inactive.highlightedText: Theme.app.inactive.highlightedText
-                model: App.resultsRows
-                cellCursor: true
-                sortable: true
-                rowNumbers: true
-                contextMenu: true
-                orderBy: App.resultsOrder
-                filter: App.resultsFilter
-                onOrderByChanged: App.resultsOrderChanged(orderBy)
-            }
-            Flex {
-                direction: Tui.Horizontal
-                Text { text: " "; Layout.fillWidth: true }
-                Button { text: qsTrId("autodoc.main.copy"); toolTipText: "the selected cells, or the cursor's, as TSV (y in the table; the right-click menu has CSV, JSON and Markdown)"; onClicked: App.copyResults() }
-                Text { text: " " }
-                Button { text: qsTrId("autodoc.main.export_loaded_rows"); toolTipText: "the rows loaded, as shown, into a CSV or JSON file"; onClicked: App.startExportResults() }
-                Text { text: " " }
-                Button { text: qsTrId("autodoc.main.insert_as_markdown"); toolTipText: "the rows loaded now, as shown, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
-                Text { text: " " }
-                Button { text: qsTrId("autodoc.main.close_q"); toolTipText: "close the results"; onClicked: App.toggleResults() }
-                Text { text: " "; Layout.fillWidth: true }
-            }
-        }
-    }
 
     // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
     // written in here as the program is built; Escape closes one, and its plugin runs on
     // ---- the relation views' panels (the GUI's) ----
     // ---- the card plugins' panels ----
 
-    // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
-    // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
-    // the window across, 80% along, centred (todosDefault), until the user sizes or places it
     // a script's card (autodoc.ui.card, luacard.go): its Markdown drawn Rendered in the GUI, where a
     // vega-lite fence is a chart; a terminal shows the source. One card at a time; :usage is one
     Panel {
@@ -648,273 +945,6 @@ Window {
             text: App.luaCardText
             SyntaxHighlighter { definition: "Markdown" }
             MarkdownRenderer { mermaid: true }
-        }
-    }
-    Panel {
-        id: todos
-        heading: App.todosTitle
-        closeOnQ: true
-        edge: App.todosEdge
-        size: App.todosSize
-        length: App.todosLength
-        floating: App.todosFloating
-        floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
-        onPlaced: App.panelPlaced("todos", x, y, width, height)
-        // 25%, not the side panels' 15: the top bar's icons, and the action row's widest button,
-        // "[ Status… ]", whole inside the frame on an 80-column screen; its four fit from 55% there
-        minimumSize: 25
-        onResized: App.panelResized("todos", size, length)
-        onOpened: App.panelOpened("todos")
-        onClosed: App.panelClosed("todos")
-        Flex {
-            direction: Tui.Vertical
-            // the panel's keys, live while the keyboard is in the top bar or the tabs: NOT in the
-            // details pane below, whose read-only Editor lets the edit keys it refuses (a d s i o)
-            // bubble, and a key read there must never change or remove the task being read
-            FocusScope {
-                Layout.fillHeight: true
-                keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
-                // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
-                Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
-                Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
-                Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
-                Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
-                Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
-                Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
-                Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
-                Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
-                Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
-                Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
-                Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
-                Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
-                Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
-                Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
-                Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
-                // ---- end of the todos's keys ----
-                Flex {
-                    direction: Tui.Vertical
-                    // the store bar, framed, so a line runs between it and the tabs (golib's Text
-                    // cuts a rule with an ellipsis): the store shown, the others in its dropdown, on
-                    // a row of its own; under it the store's buttons, words (an icon glyph is a box in
-                    // a font that lacks it), on the right. The words and a store's name do not fit
-                    // one row of the panel's 52 columns on an 80-column screen, so each has its own.
-                    Frame {
-                        title: qsTrId("autodoc.main.store")
-                        Flex {
-                            direction: Tui.Vertical
-                            ComboBox {
-                                id: todoStore
-                                toolTipText: "the todo store shown: choose another (S)"
-                                model: App.todoStores
-                                textRole: "label"
-                                currentIndex: App.todoStoreIndex
-                                onActivated: App.todoStoreChosen(index)
-                            }
-                            Flex {
-                                direction: Tui.Horizontal
-                                Text { text: " "; Layout.fillWidth: true }
-                                Button { text: qsTrId("autodoc.main.new"); toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
-                                Text { text: " " }
-                                Button { text: qsTrId("autodoc.main.load"); toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
-                                Text { text: " " }
-                                Button { text: qsTrId("autodoc.main.edit_l"); toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
-                                Text { text: " " }
-                                Button { text: qsTrId("autodoc.main.refresh"); toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
-                                Text { text: " " }
-                                Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
-                            }
-                        }
-                    }
-                    // a tab per status, each a numbered table of its tasks; Archived its months, and
-                    // the open month's tasks beside them
-                    TabView {
-                        id: todoTabs
-                        Layout.fillHeight: true
-                        currentIndex: App.todoTab
-                        onCurrentIndexChanged: App.todoTabShown(index)
-                        Tab {
-                            title: "Open"
-                            TableView {
-                                id: todoOpenTable
-                                palette.highlight: Theme.document.highlight
-                                palette.highlightedText: Theme.document.highlightedText
-                                model: App.todoOpenRows
-                                currentIndex: App.todoOpenIndex
-                                onCurrentIndexChanged: App.todoMoved(0, index)
-                                onActivated: App.todoActivated(0, index)
-                                TableViewColumn { role: "n"; title: "#"; width: 4 }
-                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
-                            }
-                        }
-                        Tab {
-                            title: "In progress"
-                            TableView {
-                                id: todoInProgressTable
-                                palette.highlight: Theme.document.highlight
-                                palette.highlightedText: Theme.document.highlightedText
-                                model: App.todoInProgressRows
-                                currentIndex: App.todoInProgressIndex
-                                onCurrentIndexChanged: App.todoMoved(1, index)
-                                onActivated: App.todoActivated(1, index)
-                                TableViewColumn { role: "n"; title: "#"; width: 4 }
-                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
-                            }
-                        }
-                        Tab {
-                            title: "Deferred"
-                            TableView {
-                                id: todoDeferredTable
-                                palette.highlight: Theme.document.highlight
-                                palette.highlightedText: Theme.document.highlightedText
-                                model: App.todoDeferredRows
-                                currentIndex: App.todoDeferredIndex
-                                onCurrentIndexChanged: App.todoMoved(2, index)
-                                onActivated: App.todoActivated(2, index)
-                                TableViewColumn { role: "n"; title: "#"; width: 4 }
-                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
-                            }
-                        }
-                        Tab {
-                            title: "Completed"
-                            TableView {
-                                id: todoCompletedTable
-                                palette.highlight: Theme.document.highlight
-                                palette.highlightedText: Theme.document.highlightedText
-                                model: App.todoCompletedRows
-                                currentIndex: App.todoCompletedIndex
-                                onCurrentIndexChanged: App.todoMoved(3, index)
-                                onActivated: App.todoActivated(3, index)
-                                TableViewColumn { role: "n"; title: "#"; width: 4 }
-                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
-                            }
-                        }
-                        Tab {
-                            title: "Archived"
-                            Split {
-                                orientation: Tui.Horizontal
-                                ratio: 0.3
-                                TableView {
-                                    id: todoMonths
-                                    palette.highlight: Theme.document.highlight
-                                    palette.highlightedText: Theme.document.highlightedText
-                                    model: App.todoMonths
-                                    currentIndex: App.todoMonthIndex
-                                    onCurrentIndexChanged: App.todoMonthMoved(index)
-                                    onActivated: App.todoMonthChosen(index)
-                                    TableViewColumn { role: "month"; title: "MONTH"; width: 8 }
-                                    TableViewColumn { role: "count"; title: "TASKS"; width: 0 }
-                                }
-                                TableView {
-                                    id: todoArchivedTable
-                                    palette.highlight: Theme.document.highlight
-                                    palette.highlightedText: Theme.document.highlightedText
-                                    model: App.todoArchivedRows
-                                    currentIndex: App.todoArchivedIndex
-                                    onCurrentIndexChanged: App.todoMoved(4, index)
-                                    onActivated: App.todoActivated(4, index)
-                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
-                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
-                                }
-                            }
-                        }
-                        // the store's workspace's variables, the same from every route to it: each value and
-                        // where it came from (todos_vars.go)
-                        Tab {
-                            title: "Variables"
-                            TableView {
-                                id: todoVarsTable
-                                palette.highlight: Theme.document.highlight
-                                palette.highlightedText: Theme.document.highlightedText
-                                model: App.todoVarsRows
-                                currentIndex: App.todoVarsIndex
-                                onCurrentIndexChanged: App.todoVarMoved(index)
-                                onActivated: App.todoVarEdit()
-                                TableViewColumn { role: "name"; title: "NAME"; width: 16 }
-                                TableViewColumn { role: "from"; title: "FROM"; width: 9 }
-                                TableViewColumn { role: "value"; title: "VALUE"; width: 0 }
-                            }
-                        }
-                    }
-                }
-            }
-            // the task under the cursor's details (i, o), Markdown, rendered as the pickers' previews
-            // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
-            // scrolled, so a long description never pushes the tabs away
-            Frame {
-                title: qsTrId("autodoc.main.details")
-                visible: App.todoDetailShown
-                Layout.fillHeight: true
-                Editor {
-                    cursorColor: Theme.document.cursor // the theme's cursor: a terminal's own may not show on its colours
-                    id: todoDetails
-                    readOnly: true
-                    text: App.todoDetail
-                    wrap: true
-                    view: Editor.Rendered
-                    SyntaxHighlighter { definition: "Markdown" }
-                    MarkdownRenderer {}
-                }
-            }
-            // what needs the user: a file a tab could not list; hidden while there is none
-            Text { text: App.todosStatus; visible: App.todosStatusShown; wrapMode: Tui.WordWrap }
-            // the action row: one line, only the actions that apply to the task under the cursor,
-            // each its key's (its tooltip says which), the others hidden, never greyed; on a store not claimed none, only a
-            // note. Which apply follows the cursor (todos.go: syncActions), never a button's own click.
-            // the panel's keys again, live on these buttons too (the details pane above has none)
-            FocusScope {
-                keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
-                // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
-                Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
-                Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
-                Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
-                Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
-                Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
-                Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
-                Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
-                Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
-                Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
-                Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
-                Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
-                Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
-                Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
-                Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
-                Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
-                Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
-                // ---- end of the todos task buttons' keys ----
-                Flex {
-                    direction: Tui.Horizontal
-                    Text { text: qsTrId("autodoc.main.read_only_until_the_cutover"); visible: App.todoReadOnly }
-                    Button { id: todoStatusButton; text: qsTrId("autodoc.main.status"); toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
-                    Text { text: " "; visible: App.todoActAssign }
-                    Button { text: qsTrId("autodoc.main.assign"); toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
-                    Text { text: " "; visible: App.todoActRemove }
-                    Button { text: qsTrId("autodoc.main.remove_d"); toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
-                    Text { text: " "; visible: App.todoActStatus }
-                    Button { id: todoAddButton; text: qsTrId("autodoc.main.add"); toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
-                    Button { text: qsTrId("autodoc.main.set"); toolTipText: "set the value, in the KB's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
-                    Text { text: " "; visible: App.todoActVarSet }
-                    Button { text: qsTrId("autodoc.main.this_machine"); toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
-                    Text { text: " "; visible: App.todoActVarClear }
-                    Button { text: qsTrId("autodoc.main.clear_d"); toolTipText: "clear the value set here (d)"; visible: App.todoActVarClear; enabled: App.todoActVarClear; onClicked: App.todoRemove() }
-                    Text { text: " "; visible: App.todoActVarAdd }
-                    Button { text: qsTrId("autodoc.main.add"); toolTipText: "add a variable, NAME=value (a)"; visible: App.todoActVarAdd; enabled: App.todoActVarAdd; onClicked: App.todoAdd() }
-                }
-            }
         }
     }
 
