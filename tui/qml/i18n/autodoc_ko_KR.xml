@@ -3476,6 +3476,10 @@ WHAT A KEY NEEDS
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>배치할 열린 패널이 없습니다: 먼저 하나를 여세요 (이동 메뉴)</translation>
     </message>
+    <message id="autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged">
+        <source>%1 is tiled: Layout › Float lets it be arranged</source>
+        <translation>%1은(는) 타일로 배치되어 있습니다. 레이아웃 › 플로팅으로 바꾸면 배치할 수 있습니다</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
         <source>audit of %1 handed to %2: click to install or cancel</source>
         <translation>%1 감사를 %2에게 넘겼습니다: 클릭하여 설치하거나 취소하세요</translation>

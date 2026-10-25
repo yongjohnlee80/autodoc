@@ -6,7 +6,8 @@ import (
 )
 
 // ARRANGE PANEL — Go › Arrange panel (SPC L): the panel with the keyboard, else the one opened
-// last, moved and resized by keys. A small card holds the keyboard meanwhile (views/Arrange.qml),
+// last, moved and resized by keys. A panel tiled now is its tile's to place, and refuses a move, so
+// Arrange says so and leaves it. A small card holds the keyboard meanwhile (views/Arrange.qml),
 // so Escape reaches it and not the drawer, which would close. It is one change: the steps show at
 // once but nothing is written until Enter keeps them; Escape puts the panel back as it was, the
 // store untouched.
@@ -31,6 +32,10 @@ func (h *Host) arrangePanel() {
 	panel := h.panelWithKeyboard()
 	if panel == "" {
 		h.notify(h.tr("autodoc.notice.arrange.no_panel_is_open_to_arrange_open_one_first_the_g"))
+		return
+	}
+	if h.tiledNow(panel) {
+		h.notify(h.trf("autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged", h.panelTitle(panel)))
 		return
 	}
 	a := &arrangeState{panel: panel}

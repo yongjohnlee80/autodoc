@@ -3477,6 +3477,10 @@ O QUE UMA TECLA PRECISA
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>nenhum painel aberto para organizar: abra um antes (menu Ir)</translation>
     </message>
+    <message id="autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged">
+        <source>%1 is tiled: Layout › Float lets it be arranged</source>
+        <translation>%1 está lado a lado: Layout › Flutuante permite organizá-lo</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
         <source>audit of %1 handed to %2: click to install or cancel</source>
         <translation>auditoria de %1 entregue a %2: clique para instalar ou cancelar</translation>

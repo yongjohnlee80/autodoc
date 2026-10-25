@@ -83,6 +83,9 @@ func TestAPanelReleasedForRoomStaysTiledAndTilesAgainWhenTheRoomReturns(t *testi
 		t.Fatalf("released for room: wanted %v, Layout %q; want still Tiled, the user's choice", wants, stored)
 	}
 	wantLayoutChecked(t, "the todos released", onLoop(r, func() []widget.MenuItemModel { return layoutChoices(core{r.h}, "todos", tabsRowOf) }), true)
+	if now := onLoop(r, func() [2]bool { return [2]bool{r.h.tiledNow("todos"), r.h.tiledNow("explorer")} }); now != [2]bool{false, true} {
+		t.Fatalf("tiled now: the todos %v, the explorer %v; want the released todos not, the explorer still", now[0], now[1])
+	}
 	r.s.Backend.InjectResize(100, 30)
 	r.s.WaitFor(t, "the todos tiled again", func(string) bool { _, g := tileOf(r, "todos"); return g })
 }

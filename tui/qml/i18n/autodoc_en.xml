@@ -3477,6 +3477,10 @@ WHAT A KEY NEEDS
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>no panel is open to arrange: open one first (the Go menu)</translation>
     </message>
+    <message id="autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged">
+        <source>%1 is tiled: Layout › Float lets it be arranged</source>
+        <translation>%1 is tiled: Layout › Float lets it be arranged</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
         <source>audit of %1 handed to %2: click to install or cancel</source>
         <translation>audit of %1 handed to %2: click to install or cancel</translation>

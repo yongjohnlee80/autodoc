@@ -154,8 +154,9 @@ func (h *Host) menuAutoHide(p prefs) bool {
 	return p.menuHidden && (h.p == nil || len(h.dockTargets()) <= 1)
 }
 
-// goDock is a dock icon's click: the widget by its :go name; the editor's hides or shows the panels,
-// a shown panel's hides it, any other goes there (goTo).
+// goDock is a dock icon's click: the widget by its :go name; the editor's shows its window when it
+// is minimized, and otherwise hides or shows the panels; a shown panel's hides it, any other goes
+// there (goTo).
 func (h *Host) goDock(key string) {
 	t, err := h.widgetNamed(key)
 	if err != nil {
@@ -163,6 +164,9 @@ func (h *Host) goDock(key string) {
 		return
 	}
 	switch {
+	case t.panel == "" && h.editorMinimized():
+		h.keep(h.p.Call("editorWindow", "restore"))
+		h.focusEditor()
 	case t.panel == "":
 		h.hideOrShowPanels()
 	case h.panelOpen[t.panel] && !h.panelHidden(t.panel):
@@ -207,6 +211,9 @@ func (h *Host) hidePanel(id string) {
 
 // showPanel shows a hidden panel again as it was (a minimized Drawer's open restores it).
 func (h *Host) showPanel(id string) { h.keep(h.p.Call(id, "open")) }
+
+// editorMinimized reports whether the page's window is minimized, its icon in the dock.
+func (h *Host) editorMinimized() bool { return h.panelHidden("editorWindow") }
 
 // panelHidden reports whether panel id is hidden by the dock: open, minimized.
 func (h *Host) panelHidden(id string) bool {
