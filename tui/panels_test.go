@@ -147,7 +147,7 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	if _, kept := p.panelGeo["tui.explorer.left.size"]; kept {
 		t.Error("a size under the minimum was kept")
 	}
-	if s, l := p.panelGeometry("explorer", "left"); s != 30 || l != 70 {
-		t.Errorf("the explorer at the left: %d × %d, want the default size and the kept length", s, l)
+	if s, l := p.panelGeometry("explorer", "left"); s != 35 || l != 70 {
+		t.Errorf("the explorer at the left: %d × %d, want its default size (35) and the kept length", s, l)
 	}
 }

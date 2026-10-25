@@ -39,7 +39,7 @@ type tileWindow struct {
 // tileWindows are the base's windows: the page, then the tileable panels.
 var tileWindows = []tileWindow{
 	{id: "editor", node: "editorWindow", tiled: true},
-	{id: "explorer", node: "explorer", edge: "left", size: 30},
+	{id: "explorer", node: "explorer", edge: "left", size: 35},
 	{id: "terminal", node: "terminal", edge: "bottom", size: 30},
 	{id: "agent", node: "agent", edge: "right", size: 35},
 	{id: "results", node: "results", edge: "bottom", size: 35},

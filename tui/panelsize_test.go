@@ -39,7 +39,7 @@ func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
 }
 
 // TestADraggedPanelFloatsWhereItIsLeft: the terminal at the bottom, Alt-dragged up six rows, floats
-// there, and the explorer at the left, Alt-right-dragged ten columns wider, floats at its new size;
+// there, and the explorer at the left (35% wide), Alt-right-dragged ten columns wider, floats at 45%;
 // the store keeps each as percentages of the Window, and a TUI attached after opens them there
 // (ADR 1791500773). No corner grip is drawn.
 func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
@@ -57,10 +57,10 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row >= 0 })
 	altDrag(t, r, tuicore.MouseRight, 20, 10, 10, 0)
-	r.s.WaitFor(t, "the explorer floating 40% wide", func(string) bool {
+	r.s.WaitFor(t, "the explorer floating 45% wide", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
 		f, ok := panelgeometry.ParseFloat(m["tui.explorer.float"])
-		return ok && f[0] == 0 && f[2] == 40
+		return ok && f[0] == 0 && f[2] == 45
 	})
 
 	again := attached(t, d)
