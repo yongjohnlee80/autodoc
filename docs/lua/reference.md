@@ -507,7 +507,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 
 | Domain | Functions |
 |---|---|
-| `agents` | `list`, `send` |
+| `agents` | `list`, `send`, `resume` |
 | `app` | `stats` |
 | `clipboard` | `read`, `write` |
 | `plugin` | `run` |

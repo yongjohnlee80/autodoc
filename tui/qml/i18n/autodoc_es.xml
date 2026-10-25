@@ -691,6 +691,14 @@
         <source>reset the panel layout</source>
         <translation>restablecer la disposición de paneles</translation>
     </message>
+    <message id="autodoc.cmd.panel.resume">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>reanudar la pestaña del terminal o de los agentes (SIGCONT)</translation>
+    </message>
+    <message id="autodoc.cmd.panel.resume.help">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>reanudar la pestaña del terminal o de los agentes (SIGCONT)</translation>
+    </message>
     <message id="autodoc.cmd.plugins.add">
         <source>add a plugin by its registry name or a git URL</source>
         <translation>añadir un plugin por su nombre en el registro o una URL git</translation>
