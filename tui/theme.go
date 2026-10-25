@@ -161,6 +161,7 @@ func (h *Host) reloaded() {
 	h.applyTerminalKeymap(h.prefs)              // and their keymap's normal mode
 	h.attachTabViewMenus()                      // and the explorer's and the todos' tabs their menu
 	h.attachFindChip()                          // and the page's rebuilt window the find's card
+	h.syncBufferTabs()                          // and a rebuilt editor's strip its tabs, ≡ and +
 	h.themesReloaded()
 }
 
