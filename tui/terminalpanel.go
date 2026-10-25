@@ -47,6 +47,9 @@ type TerminalPanel interface {
 	Start(widget.TerminalTabID) error
 	SendText(widget.TerminalTabID, string) error
 	SendPaste(widget.TerminalTabID, string) error
+	// Resume sends a SIGCONT to the tab's program (its process group): one stopped by its own Ctrl+Z
+	// runs again. A running one is not disturbed.
+	Resume(widget.TerminalTabID) error
 	Remove(widget.TerminalTabID) (TerminalRemoval, error)
 	ForceRemove(widget.TerminalTabID) error
 	Tabs() []widget.TerminalTab
@@ -57,7 +60,18 @@ type TerminalPanel interface {
 	Menus(add func() []widget.MenuItemModel, tab func(widget.TerminalTabID) []widget.MenuItemModel)
 }
 
+// ErrResumeUnsupported is Resume where the platform has no SIGCONT.
+var ErrResumeUnsupported = errs.Sentinel(errs.ErrUnsupported, "resume: no SIGCONT on this platform")
+
 type terminalPanel struct{ tabs *widget.TerminalTabs }
+
+// Resume is TerminalTabs.Signal with SIGCONT for that tab; where the platform has none, it says so.
+func (p terminalPanel) Resume(id widget.TerminalTabID) error {
+	if resumeSignal == nil {
+		return ErrResumeUnsupported
+	}
+	return p.tabs.Signal(id, resumeSignal)
+}
 
 func (p terminalPanel) SameOwner(other TerminalPanel) bool {
 	peer, ok := other.(terminalPanel)

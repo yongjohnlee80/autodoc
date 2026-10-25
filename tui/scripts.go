@@ -177,7 +177,8 @@ func (l luaHostOf) agentEntries() []AgentEntry { return l.h.agents.AgentEntries(
 func (l luaHostOf) sendText(to AgentRef, text string, done func(error)) error {
 	return l.h.agents.SendText(to, text, done)
 }
-func (l luaHostOf) post(fn func()) { l.h.p.Post(fn) }
+func (l luaHostOf) resumeAgent(to AgentRef) error { return l.h.agents.Resume(to) }
+func (l luaHostOf) post(fn func())                { l.h.p.Post(fn) }
 
 // the card's (luacard.go): its panel opened without taking the keyboard, which stays where it is
 func (l luaHostOf) openPanel(id string)              { l.h.keep(l.h.p.Call(id, "open")) }

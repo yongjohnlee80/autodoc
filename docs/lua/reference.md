@@ -527,6 +527,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `autodoc.app.stats()` | at once: the app's own process, in the keys `sys.stats` answers for the daemon's: `{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}`. Sizes are bytes (`rss` 0 where the system cannot say: macOS), `cpu_seconds` the CPU used so far: a rate is two readings apart |
 | `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
 | `autodoc.plugin.run(id, args…)` | at once, `ok, err`: from a plugin's own Lua package only (its `lua/`, loaded as `plugin:<name>`, [docs/plugins.md](../plugins.md#a-plugins-lua-package-lua)), one of its plugin's `[[commands]]` run with `args` (strings), the plugin started when it is not running. `err` `"autodoc.plugin.run: not a plugin's package"` for any other script, `"unknown: <id>"` for an id its manifest does not declare; arguments need the plugin's `protocol = 7` |
+| `autodoc.agents.resume([agent])` | at once, `ok, err`: a SIGCONT to the agent's tab, `agent` as `send`'s, none for the agents panel's tab now. An agent CLI stopped by a suspend runs again; a running one isn't disturbed. `err` `"stale"`, `"unavailable"`, or why |
 | `autodoc.agents.send(agent, text, cb)` | `text` pasted into the agent's prompt, no Enter added after it: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, or why |
 
 A paste is as the terminal's own: an agent CLI that asked for bracketed paste gets the text whole,
@@ -580,7 +581,7 @@ call answers `nil` and `needs <capability>: not granted`, and does nothing.
 | `workspace.write` | call its writing verbs: write, rename and remove documents and tasks |
 | `settings` | change AutoDoc's settings: workspaces, models, rankers, preferences |
 | `clipboard` | `autodoc.clipboard.read` and `.write` |
-| `agents` | `autodoc.agents.list` and `.send` |
+| `agents` | `autodoc.agents.list`, `.send` and `.resume` |
 | `commands` | run commands: `autodoc.run`, `ed:run`, and the keys and menu rows it binds (`autodoc.map`, `autodoc.menu`: they register either way, and say they need it when pressed) |
 
 - **Every daemon verb says which of the first three it needs** (its effect, in `autodoc

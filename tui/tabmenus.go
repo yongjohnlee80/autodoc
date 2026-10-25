@@ -25,11 +25,19 @@ func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuIte
 	return withLabelMessage(row, label)
 }
 
-// panelRows end panel's tab menu: Theme and font…, which opens the terminals' look (nil where the
-// host has none); Text size › in a window, the shells' share of its text (textSizeMenu); Maximize, or Restore while it is maximized, its Drawer's own toggleMaximize (none
-// where the host has none); and Hide, the panel's own toggle (hide), its tabs running on.
-func panelRows(c any, panel string, hide func()) []widget.MenuItemModel {
-	rows := []widget.MenuItemModel{widget.NewSeparator("tabs.panel")}
+// panelRows end panel's tab menu: Resume, a SIGCONT to tab id's program on tabs (disabled with no
+// tab); Theme and font…, which opens the terminals' look (nil where the host has none); Text size ›
+// in a window, the shells' share of its text (textSizeMenu); Maximize, or Restore while it is
+// maximized, its Drawer's own toggleMaximize (none where the host has none); and Hide, the panel's
+// own toggle (hide), its tabs running on.
+func panelRows(c any, panel string, tabs TerminalPanel, id widget.TerminalTabID, hide func()) []widget.MenuItemModel {
+	resume := tabMenuRow("tabs.resume", "Res&ume", func(id widget.TerminalTabID) {
+		if err := tabs.Resume(id); err != nil {
+			keepFailure(c, fmt.Errorf("Resume a tab of the %s panel: %w", panel, err))
+		}
+	})
+	resume.Enabled = id != ""
+	rows := []widget.MenuItemModel{widget.NewSeparator("tabs.panel"), resume}
 	if look := lookOf(c); look != nil {
 		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(widget.TerminalTabID) {
 			if err := look(); err != nil {

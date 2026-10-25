@@ -2135,6 +2135,10 @@
         <source>Re&amp;store</source>
         <translation>元に戻す(&amp;s)</translation>
     </message>
+    <message id="autodoc.gomenu.res_ume_u">
+        <source>Res&amp;ume</source>
+        <translation>再開(&amp;u)</translation>
+    </message>
     <message id="autodoc.gomenu.restart">
         <source>Restart</source>
         <translation>再起動</translation>
@@ -2550,7 +2554,7 @@ THE PANELS
   CLAUDE.md there, and keeps running while hidden. Each agent has a tab, named by its codename:
   + on the strip offers the profiles (a running one goes to its tab, a stopped one starts), and
   a tab's menu (≡, a right click anywhere on the strip or on an empty panel, or Enter on the
-  strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Theme and
+  strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Resume, Theme and
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
@@ -2563,13 +2567,14 @@ THE PANELS
   The terminal (SPC `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
-  + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
+  + adds one, and a tab's menu has Go to ›, New, Close, Resume, Theme and font…, Maximize (Restore)
   and Hide (the panel closed, every shell running on). The strip's _ does the same, + maximizes it
   (again to restore), and x stops
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
+  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes back where it was. When
@@ -2669,7 +2674,7 @@ WHAT A KEY NEEDS
   知らされ、非表示の間も動き続けます。各エージェントにはコードネーム付きのタブがあります:
   タブ列の + でプロファイルを選択 (実行中のものはそのタブへ、停止中のものは起動)。
   タブのメニュー (≡、タブ列や空のパネル上の右クリック、またはタブ列上で
-  Enter) には 移動先 ›、再起動、閉じる (エージェント実行中は先に確認)、プロファイル…、テーマと
+  Enter) には 移動先 ›、再起動、閉じる (エージェント実行中は先に確認)、プロファイル…、再開、テーマと
   フォント…、最大化 (ドック領域を占めている間は 元に戻す)、隠す (パネルを閉じ、
   全エージェントは動作を継続) があります。プロファイルの 使用 でも
   別のエージェントを起動できます。
@@ -2682,13 +2687,13 @@ WHAT A KEY NEEDS
   ターミナル (SPC `、移動 › ターミナル) はワークスペースのフォルダーでシェルを実行します。下端、
   または設定で指定した位置 (上、左、右、中央) に表示し、位置ごとにサイズを持ちます。
   シェルがないときに開くとシェルを起動し、非表示の間も動き続けます。各シェルにはタブがあります:
-  + で追加、タブのメニューには 移動先 ›、新規、閉じる、テーマとフォント…、最大化 (元に戻す)、
+  + で追加、タブのメニューには 移動先 ›、新規、閉じる、再開、テーマとフォント…、最大化 (元に戻す)、
   隠す (パネルを閉じ、全シェルは動作を継続) があります。タブ列右端の _ も同じく隠し、+ は最大化し
   (もう一度で元に戻す)、x は
   全シェルを停止してパネルを閉じます (実行中のものがあれば一度だけ確認)。テーマとフォント… (設定のターミナル行やオプション › フォントと
   ズーム… からも) はターミナルのテーマ (文字、背景、カーソルのみ。プログラム独自の
   色はそのまま) と、ウィンドウではフォントを設定します。その中で Esc を押すと元に戻ります。キーはすべて
-  シェルに送られ、Esc も同様です。Ctrl+T (または Ctrl+\ Ctrl+n) でノーマルモードに移り、h j k l、w b e、gg G、
+  シェルに送られ、Esc も同様ですが、Ctrl+Z は届かないのでプログラムがそれで止まることはなく、一時停止で止まったものは 再開 で動き出します。Ctrl+T (または Ctrl+\ Ctrl+n) でノーマルモードに移り、h j k l、w b e、gg G、
   Ctrl+u/d/b/f、/ と ? で履歴内を移動、v または V で選択、y でコピー、Ctrl+T、i または
   Enter で戻ります。エージェントパネルのキーも同じです。
   ノーマルモードで Escape、または再度 SPC ` で隠し、キーボードは元の場所に戻ります。

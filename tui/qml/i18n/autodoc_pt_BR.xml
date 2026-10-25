@@ -2135,6 +2135,10 @@
         <source>Re&amp;store</source>
         <translation>Re&amp;staurar</translation>
     </message>
+    <message id="autodoc.gomenu.res_ume_u">
+        <source>Res&amp;ume</source>
+        <translation>Contin&amp;uar</translation>
+    </message>
     <message id="autodoc.gomenu.restart">
         <source>Restart</source>
         <translation>Reiniciar</translation>
@@ -2550,7 +2554,7 @@ THE PANELS
   CLAUDE.md there, and keeps running while hidden. Each agent has a tab, named by its codename:
   + on the strip offers the profiles (a running one goes to its tab, a stopped one starts), and
   a tab's menu (≡, a right click anywhere on the strip or on an empty panel, or Enter on the
-  strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Theme and
+  strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Resume, Theme and
   font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
   leaves every agent running; Use in the profiles
   starts another too.
@@ -2563,13 +2567,14 @@ THE PANELS
   The terminal (SPC `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
-  + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
+  + adds one, and a tab's menu has Go to ›, New, Close, Resume, Theme and font…, Maximize (Restore)
   and Hide (the panel closed, every shell running on). The strip's _ does the same, + maximizes it
   (again to restore), and x stops
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too; Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
+  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes back where it was. When
@@ -2670,7 +2675,7 @@ OS PAINÉIS
   CLAUDE.md ali, e continua rodando enquanto oculto. Cada agente tem uma aba, com o nome do seu codinome:
   + na faixa oferece os perfis (um em execução vai para sua aba, um parado inicia), e
   o menu de uma aba (≡, um clique direito em qualquer ponto da faixa ou num painel vazio, ou Enter na
-  faixa) tem Ir para ›, Reiniciar, Fechar (pergunta antes enquanto o agente roda), Perfis…, Tema e
+  faixa) tem Ir para ›, Reiniciar, Fechar (pergunta antes enquanto o agente roda), Perfis…, Continuar, Tema e
   fonte…, Maximizar (Restaurar enquanto ocupa a área de encaixe) e Ocultar, que fecha o painel e
   deixa todos os agentes rodando; Usar nos perfis
   também inicia outro.
@@ -2683,13 +2688,13 @@ OS PAINÉIS
   O terminal (SPC `, Ir › Terminal) roda seus shells na pasta do espaço de trabalho, embaixo
   ou onde Preferências o puser (em cima, à esquerda, à direita ou centralizado), cada lugar com seu tamanho.
   Um shell inicia quando ele abre sem nenhum, e continua rodando enquanto oculto. Cada shell tem uma aba:
-  + adiciona uma, e o menu de uma aba tem Ir para ›, Novo, Fechar, Tema e fonte…, Maximizar (Restaurar)
+  + adiciona uma, e o menu de uma aba tem Ir para ›, Novo, Fechar, Continuar, Tema e fonte…, Maximizar (Restaurar)
   e Ocultar (o painel fechado, todos os shells rodando). O _ da faixa faz o mesmo, o + o maximiza
   (de novo para restaurá-lo) e o x para
   todos os shells e fecha o painel, com uma só pergunta enquanto algum roda. Tema e fonte… (também a linha de terminal das Preferências e Opções › Fontes
   e zoom…) define o tema dos terminais, só o texto, o fundo e o cursor, as cores próprias de um programa
   continuando as dele, e numa janela a fonte; Esc nele devolve o que havia. Toda tecla vai para o
-  shell, Esc também; Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
+  shell, Esc também, exceto Ctrl+Z: nenhum programa para com ela, e Continuar retoma um que uma suspensão parou; Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / e ? percorrem o histórico, v ou V seleciona e y copia, e Ctrl+T, i ou
   Enter volta. As teclas do painel de agentes são as mesmas.
   Escape no modo Normal, ou SPC ` de novo, o oculta; o teclado volta para onde estava. Quando

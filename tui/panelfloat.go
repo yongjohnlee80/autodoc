@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
@@ -67,9 +68,9 @@ var maximizable = []string{"terminal", "agent"}
 // Maximize (Restore), F11 and SPC M all come here.
 func (h *Host) toggleMaximize(panel string) error { return h.p.Call(panel, "toggleMaximize") }
 
-// maximizePanel is F11 and SPC M (panel.maximize): the terminal or the agents, whichever has the
-// keyboard, else the most recently opened of them that is still open.
-func (h *Host) maximizePanel() {
+// panelInHand is the terminal or the agents, whichever has the keyboard, else the most recently
+// opened of them that is still open; "" for neither. Maximize and Resume act on it.
+func (h *Host) panelInHand() string {
 	target := ""
 	for _, p := range maximizable {
 		if s := h.panelSpec(p); s != nil && h.paneHasKeyboard(s.View) {
@@ -81,6 +82,12 @@ func (h *Host) maximizePanel() {
 			target = p
 		}
 	}
+	return target
+}
+
+// maximizePanel is F11 and SPC M (panel.maximize): the panel in hand (panelInHand).
+func (h *Host) maximizePanel() {
+	target := h.panelInHand()
 	if target == "" {
 		h.notify(h.tr("autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o"))
 		return
@@ -91,6 +98,26 @@ func (h *Host) maximizePanel() {
 			op = "Restore"
 		}
 		h.keep(fmt.Errorf("%s the %s panel: %w", op, target, err))
+	}
+}
+
+// resumePanel is panel.resume: a SIGCONT to the active tab of the panel in hand (panelInHand), so
+// a program stopped by its own Ctrl+Z, or by a SIGTSTP from elsewhere, runs again. A running one is
+// not disturbed.
+func (h *Host) resumePanel() {
+	target := h.panelInHand()
+	if target == "" {
+		h.keep(errors.New("Resume: neither the terminal nor the agents is open"))
+		return
+	}
+	s := h.panelSpec(target)
+	tabs, ok := h.tabsOf(s.View)
+	if !ok || tabs.Active() == "" {
+		h.keep(fmt.Errorf("Resume: the %s panel has no tab", target))
+		return
+	}
+	if err := (terminalPanel{tabs: tabs}).Resume(tabs.Active()); err != nil {
+		h.keep(fmt.Errorf("Resume the %s panel's tab: %w", target, err))
 	}
 }
 
