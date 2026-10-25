@@ -12,6 +12,8 @@ verbs).
 How it is put together, and the convention a new feature follows, is
 [docs/architecture.md](docs/architecture.md); what an AI agent may call, and how, is
 [AGENTS.md](AGENTS.md) (`autodoc --contracts` prints every verb's contract).
+The rules a change follows are [CONVENTIONS.md](CONVENTIONS.md), and how to send one is
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Package | What it does |
 | --- | --- |
@@ -1191,7 +1193,8 @@ make test    # or: make race, make cover
 The Postgres destination's cells need `AUTODOC_TEST_PGURL`, a PostgreSQL with pgvector whose user
 may create databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)). CI runs
 `make race`'s command against a pgvector service with those cells required
-(`AUTODOC_TEST_PG_REQUIRED=1`), and on a pull request a separate coverage policy.
+(`AUTODOC_TEST_PG_REQUIRED=1`), and on a pull request a separate coverage policy. Before sending a change, read
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
