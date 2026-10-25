@@ -59,12 +59,28 @@ make test         # the tests, with -tags server
 make race         # the tests under -race, twice
 go vet -tags gui ./tui/ ./app/
 go test -tags gui ./tui/
-make test-lua     # autodoc.nvim's specs (needs Neovim)
+make test-lua     # autodoc.nvim's Lua suites (see below)
 ```
 
 - **Never run `go test -tags gui ./app/`**: it opens a window.
 - The Postgres cells need `AUTODOC_TEST_PGURL`, a PostgreSQL with pgvector whose user may create
   databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)).
+- **The Lua suites** (`make test-lua`, which runs `tests/run-all.sh`) need:
+  - Neovim on `PATH` (CI uses v0.12.2);
+  - a checkout of [auto-core.nvim](https://github.com/yongjohnlee80/auto-core.nvim), named by
+    `AUTODOC_TEST_AUTOCORE` or found beside this checkout. The run stops if there is none. CI pins
+    the revision it tests against (`AUTO_CORE_SHA` in `.github/workflows/ci.yml`); check out the
+    same one:
+
+    ```sh
+    git clone https://github.com/yongjohnlee80/auto-core.nvim ../auto-core.nvim
+    git -C ../auto-core.nvim checkout <AUTO_CORE_SHA from ci.yml>
+    make test-lua
+    ```
+
+  - The composition suite, the drawer hosted by the real auto-finder.nvim, is optional. It runs
+    when `AUTODOC_TEST_AUTOFINDER` names a checkout of it, or one is found beside this checkout,
+    and is reported skipped otherwise.
 - The TUI tests are long. `go test ./tui -run <Name>` runs one; CI runs them in four shards
   (`tests/run-tui-shard.sh`).
 
@@ -107,11 +123,14 @@ Every pull request runs:
 - `gofmt`, `go vet` (untagged, `-tags server`, `-tags gui`) and the builds;
 - the tests under `-race`, twice, against a pgvector service;
 - the TUI tests under `-race`, in four shards;
-- the Lua specs in Neovim;
-- the GUI build and its tests, on Linux and macOS;
+- the Lua suites in Neovim, against the pinned auto-core.nvim;
+- on Linux, the GUI build and its TUI tests (`-tags gui`);
+- on macOS, the builds with and without the GUI for both architectures, and the core and RPC tests
+  under `-race` (FSEvents through cgo);
 - the untagged build reaching no server code, and no private module in the dependency graph;
 - **the coverage policy**: changed code at least 70% covered, and no file and no total dropping more
-  than 1 point. The result is posted on the pull request.
+  than 1 point. The report is in the job's summary. A pull request from a branch of this repository
+  also gets it as a comment; one from a fork does not, since its token is read-only.
 
 A pull request is merged once CI is green and a maintainer has approved it. Review comments are
 answered with new commits on the same branch.
