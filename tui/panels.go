@@ -311,13 +311,20 @@ func (h *Host) keyboardHome() string {
 	return "editor"
 }
 
-// focusWindow gives the keyboard to a panel, or to the page ("").
+// focusWindow gives the keyboard to a panel, or to the page (""). An id that names no panel now (a
+// card whose plugin went while a caller held it: Arrange's end, posted) is a window gone, so the
+// keyboard goes home, as when a window closes (keyboardHome).
 func (h *Host) focusWindow(panel string) {
 	if panel == "" {
 		h.focusEditor()
 		return
 	}
-	h.keep(h.p.Call(h.panelSpec(panel).focusView(), "forceActiveFocus"))
+	s := h.panelSpec(panel)
+	if s == nil {
+		h.keep(h.p.Call(h.keyboardHome(), "forceActiveFocus"))
+		return
+	}
+	h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
 }
 
 // nextWindow is the window next to shown[from] a step away: of those whose centre lies that way,
