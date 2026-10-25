@@ -507,6 +507,8 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
+	// Layout › on the explorer's and the todos' tabs (tilelayout.go)
+	p.Post(h.attachTabViewMenus)
 	p.Post(h.keysChanged) // the user's keymap.xml, read as the program was built: the cards name its keys
 	p.Post(h.start)
 	p.Post(func() {

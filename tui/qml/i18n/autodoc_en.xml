@@ -1011,6 +1011,14 @@
         <source>put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker</source>
         <translation>put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker</translation>
     </message>
+    <message id="autodoc.cmd.window.layout">
+        <source>a window's layout</source>
+        <translation>a window's layout</translation>
+    </message>
+    <message id="autodoc.cmd.window.layout.help">
+        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>Tiled or Float for a window: alone, the editor's; Tab lists the windows</translation>
+    </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
         <translation>manage workspaces</translation>
@@ -2095,6 +2103,10 @@
         <source>Export loaded rows…</source>
         <translation>Export loaded rows…</translation>
     </message>
+    <message id="autodoc.gomenu.float_f">
+        <source>&amp;Float</source>
+        <translation>&amp;Float</translation>
+    </message>
     <message id="autodoc.gomenu.go_to">
         <source>Go to</source>
         <translation>Go to</translation>
@@ -2110,6 +2122,10 @@
     <message id="autodoc.gomenu.insert_as_markdown">
         <source>Insert as Markdown</source>
         <translation>Insert as Markdown</translation>
+    </message>
+    <message id="autodoc.gomenu.l_ayout_a">
+        <source>L&amp;ayout</source>
+        <translation>L&amp;ayout</translation>
     </message>
     <message id="autodoc.gomenu.la_rger_r">
         <source>La&amp;rger</source>
@@ -2178,6 +2194,10 @@
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>
         <translation>&amp;Theme and font…</translation>
+    </message>
+    <message id="autodoc.gomenu.tiled_t">
+        <source>&amp;Tiled</source>
+        <translation>&amp;Tiled</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -3900,6 +3920,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.language.no_language">
         <source>no language %1</source>
         <translation>no language %1</translation>
+    </message>
+    <message id="autodoc.notice.layout.no_window_s_the_windows_are_s">
+        <source>no window %1: the windows are %2</source>
+        <translation>no window %1: the windows are %2</translation>
     </message>
     <message id="autodoc.notice.luaevents.a_lua_handler_failed">
         <source>a Lua handler failed: %1</source>

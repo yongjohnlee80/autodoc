@@ -773,8 +773,9 @@ func (pl *plugins) bindResultsMenu() {
 	}
 }
 
-// resultsMenuRows are the menu's rows, each a results command of the catalog. The sorts take the
-// field the right press was on (MenuAt), not the cursor's.
+// resultsMenuRows are the menu's rows, each a results command of the catalog, then the panel's
+// Layout › (its only menu: the panel has no strip). The sorts take the field the right press was on
+// (MenuAt), not the cursor's.
 func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 	t := pl.c.ResultsTable(resultsView)
 	if t == nil {
@@ -799,7 +800,7 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 		m.Enabled = enabled
 		return withLabelMessage(m, label) // a row with a field's name is composed in the UI's language
 	}
-	return []widget.MenuItemModel{
+	rows := []widget.MenuItemModel{
 		row("copy", "Copy", "results.copy", nil, have),
 		row("copy_csv", "Copy as CSV", "results.copy_csv", nil, have),
 		row("copy_json", "Copy as JSON", "results.copy_json", nil, have),
@@ -813,7 +814,9 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 		widget.NewSeparator("results.menu.leaving"),
 		row("export", "Export loaded rows…", "results.export", nil, have),
 		row("markdown", "Insert as Markdown", "results.markdown", nil, have),
+		widget.NewSeparator("results.menu.panel"),
 	}
+	return append(rows, layoutRows(pl.c, "results", coreRowOf)...)
 }
 
 // runResultsEntry runs a results command of the catalog, as the menu's rows do; its error is a

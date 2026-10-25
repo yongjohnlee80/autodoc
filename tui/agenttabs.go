@@ -29,13 +29,14 @@ func (a *agents) addRows() []widget.MenuItemModel {
 	return append(rows, a.profilesRow())
 }
 
-// tabRows are tab id's menu: Go to ›, Restart and Close for its agent, Profiles….
+// tabRows are tab id's menu: the panel's Layout ›, Go to ›, Restart and Close for its agent,
+// Profiles….
 func (a *agents) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	panel, err := a.runtime()
 	if err != nil {
 		return nil
 	}
-	rows := []widget.MenuItemModel{goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, a.goToTab)}
+	rows := append(layoutRows(a.c, "agent", tabRowOf), goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, a.goToTab))
 	if instance := a.instanceOn(panel, id); instance != nil {
 		code := instance.profile.Codename
 		restart := tabMenuRow("agents.restart", "Restart", func(widget.TerminalTabID) { a.restartAgent(code) })

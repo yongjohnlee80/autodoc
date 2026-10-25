@@ -25,6 +25,11 @@ func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuIte
 	return withLabelMessage(row, label)
 }
 
+// tabRowOf is tabMenuRow as a rowMaker: a row whatever tab its menu was opened for (Layout ›).
+func tabRowOf(id, label string, run func()) widget.MenuItemModel {
+	return tabMenuRow(id, label, func(widget.TerminalTabID) { run() })
+}
+
 // panelRows end panel's tab menu: Resume, a SIGCONT to tab id's program on tabs (disabled with no
 // tab); Theme and font…, which opens the terminals' look (nil where the host has none); Text size ›
 // in a window, the shells' share of its text (textSizeMenu); Maximize, or Restore while it is

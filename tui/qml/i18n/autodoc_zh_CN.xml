@@ -1011,6 +1011,14 @@
         <source>put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker</source>
         <translation>将键盘焦点放到控件上：面板若已关闭则打开；按 Tab 列出名称；不带参数时打开“转到”选择器</translation>
     </message>
+    <message id="autodoc.cmd.window.layout">
+        <source>a window's layout</source>
+        <translation>窗口的布局</translation>
+    </message>
+    <message id="autodoc.cmd.window.layout.help">
+        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>将窗口设为平铺或浮动：不带参数时为编辑器；Tab 列出窗口</translation>
+    </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
         <translation>管理工作区</translation>
@@ -2095,6 +2103,10 @@
         <source>Export loaded rows…</source>
         <translation>导出已加载的行…</translation>
     </message>
+    <message id="autodoc.gomenu.float_f">
+        <source>&amp;Float</source>
+        <translation>浮动(&amp;f)</translation>
+    </message>
     <message id="autodoc.gomenu.go_to">
         <source>Go to</source>
         <translation>转到</translation>
@@ -2110,6 +2122,10 @@
     <message id="autodoc.gomenu.insert_as_markdown">
         <source>Insert as Markdown</source>
         <translation>插入为 Markdown</translation>
+    </message>
+    <message id="autodoc.gomenu.l_ayout_a">
+        <source>L&amp;ayout</source>
+        <translation>布局(&amp;a)</translation>
     </message>
     <message id="autodoc.gomenu.la_rger_r">
         <source>La&amp;rger</source>
@@ -2178,6 +2194,10 @@
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>
         <translation>主题与字体(&amp;T)…</translation>
+    </message>
+    <message id="autodoc.gomenu.tiled_t">
+        <source>&amp;Tiled</source>
+        <translation>平铺(&amp;t)</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -3895,6 +3915,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.language.no_language">
         <source>no language %1</source>
         <translation>没有语言 %1</translation>
+    </message>
+    <message id="autodoc.notice.layout.no_window_s_the_windows_are_s">
+        <source>no window %1: the windows are %2</source>
+        <translation>没有窗口 %1：窗口有 %2</translation>
     </message>
     <message id="autodoc.notice.luaevents.a_lua_handler_failed">
         <source>a Lua handler failed: %1</source>

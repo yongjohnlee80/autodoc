@@ -1011,6 +1011,14 @@
         <source>put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker</source>
         <translation>levar o teclado a um widget: um painel fechado se abre; Tab lista os nomes; sozinho, o seletor Ir para</translation>
     </message>
+    <message id="autodoc.cmd.window.layout">
+        <source>a window's layout</source>
+        <translation>o layout de uma janela</translation>
+    </message>
+    <message id="autodoc.cmd.window.layout.help">
+        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>Lado a lado ou flutuante para uma janela: sozinho, a do editor; Tab lista as janelas</translation>
+    </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
         <translation>gerenciar espaços de trabalho</translation>
@@ -2095,6 +2103,10 @@
         <source>Export loaded rows…</source>
         <translation>Exportar linhas carregadas…</translation>
     </message>
+    <message id="autodoc.gomenu.float_f">
+        <source>&amp;Float</source>
+        <translation>&amp;Flutuante</translation>
+    </message>
     <message id="autodoc.gomenu.go_to">
         <source>Go to</source>
         <translation>Ir para</translation>
@@ -2110,6 +2122,10 @@
     <message id="autodoc.gomenu.insert_as_markdown">
         <source>Insert as Markdown</source>
         <translation>Inserir como Markdown</translation>
+    </message>
+    <message id="autodoc.gomenu.l_ayout_a">
+        <source>L&amp;ayout</source>
+        <translation>L&amp;ayout</translation>
     </message>
     <message id="autodoc.gomenu.la_rger_r">
         <source>La&amp;rger</source>
@@ -2178,6 +2194,10 @@
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>
         <translation>&amp;Tema e fonte…</translation>
+    </message>
+    <message id="autodoc.gomenu.tiled_t">
+        <source>&amp;Tiled</source>
+        <translation>Lado a lado (&amp;t)</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -3900,6 +3920,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.language.no_language">
         <source>no language %1</source>
         <translation>idioma %1 inexistente</translation>
+    </message>
+    <message id="autodoc.notice.layout.no_window_s_the_windows_are_s">
+        <source>no window %1: the windows are %2</source>
+        <translation>não há janela %1: as janelas são %2</translation>
     </message>
     <message id="autodoc.notice.luaevents.a_lua_handler_failed">
         <source>a Lua handler failed: %1</source>

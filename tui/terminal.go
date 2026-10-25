@@ -502,7 +502,7 @@ func shellLabel(panel TerminalPanel) string {
 	}
 }
 
-// tabRows are a shell tab's menu: Go to ›, New, Close.
+// tabRows are a shell tab's menu: the panel's Layout ›, Go to ›, New, Close.
 func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	panel, err := t.panel()
 	if err != nil {
@@ -510,12 +510,11 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	}
 	closing := tabMenuRow("terminal.close", "Close", t.closeShell)
 	closing.Enabled = id != "" // an empty panel's menu has no shell to close
-	rows := []widget.MenuItemModel{
+	rows := append(layoutRows(t.c, "terminal", tabRowOf),
 		goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, func(target widget.TerminalTabID) {
 			t.c.Keep(panel.Select(target))
 		}),
-		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }),
-	}
+		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }))
 	if t.startLua != nil {
 		rows = append(rows, tabMenuRow("terminal.lua", "New &Lua shell", func(widget.TerminalTabID) { t.newLuaShell() }))
 	}
