@@ -691,6 +691,14 @@
         <source>reset the panel layout</source>
         <translation>重置面板布局</translation>
     </message>
+    <message id="autodoc.cmd.panel.resume">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>继续终端或智能体的标签页 (SIGCONT)</translation>
+    </message>
+    <message id="autodoc.cmd.panel.resume.help">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>继续终端或智能体的标签页 (SIGCONT)</translation>
+    </message>
     <message id="autodoc.cmd.plugins.add">
         <source>add a plugin by its registry name or a git URL</source>
         <translation>按注册名称或 git URL 添加插件</translation>

@@ -55,6 +55,7 @@ func TestAUsersKeymapMovesAKey(t *testing.T) {
 <shortcut id="autodoc.leader.openRecent"><key value="Shift+R"/></shortcut>
 <shortcut id="autodoc.window.maximizePanel"><key value="F9"/></shortcut>
 <shortcut id="autodoc.terminal.mode"><key value="Ctrl+Y"/></shortcut>
+<shortcut id="autodoc.terminal.suspend"><key value="Ctrl+B"/></shortcut>
 </mapping>`)
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
 	r.s.WaitForText(t, "connected — autodoc v-test")
@@ -69,10 +70,10 @@ func TestAUsersKeymapMovesAKey(t *testing.T) {
 		return strings.Contains(help, "YOUR KEYS") && strings.Contains(help, "autodoc.window.openSearch") &&
 			strings.Contains(help, "keymap.xml, line 2")
 	})
-	// a terminal keeps maximize's keys from its program, and toggles its mode on the mode key: both
-	// follow the map
+	// a terminal keeps maximize's and suspend's keys from its program, and toggles its mode on the
+	// mode key: all follow the map
 	r.s.WaitFor(t, "the terminals follow the moved keys", func(string) bool {
-		return r.sourceKeys("App.terminalHostKeys") == "F9" && r.sourceKeys("App.terminalModeKey") == "Ctrl+Y"
+		return r.sourceKeys("App.terminalHostKeys") == "F9 Ctrl+B" && r.sourceKeys("App.terminalModeKey") == "Ctrl+Y"
 	})
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF5})
 	r.s.WaitForText(t, "words; a * ends a prefix")
@@ -88,7 +89,7 @@ func TestTheKeymapFileIsFollowed(t *testing.T) {
 	if got := r.keysOfCommand("autodoc.leader.openRecent"); !slices.Equal(got, tuikey.MustParse("R")) {
 		t.Fatalf("with no file, openRecent's keys: %v, want r", got)
 	}
-	if hk, mk := r.sourceKeys("App.terminalHostKeys"), r.sourceKeys("App.terminalModeKey"); hk != "F11" || mk != "Ctrl+T" {
+	if hk, mk := r.sourceKeys("App.terminalHostKeys"), r.sourceKeys("App.terminalModeKey"); hk != "F11 Ctrl+Z" || mk != "Ctrl+T" {
 		t.Errorf("with no file, the terminals' keys: hostKeys %q, modeKey %q", hk, mk)
 	}
 	writeKeymap(t, file, `<mapping><shortcut id="autodoc.leader.openRecent"><key value="Shift+R"/></shortcut></mapping>`)

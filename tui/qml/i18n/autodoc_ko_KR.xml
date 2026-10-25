@@ -691,6 +691,14 @@
         <source>reset the panel layout</source>
         <translation>패널 레이아웃 초기화</translation>
     </message>
+    <message id="autodoc.cmd.panel.resume">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>터미널 또는 에이전트 탭 재개 (SIGCONT)</translation>
+    </message>
+    <message id="autodoc.cmd.panel.resume.help">
+        <source>resume the terminal's or the agents' tab (SIGCONT)</source>
+        <translation>터미널 또는 에이전트 탭 재개 (SIGCONT)</translation>
+    </message>
     <message id="autodoc.cmd.plugins.add">
         <source>add a plugin by its registry name or a git URL</source>
         <translation>레지스트리 이름 또는 git URL로 플러그인 추가</translation>
