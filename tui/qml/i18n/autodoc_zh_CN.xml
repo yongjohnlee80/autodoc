@@ -2466,7 +2466,9 @@
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
               zoom… chooses the fonts too); a terminal's own settings choose its font. Zoom
-              stops before the window would be smaller than 80 × 20: enlarge it to zoom on</source>
+              stops before the window would be smaller than 80 × 20: enlarge it to zoom on
+  Options › Renderer  in the GUI, what draws the window: Auto, Vulkan where it can, or
+              OpenGL; the window takes it as it opens, so a change applies at the next start</source>
         <translation>按键
   Space       前导键卡片，在 Normal 模式下：按某个键即运行其命令(命令列表即卡片)；
               Ctrl+Space 在任何编辑器模式下都能打开它
@@ -2529,7 +2531,9 @@
   Shift+F10, the Menu key, SPC .  在光标处打开页面的右键菜单
   Ctrl+= Ctrl+- Ctrl+0  在 GUI 窗口中放大、缩小、恢复到 100%(“选项 › 字体与
               缩放…”还可选择字体)；终端的字体由其自身设置决定。缩放
-              会在窗口小于 80 × 20 之前停止：放大窗口后可继续缩放</translation>
+              会在窗口小于 80 × 20 之前停止：放大窗口后可继续缩放
+  选项 › 渲染器  在 GUI 中绘制窗口的方式：自动（可用时使用 Vulkan）或 OpenGL。窗口打开时
+              决定，因此更改在下次启动时生效</translation>
     </message>
     <message id="autodoc.help.layout">
         <source>THE LAYOUT
@@ -3338,6 +3342,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.remove_d">
         <source>Remove (&amp;d)</source>
         <translation>移除(&amp;D)</translation>
+    </message>
+    <message id="autodoc.main.renderer">
+        <source>&amp;Renderer</source>
+        <translation>渲染器(&amp;R)</translation>
+    </message>
+    <message id="autodoc.main.renderer_auto">
+        <source>&amp;1. Auto  (Vulkan where it can)</source>
+        <translation>&amp;1. 自动  (可用时使用 Vulkan)</translation>
+    </message>
+    <message id="autodoc.main.renderer_opengl">
+        <source>&amp;2. OpenGL</source>
+        <translation>&amp;2. OpenGL</translation>
     </message>
     <message id="autodoc.main.reset_panel_layout">
         <source>Reset panel la&amp;yout</source>
@@ -4494,6 +4510,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.relations.links">
         <source>links</source>
         <translation>链接</translation>
+    </message>
+    <message id="autodoc.notice.renderer.from_the_next_start">
+        <source>the renderer changes at the next start: the window takes it as it opens</source>
+        <translation>渲染器在下次启动时更改：窗口打开时决定</translation>
+    </message>
+    <message id="autodoc.notice.renderer.no_renderer_s">
+        <source>no renderer %1: auto or opengl</source>
+        <translation>没有渲染器 %1：auto 或 opengl</translation>
     </message>
     <message id="autodoc.notice.restart.asking_the_backend_to_stop">
         <source>asking the backend to stop…</source>

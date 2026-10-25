@@ -146,6 +146,8 @@ The editor's and the panels' settings are **preferences**. Options › Editor pr
 - each panel's edge;
 - the theme, the toast corner, and what to do with a file changed on disk.
 
+In `--gui`, Options › Renderer sets what draws the window, at the next start ([the surfaces](01-architecture-and-surfaces.md)).
+
 The daemon keeps them (`preference.set`), so `--ui` and `--gui` share them.
 
 `config.toml` (`$XDG_CONFIG_HOME/autodoc/config.toml`, else `~/.config/autodoc/config.toml`) configures the daemon itself. A setting it doesn't know is refused, not ignored:

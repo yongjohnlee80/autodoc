@@ -2466,7 +2466,9 @@
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
               zoom… chooses the fonts too); a terminal's own settings choose its font. Zoom
-              stops before the window would be smaller than 80 × 20: enlarge it to zoom on</source>
+              stops before the window would be smaller than 80 × 20: enlarge it to zoom on
+  Options › Renderer  in the GUI, what draws the window: Auto, Vulkan where it can, or
+              OpenGL; the window takes it as it opens, so a change applies at the next start</source>
         <translation>키
   Space       리더 카드 (Normal 모드): 키를 누르면 그 명령을 실행합니다 (목록은 카드에 있음).
               Ctrl+Space는 모든 편집기 모드에서 카드를 엽니다
@@ -2529,7 +2531,9 @@
   Shift+F10, the Menu key, SPC .  커서 위치에서 페이지의 오른쪽 클릭 메뉴
   Ctrl+= Ctrl+- Ctrl+0  GUI 창에서 확대, 축소, 100%로 되돌리기 (옵션 › 글꼴 및
               확대/축소…에서 글꼴도 선택). 터미널은 터미널 자체 설정이 글꼴을 정합니다. 창이
-              80 × 20보다 작아지기 전에 확대가 멈춥니다: 더 확대하려면 창을 키우세요</translation>
+              80 × 20보다 작아지기 전에 확대가 멈춥니다: 더 확대하려면 창을 키우세요
+  옵션 › 렌더러  GUI에서 창을 그리는 방식: 자동(가능하면 Vulkan) 또는 OpenGL. 창이 열릴 때
+              정해지므로 바꾸면 다음 시작 때 적용됩니다</translation>
     </message>
     <message id="autodoc.help.layout">
         <source>THE LAYOUT
@@ -3344,6 +3348,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.remove_d">
         <source>Remove (&amp;d)</source>
         <translation>제거(&amp;d)</translation>
+    </message>
+    <message id="autodoc.main.renderer">
+        <source>&amp;Renderer</source>
+        <translation>렌더러(&amp;r)</translation>
+    </message>
+    <message id="autodoc.main.renderer_auto">
+        <source>&amp;1. Auto  (Vulkan where it can)</source>
+        <translation>&amp;1. 자동  (가능하면 Vulkan)</translation>
+    </message>
+    <message id="autodoc.main.renderer_opengl">
+        <source>&amp;2. OpenGL</source>
+        <translation>&amp;2. OpenGL</translation>
     </message>
     <message id="autodoc.main.reset_panel_layout">
         <source>Reset panel la&amp;yout</source>
@@ -4500,6 +4516,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.relations.links">
         <source>links</source>
         <translation>링크</translation>
+    </message>
+    <message id="autodoc.notice.renderer.from_the_next_start">
+        <source>the renderer changes at the next start: the window takes it as it opens</source>
+        <translation>렌더러는 다음 시작 때 바뀝니다: 창이 열릴 때 정해집니다</translation>
+    </message>
+    <message id="autodoc.notice.renderer.no_renderer_s">
+        <source>no renderer %1: auto or opengl</source>
+        <translation>렌더러 %1 없음: auto 또는 opengl</translation>
     </message>
     <message id="autodoc.notice.restart.asking_the_backend_to_stop">
         <source>asking the backend to stop…</source>

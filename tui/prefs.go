@@ -26,6 +26,7 @@ const (
 	prefTodosEdge  = "tui.todos.edge"
 	prefRuler      = "tui.ruler"
 	prefKeymap     = "tui.editor.keymap"
+	prefRenderer   = "tui.gui.renderer" // the window's renderer, taken as it opens (renderer.go)
 	prefWrap       = "tui.editor.wrap"
 	prefNumbers    = "tui.editor.linenumbers"
 	prefIndent     = "tui.editor.indentmarks"
@@ -93,6 +94,7 @@ type prefs struct {
 	todosEdge            string // where the todos panel opens: the left edge unless chosen
 	ruler                int
 	keymap               string
+	renderer             string                     // the window's renderer from the next start (renderer.go)
 	keymapChosen         bool                       // a keymap was ever stored (tui.editor.keymap): the Vim question is not asked
 	wrap, lineNumbers    bool                       // the page: long lines wrapped at its width; each line's number
 	indentMarks          string                     // which lines show their indentation as marks (indentMarks)
@@ -203,6 +205,11 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			}).
 			then(func(p prefs) {
 				h.say(h.trf("autodoc.notice.prefs.editor_mode", keymapLabels[indexOf(keymaps, p.keymap)]))
+			}),
+		choicePref(prefRenderer, RendererAuto, renderers, func(p *prefs) *string { return &p.renderer }).
+			shows(func(p prefs) map[string]any {
+				h.mirrorRenderer(p.renderer) // the next start's window reads it before the store is read
+				return map[string]any{"App.rendererAuto": p.renderer == RendererAuto, "App.rendererOpenGL": p.renderer == RendererOpenGL}
 			}),
 		boolPref(prefWrap, true, func(p *prefs) *bool { return &p.wrap }).
 			chooser("App.wrapIndex", "App.setWrapIndex").

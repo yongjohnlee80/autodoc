@@ -72,20 +72,40 @@ type LaunchOptions struct {
 	DebugRecorder record.Recorder
 }
 
+// loadPaths is the config at configPath and the paths it names: the one reading of the config
+// Launch starts with, and GUIRendererFile reads before a window opens.
+func loadPaths(configPath string) (*endpoint.Endpoints, endpoint.Paths, error) {
+	e, err := endpoint.Load(configPath)
+	if err != nil {
+		return nil, endpoint.Paths{}, err
+	}
+	p, err := e.Paths()
+	return e, p, err
+}
+
+// guiRendererName is the state directory's mirror of tui.gui.renderer (renderer.go).
+const guiRendererName = "gui-renderer"
+
+// GUIRendererFile is where the state directory of the config at configPath mirrors
+// tui.gui.renderer, for the GUI build to read as it opens its window, before the store can be read;
+// "" when the config cannot be read.
+func GUIRendererFile(configPath string) string {
+	if _, p, err := loadPaths(configPath); err == nil {
+		return filepath.Join(p.StateDir, guiRendererName)
+	}
+	return ""
+}
+
 // Launch runs AutoDoc's TUI until it quits or ctx ends: it reads the config, attaches to the daemon
 // on its socket (starting one when nothing answers), opens the workspace asked for or the one last
 // entered, and runs on the terminal.
 func Launch(ctx context.Context, o LaunchOptions) error {
-	e, err := endpoint.Load(o.ConfigPath)
+	e, p, err := loadPaths(o.ConfigPath)
 	if err != nil {
 		return err
 	}
 	// the TUI's own state (the last workspace, unsaved work) and a spawned daemon's log live here
 	if err := e.MakeStateDir(); err != nil {
-		return err
-	}
-	p, err := e.Paths()
-	if err != nil {
 		return err
 	}
 	configPath, stateDir, sock, storePath := e.ConfigPath, p.StateDir, p.Socket, p.Store
@@ -140,6 +160,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Registrations: o.Registrations,
 		AgentDir:      filepath.Join(stateDir, "agent"),
 		RecoveryDir:   filepath.Join(stateDir, "recovery"),
+		RendererFile:  filepath.Join(stateDir, guiRendererName),
 		CrashDir:      filepath.Join(stateDir, "crash"),
 		EditorDir:     filepath.Join(stateDir, "editor"),
 		// the user's Lua commands, beside the config as the plugins are

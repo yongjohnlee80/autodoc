@@ -109,6 +109,13 @@ Running `autodoc --ui` (or `autodoc --ui <workspace-name>`) opens the full-scree
 
 Invoking `autodoc --gui` (or `autodoc --gui <workspace-name>`) launches the native, GPU-accelerated desktop application powered by Gio (`gioui.org`). It shares 100% of the editor buffer engine, keybindings, leader chords, and panel layout with `--ui`, while adding crisp vector typography and **Rendered View** (`Ctrl+T`). In `--gui`, standalone block embeds—including `.mmd` Mermaid diagrams, `.chart.json` Vega-Lite charts, `.csv` data tables, and raster/vector images—render natively inline without spawning a headless browser. Clicking any rendered diagram or chart jumps directly into an inline source editor for that companion file.
 
+**The renderer.** Options › Renderer chooses what draws the window:
+
+- **Auto**, the default: Vulkan where the window can have it (on Linux under Wayland), OpenGL where it can't. On macOS the window draws through Metal either way.
+- **OpenGL**: OpenGL always, for a machine whose Vulkan driver misbehaves.
+
+The window chooses its renderer as it opens, so a change applies at the next start. The preference is `tui.gui.renderer` (`auto` or `opengl`), and the terminal build ignores it.
+
 ### 3. Neovim Integration (`autodoc.nvim`)
 
 For developers who live inside Neovim, `autodoc.nvim` connects directly to `autodoc --serve` over Neovim's native msgpack-RPC channel. It provides instant workspace-wide fuzzy search, frontmatter-aware completion, `[[wikilink]]` follow and backlink pickers, floating document previews, and full integration with the `.todo-list/` task store—all without leaving your code buffers.
