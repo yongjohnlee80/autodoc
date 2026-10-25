@@ -147,6 +147,7 @@ type Host struct {
 	agents    *agents
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
+	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
 	// the explorer (explorer.go), a feature of its own: find searches its rows (FindPane)
 	explorer *explorer
 
@@ -444,6 +445,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.active, h.file, h.bufRecent = first, &first.file, []*openBuffer{first}
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
+	h.tiles = newTiles(core{h})
 	h.explorer = newExplorer(core{h})
 	h.ai = newAIModels(core{h})
 	h.outline = newOutline(core{h})
