@@ -271,6 +271,7 @@ Window {
     // in it) ----
     TileManager {
         id: tiles
+        onTileChanged: App.tileChanged(key, operation, edge, size, tiled)
         // the page: the file, centred, as wide as the ruler; a window of its own that never closes
         FloatWindow {
             id: editorWindow
@@ -278,7 +279,8 @@ Window {
             movable: true; resizable: true; minimizable: true
             maximumWidth: App.pageWidth
             TileManager.edge: Tui.Center
-            TileManager.tiled: true
+            TileManager.tiled: App.editorTiled
+            TileManager.minimumWidth: 40; TileManager.minimumHeight: 8 // the page's least: narrower or shorter, the panel tiled last floats
             Frame {
                 title: App.fileTitle
                 maximumWidth: App.pageWidth
@@ -343,8 +345,9 @@ Window {
         // maximize it (again to restore: the Drawer's own toggleMaximize), or close it. SPC e and SPC l open it on their tab, or go to it, or close it on their own.
         Panel {
             id: explorer
-            TileManager.edge: Tui.Left; TileManager.edges: "left right top bottom"; TileManager.size: 30
-            TileManager.tiled: false
+            TileManager.edge: App.explorerTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.explorerTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.tiled: App.explorerTiled
             heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
             closeOnQ: true
             edge: App.explorerEdge
@@ -418,8 +421,9 @@ Window {
         // names, at that place's size; it keeps running while hidden (terminal.go)
         Panel {
             id: terminal
-            TileManager.edge: Tui.Bottom; TileManager.edges: "left right top bottom"; TileManager.size: 30
-            TileManager.tiled: false
+            TileManager.edge: App.terminalTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.terminalTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.tiled: App.terminalTiled
             heading: qsTrId("autodoc.main.terminal_2")
             surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
             edge: App.terminalEdge
@@ -467,8 +471,9 @@ Window {
         // running while hidden (agent.go)
         Panel {
             id: agent
-            TileManager.edge: Tui.Right; TileManager.edges: "left right top bottom"; TileManager.size: 35
-            TileManager.tiled: false
+            TileManager.edge: App.agentTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.agentTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.tiled: App.agentTiled
             heading: App.agentTitle
             surface: Theme.app.window   // the Window's tone, as the agent's frame has always had
             edge: App.agentEdge
@@ -515,8 +520,9 @@ Window {
         // which fetches a row.
         Panel {
             id: results
-            TileManager.edge: Tui.Bottom; TileManager.edges: "left right top bottom"; TileManager.size: 35
-            TileManager.tiled: false
+            TileManager.edge: App.resultsTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.resultsTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.tiled: App.resultsTiled
             heading: App.resultsTitle
             closeOnQ: true
             edge: Tui.Bottom
@@ -587,8 +593,9 @@ Window {
         // the window across, 80% along, centred (todosDefault), until the user sizes or places it
         Panel {
             id: todos
-            TileManager.edge: Tui.Left; TileManager.edges: "left right top bottom"; TileManager.size: 30
-            TileManager.tiled: false
+            TileManager.edge: App.todosTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.todosTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.tiled: App.todosTiled
             heading: App.todosTitle
             closeOnQ: true
             edge: App.todosEdge
