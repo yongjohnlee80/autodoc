@@ -197,3 +197,28 @@ func TestAGUITabsCloseButton(t *testing.T) {
 		t.Fatal("a.md, modified, closed without the question")
 	}
 }
+
+// At start-up, before anything is typed or opened, the editor's title bar has buffer 1's tab, the
+// untitled page, active and named as the title names it, with + and ≡ beside it; ≡ opens the strip's
+// menu, Layout right above Go to.
+func TestTheGUIEditorsTabsAreThereFromTheStart(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.ready(t)
+	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	r.s.WaitFor(t, "the untitled page's tab, + and ≡", func(string) bool {
+		return onLoop(r, func() bool {
+			tabs := strip.Tabs()
+			return len(tabs) == 1 && tabs[0].ID == strip.Active() && tabs[0].Label == untitled && len(strip.TabSpans()) == 3
+		})
+	})
+	if title := r.source("App.fileTitle"); title != untitled {
+		t.Fatalf("the title says %q; the tab says %q", title, untitled)
+	}
+	menu := onLoop(r, func() widget.TabSpan { s := strip.TabSpans(); return s[len(s)-1] }) // ≡, last
+	onLoop(r, func() bool {
+		return strip.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: menu.X, Y: 0})
+	})
+	r.s.WaitFor(t, "the strip's menu open", func(string) bool { return onLoop(r, strip.MenuOpen) })
+	wantLayoutAbove(t, "the untitled page's strip", onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(strip.Active()) }), "buffer.tabs.goto", true)
+}
