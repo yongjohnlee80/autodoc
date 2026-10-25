@@ -119,7 +119,7 @@ func TestTheLinksPanelsPlaceMovesToTheExplorer(t *testing.T) {
 	// on a load, from the store: the explorer opens where the links did, and the links' key stays
 	d, r := runShellTUI(t, map[string]string{"tui.links.edge": "top"})
 	r.s.WaitFor(t, "the explorer at the top", func(string) bool {
-		return onLoop(r, func() string { return r.h.panelEdges()["explorer"] }) == "top"
+		return onLoop(r, func() string { return r.h.panelSpec("explorer").Edge(r.h.prefs) }) == "top"
 	})
 	m, err := d.db.Preferences(context.Background())
 	if err != nil {

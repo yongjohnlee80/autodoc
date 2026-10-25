@@ -403,7 +403,9 @@ func TestTodosSharesTheLeftEdgeWithTheExplorer(t *testing.T) {
 	r.s.WaitForText(t, "┌ explorer")
 	openTodos(t, r, "kb", '1')
 	r.s.WaitForText(t, "Ship it")
-	if got := onLoop(r, func() map[string]string { return r.h.panelEdges() }); got["explorer"] != "left" || got["todos"] != "left" {
+	if got := onLoop(r, func() map[string]string {
+		return map[string]string{"explorer": r.h.panelSpec("explorer").Edge(r.h.prefs), "todos": r.h.panelSpec("todos").Edge(r.h.prefs)}
+	}); got["explorer"] != "left" || got["todos"] != "left" {
 		t.Fatalf("edges %v", got)
 	}
 	open := onLoop(r, func() [2]bool { return [2]bool{r.h.panelOpen["explorer"], r.h.panelOpen["todos"]} })

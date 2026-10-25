@@ -169,13 +169,12 @@ func (h *Host) showFind() {
 		h.findMarks.Store(terms)
 		h.core.InvalidateHighlightPaint()
 	}
-	if h.findChip == nil {
+	if h.findCard == nil {
 		return
 	}
-	// the page's find only (a find in a panel moves its cursor and marks nothing), and not over a
-	// drawer open at the right edge, whose title row the chip would cover
-	if len(terms) == 0 || h.rightDrawerOpen() {
-		h.findChip.Hide()
+	// the page's find only: a find in a panel moves its cursor and marks nothing
+	if len(terms) == 0 {
+		h.findCard.SetVisible(false)
 		return
 	}
 	label := fmt.Sprintf("finding %q · n next · N previous · Esc clears ", h.find.query)
@@ -183,38 +182,33 @@ func (h *Host) showFind() {
 		label = fmt.Sprintf("finding %q %d/%d · n next · N previous · Esc clears ", h.find.query, h.find.at, h.find.total)
 	}
 	h.findLabel.SetText(label)
-	h.findChip.Show()
+	h.findCard.SetVisible(true)
 }
 
-// rightDrawerOpen is whether a panel open now is docked at the right edge.
-func (h *Host) rightDrawerOpen() bool {
-	for id, at := range h.panelEdges() {
-		if at == "right" && h.panelOpen[id] {
-			return true
-		}
-	}
-	return false
-}
-
-// attachFindChip puts the find's card over the page, hidden until a find starts: at the top right, a
-// row down so the menu bar stays clear, framed and titled as the replace card is, its X clearing the
-// find.
+// attachFindChip puts the find's card in the page's window, at its top right, hidden until a find
+// starts: framed and titled as the replace card is, its X clearing the find. It is the window's, so
+// a panel floating over the window covers it, and it moves, tiles and minimizes with it. The card is
+// made once; a reload that rebuilds the window gets it again (reloaded).
 func (h *Host) attachFindChip() {
-	host, ok := h.p.Overlay()
-	if !ok || h.findChip != nil {
+	c, _ := h.p.Find("editorWindow")
+	w, ok := c.(interface {
+		AddAligned(tuicore.Component, tuicore.Align)
+	})
+	if !ok || c == h.findCardOn {
 		return
 	}
-	// the replace card's look: the panel's colours, a frame and a title
-	look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
-	h.findLabel = widget.NewText("", widget.WithTextStyle(look))
-	clear := widget.NewButton("X", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
-	row := tuicore.NewFlex(tuicore.Horizontal)
-	row.Add(h.findLabel, clear)
-	card := widget.NewBox(row, widget.WithTitle("Find"), widget.WithBorder(style.BorderNormal), widget.WithStyle(look.Padding(0, 1)))
-	col := tuicore.NewFlex(tuicore.Vertical)
-	col.Add(widget.NewText(""), card) // the empty row keeps the menu bar clear above the card
-	h.findChip = widget.NewFloat(col, widget.WithAnchor(widget.TopRight))
-	host.Attach(h.findChip)
+	if h.findCard == nil {
+		// the replace card's look: the panel's colours, a frame and a title
+		look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
+		h.findLabel = widget.NewText("", widget.WithTextStyle(look))
+		clear := widget.NewButton("X", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
+		row := tuicore.NewFlex(tuicore.Horizontal)
+		row.Add(h.findLabel, clear)
+		h.findCard = widget.NewBox(row, widget.WithTitle("Find"), widget.WithBorder(style.BorderNormal), widget.WithStyle(look.Padding(0, 1)))
+		h.findCard.SetVisible(false)
+	}
+	w.AddAligned(h.findCard, tuicore.AlignTopRight)
+	h.findCardOn = c
 	h.showFind()
 }
 
