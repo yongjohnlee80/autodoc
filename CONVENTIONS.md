@@ -4,9 +4,10 @@ The rules every change to AutoDoc follows. They are strict: a change that breaks
 however small. Most are enforced by a test or a CI step, named beside the rule; the rest are held in
 review.
 
-This file states the rules. [docs/architecture.md](docs/architecture.md) explains how AutoDoc is put
-together and why: read it before adding a feature. Where the two seem to disagree, raise it in an
-issue rather than picking one. [CONTRIBUTING.md](CONTRIBUTING.md) covers how to send a change.
+This file is the one place the rules are stated. [docs/architecture.md](docs/architecture.md)
+explains how AutoDoc is put together and why, with examples, and links here for the rules: read it
+before adding a feature. Where the two seem to disagree, this file holds, and the disagreement is a
+docs bug to report. [CONTRIBUTING.md](CONTRIBUTING.md) covers how to send a change.
 
 ## 1. Principles
 
@@ -59,7 +60,7 @@ The packages and their jobs are in [architecture §2](docs/architecture.md#2-pac
 | --- | --- |
 | A package has a `doc.go` (what it is, its concurrency claim) and a `README.md` | review |
 | Constructors are `New(required…, opts ...Option)`; `ctx` comes first on any I/O | review |
-| **No direct I/O in `core/`.** Every filesystem operation goes through golib `vfs` | review ([architecture §3](docs/architecture.md#3-dependency-rules)) |
+| **No direct I/O in new `core/` code.** A filesystem operation goes through golib `vfs`. Known deviations remain: `core/store`'s SQLite plumbing (the lease, the key slot) and `core/export`'s site and embed reading the local disk. A change does not extend them, and moves one when it touches it | review |
 | **Data access goes through `core/store`** (or `core/pgstore`). Nowhere else imports `golib/dao/sqlite` or runs SQL | `core/store/source_test.go` `TestNoDataAccessOutsideTheStore` |
 | A table a workspace owns has a scope accessor, and every accessor and join stays inside its workspace | `core/index/tables_test.go`, `core/store/store_test.go` |
 | Time comes from the injected clock: no `time.Now()` in logic | review |
@@ -130,9 +131,12 @@ AutoDoc ships in six languages: `en`, `es`, `ja_JP`, `ko_KR`, `pt_BR` and `zh_CN
 - **No user-facing string is written in code.** QML uses `qsTrId("autodoc.…")`; Go uses `tr`/`trf`
   (`Core.Tr`/`Trf` in a feature) or `tuicore.Msg`.
 - **Ids are `autodoc.<kind>.<area>.<slug>`**, the slug taken from the English text.
-- **Every id is in all six catalogs** (`tui/qml/i18n/autodoc_<lang>.xml`), translated, never copied
-  English. Enforced by `TestEveryIDIsInTheEnglishCatalog`, `TestEveryShippedLanguageCoversEveryID`,
-  `TestASwitchLeavesNoEnglishOnScreen` and the other `tui/language_test.go` cells.
+- **Every id is in all six catalogs** (`tui/qml/i18n/autodoc_<lang>.xml`). Tests check the
+  inventory: every id used is in the English catalog (`TestEveryIDIsInTheEnglishCatalog`), every
+  shipped language covers every id (`TestEveryShippedLanguageCoversEveryID`), and a language switch
+  relabels the whole screen (`TestALanguageSwitchRelabelsTheScreen`,
+  `TestASwitchLeavesNoEnglishOnScreen`).
+- **A translation is a translation, never copied English.** No test can tell; review holds it.
 - **A sentence is translated whole and then filled** (`%1`…`%99`), never assembled from fragments.
 - **Ids generated from the Go tables** (keys, cards, commands, help, choices, themes) are refreshed
   with `go test -tags gui ./tui -run TestTheEnglishCatalogHoldsTheGoTables -update`.
@@ -160,7 +164,10 @@ AutoDoc ships in six languages: `en`, `es`, `ja_JP`, `ko_KR`, `pt_BR` and `zh_CN
 - **One SQLite file, one writer connection.** A module declares its own tables through
   `store.Declare`.
 - **Migrations are numbered pairs** in `sql/deployments/sqlite/` (`0000NN_update_*.sql` with its
-  `_revert_`), each listed in `docs/ops/schema-scripts.md` (`TestTheSchemaDocListsEveryTable`).
+  `_revert_`). Their numbering and pairing load on every engine (`TestEveryEngineLoads`).
+- **Every table is documented** in `docs/ops/schema-scripts.md` (`TestTheSchemaDocListsEveryTable`),
+  and every script is listed there. The script list is held in review, since a migration that only
+  adds a column or an index changes no table name.
 - **A released migration never changes.** Its digest is pinned (`TestReleasedScriptsAreUnchanged`,
   and the same for Postgres in `core/pgstore`). A fix is a new migration.
 - Every engine names the same scripts (`TestEveryEngineNamesTheSameScripts`).
@@ -184,6 +191,8 @@ AutoDoc ships in six languages: `en`, `es`, `ja_JP`, `ko_KR`, `pt_BR` and `zh_CN
   `t.Cleanup`, and wait for work you started before closing what it uses.
 - **Goldens are rewritten by their `-update` flag** (`-update-goldens` for `core/index`), never by
   hand, and the diff is reviewed.
+- **No mass moves.** An existing white-box test that uses only the exported API moves to
+  `<pkg>_test` when its file is next changed for another reason, not in a sweep.
 - **Never run `go test -tags gui ./app/`**: it opens a window.
 
 ## 10. What moves with a change
