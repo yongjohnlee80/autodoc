@@ -263,3 +263,24 @@ func TestAnEarlyCreditLeavesTheBuffersNewHolderItsPin(t *testing.T) {
 	}
 	b.Pix[0] = 0xff // B still draws into it
 }
+
+// Close waits for an ack in flight before the fd goes: an ack sent after it would reach whatever
+// the fd's number opened next. Here the ack's send is held 200ms; Close returns only once it ended.
+func TestASurfaceCloseWaitsForItsAcks(t *testing.T) {
+	host, plug := pair(t)
+	var ended atomic.Int64 // when the ack's send ended, in UnixNano
+	sysSendmsg = func(fd int, p, oob []byte, to unix.Sockaddr, flags int) error {
+		if fd == plug.fd { // the plugin's end sends nothing here but the ack
+			time.Sleep(200 * time.Millisecond)
+			defer func() { ended.Store(time.Now().UnixNano()) }()
+		}
+		return unix.Sendmsg(fd, p, oob, to, flags)
+	}
+	t.Cleanup(func() { sysSendmsg = unix.Sendmsg })
+	s := newSurface(plug)
+	installed(t, host, s, 1, 1)
+	s.Close()
+	if closed, e := time.Now().UnixNano(), ended.Load(); e == 0 || e > closed {
+		t.Fatal("Close returned before its ack's send ended")
+	}
+}

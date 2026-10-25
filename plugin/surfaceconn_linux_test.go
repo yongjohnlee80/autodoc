@@ -30,8 +30,8 @@ func pair(t *testing.T) (host, plug *SurfaceConn) {
 	return h, p
 }
 
-// surfaceOn is a Surface on plug, closed before the cell's fds close (its reader is done
-// first): a reader that outlived its cell would take the next cell's datagrams and fds.
+// surfaceOn is a Surface on plug, closed before the cell's fds close (its reader, then its acks, are
+// done first): a reader that outlived its cell would take the next cell's datagrams and fds.
 func surfaceOn(t *testing.T, plug *SurfaceConn) *Surface {
 	s := newSurface(plug)
 	t.Cleanup(s.Close)
