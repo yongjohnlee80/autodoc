@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +13,7 @@ import (
 )
 
 // THE PAGE'S FIND, marked and cleared (Johno, 2026-10-02): the page marks a find's words,
-// "finding …" under the menu clears it with its X, and the Search menu reaches the find from the
+// "finding …" at the page window's top right clears it with its X, and the Search menu reaches the find from the
 // Text mode.
 
 // cellOf is the screen cell at the start of sub, on the first row holding within (sub inside it),
@@ -49,6 +51,13 @@ func (r *running) marked(within, sub, plain string) bool {
 	}()
 }
 
+// findCardWhole reports whether row, the find card's, ends with the card's own X and frame: nothing
+// drawn over its right end.
+func findCardWhole(row string) bool {
+	end := strings.TrimRight(row, " ")
+	return strings.HasSuffix(end, "│") && strings.HasSuffix(strings.TrimRight(strings.TrimSuffix(end, "│"), " "), "X")
+}
+
 // findChipRow is the row "finding …" is on, and its text; -1 when it is not shown.
 func (r *running) findChipRow() (int, string) {
 	for y, row := range strings.Split(r.s.String(), "\n") {
@@ -60,8 +69,8 @@ func (r *running) findChipRow() (int, string) {
 }
 
 // TestAPageFindIsMarkedAndClearedByItsX: / marks every occurrence in the page, and "finding …"
-// shows at the top right a row under the menu bar; its X, clicked, unmarks the page and hides it.
-// A drawer opened at the right edge hides it while it is open.
+// shows at the top right of the page's window; its X, clicked, unmarks the page and hides it. A
+// drawer opened over the window covers it while it has the keyboard, the card being the window's.
 func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "x.md", "see [[a]]\n"}})
 	r := attached(t, d)
@@ -81,7 +90,7 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	r.s.WaitFor(t, "both occurrences marked", func(string) bool {
 		return r.marked("one kestrel", "kestrel", "one") && r.marked("three kestrel", "kestrel", "three")
 	})
-	r.s.WaitFor(t, "the find card under the menu", func(string) bool { y, _ := r.findChipRow(); return y == 2 })
+	r.s.WaitFor(t, "the find card at the window's top right", func(string) bool { y, _ := r.findChipRow(); return y == 1 })
 	_, row := r.findChipRow()
 	if end := strings.TrimRight(row, " "); !strings.HasSuffix(end, "│") || !strings.HasSuffix(strings.TrimRight(strings.TrimSuffix(end, "│"), " "), "X") || !strings.Contains(r.s.String(), "┌ Find ") {
 		t.Fatalf("the card is not framed and titled, with its X at the right end: %q", row)
@@ -91,14 +100,17 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 		t.Fatalf("the current match is %v", m)
 	}
 
-	// the explorer's drawer, at the right edge, opens on its Links tab: the chip hides under it, and
-	// comes back after
+	// the explorer's drawer, at the right edge, opens on its Links tab with the keyboard: the card,
+	// the window's, is under it, and back once the page has the keyboard again
 	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "right")); return true })
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (1)")
-	r.s.WaitFor(t, "the chip hidden under the drawer", func(string) bool { y, _ := r.findChipRow(); return y < 0 })
+	r.s.WaitFor(t, "the drawer drawn over the card's right end", func(string) bool {
+		_, row := r.findChipRow()
+		return strings.Contains(row, "links (1)") && !findCardWhole(row)
+	})
 	r.keys(t, esc())
-	r.s.WaitFor(t, "the card back", func(string) bool { y, _ := r.findChipRow(); return y == 2 })
+	r.s.WaitFor(t, "the card whole again", func(string) bool { _, row := r.findChipRow(); return findCardWhole(row) })
 
 	// its X, clicked
 	y, row := r.findChipRow()
@@ -150,4 +162,45 @@ func TestSearchMenuFindsInTheTextMode(t *testing.T) {
 	searchMenu('c') // Search › Clear find
 	r.s.WaitForText(t, "find cleared")
 	r.s.WaitFor(t, "unmarked", func(string) bool { return !r.marked("three kestrel", "kestrel", "three") })
+}
+
+// A reload that rebuilds the page's window puts the find's card in the new one. Run from a copy of
+// the QML (-dev), main.qml edited so the window is built anew (a label, a property it is built
+// with), the find still on: "finding …" is back in the new window.
+func TestTheFindCardOutlivesARebuiltPageWindow(t *testing.T) {
+	dev := t.TempDir()
+	if err := os.CopyFS(dev, qmlFiles); err != nil {
+		t.Fatal(err)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Dev: dev})
+	r.ready(t)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the page")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("kestrel")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the find card", func(string) bool { y, _ := r.findChipRow(); return y >= 0 })
+	was := onLoop(r, func() any { c, _ := r.h.p.Find("editorWindow"); return c })
+	main := filepath.Join(dev, "main.qml")
+	src, err := os.ReadFile(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(src), `key: "editor"`, `key: "editor"; label: "Page"`, 1)
+	if edited == string(src) {
+		t.Fatal(`main.qml's editorWindow has no key: "editor" to edit beside`)
+	}
+	if err := os.WriteFile(main+".tmp", []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(main+".tmp", main); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the page's window rebuilt", func(string) bool {
+		return onLoop(r, func() any { c, _ := r.h.p.Find("editorWindow"); return c }) != was
+	})
+	r.s.WaitFor(t, "the find card in the rebuilt window", func(string) bool { y, _ := r.findChipRow(); return y >= 0 })
 }

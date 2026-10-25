@@ -180,7 +180,6 @@ func (h *Host) panelOpened(name string) {
 		// the newest first: F11 and SPC M off the panels reach the newest still open
 		h.maximizableOpened = append([]string{name}, slices.DeleteFunc(h.maximizableOpened, func(p string) bool { return p == name })...)
 	}
-	h.showFind() // a drawer at the right edge hides "finding …"
 	if s.Opened != nil {
 		s.Opened(h.panelHost(name))
 	}
@@ -193,8 +192,7 @@ func (h *Host) panelClosed(name string) {
 		return
 	}
 	h.panelOpen[name] = false
-	h.dockHidden = nil // a panel closed since the editor's icon hid the others: its next click hides
-	h.showFind()
+	h.dockHidden = nil    // a panel closed since the editor's icon hid the others: its next click hides
 	if h.panelAlive(*s) { // a strip's x has stopped its tabs already
 		h.flashDock(name) // closed into the dock, its shells or agents running on: it hid there
 	}
@@ -307,13 +305,4 @@ func nextWindow(shown []placedWindow, from int, step tuicore.Point) (placedWindo
 		}
 	}
 	return best, found
-}
-
-// panelEdges are the edges each panel opens from now.
-func (h *Host) panelEdges() map[string]string {
-	out := make(map[string]string, len(h.panelSpecs()))
-	for _, s := range h.panelSpecs() {
-		out[s.ID] = s.Edge(h.prefs)
-	}
-	return out
 }

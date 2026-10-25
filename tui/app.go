@@ -300,12 +300,13 @@ type Host struct {
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
-	toasts    *widget.Toasts
-	early     []widget.Toast
-	noticeLog *notices      // the notifications kept (notices.go)
-	vimKeys   *widget.Float // the Vim keys' card (vimkeys.go)
-	findChip  *widget.Float // "finding …" and its ✕, under the menu at the top right (find.go)
-	findLabel *widget.Text
+	toasts     *widget.Toasts
+	early      []widget.Toast
+	noticeLog  *notices          // the notifications kept (notices.go)
+	vimKeys    *widget.Float     // the Vim keys' card (vimkeys.go)
+	findCard   *widget.Box       // "finding …" and its ✕, at the page window's top right (find.go)
+	findCardOn tuicore.Component // the page's window the card was put in: a rebuilt one gets it again
+	findLabel  *widget.Text
 	// the plugins (pluginfeature.go), a feature of its own: the host syncs their catalog entries
 	// when the registry is built, launches their services when the program runs, and F1 names their
 	// letters (help.go), at the moments the host decides

@@ -27,7 +27,7 @@ func TestTheAgentPanelHasAnEdge(t *testing.T) {
 	r := attached(t, d)
 	got := onLoop(r, func() string {
 		r.h.prefs.agentEdge = "left"
-		return r.h.panelEdges()["agent"]
+		return r.h.panelSpec("agent").Edge(r.h.prefs)
 	})
 	if got != "left" {
 		t.Errorf("the agent's edge is %q, want left", got)
@@ -59,33 +59,6 @@ func TestPaneMoveToSharedEdgeUsesRegistryOrder(t *testing.T) {
 		})
 		if got != "explorerTree" {
 			t.Fatalf("shared-edge move %d focused %q, want the first panel explorerTree", i, got)
-		}
-	}
-}
-
-// TestAnyPanelAtTheRightHidesTheFindCard: "finding …" sits at the top right, so any open panel
-// docked there hides it, not the explorer and the links only.
-func TestAnyPanelAtTheRightHidesTheFindCard(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	r := attached(t, d)
-	for _, tc := range []struct {
-		panel string
-		set   func(p *prefs)
-	}{
-		{"terminal", func(p *prefs) { p.termEdge = "right" }},
-		{"agent", func(p *prefs) { p.agentEdge = "right" }},
-		{"htmlPane", func(*prefs) {}},
-		{"explorer", func(p *prefs) { p.explorerEdge = "right" }},
-	} {
-		got := onLoop(r, func() [2]bool {
-			tc.set(&r.h.prefs)
-			r.h.panelOpen[tc.panel] = true
-			open := r.h.rightDrawerOpen()
-			r.h.panelOpen[tc.panel] = false
-			return [2]bool{open, r.h.rightDrawerOpen()}
-		})
-		if got != [2]bool{true, false} {
-			t.Errorf("%s at the right: rightDrawerOpen open %v, closed %v; want true, false", tc.panel, got[0], got[1])
 		}
 	}
 }
