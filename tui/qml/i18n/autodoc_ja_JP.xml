@@ -3476,6 +3476,10 @@ WHAT A KEY NEEDS
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>配置できるパネルが開いていません: 先に開いてください (移動メニュー)</translation>
     </message>
+    <message id="autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged">
+        <source>%1 is tiled: Layout › Float lets it be arranged</source>
+        <translation>%1 はタイル表示です。レイアウト › フロートにすると配置できます</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
         <source>audit of %1 handed to %2: click to install or cancel</source>
         <translation>%1 の監査を %2 に引き渡しました: クリックしてインストールまたはキャンセル</translation>

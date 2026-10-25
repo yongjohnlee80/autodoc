@@ -265,3 +265,11 @@ func (h *Host) openLayoutMenu(id string) error {
 	}
 	return nil
 }
+
+// tiledNow reports whether the window whose member is node is over its tile now (governed): one the
+// manager released for want of room is at its own place, though its Layout is still Tiled.
+func (h *Host) tiledNow(node string) bool {
+	c, _ := h.p.Find("tiles")
+	m, ok := c.(interface{ Governed(key string) bool })
+	return ok && m.Governed(node)
+}

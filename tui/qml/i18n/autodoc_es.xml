@@ -3478,6 +3478,10 @@ LO QUE NECESITA UNA TECLA
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>no hay ningún panel abierto que organizar: abre uno primero (el menú Ir)</translation>
     </message>
+    <message id="autodoc.notice.arrange.s_is_tiled_layout_float_lets_it_be_arranged">
+        <source>%1 is tiled: Layout › Float lets it be arranged</source>
+        <translation>%1 está en mosaico: Diseño › Flotante permite colocarlo</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
         <source>audit of %1 handed to %2: click to install or cancel</source>
         <translation>auditoría de %1 entregada a %2: haz clic para instalar o cancelar</translation>

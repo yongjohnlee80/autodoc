@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -205,39 +206,107 @@ func (h *Host) panelClosed(name string) {
 	h.focusEditor()
 }
 
-// dirEdge is the edge a Ctrl+h/j/k/l move heads for.
-var dirEdge = map[string]string{"h": "left", "l": "right", "k": "top", "j": "bottom"}
+// dirStep is the way a Ctrl+h/j/k/l move heads.
+var dirStep = map[string]tuicore.Point{"h": {X: -1}, "l": {X: 1}, "k": {Y: -1}, "j": {Y: 1}}
 
-// opposite is the edge across from an edge: the way back to the page.
-var opposite = map[string]string{"left": "right", "right": "left", "top": "bottom", "bottom": "top"}
+// placedWindow is a shown window where it is placed now: a panel, or the page ("").
+type placedWindow struct {
+	panel string
+	at    tuicore.Rect
+}
 
-// movePane is Ctrl+h/j/k/l: from the page, in Normal mode, to the open panel at that edge; from a
-// panel, back to the page the other way. When panels share an edge, declared
-// registry order determines the target; map iteration must never pick focus.
+// movePane is Ctrl+h/j/k/l: the keyboard to the shown window next to the one it is in, that way,
+// by where each is placed now (tiled, docked or floating alike), the page among them. From the page
+// only in Normal mode: in Insert mode the keys are the editor's.
 func (h *Host) movePane(dir string) {
-	edge, ok := dirEdge[dir]
+	step, ok := dirStep[dir]
 	if !ok {
 		return
 	}
-	app := h.p.App()
-	if c, ok := h.p.Find("editor"); ok && app.FocusWithin(c) {
-		if h.core.Mode() != widget.ModeNormal {
-			return // Insert mode: the editor's keys, not a move
-		}
-		for _, s := range h.panelSpecs() {
-			if s.Edge(h.prefs) == edge && h.panelOpen[s.ID] {
-				h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
-				return
-			}
-		}
+	shown := h.shownWindows()
+	from := slices.IndexFunc(shown, h.hasKeyboard)
+	if from < 0 || shown[from].panel == "" && h.core.Mode() != widget.ModeNormal {
 		return
 	}
-	for _, s := range h.panelSpecs() {
-		if c, ok := h.p.Find(s.focusView()); ok && app.FocusWithin(c) && edge == opposite[s.Edge(h.prefs)] {
-			h.keep(h.p.Call("editor", "forceActiveFocus"))
+	if to, ok := nextWindow(shown, from, step); ok {
+		h.focusWindow(to.panel)
+	}
+}
+
+// shownWindows are the windows on screen, placed: the page, then the open panels not hidden, in
+// their declared order.
+func (h *Host) shownWindows() []placedWindow {
+	var out []placedWindow
+	add := func(panel, node string) {
+		c, _ := h.p.Find(node)
+		w, ok := c.(interface{ WindowBehavior() *widget.WindowCore })
+		if !ok || w.WindowBehavior() == nil || w.WindowBehavior().State().Minimized {
 			return
 		}
+		if at := w.WindowBehavior().Bounds(); at.W > 0 && at.H > 0 {
+			out = append(out, placedWindow{panel, at})
+		}
 	}
+	add("", "editorWindow")
+	for _, s := range h.panelSpecs() {
+		if h.panelOpen[s.ID] {
+			add(s.ID, s.ID)
+		}
+	}
+	return out
+}
+
+// hasKeyboard reports whether the keyboard is in w.
+func (h *Host) hasKeyboard(w placedWindow) bool {
+	view := "editor"
+	if w.panel != "" {
+		view = h.panelSpec(w.panel).focusView()
+	}
+	c, ok := h.p.Find(view)
+	return ok && h.p.App().FocusWithin(c)
+}
+
+// focusWindow gives the keyboard to a panel, or to the page ("").
+func (h *Host) focusWindow(panel string) {
+	if panel == "" {
+		h.focusEditor()
+		return
+	}
+	h.keep(h.p.Call(h.panelSpec(panel).focusView(), "forceActiveFocus"))
+}
+
+// nextWindow is the window next to shown[from] a step away: of those whose centre lies that way,
+// the one whose facing edge is nearest (an overlapping one is nearest of all), then the one nearer
+// across, then the first in shown's order, never a map's.
+func nextWindow(shown []placedWindow, from int, step tuicore.Point) (placedWindow, bool) {
+	f := shown[from].at
+	best, found := placedWindow{}, false
+	var bestGap, bestAcross int
+	for i, w := range shown {
+		r := w.at
+		// doubled centres: no half cells
+		dx, dy := (2*r.X+r.W)-(2*f.X+f.W), (2*r.Y+r.H)-(2*f.Y+f.H)
+		along, across := dx*step.X+dy*step.Y, abs(dx*step.Y+dy*step.X)
+		if i == from || along <= 0 {
+			continue
+		}
+		var gap int
+		switch {
+		case step.X > 0:
+			gap = r.X - (f.X + f.W)
+		case step.X < 0:
+			gap = f.X - (r.X + r.W)
+		case step.Y > 0:
+			gap = r.Y - (f.Y + f.H)
+		default:
+			gap = f.Y - (r.Y + r.H)
+		}
+		gap = max(gap, 0)
+		if !found || gap < bestGap || gap == bestGap && across < bestAcross {
+			best, found, bestGap, bestAcross = w, true, gap, across
+		}
+	}
+	return best, found
 }
 
 // panelEdges are the edges each panel opens from now.
