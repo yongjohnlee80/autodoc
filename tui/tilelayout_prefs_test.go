@@ -58,7 +58,7 @@ func TestAPanelWhoseLayoutIsTiledIsTiledBesideThePage(t *testing.T) {
 }
 
 // The Layout is the user's choice. The explorer, the agent and the todos tiled beside the page fill
-// 100 columns at their least (20 each, the page's 40); narrowed to 90, the todos, the last to ask,
+// 112 columns at their least (25, 27 and 20, the page's 40); narrowed to 105, the todos, the last to ask,
 // are released to their own place, but their Layout is still Tiled (their preference, and what the
 // manager wants), and their Layout › still checks Tiled. Widened again, they tile again by
 // themselves. (Below the Window's 80 columns is the too-small screen: no shrink goes there.)
@@ -68,11 +68,12 @@ func TestAPanelReleasedForRoomStaysTiledAndTilesAgainWhenTheRoomReturns(t *testi
 	}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
+	r.s.Backend.InjectResize(112, 30)
 	for _, id := range []string{"explorer", "agent", "todos"} {
 		onLoop(r, func() bool { r.h.keep(r.h.p.Call(id, "open")); return true })
 		r.s.WaitFor(t, "the "+id+" tiled", func(string) bool { _, g := tileOf(r, id); return g })
 	}
-	r.s.Backend.InjectResize(90, 30)
+	r.s.Backend.InjectResize(105, 30)
 	r.s.WaitFor(t, "the todos released for room", func(string) bool { _, g := tileOf(r, "todos"); return !g })
 	if _, g := tileOf(r, "explorer"); !g {
 		t.Fatal("the explorer, which asked first, was released too")
@@ -86,7 +87,7 @@ func TestAPanelReleasedForRoomStaysTiledAndTilesAgainWhenTheRoomReturns(t *testi
 	if now := onLoop(r, func() [2]bool { return [2]bool{r.h.tiledNow("todos"), r.h.tiledNow("explorer")} }); now != [2]bool{false, true} {
 		t.Fatalf("tiled now: the todos %v, the explorer %v; want the released todos not, the explorer still", now[0], now[1])
 	}
-	r.s.Backend.InjectResize(100, 30)
+	r.s.Backend.InjectResize(112, 30)
 	r.s.WaitFor(t, "the todos tiled again", func(string) bool { _, g := tileOf(r, "todos"); return g })
 }
 
