@@ -120,9 +120,9 @@ type keyScope struct {
 // pane's), the explorer's two tabs (its tree's, and the relations' Links list's), and the GUI's
 // HTML preview pane.
 var keyScopes = []keyScope{
-	{ID: "page", Indent: "            "}, {ID: "explorer", Indent: "                    "},
-	{ID: "links", Indent: "                    "},
-	{ID: "todos", Indent: "                "}, {ID: "todos", Indent: "                ", Label: "todos task buttons'"},
+	{ID: "page", Indent: "                    "}, {ID: "explorer", Indent: "                        "},
+	{ID: "links", Indent: "                        "},
+	{ID: "todos", Indent: "                    "}, {ID: "todos", Indent: "                    ", Label: "todos task buttons'"},
 	{ID: "htmlPane", Indent: "        ", Label: "HTML preview's"},
 }
 
