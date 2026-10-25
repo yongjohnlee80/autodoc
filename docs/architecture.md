@@ -48,12 +48,14 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 
 ## 3. Dependency rules
 
-- `core/*` never imports `rpc`, `app`, `tui` or `internal`. `core/module` imports nothing of
-  AutoDoc's.
-- **No direct I/O in `core/`.** Every filesystem operation goes through golib's `vfs`
-  (`core/docs` over a `vfs.FS`). `os` appears only where a `vfs/local` FS is built, outside
-  `core/` (`internal/daemon`'s `TodoDisk`, `app`). `core/store`'s SQLite plumbing is the
-  exception being reviewed (follow-up 3/7).
+The rules, and the test that holds each, are [CONVENTIONS.md §2 and §3](../CONVENTIONS.md#2-packages-and-dependencies).
+How they shape the tree:
+
+- `core/*` is the domain, below every host. `core/module` is the convention's types, and nothing
+  of AutoDoc's sits beneath it.
+- Core reaches the disk only through golib's `vfs` (`core/docs` over a `vfs.FS`). `os` appears
+  only where a `vfs/local` FS is built, outside `core/` (`internal/daemon`'s `TodoDisk`, `app`).
+  The deviations still in core are listed with the rule.
 - `rpc` is a host: it adapts modules to the wire. The TUI's script engine is another host of the
   same contracts.
 - A port (an interface a package needs) is declared by the package that consumes it:
@@ -183,43 +185,27 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
 
 ### 4.3 Core package rules
 
-| Rule | Form |
-| --- | --- |
-| package | one concept; `doc.go` (what, concurrency claim) and `README.md` |
-| constructor | `New(required…, opts ...Option)`; ctx first on any I/O |
-| I/O | golib `vfs` only (§3) |
-| time | `WithClock`; no `time.Now()` in logic |
-| waits | no `time.Sleep` in production code: wait on the event (a channel, a context), or on a cancellable timer; every timed wait (`clock.Sleep`, `time.After`, a timer, a ticker) has a `NOTE:` directly above saying why it must be timed (backoff, nothing can announce it, a named deadline, a grace period, batching, debounce). `core/clock/waits_test.go` enforces both; tests may sleep |
-| logging | `WithLogger(logger.Logger)` |
-| errors | `errs.Sentinel`; wrap with `%w`; public ones in the module's `Errors()` |
-| wire types | json-tagged structs in the package |
-| tests | the surface black-box (`<pkg>_test`), internals white-box; see §4.4 |
+The rules for a core package are [CONVENTIONS.md §3](../CONVENTIONS.md#3-core-packages). A timed
+wait's `NOTE:` names why it must be timed: backoff, nothing can announce it, a named deadline, a
+grace period, batching, debounce. Tests may sleep.
 
 ### 4.4 Tests
 
-- **The surface is tested from outside.** A test of what callers use (exported types and
-  functions, verbs, a conformance contract) is in the black-box package `<pkg>_test`, so it can
-  only do what a caller can.
-- **Internals are tested inside.** A test that must reach unexported state is in the package
-  itself: a loop's queue, a failure injected at one statement (`failWrites`, `renamed`), a row
-  read back with SQL of its own.
-- **Test-only exports go in `export_test.go`.** A black-box test that needs one internal piece
-  gets it from an `export_test.go` in the package, which only tests compile (index's
-  `BufferedWriter`). It is never production API.
-- **A hook in production code is a nil package variable.** It is set only by a test, before
-  anything runs, and its comment says so (index's `commitFailed`, pgstore's `putHook`).
-- **A contract several implementations meet is a `<pkg>test` package.** Each implementation runs
-  the same cells (`index/writertest`, golib `search/searchtest`, `pgstore/pgtest`, `todotest`).
-- **Disks are golib `vfs/memfs`.** A disk is `vfs/local` over `t.TempDir()` only where the real
-  file system is the point (versions, symlinks, the daemon's `/`).
-- **No mass moves.** An existing white-box test that uses only the exported API moves to
-  `<pkg>_test` when its file is next changed for another reason.
+The test rules are [CONVENTIONS.md §9](../CONVENTIONS.md#9-tests). Where each one shows in this tree:
+
+- a test-only export from `export_test.go`: index's `BufferedWriter`;
+- a production hook as a nil package variable, set only by tests: index's `commitFailed`,
+  pgstore's `putHook`;
+- a failure injected at one statement, white-box: `failWrites`, `renamed`;
+- a contract several implementations meet, as a `<pkg>test` package: `index/writertest`, golib
+  `search/searchtest`, `pgstore/pgtest`, `todotest`;
+- a real disk only where it is the point: versions, symlinks, the daemon's `/`.
 
 ## 5. Store and migrations
 
 One SQLite file (`autodoc.db`), one writer connection. Migrations are
 `sql/deployments/sqlite/0000NN_update_*.sql` with their `_revert_` pairs, listed in
-`docs/ops/schema-scripts.md`. Released scripts never change: their digests are pinned in tests.
+`docs/ops/schema-scripts.md`. The migration rules are [CONVENTIONS.md §8](../CONVENTIONS.md#8-storage-and-migrations).
 
 A module declares its own tables through the store's seam, `store.Declare` (`core/store/declare.go`):
 at its package's init, the module names a build function for its dao schemas. Every store builds
@@ -230,13 +216,10 @@ other.
 
 ## 6. Protocol and versioning
 
-- `rpc.Protocol` is the newest protocol and `rpc.MinProtocol` the oldest served. A session keeps
-  the protocol it declared.
-- A verb arrives at a protocol: its contract's `Since`.
-- **Adding a verb** is its contract plus its handler. `rpc/testdata/contracts.json` (the golden
-  file; `go test ./rpc -update` rewrites it), AGENTS.md and autodoc.nvim's
-  `lua/autodoc/contracts.lua` (`go generate ./rpc`) follow, and tests fail until they do.
-- A change that is not an addition raises `MinProtocol`, or keeps the old behaviour below it.
+- `rpc.Protocol` is the newest protocol and `rpc.MinProtocol` the oldest served. A verb arrives at
+  a protocol: its contract's `Since`.
+- The protocol rules, and what follows a new verb, are
+  [CONVENTIONS.md §4](../CONVENTIONS.md#4-daemon-features-and-the-rpc-protocol).
 
 ## 7. Concurrency
 
@@ -250,6 +233,6 @@ other.
 
 ## 8. Testing gates
 
-`gofmt -l`, `go vet ./...`, `go vet -tags gui ./tui/ ./app/`, `go test ./...`, and `go test
--tags gui ./tui/`. Never `go test -tags gui ./app/`: it opens a window. CI also runs `-race`, and a
-coverage policy: no file drops more than 1 point.
+The checks to run before pushing, and what CI runs on a pull request, are in
+[CONTRIBUTING.md](../CONTRIBUTING.md#running-the-checks). Never `go test -tags gui ./app/`: it opens
+a window.
