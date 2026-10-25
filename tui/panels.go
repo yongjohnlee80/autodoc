@@ -31,7 +31,8 @@ type PanelSpec struct {
 	GoTabs []string
 	// Priority orders focus targets across features; ties keep contribution order.
 	Priority int
-	// Edge is the edge it opens from now; "center" for none.
+	// Edge is the edge it opens from now, the place its dragged size and length are kept at; a panel
+	// with Places has one.
 	Edge func(p prefs) string
 	// Places are the edges whose dragged size and length preferences keep; nil: it sizes itself.
 	Places []string
@@ -201,7 +202,7 @@ func (h *Host) panelClosed(name string) {
 		s.Closed(h.panelHost(name))
 		return
 	}
-	h.focusEditor()
+	h.keep(h.p.Call(h.keyboardHome(), "forceActiveFocus"))
 }
 
 // dirStep is the way a Ctrl+h/j/k/l move heads.
@@ -231,37 +232,83 @@ func (h *Host) movePane(dir string) {
 	}
 }
 
-// shownWindows are the windows on screen, placed: the page, then the open panels not hidden, in
-// their declared order.
+// shownWindows are the windows on screen, placed: the page, then the open panels, in their declared
+// order, each while it is shown (shownWindow).
 func (h *Host) shownWindows() []placedWindow {
 	var out []placedWindow
-	add := func(panel, node string) {
-		c, _ := h.p.Find(node)
-		w, ok := c.(interface{ WindowBehavior() *widget.WindowCore })
-		if !ok || w.WindowBehavior() == nil || w.WindowBehavior().State().Minimized {
-			return
-		}
-		if at := w.WindowBehavior().Bounds(); at.W > 0 && at.H > 0 {
-			out = append(out, placedWindow{panel, at})
-		}
+	if w, ok := h.shownWindow("", "editorWindow"); ok {
+		out = append(out, w)
 	}
-	add("", "editorWindow")
 	for _, s := range h.panelSpecs() {
-		if h.panelOpen[s.ID] {
-			add(s.ID, s.ID)
+		if !h.panelOpen[s.ID] {
+			continue
+		}
+		if w, ok := h.shownWindow(s.ID, s.ID); ok {
+			out = append(out, w)
 		}
 	}
 	return out
 }
 
+// shownWindow is the window panel (the page, "") whose node is node, where it is drawn on the
+// screen, while it is: not minimized (a minimized window is only concealed, its layer still in the
+// overlay's stack), and laid out. The screen's is the one frame tiled and floating windows share; a
+// window core's Bounds is its target's (a tile's is its manager's, under the menu bar). Whether a
+// panel is open is the caller's.
+func (h *Host) shownWindow(panel, node string) (placedWindow, bool) {
+	c, _ := h.p.Find(node)
+	w, ok := c.(interface{ ScreenRect() (tuicore.Rect, bool) })
+	if !ok {
+		return placedWindow{}, false
+	}
+	at, on := w.ScreenRect()
+	return placedWindow{panel, at}, on
+}
+
+// windowView is the view the keyboard is in when it is in window panel: the page's editor, or the
+// panel's focus view.
+func (h *Host) windowView(panel string) string {
+	if panel == "" {
+		return "editor"
+	}
+	return h.panelSpec(panel).focusView()
+}
+
 // hasKeyboard reports whether the keyboard is in w.
 func (h *Host) hasKeyboard(w placedWindow) bool {
-	view := "editor"
-	if w.panel != "" {
-		view = h.panelSpec(w.panel).focusView()
-	}
-	c, ok := h.p.Find(view)
+	c, ok := h.p.Find(h.windowView(w.panel))
 	return ok && h.p.App().FocusWithin(c)
+}
+
+// keyboardHome is where the keyboard goes when the window that had it closes: the topmost window
+// still shown (shownWindows), by the overlay's stack, as a window manager focuses the next window
+// down. It is that window's view, else, with none shown, the page's editor.
+func (h *Host) keyboardHome() string {
+	host, ok := h.p.Overlay()
+	if !ok {
+		return "editor"
+	}
+	var layers []tuicore.Component
+	for _, l := range host.Stack.All() {
+		layers = append(layers, l)
+	}
+	var views []string
+	for _, w := range h.shownWindows() {
+		views = append(views, h.windowView(w.panel))
+	}
+	for i := len(layers) - 1; i >= 0; i-- {
+		layer, ok := layers[i].(widget.ContextOwner)
+		if !ok || layer.Context() == nil {
+			continue
+		}
+		for _, view := range views {
+			c, _ := h.p.Find(view)
+			if n, ok := c.(widget.ContextOwner); ok && n.Context() != nil && layer.Context().SubtreeContains(n.Context().ID()) {
+				return view
+			}
+		}
+	}
+	return "editor"
 }
 
 // focusWindow gives the keyboard to a panel, or to the page ("").

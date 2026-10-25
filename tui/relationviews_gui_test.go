@@ -890,3 +890,7 @@ func (c *closeHost) RestoreKeyboardPane(id string) error {
 	c.restored = append(c.restored, id)
 	return nil
 }
+func (c *closeHost) RestoreKeyboardHome() error {
+	c.restored = append(c.restored, "home")
+	return nil
+}

@@ -146,7 +146,7 @@ func (a *agents) Panels() []PanelSpec {
 	s := agentPanelSpec()
 	s.Open = func(PanelHost) { a.openAgentPanel() }
 	s.Opened = func(c PanelHost) { c.Set("App.agentShown", true) }
-	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardPane("editor")) }
+	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardHome()) }
 	return []PanelSpec{s}
 }
 func (a *agents) PreferencesChanged() {

@@ -65,26 +65,41 @@ func (h *Host) arrangeStep(step string) {
 	w.WindowBehavior().HandleAction(tuicore.ActionInvocation{Action: action, Origin: tuicore.OriginProgrammatic})
 }
 
-// arrangeKeep is Enter: the last step's rectangle is written, once.
+// arrangeKeep is Enter: the last step's rectangle is written, once. The card closes next
+// (arrangeCancel), which gives the panel the keyboard.
 func (h *Host) arrangeKeep() {
 	a := h.arrange
 	h.arrange = nil
-	if a != nil && a.rect != nil {
+	if a == nil {
+		return
+	}
+	h.arranged = a.panel
+	if a.rect != nil {
 		h.panelPlaced(a.panel, a.rect[0], a.rect[1], a.rect[2], a.rect[3])
 	}
 }
 
-// arrangeCancel is Escape, or the card closed any other way: the panel goes back to where it
-// began, through the properties the drawer binds; nothing was stored.
+// arrangeCancel is the card closed: after Enter (arrangeKeep), or by Escape or any other way, when
+// the panel goes back to where it began, through the properties the drawer binds, nothing stored.
+// Either way the arrangement ends with the keyboard in the panel it arranged, which comes forward by
+// it: the user's own Arrange asked for that window.
 func (h *Host) arrangeCancel() {
 	a := h.arrange
 	h.arrange = nil
-	if a == nil || a.rect == nil {
-		return
+	panel := h.arranged
+	h.arranged = ""
+	if a != nil {
+		panel = a.panel
+		if a.rect != nil {
+			// docked when it began: floating false is the change the drawer sees; floating, its
+			// rectangle's percentages are
+			h.showFloat(a.panel, a.begin)
+		}
 	}
-	// docked when it began: floating false is the change the drawer sees; floating, its
-	// rectangle's percentages are
-	h.showFloat(a.panel, a.begin)
+	if panel != "" {
+		// after the card's own close puts the keyboard back where it was
+		h.p.Post(func() { h.focusWindow(panel) })
+	}
 }
 
 // panelTitle is how a panel is named to the user, in the UI's language.

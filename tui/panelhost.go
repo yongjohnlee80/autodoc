@@ -22,7 +22,9 @@ type PanelHost interface {
 	// RestoreKeyboardPane is navigation to the editor or a receiving pane,
 	// never an arbitrary component's method or focus query.
 	RestoreKeyboardPane(id string) error
-	KeyboardPane() string
+	// RestoreKeyboardHome is a closed panel's way home: the keyboard to the topmost window still
+	// open, a panel, else the page, as a window manager focuses the next window down.
+	RestoreKeyboardHome() error
 	PanelOpen(id string) bool
 	TogglePanel(id string)
 	OpenDrawer(id string)
@@ -47,7 +49,6 @@ type agentHost interface {
 
 func (c core) Keep(err error)           { c.h.keep(err) }
 func (c core) Focused(id string) bool   { return c.h.paneHasKeyboard(id) }
-func (c core) KeyboardPane() string     { return c.h.keyboardPane() }
 func (c core) PanelOpen(id string) bool { return c.h.panelOpen[id] }
 func (c core) OpenDrawer(id string)     { c.h.openDrawer(id) }
 func (c core) CloseDrawer(id string)    { c.h.closeDrawer(id) }

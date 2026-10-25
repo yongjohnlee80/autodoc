@@ -594,7 +594,7 @@ func (g *globeMap) Panels() []PanelSpec {
 			g.open, g.drag = false, nil // a gesture ends with its panel (its capture is lost as it hides)
 			g.stop()                    // the load under way ends, and what it still hands over is dropped
 			g.told(g.c.Tr("autodoc.notice.globemap_gui.globemap_closed_before_it_settled"))
-			c.Keep(c.RestoreKeyboardPane("editor"))
+			c.Keep(c.RestoreKeyboardHome())
 		}}}
 }
 

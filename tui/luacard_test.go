@@ -192,6 +192,26 @@ autodoc.command{ name = "stale", run = function() first:set("stale text") end }`
 	}
 }
 
+// The card's panel closed with the keyboard in it gives the keyboard to the topmost window still
+// open, as every closed panel's goes: the explorer, open under it, not the page.
+func TestAClosedCardGivesTheKeyboardToTheTopmostWindowStillOpen(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.leader(t, 'e')
+	r.s.WaitFor(t, "the explorer's keyboard", func(string) bool { return onLoop(r, func() bool { return within(r, "explorerTree") }) })
+	r.luaLoad(t, `autodoc.command{ name = "show", run = function() autodoc.ui.card{ title = "shown", text = "card text" } end }`)
+	if err := r.luaRun("show"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "card text")
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call(luaCardView, "forceActiveFocus")); return true })
+	r.s.WaitFor(t, "the card's keyboard", func(string) bool { return onLoop(r, func() bool { return within(r, luaCardView) }) })
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call(luaCardPanel, "close")); return true })
+	r.s.WaitFor(t, "the explorer's keyboard, the card closed", func(string) bool {
+		return !r.cardOpen() && onLoop(r, func() bool { return within(r, "explorerTree") })
+	})
+}
+
 // every under the floor ticks at the floor; nil never ticks.
 func TestACardsTicksHaveAFloor(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})

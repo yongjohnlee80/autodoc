@@ -70,7 +70,7 @@ func TestPanelRegistryRejectsAmbiguousOrInvalidContributions(t *testing.T) {
 	}{
 		{"id", func(s *PanelSpec) { s.ID = "" }, "without an id"},
 		{"view", func(s *PanelSpec) { s.View = "" }, "without an id"},
-		{"edge", func(s *PanelSpec) { s.Edge = nil }, "without an id"},
+		{"edge", func(s *PanelSpec) { s.Edge = nil }, "no edge"}, // a panel whose size is kept has an edge to keep it at
 		{"default", func(s *PanelSpec) { s.Default = nil }, "invalid geometry"},
 		{"size bounds", func(s *PanelSpec) { s.Size = [2]int{90, 10} }, "invalid geometry"},
 		{"length bounds", func(s *PanelSpec) { s.Length = [2]int{10, 101} }, "invalid geometry"},
@@ -85,6 +85,10 @@ func TestPanelRegistryRejectsAmbiguousOrInvalidContributions(t *testing.T) {
 				t.Fatalf("invalid contribution: %v, want %q", err, tc.want)
 			}
 		})
+	}
+	sized := PanelSpec{ID: "self", View: "selfView"} // no Places: it sizes itself, and needs no edge
+	if _, err := newRegistry(&panelFixture{name: "self", specs: []PanelSpec{sized}}); err != nil {
+		t.Fatalf("a panel that sizes itself, with no edge, was refused: %v", err)
 	}
 	a, b := fixturePanel(), fixturePanel()
 	if _, err := newRegistry(&panelFixture{name: "one", specs: []PanelSpec{a}}, &panelFixture{name: "two", specs: []PanelSpec{b}}); err == nil || !strings.Contains(err.Error(), "panel custom is both") {
@@ -153,9 +157,9 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 	if a.reg.panels == b.reg.panels || a.agents.agentRows == b.agents.agentRows {
 		t.Fatal("programs share a panel registry or agent model")
 	}
-	a.terminals.before = "relationsList"
+	a.terminals.restore = false
 	a.agents.agentRunning = "first"
-	if b.terminals.before != "" || b.agents.agentRunning != "" {
+	if !b.terminals.restore || b.agents.agentRunning != "" {
 		t.Fatal("programs share terminal or agent runtime state")
 	}
 	for _, name := range []string{"App.terminalShown", "App.agentShown"} {

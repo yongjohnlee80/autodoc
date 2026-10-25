@@ -240,7 +240,7 @@ func (s *scripting) Panels() []PanelSpec {
 		Opened: func(PanelHost) { s.armCard() },
 		Closed: func(h PanelHost) {
 			s.cardEpoch++
-			h.Keep(h.RestoreKeyboardPane("editor"))
+			h.Keep(h.RestoreKeyboardHome())
 		}}}
 }
 

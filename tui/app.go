@@ -142,6 +142,7 @@ type Host struct {
 	termFontModel                          *tuidecl.ListModel // the terminals' face chooser: the cell font's first, then cellFonts
 	lookWas                                lookWas            // the terminals' look when Theme and font… opened (terminallook.go)
 	arrange                                *arrangeState      // an arrangement in progress (arrange.go)
+	arranged                               string             // the panel an arrangement kept, given the keyboard as its card closes (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals *terminals
 	agents    *agents

@@ -38,7 +38,6 @@ func (s *scopedPanelHost) Trf(id string, args ...any) string {
 func (s *scopedPanelHost) Ask(q Question) Asked            { return s.core.Ask(q) }
 func (s *scopedPanelHost) Prefs() prefs                    { return s.core.Prefs() }
 func (s *scopedPanelHost) Keep(err error)                  { s.core.Keep(err) }
-func (s *scopedPanelHost) KeyboardPane() string            { return s.core.KeyboardPane() }
 func (s *scopedPanelHost) PanelOpen(id string) bool        { return s.core.PanelOpen(id) }
 func (s *scopedPanelHost) TogglePanel(id string)           { s.core.TogglePanel(id) }
 func (s *scopedPanelHost) OpenDrawer(id string)            { s.core.OpenDrawer(id) }
@@ -164,6 +163,14 @@ func (s *scopedPanelHost) RestoreKeyboardPane(id string) error {
 		return fmt.Errorf("restore keyboard pane %q: %w", id, errs.ErrInvalidArgument)
 	}
 	return s.core.View(id, "forceActiveFocus")
+}
+
+// RestoreKeyboardHome is the close path's restore: the topmost window still open (keyboardHome).
+func (s *scopedPanelHost) RestoreKeyboardHome() error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	return s.core.View(s.core.h.keyboardHome(), "forceActiveFocus")
 }
 
 func (r *panelRegistry) bind(c core) error {

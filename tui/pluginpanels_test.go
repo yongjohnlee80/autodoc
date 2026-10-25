@@ -254,7 +254,8 @@ func TestACardOpensAsADockedPanelAtItsFirstPlacement(t *testing.T) {
 	r.h.p.Post(func() { r.h.plugins.placePlugin(0) })
 	storedPref(t, d, r, "tui.plugin.card.placement", "left")
 	r.h.p.Post(func() { r.h.closeDialog("pluginManager") })
-	r.s.WaitFor(t, "docked at the left", func(sc string) bool { _, l, _, _, ok := frameOf(sc, "Card"); return ok && l == 0 })
+	// placed while the page has the keyboard: it moves, and comes forward only when opened or focused
+	r.s.WaitFor(t, "docked at the left", func(string) bool { return boundsOf(r, cardPanelID("card")).X == 0 })
 }
 
 // Esc hides a focused card and tells the user how to reopen it. Its SPC p toggle shows the same
@@ -618,5 +619,30 @@ func (r *running) pluginRowLabel(name string) (string, bool) {
 			}
 		}
 		return "", false
+	})
+}
+
+// The terminal closed gives the keyboard to the topmost window still open, as every panel's close
+// does: the terminal opened from the page, a card opened over the page without the keyboard (it
+// comes forward, as a window that opens does), and the terminal closed, the card is on the screen,
+// the keyboard in it; not on the page, which would have come over the card.
+func TestTheTerminalClosedGivesTheKeyboardToTheTopmostWindowStillOpen(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PS1", "$ ")
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
+	_, r, _ := cardTUI(t, dir, nil)
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.openPlugin("card")
+	waitFrame(t, r, "Card")
+	if !r.focused("terminalView") {
+		t.Fatal("the card took the keyboard as it opened")
+	}
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the card on the screen, the keyboard in it", func(sc string) bool {
+		_, _, _, _, shown := frameOf(sc, "Card")
+		return shown && r.focused(cardViewID("card"))
 	})
 }
