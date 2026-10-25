@@ -346,7 +346,10 @@ Window {
         Panel {
             id: explorer
             TileManager.edge: App.explorerTileEdge; TileManager.edges: "left right top bottom"
-            TileManager.size: App.explorerTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.size: App.explorerTileSize
+            // its least: 25 columns hold its strip whole (the tabs' arrows, ≡, and _ + x); 4 rows its frame,
+            // its strip and one tree row
+            TileManager.minimumWidth: 25; TileManager.minimumHeight: 4
             TileManager.tiled: App.explorerTiled
             heading: App.linksTabShown ? App.relationsTitle : qsTrId("autodoc.main.explorer_2")
             closeOnQ: true
@@ -422,7 +425,10 @@ Window {
         Panel {
             id: terminal
             TileManager.edge: App.terminalTileEdge; TileManager.edges: "left right top bottom"
-            TileManager.size: App.terminalTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.size: App.terminalTileSize
+            // its least: 27 columns hold its strip whole (the tab, +, ≡, and _ + x); 6 rows its frame, its
+            // strip and three of the shell's rows
+            TileManager.minimumWidth: 27; TileManager.minimumHeight: 6
             TileManager.tiled: App.terminalTiled
             heading: qsTrId("autodoc.main.terminal_2")
             surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
@@ -472,7 +478,10 @@ Window {
         Panel {
             id: agent
             TileManager.edge: App.agentTileEdge; TileManager.edges: "left right top bottom"
-            TileManager.size: App.agentTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.size: App.agentTileSize
+            // its least: 27 columns hold its strip whole (the tab, +, ≡, and _ + x); 6 rows its frame, its
+            // strip and three of the agent's rows
+            TileManager.minimumWidth: 27; TileManager.minimumHeight: 6
             TileManager.tiled: App.agentTiled
             heading: App.agentTitle
             surface: Theme.app.window   // the Window's tone, as the agent's frame has always had
@@ -521,7 +530,10 @@ Window {
         Panel {
             id: results
             TileManager.edge: App.resultsTileEdge; TileManager.edges: "left right top bottom"
-            TileManager.size: App.resultsTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.size: App.resultsTileSize
+            // its least: 20 columns hold its ORDER BY field's ▾ and its first button whole; 7 rows its frame,
+            // the ORDER BY row, the table's header and rule, one row of results, and the buttons
+            TileManager.minimumWidth: 20; TileManager.minimumHeight: 7
             TileManager.tiled: App.resultsTiled
             heading: App.resultsTitle
             closeOnQ: true
@@ -594,7 +606,11 @@ Window {
         Panel {
             id: todos
             TileManager.edge: App.todosTileEdge; TileManager.edges: "left right top bottom"
-            TileManager.size: App.todosTileSize; TileManager.minimumWidth: 20; TileManager.minimumHeight: 6
+            TileManager.size: App.todosTileSize
+            // its least: 20 columns hold a tab, the tabs' arrows and ≡, and the store's first buttons whole;
+            // 16 rows its frame, the store, the tabs, the table's header and one row of tasks, the details
+            // (which take half of what the table leaves) and the status line
+            TileManager.minimumWidth: 20; TileManager.minimumHeight: 16
             TileManager.tiled: App.todosTiled
             heading: App.todosTitle
             closeOnQ: true
