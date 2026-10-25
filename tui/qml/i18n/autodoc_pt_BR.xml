@@ -3957,6 +3957,14 @@ O QUE UMA TECLA PRECISA
         <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
         <translation>Maximizar vale para o terminal e os agentes: abra um antes (SPC ` ou SPC g)</translation>
     </message>
+    <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
+        <source>Resume has no tab to wake: the panel is empty</source>
+        <translation>Continuar não tem aba para retomar: o painel está vazio</translation>
+    </message>
+    <message id="autodoc.notice.panelfloat.resume_is_the_terminal_s_and_the_agents_open_one">
+        <source>Resume is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
+        <translation>Continuar vale para o terminal e os agentes: abra um antes (SPC ` ou SPC g)</translation>
+    </message>
     <message id="autodoc.notice.plugincmds.did_not_start">
         <source>%1 did not start</source>
         <translation>%1 não iniciou</translation>

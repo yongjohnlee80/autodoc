@@ -3952,6 +3952,14 @@ WHAT A KEY NEEDS
         <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
         <translation>最大化仅适用于终端和智能体：请先打开其中之一(SPC ` 或 SPC g)</translation>
     </message>
+    <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
+        <source>Resume has no tab to wake: the panel is empty</source>
+        <translation>没有可继续的标签页：面板是空的</translation>
+    </message>
+    <message id="autodoc.notice.panelfloat.resume_is_the_terminal_s_and_the_agents_open_one">
+        <source>Resume is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
+        <translation>继续仅适用于终端和智能体：请先打开其中之一(SPC ` 或 SPC g)</translation>
+    </message>
     <message id="autodoc.notice.plugincmds.did_not_start">
         <source>%1 did not start</source>
         <translation>%1 未能启动</translation>
