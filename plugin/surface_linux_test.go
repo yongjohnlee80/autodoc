@@ -83,8 +83,8 @@ func fakeHost(t *testing.T, n int) (*Surface, *[]uint64, *sync.Mutex) {
 	}
 	fd, _ := unix.Dup(int(child.Fd()))
 	child.Close()
-	sf := newSurface(newSurfaceConn(fd))
 	t.Cleanup(func() { host.Close() })
+	sf := surfaceOn(t, newSurfaceConn(fd))
 	var specs []SurfaceBufferSpec
 	var fds []int
 	for i := range n {
@@ -101,7 +101,7 @@ func fakeHost(t *testing.T, n int) (*Surface, *[]uint64, *sync.Mutex) {
 	}
 	sf.setInfo(SurfaceInfo{Gen: 1, W: 64, H: 16, Scale: 1})
 	seqs, mu := &[]uint64{}, &sync.Mutex{}
-	go func() {
+	onHost(t, host, func() {
 		for {
 			m, g, err := host.Recv()
 			if err != nil {
@@ -118,7 +118,7 @@ func fakeHost(t *testing.T, n int) (*Surface, *[]uint64, *sync.Mutex) {
 			host.Send(FrameDoneMsg(SurfaceFrameDone{Seq: f.Seq, Outcome: "drawn", WhenNS: f.InputT + 1}))
 			host.Send(BufferFreeMsg(f.Buffer))
 		}
-	}()
+	})
 	return sf, seqs, mu
 }
 

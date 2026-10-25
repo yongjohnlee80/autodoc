@@ -30,6 +30,24 @@ func pair(t *testing.T) (host, plug *SurfaceConn) {
 	return h, p
 }
 
+// surfaceOn is a Surface on plug, closed before the cell's fds close (its reader is done
+// first): a reader that outlived its cell would take the next cell's datagrams and fds.
+func surfaceOn(t *testing.T, plug *SurfaceConn) *Surface {
+	s := newSurface(plug)
+	t.Cleanup(s.Close)
+	return s
+}
+
+// onHost runs work, a cell's sends and receives on host, on its own goroutine, done before the
+// cell's cleanups close any fd: the cleanup shuts host down, which ends a blocked send or receive,
+// and waits for work to return. Work that outlived its cell would send to, or take from, whatever
+// conn the next cell opened on its fd number.
+func onHost(t *testing.T, host *SurfaceConn, work func()) {
+	done := make(chan struct{})
+	t.Cleanup(func() { host.Shutdown(); <-done })
+	go func() { defer close(done); work() }()
+}
+
 // openFDs is how many descriptors this process holds.
 func openFDs(t *testing.T) int {
 	t.Helper()
@@ -165,7 +183,7 @@ func TestASignalNeverEndsATimedSend(t *testing.T) {
 	host, plug := pair(t)
 	const count = 2000
 	tid, sendErr := make(chan int, 1), make(chan error, 1)
-	go func() {
+	onHost(t, host, func() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		tid <- unix.Gettid()
@@ -177,7 +195,7 @@ func TestASignalNeverEndsATimedSend(t *testing.T) {
 			}
 		}
 		sendErr <- nil
-	}()
+	})
 	stop := make(chan struct{})
 	defer close(stop)
 	var signals atomic.Int64
