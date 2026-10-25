@@ -73,8 +73,9 @@ make test-lua     # autodoc.nvim's Lua suites (see below)
     same one:
 
     ```sh
+    sha=$(sed -n 's/^ *AUTO_CORE_SHA: *"\([0-9a-f]*\)".*/\1/p' .github/workflows/ci.yml)
     git clone https://github.com/yongjohnlee80/auto-core.nvim ../auto-core.nvim
-    git -C ../auto-core.nvim checkout <AUTO_CORE_SHA from ci.yml>
+    git -C ../auto-core.nvim checkout "$sha"
     make test-lua
     ```
 
