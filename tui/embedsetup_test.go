@@ -793,9 +793,8 @@ func TestAnOldPlanEndingMakesTheNewViewCheckAgain(t *testing.T) {
 	}
 }
 
-// A download's end outlives a Check whose catalog was read before it: the late Check does not mark
-// the model not installed again. (The fixture's catalog says not installed whenever it is read: a
-// Check answering after the download ended is one read before it.)
+// A download's end outlives a Check that began before it: that Check's catalog may have been read
+// before the download ended, so its answer does not mark the model not installed again.
 func TestADownloadsEndOutlivesALateCheck(t *testing.T) {
 	h := &heldCore{scriptedCore: setupDaemon(false)}
 	s := newEmbedSetup(h)
@@ -805,22 +804,48 @@ func TestADownloadsEndOutlivesALateCheck(t *testing.T) {
 	s.open()
 	h.run(0)
 	h.run(1)
-	s.pull() // 2
-	h.run(2) // the job; its poll (3)
-	h.run(3) // done; its estimate (4)
+	s.pull()        // 2
+	h.run(2)        // the job; its poll (3)
+	s.check(s.base) // 4: begins before the download ends
+	h.run(3)        // done; its estimate (5)
 	if s.cards[1]["installed"] != true {
 		t.Fatal("the download's end did not mark the model installed")
 	}
-	s.check(s.base) // 5
 	h.answers["embedding.estimate"] = setupDaemon(true).answers["embedding.estimate"]
-	h.run(5) // the Check's answer, its catalog saying not installed; its estimate (6)
+	h.run(4) // the Check's answer, its catalog saying not installed; its estimate (6)
 	if s.cards[1]["installed"] != true {
-		t.Fatal("a Check's catalog from before the download ended marked the model not installed again")
+		t.Fatal("a Check begun before the download ended marked the model not installed again")
 	}
-	h.run(4) // the estimate asked before the Check: dropped
+	h.run(5) // the estimate asked before the Check answered: dropped
 	h.run(6)
 	if !shown(h.scriptedCore, "Use") || shown(h.scriptedCore, "Pull") {
 		t.Fatalf("after the Check's estimate: use %v, pull %v", shown(h.scriptedCore, "Use"), shown(h.scriptedCore, "Pull"))
+	}
+}
+
+// A Check begun after a download ended reads a catalog newer than it: a model removed since is not
+// installed, and Download is offered again, as after a close and reopen.
+func TestAFreshCheckSeesAModelRemovedAfterItsDownload(t *testing.T) {
+	c := setupDaemon(false)
+	s := newEmbedSetup(c)
+	c.answers["embedding.pull"] = func([]any) (any, error) { return map[string]any{"job": "pull-1"}, nil }
+	c.answers["embedding.pull_status"] = func([]any) (any, error) { return map[string]any{"state": "done"}, nil }
+	s.open()
+	if s.installed() || !shown(c, "Pull") {
+		t.Fatalf("before the download: installed %v, pull %v", s.installed(), shown(c, "Pull"))
+	}
+	c.answers["embedding.estimate"] = setupDaemon(true).answers["embedding.estimate"]
+	s.pull() // done at once; the estimate after it says installed
+	if !s.installed() || !shown(c, "Use") {
+		t.Fatalf("after the download: installed %v, use %v", s.installed(), shown(c, "Use"))
+	}
+	// removed on the same Ollama: the catalog and the estimate say so
+	c.answers["embedding.estimate"] = setupDaemon(false).answers["embedding.estimate"]
+	for _, again := range []func(){func() { s.check(s.base) }, func() { s.closed(); s.open() }} {
+		again()
+		if s.installed() || !shown(c, "Pull") || shown(c, "Use") {
+			t.Fatalf("after the removal: installed %v, pull %v, use %v; want it not installed, Download offered", s.installed(), shown(c, "Pull"), shown(c, "Use"))
+		}
 	}
 }
 
