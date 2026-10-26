@@ -7076,5 +7076,221 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>P&amp;revious</source>
         <translation>上一步(&amp;R)</translation>
     </message>
+    <message id="autodoc.text.embedsetup.about">
+        <source>about %1</source>
+        <translation>约 %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.can_t_tell_here">
+        <source>can't tell here</source>
+        <translation>此处无法判断</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_check">
+        <source>Could not check: %1</source>
+        <translation>无法检查：%1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_estimate">
+        <source>Could not estimate: %1</source>
+        <translation>无法估算：%1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.done">
+        <source>Done: semantic search uses %1.</source>
+        <translation>完成：语义搜索使用 %1。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloaded_timing_it">
+        <source>Downloaded. Timing it on a sample…</source>
+        <translation>已下载。正在用样本计时…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.download_failed">
+        <source>The download failed: %1</source>
+        <translation>下载失败：%1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading">
+        <source>Downloading: %1 of %2</source>
+        <translation>正在下载：%1 / %2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading_eta">
+        <source>Downloading: %1 of %2, about %3 left</source>
+        <translation>正在下载：%1 / %2，约剩 %3</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.embeds">
+        <source>embeds</source>
+        <translation>嵌入</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_in_memory">
+        <source>fits in memory</source>
+        <translation>可放入内存</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_on_the_gpu">
+        <source>fits on the GPU</source>
+        <translation>可放入 GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_memory_unknown">
+        <source>%1 (memory unknown)</source>
+        <translation>%1（显存未知）</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_with_memory">
+        <source>%1, %2</source>
+        <translation>%1，%2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.installed">
+        <source>, installed</source>
+        <translation>，已安装</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.its_own">
+        <source>its own: %1</source>
+        <translation>自有：%1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.keeps_its_own">
+        <source>keeps its own: %1</source>
+        <translation>保留自有：%1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.model_row">
+        <source>%1 — %2, %3 download</source>
+        <translation>%1 — %2，下载 %3</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_gpu">
+        <source>no GPU</source>
+        <translation>无 GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_ollama">
+        <source>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</source>
+        <translation>%1 处没有 Ollama 响应。请从 ollama.com 安装并启动它，然后点击检查。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.off">
+        <source>off</source>
+        <translation>关闭</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.on">
+        <source>on</source>
+        <translation>开启</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.ready_to_use">
+        <source>%1 is installed. Tick the workspaces, then Use.</source>
+        <translation>%1 已安装。勾选工作区，然后点击使用。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.setting_up">
+        <source>Setting up…</source>
+        <translation>正在设置…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stays_off">
+        <source>stays off</source>
+        <translation>保持关闭</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_the_provider">
+        <source>adding the provider</source>
+        <translation>添加提供方</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_off">
+        <source>turning off %1</source>
+        <translation>关闭 %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_on">
+        <source>turning on %1</source>
+        <translation>开启 %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_using_it">
+        <source>using the provider</source>
+        <translation>使用提供方</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped">
+        <source>Stopped. If something else is downloading this model too, Ollama finishes it for that.</source>
+        <translation>已停止。如果还有其他程序在下载此模型，Ollama 会为它完成下载。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped_at">
+        <source>Stopped at %1: %2. What is done stays done; Retry runs it again.</source>
+        <translation>在%1时停止：%2。已完成的保持不变；重试会再次执行。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.switches_from">
+        <source>switches from %1</source>
+        <translation>从 %1 切换</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.this_machine">
+        <source>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</source>
+        <translation>本机：%1；内存 %2；磁盘可用 %3；Ollama %4。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.to_download">
+        <source>The model is a %1 download. The times show once it is installed.</source>
+        <translation>此模型需下载 %1。安装后会显示所需时间。</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.too_large_here">
+        <source>too large here</source>
+        <translation>此处过大</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_off">
+        <source>turned off</source>
+        <translation>关闭</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_on">
+        <source>turned on</source>
+        <translation>开启</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.check">
+        <source>&amp;Check</source>
+        <translation>检查(&amp;C)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>关闭(&amp;Q)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.download">
+        <source>&amp;Download</source>
+        <translation>下载(&amp;D)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.enter_ticks_a_workspace_or_unticks_it">
+        <source>Enter ticks a workspace or unticks it. Ticked ones use this model.</source>
+        <translation>按 Enter 勾选或取消勾选工作区。勾选的工作区使用此模型。</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.model">
+        <source>Model</source>
+        <translation>模型</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.ollama">
+        <source>Ollama at</source>
+        <translation>Ollama 地址</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.retry">
+        <source>&amp;Retry</source>
+        <translation>重试(&amp;R)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.set_up_semantic_search">
+        <source>Set up semantic search</source>
+        <translation>设置语义搜索</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.stop_download">
+        <source>&amp;Stop download</source>
+        <translation>停止下载(&amp;S)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.use">
+        <source>&amp;Use</source>
+        <translation>使用(&amp;U)</translation>
+    </message>
+    <message id="autodoc.dialog.aIModels.set_up">
+        <source>&amp;Set up…</source>
+        <translation>设置(&amp;S)…</translation>
+    </message>
+    <message id="autodoc.dialog.searchPicker.semantic_search_is_off_set_up">
+        <source>Semantic search is off — set up…</source>
+        <translation>语义搜索已关闭 — 设置…</translation>
+    </message>
+    <message id="autodoc.notice.progress.model_updated_refilling">
+        <source>%1 was updated; semantic search is temporarily words-only while it refills %2</source>
+        <translation>%1 已更新；重新填充 %2 期间，语义搜索暂时仅使用词语</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search">
+        <source>set up semantic search</source>
+        <translation>设置语义搜索</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search.help">
+        <source>set up semantic search</source>
+        <translation>设置语义搜索</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_reading_the_workspaces">
+        <source>reading the workspaces</source>
+        <translation>读取工作区</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
+        <source>A setup that was still running changed the workspaces: Check again before Use.</source>
+        <translation>一个仍在运行的设置更改了工作区：使用前请再次检查。</translation>
+    </message>
 </context>
 </TS>

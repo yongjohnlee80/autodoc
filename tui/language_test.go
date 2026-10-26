@@ -503,3 +503,24 @@ func TestATutorialPageALanguageLacksIsEnglishs(t *testing.T) {
 		t.Error("a Host with no language does not read English's tutorial")
 	}
 }
+
+// The embedding setup is in the language chosen: the dialog's strings come from the shipped catalogs
+// like every other dialog's. (A table's column titles are literals in golib's TableViewColumn, in
+// every dialog: they are not this cell's.)
+func TestTheSetupDialogFollowsTheLanguage(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	s := decltest.RunWith(t, 120, 40, h.attach, h.options(Options{})...)
+	t.Cleanup(h.cancel)
+	r := &running{h: h, s: s}
+	onLoop(r, func() bool {
+		h.setLanguage("ko_KR")
+		h.set("App.embedSetupReady", true) // the table shows once a check has answered
+		h.open("embeddingSetup")
+		return true
+	})
+	s.WaitForText(t, "의미 검색 설정")
+	s.WaitForText(t, "Enter로 워크스페이스를 체크하거나 해제합니다")
+	if sc := s.String(); strings.Contains(sc, "Set up semantic search") || strings.Contains(sc, "Enter ticks") {
+		t.Errorf("the setup's English in the Korean screen:\n%s", sc)
+	}
+}

@@ -7087,5 +7087,221 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>P&amp;revious</source>
         <translation>Ante&amp;rior</translation>
     </message>
+    <message id="autodoc.text.embedsetup.about">
+        <source>about %1</source>
+        <translation>cerca de %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.can_t_tell_here">
+        <source>can't tell here</source>
+        <translation>não dá para saber aqui</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_check">
+        <source>Could not check: %1</source>
+        <translation>Não foi possível verificar: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_estimate">
+        <source>Could not estimate: %1</source>
+        <translation>Não foi possível estimar: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.done">
+        <source>Done: semantic search uses %1.</source>
+        <translation>Pronto: a busca semântica usa %1.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloaded_timing_it">
+        <source>Downloaded. Timing it on a sample…</source>
+        <translation>Baixado. Medindo o tempo numa amostra…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.download_failed">
+        <source>The download failed: %1</source>
+        <translation>O download falhou: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading">
+        <source>Downloading: %1 of %2</source>
+        <translation>Baixando: %1 de %2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading_eta">
+        <source>Downloading: %1 of %2, about %3 left</source>
+        <translation>Baixando: %1 de %2, faltam cerca de %3</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.embeds">
+        <source>embeds</source>
+        <translation>incorpora</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_in_memory">
+        <source>fits in memory</source>
+        <translation>cabe na memória</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_on_the_gpu">
+        <source>fits on the GPU</source>
+        <translation>cabe na GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_memory_unknown">
+        <source>%1 (memory unknown)</source>
+        <translation>%1 (memória desconhecida)</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_with_memory">
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.installed">
+        <source>, installed</source>
+        <translation>, instalado</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.its_own">
+        <source>its own: %1</source>
+        <translation>o próprio: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.keeps_its_own">
+        <source>keeps its own: %1</source>
+        <translation>mantém o próprio: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.model_row">
+        <source>%1 — %2, %3 download</source>
+        <translation>%1 — %2, download de %3</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_gpu">
+        <source>no GPU</source>
+        <translation>sem GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_ollama">
+        <source>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</source>
+        <translation>Nenhum Ollama responde em %1. Instale-o em ollama.com, inicie-o e depois Verifique.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.off">
+        <source>off</source>
+        <translation>desligada</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.on">
+        <source>on</source>
+        <translation>ligada</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.ready_to_use">
+        <source>%1 is installed. Tick the workspaces, then Use.</source>
+        <translation>%1 está instalado. Marque os espaços de trabalho e depois Usar.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.setting_up">
+        <source>Setting up…</source>
+        <translation>Configurando…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stays_off">
+        <source>stays off</source>
+        <translation>continua desligada</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_the_provider">
+        <source>adding the provider</source>
+        <translation>adicionando o provedor</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_off">
+        <source>turning off %1</source>
+        <translation>desligando %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_on">
+        <source>turning on %1</source>
+        <translation>ligando %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_using_it">
+        <source>using the provider</source>
+        <translation>usando o provedor</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped">
+        <source>Stopped. If something else is downloading this model too, Ollama finishes it for that.</source>
+        <translation>Parado. Se outra coisa também estiver baixando este modelo, o Ollama termina para ela.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped_at">
+        <source>Stopped at %1: %2. What is done stays done; Retry runs it again.</source>
+        <translation>Parou em %1: %2. O que foi feito continua feito; Tentar de novo executa outra vez.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.switches_from">
+        <source>switches from %1</source>
+        <translation>troca de %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.this_machine">
+        <source>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</source>
+        <translation>Esta máquina: %1; %2 de memória; %3 livres em disco; Ollama %4.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.to_download">
+        <source>The model is a %1 download. The times show once it is installed.</source>
+        <translation>O modelo é um download de %1. Os tempos aparecem depois de instalado.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.too_large_here">
+        <source>too large here</source>
+        <translation>grande demais aqui</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_off">
+        <source>turned off</source>
+        <translation>é desligada</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_on">
+        <source>turned on</source>
+        <translation>é ligada</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.check">
+        <source>&amp;Check</source>
+        <translation>Verificar (&amp;c)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Fechar (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.download">
+        <source>&amp;Download</source>
+        <translation>Baixar (&amp;d)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.enter_ticks_a_workspace_or_unticks_it">
+        <source>Enter ticks a workspace or unticks it. Ticked ones use this model.</source>
+        <translation>Enter marca ou desmarca um espaço de trabalho. Os marcados usam este modelo.</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.model">
+        <source>Model</source>
+        <translation>Modelo</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.ollama">
+        <source>Ollama at</source>
+        <translation>Ollama em</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.retry">
+        <source>&amp;Retry</source>
+        <translation>Tentar de novo (&amp;r)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.set_up_semantic_search">
+        <source>Set up semantic search</source>
+        <translation>Configurar a busca semântica</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.stop_download">
+        <source>&amp;Stop download</source>
+        <translation>Parar download (&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.use">
+        <source>&amp;Use</source>
+        <translation>&amp;Usar</translation>
+    </message>
+    <message id="autodoc.dialog.aIModels.set_up">
+        <source>&amp;Set up…</source>
+        <translation>Configurar (&amp;s)…</translation>
+    </message>
+    <message id="autodoc.dialog.searchPicker.semantic_search_is_off_set_up">
+        <source>Semantic search is off — set up…</source>
+        <translation>A busca semântica está desligada — configurar…</translation>
+    </message>
+    <message id="autodoc.notice.progress.model_updated_refilling">
+        <source>%1 was updated; semantic search is temporarily words-only while it refills %2</source>
+        <translation>%1 foi atualizado; a busca semântica está temporariamente só com palavras enquanto preenche %2 de novo</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search">
+        <source>set up semantic search</source>
+        <translation>configurar a busca semântica</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search.help">
+        <source>set up semantic search</source>
+        <translation>configurar a busca semântica</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_reading_the_workspaces">
+        <source>reading the workspaces</source>
+        <translation>lendo os espaços de trabalho</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
+        <source>A setup that was still running changed the workspaces: Check again before Use.</source>
+        <translation>Uma configuração que ainda estava em execução mudou os espaços de trabalho: Verifique de novo antes de Usar.</translation>
+    </message>
 </context>
 </TS>

@@ -209,6 +209,10 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	}
 	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
+		case emb.target != "" && sameModelNewDigest(emb.model, emb.target):
+			// the same model, another download: Ollama updated it, and it refills (ADR 1793005098 §4.4)
+			name, _ := embed.ParseFingerprint(emb.target)
+			h.notifyOngoing(toastSemantic, h.trf("autodoc.notice.progress.model_updated_refilling", name.Name, h.ws))
 		case emb.target != "" || emb.semantic == "switching":
 			h.notifyOngoing(toastSemantic, h.trf("autodoc.notice.progress.semantic_search_is_temporarily_words_only_while", h.ws))
 		case polled && prev.target != "" && emb.target == "" && emb.on && emb.semantic != "off":
@@ -358,4 +362,12 @@ func (h *Host) publishStatus() {
 			h.notifyOngoing(toastProgress, p)
 		}
 	}
+}
+
+// sameModelNewDigest reports whether fingerprints a and b name one model of one provider at two
+// digests: the model's tag moved to a new download.
+func sameModelNewDigest(a, b string) bool {
+	ma, oka := embed.ParseFingerprint(a)
+	mb, okb := embed.ParseFingerprint(b)
+	return oka && okb && ma.Provider == mb.Provider && ma.Name == mb.Name && ma.Digest != mb.Digest
 }

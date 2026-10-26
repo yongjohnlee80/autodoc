@@ -35,6 +35,7 @@ func (h *Host) state() map[string]any {
 		"App.stageLexical":       true,
 		"App.stageSemantic":      true,
 		"App.stageSemanticShown": false,
+		"App.searchSetupShown":   false, // semantic search is off: the picker offers Set up… (embedsetup.go)
 		"App.stageRerank":        true,
 		"App.stageRerankText":    h.tr("autodoc.text.state.rerank"),
 		"App.stageRerankShown":   false,

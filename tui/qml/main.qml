@@ -1034,6 +1034,7 @@ Window {
     AgentEdit { id: agentEdit }
     VimQuestion { id: vimQuestion }
     AgentSetup { id: agentSetup }
+    EmbeddingSetup { id: embeddingSetup }
     AgentSwitch { id: agentSwitch }
     RankerWindow { id: rankerWindow }
     Mismatch { id: mismatch }

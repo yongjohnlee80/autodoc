@@ -132,6 +132,8 @@ func (h *Host) searchLive(q string) {
 		h.hitsRanked = ranked
 		h.rankedBy(a.rankedBy)
 		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), ranked, a.mode, a.semantic))
+		// no provider (the wire's semantic "off"): the picker offers one action into the setup
+		h.set("App.searchSetupShown", a.semantic == "off")
 		h.searchPick.show(a.hits) // the hits, the first previewed
 	})
 }
