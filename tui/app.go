@@ -229,8 +229,6 @@ type Host struct {
 	awaitExit func(ctx context.Context, pid int64) bool
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
 	epoch     uint64
-	switches  []wsSwitch    // the workspace switches told to the agents, the last keptSwitches (agentswitch.go)
-	switchSeq int64         // the last switch's seq
 	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
 	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
 	files     FileList      // the workspace's files, as last listed (page.go)

@@ -16,7 +16,8 @@
 //	autodoc --editor editor.read '[1, 20]'
 //	autodoc --editor editor.buffers
 //	autodoc --editor editor.read '[1, 20, 3]'   # lines 1 to 20 of buffer 3, shown or not
-//	autodoc --editor editor.workspace           # the agent's workspace, the editor's, and the switches (ADR 1792988759)
+//	autodoc --editor editor.workspace           # the agent's workspace, the editor's, and the switch since it last asked (ADR 1792988759)
+//	autodoc --workspace-notice                  # that switch as one line, or nothing: a Claude agent's UserPromptSubmit hook
 //
 // --contracts prints the verbs' contracts and the error codes, built in this process with no daemon:
 //
@@ -158,6 +159,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
+	fs.Bool("workspace-notice", false, "print the line telling this agent the editor's workspace changed since it last asked, or nothing; always exit 0 (a Claude agent's UserPromptSubmit hook, ADR 1792988759)")
 	editor := fs.String("editor", "", `call a verb of the page in the AutoDoc that started this agent ($AUTODOC_EDITOR, as $AUTODOC_AGENT) and print its answer as JSON; its parameters, a JSON array, after the flags: --editor editor.read '[1, 20]'`)
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text, or a docs folder as a site (its site.toml)")
 	exportOutput := fs.String("output", "", "--export: destination file, or a site's folder (required)")
@@ -253,6 +255,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			defer stop()
 			return editorMain(ctx, *editor, params, stdout, stderr)
 		}},
+		{flag: "workspace-notice", run: func(string) int { return workspaceNotice(ctx, os.Getenv, stdout) }},
 		{flag: "export", asked: func() bool { return *exportFormat != "" }, arg: true, run: func(src string) int {
 			if *exportFormat == "site" {
 				theme := "" // site.toml's, unless --theme is given

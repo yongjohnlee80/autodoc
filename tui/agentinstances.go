@@ -49,6 +49,10 @@ type agentInstance struct {
 	owner            TerminalPanel
 	generation       int
 	retirement       TerminalCompletion
+	// seen is the workspace this incarnation was last told of (takeSwitch, agentswitch.go), its own
+	// at first; seenToken the incarnation it belongs to, so a restart starts again from its own
+	seen      wsRef
+	seenToken string
 }
 
 type agentRuntimeHost interface {

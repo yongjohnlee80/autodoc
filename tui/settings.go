@@ -889,24 +889,28 @@ func (h *Host) settingsTabNow() int { return h.settingsTab }
 
 func (h *Host) settingsTabMoved(i int) { h.settingsTab = i }
 
+// renameWorkspaceRow gives the listed workspace name the name to at once, before the relisting
+// answers: a Delete… or Edit… asked for meanwhile acts on the workspace as it is now named, and
+// wsRefOf finds its root under the new name (an agent's switch, agentswitch.go).
+func (h *Host) renameWorkspaceRow(name, to string) {
+	list := slices.Clone(h.workspaces.All())
+	for i := range list {
+		if list[i].name == name {
+			list[i].name = to
+		}
+	}
+	h.showWorkspaceRows(list)
+}
+
 // saved follows a configure: the workspace in use keeps being used under a new name, a new schema
 // checks the open file, and the manager and the explorer are listed again.
 func (h *Host) saved(name string, c map[string]any) {
 	to := name
 	if n, ok := c["name"].(string); ok {
 		to = n
-		// the list holds the new name at once: a Delete… or Edit… asked for before the relisting
-		// answers acts on the workspace as it is now named
-		list := slices.Clone(h.workspaces.All())
-		for i := range list {
-			if list[i].name == name {
-				list[i].name = to
-			}
-		}
-		h.showWorkspaceRows(list)
+		h.renameWorkspaceRow(name, to)
 		if h.ws == name {
 			// the same workspace under another name: the open file stays open
-			h.noteRename(h.ws, to)
 			h.ws = to
 			h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), to))
 			if h.remember != nil {
