@@ -270,7 +270,7 @@ func TestAnEdgeChosenTilesThePanelAsItIsNow(t *testing.T) {
 	r.s.WaitForText(t, "Float")
 	r.keys(t, key('t'))
 	r.s.WaitForText(t, "Bottom")
-	r.s.WaitFor(t, "the terminal's Layout stored Tiled", func(string) bool {
+	r.waitWithin(t, "the terminal's Layout stored Tiled", daemonWait, func() bool {
 		p, err := d.db.Preferences(context.Background())
 		return err == nil && p[layoutKey("terminal")] == layoutTiled
 	})

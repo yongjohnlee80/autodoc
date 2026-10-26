@@ -109,7 +109,7 @@ func TestTheRankerModelsTab(t *testing.T) {
 	r.keys(t, key('r')) // Remove…
 	r.s.WaitForText(t, "Remove the ranker tei?")
 	r.keys(t, key('y'))
-	r.s.WaitFor(t, "tei gone", func(string) bool {
+	r.waitWithin(t, "tei gone", daemonWait, func() bool {
 		rs, err := d.db.Rankers(ctx)
 		return err == nil && len(rs) == 0
 	})
@@ -140,7 +140,7 @@ func TestABuildsRankerIsShownReadOnly(t *testing.T) {
 	r.keys(t, key('r'))
 	r.s.WaitForText(t, "Remove the ranker tei?")
 	r.keys(t, key('y'))
-	r.s.WaitFor(t, "tei gone", func(string) bool {
+	r.waitWithin(t, "tei gone", daemonWait, func() bool {
 		rs, err := d.db.Rankers(ctx)
 		return err == nil && len(rs) == 0
 	})
@@ -202,7 +202,7 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	r.s.WaitFor(t, "local stored", func(string) bool {
+	r.waitWithin(t, "local stored", daemonWait, func() bool {
 		rs, err := d.db.Rankers(ctx)
 		return err == nil && len(rs) == 1 && rs[0].Name == "local" && rs[0].BaseURL == tei.URL
 	})
