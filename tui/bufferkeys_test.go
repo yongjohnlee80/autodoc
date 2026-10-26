@@ -245,3 +245,33 @@ func TestTheBufferCardAsksAboutEachUnsavedBufferInTurn(t *testing.T) {
 		}
 	}
 }
+
+// TestTheBufferEntriesRunAsTheirKeys: the buffer card's catalog entries do what their keys do when
+// run by id, as ':', autodoc.run and a plugin run them: buffer.show_2 shows the 2nd buffer,
+// buffer.close_right and buffer.close_left close the buffers beside it, and buffer.show_3, past
+// the last, shows none.
+func TestTheBufferEntriesRunAsTheirKeys(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 3)
+	for _, p := range []string{"a.md", "b.md", "c.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	run := func(id string) {
+		t.Helper()
+		if err := onLoop(r, func() error { return r.h.cat.run(id, nil) }); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	run("buffer.show_2")
+	r.s.WaitFor(t, "buffer.show_2: b.md", func(string) bool { return r.file().path == "b.md" })
+	run("buffer.close_right")
+	r.s.WaitFor(t, "buffer.close_right: c.md closed", func(string) bool { return slices.Equal(r.bufferPaths(), []string{"a.md", "b.md"}) })
+	run("buffer.close_left")
+	r.s.WaitFor(t, "buffer.close_left: a.md closed", func(string) bool { return slices.Equal(r.bufferPaths(), []string{"b.md"}) })
+	run("buffer.show_3")
+	if got := r.file().path; got != "b.md" || !slices.Equal(r.bufferPaths(), []string{"b.md"}) {
+		t.Errorf("after buffer.show_3 of one buffer: %q shown, buffers %q", got, r.bufferPaths())
+	}
+}
