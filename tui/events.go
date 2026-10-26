@@ -149,6 +149,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 		switch e.kind {
 		case "workspace.renamed":
 			if e.workspace == h.ws && e.detail != "" {
+				h.noteRename(h.ws, e.detail)
 				h.ws = e.detail // the same root and index under its new name: nothing to reopen
 				h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), h.ws))
 			}

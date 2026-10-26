@@ -28,7 +28,9 @@ import (
 // the next call. Every edit is one undo step; an edit given the revision it read is refused when the
 // text has moved on. editor.add_command writes a Lua command into lua/ only after the user's yes.
 //
-//	editor.document                         {path, workspace, kind, modified, revision, cursor, selection?}  editor.read
+//	editor.document                         {path, workspace, kind, modified, revision, cursor, selection?,
+//	                                         spawn_workspace, foreign_workspace?}                            editor.read
+//	editor.workspace [after]                {spawn, current, switches, cursor, lost?} (ADR 1792988759)       editor.read
 //	editor.read [from_line, to_line]        {text, revision}                                                 editor.read
 //	editor.find term [opts]                 [[l1, c1, l2, c2], …]                                            editor.read
 //	editor.insert line col text [rev]       {line, col, revision}                                            editor.write
@@ -189,6 +191,7 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 	return map[string]golibrpc.Handler{
 		"editor.buffers":     h.editorVerb("editor.read", h.editorBuffers),
 		"editor.document":    h.editorVerb("editor.read", h.editorDocument),
+		"editor.workspace":   h.editorVerb("editor.read", h.editorWorkspace),
 		"editor.read":        h.editorVerb("editor.read", h.editorRead),
 		"editor.find":        h.editorVerb("editor.read", h.editorFind),
 		"editor.insert":      h.editorVerb("editor.write", h.editorInsert),
@@ -251,7 +254,7 @@ func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *widget.EditorCor
 }
 
 // editorBuffers is editor.buffers: every open buffer, in opening order.
-func (h *Host) editorBuffers(_ string, _ editorArgs) (any, error) {
+func (h *Host) editorBuffers(agent string, _ editorArgs) (any, error) {
 	out := []any{}
 	for _, b := range h.buffers {
 		row := map[string]any{"n": b.n, "modified": b.file.dirty, "active": b == h.active}
@@ -263,13 +266,14 @@ func (h *Host) editorBuffers(_ string, _ editorArgs) (any, error) {
 			if b.file.ws != "" {
 				row["workspace"] = b.file.ws
 			}
+			h.markForeign(agent, b.file.ws, row)
 		}
 		out = append(out, row)
 	}
 	return out, nil
 }
 
-func (h *Host) editorDocument(_ string, a editorArgs) (any, error) {
+func (h *Host) editorDocument(agent string, a editorArgs) (any, error) {
 	b, c, err := h.socketBuffer(a, 0)
 	if err != nil {
 		return nil, err
@@ -284,6 +288,7 @@ func (h *Host) editorDocument(_ string, a editorArgs) (any, error) {
 		if b.file.ws != "" {
 			doc["workspace"] = b.file.ws
 		}
+		h.markForeign(agent, b.file.ws, doc)
 	}
 	if r, ok := c.Selection(); ok {
 		doc["selection"] = []any{r.From.Line + 1, r.From.Col + 1, r.To.Line + 1, r.To.Col + 1}

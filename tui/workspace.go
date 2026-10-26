@@ -72,6 +72,7 @@ func (h *Host) loadWorkspaces() {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
 		if pick < 0 {
+			h.noteSwitch(switchLeft, h.wsRefOf(h.ws), wsRef{})
 			h.ws = ""
 			h.resetFiles()
 			h.setWhere(h.tr("autodoc.text.workspace.autodoc_no_workspace"))
@@ -154,6 +155,9 @@ func (h *Host) useWorkspace(i int) {
 // connection changed, so each open buffer is checked against the disk (recheckFile).
 func (h *Host) enter(name string) {
 	again := name == h.ws
+	if !again {
+		h.noteSwitch(switchEntered, h.wsRefOf(h.ws), h.wsRefOf(name))
+	}
 	h.epoch++
 	h.ws, h.entered = name, true
 	h.resetFiles()
@@ -334,6 +338,7 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 			}
 			if h.ws == name {
 				h.keepDraftOnLeave() // its buffers: each asked about first, so only Stay-free ones are left
+				h.noteSwitch(switchLeft, h.wsRefOf(h.ws), wsRef{})
 				h.ws, h.entered = "", false
 			}
 			h.notify(h.trf("autodoc.notice.workspace.deleted_workspace_its_files_stay", name))

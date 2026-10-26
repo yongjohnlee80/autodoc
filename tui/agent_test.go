@@ -64,6 +64,12 @@ func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) 
 // runAgentTUIWith is runAgentTUI with more preferences stored and opt's options too.
 func runAgentTUIWith(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
 	t.Helper()
+	return runAgentTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}})
+}
+
+// runAgentTUIIn is runAgentTUIWith over the daemon's workspaces files, kb's entered first.
+func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PATH", "/usr/bin:/bin")
 	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
@@ -80,7 +86,7 @@ func runAgentTUIWith(t *testing.T, dir string, profiles []agentProfile, def stri
 		prefs[prefAgentDefault] = def
 	}
 	maps.Copy(prefs, more)
-	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
+	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
