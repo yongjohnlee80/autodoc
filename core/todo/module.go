@@ -85,8 +85,9 @@ type (
 		ID string `param:"id"`
 	}
 	addParams struct {
-		At   At   `param:"at"`
-		Spec Spec `param:"spec" doc:"{title, id?, description?, status?, due?, priority?, assignee?, tags?, adr?, review?, blocked?}"`
+		At    At     `param:"at"`
+		Spec  Spec   `param:"spec" doc:"{title, id?, description?, status?, due?, priority?, assignee?, tags?, adr?, review?, blocked?}"`
+		Scope string `param:"scope,optional" doc:"with an assignee, the assigner's scope, as todos.assign's (protocol 30)"`
 	}
 	updateParams struct {
 		At    At             `param:"at"`
@@ -106,6 +107,7 @@ type (
 		Rev      string `param:"rev"`
 		Assignee string `param:"assignee" doc:"\"\" clears it"`
 		Reason   string `param:"reason,optional"`
+		Scope    string `param:"scope,optional" doc:"the assigner's scope, at most 256 bytes: kept on the change and the snapshot, never read (protocol 30)"`
 	}
 	revParams struct {
 		At  At     `param:"at"`
@@ -228,7 +230,7 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(write("todos.add", task,
 			"Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told.",
 			agent, append(writes, CodeInvalid, CodeExists)...),
-			func(ctx context.Context, p addParams) (Task, error) { return m.Add(ctx, p.At, p.Spec) }),
+			func(ctx context.Context, p addParams) (Task, error) { return m.Add(ctx, p.At, p.Spec, p.Scope) }),
 		module.Handle(write("todos.update", task,
 			"Changes hand-editable fields of a task read at rev; status and assignee have their own verbs.",
 			agent, append(writes, CodeStale, CodeNoTask, CodeInvalid)...),
@@ -244,7 +246,7 @@ func (m *Manager) Verbs() []module.Verb {
 			"Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told.",
 			agent, append(writes, CodeStale, CodeNoTask)...),
 			func(ctx context.Context, p assignParams) (Task, error) {
-				return m.Assign(ctx, p.At, p.ID, p.Rev, p.Assignee, p.Reason)
+				return m.Assign(ctx, p.At, p.ID, p.Rev, p.Assignee, p.Reason, p.Scope)
 			}),
 		module.Handle(write("todos.remove", "nil", "Deletes a task read at rev.", agent, append(writes, CodeStale, CodeNoTask)...),
 			func(ctx context.Context, p revParams) (none, error) { return nil, m.Remove(ctx, p.At, p.ID, p.Rev) }),
@@ -258,7 +260,7 @@ func (m *Manager) Verbs() []module.Verb {
 			"Reconciles the active buckets: misplaced files, errors[], the 28-day archive. Never reads archives.",
 			agent, writes...),
 			func(ctx context.Context, p atParams) (RefreshSummary, error) { return m.Refresh(ctx, p.At) }),
-		module.Handle(quiet("todos.changes", module.EffectRead, "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, hand?, at}], resync?, snapshot?, cursor}",
+		module.Handle(quiet("todos.changes", module.EffectRead, "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, scope?, hand?, at}], resync?, snapshot?, cursor}",
 			"A consumer's committed changes after its cursor, or a resync when it was away too long.", user),
 			func(ctx context.Context, p changesParams) (ChangesPage, error) {
 				return m.Changes(ctx, p.At, p.Consumer, int(p.Limit))

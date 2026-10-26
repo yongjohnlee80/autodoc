@@ -38,6 +38,7 @@ func RunJournalConformance(t *testing.T, h Harness) {
 	t.Run("settings", func(t *testing.T) { conformSettings(t, h) })
 	t.Run("repath", func(t *testing.T) { conformRepath(t, h) })
 	t.Run("a failed transaction leaves nothing", func(t *testing.T) { conformAtomic(t, h) })
+	t.Run("the scope", func(t *testing.T) { conformScope(t, h) })
 	t.Run("reopen", func(t *testing.T) { conformReopen(t, h) })
 }
 
@@ -51,7 +52,7 @@ var (
 // full is a change with every field set; Seq and State are the journal's to give.
 func full(store, id string) todo.Change {
 	return todo.Change{Seq: 77, Store: store, ID: id, Kind: todo.KindStatus, Op: todo.OpMove, From: "open", To: "completed",
-		Fields: []string{"status", "title"}, Reason: "done", Hand: true, FromPath: "open/" + id + ".md",
+		Fields: []string{"status", "title"}, Reason: "done", Scope: "auto-agents:p1", Hand: true, FromPath: "open/" + id + ".md",
 		ToPath: "completed/" + id + ".md", FromRev: "r1", ToRev: "r2", State: todo.StateCommitted, At: t0.In(pdt)}
 }
 
@@ -169,6 +170,46 @@ func conformSnapshot(t *testing.T, h Harness) {
 	must(t, j.Baseline(cctx, "A", nil))
 	same(t, "emptied", snapshot(t, j, "A"), []todo.SnapshotRow(nil))
 	same(t, "another store's", snapshot(t, j, "B"), []todo.SnapshotRow{z})
+}
+
+// conformScope: an assign's edit gives its rows its scope; any other edit keeps a task's scope
+// while its assignee is unchanged (a move included) and drops it when the assignee changed; the
+// scope is read back with the snapshot, and another store's rows never lend theirs.
+func conformScope(t *testing.T, h Harness) {
+	j := h.New(t)
+	scope := func(s string) *string { return &s }
+	x := todo.SnapshotRow{Path: "open/x.md", ID: "x", Rev: "1", Status: "open"}
+	other := todo.SnapshotRow{Path: "open/x.md", ID: "x", Rev: "1", Status: "open", Assignee: "agent:b"}
+	must(t, j.Baseline(cctx, "A", []todo.SnapshotRow{x}))
+	must(t, j.Baseline(cctx, "B", []todo.SnapshotRow{other}))
+	commit := func(e todo.Edit) {
+		t.Helper()
+		e.Store = "A"
+		must(t, j.Commit(cctx, begin(t, j, full("A", "x")), e))
+	}
+	assigned := x
+	assigned.Rev, assigned.Status, assigned.Assignee = "2", "in-progress", "agent:b"
+	commit(todo.Edit{Put: []todo.SnapshotRow{assigned}, Scope: scope("auto-agents:p1")})
+	want := assigned
+	want.Scope = "auto-agents:p1"
+	same(t, "an assign's scope", snapshot(t, j, "A"), []todo.SnapshotRow{want})
+
+	moved := assigned
+	moved.Path, moved.Rev, moved.Status = "completed/x.md", "3", "completed"
+	commit(todo.Edit{Put: []todo.SnapshotRow{moved}, Delete: []string{"open/x.md"}})
+	want = moved
+	want.Scope = "auto-agents:p1"
+	same(t, "kept across a move, the assignee unchanged", snapshot(t, j, "A"), []todo.SnapshotRow{want})
+
+	edited := moved
+	edited.Rev, edited.Assignee = "4", "agent:c"
+	commit(todo.Edit{Put: []todo.SnapshotRow{edited}})
+	same(t, "dropped when the assignee changed by anything but an assign", snapshot(t, j, "A"), []todo.SnapshotRow{edited})
+
+	commit(todo.Edit{Put: []todo.SnapshotRow{edited}, Scope: scope("auto-agents:p2")})
+	commit(todo.Edit{Put: []todo.SnapshotRow{edited}, Scope: scope("")})
+	same(t, "an assign with none sets none", snapshot(t, j, "A"), []todo.SnapshotRow{edited})
+	same(t, "another store's row is its own", snapshot(t, j, "B"), []todo.SnapshotRow{other})
 }
 
 func conformConsumers(t *testing.T, h Harness) {

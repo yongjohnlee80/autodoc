@@ -106,7 +106,7 @@ func TestEveryRouteResolvesTheWorkspacesVars(t *testing.T) {
 			t.Errorf("%s is derived: %+v", n, v)
 		}
 	}
-	task, err := e.m.Add(ctx, folder, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/a.md"}})
+	task, err := e.m.Add(ctx, folder, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/a.md"}}, "")
 	if err != nil || !slices.Equal(task.ADR, []string{"$KB_ROOT/adrs/a.md"}) {
 		t.Errorf("symbolized on the folder route: %v %v", task.ADR, err)
 	}

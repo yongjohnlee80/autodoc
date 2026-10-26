@@ -27,7 +27,7 @@ func seedTodos(t *testing.T, d *daemon, claimed bool, specs ...todo.Spec) []todo
 	}
 	var out []todo.Task
 	for _, s := range specs {
-		task, err := d.todos.Add(ctx, kbTodos, s)
+		task, err := d.todos.Add(ctx, kbTodos, s, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +261,7 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
 	// another client's add arrives as an event, as sys.events carries it
-	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}); err != nil {
+	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}, ""); err != nil {
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool { return r.h.reg.event("todos.changed", "kb", "x") })
@@ -285,7 +285,7 @@ func TestTodosStoreDropdownShowsOneStore(t *testing.T) {
 	if _, err := d.todos.Scaffold(ctx, other); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.todos.Add(ctx, other, todo.Spec{Title: "Another store's task"}); err != nil {
+	if _, err := d.todos.Add(ctx, other, todo.Spec{Title: "Another store's task"}, ""); err != nil {
 		t.Fatal(err)
 	}
 	r := attached(t, d)

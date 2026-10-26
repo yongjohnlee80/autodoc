@@ -83,7 +83,7 @@ func (e *env) must(err error) {
 
 func (e *env) add(spec todo.Spec) todo.Task {
 	e.t.Helper()
-	task, err := e.m.Add(ctx, kb, spec)
+	task, err := e.m.Add(ctx, kb, spec, "")
 	if err != nil {
 		e.t.Fatalf("add %q: %v", spec.Title, err)
 	}
