@@ -1542,6 +1542,22 @@ func waitCount(t *testing.T, logs, name, line string, n int) {
 	}
 }
 
+// waitLogged waits until the plugin's log holds every one of want, as the host or the plugin wrote it.
+func waitLogged(t *testing.T, logs, name string, want ...string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
+		if !slices.ContainsFunc(want, func(w string) bool { return !strings.Contains(string(b), w) }) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s's log never held all of %q:\n%s", name, want, b)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // waitSaid waits until the plugin has said a line starting with prefix, and returns what it said.
 func waitSaid(t *testing.T, logs, name, prefix string) []string {
 	t.Helper()
