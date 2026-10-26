@@ -9,5 +9,5 @@ Keybinding,Ctrl+T,Terminal / Agent PTY,Toggle PTY Normal Mode,"Switches between 
 Keybinding,Esc (in PTY Normal Mode),Terminal / Agent Normal Mode,Hide Panel,"Closes the terminal or agent drawer without terminating running child processes"
 Keybinding,+ / ≡ (Strip Menu),Tab Strip,Tab Management,"Spawns a new shell or profile (+), switches tabs (Go to ›), restarts/closes an agent, or opens Profiles… and Theme/font…"
 Keybinding,Shift+A (A),Todos Panel (SPC x),Assign Task to Agent,"Opens AgentAssignPicker, transitions open task to in-progress with autodoc:<codename>, and dispatches task brief to PTY"
-Convention,autodoc:<codename>,Assignee Prefix,e.g. autodoc:claude,"Distinguishes AutoDoc-managed terminal agents from external AutoVim mailbox agents (agent:<name>)"
+Convention,autodoc:<codename>,Assignee Prefix,e.g. autodoc:claude,"Distinguishes AutoDoc-managed terminal agents from agents another tool assigns (agent:<name>)"
 Convention,agentSubmitDelay,Delivery Timing,60ms,"Pause between bracketed paste of the 4-line task payload and the trailing carriage return (\r) so TUIs submit cleanly"
