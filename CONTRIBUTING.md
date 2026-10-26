@@ -82,7 +82,7 @@ make test-lua     # autodoc.nvim's Lua suites (see below)
   - The composition suite, the drawer hosted by the real auto-finder.nvim, is optional. It runs
     when `AUTODOC_TEST_AUTOFINDER` names a checkout of it, or one is found beside this checkout,
     and is reported skipped otherwise.
-- The TUI tests are long. `go test ./tui -run <Name>` runs one; CI runs them in four shards
+- The TUI tests are long. `go test ./tui -run <Name>` runs one; CI runs them in eight shards
   (`tests/run-tui-shard.sh`).
 
 ### Generated files
@@ -123,7 +123,7 @@ Every pull request runs:
 
 - `gofmt`, `go vet` (untagged, `-tags server`, `-tags gui`) and the builds;
 - the tests under `-race`, twice, against a pgvector service;
-- the TUI tests under `-race`, in four shards;
+- the TUI tests under `-race`, in eight shards;
 - the Lua suites in Neovim, against the pinned auto-core.nvim;
 - on Linux, the GUI build and its TUI tests (`-tags gui`);
 - on macOS, the builds with and without the GUI for both architectures, and the core and RPC tests
