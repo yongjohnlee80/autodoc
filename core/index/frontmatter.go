@@ -16,18 +16,25 @@ import (
 // a todo store by its todo format, every other file by kb, the workspace's schema (ADR 1792015212
 // amendment 2). So the editor's diagnostics and index.documents' agree.
 func (x *Indexer) ValidateFrontmatter(path string, src []byte, kb *schema.Schema) schema.Result {
-	return frontmatterOf(kind.ParseMarkdown(src), src, kb, x.mode(path).Store)
+	return frontmatterOf(path, kind.ParseMarkdown(src), src, kb, x.mode(path).Store)
 }
 
-// frontmatterOf is doc's frontmatter checked: by the store's todo format for a task, else by kb.
-func frontmatterOf(doc *markdown.Document, src []byte, kb *schema.Schema, st *TodoStore) schema.Result {
+// frontmatterOf is the frontmatter of doc at path checked: by the store's todo format for a task,
+// else by kb, whose exempt paths keep their facets and get no diagnostic.
+func frontmatterOf(path string, doc *markdown.Document, src []byte, kb *schema.Schema, st *TodoStore) schema.Result {
 	if st != nil && st.Check != nil {
 		return st.Check(src)
 	}
+	var r schema.Result
 	if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
-		return kb.Validate(fm.Literal, true)
+		r = kb.Validate(fm.Literal, true)
+	} else {
+		r = kb.Validate(nil, false)
 	}
-	return kb.Validate(nil, false)
+	if kb.Exempts(path) {
+		r.Diagnostics = nil // a file the schema doesn't judge (raw/, archive/, …): facets only
+	}
+	return r
 }
 
 // schema is the workspace's frontmatter schema now, and its fingerprint.

@@ -30,9 +30,12 @@ end
 ---core/schema's rules at the level the migration reports them (required, enum, type, unknown_type),
 ---and adds no_frontmatter, which the migration counts; the daemon's own `doc.validate` is the
 ---authority.
-function M.validate(s, text)
+function M.validate(s, text, path)
   local fm = frontmatter.parse_text(text)
   local diags = {}
+  if path and schema.exempts(s, path) then
+    return diags -- a file the schema doesn't judge (raw/, archive/, …): no diagnostic
+  end
   local function add(field, rule, msg) diags[#diags + 1] = { field = field, rule = rule, message = msg } end
   if not fm then
     add("", "no_frontmatter", "the document has no frontmatter")
@@ -40,6 +43,10 @@ function M.validate(s, text)
   end
   local tv = fm.keys[s.discriminator] and fm.keys[s.discriminator].value
   local t = type(tv) == "string" and tv or nil
+  local df = s.common_by[s.discriminator]
+  if t and df and df.aliases and df.aliases[t] then
+    t = df.aliases[t] -- an alias of a type is that type: its fields, as core/schema's fieldsFor
+  end
   -- a type the schema has no fields for is checked against common alone
   local fields = schema.fields_for(s, t and s.types[t] and t or nil)
   for _, f in ipairs(fields) do
@@ -54,6 +61,7 @@ function M.validate(s, text)
       else
         local itype = f.type == "list" and (f.item_type or "string") or f.type
         for _, x in ipairs(vals) do
+          x = (f.aliases and f.aliases[x]) or x -- a legacy spelling is its value (aliases)
           if not check_scalar(itype, x) then
             add(f.name, "type", ("%s: %q is not a %s"):format(f.name, x, itype))
           elseif f.enum and not enum_has(f.enum, x) then

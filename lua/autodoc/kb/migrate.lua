@@ -270,7 +270,7 @@ local function schema_counts(root, paths)
   for _, rel in ipairs(paths) do
     local text = util.read_file(root .. "/" .. rel)
     if text then
-      for _, d in ipairs(schema_check.validate(s, text)) do
+      for _, d in ipairs(schema_check.validate(s, text, rel)) do
         local k = d.rule .. (d.field ~= "" and (" " .. d.field) or "")
         c[k] = (c[k] or 0) + 1
       end

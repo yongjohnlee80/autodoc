@@ -757,7 +757,7 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 		p.links = append(p.links, extractRelations(doc, p.path)...)
 	}
 	p.adr = adrNumber(p.meta.FrontmatterJSON)
-	p.frontmatter = frontmatterOf(doc, s.text, s.schema, s.mode.Store)
+	p.frontmatter = frontmatterOf(p.path, doc, s.text, s.schema, s.mode.Store)
 	return nil
 }
 

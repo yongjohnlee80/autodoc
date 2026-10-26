@@ -45,6 +45,15 @@ local function flow_map(s, where)
       local items = {}
       for _, it in ipairs(split_top(v:sub(2, -2))) do items[#items + 1] = it end
       f[k] = items
+    elseif v:sub(1, 1) == "{" then
+      -- a nested flow mapping (aliases: {changes_requested: change_requested}): its keys may hold '-'
+      local m = {}
+      for _, e in ipairs(split_top(v:sub(2, -2))) do
+        local mk, mv = e:match("^([%w_%-]+)%s*:%s*(.-)$")
+        if not mk then error(where .. ": bad entry " .. e) end
+        m[mk] = mv
+      end
+      f[k] = m
     elseif v == "true" then
       f[k] = true
     elseif v == "false" then
@@ -77,6 +86,10 @@ function M.parse(text)
         s.discriminator = v
       elseif k == "common" or k == "types" then
         section = k
+      elseif k == "exempt" then
+        -- the root-relative globs of files the schema doesn't judge (exempts)
+        if v:sub(1, 1) ~= "[" or v:sub(-1) ~= "]" then error(where .. ": exempt must be a [list]") end
+        s.exempt = split_top(v:sub(2, -2))
       else
         error(where .. ": unknown key " .. k)
       end
@@ -119,6 +132,35 @@ function M.shipped()
   return cached
 end
 
+-- glob_match reports whether the root-relative path p matches pattern, as core/workspace's Matcher
+-- does: segments split on '/', each a glob (* and ?), "**" any number of whole segments, and a
+-- pattern ending in "/**" matching the directory itself.
+local function seg_match(pat, seg)
+  local lp = "^" .. pat:gsub("[%^%$%(%)%%%.%[%]%+%-]", "%%%0"):gsub("%*", "[^/]*"):gsub("%?", "[^/]") .. "$"
+  return seg:match(lp) ~= nil
+end
+local function segs_match(ps, i, ss, j)
+  if i > #ps then return j > #ss end
+  if ps[i] == "**" then
+    for k = j, #ss + 1 do
+      if segs_match(ps, i + 1, ss, k) then return true end
+    end
+    return false
+  end
+  return j <= #ss and seg_match(ps[i], ss[j]) and segs_match(ps, i + 1, ss, j + 1)
+end
+local function glob_match(pattern, p)
+  return segs_match(vim.split(pattern, "/", { plain = true }), 1, vim.split(p, "/", { plain = true }), 1)
+end
+
+---Whether the schema doesn't judge the root-relative path p (its exempt list).
+function M.exempts(s, p)
+  for _, pat in ipairs(s.exempt or {}) do
+    if glob_match(pat, p) then return true end
+  end
+  return false
+end
+
 ---Fields a document of type `t` is checked against: common, with the type's own over it.
 function M.fields_for(s, t)
   local out, by = {}, {}
@@ -128,6 +170,14 @@ function M.fields_for(s, t)
     if own and own.by[f.name] then
       for k, v in pairs(own.by[f.name]) do merged[k] = v end
       merged.required = f.required or own.by[f.name].required
+      if own.by[f.name].enum and not own.by[f.name].aliases and merged.aliases then
+        -- as core/schema: common's aliases less those naming a value the type narrowed away
+        local kept = {}
+        for from, to in pairs(merged.aliases) do
+          if vim.tbl_contains(merged.enum, to) then kept[from] = to end
+        end
+        merged.aliases = kept
+      end
     end
     out[#out + 1] = merged
     by[f.name] = merged

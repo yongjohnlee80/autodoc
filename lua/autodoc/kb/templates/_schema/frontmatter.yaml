@@ -5,6 +5,9 @@
 version: 2
 strict: false
 discriminator: type
+# Files the schema doesn't judge: they keep their facets and have no diagnostics. raw/ is immutable
+# source, _templates/ AutoDoc's own, archive/ retired, and .auto-agents/ and .junie/ tools'.
+exempt: [raw/**, _templates/**, archive/**, .auto-agents/**, .junie/**]
 common:
   type: {type: string, required: true, enum: [adr, adr-rationale, convention, playbook, reference, synthesis, review, pr, note, about, kb]}
   status: {type: string, required: true}
@@ -21,7 +24,8 @@ common:
   amends: {type: list}
 types:
   adr:
-    status: {type: string, enum: [proposed, accepted, rejected, superseded, deprecated]}
+    # implemented reads as accepted
+    status: {type: string, enum: [proposed, accepted, rejected, superseded, deprecated], aliases: {implemented: accepted}}
     number: {type: string, required: true}
     revision: {type: integer}
     formerly: {type: string}
@@ -38,7 +42,8 @@ types:
     revision: {type: integer}
     applies_to: {type: list}
   playbook:
-    status: {type: string, enum: [draft, active, retired]}
+    # draft-awaiting-execution reads as draft
+    status: {type: string, enum: [draft, active, retired], aliases: {draft-awaiting-execution: draft}}
     area: {type: string}
     revision: {type: integer}
   reference:
@@ -47,14 +52,17 @@ types:
     source_sha: {type: string}
     ingested_at: {type: date}
   synthesis:
-    status: {type: string, enum: [draft, final, superseded]}
+    # open reads as draft; revised, active, completed, implemented, closed and current as final
+    status: {type: string, enum: [draft, final, superseded], aliases: {open: draft, revised: final, active: final, completed: final, implemented: final, closed: final, current: final}}
     kind: {type: string, enum: [analysis, investigation, lesson, bug-fix, benchmark, incident, design, evidence, handoff, research]}
   review:
-    status: {type: string, enum: [in-progress, completed]}
+    # open reads as in-progress; final, closed, complete, approved and changes-requested as completed
+    status: {type: string, enum: [in-progress, completed], aliases: {open: in-progress, final: completed, closed: completed, complete: completed, approved: completed, changes-requested: completed}}
     reviewer: {type: string, required: true}
     subject: {type: string, required: true}
-    # change_requested is the spelling a new review writes; the others read as it
-    verdict: {type: string, enum: [approved, approved_with_notes, change_requested, rejected, commented], aliases: {changes_requested: change_requested, changes-requested: change_requested, change-requested: change_requested}}
+    # change_requested is the spelling a new review writes; changes_requested, changes-requested and
+    # change-requested read as it; approved_pending_ci reads as approved_with_notes
+    verdict: {type: string, enum: [approved, approved_with_notes, change_requested, rejected, commented], aliases: {changes_requested: change_requested, changes-requested: change_requested, change-requested: change_requested, approved_pending_ci: approved_with_notes}}
     round: {type: integer}
     repo: {type: string}
     pr: {type: integer}
