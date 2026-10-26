@@ -115,9 +115,13 @@ type Host struct {
 	jumps *widget.JumpList
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
-	prefs                          prefs
-	prefWrites                     [][2]string // name and value, the first being written (prefs.go)
-	connected                      bool        // to the daemon: the status line shows while not (prefs.go)
+	prefs      prefs
+	prefWrites [][2]string // name and value, the first being written (prefs.go)
+	// prefsLoading counts the preference.lists in flight; prefsSetMeanwhile is what was stored since
+	// the first began, laid over each answer (loadPrefs)
+	prefsLoading                   int
+	prefsSetMeanwhile              map[string]string
+	connected                      bool // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
 	// the registrations (registrations.go): this binary's, the daemon's, and the kinds a file is
 	// read as, which are the daemon's; whether the restart was offered, a mismatch that cannot be

@@ -109,6 +109,27 @@ func TestUnknownPanelToggleKeepsOpenStateAndFocus(t *testing.T) {
 	}
 }
 
+// TestASettingMadeWhileThePreferencesLoadIsKept: a panel resized while preference.list is read (as
+// the TUI connects, or a card is added) keeps its size when the list's answer lands, though the
+// list may have been read before the size was stored.
+func TestASettingMadeWhileThePreferencesLoadIsKept(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	for i := range 20 {
+		size := 40 + i
+		onLoop(r, func() bool {
+			r.h.prefs.agentEdge = "bottom"
+			r.h.loadPrefs()
+			r.h.panelResized("agent", size, 90)
+			return true
+		})
+		r.s.WaitFor(t, "the list answered", func(string) bool { return onLoop(r, func() bool { return r.h.prefsLoading == 0 }) })
+		if got := onLoop(r, func() int { return r.h.prefs.panelGeo["tui.agent.bottom.size"] }); got != size {
+			t.Fatalf("round %d: the agent's size is %d after the list landed, want %d", i, got, size)
+		}
+	}
+}
+
 // TestEveryPanelKeepsItsSizeAtItsEdge: a panel's grip released keeps its size and length for the
 // edge it opens from now, and a new start reads them back, each panel at its own edge.
 func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {

@@ -322,19 +322,35 @@ func prefState(p prefs) map[string]any {
 }
 
 // loadPrefs reads the store's preferences on a connection, and applies them: the theme by a
-// reload, when it is not the one on screen.
+// reload, when it is not the one on screen. What is set while the list is read (a panel resized as
+// the TUI connects) is laid over its answer: the list may have been read before that write landed,
+// and must not undo it.
 func (h *Host) loadPrefs() {
 	tk := h.ticket(nil, TicketSession) // daemon-wide: a workspace switch keeps it, a new connection drops it
+	if h.prefsLoading == 0 {
+		h.prefsSetMeanwhile = map[string]string{}
+	}
+	h.prefsLoading++
 	do(h, func(ctx context.Context) answerOf[map[string]any] {
 		res, err := h.call(ctx, "preference.list")
 		return answered(asMap(res), err)
 	}, func(a answerOf[map[string]any]) {
+		meanwhile := h.prefsSetMeanwhile
+		if h.prefsLoading--; h.prefsLoading == 0 {
+			h.prefsSetMeanwhile = nil
+		}
 		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.failed("preferences", a.err)
 			return
+		}
+		if a.v == nil {
+			a.v = map[string]any{}
+		}
+		for name, value := range meanwhile {
+			a.v[name] = value
 		}
 		values, migrated := migrateAgentDefault(a.v)
 		values = migrateLinksPanel(values) // readRows reads the explorer's edge from it too
@@ -453,6 +469,9 @@ func (h *Host) setPref(name, value string, change func(*prefs)) {
 // storePref writes one preference to the store, behind those waiting, so they land in the order
 // set: after setPref's full apply, and after a feature's SetPref through its row (setRowPref).
 func (h *Host) storePref(name, value string) {
+	if h.prefsSetMeanwhile != nil {
+		h.prefsSetMeanwhile[name] = value // a list in flight may not hold it yet (loadPrefs)
+	}
 	h.prefWrites = append(h.prefWrites, [2]string{name, value})
 	if len(h.prefWrites) == 1 {
 		h.writePref()
