@@ -331,3 +331,31 @@ func TestAnUnregisteredDerivedFormatTakesTheBuiltInIdentity(t *testing.T) {
 		}
 	}
 }
+
+// An exempt file keeps its facets and has no diagnostics; the same file outside the exempt folder
+// has them. ValidateFrontmatter agrees.
+func TestAnExemptFileHasFacetsAndNoDiagnostics(t *testing.T) {
+	var sv schemaVar
+	sv.set(t, "version: 1\nexempt: [raw/**]\nfrontmatter:\n  type: {type: string, enum: [note], required: true}\n  status: {type: string}\n", "e1")
+	e := newEnv(t, options{Schema: sv.get})
+	e.write("raw/a.md", "---\nstatus: x\n---\nzebra\n")
+	e.write("b.md", "---\nstatus: x\n---\nzebra\n")
+	for _, p := range []string{"raw/a.md", "b.md"} {
+		e.ix.Touch(p)
+		e.indexedAt(p)
+	}
+	ctx := context.Background()
+	if d, _ := e.store.Diagnostics(ctx, "raw/a.md"); len(d) != 0 {
+		t.Errorf("an exempt file's diagnostics: %+v, want none", d)
+	}
+	if got, want := e.facets("raw/a.md"), []string{"status=x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("an exempt file's facets: %v, want %v", got, want)
+	}
+	if d, _ := e.store.Diagnostics(ctx, "b.md"); len(d) != 1 || d[0].Rule != schema.RuleRequired {
+		t.Errorf("the same file outside it: %+v, want type required", d)
+	}
+	kb, _ := sv.get()
+	if r := e.ix.ValidateFrontmatter("raw/a.md", []byte("---\nstatus: x\n---\n"), kb); len(r.Diagnostics) != 0 {
+		t.Errorf("ValidateFrontmatter of an exempt path: %+v, want none", r.Diagnostics)
+	}
+}

@@ -96,6 +96,9 @@ local CORPUS = {
   -- a section in the shipped schema, so unknown_type needs a schema of its own (the next section)
   { "a type outside the enum", with("widget"), "type:enum" },
   { "a type's own required field", with("review", { "status: completed" }), "required" },
+  -- a legacy spelling is its value (the schema's aliases), on both sides
+  { "a legacy status spelling", with("synthesis", { "status: revised" }), "" },
+  { "a legacy verdict spelling", with("review", { "status: closed", "reviewer: r", "subject: s", "verdict: changes-requested" }), "" },
 }
 
 t.section("schema_check finds what doc.validate finds", function()
@@ -109,6 +112,20 @@ t.section("schema_check finds what doc.validate finds", function()
     t.ok(rejects == "" and want == "" or rejects ~= "" and want:find(rejects, 1, true) ~= nil,
       name .. (rejects == "" and ": accepted" or ": rejected for " .. rejects), want)
   end
+end)
+
+t.section("an exempt path: neither side judges it", function()
+  local s = schema.shipped()
+  local text = fm({ "status: bogus" }) -- no type, a bad status: diagnosed anywhere else
+  for _, p in ipairs({ "raw/doc.md", "archive/old/doc.md", "_templates/doc.md" }) do
+    local res, err = call("doc.validate", { "kb", p, text })
+    local want, got = keys(res and res.diagnostics), keys(schema_check.validate(s, text, p))
+    t.ok(err == nil and want == "" and got == "", p .. ": no diagnostic on either side",
+      string.format("daemon {%s}, schema_check {%s}%s", want, got, err and (" err " .. err.message) or ""))
+  end
+  local res = call("doc.validate", { "kb", "notes/doc.md", text })
+  t.ok(keys(res and res.diagnostics) ~= "" and keys(res and res.diagnostics) == keys(schema_check.validate(s, text, "notes/doc.md")),
+    "the same text outside them is judged, the same on both sides", keys(res and res.diagnostics))
 end)
 
 t.section("unknown_type: a type the enum allows and the schema has no section for", function()
@@ -138,6 +155,42 @@ t.section("unknown_type: a type the enum allows and the schema has no section fo
   end)
   local got = keys(schema_check.validate(schema.parse(own), text))
   t.ok(want == "type:unknown_type" and got == want, "the same unknown_type", string.format("daemon {%s}, schema_check {%s}", want, got))
+end)
+
+t.section("an alias of a type is that type: its own fields checked, on both sides", function()
+  local own = table.concat({
+    "version: 2",
+    "strict: false",
+    "discriminator: type",
+    "common:",
+    "  type: {type: string, required: true, enum: [note], aliases: {memo: note}}",
+    "types:",
+    "  note:",
+    "    title: {type: string, required: true}",
+    "    kind: {type: string, enum: [a, b]}",
+  }, "\n") .. "\n"
+  local root3 = t.tmp("kb3")
+  vim.fn.mkdir(root3, "p")
+  vim.fn.writefile(vim.split(own, "\n", { plain = true }), root3 .. "/schema.yaml")
+  local _, err = call("workspace.add", { "kb3", root3 })
+  t.ok(err == nil, "workspace.add kb3", err and err.message)
+  _, err = call("workspace.configure", { "kb3", { schema = "schema.yaml" } })
+  t.ok(err == nil, "workspace.configure kb3's schema", err and err.message)
+  t.wait(20000, function()
+    local res = call("doc.validate", { "kb3", "doc.md", "---\ntype: memo\n---\n" })
+    return keys(res and res.diagnostics) ~= ""
+  end)
+  local s3 = schema.parse(own)
+  for _, c in ipairs({
+    { "memo without its type's required title", "type: memo", "title:required" },
+    { "memo with its type's field outside its enum", "type: memo\ntitle: x\nkind: c", "kind:enum" },
+    { "memo with its type's fields", "type: memo\ntitle: x\nkind: a", "" },
+  }) do
+    local text = "---\n" .. c[2] .. "\n---\n"
+    local res = call("doc.validate", { "kb3", "doc.md", text })
+    local want, got = keys(res and res.diagnostics), keys(schema_check.validate(s3, text))
+    t.ok(want == c[3] and got == want, c[1], string.format("daemon {%s}, schema_check {%s}, want {%s}", want, got, c[3]))
+  end
 end)
 
 t.section("refs.resolve reaches where graph.resolve does", function()

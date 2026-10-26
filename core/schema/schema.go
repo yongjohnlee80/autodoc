@@ -11,6 +11,8 @@ import (
 
 	pyaml "github.com/yongjohnlee80/golib/parse/yaml"
 	"github.com/yongjohnlee80/golib/yaml"
+
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // Version is the newest schema version this build reads, and MinVersion the oldest.
@@ -79,6 +81,9 @@ type Schema struct {
 	common        fieldSet            // version 1: every field
 	types         map[string]fieldSet // by discriminator value: common merged with the type's own
 	typeOrder     []string            // types' keys, in the schema's order
+	// Exempt are the root-relative globs of the files it doesn't judge (Exempts); nil for none.
+	Exempt []string
+	exempt workspace.Matcher
 }
 
 // fieldSet is the fields one document is checked against, in the schema's order.
@@ -186,7 +191,7 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 		return p.schemaV2(root)
 	}
 	s := &Schema{Version: 1, byName: map[string]int{}}
-	var version, fields, order *pyaml.Node
+	var version, fields, order, exempt *pyaml.Node
 	for _, pr := range root.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -205,8 +210,10 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 			fields = pr.Value
 		case "order":
 			order = pr.Value
+		case "exempt":
+			exempt = pr.Value
 		default:
-			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, order and frontmatter)", key)
+			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, order, exempt and frontmatter)", key)
 		}
 	}
 	if version == nil {
@@ -227,7 +234,39 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 	if s.order, err = p.order(order, s); err != nil {
 		return nil, err
 	}
+	if err := p.exempt(exempt, s); err != nil {
+		return nil, err
+	}
 	return s, nil
+}
+
+// exempt reads the exempt list: root-relative globs, as a workspace's include and exclude take
+// them, of the files the schema doesn't judge. A nil node is none.
+func (p parser) exempt(n *pyaml.Node, s *Schema) error {
+	if n == nil {
+		return nil
+	}
+	if n.Kind != pyaml.KindSequence {
+		return p.fail(n, "exempt must be a list of path patterns")
+	}
+	for _, it := range n.Items {
+		pat, ok := p.value(it).(string)
+		if !ok {
+			return p.fail(it, "exempt: a pattern must be a string")
+		}
+		if err := workspace.ValidPattern(pat); err != nil {
+			return p.fail(it, "exempt: %v", err)
+		}
+		s.Exempt = append(s.Exempt, pat)
+	}
+	s.exempt = workspace.NewMatcher(s.Exempt, nil)
+	return nil
+}
+
+// Exempts reports whether the schema doesn't judge the root-relative path p (its exempt list): the
+// file keeps its facets, and has no diagnostics. A nil schema exempts nothing.
+func (s *Schema) Exempts(p string) bool {
+	return s != nil && len(s.Exempt) > 0 && s.exempt.Match(p)
 }
 
 // order reads the order list: field names the schema declares, each once. A nil node is no order.
@@ -272,7 +311,7 @@ func (p parser) version(root *pyaml.Node) int64 {
 // schemaV2 reads a version 2 schema: common, and each type's fields merged over it.
 func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 	s := &Schema{Version: 2, byName: map[string]int{}}
-	var disc, common, types, order *pyaml.Node
+	var disc, common, types, order, exempt *pyaml.Node
 	for _, pr := range root.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -294,10 +333,12 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 			types = pr.Value
 		case "order":
 			order = pr.Value
+		case "exempt":
+			exempt = pr.Value
 		case "frontmatter":
 			return nil, p.fail(pr.Key, "a version 2 schema declares its fields under common and types, not frontmatter")
 		default:
-			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, discriminator, common, types and order)", key)
+			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, discriminator, common, types, order and exempt)", key)
 		}
 	}
 	if common == nil {
@@ -335,6 +376,9 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 		}
 	}
 	if s.order, err = p.order(order, s); err != nil {
+		return nil, err
+	}
+	if err := p.exempt(exempt, s); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -420,6 +464,18 @@ func merge(common, own fieldSet, optional map[string]bool, where string) (fieldS
 				return m, &Error{Line: o.Line, Msg: fmt.Sprintf("field %q: %s's enum value %q is not one of common's enum (a type narrows a field, never widens it)", c.Name, where, bad)}
 			}
 			f.Enum = o.Enum
+		}
+		switch {
+		case o.Aliases != nil:
+			f.Aliases = o.Aliases // the type's own spellings, of its own enum (field checked them)
+		case f.Aliases != nil && o.Enum != nil:
+			kept := map[string]string{} // common's, less those naming a value the type narrowed away
+			for from, to := range f.Aliases {
+				if slices.Contains(f.Enum, to) {
+					kept[from] = to
+				}
+			}
+			f.Aliases = kept
 		}
 		if c.Required && optional[c.Name] {
 			return m, &Error{Line: o.Line, Msg: fmt.Sprintf("field %q: %s cannot make a field common requires optional", c.Name, where)}

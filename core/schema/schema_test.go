@@ -580,3 +580,59 @@ func TestTheShippedKBSchemaReadsTheVerdictsSpellings(t *testing.T) {
 		}
 	}
 }
+
+// The shipped schema's other spellings: a type's status aliases survive its merge over common
+// (review's closed is completed, synthesis's revised final), approved_pending_ci reads as
+// approved_with_notes, and raw/, _templates/, archive/, .auto-agents/ and .junie/ are exempt, nothing else.
+func TestTheShippedKBSchemaReadsEachLegacySpellingAndExemptsItsFolders(t *testing.T) {
+	src, err := os.ReadFile("../../lua/autodoc/kb/templates/_schema/frontmatter.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := mustParse(t, string(src))
+	facet := func(doc, field string) (string, []Diagnostic) {
+		r := s.ValidateFile(note("created: 2026-10-26\ntags: [x]\nabstract: a\n" + doc))
+		for _, f := range r.Facets {
+			if f.Field == field {
+				return f.Value, r.Diagnostics
+			}
+		}
+		return "", r.Diagnostics
+	}
+	for _, c := range []struct{ doc, field, want string }{
+		{"type: review\nreviewer: r\nsubject: s\nstatus: closed\n", "status", "completed"},
+		{"type: review\nreviewer: r\nsubject: s\nstatus: open\n", "status", "in-progress"},
+		{"type: review\nreviewer: r\nsubject: s\nstatus: completed\nverdict: approved_pending_ci\n", "verdict", "approved_with_notes"},
+		{"type: synthesis\nstatus: revised\n", "status", "final"},
+		{"type: adr\nnumber: \"1\"\nstatus: implemented\n", "status", "accepted"},
+		{"type: playbook\nstatus: draft-awaiting-execution\n", "status", "draft"},
+	} {
+		got, diags := facet(c.doc, c.field)
+		if got != c.want || len(diags) != 0 {
+			t.Errorf("%q: %s faceted %q with %+v, want %q and no diagnostic", c.doc, c.field, got, diags, c.want)
+		}
+	}
+	for p, want := range map[string]bool{"raw/a/x.md": true, "_templates/adr.md": true, "archive/old.md": true, ".auto-agents/kb.md": true, ".junie/guidelines.md": true,
+		"adrs/x.md": false, "synthesis/raw.md": false} {
+		if s.Exempts(p) != want {
+			t.Errorf("Exempts(%q) = %v, want %v", p, !want, want)
+		}
+	}
+}
+
+// exempt is a list of valid path patterns; a schema with none exempts nothing.
+func TestParseReadsTheExemptList(t *testing.T) {
+	s := mustParse(t, "version: 1\nexempt: [raw/**]\nfrontmatter:\n  a: {type: string}\n")
+	if !s.Exempts("raw/x.md") || s.Exempts("x.md") {
+		t.Errorf("Exempts: raw/x.md %v, x.md %v", s.Exempts("raw/x.md"), s.Exempts("x.md"))
+	}
+	if mustParse(t, kbSchema).Exempts("raw/x.md") {
+		t.Error("a schema with no exempt list exempted a path")
+	}
+	for _, src := range []string{"version: 1\nexempt: raw/**\nfrontmatter: {a: {type: string}}\n", "version: 1\nexempt: [1]\nfrontmatter: {a: {type: string}}\n"} {
+		var se *Error
+		if _, err := Parse([]byte(src)); !errors.As(err, &se) || !strings.Contains(se.Msg, "exempt") {
+			t.Errorf("%q: %v, want an exempt error", src, err)
+		}
+	}
+}
