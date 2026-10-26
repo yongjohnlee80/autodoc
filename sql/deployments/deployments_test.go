@@ -209,15 +209,7 @@ func TestTheTodoSearchDefault(t *testing.T) {
 		t.Fatalf("a new workspace's todo_graph_only %s, want 0: its tasks in search", got)
 	}
 	exec(t, db, "UPDATE workspace SET todo_graph_only = 1 WHERE id = 2")
-	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
-		t.Fatalf("revert 000024, the scripts after: %s, %v", name, err)
-	}
-	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
-		t.Fatalf("revert 000023, the script after: %s, %v", name, err)
-	}
-	if name, err := deployments.Runner().Revert(ctx, db, 22); err != nil || !strings.Contains(name, "000022") {
-		t.Fatalf("revert 000022: %s, %v", name, err)
-	}
+	revertDownTo(t, db, 22)
 	if got := fmt.Sprint(ints("SELECT todo_search FROM workspace ORDER BY id")); got != "[1 0]" {
 		t.Fatalf("reverted todo_search %s, want [1 0]: the inverse", got)
 	}
@@ -259,12 +251,7 @@ func TestTheWorkspaceVarsScript(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "INSERT INTO todo_workspace_var(kb, name, value) VALUES ('/kb', 'DUMPS', '/x')"); err == nil {
 		t.Fatal("two values of one name in one workspace")
 	}
-	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
-		t.Fatalf("revert 000024, the script after: %s, %v", name, err)
-	}
-	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
-		t.Fatalf("revert 000023: %s, %v", name, err)
-	}
+	revertDownTo(t, db, 23)
 	if _, err := db.QueryContext(ctx, "SELECT kb FROM todo_store"); err == nil {
 		t.Fatal("the revert left todo_store.kb")
 	}
@@ -299,9 +286,7 @@ func TestTheTodoStoreReleasedScript(t *testing.T) {
 	if got["s"] != (sql.NullInt64{}) || got["r"] != (sql.NullInt64{Int64: 42, Valid: true}) {
 		t.Fatalf("released_at %v: want NULL for a store never released, the time for one released", got)
 	}
-	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
-		t.Fatalf("revert 000024: %s, %v", name, err)
-	}
+	revertDownTo(t, db, 24)
 	if _, err := db.QueryContext(ctx, "SELECT released_at FROM todo_store"); err == nil {
 		t.Fatal("the revert left todo_store.released_at")
 	}
@@ -316,6 +301,54 @@ func TestTheTodoStoreReleasedScript(t *testing.T) {
 	if err := left.Close(); err != nil || n != 2 {
 		t.Fatalf("the revert kept %d stores, %v; want both", n, err)
 	}
+}
+
+// 000025 gives an assignment its scope (ADR 1791532020 r15 §2.5a): empty for a change or a
+// snapshot row written without one, and an index finding a store's row by task id. The revert
+// drops both columns and the index, and keeps the rows.
+func TestTheTodoAssignScopeScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO todo_change(store, id, kind, op, state) VALUES ('s', 'x', 'assign', 'in-place', 'committed')")
+	exec(t, db, "INSERT INTO todo_snapshot(store, path, id, rev, status) VALUES ('s', 'open/x.md', 'x', '1', 'open')")
+	for _, q := range []string{"SELECT scope FROM todo_change", "SELECT scope FROM todo_snapshot"} {
+		if got, err := first(db, q); err != nil || got != "" {
+			t.Fatalf("%s: %q, %v; want '' for a row written without one", q, got, err)
+		}
+	}
+	if got, err := first(db, "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'todo_snapshot_id'"); err != nil || got != "1" {
+		t.Fatalf("the snapshot's id index: %s, %v", got, err)
+	}
+	revertDownTo(t, db, 25)
+	for _, q := range []string{"SELECT scope FROM todo_change", "SELECT scope FROM todo_snapshot"} {
+		if _, err := first(db, q); err == nil {
+			t.Fatalf("the revert left %s", q)
+		}
+	}
+	for _, q := range []string{"SELECT count(*) FROM todo_change", "SELECT count(*) FROM todo_snapshot"} {
+		if got, err := first(db, q); err != nil || got != "1" {
+			t.Fatalf("%s after the revert: %s, %v; want the row kept", q, got, err)
+		}
+	}
+}
+
+// first is the first column of q's first row, as text; an error when q fails or has no row.
+func first(db dao.DataConn, q string) (string, error) {
+	rows, err := db.QueryContext(context.Background(), q)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", fmt.Errorf("%s: no row", q)
+	}
+	var v any
+	if err := rows.Scan(&v); err != nil {
+		return "", err
+	}
+	if b, ok := v.([]byte); ok { // a driver may answer TEXT as bytes
+		return string(b), rows.Err()
+	}
+	return fmt.Sprint(v), rows.Err()
 }
 
 // 000012 gives every chunk an embed text, ” unless a writer sets one, and its revert takes the
@@ -462,6 +495,26 @@ func open(t *testing.T) dao.DataConn {
 		t.Fatal(err)
 	}
 	return db
+}
+
+// revertDownTo reverts db's scripts from the latest down to n, each by its number: a cell of an
+// older script reaches it through every script after it, so a new script needs no edit there.
+func revertDownTo(t *testing.T, db dao.DataConn, n int) {
+	t.Helper()
+	all, err := deploy.Load(deployments.FS(), dao.DialectSQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := 0
+	for _, s := range all {
+		latest = max(latest, s.Number)
+	}
+	for i := latest; i >= n; i-- {
+		want := fmt.Sprintf("%06d", i)
+		if name, err := deployments.Runner().Revert(context.Background(), db, i); err != nil || !strings.Contains(name, want) {
+			t.Fatalf("revert %s: %s, %v", want, name, err)
+		}
+	}
 }
 
 func exec(t *testing.T, db dao.DataConn, q string, args ...any) {

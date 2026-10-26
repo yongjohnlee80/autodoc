@@ -14,7 +14,7 @@ func TestEveryVerbWritesItsRow(t *testing.T) {
 	e := claimed(t)
 	a := e.add(todo.Spec{Title: "a"})
 	a, _ = e.m.Update(ctx, kb, a.ID, a.Rev, todo.Patch{"priority": "low"})
-	a, _ = e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "why")
+	a, _ = e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "why", "")
 	a, _ = e.m.Status(ctx, kb, a.ID, a.Rev, "completed")
 	e.must(e.m.Remove(ctx, kb, a.ID, a.Rev))
 	e.disk.WriteFile(kbStore+"/open/bad.md", []byte("junk"))
@@ -95,7 +95,7 @@ func TestFirstSightIsABaseline(t *testing.T) {
 func TestConsumers(t *testing.T) {
 	e := claimed(t)
 	a := e.add(todo.Spec{Title: "a"})
-	e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "do it")
+	e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "do it", "")
 	page, err := e.m.Changes(ctx, kb, "auto-core", 10)
 	if err != nil || len(page.Changes) != 2 || page.Cursor != 2 || page.Resync {
 		t.Fatalf("%+v %v", page, err)
@@ -145,7 +145,7 @@ func TestPruningAndResync(t *testing.T) {
 	if len(e.rows()) != 0 {
 		t.Fatal("a change everyone acknowledged, past 30 days, was kept")
 	}
-	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "")
+	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "", "")
 	e.advance(91 * 24 * time.Hour)
 	e.m.Changes(ctx, kb, "panel", 10) // silent 91 days too: dropped by its own ask, and answered a resync
 	e.m.Refresh(ctx, kb)              // auto-core has been silent 91 days
@@ -177,7 +177,7 @@ func TestAResyncIsDeliveredAtLeastOnce(t *testing.T) {
 	a := e.add(todo.Spec{Title: "a"})
 	page, _ := e.m.Changes(ctx, kb, "auto-core", 10)
 	e.must(e.m.Ack(ctx, kb, "auto-core", page.Cursor))
-	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "do it")
+	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "do it", "")
 	before, _ := e.m.Changes(ctx, kb, "auto-core", 10) // a page it never acknowledges
 	e.advance(91 * 24 * time.Hour)
 	e.m.Refresh(ctx, kb) // drops it: silent 91 days
@@ -240,5 +240,62 @@ func TestASilentConsumerIsDroppedByItsAsk(t *testing.T) {
 	e.must(e.m.Ack(ctx, kb, "auto-core", again.Cursor))
 	if page, _ := e.m.Changes(ctx, kb, "auto-core", 10); page.Resync {
 		t.Errorf("after the ack: %+v", page)
+	}
+}
+
+// An assign keeps the scope it was given on its change and on the task's snapshot row, which a
+// later status move keeps (the assignee unchanged) and a hand edit of the assignee drops (ADR
+// 1791532020 §2.5a); so does an add with an assignee, which is an assignment. A scope longer than
+// MaxScope is refused, writing nothing.
+func TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand(t *testing.T) {
+	e := claimed(t)
+	a := e.add(todo.Spec{Title: "a"})
+	snap := func() todo.SnapshotRow {
+		t.Helper()
+		rows, err := e.j.Snapshot(ctx, e.storeID())
+		e.must(err)
+		for _, r := range rows {
+			if r.ID == a.ID {
+				return r
+			}
+		}
+		t.Fatalf("no snapshot row for %s: %+v", a.ID, rows)
+		return todo.SnapshotRow{}
+	}
+	rows := len(e.rows())
+	if _, err := e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "", strings.Repeat("s", todo.MaxScope+1)); !is(err, todo.ErrInvalid) || len(e.rows()) != rows {
+		t.Fatalf("an over-long scope: %v, %d rows written", err, len(e.rows())-rows)
+	}
+	a, err := e.m.Assign(ctx, kb, a.ID, a.Rev, "agent:x", "go", "auto-agents:p1")
+	e.must(err)
+	last := e.rows()[len(e.rows())-1]
+	if last.Kind != todo.KindAssign || last.Scope != "auto-agents:p1" || snap().Scope != "auto-agents:p1" {
+		t.Fatalf("the assign: %+v, its snapshot %+v", last, snap())
+	}
+	page, err := e.m.Changes(ctx, kb, "reader", 10)
+	e.must(err)
+	if c := page.Changes[len(page.Changes)-1]; c.Kind != todo.KindAssign || c.Scope != "auto-agents:p1" {
+		t.Fatalf("todos.changes: %+v", c)
+	}
+	a, err = e.m.Status(ctx, kb, a.ID, a.Rev, "deferred")
+	e.must(err)
+	if s := snap(); s.Scope != "auto-agents:p1" || s.Status != "deferred" {
+		t.Fatalf("after a status move: %+v", s)
+	}
+	p := kbStore + "/" + a.Path
+	e.disk.WriteFile(p, []byte(strings.Replace(e.read(p), `assignee: "agent:x"`, `assignee: "agent:y"`, 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	if s := snap(); s.Assignee != "agent:y" || s.Scope != "" {
+		t.Fatalf("after a hand edit of the assignee: %+v", s)
+	}
+	rows = len(e.rows())
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "c", Assignee: "agent:x"}, strings.Repeat("s", todo.MaxScope+1)); !is(err, todo.ErrInvalid) || len(e.rows()) != rows {
+		t.Fatalf("an add's over-long scope: %v, %d rows written", err, len(e.rows())-rows)
+	}
+	b, err := e.m.Add(ctx, kb, todo.Spec{Title: "b", Assignee: "agent:x"}, "auto-agents:p2")
+	e.must(err)
+	a = b
+	if last := e.rows()[len(e.rows())-1]; last.Kind != todo.KindAssign || last.Scope != "auto-agents:p2" || snap().Scope != "auto-agents:p2" {
+		t.Fatalf("an add with an assignee: %+v, its snapshot %+v", last, snap())
 	}
 }

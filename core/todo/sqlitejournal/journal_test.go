@@ -218,14 +218,16 @@ func TestTheTodoJournalSurfacesAStorageFailure(t *testing.T) {
 	}
 }
 
-// The log's lookups go through its index, not a scan of every store's rows.
+// The log's lookups go through its index, not a scan of every store's rows, and so does a commit's
+// read of a task's prior snapshot row, by id (its scope, ADR 1791532020 §2.5a).
 func TestTheTodoLogLookupsUseTheirIndex(t *testing.T) {
 	s := openStore(t)
 	raw := raw(t, s)
-	for _, q := range []string{
-		"SELECT seq FROM todo_change WHERE store = 'A' AND state IN ('pending', 'staged') ORDER BY seq",
-		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' AND seq > 5 ORDER BY seq LIMIT 10",
-		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' ORDER BY seq DESC LIMIT 1",
+	for q, index := range map[string]string{
+		"SELECT seq FROM todo_change WHERE store = 'A' AND state IN ('pending', 'staged') ORDER BY seq":           "todo_change_store",
+		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' AND seq > 5 ORDER BY seq LIMIT 10": "todo_change_store",
+		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' ORDER BY seq DESC LIMIT 1":         "todo_change_store",
+		"SELECT assignee, scope FROM todo_snapshot WHERE store = 'A' AND id = 'x'":                                "todo_snapshot_id",
 	} {
 		rows, err := raw.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+q)
 		if err != nil {
@@ -241,8 +243,8 @@ func TestTheTodoLogLookupsUseTheirIndex(t *testing.T) {
 			plan = append(plan, detail)
 		}
 		_ = rows.Close()
-		if p := strings.Join(plan, "; "); !strings.Contains(p, "todo_change_store") {
-			t.Errorf("%s: plan %q does not use todo_change_store", q, p)
+		if p := strings.Join(plan, "; "); !strings.Contains(p, index) {
+			t.Errorf("%s: plan %q does not use %s", q, p, index)
 		}
 	}
 }

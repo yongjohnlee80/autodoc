@@ -60,6 +60,29 @@ type Edit struct {
 	Put    []SnapshotRow // rows to add or replace, keyed by path
 	Delete []string      // paths whose rows go
 	Repath *Repath       // a store move: the store's new path
+	// Scope is the scope an assign gives its Put rows (its Change's). Nil, a Put row keeps the
+	// scope its task's prior row held when the assignee is unchanged, and has none when it
+	// changed: a scope belongs only to the assign that set the assignee (ADR 1791532020 §2.5a).
+	Scope *string
+}
+
+// Scoped is e's Put rows with their scopes: e.Scope when set, else each row's task's prior scope
+// where prior (the store's row of that id before e, if any) has the same assignee, else none. A
+// journal applies these, so every journal keeps one rule.
+func (e Edit) Scoped(prior func(id string) (SnapshotRow, bool)) []SnapshotRow {
+	out := make([]SnapshotRow, len(e.Put))
+	for i, r := range e.Put {
+		switch was, ok := prior(r.ID); {
+		case e.Scope != nil:
+			r.Scope = *e.Scope
+		case ok && was.Assignee == r.Assignee:
+			r.Scope = was.Scope
+		default:
+			r.Scope = ""
+		}
+		out[i] = r
+	}
+	return out
 }
 
 // Repath moves a store: its record's path becomes To, and every root resolving to From now

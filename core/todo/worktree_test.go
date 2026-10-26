@@ -146,10 +146,10 @@ func TestAWorktreePlanNeedsNoProjectRoot(t *testing.T) {
 // blocked takes task ids: todos.add and todos.update refuse a sentence there, and accept ids.
 func TestBlockedRefusesWhatIsNotATaskID(t *testing.T) {
 	e := claimed(t)
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", Blocked: []string{"2026-10-15-ok", "waits for the release"}}); !is(err, todo.ErrInvalid) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", Blocked: []string{"2026-10-15-ok", "waits for the release"}}, ""); !is(err, todo.ErrInvalid) {
 		t.Errorf("add with a sentence in blocked: %v", err)
 	}
-	tk, err := e.m.Add(ctx, kb, todo.Spec{Title: "y", Blocked: []string{"2026-10-15-ok", "other_id"}})
+	tk, err := e.m.Add(ctx, kb, todo.Spec{Title: "y", Blocked: []string{"2026-10-15-ok", "other_id"}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

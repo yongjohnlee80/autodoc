@@ -3,6 +3,7 @@ package todo_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -205,7 +206,7 @@ func TestEveryVerbAnswers(t *testing.T) {
 		t.Errorf("a plan rewrote: %+v", p)
 	}
 	updated := call("todos.update", "kb", added.ID, added.Rev, map[string]any{"priority": "high"}).(todo.Task)
-	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours").(todo.Task)
+	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours", "auto-agents:p1").(todo.Task)
 	statused := call("todos.status", "kb", added.ID, assigned.Rev, "completed").(todo.Task)
 	if statused.Status != "completed" || statused.Assignee != "agent:jarvis" {
 		t.Errorf("after the writes %+v", statused)
@@ -216,6 +217,10 @@ func TestEveryVerbAnswers(t *testing.T) {
 	page := call("todos.changes", "kb", "auto-core", int64(10)).(todo.ChangesPage)
 	if len(page.Changes) == 0 {
 		t.Fatal("no changes for a new consumer")
+	}
+	// the assign's scope, as the verb was given it (protocol 30)
+	if i := slices.IndexFunc(page.Changes, func(c todo.Change) bool { return c.Kind == todo.KindAssign }); i < 0 || page.Changes[i].Scope != "auto-agents:p1" {
+		t.Errorf("the assign's change: %d %+v; want its scope", i, page.Changes)
 	}
 	call("todos.ack", "kb", "auto-core", page.Changes[len(page.Changes)-1].Seq)
 	call("todos.remove", "kb", added.ID, statused.Rev)

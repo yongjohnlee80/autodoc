@@ -62,6 +62,7 @@ var sqliteSuites = []struct {
 }{
 	{"EveryVerbWritesItsRow", TestEveryVerbWritesItsRow},
 	{"HandEditsAreUpdatesNeverAssigns", TestHandEditsAreUpdatesNeverAssigns},
+	{"AnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand", TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand},
 	{"FirstSightIsABaseline", TestFirstSightIsABaseline},
 	{"Consumers", TestConsumers},
 	{"PruningAndResync", TestPruningAndResync},

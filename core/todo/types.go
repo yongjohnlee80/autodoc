@@ -188,7 +188,8 @@ type Change struct {
 	To       string    `json:"to,omitempty"`
 	Fields   []string  `json:"fields,omitempty"` // update and refresh: the fields that changed
 	Reason   string    `json:"reason,omitempty"`
-	Hand     bool      `json:"hand,omitempty"` // found by the snapshot diff: an edit made outside the daemon
+	Scope    string    `json:"scope,omitempty"` // assign: the assigner's scope as given, never read here (ADR 1791532020 §2.5a)
+	Hand     bool      `json:"hand,omitempty"`  // found by the snapshot diff: an edit made outside the daemon
 	FromPath string    `json:"from_path,omitempty"`
 	ToPath   string    `json:"to_path,omitempty"`
 	FromRev  string    `json:"from_rev,omitempty"`
@@ -205,8 +206,12 @@ type SnapshotRow struct {
 	Rev      string            `json:"rev"`
 	Status   string            `json:"status"`
 	Assignee string            `json:"assignee,omitempty"`
+	Scope    string            `json:"scope,omitempty"` // the scope of the assign that set Assignee; "" once anything else changed it
 	Fields   map[string]string `json:"fields,omitempty"`
 }
+
+// MaxScope is the longest scope todos.assign keeps, in bytes.
+const MaxScope = 256
 
 // Consumer is a change-log reader and how far it has acknowledged. One silent too long is
 // unregistered, and kept so that its return gets a resync. It stays unregistered, answered the

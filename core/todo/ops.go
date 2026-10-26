@@ -203,8 +203,12 @@ func render(t Task) (Task, []byte, error) {
 }
 
 // Add creates a task in an At's store. Creating with an assignee is an assignment: an open task
-// starts in-progress (D1), and its change is an assign, delivered as todos.assign's is.
-func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
+// starts in-progress (D1), and its change is an assign, delivered as todos.assign's is, with its
+// scope as Assign keeps one.
+func (m *Manager) Add(ctx context.Context, at At, spec Spec, scope string) (Task, error) {
+	if len(scope) > MaxScope {
+		return Task{}, fmt.Errorf("%w: a scope of %d bytes; at most %d", ErrInvalid, len(scope), MaxScope)
+	}
 	w, st, err := m.writing(ctx, at)
 	if errors.Is(err, ErrNotAStore) {
 		// a workspace's first task makes its store, as its first write claims it (ADR 1791532020 r13)
@@ -267,7 +271,7 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	}
 	c := Change{ID: id, Kind: KindAdd, To: status}
 	if spec.Assignee != "" {
-		c = Change{ID: id, Kind: KindAssign, To: spec.Assignee} // delivered like todos.assign
+		c = Change{ID: id, Kind: KindAssign, To: spec.Assignee, Scope: scope} // delivered like todos.assign, with its scope
 	}
 	return m.create(ctx, st, c, back, content)
 }
@@ -408,8 +412,12 @@ func (m *Manager) Status(ctx context.Context, at At, id, seen, status string) (T
 // Assign sets or clears a task's assignee. Assigning an open task moves it to in-progress in the
 // same write (D1); nothing else changes status. Assigning again, even to the same assignee, is a
 // new assignment: it is written and logged, so it is delivered again. Clearing an unassigned task
-// is a no-op.
-func (m *Manager) Assign(ctx context.Context, at At, id, seen, assignee, reason string) (Task, error) {
+// is a no-op. scope is the assigner's, kept on the change and the snapshot and never read here
+// (ADR 1791532020 §2.5a); "" for none.
+func (m *Manager) Assign(ctx context.Context, at At, id, seen, assignee, reason, scope string) (Task, error) {
+	if len(scope) > MaxScope {
+		return Task{}, fmt.Errorf("%w: a scope of %d bytes; at most %d", ErrInvalid, len(scope), MaxScope)
+	}
 	_, st, err := m.writing(ctx, at)
 	if err != nil {
 		return Task{}, err
@@ -434,7 +442,7 @@ func (m *Manager) Assign(ctx context.Context, at At, id, seen, assignee, reason 
 	if err != nil {
 		return Task{}, err
 	}
-	c := Change{ID: id, Kind: KindAssign, From: old, To: assignee, Reason: reason, FromRev: seen}
+	c := Change{ID: id, Kind: KindAssign, From: old, To: assignee, Reason: reason, Scope: scope, FromRev: seen}
 	if back.Path != from {
 		return m.move(ctx, st, c, from, ver, back, content)
 	}

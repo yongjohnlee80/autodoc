@@ -60,6 +60,7 @@ const (
 	tcTo           todoCol = "to_value"
 	tcFields       todoCol = "fields"
 	tcReason       todoCol = "reason"
+	tcScope        todoCol = "scope"
 	tcHand         todoCol = "hand"
 	tcFromPath     todoCol = "from_path"
 	tcToPath       todoCol = "to_path"
@@ -107,7 +108,7 @@ type (
 	todoChangeRow   struct {
 		Seq                        int64
 		Store, ID, Kind, Op, State string
-		From, To, Reason           string
+		From, To, Reason, Scope    string
 		FromPath, ToPath           string
 		FromRev, ToRev             string
 		Fields                     *string
@@ -115,8 +116,8 @@ type (
 		At                         *int64
 	}
 	todoSnapRow struct {
-		Store, Path, ID, Rev, Status, Assignee string
-		Fields                                 *string
+		Store, Path, ID, Rev, Status, Assignee, Scope string
+		Fields                                        *string
 	}
 	todoConsumerRow struct {
 		Store, Name  string
@@ -215,6 +216,7 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcTo:       func(r *todoChangeRow) any { return &r.To },
 			tcFields:   func(r *todoChangeRow) any { return &r.Fields },
 			tcReason:   func(r *todoChangeRow) any { return &r.Reason },
+			tcScope:    func(r *todoChangeRow) any { return &r.Scope },
 			tcHand:     func(r *todoChangeRow) any { return &r.Hand },
 			tcFromPath: func(r *todoChangeRow) any { return &r.FromPath },
 			tcToPath:   func(r *todoChangeRow) any { return &r.ToPath },
@@ -230,6 +232,7 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcRev:      func(r *todoSnapRow) any { return &r.Rev },
 			tcStatus:   func(r *todoSnapRow) any { return &r.Status },
 			tcAssignee: func(r *todoSnapRow) any { return &r.Assignee },
+			tcScope:    func(r *todoSnapRow) any { return &r.Scope },
 			tcFields:   func(r *todoSnapRow) any { return &r.Fields },
 		}, []todoCol{tcStore, tcPath}, map[todoSort]string{byPath: `"todo_snapshot"."path"`}),
 		consumers: todoTable(c, "todo_consumer", map[todoCol]func(*todoConsumerRow) any{
@@ -367,7 +370,7 @@ func (j *todoJournal) Prune(ctx context.Context, store string, before time.Time,
 func insertChange(tx *dao.Transaction, t *todoTables, c todo.Change, state string) (int64, error) {
 	return t.changes.On(tx).SetMap(map[todoCol]any{
 		tcStore: c.Store, tcID: c.ID, tcKind: c.Kind, tcOp: c.Op, tcFrom: c.From, tcTo: c.To,
-		tcFields: jsonText(c.Fields, len(c.Fields)), tcReason: c.Reason, tcHand: flag(c.Hand), tcFromPath: c.FromPath, tcToPath: c.ToPath,
+		tcFields: jsonText(c.Fields, len(c.Fields)), tcReason: c.Reason, tcScope: c.Scope, tcHand: flag(c.Hand), tcFromPath: c.FromPath, tcToPath: c.ToPath,
 		tcFromRev: c.FromRev, tcToRev: c.ToRev, tcState: state, tcAt: nanos(c.At),
 	}).Insert()
 }
@@ -398,7 +401,7 @@ func changes(q dao.DAO[*todoChangeRow, todoCol, int64]) ([]todo.Change, error) {
 	out := make([]todo.Change, 0, len(rows))
 	for _, r := range rows {
 		c := todo.Change{Seq: r.Seq, Store: r.Store, ID: r.ID, Kind: r.Kind, Op: r.Op, From: r.From, To: r.To,
-			Reason: r.Reason, Hand: r.Hand != 0, FromPath: r.FromPath, ToPath: r.ToPath, FromRev: r.FromRev,
+			Reason: r.Reason, Scope: r.Scope, Hand: r.Hand != 0, FromPath: r.FromPath, ToPath: r.ToPath, FromRev: r.FromRev,
 			ToRev: r.ToRev, State: r.State, At: fromNanos(r.At)}
 		if err := fromJSON(r.Fields, &c.Fields); err != nil {
 			return nil, err
@@ -411,6 +414,17 @@ func changes(q dao.DAO[*todoChangeRow, todoCol, int64]) ([]todo.Change, error) {
 // applyEdit is what a committed row changes besides itself: the snapshot's deletes, then its puts,
 // then a store move's records.
 func applyEdit(tx *dao.Transaction, t *todoTables, e todo.Edit) error {
+	prior := map[string]todo.SnapshotRow{} // the Put rows' tasks as they were, read before the deletes
+	for _, r := range e.Put {
+		rows, err := t.snapshot.On(tx).With(tcStore, e.Store).With(tcID, r.ID).Select(tcAssignee, tcScope) // todo_snapshot_id covers it
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			prior[r.ID] = todo.SnapshotRow{Assignee: rows[0].Assignee, Scope: rows[0].Scope}
+		}
+	}
+	e.Put = e.Scoped(func(id string) (todo.SnapshotRow, bool) { r, ok := prior[id]; return r, ok })
 	for _, p := range e.Delete {
 		if err := t.snapshot.On(tx).With(tcStore, e.Store).With(tcPath, p).Delete(); err != nil {
 			return err
@@ -441,7 +455,7 @@ func (j *todoJournal) Snapshot(ctx context.Context, store string) ([]todo.Snapsh
 			return err
 		}
 		for _, r := range rows {
-			s := todo.SnapshotRow{Path: r.Path, ID: r.ID, Rev: r.Rev, Status: r.Status, Assignee: r.Assignee}
+			s := todo.SnapshotRow{Path: r.Path, ID: r.ID, Rev: r.Rev, Status: r.Status, Assignee: r.Assignee, Scope: r.Scope}
 			if err := fromJSON(r.Fields, &s.Fields); err != nil {
 				return err
 			}
@@ -465,7 +479,7 @@ func (j *todoJournal) Baseline(ctx context.Context, store string, rows []todo.Sn
 func putSnapshot(tx *dao.Transaction, t *todoTables, store string, rows []todo.SnapshotRow) error {
 	for _, r := range rows {
 		if err := t.snapshot.On(tx).SetMap(map[todoCol]any{tcStore: store, tcPath: r.Path, tcID: r.ID, tcRev: r.Rev,
-			tcStatus: r.Status, tcAssignee: r.Assignee, tcFields: jsonText(r.Fields, len(r.Fields))}).Upsert(); err != nil {
+			tcStatus: r.Status, tcAssignee: r.Assignee, tcScope: r.Scope, tcFields: jsonText(r.Fields, len(r.Fields))}).Upsert(); err != nil {
 			return err
 		}
 	}

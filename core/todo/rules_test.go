@@ -25,21 +25,21 @@ func TestAddWritesTheTaskFile(t *testing.T) {
 	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " -->\n\n# Ship it, now!\n\nDo the thing.\n") {
 		t.Errorf("file:\n%s", got)
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "Ship it, now"}); !is(err, todo.ErrExists) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "Ship it, now"}, ""); !is(err, todo.ErrExists) {
 		t.Errorf("same id again: %v", err)
 	}
 	for _, id := range []string{"../escape", "a/b", ".hidden", "with space", ""} {
 		if id == "" {
 			continue
 		}
-		if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", ID: id}); !is(err, todo.ErrInvalid) {
+		if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", ID: id}, ""); !is(err, todo.ErrInvalid) {
 			t.Errorf("id %q: %v", id, err)
 		}
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", Priority: "urgent"}); !is(err, todo.ErrInvalid) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x", Priority: "urgent"}, ""); !is(err, todo.ErrInvalid) {
 		t.Errorf("a value the schema refuses: %v", err)
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: ""}); !is(err, todo.ErrInvalid) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: ""}, ""); !is(err, todo.ErrInvalid) {
 		t.Errorf("no title: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestTransitionsAnyToAny(t *testing.T) {
 func TestAssignD1(t *testing.T) {
 	e := claimed(t)
 	open := e.add(todo.Spec{Title: "open one"})
-	got, err := e.m.Assign(ctx, kb, open.ID, open.Rev, "agent:jarvis", "start with the tests")
+	got, err := e.m.Assign(ctx, kb, open.ID, open.Rev, "agent:jarvis", "start with the tests", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,22 +104,22 @@ func TestAssignD1(t *testing.T) {
 		t.Errorf("row %+v", last)
 	}
 	// re-assigning never moves it back, and is delivered again
-	again, err := e.m.Assign(ctx, kb, got.ID, got.Rev, "agent:jarvis", "actually, the docs first")
+	again, err := e.m.Assign(ctx, kb, got.ID, got.Rev, "agent:jarvis", "actually, the docs first", "")
 	if err != nil || again.Status != "in-progress" || e.rows()[len(e.rows())-1].Reason != "actually, the docs first" {
 		t.Errorf("re-assign: %+v %v", again, err)
 	}
 	// unassigning changes no status
-	cleared, err := e.m.Assign(ctx, kb, again.ID, again.Rev, "", "")
+	cleared, err := e.m.Assign(ctx, kb, again.ID, again.Rev, "", "", "")
 	if err != nil || cleared.Assignee != "" || cleared.Status != "in-progress" {
 		t.Errorf("unassign: %+v %v", cleared, err)
 	}
 	rows := len(e.rows())
-	if _, err := e.m.Assign(ctx, kb, cleared.ID, cleared.Rev, "", ""); err != nil || len(e.rows()) != rows {
+	if _, err := e.m.Assign(ctx, kb, cleared.ID, cleared.Rev, "", "", ""); err != nil || len(e.rows()) != rows {
 		t.Errorf("clearing an unassigned task wrote: %v", err)
 	}
 	for _, status := range []string{"deferred", "completed", "in-progress", "archived"} {
 		task := e.add(todo.Spec{Title: "s " + status, Status: status})
-		got, err := e.m.Assign(ctx, kb, task.ID, task.Rev, "agent:x", "")
+		got, err := e.m.Assign(ctx, kb, task.ID, task.Rev, "agent:x", "", "")
 		if err != nil || got.Status != status {
 			t.Errorf("assign a %s task: %+v %v", status, got, err)
 		}
@@ -165,7 +165,7 @@ func TestStaleRevIsRefused(t *testing.T) {
 	for name, call := range map[string]func() error{
 		"update": func() error { _, err := e.m.Update(ctx, kb, task.ID, task.Rev, todo.Patch{"title": "v3"}); return err },
 		"status": func() error { _, err := e.m.Status(ctx, kb, task.ID, task.Rev, "deferred"); return err },
-		"assign": func() error { _, err := e.m.Assign(ctx, kb, task.ID, task.Rev, "x", ""); return err },
+		"assign": func() error { _, err := e.m.Assign(ctx, kb, task.ID, task.Rev, "x", "", ""); return err },
 		"remove": func() error { return e.m.Remove(ctx, kb, task.ID, task.Rev) },
 	} {
 		if err := call(); !is(err, todo.ErrStale) {

@@ -267,10 +267,18 @@ func (j *Journal) apply(e todo.Edit) {
 	if j.snap[e.Store] == nil {
 		j.snap[e.Store] = map[string]todo.SnapshotRow{}
 	}
+	rows := e.Scoped(func(id string) (todo.SnapshotRow, bool) {
+		for _, r := range j.snap[e.Store] {
+			if r.ID == id {
+				return r, true
+			}
+		}
+		return todo.SnapshotRow{}, false
+	})
 	for _, p := range e.Delete {
 		delete(j.snap[e.Store], p)
 	}
-	for _, r := range e.Put {
+	for _, r := range rows {
 		j.snap[e.Store][r.Path] = r
 	}
 	if e.Repath != nil {

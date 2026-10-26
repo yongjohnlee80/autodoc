@@ -97,7 +97,10 @@ import (
 // below 29 ignores released. Every session gets the claim at the first write: the refusal was the
 // bug. So does every session's read of a registered root's store not made yet: an empty store's
 // answer, where not_a_store was.
-const Protocol int64 = 29
+// Protocol 30 is ADR 1791532020 r15 §2.5a: todos.assign's optional scope, the assigner's, kept on
+// the assign change (todos.changes' scope) and the task's snapshot row (a resync's), and never read
+// by AutoDoc. A session below 30 sends none and ignores the key; its assignments have no scope.
+const Protocol int64 = 30
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

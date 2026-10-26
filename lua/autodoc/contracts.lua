@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 29,
+  protocol = 30,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -467,7 +467,8 @@ return {
       since = 20, scope = "global", audience = "agent",
       params = {
         { name = "at", type = "workspace | {root}" },
-        { name = "spec", type = "map" }
+        { name = "spec", type = "map" },
+        { name = "scope", type = "string", optional = true }
       },
       result = "task: {id, version, status, title, …, rev, path, description}",
       doc = "Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told.",
@@ -479,7 +480,8 @@ return {
         { name = "id", type = "string" },
         { name = "rev", type = "string" },
         { name = "assignee", type = "string" },
-        { name = "reason", type = "string", optional = true }
+        { name = "reason", type = "string", optional = true },
+        { name = "scope", type = "string", optional = true }
       },
       result = "task: {id, version, status, title, …, rev, path, description}",
       doc = "Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told.",
@@ -491,7 +493,7 @@ return {
         { name = "consumer", type = "string" },
         { name = "limit", type = "int", optional = true }
       },
-      result = "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, hand?, at}], resync?, snapshot?, cursor}",
+      result = "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, scope?, hand?, at}], resync?, snapshot?, cursor}",
       doc = "A consumer's committed changes after its cursor, or a resync when it was away too long.",
     },
     ["todos.claim"] = {

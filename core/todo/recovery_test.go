@@ -74,13 +74,16 @@ func recoveryCases() []recoveryCase {
 	return []recoveryCase{
 		{name: "create", kind: todo.KindAdd,
 			setup: func(e *env) func() error {
-				return func() error { _, err := e.m.Add(ctx, kb, todo.Spec{Title: "new one"}); return err }
+				return func() error { _, err := e.m.Add(ctx, kb, todo.Spec{Title: "new one"}, ""); return err }
 			},
 			before: func(e *env) bool { return !e.exists(open("2026-10-11-new-one")) },
 			after:  func(e *env) bool { return e.exists(open("2026-10-11-new-one")) }},
 		{name: "create by assign", kind: todo.KindAssign,
 			setup: func(e *env) func() error {
-				return func() error { _, err := e.m.Add(ctx, kb, todo.Spec{Title: "theirs", Assignee: "agent:x"}); return err }
+				return func() error {
+					_, err := e.m.Add(ctx, kb, todo.Spec{Title: "theirs", Assignee: "agent:x"}, "")
+					return err
+				}
 			},
 			before: func(e *env) bool { return !e.exists(kbStore + "/in-progress/2026-10-11-theirs.md") },
 			after:  func(e *env) bool { return e.exists(kbStore + "/in-progress/2026-10-11-theirs.md") }},
@@ -104,7 +107,7 @@ func recoveryCases() []recoveryCase {
 		{name: "move by assign", kind: todo.KindAssign,
 			setup: func(e *env) func() error {
 				seed(e, todo.Spec{Title: "t", ID: "t"})
-				return func() error { _, err := e.m.Assign(ctx, kb, "t", seeded.Rev, "agent:x", "go"); return err }
+				return func() error { _, err := e.m.Assign(ctx, kb, "t", seeded.Rev, "agent:x", "go", ""); return err }
 			},
 			before: func(e *env) bool { return e.exists(open("t")) && !e.exists(kbStore+"/in-progress/t.md") },
 			after:  func(e *env) bool { return !e.exists(open("t")) && e.exists(kbStore+"/in-progress/t.md") }},
@@ -321,7 +324,7 @@ func TestAnAmbiguousStoreMoveBlocksWrites(t *testing.T) {
 	}
 	e.revive()
 	e.disk.MkdirAll("/elsewhere/todos") // someone made the target meanwhile
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x"}); !is(err, todo.ErrNotWritable) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x"}, ""); !is(err, todo.ErrNotWritable) {
 		t.Errorf("a write to a store with an ambiguous move: %v", err)
 	}
 	if _, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil {

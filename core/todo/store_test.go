@@ -30,7 +30,7 @@ func TestAStoreIsClaimedByItsFirstWrite(t *testing.T) {
 	if e.exists(kbStore + "/.autodoc-owner") {
 		t.Error("a marker before any write")
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}, ""); err != nil {
 		t.Fatalf("the first write to a workspace's store: %v", err)
 	}
 	if !strings.HasPrefix(e.read(kbStore+"/.autodoc-owner"), "claimed by autodoc at ") {
@@ -44,10 +44,10 @@ func TestAStoreIsClaimedByItsFirstWrite(t *testing.T) {
 	}
 	task := e.get("t")
 	writes := func() map[string]error {
-		_, add := e.m.Add(ctx, kb, todo.Spec{Title: "x"})
+		_, add := e.m.Add(ctx, kb, todo.Spec{Title: "x"}, "")
 		_, upd := e.m.Update(ctx, kb, "t", task.Rev, todo.Patch{"title": "y"})
 		_, st := e.m.Status(ctx, kb, "t", task.Rev, "deferred")
-		_, as := e.m.Assign(ctx, kb, "t", task.Rev, "x", "")
+		_, as := e.m.Assign(ctx, kb, "t", task.Rev, "x", "", "")
 		_, ref := e.m.Refresh(ctx, kb)
 		_, sc := e.m.Scaffold(ctx, kb)
 		_, mv := e.m.MoveStore(ctx, kb, "/kb/moved")
@@ -70,7 +70,7 @@ func TestAStoreIsClaimedByItsFirstWrite(t *testing.T) {
 		t.Errorf("reads after the release: %+v %v", l, err)
 	}
 	e.restart()
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "after a restart"}); !is(err, todo.ErrUnclaimed) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "after a restart"}, ""); !is(err, todo.ErrUnclaimed) {
 		t.Errorf("a released store's write after a restart: %v; want it still released", err)
 	}
 	e.must(e.m.Claim(ctx, kb))
@@ -78,7 +78,7 @@ func TestAStoreIsClaimedByItsFirstWrite(t *testing.T) {
 		t.Errorf("claimed again: %+v %v", r, err)
 	}
 	e.restart()
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "claimed again, after a restart"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "claimed again, after a restart"}, ""); err != nil {
 		t.Errorf("claimed again, after a restart: %v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestAWorkspacesFirstTaskMakesItsStore(t *testing.T) {
 	if _, err := e.disk.FS.Stat(ctx, strings.TrimPrefix(kbStore, "/")); err == nil {
 		t.Fatal("the fixture has a store already")
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}, ""); err != nil {
 		t.Fatalf("the first task of a workspace with no store: %v", err)
 	}
 	for _, b := range todo.Statuses {
@@ -153,7 +153,7 @@ func TestAStoreNotMadeYetReadsEmpty(t *testing.T) {
 	if _, err := e.m.Get(ctx, stray, "nope"); !is(err, todo.ErrNotAStore) {
 		t.Errorf("the get of a root no one registered: %v; want not a store", err)
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}, ""); err != nil {
 		t.Fatalf("the first task after the reads: %v", err)
 	}
 	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 1 {
@@ -186,7 +186,7 @@ func TestPriorityNormalIsTheLegacySpellingOfMedium(t *testing.T) {
 	if got := e.read(kbStore + "/open/old.md"); !strings.Contains(got, "\npriority: medium\n") || strings.Contains(got, "priority: normal") {
 		t.Errorf("the task's next write kept normal:\n%s", got)
 	}
-	added, err := e.m.Add(ctx, kb, todo.Spec{Title: "Given normal", Priority: "normal"})
+	added, err := e.m.Add(ctx, kb, todo.Spec{Title: "Given normal", Priority: "normal"}, "")
 	if err != nil || added.Priority != "medium" {
 		t.Fatalf("a new task given normal: %+v %v; want medium", added, err)
 	}
@@ -210,7 +210,7 @@ func TestNewProjectOrder(t *testing.T) {
 	if _, err := e.m.Scaffold(ctx, at); !is(err, todo.ErrNotWritable) {
 		t.Errorf("scaffolding an unregistered root: %v", err)
 	}
-	if _, err := e.m.Add(ctx, at, todo.Spec{Title: "x"}); !is(err, todo.ErrNotWritable) {
+	if _, err := e.m.Add(ctx, at, todo.Spec{Title: "x"}, ""); !is(err, todo.ErrNotWritable) {
 		t.Errorf("a task in an unregistered root: %v", err)
 	}
 	added, err := e.m.Register(ctx, "/src/proj")
@@ -238,7 +238,7 @@ func TestNewProjectOrder(t *testing.T) {
 	if o, _ := e.m.Scaffold(ctx, at); o.Scaffolded {
 		t.Error("a second scaffold made something")
 	}
-	if _, err := e.m.Add(ctx, at, todo.Spec{Title: "first"}); err != nil {
+	if _, err := e.m.Add(ctx, at, todo.Spec{Title: "first"}, ""); err != nil {
 		t.Error(err)
 	}
 	if _, err := e.m.Register(ctx, "/src/nope"); err == nil {
@@ -322,7 +322,7 @@ func TestConfinement(t *testing.T) {
 	e.must(func() error { _, err := e.m.Register(ctx, "/src/other"); return err }())
 	e.must(e.m.Claim(ctx, other))
 	e.must(e.m.SetKB(ctx, other, "kb"))
-	task, err := e.m.Add(ctx, other, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/x.md"}})
+	task, err := e.m.Add(ctx, other, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/x.md"}}, "")
 	if err != nil || task.ADR[0] != "$KB_ROOT/adrs/x.md" || !e.exists("/src/other/.todo-list/open/"+task.ID+".md") ||
 		e.exists("/kb/.todo-list/open/"+task.ID+".md") {
 		t.Errorf("the store's KB_ROOT: %+v %v", task, err)
@@ -366,7 +366,7 @@ func TestSymlinksAreNotFollowed(t *testing.T) {
 	if _, err := m.Get(ctx, at, "secret"); !is(err, todo.ErrNotFound) {
 		t.Errorf("get through a symlink: %v", err)
 	}
-	if _, err := m.Add(ctx, at, todo.Spec{Title: "t", ID: "secret"}); !is(err, todo.ErrExists) {
+	if _, err := m.Add(ctx, at, todo.Spec{Title: "t", ID: "secret"}, ""); !is(err, todo.ErrExists) {
 		t.Errorf("a create over the symlink: %v (it must neither follow nor replace it)", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(outside, "secret.md")); string(b) != secret {
@@ -392,7 +392,7 @@ func TestSameSizeSameMtimeEditIsCaught(t *testing.T) {
 	if err := m.Claim(ctx, at); err != nil {
 		t.Fatal(err)
 	}
-	task, err := m.Add(ctx, at, todo.Spec{Title: "aaaa"})
+	task, err := m.Add(ctx, at, todo.Spec{Title: "aaaa"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +618,7 @@ func TestScaffoldAnEmptyOverride(t *testing.T) {
 	if err != nil || !o.Scaffolded || !e.exists("/plain/.autodoc-owner") {
 		t.Fatalf("scaffold: %+v %v", o, err)
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "t"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "t"}, ""); err != nil {
 		t.Error(err)
 	}
 }
@@ -709,7 +709,7 @@ func TestAWritesClaimLeavesAReleaseMadeMeanwhile(t *testing.T) {
 		e.must(m.Release(ctx, kb))
 		released = true
 	}
-	_, err := m.Add(ctx, kb, todo.Spec{Title: "a write meeting a release"})
+	_, err := m.Add(ctx, kb, todo.Spec{Title: "a write meeting a release"}, "")
 	if !released {
 		t.Fatal("the release never landed between the write's read and its claim")
 	}
@@ -726,7 +726,7 @@ func TestAWritesClaimLeavesAReleaseMadeMeanwhile(t *testing.T) {
 // so after a restart it is still released, and a write is still refused rather than claiming it.
 func TestAFailedClaimOfAReleasedStoreKeepsItReleased(t *testing.T) {
 	e := claimed(t)
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "kept"}); err != nil {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "kept"}, ""); err != nil {
 		t.Fatal(err)
 	}
 	e.must(e.m.Release(ctx, kb))
@@ -744,7 +744,7 @@ func TestAFailedClaimOfAReleasedStoreKeepsItReleased(t *testing.T) {
 	if r, err := e.m.Resolve(ctx, kb); err != nil || r.Claimed || !r.Released {
 		t.Fatalf("after the failed claim and a restart: %+v %v; want released as before", r, err)
 	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x"}); !is(err, todo.ErrUnclaimed) {
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x"}, ""); !is(err, todo.ErrUnclaimed) {
 		t.Fatalf("a write to the store still released: %v; want it refused", err)
 	}
 }
