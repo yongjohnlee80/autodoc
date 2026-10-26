@@ -73,8 +73,12 @@ type Compaction struct {
 	Before, After int64
 }
 
-// freeSpace is the free space on the file system holding dir, in bytes, as an unprivileged writer
-// sees it (a variable, so a test can say there is none).
+// FreeSpace is the free space on the file system holding dir, in bytes, as an unprivileged writer
+// sees it: what compaction checks before it copies the store, and what the host probe reports
+// (core/hostprobe).
+func FreeSpace(dir string) (int64, error) { return freeSpace(dir) }
+
+// freeSpace is FreeSpace's reading (a variable, so a test can say there is none).
 var freeSpace = func(dir string) (int64, error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(dir, &st); err != nil {
