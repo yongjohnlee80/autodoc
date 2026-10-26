@@ -323,6 +323,9 @@ type keyset struct {
 	// live is the App's key map, which a card and help name keys by (shown): nil, before the
 	// program runs, names every key by its Show.
 	live *keymap.Map
+	// panelKeys: the panel moves (App.movePane's keys) are the terminals' host keys too, the
+	// preference tui.terminal.panel_keys (terminal.go)
+	panelKeys bool
 }
 
 // shown is how a card or help names key: its Show (its Seq when it has none) while its command holds
@@ -456,9 +459,18 @@ func (k keyset) keysValue(id string) tuidecl.Keys {
 	return tuidecl.Keys(slices.Clone(cmds[i].Keys))
 }
 
-// terminalKeys are the terminals' key sources, as the map binds them now.
+// movePaneIDs are App.movePane's commands, one per direction (windowKeys).
+var movePaneIDs = []string{"autodoc.window.movePane.h", "autodoc.window.movePane.j", "autodoc.window.movePane.k", "autodoc.window.movePane.l"}
+
+// terminalKeys are the terminals' key sources, as the map binds them now: with panelKeys, the panel
+// moves are host keys too, so a moved binding moves what the programs lose.
 func (k keyset) terminalKeys() map[string]any {
 	host := tuidecl.Keys(slices.Concat(k.keysValue(maximizeID), k.keysValue(suspendID))) // a copy: never the map's own slices
+	if k.panelKeys {
+		for _, id := range movePaneIDs {
+			host = append(host, k.keysValue(id)...)
+		}
+	}
 	return map[string]any{"App.terminalHostKeys": host, "App.terminalModeKey": k.keysValue(terminalModeID)}
 }
 

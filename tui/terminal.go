@@ -74,7 +74,20 @@ func terminalPrefRows(t *terminals) []PrefSpec {
 		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
 		theme = theme.then(func(prefs) { t.showLook() })
 	}
-	return []PrefSpec{row, theme}
+	return []PrefSpec{row, theme, panelKeysRow()}
+}
+
+// PANEL KEYS WHILE TYPING (v0.3.1) — Ctrl+h/j/k/l move between panels from a terminal's or an
+// agent's input mode too. Their keys, as the map binds App.movePane, are the panels' host keys
+// (App.terminalHostKeys, keys.go), so the program never sees them; Ctrl+\ then one sends it to the
+// program (golib's escape prefix). Options › Terminal turns it off, and they are the program's again.
+// Arriving at either panel by one of them puts its tab in input mode, ready to type (panels.go).
+const prefTermPanelKeys = "tui.terminal.panel_keys"
+
+// panelKeysRow is the preference: on by default; the menu's check follows it.
+func panelKeysRow() PrefSpec {
+	return boolPref(prefTermPanelKeys, true, func(p *prefs) *bool { return &p.termPanelKeys }).
+		shows(func(p prefs) map[string]any { return map[string]any{"App.terminalPanelKeys": p.termPanelKeys} })
 }
 
 // THE TERMINALS' THEME — the colours the terminal's and the agents' shells are drawn in, on their

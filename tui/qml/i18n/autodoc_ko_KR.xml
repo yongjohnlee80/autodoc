@@ -771,6 +771,14 @@
         <source>search models</source>
         <translation>검색 모델</translation>
     </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>입력 중에도 Ctrl+h/j/k/l로 패널 이동</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys.help">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>입력 중에도 Ctrl+h/j/k/l로 패널 이동</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>결과: 선택 복사 (선택한 셀, 또는 커서의 셀을 TSV로)</translation>
@@ -2448,7 +2456,9 @@
               editor mode's Insert, Ctrl+W is Vim's: it deletes the word before the cursor (Esc
               first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
               Normal-mode command
-  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
+  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page; in the
+              terminal and agent panels too, while typing (Options › Terminal turns that off),
+              and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
@@ -2513,7 +2523,8 @@
               편집기 모드의 Insert에서 Ctrl+W는 Vim의 키로, 커서 앞 단어를 지웁니다 (전환하려면
               먼저 Esc). Insert의 Ctrl+U는 들여쓰기까지 지우고, Ctrl+O는 Normal 모드 명령을
               하나 실행합니다
-  Ctrl+h/j/k/l  Normal 모드에서 그쪽에 열린 패널로, 그리고 다시 페이지로
+  Ctrl+h/j/k/l  Normal 모드에서 그쪽에 열린 패널로, 그리고 다시 페이지로. 터미널과 에이전트 패널에서는
+              입력 중에도 되며(옵션 › 터미널에서 끌 수 있음), 이 키로 도착하면 바로 입력할 수 있습니다
   F6 and Shift+F6  다음 또는 이전에 열린 위젯: 편집기와 패널 (메뉴 막대는 제외).
               SPC Tab 또는 :go &lt;name&gt;으로 이름을 지정해 이동합니다 (이동 › 위젯…)
   F10, Alt+letter  메뉴 막대. 그 전까지는 숨겨져 있습니다 (옵션 › 편집기 환경설정에서 유지 가능).
@@ -2638,7 +2649,13 @@ THE PANELS
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  shell, Esc too, but Ctrl+Z (no program stops on it, and Resume wakes one a suspend stopped)
+  and Ctrl+h/j/k/l, which move between panels. Ctrl+\ then one of these sends it to the program
+  after all: Ctrl+\ Ctrl+j is an agent's newline, Ctrl+\ Ctrl+l clears the shell. In a terminal
+  whose Backspace sends ^H (stty erase ^H), Ctrl+H can't be told from Backspace without kitty's
+  keyboard protocol: there Ctrl+H is Backspace everywhere, the page's Normal mode included. In one
+  whose Backspace is DEL but whose Ctrl+Backspace sends ^H (GNOME Terminal, Windows Terminal),
+  that Ctrl+Backspace is Ctrl+H and moves a panel. kitty, Ghostty, WezTerm and foot tell them apart.
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
@@ -2758,7 +2775,7 @@ WHAT A KEY NEEDS
   모든 셸을 멈추고 패널을 닫습니다(실행 중인 것이 있으면 한 번만 물음). 테마 및 글꼴…(환경설정의 터미널 행과 옵션 › 글꼴
   및 확대/축소…에서도)은 터미널의 테마(텍스트, 배경, 커서만. 프로그램 자체의
   색상은 그대로)와 창에서의 글꼴을 설정합니다. 그 안에서 Esc를 누르면 원래대로 되돌립니다. 모든 키는
-  셸로 가며 Esc도 마찬가지이지만, Ctrl+Z는 가지 않으므로 프로그램이 그 키로 멈추지 않고, 일시 중지로 멈춘 것은 재개로 다시 실행됩니다. Ctrl+T (또는 Ctrl+\ Ctrl+n)로 Normal 모드로 나가면 h j k l, w b e, gg G,
+  셸로 가며 Esc도 마찬가지이지만, Ctrl+Z(프로그램이 그 키로 멈추지 않고, 일시 중지로 멈춘 것은 재개로 다시 실행됩니다)와 패널 사이를 이동하는 Ctrl+h/j/k/l은 가지 않습니다. 이 키들은 Ctrl+\ 다음에 누르면 프로그램으로 보냅니다: Ctrl+\ Ctrl+j는 에이전트의 줄바꿈, Ctrl+\ Ctrl+l은 셸 화면 지우기입니다. Backspace가 ^H를 보내는 터미널(stty erase ^H)에서는 kitty 키보드 프로토콜 없이 Ctrl+H와 Backspace를 구별할 수 없어, 페이지의 Normal 모드를 포함해 어디서나 Ctrl+H가 Backspace가 됩니다. Backspace는 DEL인데 Ctrl+Backspace가 ^H를 보내는 터미널(GNOME Terminal, Windows Terminal)에서는 그 Ctrl+Backspace가 Ctrl+H가 되어 패널을 옮깁니다. kitty, Ghostty, WezTerm, foot은 둘을 구별합니다. Ctrl+T (또는 Ctrl+\ Ctrl+n)로 Normal 모드로 나가면 h j k l, w b e, gg G,
   Ctrl+u/d/b/f, /와 ?로 기록을 이동하고, v 또는 V로 선택, y로 복사하며, Ctrl+T, i 또는
   Enter로 돌아갑니다. 에이전트 패널의 키도 같습니다.
   Normal 모드에서 Escape를 누르거나 SPC `를 다시 누르면 숨겨지고, 키보드 포커스는 아직 열려 있는 맨 위 창으로 갑니다.
@@ -3424,6 +3441,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.terminal_2">
         <source>terminal</source>
         <translation>터미널</translation>
+    </message>
+    <message id="autodoc.main.terminal_options">
+        <source>Termi&amp;nal</source>
+        <translation>터미널(&amp;n)</translation>
+    </message>
+    <message id="autodoc.main.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between &amp;panels while typing</source>
+        <translation>입력 중에도 Ctrl+h/j/k/l로 패널 이동(&amp;p)</translation>
     </message>
     <message id="autodoc.main.theme">
         <source>&amp;Theme</source>

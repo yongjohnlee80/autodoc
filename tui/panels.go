@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -229,6 +230,26 @@ func (h *Host) movePane(dir string) {
 	}
 	if to, ok := nextWindow(shown, from, step); ok {
 		h.focusWindow(to.panel)
+		h.typeIn(to.panel) // a move arrives ready to type; a click, SPC or reopening keeps the tab's mode
+	}
+}
+
+// typeIn puts panel's current tab in input mode, when panel is the terminal's or the agents': a
+// Ctrl+h/j/k/l move arrives there to type (v0.3.1). A tab with no program has no mode to leave.
+func (h *Host) typeIn(panel string) {
+	s := h.panelSpec(panel)
+	if s == nil || !slices.Contains(terminalPanels, s.View) {
+		return
+	}
+	c, ok := h.p.Find(s.View)
+	if !ok {
+		return
+	}
+	if tabs, ok := tuidecl.TerminalTabsOf(c); ok {
+		if id := tabs.Active(); id != "" {
+			_ = tabs.Select(id)                        // the keyboard in the tab's terminal, not the panel around it
+			_ = tabs.SetMode(id, widget.TerminalInput) // Input needs no program: never refused
+		}
 	}
 }
 
