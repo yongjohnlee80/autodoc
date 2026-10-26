@@ -53,18 +53,44 @@ Each Markdown section is embedded as an independent stateless request. However, 
 
 ### Starting Local Ollama and TEI Servers
 
+Pull the embedding models into Ollama (`http://127.0.0.1:11434`):
+
 ```sh
-# 1. Pull recommended local embedding models in Ollama (http://127.0.0.1:11434)
 ollama pull qwen3-embedding:0.6b
 ollama pull qwen3-embedding:4b
-
-# 2. Launch HuggingFace TEI with BAAI/bge-reranker-v2-m3 on port 8080 (Docker GPU or CPU)
-docker run -d --name autodoc-reranker \
-  --gpus all -p 127.0.0.1:8080:80 \
-  -v ~/.cache/huggingface:/data \
-  ghcr.io/huggingface/text-embeddings-inference:1.5 \
-  --model-id BAAI/bge-reranker-v2-m3
 ```
+
+Start the TEI reranker with the script AutoDoc ships, [`shell/tei/tei-rerank.sh`](../../shell/tei/README.md). It runs [`compose/tei-rerank/docker-compose.yaml`](../../compose/tei-rerank/docker-compose.yaml) on an NVIDIA GPU when it finds one, and on the CPU otherwise. It picks the image tag for your GPU, waits until TEI answers, and serves it on **`http://127.0.0.1:18080`** (`TEI_PORT` changes the port):
+
+```sh
+shell/tei/tei-rerank.sh up             # GPU if one is found, else CPU; BAAI/bge-reranker-v2-m3
+shell/tei/tei-rerank.sh status         # what runs, and the model it serves
+shell/tei/tei-rerank.sh switch base    # another reranker (`models` lists them)
+shell/tei/tei-rerank.sh down
+```
+
+The GPU needs the NVIDIA Container Toolkit; the script's [README](../../shell/tei/README.md) lists what else it needs, and how to measure a model's accuracy on your own documents.
+
+> [!WARNING]
+> **TEI's GPU images are built for one compute capability each.** The bare version tag (`:1.9`) is the Ampere 8.0 (A100) build only. On any other GPU, the container stops at start with `Runtime compute cap N is not compatible with compile time compute cap 80`. `tei-rerank.sh` reads your GPU's capability (`nvidia-smi --query-gpu=compute_cap`) and picks the tag. If you run TEI yourself, pick it the same way:
+>
+> | compute capability | GPUs | tag |
+> |---|---|---|
+> | 12.0 | RTX 50 series (Blackwell) | `120-1.9` |
+> | 12.1 | DGX Spark (GB10) | `121-1.9` |
+> | 10.0 | B200 (Blackwell) | `100-1.9` |
+> | 9.0 | H100 (Hopper) | `hopper-1.9` |
+> | 8.9 | RTX 40 series (Ada) | `89-1.9` |
+> | 8.6 | RTX 30 series, A40 (Ampere) | `86-1.9` |
+> | 8.0 | A100 (Ampere) | `1.9` |
+> | 7.5 | RTX 20 series, T4 (Turing) | `turing-1.9` |
+> | no NVIDIA GPU | | `cpu-1.9` |
+>
+> To check that a tag exists, ask the registry for that tag's manifest (`docker manifest inspect ghcr.io/huggingface/text-embeddings-inference:120-1.9`). Don't search the list of tags: the registry returns it in pages, alphabetically, so a page without the tag doesn't prove it's missing.
+
+#### Checking the ranker through AutoDoc
+
+Check a ranker through AutoDoc, never by calling TEI by hand. `search.query`'s `rank` block names the model that ranked the search, with its `state` and any `error`, and `ranker.log` lists each call with its `texts`, `millis` and `outcome`. A raw request can mislead: TEI's `/info` says `max_client_batch_size` (32 by default), and a direct `POST /rerank` of more texts fails with HTTP 422. That doesn't mean the ranker window of 40 is too large. AutoDoc reads that limit from `/info` and sends the window in batches no larger than it, so `ranker.log` shows `texts: 40` with outcome `ok`.
 
 ---
 
@@ -130,7 +156,7 @@ While `embedding.use` sets the daemon-wide default provider, individual workspac
 
 Stage 3 cross-encoder rerankers are managed through the **Ranker Models** tab in `SPC s` or via the `ranker.*` (`rank.*`) RPC methods. AutoDoc supports two external ranker kinds plus compile-time supplied rankers:
 
-1. **`"tei"`:** HuggingFace Text Embeddings Inference `/rerank` endpoint (`http://127.0.0.1:8080`). AutoDoc queries `/info` (`ranker.models`) to discover the loaded cross-encoder model automatically.
+1. **`"tei"`:** HuggingFace Text Embeddings Inference `/rerank` endpoint (`http://127.0.0.1:18080`, as `tei-rerank.sh` serves it). AutoDoc queries `/info` (`ranker.models`) to discover the loaded cross-encoder model automatically.
 2. **`"rerank-api"`:** Any Cohere/Voyage/Jina-compatible `/v1/rerank` HTTP endpoint taking `{"model", "query", "documents", "top_n"}` and returning `relevance_score` per candidate.
 
 ```sh
@@ -139,7 +165,7 @@ autodoc --call ranker.add '[
   {
     "name": "tei-bge-m3",
     "kind": "tei",
-    "base_url": "http://127.0.0.1:8080",
+    "base_url": "http://127.0.0.1:18080",
     "model": "BAAI/bge-reranker-v2-m3"
   }
 ]'
