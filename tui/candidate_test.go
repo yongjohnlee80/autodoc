@@ -93,7 +93,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
-	r.s.WaitForText(t, "audit of echo handed to Scribe")
+	r.s.WaitForText(t, "audit of echo typed into Scribe's input")
 	if strings.Contains(r.s.String(), "Yes, at my own risk") || r.card() != nil {
 		t.Fatal("the card stayed up while the audit was handed over")
 	}
@@ -101,7 +101,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.clickText(t, "audit of echo handed")
+	r.clickText(t, "audit of echo typed")
 	r.question(t)
 	if r.card() != c {
 		t.Fatal("the toast reopened another candidate")
@@ -115,7 +115,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatalf("the second audit's copy %s is not fresh beside the first's %s", copy2, copy1)
 	}
 
-	r.clickText(t, "audit of echo handed")
+	r.clickText(t, "audit of echo typed")
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at "+full[:7])

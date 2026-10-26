@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/yongjohnlee80/golib/tui/widget"
+
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
@@ -352,17 +354,21 @@ func (cs *candidates) auditWith(a AgentEntry) {
 	})
 }
 
-// handOver gives the audit task to a. done(nil) means typed and submitted, never that the audit
-// ran: the toast says it was handed over, and no more. A refusal ends the toast and reopens the card.
+// handOver gives the audit task to a. done(nil) means typed into its input, for the user's Enter
+// (ADR 1792991980 §4.2), never that the audit ran: the toast says so, and no more. A refusal ends
+// the toast and reopens the card.
 func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
-	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel", c.name, a.Name))
+	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
 			return
 		}
 		why := err.Error()
-		if errors.Is(err, ErrAgentCancelled) {
+		switch {
+		case errors.Is(err, ErrAgentCancelled):
 			why = cs.c.Trf("autodoc.notice.candidate.you_didn_t_start", a.Name)
+		case errors.Is(err, widget.ErrTerminalPasteUnbracketed):
+			why = cs.c.Tr("autodoc.notice.candidate.its_program_takes_no_bracketed_paste")
 		}
 		c.toasted = false
 		cs.c.NotifyDone(c.toastID(), cs.c.Trf("autodoc.notice.candidate.audit_of_not_delivered", c.name, why))

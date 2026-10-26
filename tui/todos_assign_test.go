@@ -11,27 +11,38 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
-// hearingAgent is an agent that writes every line typed to it into heard-<its first argument> in
-// dir, so a cell reads what HandTask delivered without reading a terminal's screen.
+// hearingAgent is an agent that takes bracketed pastes (mode 2004), as agent CLIs do, and writes
+// every byte it is sent, its tty raw, into heard-<its first argument> in dir.
 func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "hearing-agent")
-	script := "#!/bin/sh\necho \"started $1\"\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " +
-		shellQuote(dir) + "/heard-\"$1\"; done\n"
+	script := "#!/bin/sh\necho \"started $1\"\nstty raw -echo\nprintf '\\033[?2004h'\nexec cat >> " +
+		shellQuote(dir) + "/heard-\"$1\"\n"
 	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
 
-// heard is what agent name has been told, line by line.
-func heard(dir, name string) []string {
+// heardRaw is every byte agent name has been sent.
+func heardRaw(dir, name string) string {
 	b, _ := os.ReadFile(filepath.Join(dir, "heard-"+name))
-	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	return string(b)
+}
+
+// heard is what agent name has been pasted, line by line, paste after paste.
+func heard(dir, name string) []string {
+	var lines []string
+	for _, p := range strings.Split(heardRaw(dir, name), "\x1b[200~")[1:] {
+		p, _, _ = strings.Cut(p, "\x1b[201~")
+		lines = append(lines, strings.Split(p, "\n")...)
+	}
+	return lines
 }
 
 // taskIn is the task titled title in bucket of kb's store, if it is there.
@@ -121,11 +132,18 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	if _, err := d.todoDisk.ReadFile(file); err != nil {
 		t.Fatalf("the path handed over is not the task's file: %v", err)
 	}
-	r.s.WaitFor(t, "the delivery told", func(string) bool { return r.noticed("assigned to Scribe, and handed to its terminal") })
-	// the agent's panel opened as Scribe started; on this small screen it covers the todos' detail:
-	// SPC g's toggle hides it, Scribe running on
+	r.s.WaitFor(t, "the delivery told", func(string) bool {
+		return r.noticed("assigned to Scribe, and typed into its input: press Enter there to send it")
+	})
+	// no Enter (ADR 1792991980 §4.2): the task waits in Scribe's input, its panel open and the
+	// keyboard in it; on this small screen it covers the todos' detail: SPC g's toggle hides it,
+	// Scribe running on
+	if raw := heardRaw(heardDir, "scribe"); strings.ContainsRune(raw, '\r') || !strings.HasSuffix(raw, "\x1b[201~") {
+		t.Fatalf("Scribe was sent more than one paste: %q", raw)
+	}
 	agentShown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	r.s.WaitFor(t, "the agent's panel open", func(string) bool { return agentShown() })
+	r.s.WaitFor(t, "the keyboard in the agent", func(string) bool { return r.focused("agentView") })
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent's panel hidden", func(string) bool { return !agentShown() })
 	r.s.WaitForText(t, "status: in-progress") // the cursor followed the task
@@ -168,6 +186,11 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitFor(t, "Scribe told again", func(string) bool { return len(heard(heardDir, "scribe")) >= 8 })
 	if got := heard(heardDir, "scribe"); got[4] != "Task: Fix the typos" || got[7] != "Instruction: Read the ADR first" {
 		t.Fatalf("Scribe heard %q", got)
+	}
+	// its hidden panel brought forward for the Enter, none typed
+	r.s.WaitFor(t, "the agent's panel open again", func(string) bool { return agentShown() && r.focused("agentView") })
+	if strings.ContainsRune(heardRaw(heardDir, "scribe"), '\r') {
+		t.Fatalf("an Enter reached Scribe: %q", heardRaw(heardDir, "scribe"))
 	}
 	if strings.Contains(r.s.String(), "start the agent?") {
 		t.Fatal("a running agent was asked about")
@@ -275,9 +298,11 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 		t.Fatalf("handed %+v", h)
 	}
 	h.done(nil)
-	h.done(ErrAgentCancelled) // as a second A's would: each says how it went
-	if len(c.notes) != 2 || c.notes[0] != "todos: assigned to Scribe, and handed to its terminal" ||
-		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") {
+	h.done(ErrAgentCancelled)                  // as a second A's would: each says how it went
+	h.done(widget.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
+	if len(c.notes) != 3 || c.notes[0] != "todos: assigned to Scribe, and typed into its input: press Enter there to send it" ||
+		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") ||
+		c.notes[2] != "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task" {
 		t.Fatalf("notes %q", c.notes)
 	}
 

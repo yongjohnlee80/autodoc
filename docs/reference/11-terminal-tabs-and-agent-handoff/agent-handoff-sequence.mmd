@@ -21,7 +21,8 @@ sequenceDiagram
         User-->>Agents: Confirm start (&Yes)
         Agents->>Agents: Write workspace guide & spawn PTY tab
     end
-    Agents->>Agents: Focus agent tab & send bracketed paste (Task, File, ID, Instruction)
-    Agents->>Agents: Wait agentSubmitDelay (60ms) then send Enter (\r)
+    Agents->>Agents: Send bracketed paste (Task, File, ID, Instruction), no Enter
+    Agents->>User: Open agent panel, tab selected, keyboard in input mode
     Agents-->>Todos: Delivery complete callback on UI loop
-    Todos-->>User: Toast: "todos: assigned to Claude Code, and handed to its terminal"
+    Todos-->>User: Toast: "todos: assigned to Claude Code, and typed into its input: press Enter there to send it"
+    User->>Agents: Enter (submits the task)

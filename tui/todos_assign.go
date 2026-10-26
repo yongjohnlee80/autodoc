@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // ASSIGN — A in the todos panel hands the task under the cursor to one of AutoDoc's own agents, as
@@ -167,10 +168,15 @@ func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assig
 	}
 }
 
-// handedOver says how the hand-over went. The assignment stands either way.
+// handedOver says how the hand-over went. The assignment stands either way. Delivered, the task
+// waits in the agent's input for the user's Enter (ADR 1792991980 §4.2).
 func (t *todos) handedOver(name, assignee string, err error) {
 	if err == nil {
-		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_and_handed_to_its_terminal", name))
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input", name))
+		return
+	}
+	if errors.Is(err, widget.ErrTerminalPasteUnbracketed) {
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste", name))
 		return
 	}
 	why := err.Error()

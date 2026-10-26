@@ -416,7 +416,8 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 
 // Use starts another profile while the first keeps its own process and token.
 func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	heardDir := t.TempDir()
+	agent := hearingAgent(t, heardDir)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
 		{Name: "one", Command: agent + " first"},
 		{Name: "two", Command: agent + " second"},
@@ -452,13 +453,15 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("accepted task did not finish delivery")
 	}
-	onLoop(r, func() bool { r.h.agents.useAgent(0); return true })
-	r.s.WaitForText(t, "heard-Task: only-first")
+	r.s.WaitFor(t, "first told", func(string) bool {
+		got := heard(heardDir, "first")
+		return len(got) > 0 && got[0] == "Task: only-first"
+	})
+	if got := heardRaw(heardDir, "second"); got != "" {
+		t.Fatalf("task intended for first instance leaked to second: %q", got)
+	}
 	onLoop(r, func() bool { r.h.agents.useAgent(1); return true })
 	r.s.WaitForText(t, "started second")
-	if strings.Contains(r.s.String(), "heard-Task: only-first") {
-		t.Fatal("task intended for first instance leaked to second")
-	}
 	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
 	}

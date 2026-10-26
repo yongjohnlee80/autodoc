@@ -45,8 +45,12 @@ type TerminalPanel interface {
 	Add(label string, config TerminalConfig) (widget.TerminalTabID, error)
 	Select(widget.TerminalTabID) error
 	Start(widget.TerminalTabID) error
-	SendText(widget.TerminalTabID, string) error
-	SendPaste(widget.TerminalTabID, string) error
+	// SendBracketedPaste is a paste only to a program that asked for bracketed paste: any other is
+	// refused, nothing sent (widget.ErrTerminalPasteUnbracketed). It is the only paste here: what
+	// AutoDoc sends a tab is text the user didn't type, never keys (ADR 1792991980).
+	SendBracketedPaste(widget.TerminalTabID, string) error
+	// SetMode puts the tab in a mode; Input needs no program.
+	SetMode(widget.TerminalTabID, widget.TerminalMode) error
 	// Resume sends a SIGCONT to the tab's program (its process group): one stopped by its own Ctrl+Z
 	// runs again. A running one is not disturbed.
 	Resume(widget.TerminalTabID) error
@@ -86,11 +90,11 @@ func (p terminalPanel) Add(label string, config TerminalConfig) (widget.Terminal
 }
 func (p terminalPanel) Select(id widget.TerminalTabID) error { return p.tabs.Select(id) }
 func (p terminalPanel) Start(id widget.TerminalTabID) error  { return p.tabs.Start(id) }
-func (p terminalPanel) SendText(id widget.TerminalTabID, text string) error {
-	return p.tabs.SendText(id, text)
+func (p terminalPanel) SendBracketedPaste(id widget.TerminalTabID, text string) error {
+	return p.tabs.SendBracketedPaste(id, text)
 }
-func (p terminalPanel) SendPaste(id widget.TerminalTabID, text string) error {
-	return p.tabs.SendPaste(id, text)
+func (p terminalPanel) SetMode(id widget.TerminalTabID, mode widget.TerminalMode) error {
+	return p.tabs.SetMode(id, mode)
 }
 func (p terminalPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {
 	return p.tabs.Remove(id)
