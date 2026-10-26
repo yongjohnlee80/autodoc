@@ -8,8 +8,10 @@
 ---  require("autodoc.todos").list("kb", {}, function(listing, err) … end)
 ---  require("autodoc.todos").update("kb", id, rev, { priority = "high" }, cb)
 ---
----`autodoc --contracts 'todos.*'` describes every verb: its params, its answer and its errors. Until
----the cutover claims a store, its writes answer -32077 (todos.unclaimed).
+---`autodoc --contracts 'todos.*'` describes every verb: its params, its answer and its errors. A
+---workspace's store is the daemon's from its first write, which makes it; until then it reads as an
+---empty one. Only a store todos.release gave back answers its writes -32077 (todos.unclaimed), until
+---todos.claim.
 ---@module 'autodoc.todos'
 
 local contract = require("autodoc.contract")
