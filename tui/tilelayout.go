@@ -204,7 +204,9 @@ func layoutChoices(c any, id string, row rowMaker) []widget.MenuItemModel {
 	for _, e := range tileEdgeRows {
 		r := row("layout.tiled."+e.edge, e.label, func() {
 			h.SetPref(tileEdgeKey(id), e.edge) // the edge first: a floating panel then tiles once, there
-			if !tiled {
+			// the Layout as it is now, not as the menu was built: a reload while it was open may
+			// have floated the panel
+			if h.Prefs().Value(layoutKey(id)) != layoutTiled {
 				h.SetPref(layoutKey(id), layoutTiled)
 			}
 		})
