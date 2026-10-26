@@ -35,14 +35,18 @@ func (h *Host) resolveOpenPath(p string) (string, error) {
 	return filepath.Join(root, filepath.FromSlash(p)), nil
 }
 
-// runOpenPath is file.open_path's Run: the path is the whole line after the verb, spaces and all,
-// as ':' gives it; a key's or autodoc.run's one argument otherwise.
+// runOpenPath is file.open_path's Run. From ':' the path is the whole line after the verb, spaces
+// and all, as resolveOpenPath takes it. Run any other way (a key, autodoc.run, a plugin's
+// host.call), it takes one absolute path, as it always has: a relative path there is refused.
 func (h *Host) runOpenPath(x Invocation) error {
-	p := x.Line
-	if strings.TrimSpace(p) == "" && len(x.Args) == 1 {
-		p = x.Args[0]
+	if x.Name == "" {
+		if len(x.Args) != 1 || !filepath.IsAbs(x.Args[0]) {
+			return errors.New("file.open_path: takes one absolute path")
+		}
+		h.openAbsolute(x.Args[0])
+		return nil
 	}
-	abs, err := h.resolveOpenPath(p)
+	abs, err := h.resolveOpenPath(x.Line)
 	if err != nil {
 		return err
 	}
@@ -95,7 +99,7 @@ func commandRows(entries []*Entry, names func(id string) []string, core []widget
 		if ns := names(e.ID); len(ns) > 0 {
 			row["name"] = ns[0]
 			if len(ns) > 1 {
-				row["aliases"] = slices.Clone(ns[1:])
+				row["aliases"] = anys(ns[1:]) // msgpack takes []any, not []string
 			}
 		}
 		if e.Args != "" {
@@ -117,7 +121,7 @@ func commandRows(entries []*Entry, names func(id string) []string, core []widget
 	for _, c := range own {
 		row := map[string]any{"name": c.Name, "source": "editor"}
 		if len(c.Aliases) > 0 {
-			row["aliases"] = slices.Clone(c.Aliases)
+			row["aliases"] = anys(c.Aliases)
 		}
 		if c.Args != "" {
 			row["args"] = c.Args
@@ -168,7 +172,25 @@ func commandsReference(entries []*Entry) string {
 	return b.String()
 }
 
-func asStrings(v any) []string { s, _ := v.([]string); return s }
+// anys is s as []any, the shape msgpack encodes.
+func anys(s []string) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		out[i] = v
+	}
+	return out
+}
+
+// asStrings is a row's []any of strings back as strings.
+func asStrings(v any) []string {
+	var out []string
+	for _, x := range asList(v) {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // commandLineRefusal is editor.run's refusal of line: a verb no ':' command has is named, with
 // where the names are, in place of the command line's own words.

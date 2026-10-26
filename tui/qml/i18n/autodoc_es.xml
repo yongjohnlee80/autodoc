@@ -604,8 +604,8 @@
         <translation>abrir un archivo por su ruta</translation>
     </message>
     <message id="autodoc.cmd.file.open_path.help">
-        <source>open a file by its path, absolute or relative to the workspace in use, as File › Open any file does once it is chosen: its workspace's when one indexes it</source>
-        <translation>abrir un archivo por su ruta, absoluta o relativa al espacio de trabajo en uso, como hace Archivo › Abrir cualquier archivo al elegirlo: en su espacio de trabajo si alguno lo indexa</translation>
+        <source>open a file by its path, as File › Open any file does once it is chosen: on the command line absolute, ~/… or relative to the workspace in use; from Lua, a key or a plugin, absolute</source>
+        <translation>abrir un archivo por su ruta, como hace Archivo › Abrir cualquier archivo al elegirlo: en la línea de comandos absoluta, ~/… o relativa al espacio de trabajo en uso; desde Lua, una tecla o un plugin, absoluta</translation>
     </message>
     <message id="autodoc.cmd.file.open_recent">
         <source>recent files</source>

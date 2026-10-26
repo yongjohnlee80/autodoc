@@ -58,7 +58,7 @@ configuration. `editor.commands` lists them with the rest.
 | `file.open` |  |  | open a document |
 | `file.open_any` |  |  | open a file anywhere |
 | `file.open_default_app` |  |  | open with the default app |
-| `file.open_path` | `:open`, `:e`, `:edit` | `<path>` | open a file by its path, absolute or relative to the workspace in use, as File › Open any file does once it is chosen: its workspace's when one indexes it |
+| `file.open_path` | `:open`, `:e`, `:edit` | `<path>` | open a file by its path, as File › Open any file does once it is chosen: on the command line absolute, ~/… or relative to the workspace in use; from Lua, a key or a plugin, absolute |
 | `file.open_recent` |  |  | recent files |
 | `file.outline` |  |  | the file's outline |
 | `file.preview_diagram` |  |  | view the diagram |
