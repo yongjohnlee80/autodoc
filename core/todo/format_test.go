@@ -12,9 +12,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
-// Golden files are auto-core's own md.encode(md.decode(f)) of each testdata/render input,
-// produced by its Lua (v0.3.2) under luajit: Go's rendering must equal them byte for byte.
-func TestRenderMatchesAutoCore(t *testing.T) {
+// Golden files are the format's first writer's own rendering of each testdata/render input (its Lua,
+// v0.3.2, under luajit), the managed header since worded as AutoDoc writes it: Go's rendering must
+// equal them byte for byte.
+func TestRenderMatchesTheGoldens(t *testing.T) {
 	inputs, _ := filepath.Glob("testdata/render/*.md")
 	if len(inputs) == 0 {
 		t.Fatal("no fixtures")
@@ -28,10 +29,10 @@ func TestRenderMatchesAutoCore(t *testing.T) {
 			continue
 		}
 		if got := encode(task); !bytes.Equal(got, want) {
-			t.Errorf("%s: rendering differs from auto-core's:\n%s\n--- want ---\n%s", in, got, want)
+			t.Errorf("%s: rendering differs from the golden:\n%s\n--- want ---\n%s", in, got, want)
 		}
 		// rendering is a fixed point: what the daemon writes reads back as itself. A title spanning
-		// lines is the exception, in auto-core as here: its H1 takes only its first line back.
+		// lines is the exception, as it always was: its H1 takes only its first line back.
 		if strings.Contains(task.Title, "\n") {
 			continue
 		}
@@ -284,5 +285,30 @@ func TestRefErrorsKeepDetected(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+}
+
+// A file carries the managed header as either writer worded it. A read strips either from the
+// description, and a write writes AutoDoc's alone, with the same schema version.
+func TestTheManagedHeaderIsReadEitherWayAndWrittenAsAutoDocs(t *testing.T) {
+	src, _ := os.ReadFile("testdata/render/full.md")
+	if !strings.Contains(string(src), "auto-core.todo schema v1") {
+		t.Fatal("the fixture no longer carries the earlier header")
+	}
+	old, err := decode(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ours, err := decode(encode(old))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old.Description != ours.Description || strings.Contains(old.Description, "managed file") {
+		t.Errorf("the description kept a header: %q, then %q", old.Description, ours.Description)
+	}
+	out := string(encode(old))
+	if strings.Contains(out, "auto-core") || strings.Count(out, "schema v1 — managed file") != 1 ||
+		!strings.Contains(out, "autodoc.todo schema v1 — managed file") || !strings.Contains(out, "\nversion: 1\n") {
+		t.Errorf("a write wrote another header, or another version:\n%s", out)
 	}
 }

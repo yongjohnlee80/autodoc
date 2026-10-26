@@ -8,21 +8,23 @@ import (
 	"strings"
 )
 
-// The on-disk format is auto-core's schema v1 minus automation: YAML frontmatter, the managed
-// header comment, an H1 of the title and the description. Encode renders exactly what auto-core's
-// md.encode renders, so a task the daemon writes is byte-identical to one auto-core writes.
+// The on-disk format is schema v1: YAML frontmatter, the managed header comment, an H1 of the
+// title and the description. Encode renders it field for field as the format's first writer did,
+// so a file written before AutoDoc owned the store and one AutoDoc writes differ only in the
+// header's wording, which a read accepts either way.
 
-// header is the managed comment block auto-core writes above the H1 (header.lua).
-const header = "<!-- ─── auto-core.todo schema v1 — managed file ───\n" +
+// header is the managed comment block written above the H1.
+const header = "<!-- ─── autodoc.todo schema v1 — managed file ───\n" +
 	"     HAND-EDIT FREELY in this body (the description) or the\n" +
 	"       hand-editable frontmatter fields: title, status, due,\n" +
 	"       priority, assignee, tags, adr, review, blocked.\n" +
 	"       Direct `status` edits to a valid enum value are honored —\n" +
-	"       refresh reconciles the file's directory. BUT side effects\n" +
-	"       (mailbox notifications, assignee fan-out) only fire when\n" +
-	"       status changes go through the API (`todo.status` /\n" +
-	"       `todo.assign`). Prefer the API when other agents need\n" +
-	"       to know.\n" +
+	"       refresh reconciles the file's directory. BUT AutoDoc logs\n" +
+	"       an edit made outside it only as an update, when it next\n" +
+	"       reads the store: a move or an assignment is announced as\n" +
+	"       one only through AutoDoc (its todo view, or `autodoc\n" +
+	"       --call todos.status` / `todos.assign`). Prefer that when\n" +
+	"       others need to know.\n" +
 	"     DO NOT HAND-EDIT frontmatter: id, version, created, updated,\n" +
 	"       status_changed, completed_at, archived_at, errors.\n" +
 	"         • id + created are frozen at creation.\n" +
@@ -45,7 +47,9 @@ const automationRemoved = "automation was removed (ADR 1791532020)"
 var removedFields = map[string]bool{"condition": true, "execute": true, "origin": true, "last_fired_at": true, "exit_code": true}
 
 var (
-	headerRe = regexp.MustCompile(`(?s)<!-- ─── auto-core\.todo schema v1.*?─── -->[ \t\n\v\f\r]*\n?`)
+	// headerRe is the managed header as either writer worded it: AutoDoc's, or the one files written
+	// before AutoDoc owned the store carry. A read strips either; a write writes AutoDoc's.
+	headerRe = regexp.MustCompile(`(?s)<!-- ─── (?:autodoc|auto-core)\.todo schema v1.*?─── -->[ \t\n\v\f\r]*\n?`)
 	h1Re     = regexp.MustCompile(`^[ \t\n\v\f\r]*#[ \t\n\v\f\r]+[^\n]*\n?`)
 )
 

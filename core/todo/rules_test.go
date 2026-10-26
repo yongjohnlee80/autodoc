@@ -1,6 +1,7 @@
 package todo_test
 
 import (
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
-func TestAddWritesAutoCoresFile(t *testing.T) {
+func TestAddWritesTheTaskFile(t *testing.T) {
 	e := claimed(t)
 	task := e.add(todo.Spec{Title: "Ship it, now!", Description: "Do the thing.", Priority: "high", Tags: []string{"a"},
 		ADR: []string{"/kb/adrs/0001.md", "/home/u/x.md"}})
@@ -19,7 +20,7 @@ func TestAddWritesAutoCoresFile(t *testing.T) {
 	}
 	want := "---\nid: \"2026-10-11-ship-it-now\"\nversion: 1\nstatus: open\ntitle: Ship it, now!\npriority: high\n" +
 		"tags:\n  - a\nadr:\n  - $KB_ROOT/adrs/0001.md\n  - $HOME/x.md\ncreated: \"2026-10-11T10:00:00-07:00\"\n" +
-		"updated: \"2026-10-11T10:00:00-07:00\"\nstatus_changed: \"2026-10-11T10:00:00-07:00\"\n---\n\n<!-- ─── auto-core.todo"
+		"updated: \"2026-10-11T10:00:00-07:00\"\nstatus_changed: \"2026-10-11T10:00:00-07:00\"\n---\n\n<!-- ─── autodoc.todo schema v1 — managed file ───\n"
 	got := e.read(kbStore + "/open/2026-10-11-ship-it-now.md")
 	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, " -->\n\n# Ship it, now!\n\nDo the thing.\n") {
 		t.Errorf("file:\n%s", got)
@@ -395,5 +396,34 @@ func TestVars(t *testing.T) {
 	e.must(e.m.SetVar(ctx, "PROJ", ""))
 	if vars, _ := e.m.Vars(ctx, kb); len(vars) != 2 {
 		t.Error("clearing a var")
+	}
+}
+
+// A file written under the earlier header wording is valid as it is: a refresh that finds nothing
+// else to change leaves it byte for byte, and only a real write gives it AutoDoc's header.
+func TestARefreshNeverRewritesAFileForItsHeader(t *testing.T) {
+	e := claimed(t)
+	fixture, _ := os.ReadFile("testdata/render/full.md")
+	i, j := strings.Index(string(fixture), "<!-- ─── auto-core.todo schema v1"), strings.Index(string(fixture), "─── -->")
+	if i < 0 || j < i {
+		t.Fatal("the fixture no longer carries the earlier header")
+	}
+	earlier := string(fixture[i : j+len("─── -->")])
+	src := []byte(strings.Replace(taskFile("legacy", "open"), "\n# Task legacy", "\n"+earlier+"\n\n# Task legacy", 1))
+	path := kbStore + "/open/legacy.md"
+	e.disk.WriteFile(path, src)
+	sum, err := e.m.Refresh(ctx, kb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Rewritten != 0 || sum.Moved != 0 || e.read(path) != string(src) {
+		t.Fatalf("a refresh rewrote a file for its header: %+v", sum)
+	}
+	got := e.get("legacy")
+	if _, err := e.m.Update(ctx, kb, got.ID, got.Rev, todo.Patch{"priority": "low"}); err != nil {
+		t.Fatal(err)
+	}
+	if after := e.read(path); strings.Contains(after, "auto-core") || !strings.Contains(after, "autodoc.todo schema v1 — managed file") {
+		t.Errorf("an update kept the earlier header:\n%s", after)
 	}
 }

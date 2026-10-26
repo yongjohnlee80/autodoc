@@ -33,16 +33,17 @@ errors:
     message: "variable '$WORKSPACE' is not defined on this machine — set it in the Vars section or as an environment variable"
 ---
 
-<!-- ─── auto-core.todo schema v1 — managed file ───
+<!-- ─── autodoc.todo schema v1 — managed file ───
      HAND-EDIT FREELY in this body (the description) or the
        hand-editable frontmatter fields: title, status, due,
        priority, assignee, tags, adr, review, blocked.
        Direct `status` edits to a valid enum value are honored —
-       refresh reconciles the file's directory. BUT side effects
-       (mailbox notifications, assignee fan-out) only fire when
-       status changes go through the API (`todo.status` /
-       `todo.assign`). Prefer the API when other agents need
-       to know.
+       refresh reconciles the file's directory. BUT AutoDoc logs
+       an edit made outside it only as an update, when it next
+       reads the store: a move or an assignment is announced as
+       one only through AutoDoc (its todo view, or `autodoc
+       --call todos.status` / `todos.assign`). Prefer that when
+       others need to know.
      DO NOT HAND-EDIT frontmatter: id, version, created, updated,
        status_changed, completed_at, archived_at, errors.
          • id + created are frozen at creation.
