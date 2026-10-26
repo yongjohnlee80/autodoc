@@ -171,7 +171,7 @@ Changing embedding models in a large knowledge base requires re-embedding every 
 
 1. **Immediate Unload of Old Model:** When you invoke `embedding.use '["local-qwen4b"]'`, the daemon probes the new model, marks it as the workspace's `target` model in SQLite (`model.target = 1`), and immediately takes the previous model offline—instructing Ollama (`keep_alive: 0`) to unload the old model from GPU RAM so both models are never resident simultaneously.
 2. **Unblocked Lexical + Reranked Search (`semantic: "switching"`):** While the background indexer embeds sections under the new target model fingerprint (`fp`), `search.query` never blocks or mixes incompatible vector spaces. It answers immediately using Stage 1 Lexical FTS5 (plus Stage 3 Reranking if active) and sets `Result.Semantic = "switching"` and `stages.skipped.semantic = "a new embedding model is filling"`.
-3. **Atomic Cutover:** Once every chunk in the workspace has its vector under the target model, the indexer flips `model.active = 1` in a single write transaction. Any open search picker in the TUI or GUI automatically refreshes its hits with hybrid semantic ranking.
+3. **Atomic Switch:** Once every chunk in the workspace has its vector under the target model, the indexer flips `model.active = 1` in a single write transaction. Any open search picker in the TUI or GUI automatically refreshes its hits with hybrid semantic ranking.
 4. **Cancelling an In-Flight Switch (`embedding.cancel_switch`):** If you cancel a switch before completion, AutoDoc restores the previous model to active duty and queues the partial target vectors for immediate deletion.
 
 ### Batched Vector Garbage Collection (`core/index/reclaim.go`)

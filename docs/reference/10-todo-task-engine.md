@@ -11,7 +11,7 @@ abstract: "Deep dive into AutoDoc's built-in .todo-list/ task engine (core/todo)
 
 Engineering teams and AI coding agents work best when tasks live alongside the documents, architecture decision records (ADRs), and code reviews they govern. Historically, keeping task state synchronized across terminal editors, GUI viewers, and background agent processes suffered from split-brain drift: each tool re-implemented YAML serialization, timestamp rules, and directory transitions with subtle incompatibilities.
 
-AutoDoc eliminates this drift by making its daemon (`core/todo`) the single authoritative owner of every `.todo-list/` store (ADR 1791532020). Whether a task is created from the interactive Todos Panel (`SPC x`), updated via the CLI (`autodoc --call todos.update`), scripted from Lua (`autodoc.todos.*`), or mutated through Neovim's `auto-finder` and `auto-agents` mailbox verbs, every operation flows through one pure-Go engine over `golib/vfs` and one crash-recoverable SQLite change log (`core/todo/sqlitejournal`).
+AutoDoc eliminates this drift by making its daemon (`core/todo`) the single authoritative owner of every `.todo-list/` store (ADR 1791532020). Whether a task is created from the interactive Todos Panel (`SPC x`), updated via the CLI (`autodoc --call todos.update`), scripted from Lua (`autodoc.todos.*`), or sent by another client over the daemon's socket, every operation flows through one pure-Go engine over `golib/vfs` and one crash-recoverable SQLite change log (`core/todo/sqlitejournal`).
 
 ---
 
@@ -26,7 +26,7 @@ Inside `.todo-list/`, a task's physical directory placement corresponds directly
 - `deferred/` — Tasks intentionally paused or postponed (`status: deferred`).
 - `completed/` — Finished tasks retained in the active working set for up to 28 days (`status: completed`).
 - `archived/YYYY/MM/` — Completed tasks older than 28 days (or explicitly archived), partitioned by year and month of completion/archival so active listing remains instantaneous even as historical archives grow to thousands of files.
-- `.autodoc-owner` — The durable cutover marker written once the daemon claims write ownership of the store (`todos.claim`).
+- `.autodoc-owner` — The durable ownership marker the daemon writes when it claims the store: at the store's first write when it lies at a registered root (an AutoDoc workspace, or a root `todos.register` adds), or by `todos.claim`.
 - `.trash/` — Staging directory used during the 3-phase crash-safe deletion protocol (`todos.remove` and `todos.remove_malformed`).
 
 ### Stat-Keyed Read Caching and On-Demand Archives
@@ -77,7 +77,7 @@ AutoDoc partitions frontmatter fields into three strict categories:
 1. **Daemon-Managed Fields (`managed: true`)**: `id`, `version`, `created`, `updated`, `status_changed`, `completed_at`, `archived_at`, and `errors`. Clients and humans must **never** edit these by hand. `todos.update` rejects patches that include them (`todos.invalid`, `-32073`).
 2. **Verb-Managed Lifecycle Fields**:
    - `status` — Transitioned via `todos.status` (or implicitly from `open` to `in-progress` on `todos.assign`). Moving a task to `completed` stamps `completed_at`; moving it to `archived` stamps `archived_at` (preserving `completed_at` if it came from `completed`) and relocates the file into `archived/YYYY/MM/`.
-   - `assignee` — Mutated via `todos.assign`. Per Decision D1 of ADR 1791532020, assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so notification consumers (such as `auto-core`) wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
+   - `assignee` — Mutated via `todos.assign`. Per Decision D1 of ADR 1791532020, assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so a notification consumer (an assignment notifier reading `todos.changes`) can wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
 3. **Hand-Editable Fields**: `title`, `description` (the Markdown body), `priority` (`critical`, `high`, `medium`, `low`), `due` (`YYYY-MM-DD`), `tags`, `adr`, `review`, and `blocked`. Users and agents may edit the Markdown body directly on disk or pass a partial map to `todos.update` with the task's current `rev` token.
 
 ---
@@ -138,7 +138,7 @@ In the AutoDoc TUI and GUI, pressing `SPC x` (or selecting **Todos › Open todo
   - Tabs `1` through `4` display numbered tables for **Open**, **In progress**, **Deferred**, and **Completed** tasks.
   - Tab `5` (**Archived**) displays a two-level browser: the left list shows `YYYY/MM` archive partitions with task counts; pressing `Enter` on a month loads its tasks into the table, and `Backspace` returns focus to the month list.
   - Tab `6` (**Variables**) inspects the store's effective symbolic path variables (`$KB_ROOT`, `$PROJECT_ROOT`, `$HOME`, and custom variables), showing each variable's resolved path and scope (`e` sets a workspace-scoped variable in `.autodoc-vars.toml`; `m` sets a machine-local override).
-- **Details Pane & Contextual Action Row (`i` / `o`)**: Below the table, a toggleable Markdown preview renders the selected task's metadata, any validation `errors[]`, and its description body. The bottom action row dynamically surfaces only valid operations (`Add`, `Status…`, `Assign`, `Remove`), hiding all write actions when viewing an unclaimed pre-cutover store. Pressing `?` opens a grouped keybinding overlay card.
+- **Details Pane & Contextual Action Row (`i` / `o`)**: Below the table, a toggleable Markdown preview renders the selected task's metadata, any validation `errors[]`, and its description body. The bottom action row dynamically surfaces only valid operations (`Add`, `Status…`, `Assign`, `Remove`), hiding all write actions when viewing a store released with `todos.release`, which names `todos.claim` to take it back. Pressing `?` opens a grouped keybinding overlay card.
 
 ---
 
@@ -158,7 +158,7 @@ autodoc --call todos.update '[
   "kb",
   "2026-10-17-implement-sqlite-todo-journal",
   "a94f8c2e1b0d...",
-  {"priority": "critical", "adr": ["/home/johno/.config/nvim/.auto-agents-config/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
+  {"priority": "critical", "adr": ["/home/me/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
 ]'
 
 # 4. Transition status to completed (moves file to completed/ and stamps completed_at)
@@ -170,14 +170,14 @@ autodoc --call todos.refresh '["kb"]'
 
 ### Pull-Based Consumer Cursors (`todos.changes` and `todos.ack`)
 
-Because the AutoDoc daemon never pushes unsolicited messages over RPC sockets, external bridges (such as Neovim's `auto-core` assignment notifier) consume mutations using a durable pull cursor:
+Because the AutoDoc daemon never pushes unsolicited messages over RPC sockets, an external consumer (an editor bridge, or an assignment notifier) reads mutations through a durable pull cursor, under a consumer name of its own:
 
 ```sh
-# Pull up to 50 committed changes after auto-core's last acknowledged sequence number
-autodoc --call todos.changes '["kb", "auto-core", 50]'
+# Pull up to 50 committed changes after the consumer's last acknowledged sequence number
+autodoc --call todos.changes '["kb", "notifier", 50]'
 
-# Acknowledge sequence 148 after delivering mailbox notifications
-autodoc --call todos.ack '["kb", "auto-core", 148]'
+# Acknowledge sequence 148 once its notifications are delivered
+autodoc --call todos.ack '["kb", "notifier", 148]'
 ```
 
 Journal rows are retained for at least 30 days and are pruned only after every active consumer has acknowledged them. If a consumer stays silent for more than 90 days, it is automatically unregistered and receives a full `resync` snapshot the next time it calls `todos.changes`.
