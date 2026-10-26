@@ -814,7 +814,8 @@ into the dialog, and it gets every key but Esc, which closes it. The first one i
 
 **Cards.** A card plugin (AutoDB's, say) is a docked panel of its own beside the page, at the edge
 its manifest names first (AutoDB's: the right), and moves, resizes and keeps its place as every
-panel does (Alt/Option-drag, **Go › Arrange panel**). It takes the keys when clicked or when one of
+panel does (Alt/Option-drag, or in `--gui` a plain drag of its title row or border, **Go › Arrange
+panel**). It takes the keys when clicked or when one of
 its commands runs, and then every key is the plugin's, q included. Esc, or **Close (Esc)** on its
 right-click menu, closes the panel and hands the keys back to the page; the plugin runs on, its
 results and session kept, and a command or its Plugins menu entry opens the panel again. Its

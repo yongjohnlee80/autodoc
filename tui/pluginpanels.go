@@ -17,8 +17,9 @@ import (
 
 // CARD PANELS — a card plugin (a dialog with [dialog] modal = false) is a docked panel of its own,
 // as the results panel is: it opens at the edge its placement names, moves and resizes as every
-// panel does (Alt/Option-left drag, Alt/Option-right drag, Go › Arrange panel), and keeps its size
-// and its floating rectangle in the preferences under its panel's id (tui.card_<name>.*).
+// panel does (Alt/Option-left drag, Alt/Option-right drag, in the GUI a plain drag of its frame,
+// Go › Arrange panel), and keeps its size and its floating rectangle in the preferences under its
+// panel's id (tui.card_<name>.*).
 //
 // The panels are written into main.qml (cardPanelsQML), one for each card plugin found as the
 // program is built. Then the set follows the folder (ADR 1792848741): a card plugin added while

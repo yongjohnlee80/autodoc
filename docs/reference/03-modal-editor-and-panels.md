@@ -93,6 +93,7 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
 
 - **Moving one:** every panel moves and resizes.
   - Alt (Option on a Mac) with the left mouse button drags it anywhere, and Alt with the right button resizes it.
+  - In the GUI (`--gui`), a plain drag does it too: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it.
   - `SPC L` (Go › Arrange panel…) does both from the keyboard: `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` resize it, `Enter` keeps it, and `Esc` puts it back.
   - Go › Reset panel layout docks every panel at its edge again.
 - **Maximizing:** `SPC M` or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
