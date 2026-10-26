@@ -48,7 +48,7 @@ AutoDoc uses explicit mode flags (`--ui` for the terminal interface, `--gui` for
 
 ```bash
 # Register a workspace named "engineering-kb" (starts the daemon automatically if needed)
-autodoc --call workspace.add '["engineering-kb", "/home/johno/Notes/engineering-kb", ["**/*.md"], [".git/**"]]'
+autodoc --call workspace.add '["engineering-kb", "/home/me/Notes/engineering-kb", ["**/*.md"], [".git/**"]]'
 
 # Open the workspace in the terminal TUI (or omit the name to open the last-used workspace)
 autodoc --ui engineering-kb
@@ -81,7 +81,7 @@ Workspaces in AutoDoc are stored inside the SQLite database (`autodoc.db`) rathe
 # 1. Register the GlobalKB workspace with initial include/exclude globs
 autodoc --call workspace.add '[
   "GlobalKB",
-  "/home/johno/.config/nvim/.auto-agents-config/kb",
+  "/home/me/kb",
   ["**/*.md"],
   [".git/**", "archive/raw-dumps/**"]
 ]'
@@ -109,8 +109,8 @@ Because workspaces and sealed provider keys live in the SQLite store (`core/conf
 [server]
 # Optional custom paths; omit to use XDG defaults
 # socket = "/run/user/1000/autodoc.sock"
-# state_dir = "/home/johno/.local/state/autodoc"
-# data_dir = "/home/johno/.local/share/autodoc"
+# state_dir = "/home/me/.local/state/autodoc"
+# data_dir = "/home/me/.local/share/autodoc"
 
 [follow]
 poll_interval = "2s"
