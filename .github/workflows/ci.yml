@@ -107,12 +107,12 @@ jobs:
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -tags server -o /dev/null ./cmd/autodoc
 
   tui:
-    name: TUI race (${{ matrix.shard }}/4)
+    name: TUI race (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -120,7 +120,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: test
-        run: bash tests/run-tui-shard.sh "${{ matrix.shard }}" 4 > "$RUNNER_TEMP/tui-tests.jsonl"
+        run: bash tests/run-tui-shard.sh "${{ matrix.shard }}" 8 > "$RUNNER_TEMP/tui-tests.jsonl"
       - name: test timings
         if: always()
         uses: actions/upload-artifact@v4

@@ -7,16 +7,15 @@ when changing the fixtures.
 
 ## Run the CI race tests
 
-CI runs four independent TUI jobs:
+CI runs eight independent TUI jobs:
 
 ```sh
-bash tests/run-tui-shard.sh 0 4 > tui-0.jsonl
-bash tests/run-tui-shard.sh 1 4 > tui-1.jsonl
-bash tests/run-tui-shard.sh 2 4 > tui-2.jsonl
-bash tests/run-tui-shard.sh 3 4 > tui-3.jsonl
+for shard in 0 1 2 3 4 5 6 7; do
+  bash tests/run-tui-shard.sh "$shard" 8 > "tui-$shard.jsonl"
+done
 ```
 
-Run all four to reproduce the complete TUI race gate. Shard indices start at zero.
+Run all eight to reproduce the complete TUI race gate. Shard indices start at zero.
 The script discovers tests from the race build with `go test -list`, assigns
 successive top-level tests modulo the shard count, and anchors the resulting
 `-run` expression. Every discovered test belongs to exactly one shard; its
@@ -25,7 +24,10 @@ and `-count=2`, and has a 15-minute package deadline. Invalid arguments and empt
 selections fail.
 
 Separate processes preserve tests that change environment variables or package
-globals. Adding `t.Parallel` to those cases would change their isolation.
+globals. Adding `t.Parallel` to those cases would change their isolation, so the
+TUI tests stay serial within a shard: nearly every one starts the host, which
+reaches package-level test seams and starts goroutines, so no static rule can
+admit them. More shards, not `t.Parallel`, is how the gate gets faster.
 The main Go job runs every other package with the same race/count policy.
 GUI and head/base coverage jobs still execute the complete TUI suite under their
 respective build and coverage settings. Each race job uploads its JSONL timing
