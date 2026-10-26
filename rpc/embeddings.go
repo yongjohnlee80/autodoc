@@ -29,6 +29,25 @@ type Embeddings interface {
 // WithEmbeddings serves the daemon's embedding providers.
 func WithEmbeddings(e Embeddings) Option { return func(o *options) { o.embeddings = e } }
 
+// ErrPulling is embedding.pull while another pull runs or unwinds (ADR 1793005098 §4.3).
+var ErrPulling = errors.New("rpc: a model is being pulled")
+
+// ErrNoPull is embedding.pull_status or embedding.pull_cancel naming a job that is not the current
+// one: it ended and another began, or the daemon restarted.
+var ErrNoPull = errors.New("rpc: no such pull")
+
+// PullState is a pull job as embedding.pull_status answers it.
+type PullState struct {
+	Job       string   `json:"job"`
+	Model     string   `json:"model"`
+	State     string   `json:"state"` // running, done, failed or cancelled
+	Completed int64    `json:"completed"`
+	Total     int64    `json:"total"`
+	Rate      float64  `json:"rate"`          // bytes a second over the last 10 s; 0 unknown
+	ETA       *float64 `json:"eta,omitempty"` // seconds left at that rate; absent while it is 0
+	Error     string   `json:"error,omitempty"`
+}
+
 // ErrNoSwitch is embedding.cancel_switch with no model filling to replace the active one.
 var ErrNoSwitch = errors.New("rpc: no model switch is under way")
 

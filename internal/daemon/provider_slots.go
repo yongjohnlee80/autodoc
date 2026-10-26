@@ -29,12 +29,21 @@ func withSharedSlots(p embed.Provider, slots chan struct{}) embed.Provider {
 
 func (p *providerSlots) Name() string       { return p.provider.Name() }
 func (p *providerSlots) Model() embed.Model { return p.provider.Model() }
-func (p *providerSlots) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (p *providerSlots) Embed(ctx context.Context, texts []string) (vecs [][]float32, err error) {
+	err = holdSlot(ctx, p.slots, func() error {
+		vecs, err = p.provider.Embed(ctx, texts)
+		return err
+	})
+	return vecs, err
+}
+
+// holdSlot runs fn holding one of slots, waiting for it until ctx ends.
+func holdSlot(ctx context.Context, slots chan struct{}, fn func() error) error {
 	select {
-	case p.slots <- struct{}{}:
+	case slots <- struct{}{}:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
-	defer func() { <-p.slots }()
-	return p.provider.Embed(ctx, texts)
+	defer func() { <-slots }()
+	return fn()
 }

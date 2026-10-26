@@ -100,7 +100,10 @@ import (
 // Protocol 30 is ADR 1791532020 r15 §2.5a: todos.assign's optional scope, the assigner's, kept on
 // the assign change (todos.changes' scope) and the task's snapshot row (a resync's), and never read
 // by AutoDoc. A session below 30 sends none and ignores the key; its assignments have no scope.
-const Protocol int64 = 30
+// Protocol 31 is ADR 1793005098: the embedding setup's host.probe, embedding.catalog,
+// embedding.estimate, embedding.pull, embedding.pull_status and embedding.pull_cancel, which a
+// session below 31 sees as unknown methods.
+const Protocol int64 = 31
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -254,6 +257,7 @@ type Server struct {
 	workspaces   Workspaces
 	preferences  Preferences
 	embeddings   Embeddings
+	setup        embeddingSetup // the embeddings', when they set a model up (embedsetup.go)
 	rankers      Rankers
 	events       Events
 	log          logger.Logger
@@ -318,8 +322,8 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
 		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID, setters: settersOf(workspaces),
-		modelContext: modelContextOf(o.embeddings),
-		verbs:        map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
+		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
+		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
 		ropts = append(ropts, golibrpc.WithListener(o.listener))
@@ -343,6 +347,7 @@ func (s *Server) register() {
 	s.own(s.docVerbs()...)
 	s.own(s.fileVerbs()...)
 	s.own(s.embeddingVerbs()...)
+	s.own(s.setupVerbs()...)
 	s.own(s.rankerVerbs()...)
 }
 

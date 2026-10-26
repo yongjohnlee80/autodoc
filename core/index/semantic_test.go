@@ -851,6 +851,12 @@ func TestPendingAndTextsCountWhatAModelWouldEmbed(t *testing.T) {
 	if n, err := e.ix.Pending(ctx, other); err != nil || n != texts {
 		t.Errorf("Pending for a model never embedded: %d, %v; want %d", n, err, texts)
 	}
+	if got, err := e.ix.PendingSample(ctx, fp, 32); err != nil || len(got) != 0 {
+		t.Errorf("a sample of the filled model's pending texts: %q, %v; want none", got, err)
+	}
+	if got, err := e.ix.PendingSample(ctx, other, 2); err != nil || len(got) != 2 || got[0] == got[1] {
+		t.Errorf("a sample of 2 for a model never embedded: %q, %v; want 2 distinct texts", got, err)
+	}
 	ms, err := e.ix.Models(ctx)
 	if err != nil || len(ms) != 1 {
 		t.Fatalf("models %+v, %v", ms, err)

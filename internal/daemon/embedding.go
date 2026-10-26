@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -68,6 +69,16 @@ type Embedding struct {
 	unkept  int // calls past maxPending, not kept: reported at the next write
 
 	done chan struct{}
+
+	dataDir string // the store's directory: the free space the setup reports
+
+	// the embedding setup's pull (embedsetup.go): one job at a time, owned by the daemon
+	pullMu       sync.Mutex
+	started      context.Context // Start's: a pull's context derives from it, so shutdown ends it
+	born         time.Time       // this Embedding's making: the first part of a pull's id
+	pulls        int             // the pulls started: the second part
+	job          *pullJob        // the current or last pull; nil for none
+	pullsRunning sync.WaitGroup  // the pulls still running, joined by Wait
 }
 
 // maxPending bounds a provider's calls held for the store: a store that cannot be written for
@@ -80,7 +91,11 @@ func NewEmbedding(db *store.Store, ws *Workspaces, log logger.Logger) *Embedding
 	if log == nil {
 		log = logger.New()
 	}
-	e := &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{})}
+	e := &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{}),
+		born: time.Now()}
+	if db != nil {
+		e.dataDir = filepath.Dir(db.Path())
+	}
 	if ws != nil {
 		ws.SetProviderBuilder(e.buildByName) // a workspace's own provider is set up as the daemon's is
 	}
@@ -107,6 +122,9 @@ func (e *Embedding) overridesChanged(name string) {
 // Start writes the meters' calls to the store until ctx ends, and sets up the provider the
 // preference names. One that does not set up is logged, and search is by words.
 func (e *Embedding) Start(ctx context.Context) {
+	e.pullMu.Lock()
+	e.started = ctx
+	e.pullMu.Unlock()
 	go e.flush(ctx)
 	prefs, err := e.db.Preferences(ctx)
 	if err != nil {
@@ -125,6 +143,7 @@ func (e *Embedding) Start(ctx context.Context) {
 func (e *Embedding) Wait() {
 	<-e.done
 	e.unloads.Wait()
+	e.pullsRunning.Wait() // cancelled with Start's ctx
 }
 
 // Use makes the provider named name the one semantic search uses, and remembers it; "" turns
