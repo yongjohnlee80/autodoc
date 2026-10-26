@@ -72,11 +72,11 @@ func norm(v []float32) float64 {
 // with the new model. The mutant, named here: the switch not published (the query embedded with
 // the new model while the old one is still active).
 //
-// The test waits for the switch as a query sees it, published, and recorded: a query answering
-// switching and the store's target the new model's, both. A tenant answers switching before prepare
-// too (publish: not prepared yet), so a switching answer alone may come before prepare records the
-// target. The switch's own re-embedding calls the same provider whenever it gets there, so a count
-// of every call marks nothing; the query's provider calls are its own, by its text.
+// The query is asked behind the switch's publish. A tenant answers switching before prepare too
+// (publish: not prepared yet), and prepare records the target before it publishes, so neither a
+// switching answer nor the target marks the switch as published. The switch's re-embedding
+// reaching the held provider does: it starts only once prepare has published. The query's provider
+// calls are its own, by its text.
 func TestAQueryWhileItsTenantSwitchesIsSwitching(t *testing.T) {
 	st := newStore()
 	st.put("a.md", "alpha")
@@ -88,11 +88,13 @@ func TestAQueryWhileItsTenantSwitchesIsSwitching(t *testing.T) {
 	ctx := context.Background()
 	qctx, cancel := context.WithTimeout(ctx, 2*time.Second) // a query that reached the held provider would wait for good
 	defer cancel()
-	waitFor(t, "a query answered switching, the switch's target recorded", func() bool {
-		_, _, err := w.QueryEmbedder("t")(qctx, "q")
-		_, tg, _ := st.Models(ctx)
-		return errors.Is(err, search.ErrSwitching) && tg == fingerprint("m")
-	})
+	waitFor(t, "the switch's re-embedding at the held provider", func() bool { return p.times("alpha") > 0 })
+	if _, _, err := w.QueryEmbedder("t")(qctx, "q"); !errors.Is(err, search.ErrSwitching) {
+		t.Fatalf("a query with the switch published answered %v, want search.ErrSwitching", err)
+	}
+	if _, tg, _ := st.Models(ctx); tg != fingerprint("m") {
+		t.Fatalf("the switch published, but the target recorded is %q", tg)
+	}
 	if n := p.times("q"); n != 0 {
 		t.Errorf("a query mid-switch called the provider: it embedded the query %d times", n)
 	}
