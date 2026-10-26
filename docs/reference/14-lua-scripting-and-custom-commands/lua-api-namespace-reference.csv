@@ -1,7 +1,7 @@
 Namespace,Function / Method,Signature,Capability Grant (Packages),Description
 autodoc.command,autodoc.command,"autodoc.command{name, aliases, args, help, run, complete, id, title}",None (registration),"Registers a custom ':' command in the catalog; edits inside run(ed, args, line, cmd) form one atomic undo step"
 autodoc.keymap / map,autodoc.map,"autodoc.map{mode, keys, command, title}",commands,"Binds a Normal, Visual, or SPC u leader key to execute a catalog command line"
-autodoc.menu,autodoc.menu,"autodoc.menu{where, title, command}",commands,"Adds a row to the editor right-click menu or the Plugins menu"
+autodoc.menu,autodoc.menu,"autodoc.menu{where, id, menu, files, when, title, command}",commands,"Adds a row to the editor right-click menu or the Plugins menu, scoped by files and when, under a submenu, titled live; returns a handle whose remove() takes it out"
 autodoc.requires,autodoc.requires,"autodoc.requires{cap1, cap2, ...}",None (declaration),"Declares package capability requirements at load time alongside package.toml"
 autodoc.buf / ed,ed:lines / ed:line,"ed:lines() / ed:line(n)",None (active buffer),"Returns a copy of all buffer lines (or line n) without trailing line breaks (1-based)"
 autodoc.buf / ed,ed:insert / ed:replace,"ed:insert(text) / ed:replace(l1, c1, l2, c2, text)",None (active buffer),"Inserts or replaces grapheme-indexed ranges in the buffer and returns exact post-edit coordinates"

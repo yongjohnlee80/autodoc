@@ -388,9 +388,31 @@ does: a command's name and its arguments, `"table 2 3"`. Its error is a notifica
   key (`f`, `m`, `q`, `"`), the key is Vim's as always. It is not repeated by `.` or recorded in a
   macro.
 - **A page key replaces Vim's** for that key. Pick one you don't use (`Q`, a `<C-…>` chord).
-- **`autodoc.menu`'s `where`** is `"editor"`, the page's right-click menu, or `"plugins"`, the
-  Plugins menu. `title` takes `&` before the mnemonic letter: `"&Word count"`.
 - **`:lua-reload` drops every key and row** with the scripts; loading them again binds them again.
+
+| `autodoc.menu` field | What it is |
+|---|---|
+| `where` | `"editor"`, the page's right-click menu, or `"plugins"`, the Plugins menu |
+| `command` | the command line it runs |
+| `title` | its text, `&` before the mnemonic letter: `"&Word count"`. In the editor's menu, also a function `title(ctx)`, answered each time the menu opens: `"Execute on " .. conn` |
+| `menu` | a submenu to show it under: rows with the same `menu` share one, a plugin's rows included (they sit under the plugin's title) |
+| `files` | editor rows: globs over the open file's **base name**, `{"*.sql"}`; the row shows only for a match |
+| `when` | editor rows: a function `when(ctx)`, asked as the menu opens; the row shows only when it returns true |
+| `id` | a name for the row: the same `id` from the same script again replaces the row in its place |
+
+- **`ctx`** is `{path, workspace, kind, selection}`: the open file's path in its workspace, the
+  workspace, its kind (`"markdown"`, …) and whether text is selected. A folder's scope is a `when`
+  on `ctx.path` (`ctx.path:find("^notes/")`): `files` sees the base name only.
+- **`autodoc.menu` returns the row's handle:** `row:remove()` takes it out. A handle reaches only
+  the row it added: once the `id` is added again, the old handle removes nothing.
+- **One budget per opening:** every `when` and `title` function of one opening of the menu shares
+  200 ms, commands they run included. A row the budget doesn't reach is left out that time, and one
+  notification says so. Keep them quick: read a variable, not a server.
+- **An error** in `when` or `title`, or a title that isn't a string, leaves that row out with a
+  notification; the menu still opens.
+- **A Plugins-menu row** takes no `files`, `when` or title function: that menu isn't rebuilt as it
+  opens.
+- **A script's words are its own:** a row's title is shown as written in every language.
 
 ```lua
 -- keys.lua: :stamp on Q, on SPC u s, and in the right-click menu
@@ -402,6 +424,15 @@ autodoc.command{
 autodoc.map{ mode = "normal", keys = "Q", command = "stamp" }
 autodoc.map{ mode = "leader", keys = "s", command = "stamp", title = "today's date" }
 autodoc.menu{ where = "editor", title = "Insert the &date", command = "stamp" }
+
+-- under a "Notes" submenu, only in notes/ and only with a selection
+local row = autodoc.menu{
+  where = "editor", menu = "Notes", id = "quote",
+  when = function(ctx) return ctx.selection and ctx.path:find("^notes/") ~= nil end,
+  title = function(ctx) return "&Quote in " .. ctx.workspace end,
+  command = "stamp",
+}
+-- row:remove() takes it out again
 ```
 
 ## Characters: `autodoc.text`
