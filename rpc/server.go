@@ -91,7 +91,12 @@ import (
 // Protocol 28 is ADR 1792347044 r9: graph.map's nodes carry their tags, for the GlobeMap's colour
 // rules, and its answer the schema's document types, a node's type its discriminator's value, for
 // the Mindmap's shapes; a session below 28 reads its answer as before.
-const Protocol int64 = 28
+// Protocol 29 is ADR 1791532020 r13: a todo store is AutoDoc's from its first write, todos.add
+// making it if it is missing, and todos.resolve, todos.stores, todos.set_dir and todos.move_store
+// say whether todos.release gave it back (released); todos.unclaimed now means only that. A session
+// below 29 ignores released. Every session gets the claim at the first write: the refusal was the
+// bug.
+const Protocol int64 = 29
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
