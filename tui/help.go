@@ -443,8 +443,9 @@ const helpLayout = `THE LAYOUT
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.<window>.tileEdge and tui.<window>.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.<window>.tileEdge and
+  tui.<window>.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,

@@ -102,7 +102,7 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
 
 The page is a window of its own, and the explorer, the terminal, the agent, the results and the todos are each either **floating** (over the page, docked at an edge or anywhere you drag them, as above) or **tiled** (beside the page, sharing the screen with it). Each window's **Layout** says which.
 
-- **Choosing it:** Layout › Tiled or Float is on every window's menu, right above Go to ›:
+- **Choosing it:** Layout › Tiled or Float is on every window's menu, right above Go to ›. A panel's Tiled is a submenu of the edges its tile docks at, Left, Right, Top and Bottom: its edge is checked while it is tiled, and choosing one docks it there, tiling a floating panel too. The page has no edge, since it fills the rest. The menu is on:
   - the page's buffer strip (`--gui`);
   - the terminal's and the agent's tabs (`≡`, or a right click on the strip);
   - the explorer's and the todos' tabs (`≡`);
@@ -110,7 +110,7 @@ The page is a window of its own, and the explorer, the terminal, the agent, the 
 
   `:layout [window]` opens it over the page, the page's when no window is named. Tab completes the windows: `editor`, `explorer`, `terminal`, `agent`, `results`, `todos`.
 - **The defaults:** the page is tiled, every panel floats. A layout is kept across restarts.
-- **Where a tiled panel goes:** at its tile's edge, a share of the screen across it. These are the preferences `tui.<window>.tileEdge` and `tui.<window>.tileSize` (a percent, 5 to 90). Alt with the right button drags the border a tiled panel shares, and its new share is kept. A tiled panel's own docked place and floating rectangle stay as they were, for when it floats again.
+- **Where a tiled panel goes:** at its tile's edge, a share of the screen across it. Layout › Tiled › Left, Right, Top or Bottom chooses the edge. These are the preferences `tui.<window>.tileEdge` and `tui.<window>.tileSize` (a percent, 5 to 90). Alt with the right button drags the border a tiled panel shares, and its new share is kept. A tiled panel's own docked place and floating rectangle stay as they were, for when it floats again.
 - **When the room runs out:** the page needs 40 columns and 8 rows, and a panel what its content needs at the left or right, or at the top or bottom: the explorer 25 columns or 4 rows, the terminal and the agent 27 columns or 6 rows, the results 20 columns or 7 rows, the todos 20 columns or 16 rows. When the window is too small for the page and every tiled panel, the panel tiled last floats until the room comes back, then tiles again by itself. Its Layout still says Tiled: that is your choice, not the room's.
 - **A floating page** moves and resizes up to the page's width, never closes, and comes forward when it takes the keyboard. When it is minimized, the dock's editor icon shows it again.
 - **Moving between them:** `Ctrl+h` `j` `k` `l` go to the window placed that way: tiled, docked or floating alike.

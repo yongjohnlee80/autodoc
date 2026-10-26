@@ -176,9 +176,14 @@ func layoutRows(c any, id string, row rowMaker) []widget.MenuItemModel {
 	return []widget.MenuItemModel{withLabelMessage(sub, "L&ayout")}
 }
 
+// tileEdgeRows are Layout › Tiled ›'s rows: the edges a panel's tile docks at, each with its label.
+var tileEdgeRows = []struct{ edge, label string }{{"left", "Le&ft"}, {"right", "&Right"}, {"top", "&Top"}, {"bottom", "&Bottom"}}
+
 // layoutChoices are the window id's Layout, Tiled and Float: the one checked is its preference, the
 // user's choice (a window released for want of room is still Tiled), and choosing the other
-// switches it live. nil for a host that sets no preference.
+// switches it live. A panel's Tiled is a submenu of the edges its tile docks at
+// (tui.<id>.tileEdge): its edge is checked while it is tiled, and choosing one docks it there, tiling
+// it first when it floats. The page, the fill, has no edge. nil for a host that sets no preference.
 func layoutChoices(c any, id string, row rowMaker) []widget.MenuItemModel {
 	h, ok := c.(layoutHost)
 	if !ok {
@@ -190,7 +195,34 @@ func layoutChoices(c any, id string, row rowMaker) []widget.MenuItemModel {
 		r.Kind, r.Group, r.Checked = widget.ItemKindRadio, "layout", tiled == (value == layoutTiled)
 		return r
 	}
-	return []widget.MenuItemModel{radio(layoutTiled, "&Tiled"), radio(layoutFloat, "&Float")}
+	float := radio(layoutFloat, "&Float")
+	if w, ok := tileWindowByID(id); !ok || w.edge == "" {
+		return []widget.MenuItemModel{radio(layoutTiled, "&Tiled"), float}
+	}
+	edge := h.Prefs().Value(tileEdgeKey(id))
+	var edges []widget.MenuItemModel
+	for _, e := range tileEdgeRows {
+		r := row("layout.tiled."+e.edge, e.label, func() {
+			h.SetPref(tileEdgeKey(id), e.edge) // the edge first: a floating panel then tiles once, there
+			if !tiled {
+				h.SetPref(layoutKey(id), layoutTiled)
+			}
+		})
+		r.Kind, r.Group, r.Checked = widget.ItemKindRadio, "layout.edge", tiled && edge == e.edge
+		edges = append(edges, r)
+	}
+	sub := widget.NewSubmenu("layout.tiled", "Tiled", edges)
+	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("&Tiled")
+	return []widget.MenuItemModel{withLabelMessage(sub, "&Tiled"), float}
+}
+
+// tileWindowByID is the window id, or false.
+func tileWindowByID(id string) (tileWindow, bool) {
+	i := slices.IndexFunc(tileWindows, func(w tileWindow) bool { return w.id == id })
+	if i < 0 {
+		return tileWindow{}, false
+	}
+	return tileWindows[i], true
 }
 
 // tabsRowOf is a row of a TabView's menu as a rowMaker: a row whatever tab it was opened for.
@@ -236,7 +268,7 @@ func tileWindowIDs() []string {
 // none says which are.
 func (h *Host) layoutEntries() []Entry {
 	return []Entry{{ID: "window.layout", Title: "a window's layout", Verb: "layout", Args: "[window]",
-		Help:     "Tiled or Float for a window: alone, the editor's; Tab lists the windows",
+		Help:     "Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows",
 		Complete: func(widget.CompleteContext) []string { return tileWindowIDs() },
 		Run: func(x Invocation) error {
 			id := strings.TrimSpace(x.Line)

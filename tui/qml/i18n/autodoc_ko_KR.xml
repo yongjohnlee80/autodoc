@@ -1024,8 +1024,8 @@
         <translation>창의 레이아웃</translation>
     </message>
     <message id="autodoc.cmd.window.layout.help">
-        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
-        <translation>창을 타일 또는 플로팅으로. 인수 없이는 편집기. Tab으로 창 목록</translation>
+        <source>Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>창을 가장자리에 타일 또는 플로팅으로. 인수 없이는 편집기. Tab으로 창 목록</translation>
     </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
@@ -2075,6 +2075,10 @@
         <source>&amp;Back</source>
         <translation>뒤로(&amp;b)</translation>
     </message>
+    <message id="autodoc.gomenu.bottom_b">
+        <source>&amp;Bottom</source>
+        <translation>아래(&amp;b)</translation>
+    </message>
     <message id="autodoc.gomenu.close">
         <source>Close</source>
         <translation>닫기</translation>
@@ -2139,6 +2143,10 @@
         <source>La&amp;rger</source>
         <translation>크게(&amp;r)</translation>
     </message>
+    <message id="autodoc.gomenu.le_ft_f">
+        <source>Le&amp;ft</source>
+        <translation>왼쪽(&amp;f)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>최대화(&amp;m)</translation>
@@ -2175,6 +2183,10 @@
         <source>Restart</source>
         <translation>다시 시작</translation>
     </message>
+    <message id="autodoc.gomenu.right_r">
+        <source>&amp;Right</source>
+        <translation>오른쪽(&amp;r)</translation>
+    </message>
     <message id="autodoc.gomenu.save_s">
         <source>&amp;Save</source>
         <translation>저장(&amp;s)</translation>
@@ -2206,6 +2218,10 @@
     <message id="autodoc.gomenu.tiled_t">
         <source>&amp;Tiled</source>
         <translation>타일(&amp;t)</translation>
+    </message>
+    <message id="autodoc.gomenu.top_t">
+        <source>&amp;Top</source>
+        <translation>위(&amp;t)</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -2554,8 +2570,9 @@
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.&lt;window&gt;.tileEdge and
+  tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
@@ -2570,7 +2587,8 @@
   에이전트의 탭, 탐색기와 태스크의 ≡, 그리고 결과 표의 오른쪽 클릭 메뉴 끝. :layout [창]은
   그 메뉴를 페이지 위에 엽니다. 인수 없이는 페이지의 것입니다 (Tab으로 창 목록). 페이지는
   플로팅으로 바꾸지 않는 한 타일이고, 모든 패널은 타일로 바꾸지 않는 한 플로팅입니다.
-  타일 패널은 자신의 가장자리에서 기본 영역의 일정 비율을 차지합니다 (환경설정 값
+  타일 패널은 레이아웃 › 타일 ›에서 고른 가장자리(왼쪽, 오른쪽, 위, 아래)에서 기본 영역의
+  일정 비율을 차지합니다 (환경설정 값
   tui.&lt;창&gt;.tileEdge 와 tui.&lt;창&gt;.tileSize). Alt와 오른쪽 드래그로 맞닿은 경계를 옮기면 새
   비율이 유지됩니다. 창이 페이지와 타일 패널을 모두 담기에 너무 작으면, 마지막으로 타일된
   패널이 공간이 돌아올 때까지 플로팅되었다가 스스로 다시 타일이 됩니다. 레이아웃은 계속

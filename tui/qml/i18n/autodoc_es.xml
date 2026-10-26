@@ -1024,8 +1024,8 @@
         <translation>la disposición de una ventana</translation>
     </message>
     <message id="autodoc.cmd.window.layout.help">
-        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
-        <translation>En mosaico o flotante para una ventana: sola, la del editor; Tab lista las ventanas</translation>
+        <source>Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>En mosaico en un borde, o flotante, para una ventana: sola, la del editor; Tab lista las ventanas</translation>
     </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
@@ -2075,6 +2075,10 @@
         <source>&amp;Back</source>
         <translation>Atrás (&amp;b)</translation>
     </message>
+    <message id="autodoc.gomenu.bottom_b">
+        <source>&amp;Bottom</source>
+        <translation>Abajo (&amp;b)</translation>
+    </message>
     <message id="autodoc.gomenu.close">
         <source>Close</source>
         <translation>Cerrar</translation>
@@ -2139,6 +2143,10 @@
         <source>La&amp;rger</source>
         <translation>Más grande (&amp;r)</translation>
     </message>
+    <message id="autodoc.gomenu.le_ft_f">
+        <source>Le&amp;ft</source>
+        <translation>Izquierda (&amp;f)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>&amp;Maximizar</translation>
@@ -2175,6 +2183,10 @@
         <source>Restart</source>
         <translation>Reiniciar</translation>
     </message>
+    <message id="autodoc.gomenu.right_r">
+        <source>&amp;Right</source>
+        <translation>Derecha (&amp;r)</translation>
+    </message>
     <message id="autodoc.gomenu.save_s">
         <source>&amp;Save</source>
         <translation>Guardar (&amp;s)</translation>
@@ -2206,6 +2218,10 @@
     <message id="autodoc.gomenu.tiled_t">
         <source>&amp;Tiled</source>
         <translation>En mosaico (&amp;t)</translation>
+    </message>
+    <message id="autodoc.gomenu.top_t">
+        <source>&amp;Top</source>
+        <translation>Arriba (&amp;t)</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -2555,8 +2571,9 @@
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.&lt;window&gt;.tileEdge and
+  tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
@@ -2572,7 +2589,8 @@
   tareas, y el final del menú contextual de la tabla de resultados. :layout [ventana] lo abre
   sobre la página, el de la página si va sola (Tab lista las ventanas). La página va en mosaico
   salvo que la hagas flotar; cada panel flota salvo que lo pongas en mosaico.
-  Un panel en mosaico ocupa su borde, una parte de la base a lo ancho de él (las preferencias
+  Un panel en mosaico ocupa el borde que elige su Diseño › En mosaico › (izquierda, derecha,
+  arriba o abajo), una parte de la base a lo ancho de él (las preferencias
   tui.&lt;ventana&gt;.tileEdge y tui.&lt;ventana&gt;.tileSize); Alt y un arrastre con el botón derecho
   mueven el borde que comparte, y su nueva parte se conserva. Cuando la ventana es demasiado
   pequeña para la página y los paneles en mosaico, el último puesto en mosaico flota hasta que

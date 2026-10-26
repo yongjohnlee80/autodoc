@@ -1024,8 +1024,8 @@
         <translation>a window's layout</translation>
     </message>
     <message id="autodoc.cmd.window.layout.help">
-        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
-        <translation>Tiled or Float for a window: alone, the editor's; Tab lists the windows</translation>
+        <source>Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows</translation>
     </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
@@ -2075,6 +2075,10 @@
         <source>&amp;Back</source>
         <translation>&amp;Back</translation>
     </message>
+    <message id="autodoc.gomenu.bottom_b">
+        <source>&amp;Bottom</source>
+        <translation>&amp;Bottom</translation>
+    </message>
     <message id="autodoc.gomenu.close">
         <source>Close</source>
         <translation>Close</translation>
@@ -2139,6 +2143,10 @@
         <source>La&amp;rger</source>
         <translation>La&amp;rger</translation>
     </message>
+    <message id="autodoc.gomenu.le_ft_f">
+        <source>Le&amp;ft</source>
+        <translation>Le&amp;ft</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>&amp;Maximize</translation>
@@ -2175,6 +2183,10 @@
         <source>Restart</source>
         <translation>Restart</translation>
     </message>
+    <message id="autodoc.gomenu.right_r">
+        <source>&amp;Right</source>
+        <translation>&amp;Right</translation>
+    </message>
     <message id="autodoc.gomenu.save_s">
         <source>&amp;Save</source>
         <translation>&amp;Save</translation>
@@ -2206,6 +2218,10 @@
     <message id="autodoc.gomenu.tiled_t">
         <source>&amp;Tiled</source>
         <translation>&amp;Tiled</translation>
+    </message>
+    <message id="autodoc.gomenu.top_t">
+        <source>&amp;Top</source>
+        <translation>&amp;Top</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -2555,8 +2571,9 @@
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.&lt;window&gt;.tileEdge and
+  tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
@@ -2571,8 +2588,9 @@
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.&lt;window&gt;.tileEdge and
+  tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,

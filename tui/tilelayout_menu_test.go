@@ -28,18 +28,53 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widget.MenuItemModel, goT
 	wantLayoutChecked(t, menu, rows[l].Children, tiled)
 }
 
-// wantLayoutChecked fails unless choices are the Tiled and Float radios, the one checked as tiled
-// says.
+// wantLayoutChecked fails unless choices are Tiled and the radio Float, the one checked as tiled
+// says. The page's Tiled is a radio; a panel's is a submenu of its edges' radios, one checked while
+// it is tiled and none while it floats.
 func wantLayoutChecked(t *testing.T, menu string, choices []widget.MenuItemModel, tiled bool) {
 	t.Helper()
 	tr, okT := menuRow(choices, "layout.tiled")
 	fl, okF := menuRow(choices, "layout.float")
-	if !okT || !okF || tr.Kind != widget.ItemKindRadio || fl.Kind != widget.ItemKindRadio {
-		t.Fatalf("%s: Layout holds %v; want the radios Tiled and Float", menu, rowIDs(choices))
+	if !okT || !okF || fl.Kind != widget.ItemKindRadio {
+		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDs(choices))
 	}
-	if tr.Checked != tiled || fl.Checked == tiled {
-		t.Fatalf("%s: Tiled checked %v, Float %v; want the Layout stored, tiled %v", menu, tr.Checked, fl.Checked, tiled)
+	isTiled := tr.Checked
+	if tr.Kind == widget.ItemKindSubmenu {
+		if ids := rowIDs(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
+			t.Fatalf("%s: Tiled holds %v; want the edges Left, Right, Top and Bottom", menu, ids)
+		}
+		checked := 0
+		for _, e := range tr.Children {
+			if e.Kind != widget.ItemKindRadio {
+				t.Fatalf("%s: Tiled's %s is no radio", menu, e.ID)
+			}
+			if e.Checked {
+				checked++
+			}
+		}
+		isTiled = checked == 1
+		if checked > 1 {
+			t.Fatalf("%s: %d edges checked", menu, checked)
+		}
+	} else if tr.Kind != widget.ItemKindRadio {
+		t.Fatalf("%s: Tiled is neither a radio nor a submenu", menu)
 	}
+	if isTiled != tiled || fl.Checked == tiled {
+		t.Fatalf("%s: Tiled checked %v, Float %v; want the Layout stored, tiled %v", menu, isTiled, fl.Checked, tiled)
+	}
+}
+
+// edgeRow is a panel's Layout › Tiled › edge row in rows (a panel's menu), or false.
+func edgeRow(rows []widget.MenuItemModel, edge string) (widget.MenuItemModel, bool) {
+	l := rowAt(rows, "layout")
+	if l < 0 {
+		return widget.MenuItemModel{}, false
+	}
+	tiled, ok := menuRow(rows[l].Children, "layout.tiled")
+	if !ok {
+		return widget.MenuItemModel{}, false
+	}
+	return menuRow(tiled.Children, "layout.tiled."+edge)
 }
 
 // The page's buffer strip and the terminal's tabs have Layout › right above Go to ›, checked as
@@ -52,8 +87,11 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
 	wantLayoutAbove(t, "the terminal", rows, "tabs.goto", false)
-	tiled, _ := menuRow(rows, "layout.tiled")
-	onLoop(r, func() bool { tiled.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+	bottom, ok := edgeRow(rows, "bottom")
+	if !ok {
+		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDs(rows))
+	}
+	onLoop(r, func() bool { bottom.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
 	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool {
 		return onLoop(r, func() string { return r.h.prefs.Value(layoutKey("terminal")) }) == layoutTiled
 	})
@@ -121,6 +159,8 @@ func TestTheExplorersAndTheTodosTabsOfferTheirLayout(t *testing.T) {
 			r.keys(t, key('a'))
 			r.s.WaitForText(t, "Float")
 			r.keys(t, key('t'))
+			r.s.WaitForText(t, "Bottom") // Tiled ›, the edges
+			r.keys(t, key('f'))          // Left
 			r.s.WaitFor(t, "the "+c.window+"'s Layout Tiled", func(string) bool {
 				return onLoop(r, func() string { return r.h.prefs.Value(layoutKey(c.window)) }) == layoutTiled
 			})
@@ -147,6 +187,8 @@ func TestTheLayoutCommandOpensAWindowsLayout(t *testing.T) {
 	r.command(t, "layout terminal")
 	r.s.WaitForText(t, "Float")
 	r.keys(t, key('t'))
+	r.s.WaitForText(t, "Bottom") // Tiled ›, the edges
+	r.keys(t, key('b'))
 	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool { return layouts() == [2]string{layoutFloat, layoutTiled} })
 	r.command(t, "layout nope")
 	r.s.WaitFor(t, "the notice naming the windows", func(sc string) bool { // a toast wraps it
@@ -155,4 +197,57 @@ func TestTheLayoutCommandOpensAWindowsLayout(t *testing.T) {
 	if got := layouts(); got != [2]string{layoutFloat, layoutTiled} {
 		t.Fatalf("the editor's and the terminal's Layout %v after :layout nope; want them unchanged", got)
 	}
+}
+
+// TestAPanelsEdgeIsChosenOnItsLayout: Layout › Tiled › on the terminal's menu. Chosen on the
+// floating terminal, Right tiles it there, the page beside it; Top, Left and Bottom then move its
+// tile, each checked as chosen. Its edge set elsewhere (the preference), the menu checks it.
+func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	rows := func() []widget.MenuItemModel {
+		return onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	}
+	wantLayoutChecked(t, "the floating terminal", rows()[rowAt(rows(), "layout")].Children, false)
+	choose := func(edge string) {
+		t.Helper()
+		row, ok := edgeRow(rows(), edge)
+		if !ok {
+			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDs(rows()))
+		}
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+	}
+	// at is whether the terminal's tile is on edge's side of the page: centres compared
+	at := func(edge string) bool {
+		term, page := boundsOf(r, "terminal"), boundsOf(r, "editorWindow")
+		if term.W == 0 || page.W == 0 {
+			return false
+		}
+		tx, ty, px, py := 2*term.X+term.W, 2*term.Y+term.H, 2*page.X+page.W, 2*page.Y+page.H
+		return map[string]bool{"left": tx < px, "right": tx > px, "top": ty < py, "bottom": ty > py}[edge]
+	}
+	tiledAt := func(edge string) bool {
+		return onLoop(r, func() bool {
+			return r.h.prefs.Value(layoutKey("terminal")) == layoutTiled && r.h.prefs.Value(tileEdgeKey("terminal")) == edge
+		}) && at(edge)
+	}
+	wantEdgeChecked := func(edge string) {
+		t.Helper()
+		for _, e := range edges {
+			row, _ := edgeRow(rows(), e)
+			if row.Checked != (e == edge) {
+				t.Fatalf("Tiled › %s checked %v with the edge %s", e, row.Checked, edge)
+			}
+		}
+	}
+	for _, edge := range []string{"right", "top", "left", "bottom"} {
+		choose(edge)
+		r.s.WaitFor(t, "the terminal tiled at the "+edge, func(string) bool { return tiledAt(edge) })
+		wantEdgeChecked(edge)
+		wantLayoutChecked(t, "the terminal at the "+edge, rows()[rowAt(rows(), "layout")].Children, true)
+	}
+	onLoop(r, func() bool { core{r.h}.SetPref(tileEdgeKey("terminal"), "top"); return true })
+	r.s.WaitFor(t, "the terminal tiled at the top, set elsewhere", func(string) bool { return tiledAt("top") })
+	wantEdgeChecked("top")
 }
