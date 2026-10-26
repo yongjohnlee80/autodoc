@@ -1,12 +1,14 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -59,4 +61,29 @@ func editorMain(ctx context.Context, verb, params string, stdout, stderr io.Writ
 		fmt.Fprintln(stderr, "autodoc:", err)
 	}
 	return 1
+}
+
+// noticeWait bounds --workspace-notice's call: it runs before each of the user's prompts, so an
+// editor that doesn't answer delays none by more.
+const noticeWait = 2 * time.Second
+
+// workspaceNotice is --workspace-notice, editor.workspace for a UserPromptSubmit hook (ADR 1792988759
+// r2 §4.3): the switch's one-line notice on out, or nothing. It is always 0: with the TUI gone, a
+// refusal, or no editor at all it prints nothing, so the hook never blocks or decorates a prompt.
+func workspaceNotice(ctx context.Context, env func(string) string, out io.Writer) int {
+	ctx, cancel := context.WithTimeout(ctx, noticeWait)
+	defer cancel()
+	var b bytes.Buffer
+	if err := runEditor(ctx, "editor.workspace", "", env, &b); err != nil {
+		return 0
+	}
+	var res struct {
+		Switch struct {
+			Notice string `json:"notice"`
+		} `json:"switch"`
+	}
+	if json.Unmarshal(b.Bytes(), &res) == nil && res.Switch.Notice != "" {
+		fmt.Fprintln(out, res.Switch.Notice)
+	}
+	return 0
 }

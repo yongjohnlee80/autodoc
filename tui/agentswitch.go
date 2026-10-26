@@ -1,15 +1,14 @@
 package tui
 
-import (
-	"cmp"
-	"time"
-)
+import "fmt"
 
-// WORKSPACE SWITCHES, TOLD TO THE AGENTS (ADR 1792988759) — an agent AutoDoc started is bound to the
-// workspace it started in: its env, its folder and its guide name it, and a switch never changes
-// them. A switch of the TUI's workspace is told instead: the TUI keeps a short numbered record of
-// each, which an agent reads on the editor socket (editor.workspace), and editor.document and
-// editor.buffers say when a buffer is in a workspace other than the asking agent's.
+// WORKSPACE SWITCHES, TOLD TO THE AGENTS (ADR 1792988759 r2) — an agent AutoDoc started is bound to
+// the workspace it started in: its env, its folder and its guide name it, and a switch never changes
+// them. A switch is told when the agent asks, never typed into its terminal: each agent instance keeps
+// the workspace it last saw, and editor.workspace answers one switch from that to the TUI's, however
+// many came between (A→B→C is A→C, A→B→A none). A Claude agent asks with each prompt, through the
+// UserPromptSubmit hook in its folder (agenthook.go). editor.document and editor.buffers say when a
+// buffer is in a workspace other than the asking agent's.
 
 // wsRef is a workspace as an agent sees it: its name and root. wsInfo's fields are the TUI's own.
 type wsRef struct{ Name, Root string }
@@ -17,32 +16,47 @@ type wsRef struct{ Name, Root string }
 // value is r on the socket: {name, root}, msgpack's map.
 func (r wsRef) value() map[string]any { return map[string]any{"name": r.Name, "root": r.Root} }
 
-// wsSwitch is one change of the TUI's workspace, as an agent reads it.
+// wsSwitch is the change an agent hasn't been told of: from the workspace it last saw to the TUI's.
 type wsSwitch struct {
-	Seq      int64  // 1, 2, … for this TUI's run
 	Kind     string // switchEntered, switchRenamed or switchLeft
-	From, To wsRef  // the workspace before and after; empty for none
+	From, To wsRef  // the workspace last seen, and the one in use; To empty for none
 	Document string // the active buffer's path, when it is in To
-	At       string // RFC 3339
 }
 
-// value is s on the socket: {seq, kind, from, to, document?, at}.
-func (s wsSwitch) value() map[string]any {
-	m := map[string]any{"seq": s.Seq, "kind": s.Kind, "from": s.From.value(), "to": s.To.value(), "at": s.At}
+// value is s on the socket: {kind, from, to, document?, notice}.
+func (s wsSwitch) value(spawn wsRef) map[string]any {
+	m := map[string]any{"kind": s.Kind, "from": s.From.value(), "to": s.To.value(), "notice": s.notice(spawn)}
 	if s.Document != "" {
 		m["document"] = s.Document
 	}
 	return m
 }
 
+// notice is s as one line for the agent spawned in spawn: what `autodoc --workspace-notice` prints
+// into its context.
+func (s wsSwitch) notice(spawn wsRef) string {
+	switch s.Kind {
+	case switchRenamed:
+		return fmt.Sprintf("[AutoDoc] the workspace %s was renamed %s (the same root, %s): $AUTODOC_WORKSPACE still says %s.",
+			s.From.Name, s.To.Name, s.To.Root, spawn.Name)
+	case switchLeft:
+		return fmt.Sprintf("[AutoDoc] the editor has no workspace open now. You stay in %s ($AUTODOC_ROOT, %s).", spawn.Name, spawn.Root)
+	}
+	open := ""
+	if s.Document != "" {
+		open = "; open: " + s.Document
+	}
+	return fmt.Sprintf("[AutoDoc] the editor moved to workspace %s (%s), from %s (%s)%s. You stay in %s ($AUTODOC_WORKSPACE, "+
+		"$AUTODOC_ROOT): resolve a path from editor.document in the workspace it names.", s.To.Name, s.To.Root, s.From.Name, s.From.Root, open, spawn.Name)
+}
+
 const (
-	switchEntered = "entered" // another workspace entered
-	switchRenamed = "renamed" // the workspace in use renamed: the same root, a new name
-	switchLeft    = "left"    // no workspace in use now: none is ready, or the one in use was deleted
-	keptSwitches  = 32        // the record is a ring: an older cursor reads from its oldest, lost
+	switchEntered = "entered" // another workspace, by root
+	switchRenamed = "renamed" // the same root under another name: $AUTODOC_WORKSPACE names the old one
+	switchLeft    = "left"    // no workspace in use: none is ready, or the one in use was deleted
 )
 
-// wsRefOf is the workspace name names, with its root; the name alone for one the TUI no longer lists.
+// wsRefOf is the workspace name names, with its root; the name alone for one the TUI doesn't list.
 func (h *Host) wsRefOf(name string) wsRef {
 	if name == "" {
 		return wsRef{}
@@ -55,39 +69,33 @@ func (h *Host) wsRefOf(name string) wsRef {
 	return wsRef{Name: name}
 }
 
-// noteSwitch records a change of the TUI's workspace from from to to, of kind. Loop only.
-func (h *Host) noteSwitch(kind string, from, to wsRef) {
-	if from == to {
-		return
+// takeSwitch is the switch agent hasn't been told of, and marks the workspace in use as told: false
+// for none, or when agent has no instance. A workspace the list doesn't name yet has no root to
+// compare: its switch waits for the next ask. Loop only.
+func (h *Host) takeSwitch(agent string) (wsSwitch, bool) {
+	inst := h.agents.instances[agent]
+	if inst == nil {
+		return wsSwitch{}, false
 	}
-	h.switchSeq++
-	r := wsSwitch{Seq: h.switchSeq, Kind: kind, From: from, To: to, At: time.Now().UTC().Format(time.RFC3339)}
-	if b := h.active; b != nil && b.file.open && b.file.ws == to.Name {
-		r.Document = b.file.path
+	if inst.seenToken != inst.token { // a new incarnation: it knows only the workspace it started in
+		inst.seen, inst.seenToken = wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, inst.token
 	}
-	h.switches = append(h.switches, r)
-	if len(h.switches) > keptSwitches {
-		h.switches = h.switches[len(h.switches)-keptSwitches:]
+	cur := h.wsRefOf(h.ws)
+	if cur == inst.seen || (cur.Name != "" && cur.Root == "") {
+		return wsSwitch{}, false
 	}
-}
-
-// noteRename records the workspace in use renamed from from to to: one root, whichever name the
-// TUI's list holds now.
-func (h *Host) noteRename(from, to string) {
-	root := cmp.Or(h.wsRefOf(from).Root, h.wsRefOf(to).Root)
-	h.noteSwitch(switchRenamed, wsRef{Name: from, Root: root}, wsRef{Name: to, Root: root})
-}
-
-// switchesAfter are the records after seq, and lost when some after it are no longer kept.
-func (h *Host) switchesAfter(seq int64) (out []wsSwitch, lost bool) {
-	out = []wsSwitch{}
-	for _, r := range h.switches {
-		if r.Seq > seq {
-			out = append(out, r)
-		}
+	sw := wsSwitch{Kind: switchEntered, From: inst.seen, To: cur}
+	switch {
+	case cur.Name == "":
+		sw.Kind = switchLeft
+	case cur.Root == inst.seen.Root:
+		sw.Kind = switchRenamed // the same files under another name: never told as a switch
 	}
-	lost = len(h.switches) > 0 && h.switches[0].Seq > seq+1
-	return out, lost
+	if b := h.active; b != nil && b.file.open && b.file.ws == cur.Name {
+		sw.Document = b.file.path
+	}
+	inst.seen = cur
+	return sw, true
 }
 
 // spawnWorkspace is the workspace the agent codename was started in, from its instance; false
@@ -100,25 +108,20 @@ func (a *agents) spawnWorkspace(codename string) (wsRef, bool) {
 	return wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, true
 }
 
-// editorWorkspace is editor.workspace [after]: the asking agent's workspace, the TUI's, and the
-// switches after the cursor after (0, or none, for every one kept). spawn is the asking token's
-// instance's, never a parameter's.
+// editorWorkspace is editor.workspace: the asking agent's workspace (spawn_workspace), the TUI's
+// (workspace_in_use) and, when it has moved since the agent last asked, the one switch between
+// (takeSwitch). It takes no parameter: spawn is the asking token's instance's.
 func (h *Host) editorWorkspace(agent string, a editorArgs) (any, error) {
-	after, _, err := a.num(0, "after", true)
-	if err != nil {
-		return nil, err
+	if len(a) > 0 {
+		return nil, invalid("editor.workspace takes no params: the workspace you started in is your token's")
 	}
-	switches, lost := h.switchesAfter(int64(after))
-	rows := make([]any, len(switches))
-	for i, r := range switches {
-		rows[i] = r.value()
+	out := map[string]any{"workspace_in_use": h.wsRefOf(h.ws).value()}
+	spawn, ok := h.agents.spawnWorkspace(agent)
+	if ok {
+		out["spawn_workspace"] = spawn.value()
 	}
-	out := map[string]any{"current": h.wsRefOf(h.ws).value(), "switches": rows, "cursor": h.switchSeq}
-	if spawn, ok := h.agents.spawnWorkspace(agent); ok {
-		out["spawn"] = spawn.value()
-	}
-	if lost {
-		out["lost"] = true
+	if sw, ok := h.takeSwitch(agent); ok {
+		out["switch"] = sw.value(spawn)
 	}
 	return out, nil
 }

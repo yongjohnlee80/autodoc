@@ -245,7 +245,10 @@ When running inside automated environments (such as `auto-agents.nvim`, embedded
 - **`$AUTODOC_WORKSPACE`**: Workspace name passed by agent/terminal harnesses to CLI invocations (`autodoc --call <verb> '["'"$AUTODOC_WORKSPACE"'", ...]'`).
 - **`$AUTO_AGENTS_KB_ROOT`**: Canonical path to the active knowledge base root directory in `auto-agents`.
 - **`$AUTODOC_EDITOR`** / **`$AUTODOC_AGENT`**: Exported inside AutoDoc's embedded agent terminals so `autodoc --editor` can talk directly to the hosting AutoDoc editor buffers.
-  - An agent stays in the workspace it was started in when you switch the editor to another one: its `$AUTODOC_WORKSPACE` and `$AUTODOC_ROOT` don't change. `autodoc --editor editor.workspace` tells it the editor's workspace and the switches since it last asked, and `editor.document` marks a buffer from another workspace `foreign_workspace`.
+  - An agent stays in the workspace it was started in when you switch the editor to another one: its `$AUTODOC_WORKSPACE` and `$AUTODOC_ROOT` don't change, and nothing is typed into its terminal.
+    - `autodoc --editor editor.workspace` tells it the editor's workspace, and the one switch since it last asked: A → B → C is told as A → C. It needs no permission.
+    - A Claude Code agent is told with your next message. AutoDoc adds a `UserPromptSubmit` hook running `autodoc --workspace-notice` to the agent folder's `.claude/settings.json`, keeping anything else in that file. Other agent CLIs are asked by their guide to call `editor.workspace` before acting on a message.
+    - `editor.document` marks a buffer from another workspace `foreign_workspace`.
 
 ---
 

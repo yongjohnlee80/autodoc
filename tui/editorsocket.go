@@ -24,13 +24,13 @@ import (
 // tells its agents where (AUTODOC_EDITOR) and who they are (AUTODOC_AGENT); `autodoc --editor
 // <verb> [params]` calls it. Every verb's first param is the agent's codename; positions are
 // 1-based, as Lua's. A verb needs a capability of the agent, agent:<codename> in the Lua grants
-// (luagate.go): without it the call is refused at once and the user asked, and an Allow works for
-// the next call. Every edit is one undo step; an edit given the revision it read is refused when the
+// (luagate.go), editor.workspace none: without it the call is refused at once and the user asked,
+// and an Allow works for the next call. Every edit is one undo step; an edit given the revision it read is refused when the
 // text has moved on. editor.add_command writes a Lua command into lua/ only after the user's yes.
 //
 //	editor.document                         {path, workspace, kind, modified, revision, cursor, selection?,
 //	                                         spawn_workspace, foreign_workspace?}                            editor.read
-//	editor.workspace [after]                {spawn, current, switches, cursor, lost?} (ADR 1792988759)       editor.read
+//	editor.workspace                        {spawn_workspace, workspace_in_use, switch?} (ADR 1792988759)   none
 //	editor.read [from_line, to_line]        {text, revision}                                                 editor.read
 //	editor.find term [opts]                 [[l1, c1, l2, c2], …]                                            editor.read
 //	editor.insert line col text [rev]       {line, col, revision}                                            editor.write
@@ -191,7 +191,7 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 	return map[string]golibrpc.Handler{
 		"editor.buffers":     h.editorVerb("editor.read", h.editorBuffers),
 		"editor.document":    h.editorVerb("editor.read", h.editorDocument),
-		"editor.workspace":   h.editorVerb("editor.read", h.editorWorkspace),
+		"editor.workspace":   h.editorVerb("", h.editorWorkspace), // no grant: names, roots and a path (ADR 1792988759 r2)
 		"editor.read":        h.editorVerb("editor.read", h.editorRead),
 		"editor.find":        h.editorVerb("editor.read", h.editorFind),
 		"editor.insert":      h.editorVerb("editor.write", h.editorInsert),
@@ -218,7 +218,7 @@ func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 	return agent, editorArgs(req.Params[1:]), nil
 }
 
-// editorVerb is fn as a handler: run on the loop, for an agent granted capability.
+// editorVerb is fn as a handler: run on the loop, for an agent granted capability; "" needs none.
 func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs) (any, error)) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		return onLoopFor(ctx, h, func() (any, error) {
@@ -227,7 +227,7 @@ func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs)
 				return nil, err
 			}
 			who := "agent:" + agent
-			if g := (luaGrants{h}); !g.Granted(who, capability) {
+			if g := (luaGrants{h}); capability != "" && !g.Granted(who, capability) {
 				g.Request(who, []string{capability})
 				return nil, &golibrpc.Error{Code: codeEditorNotGranted,
 					Message: fmt.Sprintf("needs %s: not granted (the user is asked)", capability)}

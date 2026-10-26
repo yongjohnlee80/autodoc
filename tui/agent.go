@@ -375,8 +375,8 @@ func safeName(s string) string {
 }
 
 // writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into the agent's folder for ws:
-// most agent CLIs read one of the two from where they start; and bin/autodoc, agentWrapper. It
-// returns the folder.
+// most agent CLIs read one of the two from where they start; bin/autodoc, agentWrapper; and the
+// workspace notice hook into .claude/settings.json (agenthook.go). It returns the folder.
 func (h *agents) writeAgentGuide(ws wsInfo) (string, error) {
 	dir := h.agentFolder(ws)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
@@ -387,16 +387,27 @@ func (h *agents) writeAgentGuide(ws wsInfo) (string, error) {
 		name, text string
 		mode       os.FileMode
 	}{{"AGENTS.md", guide, 0o600}, {"CLAUDE.md", guide, 0o600}, {filepath.Join("bin", "autodoc"), agentWrapper(h.agentBin(), h.agentConfig), 0o700}} {
-		path := filepath.Join(dir, f.name)
-		tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
-		if err := os.WriteFile(tmp, []byte(f.text), f.mode); err != nil {
-			return "", err
-		}
-		if err := os.Rename(tmp, path); err != nil {
+		if err := writeAtomic(filepath.Join(dir, f.name), []byte(f.text), f.mode); err != nil {
 			return "", err
 		}
 	}
+	// the workspace notice, for a Claude agent (agenthook.go): without it the agent still starts, and
+	// asks editor.workspace by the guide's rule
+	h.c.Keep(mergeClaudeHook(filepath.Join(dir, ".claude", "settings.json"), noticeCommand(dir)))
 	return dir, nil
+}
+
+// writeAtomic writes path as text, mode mode, through a temporary file beside it: a reader sees the
+// old file or the new one, never part of one.
+func writeAtomic(path string, text []byte, mode os.FileMode) error {
+	tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
+	if err := os.WriteFile(tmp, text, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil { // an old temporary file keeps its mode through WriteFile
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
@@ -439,8 +450,9 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
 	"included (`$AUTODOC_EDITOR`; it knows you by `$AUTODOC_EDITOR_TOKEN`, which `autodoc --editor` passes). Positions are 1-based lines and columns (a column is a character).\n\n" +
 	"- `editor.document`: path, kind, modified, revision, cursor, selection; `editor.buffers`: every open buffer.\n" +
-	"- `editor.workspace '[after]'`: the workspace you were started in (`spawn`), the one the editor is in now " +
-	"(`current`), and the switches since the cursor `after`.\n" +
+	"- `editor.workspace`: the workspace you were started in (`spawn_workspace`), the one the editor is in now " +
+	"(`workspace_in_use`), and, when the editor has moved since you last asked, the `switch` from the one you last " +
+	"saw, with a `notice` line. It needs no permission.\n" +
 	"- `editor.read '[from_line, to_line]'`, `editor.find '[\"term\", {\"ignore_case\": true}]'`.\n" +
 	"- `editor.insert '[line, col, \"text\", revision]'`, `editor.replace '[l1, c1, l2, c2, \"text\", revision]'`, " +
 	"`editor.delete '[l1, c1, l2, c2, revision]'`: pass the revision you read, so an edit of a page the user has " +
@@ -449,8 +461,10 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
 	"to their lua/ folder only if they say yes.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
-	"`$AUTODOC_ROOT` don't change. When `editor.document` says `foreign_workspace`, its path is relative to that " +
-	"workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not at all. Keep your " +
-	"task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
+	"`$AUTODOC_ROOT` don't change. Before you act on each message from the user, run `autodoc --editor editor.workspace`, " +
+	"and when it has a `switch`, tell the user what changed (a Claude Code session in this folder is told by a hook " +
+	"instead: its `[AutoDoc]` line arrives with the message). When `editor.document` says `foreign_workspace`, its path " +
+	"is relative to that workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not " +
+	"at all. Keep your task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
 	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>`. " +
 	"Say so to the user, and try again once they have answered.\n\n"
