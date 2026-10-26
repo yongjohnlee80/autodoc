@@ -64,11 +64,15 @@ type embedSetup struct {
 	asked    uint64 // each estimate is a new one: only the latest's answer is shown
 	// The operations outlive a view's session: a Check or a close and reopen neither strands nor
 	// forgets them.
-	job, jobModel, jobBase string              // the running download, its model and its Ollama; job "" for none
-	pulled                 map[string][]string // the models downloads finished, by Ollama: a Check's catalog read before one ended does not undo it
-	polls                  uint64              // each poll chain is a new one: an older chain stops
-	plan                   *setupPlan          // the plan that stopped at a step, for Retry; nil for none
-	running                bool                // a plan runs
+	job, jobModel, jobBase string // the running download, its model and its Ollama; job "" for none
+	// pulled is the downloads finished, by Ollama and model, each with its number in finished: a
+	// Check started before one finished may have read the catalog before it, so its answer does
+	// not undo that one; a Check started after reads a catalog newer than it, removals included
+	pulled   map[string]map[string]uint64
+	finished uint64
+	polls    uint64     // each poll chain is a new one: an older chain stops
+	plan     *setupPlan // the plan that stopped at a step, for Retry; nil for none
+	running  bool       // a plan runs
 }
 
 // setupPlan is what Use applies, fixed when it starts: Retry runs the same one, whatever was picked
@@ -161,7 +165,7 @@ func (s *embedSetup) model() string { return str(s.card(), "name") }
 // recommended model.
 func (s *embedSetup) check(base string) {
 	s.session++
-	session := s.session
+	session, since := s.session, s.finished
 	base = strings.TrimSpace(base) // the worker asks this Ollama, whatever a later Check sets
 	s.base, s.exactFor, s.plan, s.stale = base, "", nil, false
 	s.c.Set("App.embedSetupStatus", "")
@@ -198,7 +202,7 @@ func (s *embedSetup) check(base string) {
 		s.cards = nil
 		for _, c := range asList(got[1]) {
 			card := asMap(c)
-			if slices.Contains(s.pulled[base], str(card, "name")) {
+			if s.pulled[base][str(card, "name")] > since { // finished after this Check began
 				card["installed"] = true
 			}
 			s.cards = append(s.cards, card)
@@ -445,10 +449,14 @@ func (s *embedSetup) poll(chain uint64) {
 			return
 		case "done":
 			s.job = ""
+			s.finished++
 			if s.pulled == nil {
-				s.pulled = map[string][]string{}
+				s.pulled = map[string]map[string]uint64{}
 			}
-			s.pulled[s.jobBase] = append(s.pulled[s.jobBase], s.jobModel)
+			if s.pulled[s.jobBase] == nil {
+				s.pulled[s.jobBase] = map[string]uint64{}
+			}
+			s.pulled[s.jobBase][s.jobModel] = s.finished
 			// the model downloaded is the job's, on the job's Ollama: neither need be the one shown now
 			if s.jobBase == s.base {
 				if i := slices.IndexFunc(s.cards, func(c map[string]any) bool { return str(c, "name") == s.jobModel }); i >= 0 {
