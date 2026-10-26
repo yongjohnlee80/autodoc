@@ -197,6 +197,10 @@ var cards = []Card{{ID: leader, View: "Leader", Title: "SPC — commands",
 // leaderGroups are SPC's card's columns. The card is to fit the smallest screen, main.qml's 80 × 20:
 // its frame leaves the body 76 cells by 16 rows. MANAGE and WINDOW, the widest groups, share a
 // column, and the narrowest has room for the agents' key and a feature's under MORE.
+// cardBodyWidth is a card's body at its widest, in cells: main.qml's smallest screen, 80 × 20, less
+// the card's frame.
+const cardBodyWidth = 76
+
 var leaderGroups = [][]string{{groupFind, groupFile}, {groupPanels, groupAgents, groupHelp}, {groupManage, groupWindow}}
 
 // windowKeys fire whichever widget has focus, when it leaves them. Space and Ctrl+h/j/k/l reach the

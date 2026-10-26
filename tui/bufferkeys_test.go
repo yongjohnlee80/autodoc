@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -274,4 +275,104 @@ func TestTheBufferEntriesRunAsTheirKeys(t *testing.T) {
 	if got := r.file().path; got != "b.md" || !slices.Equal(r.bufferPaths(), []string{"b.md"}) {
 		t.Errorf("after buffer.show_3 of one buffer: %q shown, buffers %q", got, r.bufferPaths())
 	}
+}
+
+// bufferCardHost is a host with its catalog and ten buffers whose files are named by name(n),
+// the 4th modified: no program, as bufferCardText reads only the buffers and the catalog.
+func bufferCardHost(name func(n int) string) *Host {
+	h := newHost(NewSession("unused", nil), Options{})
+	h.features()
+	h.buffers = nil
+	for n := 1; n <= 10; n++ {
+		b := h.newBuffer()
+		b.file.open, b.file.ws, b.file.path = true, "kb", name(n)
+		b.file.dirty = n == 4
+	}
+	return h
+}
+
+// TestTheBufferCardNamesEachSlotsBuffer (v0.3.2, Johno: "a file name attached to the numbers and
+// the ones not attached not shown"): SPC b's card has a row per open buffer, its slot key and its
+// tab's label, [+] on a modified one, 0 the 10th, and none for a slot with no buffer; a base name
+// two buffers share is told apart as the tabs tell it. Ten names too long for the card are cut in
+// the middle, each row within the 80 × 20 screen's card, its file's name kept. The other keys
+// follow; F1 lists the card as declared.
+func TestTheBufferCardNamesEachSlotsBuffer(t *testing.T) {
+	h := bufferCardHost(func(n int) string { return fmt.Sprintf("n%d.md", n) })
+	text := h.bufferCardText()
+	for n := 1; n <= 10; n++ {
+		want := fmt.Sprintf("%d  n%d.md", n%10, n)
+		if n == 4 {
+			want += " [+]"
+		}
+		if !strings.Contains(text, want+"\n") {
+			t.Errorf("the card lacks the row %q:\n%s", want, text)
+		}
+	}
+	for _, want := range []string{"d  close the buffer", "s  switch buffer", "r  close the buffers to the right", "l  close the buffers to the left", "b  back"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the card lacks %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "show the") {
+		t.Errorf("the card still lists the declared slot rows:\n%s", text)
+	}
+	if help := helpText(h.keys, nil, nil); !strings.Contains(help, "1  show the 1st buffer") {
+		t.Error("F1 no longer lists the card's keys as declared")
+	}
+
+	h.buffers = h.buffers[:3] // three buffers: rows 1 to 3 only
+	text = h.bufferCardText()
+	lines := strings.Split(text, "\n")
+	if len(lines) < 3 || lines[0] != "1  n1.md" || lines[1] != "2  n2.md" || lines[2] != "3  n3.md" {
+		t.Fatalf("three buffers' card:\n%s", text)
+	}
+	for _, l := range lines[3:] {
+		if l != "" && l[0] >= '0' && l[0] <= '9' {
+			t.Errorf("a row for a slot with no buffer: %q", l)
+		}
+	}
+
+	h = bufferCardHost(func(n int) string { return fmt.Sprintf("dir%d/notes.md", n) }) // one base name: told apart by path
+	if text := h.bufferCardText(); !strings.Contains(text, "1  dir1/notes.md\n") || !strings.Contains(text, "0  dir10/notes.md\n") {
+		t.Errorf("a shared base name is not told apart as the tabs tell it:\n%s", text)
+	}
+
+	h = bufferCardHost(func(n int) string { return fmt.Sprintf("%s-%d.md", strings.Repeat("long-name-", 12), n) })
+	for i, l := range strings.Split(h.bufferCardText(), "\n")[:10] {
+		if w := tuicore.StringWidth(l); w > cardBodyWidth {
+			t.Errorf("row %d is %d cells, wider than the card's %d: %q", i+1, w, cardBodyWidth, l)
+		}
+		if !strings.Contains(l, "…") || !strings.Contains(l, fmt.Sprintf("-%d.md", i+1)) {
+			t.Errorf("row %d is not cut in the middle with its file's name kept: %q", i+1, l)
+		}
+	}
+}
+
+// TestTheBufferCardFollowsTheBuffers: the card names what is open as it changes. Open while it
+// shows, it drops a buffer closed meanwhile; opened again, it names a buffer opened since.
+func TestTheBufferCardFollowsTheBuffers(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 3)
+	for _, p := range []string{"a.md", "b.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	r.leader(t, 'b')
+	r.s.WaitFor(t, "the card naming a.md and b.md", func(sc string) bool {
+		return strings.Contains(sc, "SPC b — buffers") && strings.Contains(sc, "1  a.md") && strings.Contains(sc, "2  b.md")
+	})
+	onLoop(r, func() bool { r.h.closeBuffer(bufferOnLoop(r, "a.md")); return true }) // not shown, unmodified: closed unasked
+	r.s.WaitFor(t, "the open card naming b.md first, a.md gone", func(sc string) bool {
+		return strings.Contains(sc, "SPC b — buffers") && strings.Contains(sc, "1  b.md") && !strings.Contains(sc, "2  b.md") // a notice can still name a.md
+	})
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "SPC b — buffers") })
+	r.openByPicker(t, "c.md")
+	r.waitFile(t, "c.md")
+	r.leader(t, 'b')
+	r.s.WaitFor(t, "the card naming c.md second", func(sc string) bool {
+		return strings.Contains(sc, "SPC b — buffers") && strings.Contains(sc, "1  b.md") && strings.Contains(sc, "2  c.md")
+	})
 }

@@ -174,7 +174,7 @@ func (h *Host) state() map[string]any {
 		"App.zoomSteps":     choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
-	for k, v := range h.keys.cardState() {
+	for k, v := range h.cardState() {
 		st[k] = v
 	}
 	for k, v := range h.choiceState() { // in the UI's language (language.go)

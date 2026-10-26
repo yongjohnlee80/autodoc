@@ -256,13 +256,14 @@ func bufferLabel(b *openBuffer) string {
 	return fmt.Sprintf("%d %s", b.n, b.file.name()) + bufferMarks(b)
 }
 
-// syncBuffers tells the buffer list's surfaces (:b completion, the Buffers picker, the GUI's tabs)
-// the buffers as they are now.
+// syncBuffers tells the buffer list's surfaces (:b completion, the Buffers picker, the GUI's tabs,
+// SPC b's card) the buffers as they are now.
 func (h *Host) syncBuffers() {
 	if h.bufferPick != nil {
 		h.bufferPick.setAll(h.bufferLabels())
 	}
 	h.syncBufferTabs()
+	h.set(textSource(bufferCard), h.bufferCardText())
 }
 
 // bufferLabels are the buffers' labels in opening order.
