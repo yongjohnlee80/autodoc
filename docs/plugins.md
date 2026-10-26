@@ -281,8 +281,8 @@ Each notification carries one map.
   its first placement (`right`, `left`, `top`, `bottom` or `center`; a corner at its side's edge,
   `top-right` at the right), or the one the user chose (Manage › Place), as wide (at a side) or as
   tall (at the top or bottom) as `[dialog] width` and `height` ask, until the user sizes it. It
-  moves and resizes as every panel does (Alt/Option-left drag, Alt/Option-right drag,
-  Go › Arrange panel), and AutoDoc keeps where it is left and its size. The plugin is told each new
+  moves and resizes as every panel does (Alt/Option-left drag, Alt/Option-right drag, in `--gui`
+  a plain drag of its title row or border, Go › Arrange panel), and AutoDoc keeps where it is left and its size. The plugin is told each new
   size (`plugin.resize`).
 - It takes the keys only when it is focused. A click on it focuses it, and so do its commands. While
   focused it is sent every key but Esc. The plugin is told `plugin.focus {focused: true}` when it
