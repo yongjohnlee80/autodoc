@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,21 +66,14 @@ func TestAPluginsNotices(t *testing.T) {
 
 	r.pluginCommand("a", "badnotify")
 	r.pluginCommand("old", "notifywith", "", "0", "secret from old")
-	r.pluginCommand("a", "ping")
-	r.pluginCommand("old", "ping")
-	waitSaid(t, logs, "a", "pong")
-	waitSaid(t, logs, "old", "pong")
+	// the host logs a refusal as it reads the link, the plugin its own lines on stderr: no line the
+	// plugin says after is a barrier, so each refusal is waited for itself
 	for name, wants := range map[string][]string{
 		"a":   {"host.notify refused: plugin: a notice refused: message is not a string", "host.notify refused: plugin: a notice refused: an ongoing notice with no id"},
 		"old": {"host.notify refused: the manifest's protocol 7 is before 8"},
 	} {
-		b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
-		for _, w := range wants {
-			if !strings.Contains(string(b), w) {
-				t.Errorf("%s's log lacks %q:\n%s", name, w, b)
-			}
-		}
-		if strings.Contains(string(b), "secret from old") {
+		waitLogged(t, logs, name, wants...)
+		if b, _ := os.ReadFile(filepath.Join(logs, name+".log")); strings.Contains(string(b), "secret from old") {
 			t.Errorf("%s's log holds a refused notice's message", name)
 		}
 	}
@@ -88,8 +82,9 @@ func TestAPluginsNotices(t *testing.T) {
 	}
 
 	r.pluginCommand("b", "manynotify")
-	r.pluginCommand("b", "ping")
-	waitSaid(t, logs, "b", "pong")
+	// the notices are taken on the loop in the order sent: once one past the cap is refused, every
+	// one before it is held
+	waitLogged(t, logs, "b", fmt.Sprintf("host.notify refused: more than %d ongoing notices", plugin.MaxActiveNotices))
 	runB := runOf(r, "b") // on the loop, then its tracker on the loop: never one onLoop inside another
 	if active := onLoop(r, func() int { return len(runB.active) }); active != plugin.MaxActiveNotices {
 		t.Fatalf("b holds %d ongoing notices, want the cap %d (its sync and 15 tasks; the 17th refused)", active, plugin.MaxActiveNotices)

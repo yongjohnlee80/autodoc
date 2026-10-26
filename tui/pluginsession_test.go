@@ -175,24 +175,15 @@ func TestTheSlotOutlivesARunNotItsPlugin(t *testing.T) {
 	waitSlot(t, r, "raw", map[string]string{"token": "tok-raw"})
 	r.pluginCommand("raw", "bigsession")
 	r.pluginCommand("raw", "badsession")
-	r.pluginCommand("raw", "ping") // after both: their refusals are logged by the time pong is
-	waitSaid(t, logs, "raw", "pong")
-	b, _ := os.ReadFile(filepath.Join(logs, "raw.log"))
-	for _, want := range []string{"host.session refused: over the slot's bounds", "host.session refused: malformed"} {
-		if !strings.Contains(string(b), want) {
-			t.Errorf("raw's log lacks %q:\n%s", want, b)
-		}
-	}
+	// the host logs a refusal as it reads the link, the plugin its own lines on stderr: no line the
+	// plugin says after is a barrier, so each refusal is waited for itself
+	waitLogged(t, logs, "raw", "host.session refused: over the slot's bounds", "host.session refused: malformed")
 	if got := slotOf(r, "raw"); !reflect.DeepEqual(got, map[string]string{"token": "tok-raw"}) {
 		t.Fatalf("a refused slot replaced the old one: %v", got)
 	}
 
 	r.pluginCommand("old", "session")
-	r.pluginCommand("old", "ping")
-	waitSaid(t, logs, "old", "pong")
-	if b, _ := os.ReadFile(filepath.Join(logs, "old.log")); !strings.Contains(string(b), "host.session refused: the plugin's manifest says a protocol before 7") {
-		t.Errorf("old's log:\n%s", b)
-	}
+	waitLogged(t, logs, "old", "host.session refused: the plugin's manifest says a protocol before 7")
 	if got := slotOf(r, "old"); got != nil {
 		t.Fatalf("a protocol-6 plugin set a slot: %v", got)
 	}
