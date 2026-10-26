@@ -81,6 +81,8 @@ AutoDoc partitions frontmatter fields into three strict categories:
    - `assignee` — Mutated via `todos.assign`. Per Decision D1 of ADR 1791532020, assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so a notification consumer (an assignment notifier reading `todos.changes`) can wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
 3. **Hand-Editable Fields**: `title`, `description` (the Markdown body), `priority` (`low`, `medium`, `high`; `normal` is the legacy spelling of `medium`: a task that has it is valid and reads as `medium`, and its next write writes `medium`), `due` (`YYYY-MM-DD`), `tags`, `adr`, `review`, and `blocked`. Users and agents may edit the Markdown body directly on disk or pass a partial map to `todos.update` with the task's current `rev` token.
 
+A task's frontmatter is the todo format's, not a KB document type's: the editor and `index.documents {diagnosed: true}` check a task against the format, never against the workspace's schema (see the frontmatter-schemas reference).
+
 ---
 
 ## 3. Portable Symbolic Path Rewriting (`$KB_ROOT` and `$PROJECT_ROOT`)

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
 // modes is a test's Modes: graph-only by path prefix, the todo stores by directory, and the
@@ -252,4 +254,64 @@ func TestVarLink(t *testing.T) {
 			t.Errorf("%s: %+v %v, want %+v %v", c.dest, got, ok, c.want, c.ok)
 		}
 	}
+}
+
+// TestATaskIsCheckedByItsStoresFormat (ADR 1792015212 amendment 2): a task in a store is checked
+// by the store's Check, the todo format's, never by the workspace's KB schema, so it has none of
+// the KB's diagnostics and the format's facets. A file beside the store keeps the KB schema's. A
+// store whose Check comes later indexes its unchanged task again, now checked by it.
+// ValidateFrontmatter answers what the index holds, for both.
+func TestATaskIsCheckedByItsStoresFormat(t *testing.T) {
+	var sv schemaVar
+	sv.set(t, facetSchema, "s1")
+	format := func([]byte) schema.Result {
+		return schema.Result{Facets: []schema.Facet{{Field: "status", Value: "open"}},
+			Diagnostics: []schema.Diagnostic{{Field: "adr[0]", Line: 1, Rule: "todo-not-found", Message: "adr[0]: no such file"}}}
+	}
+	m := &modes{stores: map[string]*TodoStore{".todo-list/": {ID: "S"}}} // no Check yet: the KB schema's, as before
+	e := newEnv(t, options{Schema: sv.get, Modes: m.mode})
+	task, beside := "---\nid: t\nstatus: open\n---\nt\n", "---\nstatus: draft\n---\nn\n"
+	e.write(".todo-list/open/t.md", task)
+	e.write("n.md", beside)
+	for _, p := range []string{".todo-list/open/t.md", "n.md"} {
+		e.ix.Touch(p)
+		e.indexedAt(p)
+	}
+	ctx := context.Background()
+	if d, _ := e.store.Diagnostics(ctx, ".todo-list/open/t.md"); !hasRule(d, "type", schema.RuleRequired) {
+		t.Fatalf("a store with no Check: the task's diagnostics %+v, want the KB schema's (type required among them)", d)
+	}
+
+	m.set(func(m *modes) { m.stores[".todo-list/"] = &TodoStore{ID: "S", Check: format} }) // a new store: a mode is read off the lock
+	e.revalidate(func() bool {
+		d, _ := e.store.Diagnostics(ctx, ".todo-list/open/t.md")
+		return len(d) == 1 && d[0].Rule == "todo-not-found"
+	})
+	d, _ := e.store.Diagnostics(ctx, ".todo-list/open/t.md")
+	if len(d) != 1 || d[0].Field != "adr[0]" || d[0].Rule != "todo-not-found" {
+		t.Errorf("the task's diagnostics: %+v, want the format's alone", d)
+	}
+	if got, want := e.facets(".todo-list/open/t.md"), []string{"status=open"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the task's facets: %v, want the format's %v", got, want)
+	}
+	if d, _ := e.store.Diagnostics(ctx, "n.md"); len(d) != 1 || d[0].Rule != schema.RuleRequired {
+		t.Errorf("the file beside the store: %+v, want the KB schema's (type required)", d)
+	}
+	kb, _ := sv.get()
+	if r := e.ix.ValidateFrontmatter(".todo-list/open/t.md", []byte(task), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != "todo-not-found" {
+		t.Errorf("ValidateFrontmatter of the task: %+v, want the format's", r.Diagnostics)
+	}
+	if r := e.ix.ValidateFrontmatter("n.md", []byte(beside), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != schema.RuleRequired {
+		t.Errorf("ValidateFrontmatter of the file beside it: %+v, want the KB schema's", r.Diagnostics)
+	}
+}
+
+// hasRule reports a diagnostic of rule on field among ds.
+func hasRule(ds []schema.Diagnostic, field, rule string) bool {
+	for _, d := range ds {
+		if d.Field == field && d.Rule == rule {
+			return true
+		}
+	}
+	return false
 }

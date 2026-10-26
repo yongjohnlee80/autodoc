@@ -132,7 +132,7 @@ func (s *Server) docVerbs() []module.Verb {
 		// schema with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
 		module.Handle(module.Contract{Verb: "doc.validate", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{diagnostics: [{field, line, rule, message}]}", Errors: []int64{CodeNoSuchWorkspace},
-			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter."},
+			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry."},
 			func(ctx context.Context, p docValidate) (*diagnosticsJSON, error) {
 				w := workspaceOf(ctx)
 				if len(p.Content) > docs.MaxSize {
@@ -141,8 +141,12 @@ func (s *Server) docVerbs() []module.Verb {
 				var sch *schema.Schema
 				sch, _, _ = w.FrontmatterSchema()
 				var ds []schema.Diagnostic
-				if w.Index() == nil || w.Index().Kind(p.Path).Traits().Frontmatter {
+				switch idx := w.Index(); {
+				case idx == nil:
 					ds = sch.ValidateFile(p.Content).Diagnostics
+				case idx.Kind(p.Path).Traits().Frontmatter:
+					// as the index checks the path: a task in a todo store by its todo format (ADR 1792015212 amendment 2)
+					ds = idx.ValidateFrontmatter(p.Path, p.Content, sch).Diagnostics
 				}
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
 			}),

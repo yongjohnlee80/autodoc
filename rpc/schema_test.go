@@ -172,6 +172,21 @@ func TestSchemaV2OverTheWire(t *testing.T) {
 	}
 }
 
+// A workspace with no index checks unsaved text against its schema alone: there is no todo store
+// to send a task to.
+func TestDocValidateWithoutAnIndex(t *testing.T) {
+	sch, err := schema.Parse([]byte("version: 1\nfrontmatter:\n  type: {type: string, enum: [note, adr], required: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := dialServer(t, Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb",
+		FrontmatterSchema: func() (*schema.Schema, SchemaStatus) { return sch, SchemaStatus{Active: true} }})))
+	ds := call(t, cli, "doc.validate", "kb", "draft.md", []byte("---\ntype: memo\n---\nbody\n")).(map[string]any)["diagnostics"].([]any)
+	if len(ds) != 1 || ds[0].(map[string]any)["rule"] != schema.RuleEnum {
+		t.Errorf("doc.validate with no index = %v, want type's enum diagnostic", ds)
+	}
+}
+
 func TestDocOutlineOverTheWire(t *testing.T) {
 	cli, fsys := schemaServer(t, "version: 1\nfrontmatter:\n")
 	ctx := context.Background()

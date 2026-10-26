@@ -15,7 +15,6 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/logger"
-	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/chunk"
 	"github.com/yongjohnlee80/golib/search/embed"
@@ -758,11 +757,7 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 		p.links = append(p.links, extractRelations(doc, p.path)...)
 	}
 	p.adr = adrNumber(p.meta.FrontmatterJSON)
-	if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
-		p.frontmatter = s.schema.Validate(fm.Literal, true)
-	} else {
-		p.frontmatter = s.schema.Validate(nil, false)
-	}
+	p.frontmatter = frontmatterOf(doc, s.text, s.schema, s.mode.Store)
 	return nil
 }
 

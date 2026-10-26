@@ -56,7 +56,7 @@ return {
         { name = "content", type = "bytes" }
       },
       result = "{diagnostics: [{field, line, rule, message}]}",
-      doc = "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter.",
+      doc = "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry.",
     },
     ["doc.write"] = {
       since = 1, scope = "workspace", audience = "user",

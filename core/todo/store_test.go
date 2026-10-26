@@ -808,3 +808,29 @@ func TestAFailedClaimIsUndoneWhateverItsRequest(t *testing.T) {
 		t.Errorf("the second claim: %v, claimed %v", err, claimedNow(e))
 	}
 }
+
+// CheckFile judges a task by its todo format, never a KB's schema (ADR 1792015212 amendment 2): a
+// valid task has no diagnostic and its format's facets, normal faceted as medium; a malformed one
+// has the reason todos.list gives; each errors[] entry is a diagnostic on the field it names.
+func TestCheckFileJudgesATaskByItsFormat(t *testing.T) {
+	ok := todo.CheckFile([]byte(taskFile("t", "open", "priority: normal")))
+	if len(ok.Diagnostics) != 0 {
+		t.Errorf("a valid task: %+v, want no diagnostic", ok.Diagnostics)
+	}
+	facets := map[string]string{}
+	for _, f := range ok.Facets {
+		facets[f.Field] = f.Value
+	}
+	if facets["status"] != "open" || facets["priority"] != "medium" || facets["type"] != "" {
+		t.Errorf("a valid task's facets: %v, want status open and priority medium, and no KB type", facets)
+	}
+	bad := todo.CheckFile([]byte("---\nid: \"t\"\nversion: 1\nstatus: open\n---\n\n# t\n"))
+	if len(bad.Diagnostics) != 1 || bad.Diagnostics[0].Rule != todo.RuleMalformed || !strings.Contains(bad.Diagnostics[0].Message, "title") {
+		t.Errorf("a task with no title: %+v, want one %s naming title", bad.Diagnostics, todo.RuleMalformed)
+	}
+	withErr := todo.CheckFile([]byte(taskFile("t", "open", "adr:\n  - \"/kb/adrs/gone.md\"",
+		"errors:\n  - code: not-found\n    detected: \"2026-10-01T09:00:00-07:00\"\n    field: \"adr[0]\"\n    message: \"adr[0]: no such file\"")))
+	if len(withErr.Diagnostics) != 1 || withErr.Diagnostics[0].Field != "adr[0]" || withErr.Diagnostics[0].Rule != todo.RuleTaskError+"not-found" {
+		t.Errorf("a task with an errors[] entry: %+v, want one %snot-found on adr[0]", withErr.Diagnostics, todo.RuleTaskError)
+	}
+}
