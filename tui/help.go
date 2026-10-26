@@ -180,6 +180,9 @@ const helpKeys = `KEYS
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
+  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+              one with the keyboard), round; its program never gets them (Ctrl+\ first sends
+              one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and

@@ -2488,6 +2488,9 @@
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
+  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+              one with the keyboard), round; its program never gets them (Ctrl+\ first sends
+              one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
@@ -2554,6 +2557,9 @@
               否则为最新打开的)，与其标签页菜单中的“最大化”相同：面板中的程序
               收不到 F11；自身占用 F11 的终端模拟器(如 GNOME Terminal 的全屏)
               会保留它：SPC M 始终可用
+  Ctrl+Tab, Ctrl+Shift+Tab  终端或智能体(键盘所在的那个)的下一个/上一个标签页，
+              首尾循环；程序收不到它们(先按 Ctrl+\ 则发送给程序)。在终端中，仅当终端能
+              区分 Ctrl+Tab 与 Tab 时有效(kitty 键盘协议)
   F1          本帮助(帮助 › 按键)；帮助 › 教程… 打开教程；  Ctrl+Q 退出
   Shift+F10, the Menu key, SPC .  在光标处打开页面的右键菜单
   Ctrl+= Ctrl+- Ctrl+0  在 GUI 窗口中放大、缩小、恢复到 100%(“选项 › 字体与
@@ -2993,6 +2999,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.show.b_in_the_html_preview">
         <source>b in the HTML preview</source>
         <translation>HTML 预览中的 b</translation>
+    </message>
+    <message id="autodoc.key.show.ctrl_tab_and_ctrl_shift_tab">
+        <source>Ctrl+Tab and Ctrl+Shift+Tab</source>
+        <translation>Ctrl+Tab 和 Ctrl+Shift+Tab</translation>
     </message>
     <message id="autodoc.key.show.d_in_the_links">
         <source>d in the links</source>

@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // FLOATING PANELS — the five drawers move and resize anywhere over the page: Alt/Option-left drag
@@ -82,6 +84,48 @@ func (h *Host) panelInHand() string {
 		}
 	}
 	return target
+}
+
+// cyclePanelTab is Ctrl+Tab (step 1) and Ctrl+Shift+Tab (step -1): the terminal's or the agents'
+// panel, whichever has the keyboard, shows its next or previous tab and gives it the keyboard,
+// wrapping round, as its Go to › goes to one. A tab closing is passed over. Elsewhere, or with one
+// tab, nothing.
+func (h *Host) cyclePanelTab(step int) {
+	var panel TerminalPanel
+	var pick func(widget.TerminalTabID)
+	switch {
+	case h.panelHasKeyboard("terminal"):
+		p, err := h.terminals.panel()
+		if err != nil {
+			return
+		}
+		panel, pick = p, func(id widget.TerminalTabID) { h.keep(p.Select(id)) }
+	case h.panelHasKeyboard("agent"):
+		p, err := h.agents.runtime()
+		if err != nil {
+			return
+		}
+		panel, pick = p, h.agents.goToTab
+	default:
+		return
+	}
+	var tabs []widget.TerminalTabID
+	for _, tab := range panel.Tabs() {
+		if !tab.Closing {
+			tabs = append(tabs, tab.ID)
+		}
+	}
+	at := slices.Index(tabs, panel.Active())
+	if len(tabs) < 2 || at < 0 {
+		return
+	}
+	pick(tabs[(at+step+len(tabs))%len(tabs)])
+}
+
+// panelHasKeyboard is whether the panel's view, or a widget in it, has the keyboard.
+func (h *Host) panelHasKeyboard(panel string) bool {
+	s := h.panelSpec(panel)
+	return s != nil && h.paneHasKeyboard(s.View)
 }
 
 // maximizePanel is F11 and SPC M (panel.maximize): the panel in hand (panelInHand).

@@ -129,7 +129,7 @@ The page is a window of its own, and the explorer, the terminal, the agent, the 
    `d` shows the files two links away, under the one that reaches them.
 3. **The todos (`SPC x`)**: the workspace's `.todo-list/` store, a tab for each status: Open, In progress, Deferred, Completed and Archived. `s` moves the selected task to another status, and `A` assigns it to an agent.
 4. **The terminal (`` SPC ` ``)**: your shells, in the workspace's folder. §3.8 says more.
-5. **The AI agent (`SPC g`)**: an agent CLI in a terminal of its own, started in AutoDoc's folder for the workspace.
+5. **The AI agent (`SPC g`)**: an agent CLI in a terminal of its own, started in AutoDoc's folder for the workspace. With several agents running, `Ctrl+Tab` and `Ctrl+Shift+Tab` go to the next and the previous one's tab, as in the terminal.
 6. **The notifications (`SPC h`, Go › Notifications…)**: a dialog listing what happened (a save, the connection, indexing). It is a dialog, not a panel: it has no edge and doesn't move.
 7. **The results (Go › Results)**: a table of rows a plugin returns, such as a query's.
 8. **Plugin cards (`SPC p`)**: a plugin's card, beside the page.
@@ -228,7 +228,7 @@ In Normal mode, `/` finds in the page, `n` and `N` go to the next and previous m
 
 The terminal runs your shells in the workspace's folder: at the bottom, or wherever Preferences puts it.
 
-- **Tabs:** each shell has a tab. `+` adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize and Hide.
+- **Tabs:** each shell has a tab. `+` adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize and Hide. `Ctrl+Tab` goes to the next tab and `Ctrl+Shift+Tab` the previous one, round from the last to the first, in input and Normal mode alike. The shell never gets them; `Ctrl+\` then `Ctrl+Tab` sends one to it. In a terminal, AutoDoc tells `Ctrl+Tab` from `Tab` only where the terminal does (kitty's keyboard protocol); elsewhere it arrives as `Tab` and goes to the shell.
 - **Keys:** every key goes to the shell, `Esc` too. `Ctrl+T` (or `Ctrl+\ Ctrl+n`) leaves for Normal mode, where `h` `j` `k` `l`, `/` and `?` move over the shell's history, `v` selects and `y` copies. `Ctrl+T`, `i` or `Enter` goes back.
 - **Closing:** `Escape` in Normal mode, or `` SPC ` `` again, hides the terminal, and its shells run on.
 

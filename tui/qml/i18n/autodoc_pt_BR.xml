@@ -2488,6 +2488,9 @@
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
+  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+              one with the keyboard), round; its program never gets them (Ctrl+\ first sends
+              one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
@@ -2555,6 +2558,9 @@
               shell, senão o aberto mais recente), como o Maximizar do menu da aba: um programa num painel
               nunca recebe F11; um emulador de terminal que usa F11 para si (tela cheia do
               GNOME Terminal) o mantém: SPC M sempre funciona
+  Ctrl+Tab, Ctrl+Shift+Tab  a aba seguinte ou anterior do terminal ou dos agentes (o que tem
+              o teclado), em círculo; o programa nunca as recebe (Ctrl+\ antes envia uma).
+              Num terminal, só onde ele distingue Ctrl+Tab de Tab (o protocolo de teclado do kitty)
   F1          esta ajuda (Ajuda › Teclas); Ajuda › Tutorial… o tutorial;  Ctrl+Q sair
   Shift+F10, the Menu key, SPC .  o menu do botão direito da página, no cursor
   Ctrl+= Ctrl+- Ctrl+0  na janela da GUI, ampliar, reduzir e voltar a 100% (Opções › Fontes e
@@ -3004,6 +3010,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.key.show.b_in_the_html_preview">
         <source>b in the HTML preview</source>
         <translation>b na pré-visualização HTML</translation>
+    </message>
+    <message id="autodoc.key.show.ctrl_tab_and_ctrl_shift_tab">
+        <source>Ctrl+Tab and Ctrl+Shift+Tab</source>
+        <translation>Ctrl+Tab e Ctrl+Shift+Tab</translation>
     </message>
     <message id="autodoc.key.show.d_in_the_links">
         <source>d in the links</source>
