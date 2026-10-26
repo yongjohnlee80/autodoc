@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -440,6 +441,9 @@ func (r *running) waitTyped(t *testing.T) {
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
+	// the picker filters the workspace's files as the daemon listed them: typed before the listing
+	// answers, the filter matches nothing
+	r.waitWithin(t, p+" listed", daemonWait, func() bool { return slices.Contains(r.listed(), p) })
 	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
 	r.keys(t, decltest.Type(p)...)
