@@ -19,3 +19,5 @@ Plugin -> Host,host.table / host.rows,4,"{id, title, fields, rows, more}","Opens
 Plugin -> Host,host.table_end,4,"{id, error}","Ends a paged table stream early when a cursor errors or is cancelled"
 Host -> Plugin,plugin.table.close,4,"{id}","Notifies plugin that its table was closed or replaced so it can free server cursors"
 Plugin -> Host,host.table / host.rows (P5 kinds),5,"adds {kinds} (1 byte per field: t, z, n, b, j)","Distinguishes SQL NULL (z) from 'NULL' (t), sorts numbers/booleans accurately, exports typed JSON"
+Manifest,[[menu]],11,"{command, where = ""editor"", files?, title?}","A row on the editor's right-click menu under the plugin's title, running one of its [[commands]] for the files its globs match; one row a command"
+Plugin -> Host,host.menu,11,"{id, title?, enabled?}","Retitles or disables a [[menu]] row from the next menu opening; kept until the plugin stops; an undeclared id is refused"

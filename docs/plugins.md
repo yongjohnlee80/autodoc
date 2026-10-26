@@ -168,7 +168,7 @@ files it opens: "opens .ipynb files".
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 10**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 11**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -202,10 +202,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A card or dialog that draws pixels says `protocol = 10`.** Its `[surface]` asks for a pixel
   surface (below): frames over a side channel, and the pointer in dp. An older AutoDoc refuses the
   manifest, so a plugin never runs where its frames would have nowhere to go.
+- **A plugin with rows on the editor's right-click menu says `protocol = 11`.** Its `[[menu]]`
+  declares them, and it may retitle or disable them with `host.menu` (below). An older AutoDoc
+  refuses the manifest, so a plugin never runs where its rows would not show.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 10, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 11, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -516,6 +519,39 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
   - A card's command `toggle` is AutoDoc's own and is never sent: it starts the card, its panel open
     and focused; it opens the panel of a card that runs hidden, focused; and it closes the panel of
     a card that is shown, the plugin running on (Turn off stops it).
+
+### Editor menu rows (`[[menu]]`, protocol 11)
+
+A plugin puts rows on the editor's right-click menu, under a submenu of its title. Each runs one of
+its `[[commands]]`, starting the plugin when it isn't running, as the Plugins menu does:
+
+```toml
+name     = "db"
+title    = "Database"
+kind     = "dialog"
+protocol = 11
+command  = ["./bin/db"]
+
+[[commands]]
+id    = "execute"
+title = "Execute"
+
+[[menu]]
+command = "execute"   # one of its [[commands]], and the row's id: one row a command
+where   = "editor"    # the editor's right-click menu, the only place for now
+files   = ["*.sql"]   # globs over the open file's base name; left out, every file
+title   = "&Execute"  # & marks its key; left out, the command's title
+```
+
+- **A live title: `host.menu {id, title?, enabled?}`.** While it runs, a plugin may retitle a row
+  ("Execute on main") or disable it (`enabled: false`), from the next time the menu opens. AutoDoc
+  keeps the latest and never asks the plugin as the menu opens, so a busy plugin never slows a
+  right-click. A row its manifest doesn't declare is refused, as is a title of more than 256 bytes,
+  and the plugin's log says why.
+- **A stopped plugin's rows** stay, titled and enabled as the manifest declares them: choosing one
+  starts the plugin. A removed or updated plugin's rows go with it.
+- A script's row (`autodoc.menu{menu = "<the plugin's title>", …}`, docs/lua/reference.md) joins
+  the plugin's submenu.
 
 ### Opening files (`[open]`, protocol 9)
 
@@ -842,6 +878,16 @@ func (a *db) run(sql string) {
 	}
 	_ = a.peer.Notify(plugin.Notice{Message: fmt.Sprintf("%d rows", res.Rows), ID: id})
 }
+```
+
+**Protocol 11** adds `Peer.MenuRow(id, title, enabled)`, which sends `host.menu`: a `[[menu]]` row's
+new title, or whether it's enabled, each `nil` to leave as it is. It returns `plugin.ErrNoMenu`
+when AutoDoc opened the plugin at a protocol before 11, and an error wrapping `plugin.ErrMenu` for
+an update past a bound, sending nothing.
+
+```go
+title := "&Execute on " + a.connection()
+_ = a.peer.MenuRow("execute", &title, nil)
 ```
 
 **Protocol 6** adds `plugin.PointerHandler`. AutoDoc delivers `plugin.pointer` only after the

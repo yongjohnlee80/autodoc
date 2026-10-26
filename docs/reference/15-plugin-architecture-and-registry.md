@@ -26,7 +26,7 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 10
+## 15.3 Progression of Protocols 1 Through 11
 
 AutoDoc's plugin contract evolves through ten cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
@@ -99,6 +99,13 @@ Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI it
 - The host answers each frame's outcome, then the buffer's credit, so every buffer has at most one frame in flight.
 
 The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. Linux ships first; macOS and plugin-exported DMA-BUFs follow (ADR 1792797354).
+
+### Protocol 11: Editor Menu Rows
+
+Protocol 11 (`[[menu]]`) puts a plugin's rows on the editor's right-click menu, under a submenu of its title. Each row runs one of its `[[commands]]`, for the files its globs match:
+- While it runs, the plugin may retitle a row or disable it with `host.menu {id, title?, enabled?}` (the SDK's `Peer.MenuRow`), from the next time the menu opens.
+- The host keeps the latest and never asks the plugin as the menu opens; a stopped plugin's rows show as declared.
+- A script's rows (`autodoc.menu`) share the same registry and the same submenu (ADR 1792991184).
 
 ---
 

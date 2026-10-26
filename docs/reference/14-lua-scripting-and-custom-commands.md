@@ -78,7 +78,9 @@ autodoc.command{
 -- Bind in Normal mode and on the SPC u user Lua leader card:
 autodoc.map{ mode = "normal", keys = "<C-a>", command = "adr-new accepted" }
 autodoc.map{ mode = "leader", keys = "a", command = "adr-new", title = "Insert ADR frontmatter" }
-autodoc.menu{ where = "editor", title = "Insert &ADR Frontmatter", command = "adr-new" }
+-- In the right-click menu, under an "ADR" submenu, only on Markdown files (the Lua reference's
+-- "Keys and menus" has every field: when, a live title, the row's handle):
+autodoc.menu{ where = "editor", menu = "ADR", files = {"*.md"}, title = "Insert &Frontmatter", command = "adr-new" }
 ```
 
 ### Error Reporting Hygiene
