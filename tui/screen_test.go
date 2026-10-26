@@ -948,9 +948,11 @@ func TestAProviderInUse(t *testing.T) {
 		return false
 	})
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
-	// its calls, metered and written every couple of seconds, under the list
-	r.s.WaitFor(t, "local's usage", func(sc string) bool {
+	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
+	// daemon's clock, not a frame's
+	r.waitWithin(t, "local's usage", daemonWait, func() bool {
 		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
 	// at its usage limit: a new file's embedding is refused, and the log says why
@@ -960,12 +962,13 @@ func TestAProviderInUse(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "c.md"), []byte("# C\n\ngamma\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the refused call", func(sc string) bool {
+	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
+	r.waitWithin(t, "the refused call", daemonWait, func() bool {
 		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
-		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ") // wrapped: running text
+		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
-	r.s.WaitFor(t, "the mark red while the provider fails, the dialog saying why", func(string) bool {
+	r.waitWithin(t, "the mark red while the provider fails, the dialog saying why", daemonWait, func() bool {
 		return r.semanticMark() == "red lexical search" && r.markAbove(1) == "red lexical search · the provider is not answering"
 	})
 	if snap := strings.Split(r.s.String(), "\n"); strings.Contains(snap[len(snap)-1], "not answering") {
@@ -1360,9 +1363,10 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 func TestEveryPreferenceIsKept(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
+	// the daemon's store, written through a call: the daemon's clock, not a frame's
 	stored := func(name, want string) {
 		t.Helper()
-		r.s.WaitFor(t, name+" = "+want, func(string) bool {
+		r.waitWithin(t, name+" = "+want, daemonWait, func() bool {
 			m, err := d.db.Preferences(context.Background())
 			return err == nil && m[name] == want
 		})
@@ -2055,9 +2059,10 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 		r.h.choosePrefNamed(prefCorner, indexOf(corners, "top-left"))
 		r.h.choosePrefNamed(prefSeconds, 4)
 	})
+	// the daemon's store, written through a call: the daemon's clock, not a frame's
 	stored := func(name, want string) {
 		t.Helper()
-		r.s.WaitFor(t, name+" = "+want, func(string) bool {
+		r.waitWithin(t, name+" = "+want, daemonWait, func() bool {
 			m, err := d.db.Preferences(context.Background())
 			return err == nil && m[name] == want
 		})
