@@ -29,6 +29,7 @@ type identityHost struct {
 	questions         []Question
 	epoch             int
 	closed            []string // the drawers CloseDrawer closed, in order
+	opened            []string // the drawers OpenDrawer opened, in order
 }
 
 func newIdentityHost(raw string) *identityHost {

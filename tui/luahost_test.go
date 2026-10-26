@@ -78,13 +78,14 @@ end }`)
 	r.s.WaitFor(t, "cancelled", func(string) bool { return r.noticed("picked nil cancelled") })
 }
 
-// autodoc.agents lists the agents and sends one text as a paste, typed and not submitted; agents.lua's
-// :agent-buffer sends the page to the one running, and :agent-forward the selection.
+// autodoc.agents lists the agents and sends one text as a bracketed paste, typed and not submitted;
+// agents.lua's :agent-buffer sends the page to the one running, and :agent-forward the selection.
 func TestScriptsSendTextToAnAgent(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
 	r.luaLoad(t, `
 autodoc.command{ name = "ag", run = function()
   local all = autodoc.agents.list()
@@ -97,20 +98,19 @@ end }`)
 	}
 	r.s.WaitFor(t, "the list", func(string) bool { return r.noticed("agents 1 heron running true closing false") })
 	r.s.WaitFor(t, "sent", func(string) bool { return r.noticed("sent true nil") })
-	// a paste's newline is Enter where the program did not ask for bracketed paste: the first line is
-	// heard; the last is typed and left for the user to submit
-	r.s.WaitForText(t, "heard-first-line")
-	if strings.Contains(r.s.String(), "heard-second-line") {
-		t.Error("the paste's last line was submitted")
-	}
+	// one paste, whole: its newline the text's, never an Enter
+	first := "\x1b[200~first-line\nsecond-line\x1b[201~"
+	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reported(report), first) })
 	r.s.WaitFor(t, "an unknown agent refused", func(string) bool { return r.noticed("nobody unavailable") })
 
 	onLoop(r, func() bool { r.h.core.SetValue("page-text-for-the-agent"); return true })
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitForText(t, "page-text-for-the-agent") // typed at the agent's prompt, not submitted
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
+	r.s.WaitFor(t, "the page pasted", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~")
+	})
 
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
 	onLoop(r, func() bool {
@@ -120,10 +120,33 @@ end }`)
 	if err := r.luaRun("agent-forward"); err != nil {
 		t.Fatal(err)
 	}
-	// typed after the page at the agent's prompt; the page shows the whole line, wherever the agent docks
-	r.s.WaitForText(t, "page-text-for-the-agentselected-part")
-	if sc := r.s.String(); strings.Contains(sc, "agentignored") || strings.Contains(sc, "agentselected-part ignored") {
-		t.Error("more than the selection was sent")
+	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~") })
+	if got := reported(report); strings.Contains(got, "ignored") || strings.ContainsRune(got, '\r') {
+		t.Errorf("more than the selection, or an Enter, was sent: %q", got)
+	}
+}
+
+// autodoc.agents.send to a program that never asked for bracketed paste sends it nothing, never
+// keys, and the script hears "unbracketed" (ADR 1792991980 §6).
+func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
+	agent, report := recordingAgent(t, false)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
+	r.luaLoad(t, `
+autodoc.command{ name = "ag", run = function()
+  autodoc.agents.send("heron", "never-keys", function(ok, err) autodoc.notify("sent " .. tostring(ok) .. " " .. tostring(err)) end)
+end }`)
+	if err := r.luaRun("ag"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the refusal heard", func(string) bool { return r.noticed("sent nil unbracketed") })
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.keys(t, decltest.Type("k")...) // a key the user types still reaches it: the agent reads on
+	r.s.WaitFor(t, "the key typed", func(string) bool { return strings.Contains(reported(report), "k") })
+	if got := reported(report); strings.Contains(got, "never-keys") {
+		t.Errorf("an unbracketed agent was sent the text: %q", got)
 	}
 }
 
@@ -141,8 +164,8 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.drainPosts()
-	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":line one\nline two"}) || len(c.panel.sends) != 0 {
-		t.Fatalf("a running agent: done %v, pastes %q, sends %q", got, c.panel.pastes, c.panel.sends)
+	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":[bracketed]line one\nline two"}) {
+		t.Fatalf("a running agent: done %v, pastes %q", got, c.panel.pastes)
 	}
 	if err := a.SendText(AgentRef{Codename: "two"}, "for two", func(err error) { got = append(got, err) }); err != nil {
 		t.Fatal(err)
@@ -151,7 +174,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatalf("a stopped agent: questions %+v", c.questions)
 	}
 	c.questions[0].OnYes()
-	if len(got) != 2 || got[1] != nil || len(c.panel.pastes) != 2 || !strings.HasSuffix(c.panel.pastes[1], ":for two") {
+	if len(got) != 2 || got[1] != nil || len(c.panel.pastes) != 2 || !strings.HasSuffix(c.panel.pastes[1], ":[bracketed]for two") {
 		t.Fatalf("started and sent: done %v, pastes %q", got, c.panel.pastes)
 	}
 }
@@ -159,10 +182,11 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 // SPC a opens the agents' card, its keys listed; b sends the page to the agent running, f the
 // selection, and Backspace goes back to SPC's card.
 func TestTheAgentsCardSendsThePage(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
 	onLoop(r, func() bool {
 		r.h.core.SetValue("card-sent-page")
 		return r.h.p.Call("editor", "forceActiveFocus") == nil
@@ -176,7 +200,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 		}
 	}
 	r.keys(t, key('b'))
-	r.s.WaitForText(t, "card-sent-page")
+	r.s.WaitFor(t, "the page pasted", func(string) bool { return strings.Contains(reported(report), "\x1b[200~card-sent-page\x1b[201~") })
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 
 	// f: the selection
@@ -188,7 +212,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.leader(t, 'a')
 	r.s.WaitForText(t, "SPC a — agents")
 	r.keys(t, key('f'))
-	r.s.WaitForText(t, "card-selected")
+	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.Contains(reported(report), "\x1b[200~card-selected\x1b[201~") })
 
 	// g: the agent panel, hidden; G: the profiles
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }

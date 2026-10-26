@@ -26,13 +26,16 @@ type modelPanel struct {
 	tabs    []widget.TerminalTab
 	active  widget.TerminalTabID
 	next    int
-	sends   []string
 	pastes  []string
 	resumed []widget.TerminalTabID // each Resume's tab
+	modes   []string               // each SetMode, tab:mode
 	sendErr error
-	removal *modelRemoval
-	addMenu func() []widget.MenuItemModel
-	tabMenu func(widget.TerminalTabID) []widget.MenuItemModel
+	// unbracketed is how many bracketed pastes the programs refuse before they take them, a program
+	// still starting; below zero, they never do
+	unbracketed int
+	removal     *modelRemoval
+	addMenu     func() []widget.MenuItemModel
+	tabMenu     func(widget.TerminalTabID) []widget.MenuItemModel
 }
 
 func (p *modelPanel) SameOwner(other TerminalPanel) bool {
@@ -74,13 +77,6 @@ func (p *modelPanel) Start(id widget.TerminalTabID) error {
 	}
 	return ErrAgentUnavailable
 }
-func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
-	if p.sendErr != nil {
-		return p.sendErr
-	}
-	p.sends = append(p.sends, string(id)+":"+text)
-	return nil
-}
 
 // Resume keeps the tab it was asked for.
 func (p *modelPanel) Resume(id widget.TerminalTabID) error {
@@ -88,11 +84,23 @@ func (p *modelPanel) Resume(id widget.TerminalTabID) error {
 	return nil
 }
 
-func (p *modelPanel) SendPaste(id widget.TerminalTabID, text string) error {
+// SendBracketedPaste is SendPaste, recorded as bracketed, once the programs take them (unbracketed).
+func (p *modelPanel) SendBracketedPaste(id widget.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
 	}
-	p.pastes = append(p.pastes, string(id)+":"+text)
+	if p.unbracketed != 0 {
+		if p.unbracketed > 0 {
+			p.unbracketed--
+		}
+		return widget.ErrTerminalPasteUnbracketed
+	}
+	p.pastes = append(p.pastes, string(id)+":[bracketed]"+text)
+	return nil
+}
+
+func (p *modelPanel) SetMode(id widget.TerminalTabID, mode widget.TerminalMode) error {
+	p.modes = append(p.modes, fmt.Sprintf("%s:%v", id, mode))
 	return nil
 }
 func (p *modelPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {
@@ -130,7 +138,7 @@ func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 	}
 	return c.panel, nil
 }
-func (*identityHost) OpenDrawer(string)       {}
+func (c *identityHost) OpenDrawer(id string)  { c.opened = append(c.opened, id) }
 func (c *identityHost) CloseDrawer(id string) { c.closed = append(c.closed, id) }
 func (c *identityHost) Post(fn func()) {
 	c.postMu.Lock()
@@ -238,6 +246,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.opened = nil // the start opened the panel: what the delivery opens is counted from here
 	done := 0
 	task := TaskRef{Title: "original", Path: "/tasks/one.md", ID: "one"}
 	if err := a.HandTask(AgentRef{Codename: "one"}, task, "inspect", func(err error) {
@@ -254,15 +263,14 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	}
 	c.drainPosts()
 	tab := string(instance.tab)
-	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) || len(c.panel.sends) != 0 {
-		t.Fatalf("the task goes as one paste, its Enter not yet: done=%d pastes=%q sends=%q", done, c.panel.pastes, c.panel.sends)
+	if done != 1 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
+		t.Fatalf("the task goes as one bracketed paste, and done: done=%d pastes=%q", done, c.panel.pastes)
 	}
-	if !slices.Equal(c.delays, []time.Duration{agentSubmitDelay}) {
-		t.Fatalf("the Enter waits agentSubmitDelay: %v", c.delays)
+	if len(c.delays) != 0 { // and TerminalPanel has no way to type one: no SendText
+		t.Fatalf("something waits to follow the paste, as an Enter did (ADR 1792991980 §4.2): delays=%v", c.delays)
 	}
-	c.fireAfters()
-	if done != 1 || !slices.Equal(c.panel.sends, []string{tab + ":\r"}) {
-		t.Fatalf("after the pause one Enter, a carriage return, and done: done=%d sends=%q", done, c.panel.sends)
+	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, widget.TerminalInput)}) {
+		t.Fatalf("the agent's panel is brought forward for the Enter: opened=%q active=%q modes=%q", c.opened, c.panel.active, c.panel.modes)
 	}
 	c.drainPosts()
 	a.Stopping()
@@ -305,11 +313,11 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 				t.Fatalf("completion count %d", done)
 			}
 			if ending == "yes" {
-				if outcome != nil || c.panel == nil || len(c.panel.pastes) != 1 || len(c.panel.sends) != 1 {
+				if outcome != nil || c.panel == nil || len(c.panel.pastes) != 1 {
 					t.Fatal("consented target was not started and delivered")
 				}
 			} else {
-				if outcome == nil || len(a.instances) != 0 || (c.panel != nil && len(c.panel.sends)+len(c.panel.pastes) > 0) {
+				if outcome == nil || len(a.instances) != 0 || (c.panel != nil && len(c.panel.pastes) > 0) {
 					t.Fatal("cancelled/stale request started or sent")
 				}
 			}
@@ -338,63 +346,19 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 			}
 			c.drainPosts()
 			c.fireAfters()
-			if outcome == nil || calls != 1 || len(c.panel.sends)+len(c.panel.pastes) != 0 {
+			if outcome == nil || calls != 1 || len(c.panel.pastes) != 0 {
 				t.Fatal("deferred failure sent or missed completion")
 			}
 		})
 	}
 }
 
-// TestHandTaskEnterIsCheckedAgainAfterThePause: the Enter that follows the task's paste is typed
-// only into the same running agent, on the same parent, with the delivery still open. An agent
-// that exited, a rebuilt parent, a shutdown or a failed write in the pause types no Enter, and done
-// hears the reason once.
-func TestHandTaskEnterIsCheckedAgainAfterThePause(t *testing.T) {
-	for _, during := range []string{"exited", "rebuilt", "shutdown", "write"} {
-		t.Run(during, func(t *testing.T) {
-			a, c := modelAgents(t)
-			p, _ := a.profile("one")
-			instance, err := a.startInstance(p)
-			if err != nil {
-				t.Fatal(err)
-			}
-			calls := 0
-			var outcome error
-			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
-				t.Fatal(err)
-			}
-			c.drainPosts()
-			if len(c.panel.pastes) != 1 || calls != 0 {
-				t.Fatalf("the task was not pasted before the pause: pastes=%q calls=%d", c.panel.pastes, calls)
-			}
-			first := c.panel
-			switch during {
-			case "exited":
-				c.panel.exit(instance.tab, 0)
-			case "rebuilt":
-				c.panel = &modelPanel{owner: c, next: 100}
-			case "shutdown":
-				a.Stopping()
-			case "write":
-				c.panel.sendErr = errors.New("queue full")
-			}
-			c.fireAfters()
-			if len(first.sends) != 0 || len(c.panel.sends) != 0 {
-				t.Fatalf("an Enter was typed after %s: %q %q", during, first.sends, c.panel.sends)
-			}
-			want := map[string]error{"exited": ErrAgentStale, "rebuilt": ErrAgentStale, "shutdown": ErrAgentShuttingDown}[during]
-			if calls != 1 || outcome == nil || (want != nil && !errors.Is(outcome, want)) {
-				t.Fatalf("done after %s: calls=%d outcome=%v", during, calls, outcome)
-			}
-		})
-	}
-}
-
-// TestHandTaskToAStartedAgentIsStaleIfItRestartsInThePause: a stopped agent HandTask starts is the
-// incarnation the task goes to. Restarted in its tab between the paste and the Enter (a new
-// generation), it gets no Enter, and done hears ErrAgentStale once.
-func TestHandTaskToAStartedAgentIsStaleIfItRestartsInThePause(t *testing.T) {
+// TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes (ADR 1792991980 §3): an agent HandTask
+// starts has a program still starting, which takes no bracketed paste yet. The paste is tried again
+// agentReadyPoll apart: taken once the program takes it, and never sent as keys meanwhile.
+func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	a, c := modelAgents(t)
+	c.panel = &modelPanel{owner: c, unbracketed: 3}
 	calls := 0
 	var outcome error
 	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
@@ -402,26 +366,115 @@ func TestHandTaskToAStartedAgentIsStaleIfItRestartsInThePause(t *testing.T) {
 	}
 	c.questions[0].OnYes()
 	c.drainPosts()
-	instance := a.instances["one"]
-	if instance == nil || !instance.running || len(c.panel.pastes) != 1 || calls != 0 {
-		t.Fatalf("the started agent was not pasted to before the pause: pastes=%q calls=%d", c.panel.pastes, calls)
-	}
-	if err := c.panel.Start(instance.tab); err != nil { // a new generation in the same tab
-		t.Fatal(err)
+	if len(c.panel.pastes) != 0 || calls != 0 || !slices.Equal(c.delays, []time.Duration{agentReadyPoll}) {
+		t.Fatalf("a starting program: pastes=%q calls=%d delays=%v", c.panel.pastes, calls, c.delays)
 	}
 	c.fireAfters()
-	if len(c.panel.sends) != 0 || calls != 1 || !errors.Is(outcome, ErrAgentStale) {
-		t.Fatalf("restarted in the pause: sends=%q calls=%d outcome=%v", c.panel.sends, calls, outcome)
+	if calls != 1 || outcome != nil || len(c.panel.pastes) != 1 || len(c.delays) != 3 {
+		t.Fatalf("once it takes bracketed pastes: calls=%d outcome=%v pastes=%q delays=%v", calls, outcome, c.panel.pastes, c.delays)
+	}
+	if want := []string{fmt.Sprintf("%s:%v", a.instances["one"].tab, widget.TerminalInput)}; !slices.Equal(c.panel.modes, want) {
+		t.Errorf("the agent's tab was not put in input mode for the Enter: %q", c.panel.modes)
 	}
 }
 
-// TestSendTextAddsNoEnter: Lua's SendText stays one paste with no Enter after it.
+// TestHandTaskToAnUnbracketedProgramSendsNothing (ADR 1792991980 §2): a program that never takes
+// bracketed pastes gets nothing, as keys or otherwise. A running one refuses at once; one HandTask
+// started is given agentReadyWait. done hears widget.ErrTerminalPasteUnbracketed once, and no panel
+// is brought forward.
+func TestHandTaskToAnUnbracketedProgramSendsNothing(t *testing.T) {
+	for _, target := range []string{"running", "started"} {
+		t.Run(target, func(t *testing.T) {
+			a, c := modelAgents(t)
+			c.panel = &modelPanel{owner: c, unbracketed: -1}
+			p, _ := a.profile("one")
+			if target == "running" {
+				if _, err := a.startInstance(p); err != nil {
+					t.Fatal(err)
+				}
+			}
+			calls := 0
+			var outcome error
+			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+				t.Fatal(err)
+			}
+			if target == "started" {
+				c.questions[0].OnYes()
+			}
+			c.drainPosts()
+			c.fireAfters()
+			waits := 0
+			if target == "started" {
+				waits = int(agentReadyWait / agentReadyPoll)
+			}
+			if calls != 1 || !errors.Is(outcome, widget.ErrTerminalPasteUnbracketed) || len(c.delays) != waits {
+				t.Fatalf("calls=%d outcome=%v delays=%d, want one ErrTerminalPasteUnbracketed after %d waits", calls, outcome, len(c.delays), waits)
+			}
+			if len(c.panel.pastes) != 0 || len(c.panel.modes) != 0 {
+				t.Fatalf("sent or brought forward: pastes=%q modes=%q", c.panel.pastes, c.panel.modes)
+			}
+		})
+	}
+}
+
+// TestHandTaskIsCheckedAgainInTheWait: a started agent's paste waiting for its program goes only
+// to the same running agent, on the same parent, with the delivery still open. An agent that
+// exited, restarted in its tab (a new generation), a rebuilt parent or a shutdown in the wait gets
+// nothing, and done hears the reason once.
+func TestHandTaskIsCheckedAgainInTheWait(t *testing.T) {
+	for _, during := range []string{"exited", "restarted", "rebuilt", "shutdown"} {
+		t.Run(during, func(t *testing.T) {
+			a, c := modelAgents(t)
+			c.panel = &modelPanel{owner: c, unbracketed: -1}
+			calls := 0
+			var outcome error
+			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+				t.Fatal(err)
+			}
+			c.questions[0].OnYes()
+			c.drainPosts()
+			instance := a.instances["one"]
+			if instance == nil || !instance.running || calls != 0 || len(c.afters) != 1 {
+				t.Fatalf("the started agent's paste is not waiting: calls=%d afters=%d", calls, len(c.afters))
+			}
+			first := c.panel
+			first.unbracketed = 0 // it would take the paste now
+			switch during {
+			case "exited":
+				first.exit(instance.tab, 0)
+			case "restarted":
+				if err := first.Start(instance.tab); err != nil {
+					t.Fatal(err)
+				}
+			case "rebuilt":
+				c.panel = &modelPanel{owner: c, next: 100}
+			case "shutdown":
+				a.Stopping()
+			}
+			c.fireAfters()
+			if len(first.pastes)+len(c.panel.pastes) != 0 {
+				t.Fatalf("pasted after %s: %q %q", during, first.pastes, c.panel.pastes)
+			}
+			want := map[string]error{"shutdown": ErrAgentShuttingDown}[during]
+			if want == nil {
+				want = ErrAgentStale
+			}
+			if calls != 1 || !errors.Is(outcome, want) {
+				t.Fatalf("done after %s: calls=%d outcome=%v", during, calls, outcome)
+			}
+		})
+	}
+}
+
+// TestSendTextAddsNoEnter: Lua's SendText stays one bracketed paste with no Enter after it, and
+// brings no panel forward.
 func TestSendTextAddsNoEnter(t *testing.T) {
 	a, c := modelAgents(t)
 	p, _ := a.profile("one")
 	if _, err := a.startInstance(p); err != nil {
 		t.Fatal(err)
 	}
+	c.opened = nil // the start opened the panel
 	calls := 0
 	if err := a.SendText(AgentRef{Codename: "one"}, "draft", func(err error) {
 		if err != nil {
@@ -433,8 +486,11 @@ func TestSendTextAddsNoEnter(t *testing.T) {
 	}
 	c.drainPosts()
 	c.fireAfters()
-	if calls != 1 || len(c.panel.pastes) != 1 || len(c.panel.sends) != 0 || len(c.delays) != 0 {
-		t.Fatalf("SendText: calls=%d pastes=%q sends=%q delays=%v", calls, c.panel.pastes, c.panel.sends, c.delays)
+	if calls != 1 || !slices.Equal(c.panel.pastes, []string{"tab-1:[bracketed]draft"}) || len(c.delays) != 0 {
+		t.Fatalf("SendText: calls=%d pastes=%q delays=%v", calls, c.panel.pastes, c.delays)
+	}
+	if len(c.opened)+len(c.panel.modes) != 0 {
+		t.Errorf("SendText brought the panel forward: opened=%q modes=%q", c.opened, c.panel.modes)
 	}
 }
 
@@ -455,7 +511,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.questions[len(c.questions)-1].OnYes()
-	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.sends)+len(c.panel.pastes) != 0 {
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.pastes) != 0 {
 		t.Fatal("workspace B reused or relabelled workspace A process")
 	}
 	if c.panel.configs[instance.tab].Dir != oldConfig.Dir || c.panel.configs[instance.tab].Args[len(oldConfig.Args)-1] != oldConfig.Args[len(oldConfig.Args)-1] {
@@ -479,7 +535,7 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 	}
 	c.panel = &modelPanel{owner: c, next: 100}
 	c.drainPosts()
-	if done != 1 || !errors.Is(outcome, ErrAgentStale) || len(oldOwner.sends)+len(oldOwner.pastes) != 0 || len(c.panel.sends)+len(c.panel.pastes) != 0 {
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || len(oldOwner.pastes) != 0 || len(c.panel.pastes) != 0 {
 		t.Fatal("queued old-parent request sent or lost completion")
 	}
 	callbacks := 0

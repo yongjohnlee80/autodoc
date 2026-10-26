@@ -7,6 +7,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/script"
 	lua "github.com/yuin/gopher-lua"
@@ -32,12 +33,13 @@ import (
 //	                                       its own Ctrl+Z (or a SIGTSTP from elsewhere) runs again; a
 //	                                       running one is not disturbed. err "stale", "unavailable",
 //	                                       or why
-//	autodoc.agents.send(ref, text, cb)     text pasted to an agent, no Enter added (Core.SendText):
-//	                                       ref a codename, or { codename, instance } for that exact
-//	                                       incarnation. A
-//	                                       stopped agent is started once the user agrees. cb(true) once
-//	                                       typed, or cb(nil, err): err "cancelled", "stale" (that
-//	                                       incarnation is gone), "unavailable", or why
+//	autodoc.agents.send(ref, text, cb)     text as one bracketed paste to an agent, no Enter added
+//	                                       (Core.SendText): ref a codename, or { codename, instance }
+//	                                       for that exact incarnation. A stopped agent is started once
+//	                                       the user agrees. cb(true) once typed, or cb(nil, err): err
+//	                                       "cancelled", "stale" (that incarnation is gone),
+//	                                       "unavailable", "unbracketed" (its program takes no
+//	                                       bracketed paste: nothing sent), or why
 //
 // Every cb runs later on the loop, never inside the call, as the daemon's do: a refusal known at
 // once is a cb on the next turn too. A script reads it as cb(result, err).
@@ -305,6 +307,8 @@ func agentErr(err error) string {
 		return "unavailable"
 	case errors.Is(err, ErrAgentShuttingDown):
 		return "closed"
+	case errors.Is(err, widget.ErrTerminalPasteUnbracketed):
+		return "unbracketed"
 	}
 	return err.Error()
 }

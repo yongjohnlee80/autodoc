@@ -101,8 +101,8 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
      ID: 2026-10-17-implement-sqlite-todo-journal
      Instruction: Task assigned to you.
      ```
-   - It dispatches the payload via `panel.SendPaste(tab, payload)` (using bracketed paste `\x1b[200~...\x1b[201~` when the CLI agent has enabled bracketed paste mode, so multi-line text lands intact at the prompt without premature line-by-line submission).
-   - After `agentSubmitDelay` (`60ms`), AutoDoc verifies the incarnation is still current and sends a carriage return (`\r`) so the agent immediately begins reading the task file and its linked `$KB_ROOT` ADRs.
+   - It dispatches the payload via `panel.SendBracketedPaste(tab, payload)`: one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact at the prompt. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
+   - **AutoDoc never presses Enter** (ADR 1792991980). An Enter can't tell the agent's input from a permission or select prompt it is showing, so it could answer one. Instead the payload waits in the agent's input, and the agent's panel opens with its tab selected and the keyboard in input mode. The toast says *"assigned to Claude Code, and typed into its input: press Enter there to send it"*, and the user's Enter starts the agent on the task file and its linked `$KB_ROOT` ADRs.
 
 ![Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff](agent-dispatch-latency.chart.json)
 

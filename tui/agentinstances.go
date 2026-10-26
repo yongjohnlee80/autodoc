@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -63,12 +64,15 @@ type agentRuntimeHost interface {
 	Ticket(*uint64, TicketScope) Ticket
 }
 
-// agentSubmitDelay is how long a task's paste has before its Enter, as auto-agents gives a notice
-// (send_slot's submit_delay_ms). A CLI that gets the Enter in the same read as the paste can take
-// it as part of the paste and not submit.
-// NOTE: can't announce: an agent CLI says nothing when it has taken in a paste, so the Enter waits
-// a fixed pause after it.
-const agentSubmitDelay = 60 * time.Millisecond
+// agentReadyWait is how long a delivery to an agent it just started waits for the agent's program
+// to take bracketed pastes, trying again agentReadyPoll apart (ADR 1792991980 §3): a starting
+// program hasn't asked for them yet.
+// NOTE: can't announce: a program says nothing when it enables bracketed paste, so the paste is
+// tried again until it is taken.
+const (
+	agentReadyWait = 10 * time.Second
+	agentReadyPoll = 100 * time.Millisecond
+)
 
 type agentDelivery struct {
 	done     func(error)
@@ -358,10 +362,11 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 // HandTask accepts a task for one exact agent incarnation. An immediate error
 // rejects it without calling done; accepted calls return nil and complete done
 // once on the UI loop, including cancellation and orderly owner shutdown.
-// The task goes as one paste, then an Enter of its own agentSubmitDelay later
-// (a carriage return, the key's byte), so the agent starts on it, as AutoVim's
-// assign has auto-agents do. Success means the task typed and submitted, not
-// the agent's completion.
+// The task goes as one bracketed paste, or not at all: a program that takes none
+// gets nothing, and done hears widget.ErrTerminalPasteUnbracketed. No Enter
+// follows (ADR 1792991980 §4.2): the task waits in the agent's input, its panel
+// brought forward ready to type, and the user's Enter sends it. Success means
+// the task typed, not submitted.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	check := func() error {
 		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
@@ -370,17 +375,16 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		return nil
 	}
 	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s", task.Title, task.Path, task.ID, instruction)
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_task"), true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendPaste(tab, payload)
+	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_task"), deliverOpts{present: true}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendBracketedPaste(tab, payload)
 	}, done)
 }
 
 // SendText accepts text for one agent incarnation, as HandTask accepts a task, through the same
 // delivery: the same refusals, the same consent to start a stopped agent, the same checks before
-// anything is sent. The text goes as one paste: to a CLI that asked for bracketed paste it is
-// whole and waits at the prompt for Enter; elsewhere its newlines are Enter, so its earlier lines
-// are submitted as they arrive and only its last waits. No Enter is added after it. Success means
-// typed delivery.
+// anything is sent. The text goes as one bracketed paste, whole, waiting at the prompt for Enter;
+// to a program that takes none nothing is sent, and done hears widget.ErrTerminalPasteUnbracketed
+// (ADR 1792991980 §6). No Enter is added after it. Success means typed delivery.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	check := func() error {
 		if text == "" || len(text) > widget.TerminalInputLimit {
@@ -388,9 +392,18 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 		}
 		return nil
 	}
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), false, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendPaste(tab, text)
+	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), deliverOpts{}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendBracketedPaste(tab, text)
 	}, done)
+}
+
+// present brings instance forward for the user's Enter (ADR 1792991980 §4.2): the agents panel
+// open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails
+// here is kept, never the delivery's error.
+func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
+	a.c.OpenDrawer("agent")
+	a.c.Keep(a.selectInstance(instance))
+	a.c.Keep(panel.SetMode(instance.tab, widget.TerminalInput))
 }
 
 // Resume is autodoc.agents.resume: a SIGCONT to agent to's tab, to as SendText takes it, or with
@@ -418,11 +431,17 @@ func (a *agents) Resume(to AgentRef) error {
 	return panel.Resume(instance.tab)
 }
 
-// deliver is HandTask's and SendText's one path: to resolved, check's refusal after the owner's
-// own, a stopped agent started once the user agrees (what names what is sent), everything checked
-// again before send runs on the agent's tab, and done completed once on the loop. With submit, an
-// Enter follows send agentSubmitDelay later, after the same checks again, and done waits for it.
-func (a *agents) deliver(to AgentRef, check func() error, what string, submit bool, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
+// deliverOpts are a delivery's choices.
+type deliverOpts struct {
+	present bool // once sent, the agent's panel is brought forward for the user's Enter (present)
+}
+
+// deliver is HandTask's and SendText's one path: to resolved, check's refusal
+// after the owner's own, a stopped agent started once the user agrees (what names what is sent),
+// everything checked again before send runs on the agent's tab, and done completed once on the
+// loop. An agent deliver started refusing a bracketed paste is tried again, the same checks first,
+// until agentReadyWait.
+func (a *agents) deliver(to AgentRef, check func() error, what string, o deliverOpts, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
 		return ErrAgentShuttingDown
@@ -487,6 +506,35 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, submit bo
 		}
 		return nil
 	}
+	// attempt checks everything again and runs send on the agent's tab. A refused bracketed paste is
+	// tried again agentReadyPoll later, tries more times: an agent deliver just started is still
+	// starting its program.
+	var attempt func(tries int)
+	attempt = func(tries int) {
+		if accepted.finished {
+			return // shutdown finished it in the wait: nothing is sent
+		}
+		a.syncInstances()
+		if err := validate(); err != nil {
+			finish(err)
+			return
+		}
+		panel, err := a.runtime()
+		if err == nil && (!instance.running || !instance.owner.SameOwner(panel)) {
+			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
+		}
+		if err == nil {
+			err = send(panel, instance.tab)
+		}
+		if tries > 0 && errors.Is(err, widget.ErrTerminalPasteUnbracketed) {
+			c.After(agentReadyPoll, func() { attempt(tries - 1) })
+			return
+		}
+		if err == nil && o.present {
+			a.present(panel, instance)
+		}
+		finish(err)
+	}
 	deliver := func() {
 		if accepted.finished {
 			return
@@ -498,52 +546,24 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, submit bo
 			finish(err)
 			return
 		}
+		started := false
 		if instance == nil || !instance.running {
-			started, err := a.startInstance(p)
+			fresh, err := a.startInstance(p)
 			if err != nil {
 				finish(err)
 				return
 			}
-			instance = started
-			// the incarnation just started is the one sent to: a restart in its tab before the
-			// Enter (a new generation, a new token) makes the delivery stale, as a running
-			// target's captured token does
+			instance, started = fresh, true
+			// the incarnation just started is the one sent to: a restart in its tab while the
+			// paste waits for it (a new generation, a new token) makes the delivery stale, as a
+			// running target's captured token does
 			to.Instance = instance.token
 		}
-		if err := validate(); err != nil {
-			finish(err)
-			return
+		tries := 0
+		if started {
+			tries = int(agentReadyWait / agentReadyPoll)
 		}
-		panel, err := a.runtime()
-		if err == nil && !instance.owner.SameOwner(panel) {
-			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
-		}
-		if err == nil {
-			err = send(panel, instance.tab)
-		}
-		if err != nil || !submit {
-			finish(err)
-			return
-		}
-		tab := instance.tab
-		c.After(agentSubmitDelay, func() {
-			if accepted.finished {
-				return // shutdown finished it in the pause: nothing more is typed
-			}
-			a.syncInstances()
-			if err := validate(); err != nil {
-				finish(err)
-				return
-			}
-			panel, err := a.runtime()
-			if err == nil && (!instance.running || instance.tab != tab || !instance.owner.SameOwner(panel)) {
-				err = ErrAgentStale
-			}
-			if err == nil {
-				err = panel.SendText(tab, "\r")
-			}
-			finish(err)
-		})
+		attempt(tries)
 	}
 	if instance != nil && instance.running {
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
