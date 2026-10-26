@@ -432,7 +432,8 @@ autodoc --contracts 'todos.*'                                       # every todo
 - Every write takes the `rev` you read. `todos.stale` (-32071) means the task changed since: get
   it again, re-apply your change, retry.
 - A workspace's store is AutoDoc's from its first write: `todos.add` makes it if it isn't there,
-  and nothing needs claiming first. Only a store `todos.release` gave back answers
+  and nothing needs claiming first. Until then it reads as an empty store: `todos.list` gives no
+  tasks and cursor 0, `todos.get` answers `todos.not_found`, and the reads make nothing. Only a store `todos.release` gave back answers
   `todos.unclaimed` (-32077); `todos.claim` lets AutoDoc write it again.
 - Archives are read a month at a time, on request; `todos.list` without `buckets` never reads them.
 

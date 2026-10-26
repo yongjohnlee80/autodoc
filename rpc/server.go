@@ -95,7 +95,8 @@ import (
 // making it if it is missing, and todos.resolve, todos.stores, todos.set_dir and todos.move_store
 // say whether todos.release gave it back (released); todos.unclaimed now means only that. A session
 // below 29 ignores released. Every session gets the claim at the first write: the refusal was the
-// bug.
+// bug. So does every session's read of a registered root's store not made yet: an empty store's
+// answer, where not_a_store was.
 const Protocol int64 = 29
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it

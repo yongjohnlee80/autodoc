@@ -14,7 +14,9 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/vfs"
+	"github.com/yongjohnlee80/golib/vfs/memfs"
 
+	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
@@ -34,13 +36,31 @@ type Partition struct {
 	Files int    `json:"files"`
 }
 
-// reading opens an At's store for a read: resolved, recovered, locked. The caller unlocks.
+// reading opens an At's store for a read: resolved, recovered, locked. The caller unlocks. A store
+// a registered root (a workspace, or todos.register) has not made yet reads as an empty one, and
+// the read writes nothing: no scaffold, no claim, no journal (ADR 1791532020 r13). Any other root
+// without a store is refused, as before.
 func (m *Manager) reading(ctx context.Context, at At) (where, *store, error) {
 	w, err := m.resolve(ctx, at)
 	if err != nil {
 		return w, nil, err
 	}
-	return m.locked(ctx, w)
+	w, st, err := m.locked(ctx, w)
+	if errors.Is(err, errNoStoreYet) && w.writable {
+		st, err = absentStore(w), nil
+		st.mu.Lock()
+	}
+	return w, st, err
+}
+
+// errNoStoreYet is ErrNotAStore for a store whose directory is not there.
+var errNoStoreYet = fmt.Errorf("%w", ErrNotAStore)
+
+// absentStore is w's store before it is made: empty, in memory, never kept in m.stores.
+func absentStore(w where) *store {
+	fsys := memfs.New()
+	return &store{id: w.rec.ID, path: w.rec.Path, fsys: fsys, docs: docs.New(fsys, eligible), cache: map[string]cached{},
+		recovered: true, absent: true}
 }
 
 // writing is reading for a write: the store is writable and claimed.
