@@ -124,7 +124,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
 	cmd := exec.Command(e.m.Command[0], e.m.Command[1:]...)
 	cmd.Dir = e.dir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
+	cmd.Env = append(ownEnviron(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	if surfaceChild != nil {

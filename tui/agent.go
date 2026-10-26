@@ -272,15 +272,20 @@ func fillAgentCommand(command string, ws wsInfo) string {
 // shellQuote is s as one shell word.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// agentArgv is how the terminal runs command: env, setting AutoDoc's variables, running the shell
-// on the command as the user wrote it, so its quoting and arguments are the shell's.
+// agentArgv is how the terminal runs command: env, dropping the identity another agent host gave
+// the TUI (spawnerIdentity) and setting AutoDoc's variables, running the shell on the command as
+// the user wrote it, so its quoting and arguments are the shell's.
 func agentArgv(command string, env []string) (string, []string, error) {
 	envPath, err := exec.LookPath("env")
 	if err != nil {
 		return "", nil, err
 	}
 	shell := "/bin/sh"
-	args := append(append([]string{}, env...), shell, "-c", command)
+	var args []string
+	for _, name := range spawnerIdentity(os.Environ()) {
+		args = append(args, "-u", name)
+	}
+	args = append(append(args, env...), shell, "-c", command)
 	return envPath, args, nil
 }
 
