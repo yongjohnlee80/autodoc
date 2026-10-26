@@ -42,3 +42,12 @@ func TestKeymapAuthoringNeedsNoDaemon(t *testing.T) {
 		}
 	}
 }
+
+// --commands-reference prints the commands AutoDoc is built with, with no UI or daemon: :open among
+// them, with its aliases.
+func TestTheCommandsReferenceIsPrinted(t *testing.T) {
+	code, out := runMain(t, nil, "--commands-reference")
+	if code != 0 || !strings.Contains(out, "| `file.open_path` | `:open`, `:e`, `:edit` |") || !strings.Contains(out, "editor.commands") {
+		t.Fatalf("--commands-reference: %d %s", code, out)
+	}
+}
