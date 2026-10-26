@@ -147,9 +147,9 @@ func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r.putCursor(2, strings.Index(line, "b]]"))
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
-	r.leader(t, 'b')
+	r.bufferKey(t, 'b')
 	r.waitFile(t, "a.md")
-	r.leader(t, 'b')
+	r.bufferKey(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
 	r.putCursor(2, strings.Index(line, "the c"))
@@ -200,7 +200,7 @@ func TestBackOverUnsavedChangesKeepsThem(t *testing.T) {
 	r.leader(t, 'j')
 	r.waitFile(t, "body.md")
 	r.typeInEditor(t, "edit ")
-	r.leader(t, 'b')
+	r.bufferKey(t, 'b')
 	r.waitFile(t, "doc.md")
 	if strings.Contains(r.s.String(), "Save them before") {
 		t.Fatal("SPC b asked about body.md's unsaved changes")

@@ -42,13 +42,13 @@ func (h *Host) newBufferPick() *pick[string] {
 // labelRowOf is a buffer's row in the Buffers picker.
 func labelRowOf(_ int, label string) rowOf { return rowOf{"key": label, "label": label} }
 
-// openBuffers is Go › Buffers…, SPC B and :b alone: the picker over the open buffers.
+// openBuffers is Go › Buffers…, SPC b s and :b alone: the picker over the open buffers.
 func (h *Host) openBuffers() {
 	h.syncBuffers()
 	h.bufferPick.open()
 }
 
-// closeShownBuffer is File › Close buffer, SPC C and :bd: the shown buffer closed, asked about first
+// closeShownBuffer is File › Close buffer, SPC b d and :bd: the shown buffer closed, asked about first
 // when it has unsaved changes.
 func (h *Host) closeShownBuffer() { h.closeBuffer(h.active) }
 
@@ -87,6 +87,16 @@ func (h *Host) bufferNamed(arg string) (*openBuffer, error) {
 		return found[0], nil
 	}
 	return nil, fmt.Errorf("b: %d buffers match %q: give more of the name, or its number", len(found), arg)
+}
+
+// bufferSlotEntries are buffer.show_1 to buffer.show_10, SPC b 1 to 9 and 0's: the nth buffer in
+// the tabs' order shown (showBufferAt), none past the last.
+func (h *Host) bufferSlotEntries() []Entry {
+	out := make([]Entry, bufferSlots)
+	for n := 1; n <= bufferSlots; n++ {
+		out[n-1] = builtin("buffer.show_"+strconv.Itoa(n), bufferSlotTitle(n), bufferSlotRun(n), func() { h.showBufferAt(n) })
+	}
+	return out
 }
 
 // bufferEntries are :b and :bd, as catalog entries (catalog.go), and buffer.new, which has no ':'

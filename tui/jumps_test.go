@@ -51,7 +51,7 @@ func TestCtrlOWalksTheJumpListAcrossDocuments(t *testing.T) {
 	r.keys(t, ctrlKey('i')) // forward to b, where it was left
 	r.waitAt(t, "b.md", 0, 0)
 
-	r.leader(t, 'b') // back to the previous document in one step
+	r.bufferKey(t, 'b') // back to the previous document in one step
 	r.waitAt(t, "a.md", 2, col)
 }
 

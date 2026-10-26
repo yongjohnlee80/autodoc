@@ -15,6 +15,18 @@
         <source>SPC a — agents</source>
         <translation>SPC a — 에이전트</translation>
     </message>
+    <message id="autodoc.card.buffer.help">
+        <source>THE BUFFER CARD (SPC b)</source>
+        <translation>버퍼 카드 (SPC b)</translation>
+    </message>
+    <message id="autodoc.card.buffer.keyhelp">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>키를 누르면 명령 실행 · Backspace로 뒤로 · q 또는 Esc로 닫기</translation>
+    </message>
+    <message id="autodoc.card.buffer.title">
+        <source>SPC b — buffers</source>
+        <translation>SPC b — 버퍼</translation>
+    </message>
     <message id="autodoc.card.group.agents">
         <source>AGENTS</source>
         <translation>에이전트</translation>
@@ -379,6 +391,22 @@
         <source>close the buffer</source>
         <translation>버퍼 닫기</translation>
     </message>
+    <message id="autodoc.cmd.buffer.close_left">
+        <source>close the buffers to the left</source>
+        <translation>왼쪽 버퍼 닫기</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_left.help">
+        <source>close the buffers to the left</source>
+        <translation>왼쪽 버퍼 닫기</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right">
+        <source>close the buffers to the right</source>
+        <translation>오른쪽 버퍼 닫기</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right.help">
+        <source>close the buffers to the right</source>
+        <translation>오른쪽 버퍼 닫기</translation>
+    </message>
     <message id="autodoc.cmd.buffer.delete">
         <source>close the buffer</source>
         <translation>버퍼 닫기</translation>
@@ -410,6 +438,86 @@
     <message id="autodoc.cmd.buffer.pick.help">
         <source>switch buffer</source>
         <translation>버퍼 전환</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1">
+        <source>show the 1st buffer</source>
+        <translation>1번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1.help">
+        <source>show the 1st buffer</source>
+        <translation>1번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10">
+        <source>show the 10th buffer</source>
+        <translation>10번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10.help">
+        <source>show the 10th buffer</source>
+        <translation>10번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2">
+        <source>show the 2nd buffer</source>
+        <translation>2번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2.help">
+        <source>show the 2nd buffer</source>
+        <translation>2번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3">
+        <source>show the 3rd buffer</source>
+        <translation>3번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3.help">
+        <source>show the 3rd buffer</source>
+        <translation>3번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4">
+        <source>show the 4th buffer</source>
+        <translation>4번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4.help">
+        <source>show the 4th buffer</source>
+        <translation>4번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5">
+        <source>show the 5th buffer</source>
+        <translation>5번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5.help">
+        <source>show the 5th buffer</source>
+        <translation>5번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6">
+        <source>show the 6th buffer</source>
+        <translation>6번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6.help">
+        <source>show the 6th buffer</source>
+        <translation>6번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7">
+        <source>show the 7th buffer</source>
+        <translation>7번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7.help">
+        <source>show the 7th buffer</source>
+        <translation>7번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8">
+        <source>show the 8th buffer</source>
+        <translation>8번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8.help">
+        <source>show the 8th buffer</source>
+        <translation>8번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9">
+        <source>show the 9th buffer</source>
+        <translation>9번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9.help">
+        <source>show the 9th buffer</source>
+        <translation>9번째 버퍼 표시</translation>
     </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
@@ -2442,9 +2550,12 @@
   * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
               back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
-  SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
-              its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
-              first over unsaved changes
+  SPC b       the buffer card: 1 to 9 show the 1st to the 9th buffer in the tabs' order (H and
+              L's), 0 the 10th; d closes the one shown (File › Close buffer, :bd), asking first
+              over unsaved changes; r and l close the buffers to its right and left, nearest
+              first, each asked about as d asks: a Stay stops there, that buffer shown; s
+              switches buffer (Go › Buffers…, :b), the open files and drafts each previewed with
+              its unsaved text; b goes back
   H L         in the page, in Vim's Normal mode, the buffer before or after the shown one, in the
               order of the GUI's tabs, wrapping (bufferline's Shift+h / Shift+l): this replaces
               Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
@@ -2512,9 +2623,11 @@
   * #         페이지에서, Vim의 Normal 모드에서 커서 아래 단어를 온전한 단어로 앞 또는
               뒤로 찾습니다 (g* g#은 단어 일부로도): 페이지의 찾기가 되므로 n과 N으로 이어집니다
   SPC o       문서 열기: 워크스페이스 파일에 대한 필터, 미리 보기 포함
-  SPC B       버퍼 전환 (이동 › 버퍼…, :b): 열린 파일과 초안, 각각 저장하지 않은 텍스트로
-              미리 보기. SPC C는 표시된 버퍼를 닫습니다 (파일 › 버퍼 닫기, :bd).
-              저장하지 않은 변경 사항이 있으면 먼저 묻습니다
+  SPC b       버퍼 카드: 1~9는 탭 순서(H와 L의 순서)로 1~9번째 버퍼, 0은 10번째 버퍼를 표시.
+              d는 표시된 버퍼를 닫습니다 (파일 › 버퍼 닫기, :bd). 저장하지 않은 변경 사항이 있으면
+              먼저 묻습니다. r과 l은 오른쪽과 왼쪽의 버퍼를 가까운 것부터 닫으며, 각각 d처럼
+              묻습니다: 머무르기를 누르면 거기서 멈추고 그 버퍼가 표시됩니다. s는 버퍼 전환
+              (이동 › 버퍼…, :b): 열린 파일과 초안, 각각 저장하지 않은 텍스트로 미리 보기. b는 뒤로
   H L         페이지에서, Vim의 Normal 모드에서 표시된 버퍼의 이전 또는 다음 버퍼, GUI 탭
               순서대로 순환 (bufferline의 Shift+h / Shift+l): Normal 모드에서만 Vim의 H와 L
               (화면의 첫 줄과 마지막 줄)을 대체합니다. Visual 모드는 그대로 유지하고,
@@ -2640,8 +2753,8 @@ THE PANELS
   dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it.
   Enter on a file opens it, closing the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
-  SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
-  time, within a document too). The page's right-click menu has both, Go to link (on a link)
+  SPC b b goes back to the previous document, where you left it (Ctrl+O steps back one jump at
+  a time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
   In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
   follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
@@ -2766,7 +2879,7 @@ WHAT A KEY NEEDS
   복원), x는 닫습니다. 파일에서 Enter를
   누르면 파일을 열고, 탐색기에서는 패널을 닫고 링크에서는 숨깁니다.
   SPC j는 커서 아래 링크로 이동합니다: 링크가 가리키는 문서, 없으면 웹 주소나 파일.
-  SPC b는 이전 문서의 떠났던 위치로 돌아갑니다 (Ctrl+O는 한 번에 점프 하나씩, 문서 안에서도
+  SPC b b는 이전 문서의 떠났던 위치로 돌아갑니다 (Ctrl+O는 한 번에 점프 하나씩, 문서 안에서도
   뒤로 갑니다). 페이지의 오른쪽 클릭 메뉴에 둘 다 있습니다: 링크로 이동(링크 위에서)
   과 뒤로.
   GUI에서 포인터는 클릭이 하는 일을 알려 줍니다: 텍스트 위에서는 I자 모양, 클릭이 링크를
@@ -2890,6 +3003,10 @@ WHAT A KEY NEEDS
         <source>back</source>
         <translation>뒤로</translation>
     </message>
+    <message id="autodoc.key.buffers">
+        <source>buffers…</source>
+        <translation>버퍼…</translation>
+    </message>
     <message id="autodoc.key.choose_the_store">
         <source>choose the store</source>
         <translation>저장소 선택</translation>
@@ -2897,6 +3014,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.close_the_buffer">
         <source>close the buffer</source>
         <translation>버퍼 닫기</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_left">
+        <source>close the buffers to the left</source>
+        <translation>왼쪽 버퍼 닫기</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_right">
+        <source>close the buffers to the right</source>
+        <translation>오른쪽 버퍼 닫기</translation>
     </message>
     <message id="autodoc.key.editor_preferences">
         <source>editor preferences</source>
@@ -3029,6 +3154,46 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
         <translation>메뉴 표시/포커스/숨기기</translation>
+    </message>
+    <message id="autodoc.key.show_the_10th_buffer">
+        <source>show the 10th buffer</source>
+        <translation>10번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_1st_buffer">
+        <source>show the 1st buffer</source>
+        <translation>1번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_2nd_buffer">
+        <source>show the 2nd buffer</source>
+        <translation>2번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_3rd_buffer">
+        <source>show the 3rd buffer</source>
+        <translation>3번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_4th_buffer">
+        <source>show the 4th buffer</source>
+        <translation>4번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_5th_buffer">
+        <source>show the 5th buffer</source>
+        <translation>5번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_6th_buffer">
+        <source>show the 6th buffer</source>
+        <translation>6번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_7th_buffer">
+        <source>show the 7th buffer</source>
+        <translation>7번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_8th_buffer">
+        <source>show the 8th buffer</source>
+        <translation>8번째 버퍼 표시</translation>
+    </message>
+    <message id="autodoc.key.show_the_9th_buffer">
+        <source>show the 9th buffer</source>
+        <translation>9번째 버퍼 표시</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -4075,8 +4240,8 @@ WHAT A KEY NEEDS
         <translation>%1이(가) 없어져 점프 목록에서 빠졌습니다 (Ctrl+O를 다시 누르면 더 뒤로 갑니다)</translation>
     </message>
     <message id="autodoc.notice.navigation.nothing_to_go_back_to_spc_b_returns_to_the_docum">
-        <source>nothing to go back to: SPC b returns to the documents opened before this one</source>
-        <translation>돌아갈 곳이 없습니다: SPC b는 이 문서보다 먼저 연 문서로 돌아갑니다</translation>
+        <source>nothing to go back to: SPC b b returns to the documents opened before this one</source>
+        <translation>돌아갈 곳이 없습니다: SPC b b는 이 문서보다 먼저 연 문서로 돌아갑니다</translation>
     </message>
     <message id="autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows">
         <source>%1 has no headings to navigate: the breadcrumb shows %2</source>

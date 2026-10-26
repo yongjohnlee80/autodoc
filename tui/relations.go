@@ -16,7 +16,7 @@ import (
 // both ways. Enter opens a row in the editor and closes the drawer; d, in the drawer, shows the
 // second ring (graph.neighborhood at depth 2) under each first-ring document; the unresolved
 // relations and supersession cycles close the list. SPC j goes to the link under the cursor and
-// SPC b back to the document opened before (golink.go, navigation.go); the editor's right-click
+// SPC b b back to the document opened before (golink.go, navigation.go); the editor's right-click
 // menu has both, "Go to link", on a link, and "Back".
 //
 // The drawer is a feature of its own, a DocWatcher: a page shown loads its relations. Opening a

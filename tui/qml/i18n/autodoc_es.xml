@@ -15,6 +15,18 @@
         <source>SPC a — agents</source>
         <translation>SPC a — agentes</translation>
     </message>
+    <message id="autodoc.card.buffer.help">
+        <source>THE BUFFER CARD (SPC b)</source>
+        <translation>LA TARJETA DE BÚFERES (SPC b)</translation>
+    </message>
+    <message id="autodoc.card.buffer.keyhelp">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>una tecla ejecuta su comando · Backspace vuelve atrás · q o Esc cierra</translation>
+    </message>
+    <message id="autodoc.card.buffer.title">
+        <source>SPC b — buffers</source>
+        <translation>SPC b — búferes</translation>
+    </message>
     <message id="autodoc.card.group.agents">
         <source>AGENTS</source>
         <translation>AGENTES</translation>
@@ -379,6 +391,22 @@
         <source>close the buffer</source>
         <translation>cerrar el búfer</translation>
     </message>
+    <message id="autodoc.cmd.buffer.close_left">
+        <source>close the buffers to the left</source>
+        <translation>cerrar los búferes a la izquierda</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_left.help">
+        <source>close the buffers to the left</source>
+        <translation>cerrar los búferes a la izquierda</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right">
+        <source>close the buffers to the right</source>
+        <translation>cerrar los búferes a la derecha</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right.help">
+        <source>close the buffers to the right</source>
+        <translation>cerrar los búferes a la derecha</translation>
+    </message>
     <message id="autodoc.cmd.buffer.delete">
         <source>close the buffer</source>
         <translation>cerrar el búfer</translation>
@@ -410,6 +438,86 @@
     <message id="autodoc.cmd.buffer.pick.help">
         <source>switch buffer</source>
         <translation>cambiar de búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1">
+        <source>show the 1st buffer</source>
+        <translation>mostrar el 1.er búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1.help">
+        <source>show the 1st buffer</source>
+        <translation>mostrar el 1.er búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10">
+        <source>show the 10th buffer</source>
+        <translation>mostrar el 10.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10.help">
+        <source>show the 10th buffer</source>
+        <translation>mostrar el 10.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2">
+        <source>show the 2nd buffer</source>
+        <translation>mostrar el 2.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2.help">
+        <source>show the 2nd buffer</source>
+        <translation>mostrar el 2.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3">
+        <source>show the 3rd buffer</source>
+        <translation>mostrar el 3.er búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3.help">
+        <source>show the 3rd buffer</source>
+        <translation>mostrar el 3.er búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4">
+        <source>show the 4th buffer</source>
+        <translation>mostrar el 4.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4.help">
+        <source>show the 4th buffer</source>
+        <translation>mostrar el 4.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5">
+        <source>show the 5th buffer</source>
+        <translation>mostrar el 5.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5.help">
+        <source>show the 5th buffer</source>
+        <translation>mostrar el 5.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6">
+        <source>show the 6th buffer</source>
+        <translation>mostrar el 6.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6.help">
+        <source>show the 6th buffer</source>
+        <translation>mostrar el 6.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7">
+        <source>show the 7th buffer</source>
+        <translation>mostrar el 7.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7.help">
+        <source>show the 7th buffer</source>
+        <translation>mostrar el 7.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8">
+        <source>show the 8th buffer</source>
+        <translation>mostrar el 8.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8.help">
+        <source>show the 8th buffer</source>
+        <translation>mostrar el 8.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9">
+        <source>show the 9th buffer</source>
+        <translation>mostrar el 9.º búfer</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9.help">
+        <source>show the 9th buffer</source>
+        <translation>mostrar el 9.º búfer</translation>
     </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
@@ -2442,9 +2550,12 @@
   * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
               back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
-  SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
-              its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
-              first over unsaved changes
+  SPC b       the buffer card: 1 to 9 show the 1st to the 9th buffer in the tabs' order (H and
+              L's), 0 the 10th; d closes the one shown (File › Close buffer, :bd), asking first
+              over unsaved changes; r and l close the buffers to its right and left, nearest
+              first, each asked about as d asks: a Stay stops there, that buffer shown; s
+              switches buffer (Go › Buffers…, :b), the open files and drafts each previewed with
+              its unsaved text; b goes back
   H L         in the page, in Vim's Normal mode, the buffer before or after the shown one, in the
               order of the GUI's tabs, wrapping (bufferline's Shift+h / Shift+l): this replaces
               Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
@@ -2512,9 +2623,12 @@
   * #         en la página, en el modo Normal de Vim, buscar la palabra bajo el cursor, entera, hacia delante o
               atrás (g* g# también como parte de una palabra): pasa a ser la búsqueda de la página, y n y N siguen
   SPC o       abrir un documento: un filtro sobre los archivos del espacio de trabajo, con vista previa
-  SPC B       cambiar de búfer (Ir › Búferes…, :b): los archivos y borradores abiertos, cada uno con vista previa
-              de su texto sin guardar; SPC C cierra el mostrado (Archivo › Cerrar búfer, :bd), preguntando
-              antes si hay cambios sin guardar
+  SPC b       la tarjeta de búferes: 1 a 9 muestran del 1.er al 9.º búfer en el orden de las pestañas (el
+              de H y L), 0 el 10.º; d cierra el mostrado (Archivo › Cerrar búfer, :bd), preguntando antes
+              si hay cambios sin guardar; r y l cierran los búferes a su derecha y a su izquierda, del más
+              cercano al más lejano, preguntando por cada uno como d: Seguir editando se detiene ahí, con
+              ese búfer mostrado; s cambia de búfer (Ir › Búferes…, :b), los archivos y borradores
+              abiertos, cada uno con vista previa de su texto sin guardar; b vuelve atrás
   H L         en la página, en el modo Normal de Vim, el búfer anterior o siguiente al mostrado, en el
               orden de las pestañas de la GUI, con vuelta al inicio (Shift+h / Shift+l de bufferline): sustituye
               a H y L de Vim (la primera y última línea de la pantalla) solo en modo Normal; el modo Visual
@@ -2644,8 +2758,8 @@ THE PANELS
   dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it.
   Enter on a file opens it, closing the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
-  SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
-  time, within a document too). The page's right-click menu has both, Go to link (on a link)
+  SPC b b goes back to the previous document, where you left it (Ctrl+O steps back one jump at
+  a time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
   In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
   follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
@@ -2771,7 +2885,7 @@ LOS PANELES
   de nuevo tal como estaba, + lo maximiza (otra vez para restaurarlo) y x lo cierra. Enter sobre un
   archivo lo abre, cerrando el panel desde el Explorador y ocultándolo desde los Enlaces.
   SPC j va al enlace bajo el cursor: el documento que nombra, si no su dirección web o archivo.
-  SPC b vuelve al documento anterior, donde lo dejaste (Ctrl+O retrocede un salto cada
+  SPC b b vuelve al documento anterior, donde lo dejaste (Ctrl+O retrocede un salto cada
   vez, también dentro de un documento). El menú contextual de la página tiene ambos, Ir al enlace (sobre un enlace)
   y Atrás.
   En la GUI el puntero indica qué hace un clic: una I sobre el texto, una mano donde un clic
@@ -2896,6 +3010,10 @@ LO QUE NECESITA UNA TECLA
         <source>back</source>
         <translation>atrás</translation>
     </message>
+    <message id="autodoc.key.buffers">
+        <source>buffers…</source>
+        <translation>búferes…</translation>
+    </message>
     <message id="autodoc.key.choose_the_store">
         <source>choose the store</source>
         <translation>elegir el almacén</translation>
@@ -2903,6 +3021,14 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.key.close_the_buffer">
         <source>close the buffer</source>
         <translation>cerrar el búfer</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_left">
+        <source>close the buffers to the left</source>
+        <translation>cerrar los búferes a la izquierda</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_right">
+        <source>close the buffers to the right</source>
+        <translation>cerrar los búferes a la derecha</translation>
     </message>
     <message id="autodoc.key.editor_preferences">
         <source>editor preferences</source>
@@ -3035,6 +3161,46 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
         <translation>ver/enfocar/ocultar el menú</translation>
+    </message>
+    <message id="autodoc.key.show_the_10th_buffer">
+        <source>show the 10th buffer</source>
+        <translation>mostrar el 10.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_1st_buffer">
+        <source>show the 1st buffer</source>
+        <translation>mostrar el 1.er búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_2nd_buffer">
+        <source>show the 2nd buffer</source>
+        <translation>mostrar el 2.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_3rd_buffer">
+        <source>show the 3rd buffer</source>
+        <translation>mostrar el 3.er búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_4th_buffer">
+        <source>show the 4th buffer</source>
+        <translation>mostrar el 4.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_5th_buffer">
+        <source>show the 5th buffer</source>
+        <translation>mostrar el 5.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_6th_buffer">
+        <source>show the 6th buffer</source>
+        <translation>mostrar el 6.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_7th_buffer">
+        <source>show the 7th buffer</source>
+        <translation>mostrar el 7.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_8th_buffer">
+        <source>show the 8th buffer</source>
+        <translation>mostrar el 8.º búfer</translation>
+    </message>
+    <message id="autodoc.key.show_the_9th_buffer">
+        <source>show the 9th buffer</source>
+        <translation>mostrar el 9.º búfer</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -4081,8 +4247,8 @@ LO QUE NECESITA UNA TECLA
         <translation>%1 ya no existe: salió de la lista de saltos (Ctrl+O otra vez va más atrás)</translation>
     </message>
     <message id="autodoc.notice.navigation.nothing_to_go_back_to_spc_b_returns_to_the_docum">
-        <source>nothing to go back to: SPC b returns to the documents opened before this one</source>
-        <translation>nada a lo que volver: SPC b vuelve a los documentos abiertos antes que este</translation>
+        <source>nothing to go back to: SPC b b returns to the documents opened before this one</source>
+        <translation>nada a lo que volver: SPC b b vuelve a los documentos abiertos antes que este</translation>
     </message>
     <message id="autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows">
         <source>%1 has no headings to navigate: the breadcrumb shows %2</source>

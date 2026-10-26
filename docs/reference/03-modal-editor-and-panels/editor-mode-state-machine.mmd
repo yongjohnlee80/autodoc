@@ -5,7 +5,7 @@ stateDiagram-v2
     state "Insert (typing)" as Insert
     state "Visual (character, line, block)" as Visual
     state "Command line (:w :q :find :b ...)" as Command
-    state "Picker (SPC o, SPC /, SPC B)" as Picker
+    state "Picker (SPC o, SPC /, SPC b s)" as Picker
     state "Text mode (modeless)" as Text
     state "Rendered View (Ctrl+T, --gui)" as RenderedView
 
@@ -15,7 +15,7 @@ stateDiagram-v2
     Visual --> Normal: Esc / y / d / c / > / <
     Normal --> Command: : or Ctrl+;
     Command --> Normal: Enter / Esc
-    Normal --> Picker: SPC o / SPC SPC / SPC B
+    Normal --> Picker: SPC o / SPC SPC / SPC b s
     Picker --> Normal: Enter (open) / Esc
     Normal --> Text: SPC k
     Text --> Normal: Ctrl+Space k

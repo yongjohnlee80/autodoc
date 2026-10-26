@@ -15,7 +15,7 @@ import (
 // join it. A step into another document, or another view of this one, is the host's (jumpTo): it
 // opens the document, and commits the step once it is shown there; an open that doesn't go ahead
 // (Stay at the unsaved question, an HTML file's Cancel, a failed read, a newer open) leaves the list
-// as it was. SPC b goes back to the nearest place in another document, over the same list.
+// as it was. SPC b b goes back to the nearest place in another document, over the same list.
 
 // fileRef is a document opened: its workspace ("" outside every one) and its path.
 type fileRef struct{ ws, path string }
@@ -89,7 +89,7 @@ func (h *Host) backToDocument() (widget.JumpStep, bool) {
 	}
 }
 
-// goBack is SPC b: back to the document opened before this one, at the place it was left.
+// goBack is SPC b b: back to the document opened before this one, at the place it was left.
 func (h *Host) goBack() {
 	if step, ok := h.backToDocument(); ok {
 		h.jumpTo(step)

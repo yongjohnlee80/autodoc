@@ -282,7 +282,7 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   dock, whose icon shows it again as it was, `+` maximizes it (again to restore), and `x` closes it. `Enter` opens a row, closing the
   panel from the Explorer and hiding it from the Links. The links' own panel was folded in: where
   the explorer keeps no place of its own, it opens where the links were left. `SPC j` goes to the link under the cursor (the document it names, else its web address or
-  file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
+  file); `SPC b b` goes back to the previous document, where you left it (`Ctrl+O` steps back
   one jump at a time, within a document too); the page's right-click menu has both.
 - **The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
   workspace and the links among them, placed by force, each document's dot coloured by its group
@@ -410,8 +410,8 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `SPC o`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
 | `Ctrl+O`, `Ctrl+I` | back and forward along the jumps, Vim's jump list (Normal mode): links followed, documents opened, and the page's own jumps (`G`, `gg`, `%`, `{ }`, a mark's); back to another document opens it where you left it, in the view you left it in. `Ctrl+O` no longer opens a document: `SPC o` does |
-| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the links, the link under the cursor, back |
-| `SPC B`, `SPC C`, `:b`, `:bd` | switch buffer (`Go › Buffers…`: every open file and draft, previewed with its unsaved text; `:b 3`, `:b name`), close the one shown (`File › Close buffer`), asking first over unsaved changes |
+| `SPC f`, `SPC l`, `SPC j` | open a file anywhere, the links, the link under the cursor |
+| `SPC b` | the buffer card: `1` to `9` show the 1st to the 9th buffer in the tabs' order, `0` the 10th; `d` closes the one shown (`File › Close buffer`, `:bd`), asking first over unsaved changes; `r` and `l` close the buffers to its right and left, nearest first, each asked about as `d` asks, a Stay stopping there with that buffer shown; `s` switches buffer (`Go › Buffers…`, `:b`: every open file and draft, previewed with its unsaved text; `:b 3`, `:b name`); `b` goes back |
 | `H`, `L` (`Shift+h`, `Shift+l`) | in the page, in Normal mode, the buffer before or after the shown one, in the order of the GUI's tabs, wrapping at the ends (bufferline's keys, as in autovim). This replaces Vim's `H` and `L` (the screen's top and bottom line) in Normal mode only: Visual mode keeps them, Insert mode types them, and a script's own `autodoc.map` of `H` or `L` wins |
 | `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
 | `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
@@ -750,7 +750,7 @@ speak.
   and `d` adds the files two links away.
 - **Relations and back.** `:AutodocRelations` (`<leader>ml`) lists what the current file is
   connected to in a picker, each row showing its kind. Opening one, from the picker or the drawer,
-  remembers the file you left: `:AutodocBack` (`<leader>mo`) returns to it, as the TUI's `SPC b`
+  remembers the file you left: `:AutodocBack` (`<leader>mo`) returns to it, as the TUI's `SPC b b`
   does. With `keys = true` (or `popup = true`), the right-click menu has **AutoDoc: Go to
   related…** and **AutoDoc: Back** on a KB file.
 - **Linking the primary KB.** auto-core's first-run import records the project's primary KB by its

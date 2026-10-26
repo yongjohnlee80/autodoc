@@ -7,7 +7,7 @@
 ---  load(ws, rel, deep)   graph.links, graph.backlinks, graph.unresolved (and graph.neighborhood)
 ---  pick(path?)           `<leader>ml`: the current file's relations in a picker, a kind each
 ---  open(ws, rel)         opens a related document, the one left behind going on the history
----  back()                `<leader>mo`: the document opened before, as the TUI's SPC b
+---  back()                `<leader>mo`: the document opened before, as the TUI's SPC b b
 ---  popup()               the right-click menu's "Go to related…" and "Back"
 ---@module 'autodoc.relations'
 

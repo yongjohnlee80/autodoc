@@ -185,9 +185,14 @@ type Keyed interface {
 // leader is SPC's card: Space in Vim's Normal mode, Ctrl+Space in every editor mode.
 const leader = "leader"
 
+// bufferCard is SPC b's card, the buffers': the Nth in the tabs' order, the buffers closed, back
+// and the switch.
+const bufferCard = "buffer"
+
 // cards are the host's cards.
 var cards = []Card{{ID: leader, View: "Leader", Title: "SPC — commands",
-	Help: "THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)", Groups: leaderGroups}}
+	Help: "THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)", Groups: leaderGroups},
+	{ID: bufferCard, View: "BufferCard", Title: "SPC b — buffers", Back: leader, Help: "THE BUFFER CARD (SPC b)"}}
 
 // leaderGroups are SPC's card's columns. The card is to fit the smallest screen, main.qml's 80 × 20:
 // its frame leaves the body 76 cells by 16 rows. MANAGE and WINDOW, the widest groups, share a
@@ -256,12 +261,10 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "f", Show: "f", Does: "open a file anywhere", Run: "App.openFileDialog()"},
 		{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
 		{Seq: "j", Show: "j", Does: "go to link", Run: "App.followLink()"},
-		{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
-		{Seq: "Shift+B", Show: "B", Does: "switch buffer", Run: "App.openBuffers()"},
+		{Seq: "b", Show: "b", Does: "buffers…", Opens: bufferCard},
 	}),
 	inGroup(groupFile, []Key{
 		{Seq: "n", Show: "n", Does: "new file", Run: "App.newFile()"},
-		{Seq: "Shift+C", Show: "C", Does: "close the buffer", Run: "App.closeBuffer()"},
 		{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
 		{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
 		{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},
@@ -300,6 +303,53 @@ var leaderKeys = onCard(leader, slices.Concat(
 		// SPC p is the plugins' (pluginfeature.go: Keys)
 	}),
 ))
+
+// bufferKeys are SPC b's card's: 1 to 9, then 0, show the 1st to the 10th buffer in the tabs'
+// order; d closes the shown one, s switches buffer, r and l close the buffers to its right and left
+// (buffertabs.go: closeBeside), and b goes back. Each runs the App.* twin of a catalog entry
+// (builtins.go), as SPC's keys do. Listed two a row: the slots, then d s, r l, b.
+var bufferKeys = onCard(bufferCard, slices.Concat(bufferSlotKeys(), []Key{
+	{Seq: "d", Show: "d", Does: "close the buffer", Run: "App.closeBuffer()"},
+	{Seq: "s", Show: "s", Does: "switch buffer", Run: "App.openBuffers()"},
+	{Seq: "r", Show: "r", Does: "close the buffers to the right", Run: "App.closeBuffersRight()"},
+	{Seq: "l", Show: "l", Does: "close the buffers to the left", Run: "App.closeBuffersLeft()"},
+	{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
+}))
+
+// bufferSlots is how many buffers the slot keys reach: 1 to 9, and 0 the 10th.
+const bufferSlots = 10
+
+// bufferSlotKeys are the slot keys: n shows the nth buffer, 0 the 10th.
+func bufferSlotKeys() []Key {
+	out := make([]Key, bufferSlots)
+	for n := 1; n <= bufferSlots; n++ {
+		k := strconv.Itoa(n % bufferSlots)
+		out[n-1] = Key{Seq: k, Show: k, Does: bufferSlotTitle(n), Run: bufferSlotRun(n)}
+	}
+	return out
+}
+
+// bufferSlotTitle is what the slot key of the nth buffer does, as its card and the catalog say it.
+func bufferSlotTitle(n int) string { return "show the " + ordinal(n) + " buffer" }
+
+// bufferSlotRun is the QML showing the nth buffer: App.showBufferAt(3).
+func bufferSlotRun(n int) string { return "App.showBufferAt(" + strconv.Itoa(n) + ")" }
+
+// ordinal is n as English counts it: 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st.
+func ordinal(n int) string {
+	suffix := "th"
+	if n%100 < 11 || n%100 > 13 {
+		switch n % 10 {
+		case 1:
+			suffix = "st"
+		case 2:
+			suffix = "nd"
+		case 3:
+			suffix = "rd"
+		}
+	}
+	return strconv.Itoa(n) + suffix
+}
 
 // inGroup is keys, each under group.
 func inGroup(group string, keys []Key) []Key {
@@ -392,7 +442,7 @@ func (k keyset) helpMoved() string {
 // keyCatalog is the catalog with every feature's keys and cards after the host's. A key running a
 // catalog entry that says nothing itself is named by the entry's title.
 func keyCatalog(fs []Feature) keyset {
-	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, findKeys(fs), scopedKeys, leaderKeys)}
+	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, findKeys(fs), scopedKeys, leaderKeys, bufferKeys)}
 	titles := map[string]string{}
 	for _, f := range fs {
 		if kf, ok := f.(Keyed); ok {
