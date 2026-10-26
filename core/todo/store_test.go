@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -101,6 +102,62 @@ func TestAWorkspacesFirstTaskMakesItsStore(t *testing.T) {
 	}
 	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 1 {
 		t.Errorf("the first task: %+v %v", l, err)
+	}
+}
+
+// A store a registered root has not made yet reads as an empty one (ADR 1791532020 r13): no task,
+// no malformed file, cursor 0, no such task, no change. The reads write nothing: no store, no
+// marker, no claim. A root no one registered is refused, as before.
+func TestAStoreNotMadeYetReadsEmpty(t *testing.T) {
+	e := newEnv(t)
+	e.disk.MkdirAll("/src/proj")
+	proj, stray := todo.At{Root: "/src/proj"}, todo.At{Root: "/src/stray"}
+	e.disk.MkdirAll("/src/stray")
+	if _, err := e.m.Register(ctx, "/src/proj"); err != nil {
+		t.Fatal(err)
+	}
+	for name, at := range map[string]todo.At{"a workspace": kb, "a registered root": proj} {
+		if _, err := e.m.Resolve(ctx, at); err != nil { // the store's id, recorded as any root's is
+			t.Fatal(err)
+		}
+		var calls []string
+		e.j.Fail = func(op string) error { calls = append(calls, op); return nil }
+		l, err := e.m.List(ctx, at, todo.ListOpts{})
+		if err != nil || len(l.Tasks) != 0 || len(l.Malformed) != 0 || l.Cursor != 0 {
+			t.Errorf("%s's list: %+v %v; want an empty store's", name, l, err)
+		}
+		if _, err := e.m.Get(ctx, at, "nope"); !is(err, todo.ErrNotFound) {
+			t.Errorf("%s's get: %v; want no such task", name, err)
+		}
+		e.j.Fail = nil
+		for _, op := range calls {
+			if !slices.Contains([]string{"Settings", "Pending", "Head", "Snapshot", "After", "Consumers"}, op) {
+				t.Errorf("%s's reads wrote the journal: %s, of %v", name, op, calls)
+			}
+		}
+		if c, err := e.m.Changes(ctx, at, "agent", 0); err != nil || len(c.Changes) != 0 || c.Resync {
+			t.Errorf("%s's changes: %+v %v; want none", name, c, err)
+		}
+		if r, err := e.m.Resolve(ctx, at); err != nil || r.Claimed {
+			t.Errorf("%s resolved after the reads: %+v %v; want unclaimed", name, r, err)
+		}
+	}
+	for _, dir := range []string{kbStore, "/src/proj/.todo-list", "/src/stray/.todo-list"} {
+		if _, err := e.disk.FS.Stat(ctx, strings.TrimPrefix(dir, "/")); err == nil {
+			t.Errorf("a read made %s", dir)
+		}
+	}
+	if _, err := e.m.List(ctx, stray, todo.ListOpts{}); !is(err, todo.ErrNotAStore) {
+		t.Errorf("the list of a root no one registered: %v; want not a store", err)
+	}
+	if _, err := e.m.Get(ctx, stray, "nope"); !is(err, todo.ErrNotAStore) {
+		t.Errorf("the get of a root no one registered: %v; want not a store", err)
+	}
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+		t.Fatalf("the first task after the reads: %v", err)
+	}
+	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 1 {
+		t.Errorf("the store the first task made: %+v %v", l, err)
 	}
 }
 

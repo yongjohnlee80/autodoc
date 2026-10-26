@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -120,3 +123,55 @@ func TestTheDaemonRefreshesClaimedTodoStores(t *testing.T) {
 	}
 	d.stop()
 }
+
+// TestAFreshWorkspacesStoreReadsEmpty: an agent's first todos call, on a workspace whose store is
+// not made yet, is answered over --call as an empty store's, and makes nothing on disk; a root no
+// one registered is refused, as before (ADR 1791532020 r13).
+func TestAFreshWorkspacesStoreReadsEmpty(t *testing.T) {
+	dir := short(t)
+	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	kb, other := mustEval(t, t.TempDir()), mustEval(t, t.TempDir())
+	cfg := writeConfig(t, sock, state, "", "kb="+kb)
+	start(t, cfg, sock)
+	callJSON := func(method, params string) (map[string]any, error) {
+		var out bytes.Buffer
+		if err := runCall(context.Background(), cfg, method, params, &out); err != nil {
+			return nil, err
+		}
+		var v map[string]any
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+			t.Fatalf("%s: %v: %s", method, err, out.String())
+		}
+		return v, nil
+	}
+	refused := func(err error) int64 {
+		var ce *CallError
+		if !errors.As(err, &ce) {
+			return 0
+		}
+		return ce.Code
+	}
+	l, err := callJSON("todos.list", `["kb"]`)
+	if err != nil {
+		t.Fatalf("todos.list of a fresh workspace: %v", err)
+	}
+	if _, ok := l["tasks"].([]any); !ok || len(asSlice(l["tasks"])) != 0 || len(asSlice(l["malformed"])) != 0 || l["cursor"] != float64(0) {
+		t.Errorf("todos.list of a fresh workspace: %v, want no tasks, no malformed, cursor 0", l)
+	}
+	if _, err := callJSON("todos.get", `["kb", "nope"]`); refused(err) != todo.CodeNoTask {
+		t.Errorf("todos.get of a fresh workspace: %v, want no_task", err)
+	}
+	if c, err := callJSON("todos.changes", `["kb", "agent"]`); err != nil || len(asSlice(c["changes"])) != 0 || c["resync"] == true {
+		t.Errorf("todos.changes of a fresh workspace: %v %v, want nothing", c, err)
+	}
+	if _, err := callJSON("todos.list", `[{"root": "`+other+`"}]`); refused(err) != todo.CodeNotAStore {
+		t.Errorf("todos.list of a root no one registered: %v, want not_a_store", err)
+	}
+	for _, root := range []string{kb, other} {
+		if _, err := os.Lstat(filepath.Join(root, ".todo-list")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("a read made %s/.todo-list: %v", root, err)
+		}
+	}
+}
+
+func asSlice(v any) []any { s, _ := v.([]any); return s }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -128,11 +129,13 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 // TestTodosAddsAFreshWorkspacesFirstTask: AutoDoc on its own (ADR 1791532020 r13): a workspace that
 // never had a store, nothing claimed or scaffolded first. The todos panel opens on it writable, no
 // note of read-only, and a adds its first task on the first try: the task lands, its store made
-// and claimed by that write, marker and all.
+// and claimed by that write, marker and all. Nothing on the way is a notice or a toast: the view's
+// reads of the store not made yet answer it empty.
 func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
+	before := onLoop(r, func() int { return len(r.h.noticeLog.items) })
 	r.leader(t, 'x')
 	r.s.WaitForText(t, "[ Add ]")
 	if strings.Contains(r.s.String(), "read-only") {
@@ -143,9 +146,13 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	r.s.WaitForText(t, "new task")
 	r.keys(t, decltest.Type("The first task")...)
 	r.keys(t, enter())
+	var added string
 	r.s.WaitFor(t, "the task added", func(string) bool {
 		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{"open"}})
-		return err == nil && len(l.Tasks) == 1 && l.Tasks[0].Title == "The first task"
+		if err == nil && len(l.Tasks) == 1 && l.Tasks[0].Title == "The first task" {
+			added = l.Tasks[0].ID
+		}
+		return added != ""
 	})
 	if res, err := d.todos.Resolve(context.Background(), kbTodos); err != nil || !res.Claimed {
 		t.Fatalf("the first task's store: %+v %v; want it claimed by that write", res, err)
@@ -156,6 +163,19 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	}
 	if strings.Contains(r.s.String(), "todos.unclaimed") || strings.Contains(r.s.String(), "not claimed") {
 		t.Errorf("a refusal on the way:\n%s", r.s.String())
+	}
+	r.s.WaitFor(t, "the view's read of the new store", func(sc string) bool { return strings.Contains(sc, "The first task") })
+	if sc := r.s.String(); strings.Contains(sc, "todos.list:") || strings.Contains(sc, "no todo store") {
+		t.Errorf("a toast on the way:\n%s", sc)
+	}
+	// the history is newest first: what came since are its first entries. The add's own "added" is
+	// its answer, not something on the way.
+	since := onLoop(r, func() []notice { return slices.Clone(r.h.noticeLog.items[:len(r.h.noticeLog.items)-before]) })
+	answer := onLoop(r, func() string { return r.h.trf("autodoc.notice.todos.todos_added", added) })
+	for _, n := range since {
+		if n.text != answer {
+			t.Errorf("a notice from opening the view to after the add: %q (the add's answer is %q)", n.text, answer)
+		}
 	}
 }
 

@@ -37,6 +37,7 @@ type store struct {
 
 	mu        sync.Mutex
 	recovered bool
+	absent    bool              // a store not made yet, read as an empty one (absentStore): nothing journals its reads
 	cache     map[string]cached // the active buckets' files, by path; archives are never cached
 }
 
@@ -88,7 +89,7 @@ func (m *Manager) open(ctx context.Context, w where) (*store, error) {
 	fsys, canon, err := m.disk.Open(ctx, path)
 	if err != nil {
 		if errors.Is(err, vfs.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s does not exist (todos.scaffold creates it)", ErrNotAStore, path)
+			return nil, fmt.Errorf("%w: %s does not exist (todos.scaffold creates it)", errNoStoreYet, path)
 		}
 		return nil, err
 	}
@@ -378,6 +379,9 @@ func (st *store) current(ctx context.Context, id, seen string) (Task, vfs.Versio
 // an assign. The first sight of a store takes its active snapshot silently; an archived file the
 // snapshot never had is not news. The caller holds st.mu.
 func (m *Manager) diff(ctx context.Context, st *store, files []file, inScope func(string) bool, active bool) {
+	if st.absent {
+		return
+	}
 	if err := m.diffErr(ctx, st, files, inScope, active); err != nil {
 		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.diff.failed", "store": st.id})
 	}

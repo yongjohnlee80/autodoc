@@ -110,6 +110,7 @@ var sqliteSuites = []struct {
 	{"AnAmbiguousStoreMoveBlocksWrites", TestAnAmbiguousStoreMoveBlocksWrites},
 	{"AStoreIsClaimedByItsFirstWrite", TestAStoreIsClaimedByItsFirstWrite},
 	{"AWorkspacesFirstTaskMakesItsStore", TestAWorkspacesFirstTaskMakesItsStore},
+	{"AStoreNotMadeYetReadsEmpty", TestAStoreNotMadeYetReadsEmpty},
 	{"NewProjectOrder", TestNewProjectOrder},
 	{"Where", TestWhere},
 	{"Confinement", TestConfinement},

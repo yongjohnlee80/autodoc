@@ -27,7 +27,9 @@ Writable stores are a workspace's or a `Register`ed root's `.todo-list`, and `Se
 A store is the daemon's from its first write: the write claims it, as `Claim` does, marker
 included, and `Add` makes a missing store first (ADR 1791532020 r13). `Release` gives a store
 back, and records it: writes are then refused (`ErrUnclaimed`), a write never claiming it again,
-until `Claim`. A new project: `Register(root)`, then its first write (or `Scaffold(at)`).
+until `Claim`. A new project: `Register(root)`, then its first write (or `Scaffold(at)`). Until
+then its store reads as an empty one (`List`, `Get`, `Changes`), and the reads write nothing; a
+root no one registered answers `ErrNotAStore`.
 
 ## Format
 
