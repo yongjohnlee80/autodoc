@@ -348,7 +348,7 @@ func buildPlugin(ctx context.Context, logs string, m *manifest, dir string) erro
 	cmd := exec.CommandContext(ctx, m.Install.Build[0], m.Install.Build[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = log, log
-	cmd.Env = append(os.Environ(), "AUTODOC_PLUGIN_DIR="+dir)
+	cmd.Env = append(ownEnviron(), "AUTODOC_PLUGIN_DIR="+dir)
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("its build did not finish in %s", pluginBuildTimeout)
@@ -368,7 +368,7 @@ func git(ctx context.Context, timeout time.Duration, dir string, args ...string)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=")
+	cmd.Env = append(ownEnviron(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=") // git may run configured helpers
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
