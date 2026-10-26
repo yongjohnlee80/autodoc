@@ -895,6 +895,34 @@ type ModelInfo struct {
 	KeyBytes           int64
 }
 
+// VectorBytes is the room one vector of model fp, dims wide, takes as ModelInfo counts it: its
+// float32 values, its 1-bit codes in 64-bit words, and its row's key (the 32-byte text hash, the
+// fingerprint, a byte for the workspace's id), before SQLite's own overhead. index.models and the
+// embedding setup's estimate both count with it.
+func VectorBytes(dims int, fp string) (f32, bits, key int64) {
+	return int64(dims) * 4, int64((dims+63)/64) * 8, int64(32 + len(fp) + 1)
+}
+
+// Pending is how many distinct texts of the workspace's alive chunks have no vector under model fp:
+// for a model never embedded here, every one of them.
+func (x *Indexer) Pending(ctx context.Context, fp string) (n int64, err error) {
+	err = x.store.read(ctx, func(tx *store.Tx) error {
+		n, err = x.store.pendingTexts(tx, fp)
+		return err
+	})
+	return n, err
+}
+
+// Texts is how many distinct texts the workspace's alive chunks have: what a model embeds to cover
+// them all.
+func (x *Indexer) Texts(ctx context.Context) (n int64, err error) {
+	err = x.store.read(ctx, func(tx *store.Tx) error {
+		n, _, err = x.store.textCoverage(tx)
+		return err
+	})
+	return n, err
+}
+
 // Models are the workspace's models: the active one first, then the target, then the unused.
 func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 	target := ""
@@ -915,9 +943,9 @@ func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 			}
 			n := int64(count)
 			dims := int(derefInt(r.Dims))
+			f32, bits, key := VectorBytes(dims, r.FP)
 			m := ModelInfo{FP: r.FP, Provider: deref(r.Provider), Name: deref(r.Name), Dims: dims, State: ModelUnused,
-				Vectors: n, F32Bytes: n * int64(dims) * 4, BitsBytes: n * int64((dims+63)/64) * 8,
-				KeyBytes: n * int64(32+len(r.FP)+1)}
+				Vectors: n, F32Bytes: n * f32, BitsBytes: n * bits, KeyBytes: n * key}
 			switch {
 			case r.Active == 1:
 				m.State = ModelActive

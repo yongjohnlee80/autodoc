@@ -824,3 +824,39 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 		t.Errorf("successful retry left refusal behind: %+v", es)
 	}
 }
+
+// Texts is the workspace's distinct alive texts; Pending is those with no vector under a model: none
+// for the model that filled them, all of them for one never embedded here. VectorBytes is the room
+// index.models reports, vector by vector (ADR 1793005098 §4.3's estimate counts with it).
+func TestPendingAndTextsCountWhatAModelWouldEmbed(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, options{Provider: a})
+	e.put("x.md", "zebra giraffe\n", "y.md", "hippo river\n", "z.md", "zebra giraffe\n")
+	e.ready()
+	ctx := context.Background()
+	// the truth, counted apart: the distinct text hashes of the chunks alive at each document's
+	// active generation
+	var want int64
+	_ = scanOne(ctx, e.raw, &want, `SELECT COUNT(DISTINCT c.text_hash) FROM chunk c JOIN document d ON d.id = c.doc_id
+		WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)`)
+	texts, err := e.ix.Texts(ctx)
+	if err != nil || want == 0 || texts != want {
+		t.Fatalf("Texts %d, %v; the store has %d distinct alive texts", texts, err, want)
+	}
+	fp := a.Model().Fingerprint()
+	if n, err := e.ix.Pending(ctx, fp); err != nil || n != 0 {
+		t.Errorf("Pending for the model that filled them: %d, %v", n, err)
+	}
+	other := embed.Model{Provider: "ollama", Name: "never", Digest: "sha256:x", Dims: 8}.Fingerprint()
+	if n, err := e.ix.Pending(ctx, other); err != nil || n != texts {
+		t.Errorf("Pending for a model never embedded: %d, %v; want %d", n, err, texts)
+	}
+	ms, err := e.ix.Models(ctx)
+	if err != nil || len(ms) != 1 {
+		t.Fatalf("models %+v, %v", ms, err)
+	}
+	f32, bits, key := VectorBytes(ms[0].Dims, ms[0].FP)
+	if m := ms[0]; m.F32Bytes != m.Vectors*f32 || m.BitsBytes != m.Vectors*bits || m.KeyBytes != m.Vectors*key {
+		t.Errorf("index.models %+v; VectorBytes says %d, %d, %d a vector", m, f32, bits, key)
+	}
+}
