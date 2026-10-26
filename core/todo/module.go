@@ -128,7 +128,7 @@ type (
 	}
 	claimParams struct {
 		At   At        `param:"at"`
-		Opts ClaimOpts `param:"opts,optional" doc:"{legacy_workspace}: the directory auto-core's $WORKSPACE meant"`
+		Opts ClaimOpts `param:"opts,optional" doc:"{legacy_workspace}: the directory $WORKSPACE named when the store's refs were written, before AutoDoc owned it"`
 	}
 	migrateParams struct {
 		At   At          `param:"at"`

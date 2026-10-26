@@ -320,7 +320,8 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
   its months, a month's tasks beside them. Under the tabs the task under the cursor's details,
   then one row of the actions that apply: Status…, Assign and Remove on a task, and Add. A store
-  AutoDoc does not write yet (before the cutover) shows none, only "read-only until the cutover".
+  is written from its first write, with no step first; only one released with `todos.release`
+  shows none, only "read-only: this store was released (todos.release)".
   `?` opens the card of the panel's keys, by purpose; `?` again or `Esc` closes it.
 
   | Key | In the todos panel |
@@ -344,7 +345,7 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   The agent is then handed the task in its terminal: its title, its file and the instruction. If
   the agent isn't running, you're asked first, and it's handed over once it starts. If you decline,
   or the agent can't take it, the task stays assigned and a notice says so; `A` again delivers it.
-  AutoDoc assigns only to its own agents, never to AutoVim's.
+  AutoDoc assigns only to its own agents.
   `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
   one. A terminal may keep `Alt`+click for itself; the keys always work.
 - **Files anywhere.** `File › Open file…` (`SPC f`) opens any file on this machine's disk in a
@@ -799,8 +800,9 @@ speak.
   ```
 
   `autodoc --contracts 'todos.*'` lists the verbs; the functions are bound from the same contracts,
-  generated into `lua/autodoc/contracts.lua`. Until the cutover claims a store, its writes
-  answer `-32077`, and AutoVim's auto-core keeps writing it.
+  generated into `lua/autodoc/contracts.lua`. A workspace's store is AutoDoc's from its first
+  write, `todos.add` making it if it is missing. Only a store released with `todos.release`
+  answers `-32077` (`todos.unclaimed`), and `todos.claim` lets AutoDoc write it again.
 
 Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.
 
