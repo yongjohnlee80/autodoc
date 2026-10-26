@@ -913,6 +913,17 @@ func (x *Indexer) Pending(ctx context.Context, fp string) (n int64, err error) {
 	return n, err
 }
 
+// PendingSample is up to n of the distinct alive texts with no vector under fp, as the fill would
+// embed them first (unembedded's order and text): what the embedding setup times a model on. n is
+// at most embedBatch.
+func (x *Indexer) PendingSample(ctx context.Context, fp string, n int) ([]string, error) {
+	_, texts, err := x.store.unembedded(ctx, fp, nil)
+	if err != nil {
+		return nil, err
+	}
+	return texts[:min(n, len(texts))], nil
+}
+
 // Texts is how many distinct texts the workspace's alive chunks have: what a model embeds to cover
 // them all.
 func (x *Indexer) Texts(ctx context.Context) (n int64, err error) {

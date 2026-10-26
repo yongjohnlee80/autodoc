@@ -1,5 +1,5 @@
 {
-  "protocol": 30,
+  "protocol": 31,
   "min_protocol": 12,
   "verbs": [
     {
@@ -268,6 +268,57 @@
       "doc": "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16)."
     },
     {
+      "verb": "embedding.catalog",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "read",
+      "params": [
+        {
+          "name": "base",
+          "type": "string",
+          "optional": true,
+          "doc": "the Ollama's URL; absent, embed.DefaultOllamaURL"
+        }
+      ],
+      "result": "[{name, dims, context, download, memory?, multilingual, fit, recommended, installed}]",
+      "errors": [
+        -32065
+      ],
+      "doc": "The embedding models AutoDoc knows, measured: where each fits on this machine (gpu, cpu, none, unknown), the one recommended, and whether the Ollama has it."
+    },
+    {
+      "verb": "embedding.estimate",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "read",
+      "params": [
+        {
+          "name": "model",
+          "type": "string"
+        },
+        {
+          "name": "workspaces",
+          "type": "[]string",
+          "optional": true,
+          "doc": "absent: every workspace served"
+        },
+        {
+          "name": "base",
+          "type": "string",
+          "optional": true,
+          "doc": "the Ollama's URL; absent, embed.DefaultOllamaURL"
+        }
+      ],
+      "result": "{basis, fp?, workspaces: [{workspace, texts, logical_bytes, seconds?, why?}]}",
+      "errors": [
+        -32065,
+        -32060
+      ],
+      "doc": "What embedding the workspaces with model takes: its texts and their logical bytes, provisional before it is installed; once installed, against its real fingerprint, and timed on a sample of the workspace's own texts."
+    },
+    {
       "verb": "embedding.log",
       "since": 3,
       "scope": "global",
@@ -355,6 +406,71 @@
         -32065
       ],
       "doc": "The stored embedding providers, the one in use, and why the one chosen is not in use."
+    },
+    {
+      "verb": "embedding.pull",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "settings",
+      "params": [
+        {
+          "name": "model",
+          "type": "string"
+        },
+        {
+          "name": "base",
+          "type": "string",
+          "optional": true,
+          "doc": "the Ollama's URL; absent, embed.DefaultOllamaURL"
+        }
+      ],
+      "result": "{job}",
+      "errors": [
+        -32065,
+        -32062
+      ],
+      "doc": "Starts pulling model into the Ollama, as a job the daemon owns: the request ending never stops it. One at a time."
+    },
+    {
+      "verb": "embedding.pull_cancel",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "settings",
+      "params": [
+        {
+          "name": "job",
+          "type": "string",
+          "doc": "embedding.pull's answer"
+        }
+      ],
+      "result": "{job, model, state, completed, total, rate, eta?, error?}",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "Cancels a pull and answers its state: Ollama stops the download unless another client is pulling the same model, and a later pull resumes it."
+    },
+    {
+      "verb": "embedding.pull_status",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "read",
+      "params": [
+        {
+          "name": "job",
+          "type": "string",
+          "doc": "embedding.pull's answer"
+        }
+      ],
+      "result": "{job, model, state, completed, total, rate, eta?, error?}",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "A pull's state (running, done, failed, cancelled), its bytes, and the rate and time left; a job that is not the current one is not found."
     },
     {
       "verb": "embedding.remove",
@@ -746,6 +862,26 @@
         -32060
       ],
       "doc": "Links that name no file."
+    },
+    {
+      "verb": "host.probe",
+      "since": 31,
+      "scope": "global",
+      "audience": "user",
+      "effect": "read",
+      "params": [
+        {
+          "name": "base",
+          "type": "string",
+          "optional": true,
+          "doc": "the Ollama's URL; absent, embed.DefaultOllamaURL"
+        }
+      ],
+      "result": "{gpu: {vendor, name, vram, compute}, ram, free, ollama}",
+      "errors": [
+        -32065
+      ],
+      "doc": "What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version (\"\" when none answers); 0 or \"\" is unknown."
     },
     {
       "verb": "index.changes",
@@ -1646,6 +1782,7 @@
       "name": "rpc.not_found",
       "next": "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone",
       "messages": [
+        "no such pull: it ended and another began, or the daemon restarted",
         "no such embedding provider",
         "no such ranker",
         "not found"
@@ -1657,6 +1794,7 @@
       "next": "doc.read, then merge or retry; for a name, choose another",
       "messages": [
         "another workspace has this name or root",
+        "a model is being pulled: wait for it, or cancel it",
         "another ranker has this name",
         "another embedding provider has this name",
         "the document is not at that version"

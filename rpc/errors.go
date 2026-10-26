@@ -52,6 +52,8 @@ var publicErrs = []module.PublicError{
 	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
 	{Err: store.ErrEventsExpired, Code: CodeCursorExpired, Message: "the event cursor is outside the retained log: take a snapshot and resume from the head"},
 	{Err: ErrNoSwitch, Code: golibrpc.CodeInvalidParams, Message: "no model switch is under way"},
+	{Err: ErrPulling, Code: CodeConflict, Message: "a model is being pulled: wait for it, or cancel it"},
+	{Err: ErrNoPull, Code: CodeNotFound, Message: "no such pull: it ended and another began, or the daemon restarted"},
 	{Err: store.ErrNoProvider, Code: CodeNotFound, Message: "no such embedding provider"},
 	{Err: errNoRankers, Code: CodeUnsupported, Message: "this server keeps no rankers"},
 	{Err: store.ErrNoRanker, Code: CodeNotFound, Message: "no such ranker"},

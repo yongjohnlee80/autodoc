@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 30,
+  protocol = 31,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -93,6 +93,24 @@ return {
       result = "{model}",
       doc = "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16).",
     },
+    ["embedding.catalog"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "base", type = "string", optional = true }
+      },
+      result = "[{name, dims, context, download, memory?, multilingual, fit, recommended, installed}]",
+      doc = "The embedding models AutoDoc knows, measured: where each fits on this machine (gpu, cpu, none, unknown), the one recommended, and whether the Ollama has it.",
+    },
+    ["embedding.estimate"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "model", type = "string" },
+        { name = "workspaces", type = "[]string", optional = true },
+        { name = "base", type = "string", optional = true }
+      },
+      result = "{basis, fp?, workspaces: [{workspace, texts, logical_bytes, seconds?, why?}]}",
+      doc = "What embedding the workspaces with model takes: its texts and their logical bytes, provisional before it is installed; once installed, against its real fingerprint, and timed on a sample of the workspace's own texts.",
+    },
     ["embedding.log"] = {
       since = 3, scope = "global", audience = "user",
       params = {
@@ -125,6 +143,31 @@ return {
       params = {},
       result = "{providers: [{name, kind, base_url, model, context, has_key}], active, error}",
       doc = "The stored embedding providers, the one in use, and why the one chosen is not in use.",
+    },
+    ["embedding.pull"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "model", type = "string" },
+        { name = "base", type = "string", optional = true }
+      },
+      result = "{job}",
+      doc = "Starts pulling model into the Ollama, as a job the daemon owns: the request ending never stops it. One at a time.",
+    },
+    ["embedding.pull_cancel"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "job", type = "string" }
+      },
+      result = "{job, model, state, completed, total, rate, eta?, error?}",
+      doc = "Cancels a pull and answers its state: Ollama stops the download unless another client is pulling the same model, and a later pull resumes it.",
+    },
+    ["embedding.pull_status"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "job", type = "string" }
+      },
+      result = "{job, model, state, completed, total, rate, eta?, error?}",
+      doc = "A pull's state (running, done, failed, cancelled), its bytes, and the rate and time left; a job that is not the current one is not found.",
     },
     ["embedding.remove"] = {
       since = 3, scope = "global", audience = "user",
@@ -258,6 +301,14 @@ return {
       },
       result = "[{src, raw, reason}]",
       doc = "Links that name no file.",
+    },
+    ["host.probe"] = {
+      since = 31, scope = "global", audience = "user",
+      params = {
+        { name = "base", type = "string", optional = true }
+      },
+      result = "{gpu: {vendor, name, vram, compute}, ram, free, ollama}",
+      doc = "What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version (\"\" when none answers); 0 or \"\" is unknown.",
     },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",

@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 30; the daemon serves sessions from protocol 12.
+Verbs at protocol 31; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -243,10 +243,15 @@ Verbs at protocol 30; the daemon serves sessions from protocol 12.
 | --- | --- | --- | --- | --- | --- |
 | `embedding.add` | `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, "" removes it) | `{name, kind, base_url, model, context, has_key}` Logs `embedding.providers`. Codes: -32065, -32062, -32068. | 3 | for people's tools | settings |
 | `embedding.cancel_switch` | — | `{model}` — Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16). Logs `embedding.cancelled`. Codes: -32065. | 4 | for people's tools | settings |
+| `embedding.catalog` | `base`? string (the Ollama's URL; absent, embed.DefaultOllamaURL) | `[{name, dims, context, download, memory?, multilingual, fit, recommended, installed}]` — The embedding models AutoDoc knows, measured: where each fits on this machine (gpu, cpu, none, unknown), the one recommended, and whether the Ollama has it. Codes: -32065. | 31 | for people's tools | read |
+| `embedding.estimate` | `model` string, `workspaces`? []string (absent: every workspace served), `base`? string (the Ollama's URL; absent, embed.DefaultOllamaURL) | `{basis, fp?, workspaces: [{workspace, texts, logical_bytes, seconds?, why?}]}` — What embedding the workspaces with model takes: its texts and their logical bytes, provisional before it is installed; once installed, against its real fingerprint, and timed on a sample of the workspace's own texts. Codes: -32065, -32060. | 31 | for people's tools | read |
 | `embedding.log` | `name` string, `limit` int | `[{at, texts, tokens, millis, outcome}]` — A provider's recent calls. Codes: -32065, -32061. | 3 | for people's tools | read |
 | `embedding.model_context` | `stored` string (the stored provider; "" for an unsaved one), `provider` map ({name, kind, base_url, model, context?, key?}) | `{maximum}` — The context window the provider's model reports, in tokens. Codes: -32065, -32061, -32068. | 5 | for people's tools | read |
 | `embedding.models` | `provider` any (a stored provider's name, or an unsaved one's spec), `spec`? map (with a name: the edit asked about) | `[string]` — The models a provider offers. Codes: -32065, -32061, -32068. | 3 | for people's tools | read |
 | `embedding.providers` | — | `{providers: [{name, kind, base_url, model, context, has_key}], active, error}` — The stored embedding providers, the one in use, and why the one chosen is not in use. Codes: -32065. | 3 | for people's tools | read |
+| `embedding.pull` | `model` string, `base`? string (the Ollama's URL; absent, embed.DefaultOllamaURL) | `{job}` — Starts pulling model into the Ollama, as a job the daemon owns: the request ending never stops it. One at a time. Codes: -32065, -32062. | 31 | for people's tools | settings |
+| `embedding.pull_cancel` | `job` string (embedding.pull's answer) | `{job, model, state, completed, total, rate, eta?, error?}` — Cancels a pull and answers its state: Ollama stops the download unless another client is pulling the same model, and a later pull resumes it. Codes: -32065, -32061. | 31 | for people's tools | settings |
+| `embedding.pull_status` | `job` string (embedding.pull's answer) | `{job, model, state, completed, total, rate, eta?, error?}` — A pull's state (running, done, failed, cancelled), its bytes, and the rate and time left; a job that is not the current one is not found. Codes: -32065, -32061. | 31 | for people's tools | read |
 | `embedding.remove` | `name` string | Deletes the provider and its model's vectors (refused below protocol 16). Logs `embedding.providers`. Codes: -32065, -32061. | 3 | for people's tools | settings |
 | `embedding.update` | `name` string, `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, "" removes it) | Logs `embedding.providers`. Codes: -32065, -32061, -32062, -32068. | 3 | for people's tools | settings |
 | `embedding.usage` | `name` string, `days` int | `[{day, requests, texts, tokens, failures, limited}]` — A provider's usage by day. Codes: -32065, -32061. | 3 | for people's tools | read |
@@ -272,6 +277,12 @@ Verbs at protocol 30; the daemon serves sessions from protocol 12.
 | `graph.neighborhood` | `workspace` string, `path` string, `depth` int, `options`? map ({kinds} (protocol 14)) | `{nodes, edges: [{src, dst, kind}]}` — The files within depth links. Codes: -32060, -32061. | 1 | agent | read |
 | `graph.resolve` | `workspace` string, `from` string (the file the link is written in), `raw` string (the link as written) | `{path, reason}` — Where one link reaches now, saved or not, as the index resolves links: path "" with reason missing or ambiguous, or "" when raw is no link the index keeps (a URL, a heading of from). Codes: -32060. | 18 | agent | read |
 | `graph.unresolved` | `workspace` string, `options`? map ({kinds} (protocol 14)) | `[{src, raw, reason}]` — Links that name no file. Codes: -32060. | 1 | agent | read |
+
+### `host`
+
+| verb | params | result | since | audience | effect |
+| --- | --- | --- | --- | --- | --- |
+| `host.probe` | `base`? string (the Ollama's URL; absent, embed.DefaultOllamaURL) | `{gpu: {vendor, name, vram, compute}, ram, free, ollama}` — What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version ("" when none answers); 0 or "" is unknown. Codes: -32065. | 31 | for people's tools | read |
 
 ### `index`
 
@@ -381,8 +392,8 @@ Verbs at protocol 30; the daemon serves sessions from protocol 12.
 | -32020 | `rpc.protocol_mismatch` | the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves |  |
 | -32021 | `rpc.handshake_required` | say sys.hello first |  |
 | -32060 | `rpc.no_such_workspace` | call workspace.list and use a listed name | "no such workspace" |
-| -32061 | `rpc.not_found` | refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone | "no such embedding provider"; "no such ranker"; "not found" |
-| -32062 | `rpc.conflict` | doc.read, then merge or retry; for a name, choose another | "another workspace has this name or root"; "another ranker has this name"; "another embedding provider has this name"; "the document is not at that version" |
+| -32061 | `rpc.not_found` | refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone | "no such pull: it ended and another began, or the daemon restarted"; "no such embedding provider"; "no such ranker"; "not found" |
+| -32062 | `rpc.conflict` | doc.read, then merge or retry; for a name, choose another | "another workspace has this name or root"; "a model is being pulled: wait for it, or cancel it"; "another ranker has this name"; "another embedding provider has this name"; "the document is not at that version" |
 | -32063 | `rpc.cursor_expired` | re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it | "the event cursor is outside the retained log: take a snapshot and resume from the head"; "the change cursor is older than the retained log" |
 | -32065 | `rpc.unsupported` | this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages | "this server keeps no preferences"; "this server keeps no embedding providers"; "this server keeps no event log"; "this server keeps no rankers"; "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"; "this edition has no database settings"; "this server's set of workspaces is fixed"; "this server serves no files outside its workspaces"; "this document's text could not be made now: try again later, or open it in its own viewer"; "this document's text could not be derived: open it in its own viewer"; "the workspace's filesystem cannot do this" |
 | -32066 | `rpc.committed` | the write landed: doc.read and compare, never re-send | "the write landed, then a follow-up step failed: read the document and compare" |

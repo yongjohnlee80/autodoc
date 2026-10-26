@@ -63,6 +63,12 @@ func rigModes(p string) index.Mode {
 
 func serve(t *testing.T) *rig {
 	t.Helper()
+	return serveWith(t)
+}
+
+// serveWith is serve with these options given the server too.
+func serveWith(t *testing.T, opts ...Option) *rig {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &rig{t: t, fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
@@ -90,7 +96,7 @@ func serve(t *testing.T) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.srv = New(Fixed(ws...), "v-test", WithListener(ln))
+	r.srv = New(Fixed(ws...), "v-test", append([]Option{WithListener(ln)}, opts...)...)
 	go func() { r.done <- r.srv.Run(ctx) }()
 	t.Cleanup(func() {
 		cancel()

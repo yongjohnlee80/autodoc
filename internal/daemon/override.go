@@ -42,6 +42,16 @@ func (m *Workspaces) providerOf(id int64) (string, embed.Provider, error) {
 	return name, p, nil
 }
 
+// admitted runs fn holding one of the shared embedding slots, the one limit every embedding request
+// waits on: the embedding setup's model loads and samples take their turn there as a workspace's
+// fill does.
+func (m *Workspaces) admitted(ctx context.Context, fn func() error) error {
+	m.chg.Lock() // m.slots changes under it (SetEmbedding)
+	slots := m.slots
+	m.chg.Unlock()
+	return holdSlot(ctx, slots, fn)
+}
+
 // override is the provider named name, set up once, in the shared slots.
 func (m *Workspaces) override(ctx context.Context, name string) (embed.Provider, error) {
 	m.mu.Lock()
