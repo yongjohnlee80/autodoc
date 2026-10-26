@@ -2488,7 +2488,7 @@
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
-  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+  Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
@@ -2557,7 +2557,7 @@
               없으면 가장 최근에 연 쪽), 탭 메뉴의 최대화와 같음: 패널 안의 프로그램은
               F11을 받지 않습니다. F11을 직접 쓰는 터미널 에뮬레이터(GNOME Terminal의 전체
               화면)는 F11을 가져갑니다: SPC M은 항상 동작합니다
-  Ctrl+Tab, Ctrl+Shift+Tab  터미널 또는 에이전트(키보드가 있는 쪽)의 다음/이전 탭, 끝에서
+  Ctrl+Tab and Ctrl+Shift+Tab  터미널 또는 에이전트(키보드가 있는 쪽)의 다음/이전 탭, 끝에서
               처음으로 돌아갑니다. 프로그램은 받지 않습니다 (Ctrl+\ 뒤에 누르면 보냅니다).
               터미널에서는 Ctrl+Tab과 Tab을 구분하는 곳에서만 (kitty 키보드 프로토콜)
   F1          이 도움말 (도움말 › 키). 도움말 › 튜토리얼…은 튜토리얼.  Ctrl+Q 종료

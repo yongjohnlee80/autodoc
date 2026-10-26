@@ -2488,7 +2488,7 @@
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
-  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+  Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
@@ -2557,7 +2557,7 @@
               なければ最後に開いた方)。タブメニューの 最大化 と同じ: パネル内のプログラムに F11
               は届きません。F11 を自分で使うターミナルエミュレーター (GNOME Terminal の全画面)
               ではそちらが優先: SPC M は常に使えます
-  Ctrl+Tab, Ctrl+Shift+Tab  ターミナルまたはエージェント (キーボードのある方) の次/前のタブ。
+  Ctrl+Tab and Ctrl+Shift+Tab  ターミナルまたはエージェント (キーボードのある方) の次/前のタブ。
               端で一周します。プログラムには届きません (Ctrl+\ の後なら送ります)。ターミナル
               では Ctrl+Tab と Tab を区別できる場合のみ (kitty キーボードプロトコル)
   F1          このヘルプ (ヘルプ › キー)。ヘルプ › チュートリアル… でチュートリアル。Ctrl+Q で終了

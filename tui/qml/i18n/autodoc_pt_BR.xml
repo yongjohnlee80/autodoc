@@ -2488,7 +2488,7 @@
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
               screen) keeps it: SPC M always works
-  Ctrl+Tab, Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
+  Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
   F1          this help (Help › Keys); Help › Tutorial… the tutorial;  Ctrl+Q quit
@@ -2558,7 +2558,7 @@
               shell, senão o aberto mais recente), como o Maximizar do menu da aba: um programa num painel
               nunca recebe F11; um emulador de terminal que usa F11 para si (tela cheia do
               GNOME Terminal) o mantém: SPC M sempre funciona
-  Ctrl+Tab, Ctrl+Shift+Tab  a aba seguinte ou anterior do terminal ou dos agentes (o que tem
+  Ctrl+Tab and Ctrl+Shift+Tab  a aba seguinte ou anterior do terminal ou dos agentes (o que tem
               o teclado), em círculo; o programa nunca as recebe (Ctrl+\ antes envia uma).
               Num terminal, só onde ele distingue Ctrl+Tab de Tab (o protocolo de teclado do kitty)
   F1          esta ajuda (Ajuda › Teclas); Ajuda › Tutorial… o tutorial;  Ctrl+Q sair
