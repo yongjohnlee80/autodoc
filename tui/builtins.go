@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"errors"
-	"path/filepath"
 	"slices"
 )
 
@@ -31,15 +29,9 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("buffer.close_right", "close the buffers to the right", "App.closeBuffersRight()", func() { h.closeBeside(1) }),
 		builtin("buffer.close_left", "close the buffers to the left", "App.closeBuffersLeft()", func() { h.closeBeside(-1) }),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
-		{ID: "file.open_path", Title: "open a file by its path", Args: "<absolute path>",
-			Help: "open a file by its absolute path, as File › Open any file does once it is chosen: its workspace's when one indexes it",
-			Run: func(x Invocation) error {
-				if len(x.Args) != 1 || !filepath.IsAbs(x.Args[0]) {
-					return errors.New("file.open_path: takes one absolute path")
-				}
-				h.openAbsolute(x.Args[0])
-				return nil
-			}},
+		{ID: "file.open_path", Title: "open a file by its path", Verb: "open", Aliases: []string{"e", "edit"}, Args: "<path>",
+			Help: "open a file by its path, absolute or relative to the workspace in use, as File › Open any file does once it is chosen: its workspace's when one indexes it",
+			Run:  h.runOpenPath},
 		builtin("file.save", "save", "App.save()", h.save),
 		builtin("file.reload", "reload from disk", "App.reload()", h.reload),
 		builtin("file.preview_html", "preview HTML", "App.previewHTML()", h.previewHTML),

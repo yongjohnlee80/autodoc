@@ -155,6 +155,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("check-kbtype", false, "validate the KB type repository in the directory after the flags (kbtype.toml and tree/, ADR 1792349867) and list what it creates, without a UI or daemon")
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
 	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
+	fs.Bool("commands-reference", false, "print the reference for the commands AutoDoc is built with: each one's id, its ':' name and arguments, with no UI or daemon")
 	fs.Bool("check-keymap", false, "check a keymap.xml (the file after the flags, or the one beside config.toml) as AutoDoc reads it; report every problem, without a UI or daemon")
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
@@ -198,6 +199,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 0
 		}},
 		{flag: "keymap-reference", run: func(string) int { keymapReference(stdout); return 0 }},
+		{flag: "commands-reference", run: func(string) int { commandsReference(stdout); return 0 }},
 		{flag: "check-kbtype", arg: true, run: func(dir string) int {
 			if err := checkKBType(dir, stdout); err != nil {
 				return failed(err, 1)

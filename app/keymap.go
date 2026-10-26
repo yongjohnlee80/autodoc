@@ -14,6 +14,9 @@ import (
 // keymapReference is --keymap-reference: docs/keymap.md, its table of commands the build's own.
 func keymapReference(out io.Writer) { fmt.Fprint(out, docs.KeymapReference) }
 
+// commandsReference is --commands-reference: docs/commands.md, its table of the commands the build's own.
+func commandsReference(out io.Writer) { fmt.Fprint(out, docs.CommandsReference) }
+
 // checkKeymap is --check-keymap: file, or keymap.xml beside the config, read as AutoDoc reads it. Every
 // problem is the error; each warning is printed, and the file is still valid.
 func checkKeymap(configPath, file string, out io.Writer) error {

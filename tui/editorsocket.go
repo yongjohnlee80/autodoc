@@ -37,6 +37,8 @@ import (
 //	editor.replace l1 c1 l2 c2 text [rev]   {line, col, revision}                                            editor.write
 //	editor.delete l1 c1 l2 c2 [rev]         {revision}                                                       editor.write
 //	editor.run line                         {ok}                                                             commands
+//	editor.open path                        {opening}: absolute, or relative to the workspace in use        commands
+//	editor.commands                         [{id, title, source, name?, aliases?, args?, help?}, …]          none
 //	editor.add_command name source          {installed}, once the user answered                              asked each time
 //
 // Param 1 of every verb is the agent's token, $AUTODOC_EDITOR_TOKEN: a secret made when AutoDoc
@@ -198,6 +200,8 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 		"editor.replace":     h.editorVerb("editor.write", h.editorReplace),
 		"editor.delete":      h.editorVerb("editor.write", h.editorDelete),
 		"editor.run":         h.editorVerb("commands", h.editorRun),
+		"editor.open":        h.editorVerb("commands", h.editorOpen), // what editor.run ":open" does, no more
+		"editor.commands":    h.editorVerb("", h.editorCommands),     // no grant: names and help, as F1 shows them
 		"editor.add_command": h.editorAddCommand,
 	}
 }
@@ -455,7 +459,7 @@ func (h *Host) editorRun(_ string, a editorArgs) (any, error) {
 		h.bufferEdited(b)
 	}
 	if err != nil {
-		return nil, &golibrpc.Error{Code: codeEditorRefused, Message: err.Error()}
+		return nil, commandLineRefusal(line, err)
 	}
 	return map[string]any{"ok": true}, nil
 }
