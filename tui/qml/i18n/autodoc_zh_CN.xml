@@ -1024,8 +1024,8 @@
         <translation>窗口的布局</translation>
     </message>
     <message id="autodoc.cmd.window.layout.help">
-        <source>Tiled or Float for a window: alone, the editor's; Tab lists the windows</source>
-        <translation>将窗口设为平铺或浮动：不带参数时为编辑器；Tab 列出窗口</translation>
+        <source>Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows</source>
+        <translation>将窗口平铺在某一边缘或设为浮动：不带参数时为编辑器；Tab 列出窗口</translation>
     </message>
     <message id="autodoc.cmd.workspace.manage">
         <source>manage workspaces</source>
@@ -2075,6 +2075,10 @@
         <source>&amp;Back</source>
         <translation>后退(&amp;B)</translation>
     </message>
+    <message id="autodoc.gomenu.bottom_b">
+        <source>&amp;Bottom</source>
+        <translation>底部(&amp;b)</translation>
+    </message>
     <message id="autodoc.gomenu.close">
         <source>Close</source>
         <translation>关闭</translation>
@@ -2139,6 +2143,10 @@
         <source>La&amp;rger</source>
         <translation>更大(&amp;R)</translation>
     </message>
+    <message id="autodoc.gomenu.le_ft_f">
+        <source>Le&amp;ft</source>
+        <translation>左侧(&amp;f)</translation>
+    </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
         <translation>最大化(&amp;M)</translation>
@@ -2175,6 +2183,10 @@
         <source>Restart</source>
         <translation>重启</translation>
     </message>
+    <message id="autodoc.gomenu.right_r">
+        <source>&amp;Right</source>
+        <translation>右侧(&amp;r)</translation>
+    </message>
     <message id="autodoc.gomenu.save_s">
         <source>&amp;Save</source>
         <translation>保存(&amp;S)</translation>
@@ -2206,6 +2218,10 @@
     <message id="autodoc.gomenu.tiled_t">
         <source>&amp;Tiled</source>
         <translation>平铺(&amp;t)</translation>
+    </message>
+    <message id="autodoc.gomenu.top_t">
+        <source>&amp;Top</source>
+        <translation>顶部(&amp;t)</translation>
     </message>
     <message id="autodoc.gomenu.unsort">
         <source>Unsort</source>
@@ -2554,8 +2570,9 @@
   terminal's and the agent's tabs, the explorer's and the todos' ≡, and the end of the results
   table's right-click menu. :layout [window] opens it over the page, the page's alone (Tab lists
   the windows). The page is tiled unless you float it; every panel floats unless you tile it.
-  A tiled panel sits at its edge, a share of the base across it (the preferences
-  tui.&lt;window&gt;.tileEdge and tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
+  A tiled panel sits at the edge its Layout › Tiled › names (Left, Right, Top or Bottom), a
+  share of the base across it (the preferences tui.&lt;window&gt;.tileEdge and
+  tui.&lt;window&gt;.tileSize); Alt and a right drag move the border it
   shares, and its new share is kept. When the window is too small for the page and the panels
   tiled, the panel tiled last floats until the room comes back, then tiles again by itself: its
   Layout stays Tiled. A floating page moves and resizes up to the page's width, never closes,
@@ -2569,7 +2586,8 @@
   标签栏、终端和代理的标签、资源管理器和待办的 ≡，以及结果表右键菜单的末尾。
   :layout [窗口] 在页面上打开它，不带参数时为页面的(Tab 列出窗口)。页面除非设为浮动否则
   平铺；每个面板除非设为平铺否则浮动。
-  平铺的面板位于其边缘，占基础区域的一定比例(首选项 tui.&lt;窗口&gt;.tileEdge 和
+  平铺的面板位于布局 › 平铺 › 所选的边缘(左侧、右侧、顶部或底部)，
+  占基础区域的一定比例(首选项 tui.&lt;窗口&gt;.tileEdge 和
   tui.&lt;窗口&gt;.tileSize)；按住 Alt 右键拖动共享的边界，新的比例会被保留。窗口太小，容不下
   页面和平铺的面板时，最后平铺的面板会浮动，直到空间恢复后自行重新平铺：其布局仍是平铺。
   浮动的页面可以移动和调整大小，最宽到页面宽度，从不关闭，获得键盘时会移到最前；最小化
