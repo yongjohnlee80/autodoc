@@ -183,3 +183,65 @@ func TestTheBufferCardClosesToTheRightAndLeft(t *testing.T) {
 		t.Errorf("after Stay %q is shown, want b.md, the buffer asked about", got)
 	}
 }
+
+// TestTheBufferCardAsksAboutEachUnsavedBufferInTurn: five files, all but c.md modified, c.md shown.
+// SPC b r asks about d.md, then, once Discard closes it, about e.md, each shown as it is asked
+// about; c.md is shown again. SPC b l asks about b.md, and Stay stops there: a.md is not asked
+// about. Again from c.md, SPC b l asks about b.md, then a.md, and only c.md is left. Each
+// question after the first waits for the next turn of the loop (closeBeside): the dialog the
+// answer closes does not show again in the same turn.
+func TestTheBufferCardAsksAboutEachUnsavedBufferInTurn(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n", "d.md", "ddd\n", "e.md", "eee\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 5)
+	for _, p := range []string{"a.md", "b.md", "c.md", "d.md", "e.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+		if p != "c.md" {
+			r.typeInEditor(t, "X")
+			r.waitTyped(t)
+		}
+	}
+	showC := func() {
+		t.Helper()
+		r.bufferKey(t, '3')
+		r.s.WaitFor(t, "c.md shown", func(string) bool { return r.file().path == "c.md" })
+	}
+	// asked waits for the question about p, with p shown, and answers it
+	asked := func(p string, answer rune) {
+		t.Helper()
+		r.s.WaitForText(t, p+" has unsaved changes")
+		if got := r.file().path; got != p {
+			t.Fatalf("asked about %s with %q shown", p, got)
+		}
+		r.keys(t, key(answer))
+	}
+	showC()
+	r.bufferKey(t, 'r')
+	asked("d.md", 'd') // Discard
+	asked("e.md", 'd')
+	r.s.WaitFor(t, "d.md and e.md closed, c.md shown again", func(string) bool {
+		return slices.Equal(r.bufferPaths(), []string{"a.md", "b.md", "c.md"}) && r.file().path == "c.md"
+	})
+
+	r.bufferKey(t, 'l')
+	asked("b.md", 't') // Stay
+	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "has unsaved changes") })
+	// Stay posts nothing more: no question about a.md comes, and what is open now is what the run leaves
+	if got := r.bufferPaths(); !slices.Equal(got, []string{"a.md", "b.md", "c.md"}) || r.file().path != "b.md" {
+		t.Fatalf("after Stay on b.md: buffers %q, %q shown; want all three, b.md shown", got, r.file().path)
+	}
+
+	showC()
+	r.bufferKey(t, 'l')
+	asked("b.md", 'd')
+	asked("a.md", 'd')
+	r.s.WaitFor(t, "b.md and a.md closed, c.md shown again", func(string) bool {
+		return slices.Equal(r.bufferPaths(), []string{"c.md"}) && r.file().path == "c.md"
+	})
+	for _, p := range []string{"a.md", "b.md", "d.md", "e.md"} {
+		if got := d.read(t, "kb", p); got != string(p[0])+string(p[0])+string(p[0])+"\n" {
+			t.Errorf("Discard wrote %s: %q", p, got)
+		}
+	}
+}
