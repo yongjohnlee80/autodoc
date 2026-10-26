@@ -4003,6 +4003,10 @@ WHAT A KEY NEEDS
         <source>the plugin %1's Lua package is replaced by yours, lua/%2</source>
         <translation>插件 %1 的 Lua 包已被你的 lua/%2 替代</translation>
     </message>
+    <message id="autodoc.notice.menurows.menu_rows_left_out_their_scripts_took_longer_tha">
+        <source>%1 menu rows left out: their scripts took longer than %2</source>
+        <translation>已略去 %1 个菜单项：其脚本耗时超过 %2</translation>
+    </message>
     <message id="autodoc.notice.navigation.is_gone_it_left_the_jump_list_ctrl_o_again_goes">
         <source>%1 is gone: it left the jump list (Ctrl+O again goes further back)</source>
         <translation>%1 已不存在：已从跳转列表中移除(再按 Ctrl+O 可继续后退)</translation>

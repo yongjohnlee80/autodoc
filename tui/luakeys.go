@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
@@ -19,7 +19,7 @@ import (
 //
 //	autodoc.map{mode = "normal" | "visual", keys = "Q" | "<C-k>", command = "heading"}
 //	autodoc.map{mode = "leader", keys = "t", command = "table 2 3", title = "a table"}  -- SPC u t
-//	autodoc.menu{where = "editor" | "plugins", title = "&Word count", command = "wc"}
+//	autodoc.menu{where = "editor" | "plugins", title = "&Word count", command = "wc"}  -- see menurows.go
 //
 // A Normal or Visual chord reaches the page's editor through golib's chord hook, with nothing
 // pending; a leader key is a letter of SPC u, a card built at run time as SPC p's is; a menu row
@@ -34,12 +34,6 @@ import (
 type luaKey struct {
 	letter, title, line string
 	by                  luaBinder
-}
-
-// luaMenu is a menu row a script added.
-type luaMenu struct {
-	where, title, line string
-	by                 luaBinder
 }
 
 // luaBinder is who bound a key or a row: a gated script's needs commands when it runs; an
@@ -76,7 +70,6 @@ type luaChord struct {
 type luaUI struct {
 	chords map[widget.KeyChord]luaChord
 	leader []luaKey
-	menus  []luaMenu
 }
 
 // luaLetters are SPC u's: q closes the card.
@@ -87,6 +80,7 @@ func (s *scripting) mapUI(eng interface {
 	SetFunction(string, lua.LGFunction)
 }) {
 	s.ui = luaUI{chords: map[widget.KeyChord]luaChord{}}
+	s.rows.drop(func(r *addedRow) bool { return r.source == fromLua }) // the old engine's; a plugin's [[menu]] stays
 	s.refreshLuaUI()
 	eng.SetFunction("map", s.luaMap)
 	eng.SetFunction("menu", s.luaMenuFn)
@@ -149,20 +143,90 @@ func chordOf(mode, keys string) (widget.KeyChord, error) {
 	return widget.KeyChord{}, fmt.Errorf("a %s key is one character, \"Q\", or a control chord, \"<C-k>\", not %q; a sequence is a leader key", mode, keys)
 }
 
-// luaMenuFn is autodoc.menu{where, title, command}.
+// luaMenuFields are the fields autodoc.menu takes: any other is refused.
+var luaMenuFields = map[string]bool{"where": true, "id": true, "menu": true, "files": true, "when": true, "title": true, "command": true}
+
+// luaMenuFn is autodoc.menu{where, id, menu, files, when, title, command}: a row of the editor's
+// right-click menu or of the Plugins menu (menurows.go). It answers a handle whose remove drops
+// the row; the same id from the same script again replaces the row in its place.
 func (s *scripting) luaMenuFn(L *lua.LState) int {
 	spec := L.CheckTable(1)
+	spec.ForEach(func(k, _ lua.LValue) {
+		if ks, ok := k.(lua.LString); !ok || !luaMenuFields[string(ks)] {
+			L.ArgError(1, fmt.Sprintf("menu has no field %s", lua.LVAsString(k)))
+		}
+	})
 	where := lua.LVAsString(spec.RawGetString("where"))
-	title, line := lua.LVAsString(spec.RawGetString("title")), lua.LVAsString(spec.RawGetString("command"))
 	if where != "editor" && where != "plugins" {
 		L.ArgError(1, fmt.Sprintf("menu's where is editor or plugins, not %q", where))
 	}
-	if title == "" || line == "" {
+	r := &addedRow{source: fromLua, where: where, id: lua.LVAsString(spec.RawGetString("id")), menu: lua.LVAsString(spec.RawGetString("menu"))}
+	line := lua.LVAsString(spec.RawGetString("command"))
+	switch t := spec.RawGetString("title").(type) {
+	case lua.LString:
+		r.title = string(t)
+	case *lua.LFunction:
+		r.titleFn = t
+	case *lua.LNilType:
+	default:
+		L.ArgError(1, "menu's title is a string or a function")
+	}
+	if (r.title == "" && r.titleFn == nil) || line == "" {
 		L.ArgError(1, "menu needs a title and a command")
 	}
-	s.ui.menus = append(s.ui.menus, luaMenu{where, title, line, s.binder()})
+	switch w := spec.RawGetString("when").(type) {
+	case *lua.LFunction:
+		r.when = w
+	case *lua.LNilType:
+	default:
+		L.ArgError(1, "menu's when is a function")
+	}
+	switch f := spec.RawGetString("files").(type) {
+	case *lua.LTable:
+		for i := 1; i <= f.Len(); i++ {
+			g, ok := f.RawGetInt(i).(lua.LString)
+			if _, err := path.Match(string(g), ""); !ok || err != nil {
+				L.ArgError(1, fmt.Sprintf("menu's files are globs: %s isn't one", lua.LVAsString(f.RawGetInt(i))))
+			}
+			r.files = append(r.files, string(g))
+		}
+	case *lua.LNilType:
+	default:
+		L.ArgError(1, "menu's files is a list of globs")
+	}
+	if where == "plugins" && (r.files != nil || r.when != nil || r.titleFn != nil) {
+		L.ArgError(1, "a Plugins-menu row takes no files, when or title function: that menu isn't built as it opens")
+	}
+	by := s.binder()
+	r.owner = by.script
+	r.run = func() {
+		if by.allowed(s) {
+			s.runLuaLine(line)
+		}
+	}
+	s.rows.add(r)
 	s.refreshLuaUI()
-	return 0
+	L.Push(s.rowHandle(L, r))
+	return 1
+}
+
+// rowHandle is autodoc.menu's answer: row:remove() drops the row it added, and nothing else.
+func (s *scripting) rowHandle(L *lua.LState, r *addedRow) lua.LValue {
+	ud := L.NewUserData()
+	ud.Value = r
+	mt := L.NewTypeMetatable("autodoc.menu.row")
+	if mt.RawGetString("__index") == lua.LNil {
+		methods := L.NewTable()
+		L.SetField(methods, "remove", L.NewFunction(func(L *lua.LState) int {
+			if r, ok := L.CheckUserData(1).Value.(*addedRow); ok && s.rows.remove(r) {
+				s.refreshLuaUI()
+			}
+			return 0
+		}))
+		L.SetField(mt, "__index", methods)
+	}
+	L.SetMetatable(ud, mt)
+	return ud
 }
 
 // luaKeysText is SPC u's card as the keys stand.
@@ -179,13 +243,7 @@ func (s *scripting) luaKeysText() string {
 
 // refreshLuaUI shows SPC u's letters and the Plugins menu's Lua rows as they are now.
 func (s *scripting) refreshLuaUI() {
-	var rows []tuidecl.Row
-	for i, m := range s.ui.menus {
-		if m.where == "plugins" {
-			rows = append(rows, tuidecl.Row{"label": m.title, "target": strconv.Itoa(i)})
-		}
-	}
-	s.luaMenuRows().Reset(rows)
+	s.luaMenuRows().Reset(s.rows.pluginsMenuRows(s))
 	// before the program runs, State's first value is the text as it stands then
 	if a, ok := s.c.(interface{ Attached() bool }); ok && a.Attached() {
 		s.c.Set("App.luaKeysText", s.luaKeysText())
@@ -194,7 +252,7 @@ func (s *scripting) refreshLuaUI() {
 
 func (s *scripting) luaMenuRows() *tuidecl.ListModel {
 	if s.menuRows == nil {
-		s.menuRows = tuidecl.NewListModel("label", "target")
+		s.menuRows = tuidecl.NewListModel("kind", "label", "target", "enabled", "rows")
 	}
 	return s.menuRows
 }
@@ -212,10 +270,12 @@ func (s *scripting) luaKey(letter string) {
 	}
 }
 
-// luaMenu is a Plugins-menu row of a script's, chosen.
+// luaMenu is a Plugins-menu row of a script's, chosen: target is its serial.
 func (s *scripting) luaMenu(target string) {
-	if i, err := strconv.Atoi(target); err == nil && i >= 0 && i < len(s.ui.menus) && s.ui.menus[i].by.allowed(s) {
-		s.runLuaLine(s.ui.menus[i].line)
+	if n, err := strconv.Atoi(target); err == nil {
+		if r := s.rows.bySerial(n); r != nil && r.where == "plugins" {
+			r.run()
+		}
 	}
 }
 
@@ -239,26 +299,4 @@ func (s *scripting) runLuaLine(line string) {
 	if err := s.line(line); err != nil {
 		s.c.Notify(line + ": " + err.Error())
 	}
-}
-
-// editorRows are the right-click menu's Lua rows, after a separator; none without one.
-func (s *scripting) editorRows() []widget.MenuItemModel {
-	var rows []widget.MenuItemModel
-	for i, m := range s.ui.menus {
-		if m.where != "editor" {
-			continue
-		}
-		line, by := m.line, m.by
-		id := "lua.menu." + strconv.Itoa(i)
-		rows = append(rows, menuCommand(widget.ItemID(id), m.title, widget.CoreMenuAction{ID: tuicore.ActionID(id),
-			Run: func(*widget.EditorCore) {
-				if by.allowed(s) {
-					s.runLuaLine(line)
-				}
-			}}))
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return append([]widget.MenuItemModel{widget.NewSeparator("lua.sep")}, rows...)
 }

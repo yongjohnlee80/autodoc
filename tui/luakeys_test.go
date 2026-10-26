@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -51,7 +52,14 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 	if rows != 1 {
 		t.Fatalf("the Plugins menu has %d Lua rows", rows)
 	}
-	onLoop(r, func() bool { r.h.luaFeature().luaMenu("0"); return true }) // the Plugins row: the first menu{}
+	onLoop(r, func() bool { // the Plugins row, by its target, as the menu's row runs it
+		for _, row := range r.h.luaFeature().rows.rows {
+			if row.where == "plugins" {
+				r.h.luaFeature().luaMenu(strconv.Itoa(row.serial))
+			}
+		}
+		return true
+	})
 	var row widget.MenuItemModel
 	onLoop(r, func() bool {
 		for _, it := range r.h.editorMenu(r.h.core) {
@@ -105,8 +113,9 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 	// a reload drops the test's script, and every key and row with it
 	r.mustRun(t, "lua-reload")
 	ui := onLoop(r, func() luaUI { return r.h.luaFeature().ui })
-	if len(ui.chords) != 0 || len(ui.leader) != 0 || len(ui.menus) != 0 {
-		t.Fatalf("after the reload: %+v", ui)
+	rows = onLoop(r, func() int { return len(r.h.luaFeature().rows.rows) })
+	if len(ui.chords) != 0 || len(ui.leader) != 0 || rows != 0 {
+		t.Fatalf("after the reload: %+v, %d menu rows", ui, rows)
 	}
 	r.page("abc", 1, 1)
 	press(tuicore.KeyEvent{Code: 'Q', Text: "Q"})
