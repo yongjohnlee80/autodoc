@@ -4,6 +4,7 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -180,6 +181,40 @@ func (h *Host) bufferChord(kc widget.KeyChord) bool {
 		h.showBuffer(h.buffers[(i+step+n)%n])
 	}
 	return true
+}
+
+// bufferCardText is SPC b's card as the buffers are now: a row for each open buffer up to the 10th,
+// its slot key and its tab's label (bufferTabLabel, as wide as the card allows: a longer one is cut
+// in its middle, its file's name kept), and no row for a slot with no buffer; then the card's other
+// keys, as cardText lists them. F1 lists the card's keys as declared (helpCards).
+func (h *Host) bufferCardText() string {
+	slot := map[string]Key{}
+	var rest []Key
+	for _, key := range h.keys.on(bufferCard) {
+		if strings.HasPrefix(key.Run, "App.showBufferAt(") {
+			slot[key.Run] = key
+			continue
+		}
+		rest = append(rest, key)
+	}
+	var rows []string
+	for i, b := range h.buffers[:min(len(h.buffers), bufferSlots)] {
+		key, ok := slot[bufferSlotRun(i+1)]
+		if !ok {
+			continue // a test's catalog of features alone declares no buffer card
+		}
+		shown := h.keys.shown(key)
+		rows = append(rows, shown+"  "+h.bufferTabLabel(b, cardBodyWidth-tuicore.StringWidth(shown)-2))
+	}
+	return strings.Join(append(rows, h.keys.cardText(nil, rest)), "\n")
+}
+
+// cardState is every card's body, as the document reads it: the catalog's (keyset.cardState), SPC
+// b's as the buffers are now.
+func (h *Host) cardState() map[string]any {
+	m := h.keys.cardState()
+	m[textSource(bufferCard)] = h.bufferCardText()
+	return m
 }
 
 // showBufferAt is SPC b 1 to 9, and 0 for the 10th: the nth buffer in the order the tabs show

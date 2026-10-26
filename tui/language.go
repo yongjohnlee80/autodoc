@@ -249,7 +249,7 @@ func (h *Host) languageChanged() {
 	if h.p == nil {
 		return
 	}
-	for name, text := range h.keys.cardState() {
+	for name, text := range h.cardState() {
 		h.set(name, text)
 	}
 	for name, model := range h.choiceState() {

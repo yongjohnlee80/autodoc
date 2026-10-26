@@ -169,7 +169,7 @@ func (h *Host) reloaded() {
 // them.
 func (h *Host) keysChanged() {
 	h.keys.live = h.p.App().Keymap()
-	for name, text := range h.keys.cardState() {
+	for name, text := range h.cardState() {
 		h.set(name, text)
 	}
 	h.applyTerminalKeymap(h.prefs) // the normal-mode hint names the mode key as it is bound now
