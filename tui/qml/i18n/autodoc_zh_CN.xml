@@ -3319,9 +3319,9 @@ WHAT A KEY NEEDS
         <source>Preview o&amp;ption</source>
         <translation>预览选项(&amp;P)</translation>
     </message>
-    <message id="autodoc.main.read_only_until_the_cutover">
-        <source>read-only until the cutover</source>
-        <translation>切换完成前为只读</translation>
+    <message id="autodoc.main.read_only_this_store_was_released">
+        <source>read-only: this store was released (todos.release)</source>
+        <translation>只读：此待办库已释放 (todos.release)</translation>
     </message>
     <message id="autodoc.main.recent_files">
         <source>Recen&amp;t files…</source>
@@ -4827,9 +4827,9 @@ WHAT A KEY NEEDS
         <source>todos: %1 is labelled %2</source>
         <translation>待办：%1 的标签为 %2</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo">
-        <source>todos: %1 is loaded, read-only: its new store waits for the cutover</source>
-        <translation>待办：%1 已加载，只读：其新待办库等待切换完成</translation>
+    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
+        <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
+        <translation>待办：%1 已加载，只读：其待办库已释放 (todos.release)</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>

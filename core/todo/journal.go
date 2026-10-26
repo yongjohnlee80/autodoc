@@ -90,6 +90,9 @@ type StoreRecord struct {
 	ClaimedAt   time.Time
 	LastUse     time.Time
 	RefreshedAt time.Time // the daily refresh's last run (RefreshDue); zero for never
+	// ReleasedAt is when Release gave the store back; zero for never. A released store is claimed
+	// again only by Claim, never by a write (ADR 1791532020 r13).
+	ReleasedAt time.Time
 	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4), recorded once: the
 	// workspace containing it, or the one todos.set_kb named. "" until recorded.
 	KB string

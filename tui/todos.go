@@ -22,8 +22,8 @@ import (
 // table of its tasks, read when the tab first shows; Archived lists its months, a month's tasks read
 // when it opens. Under the tabs the task under the cursor's details, then one row of the actions
 // that apply. Every read and write is a todos.* verb: the daemon owns the format and the rules, so
-// this file only shows and asks. A store the daemon has not claimed is read-only here until the
-// cutover.
+// this file only shows and asks. A store todos.release gave back is read-only here; any other is
+// written, its first write claiming it.
 
 // todoBuckets are the tabs, in order: each one's bucket, and its title.
 var todoBuckets = []struct{ bucket, title string }{
@@ -73,14 +73,14 @@ type todoFollow struct {
 // todoStore is one store the dropdown offers: where it is, as the todos.* verbs take it, and what
 // the daemon says of it.
 type todoStore struct {
-	id      string // its key: "ws:<name>" or "root:<dir>"
-	at      any    // a workspace name, or {root: …}
-	sid     string // the daemon's id of the store, its label's key; "" when not known
-	name    string // the derived name (storeName)
-	alias   string // the user's label; "" shows the name
-	ws      string // the workspace it is the store of, or ""
-	path    string // the store directory, once known
-	claimed bool   // the daemon writes it: writes allowed
+	id       string // its key: "ws:<name>" or "root:<dir>"
+	at       any    // a workspace name, or {root: …}
+	sid      string // the daemon's id of the store, its label's key; "" when not known
+	name     string // the derived name (storeName)
+	alias    string // the user's label; "" shows the name
+	ws       string // the workspace it is the store of, or ""
+	path     string // the store directory, once known
+	released bool   // todos.release gave it back: the daemon only reads it, so no write is offered
 }
 
 // title is how the store is called: its label, or its derived name.
@@ -493,7 +493,7 @@ func (t *todos) list() {
 			}
 			root, _ := roots[0].(string)
 			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, sid: str(m, "id"),
-				name: storeName(root), path: str(m, "path"), claimed: m["claimed"] == true})
+				name: storeName(root), path: str(m, "path"), released: m["released"] == true})
 		}
 		t.labels(func(labels map[string]string) {
 			for _, s := range stores {
@@ -508,7 +508,7 @@ func (t *todos) list() {
 				r := asMap(v)
 				path := str(r, "store")
 				w := &todoStore{id: "ws:" + ws, at: ws, ws: ws, sid: ids[path], name: storeName(storeRoot(path)), path: path,
-					claimed: r["claimed"] == true}
+					released: r["released"] == true}
 				if path == "" {
 					w.name = ws
 				}
@@ -886,14 +886,14 @@ func (t *todos) showDetail() {
 
 // syncActions sets the action row: the actions that apply to the task under the cursor, the others
 // hidden, never shown greyed. On a store taking writes here, Status…, Assign and Remove on a task,
-// and Add always. A store not claimed shows no action at all, only that it is read-only until the
-// cutover, and its writes' keys do nothing.
+// and Add always. A released store shows no action at all, only that it is read-only, and its
+// writes' keys do nothing.
 func (t *todos) syncActions() {
 	s, x := t.cursor()
-	writable := s != nil && s.claimed
+	writable := !t.readOnly(s)
 	task := writable && x != nil
 	onVars := t.tab == varsTab
-	t.c.Set("App.todoReadOnly", s != nil && !s.claimed)
+	t.c.Set("App.todoReadOnly", s != nil && s.released)
 	t.c.Set("App.todoOnVars", onVars)
 	t.c.Set("App.todoActAdd", writable && !onVars)
 	t.c.Set("App.todoActStatus", task)
@@ -984,10 +984,10 @@ func (t *todos) monthsBack() {
 	}
 }
 
-// readOnly reports that store s takes no writes here: the daemon has not claimed it. It says
-// nothing: the action row says the store is read-only, and offers no write (syncActions), so a
-// write's key there does nothing rather than answer with an error.
-func (t *todos) readOnly(s *todoStore) bool { return s == nil || !s.claimed }
+// readOnly reports that store s takes no writes here: todos.release gave it back. It says nothing:
+// the action row says the store is read-only, and offers no write (syncActions), so a write's key
+// there does nothing rather than answer with an error.
+func (t *todos) readOnly(s *todoStore) bool { return s == nil || s.released }
 
 // write runs a todos verb that changes store s, once s takes writes here, and reads its tabs again.
 func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
@@ -1117,7 +1117,7 @@ func (t *todos) refresh() {
 	if s == nil {
 		return
 	}
-	if !s.claimed {
+	if t.readOnly(s) {
 		t.reload() // read-only: read again, nothing to reconcile
 		return
 	}
@@ -1148,7 +1148,7 @@ func (t *todos) chooseFolder(as string) {
 }
 
 // folderChosen acts on the folder: Load registers the project and shows its store; New registers it
-// and creates its store (a write: after the cutover); M moves the store shown there.
+// and creates its store (a write, which claims it); M moves the store shown there.
 func (t *todos) folderChosen(dir string) {
 	t.c.Close(todoFolderDialogs[t.folderAs])
 	if dir == "" {
@@ -1166,9 +1166,9 @@ func (t *todos) folderChosen(dir string) {
 		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				t.want = "root:" + dir
-				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), claimed: asMap(v)["claimed"] == true}
-				if !s.claimed { // the folder is loaded; the store it asked for waits for the cutover
-					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo", tildePath(dir)))
+				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), released: asMap(v)["released"] == true}
+				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
+					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(dir)))
 					t.list()
 					return
 				}

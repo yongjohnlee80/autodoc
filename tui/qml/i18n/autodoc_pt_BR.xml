@@ -3329,9 +3329,9 @@ O QUE UMA TECLA PRECISA
         <source>Preview o&amp;ption</source>
         <translation>O&amp;pção de pré-visualização</translation>
     </message>
-    <message id="autodoc.main.read_only_until_the_cutover">
-        <source>read-only until the cutover</source>
-        <translation>somente leitura até a migração</translation>
+    <message id="autodoc.main.read_only_this_store_was_released">
+        <source>read-only: this store was released (todos.release)</source>
+        <translation>somente leitura: este repositório foi liberado (todos.release)</translation>
     </message>
     <message id="autodoc.main.recent_files">
         <source>Recen&amp;t files…</source>
@@ -4837,9 +4837,9 @@ O QUE UMA TECLA PRECISA
         <source>todos: %1 is labelled %2</source>
         <translation>tarefas: %1 está rotulado %2</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo">
-        <source>todos: %1 is loaded, read-only: its new store waits for the cutover</source>
-        <translation>tarefas: %1 está carregado, somente leitura: o novo repositório aguarda a migração</translation>
+    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
+        <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
+        <translation>tarefas: %1 está carregado, somente leitura: seu repositório foi liberado (todos.release)</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>

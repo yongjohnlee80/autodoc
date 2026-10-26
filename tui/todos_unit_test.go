@@ -146,11 +146,11 @@ func (s *scriptedCore) called(prefix string) bool {
 	return false
 }
 
-// a store with one open task, claimed or not
+// a store with one open task, claimed, or released (todos.release: the read-only case)
 func scriptedStore(claimed bool) *scriptedCore {
 	s := newScripted("kb")
 	s.answers["todos.resolve"] = func([]any) (any, error) {
-		return map[string]any{"store": "/kb/.todo-list", "claimed": claimed}, nil
+		return map[string]any{"store": "/kb/.todo-list", "claimed": claimed, "released": !claimed}, nil
 	}
 	s.answers["todos.list"] = func(p []any) (any, error) {
 		opts := p[1].(map[string]any)

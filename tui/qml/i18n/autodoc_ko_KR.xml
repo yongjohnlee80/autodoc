@@ -3325,9 +3325,9 @@ WHAT A KEY NEEDS
         <source>Preview o&amp;ption</source>
         <translation>미리 보기 옵션(&amp;p)</translation>
     </message>
-    <message id="autodoc.main.read_only_until_the_cutover">
-        <source>read-only until the cutover</source>
-        <translation>전환 전까지 읽기 전용</translation>
+    <message id="autodoc.main.read_only_this_store_was_released">
+        <source>read-only: this store was released (todos.release)</source>
+        <translation>읽기 전용: 이 저장소는 해제되었습니다 (todos.release)</translation>
     </message>
     <message id="autodoc.main.recent_files">
         <source>Recen&amp;t files…</source>
@@ -4833,9 +4833,9 @@ WHAT A KEY NEEDS
         <source>todos: %1 is labelled %2</source>
         <translation>할 일: %1의 레이블은 %2입니다</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo">
-        <source>todos: %1 is loaded, read-only: its new store waits for the cutover</source>
-        <translation>할 일: %1을(를) 읽기 전용으로 불러옴. 새 저장소는 전환을 기다립니다</translation>
+    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
+        <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
+        <translation>할 일: %1을(를) 읽기 전용으로 불러옴. 저장소가 해제되었습니다 (todos.release)</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>

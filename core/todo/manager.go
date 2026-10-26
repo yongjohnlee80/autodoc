@@ -249,7 +249,8 @@ func (m *Manager) newStore(ctx context.Context, path string) (StoreRecord, error
 }
 
 func (w where) resolved() Resolved {
-	return Resolved{StoreID: w.rec.ID, Store: w.rec.Path, Root: w.root, Override: w.override, Writable: w.writable, Claimed: w.rec.Claimed}
+	return Resolved{StoreID: w.rec.ID, Store: w.rec.Path, Root: w.root, Override: w.override, Writable: w.writable, Claimed: w.rec.Claimed,
+		Released: !w.rec.ReleasedAt.IsZero()}
 }
 
 // Resolve says where an At's store is, and whether the daemon may write it.
@@ -365,7 +366,8 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 	var out []StoreInfo
 	for _, rec := range st.Stores {
 		// ownerOf: a store recorded to a removed workspace reads as unrecorded; a read writes nothing
-		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, LastUse: rec.LastUse, Roots: []string{}, KB: m.ownerOf(rec)}
+		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, Released: !rec.ReleasedAt.IsZero(), LastUse: rec.LastUse,
+			Roots: []string{}, KB: m.ownerOf(rec)}
 		for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 			rr := st.Roots[root]
 			if rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {
@@ -389,8 +391,9 @@ type ClaimOpts struct {
 	LegacyWorkspace string `json:"legacy_workspace,omitempty"`
 }
 
-// Claim lets the daemon write an At's store: the cutover. The claim is the daemon's record, by the
-// store's id, so it holds before the store's directory exists; the .autodoc-owner marker is
+// Claim lets the daemon write an At's store. A write claims a store itself, the first time
+// (writable), so todos.claim is for a store Release gave back. The claim is the daemon's record, by
+// the store's id, so it holds before the store's directory exists; the .autodoc-owner marker is
 // written whenever the directory exists, here or by Scaffold. With a LegacyWorkspace, the claim
 // then rewrites the store's legacy $WORKSPACE refs once (cutover), archives included.
 func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
@@ -416,7 +419,7 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 		rec := s.Stores[w.rec.ID]
 		if !rec.Claimed {
-			rec.Claimed, rec.ClaimedAt, fresh = true, m.now(), true
+			rec.Claimed, rec.ClaimedAt, rec.ReleasedAt, fresh = true, m.now(), time.Time{}, true
 			s.Stores[w.rec.ID] = rec
 		}
 		return nil
@@ -486,7 +489,8 @@ func (m *Manager) unclaim(ctx context.Context, id string) error {
 	})
 }
 
-// Release makes an At's store read-only to the daemon again: the cutover's rollback.
+// Release makes an At's store read-only to the daemon again, and records it: a write no longer
+// claims it; only Claim does.
 func (m *Manager) Release(ctx context.Context, at At) error {
 	w, err := m.resolve(ctx, at)
 	if err != nil {
@@ -494,7 +498,13 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	}
 	m.claimMu.Lock()
 	defer m.claimMu.Unlock()
-	if err := m.unclaim(ctx, w.rec.ID); err != nil {
+	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		rec := s.Stores[w.rec.ID]
+		rec.Claimed, rec.ClaimedAt, rec.ReleasedAt = false, time.Time{}, m.now()
+		s.Stores[w.rec.ID] = rec
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	if st, err := m.open(ctx, w); err == nil {
@@ -505,11 +515,22 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	return nil
 }
 
-// writable resolves an At for a write: a writable, claimed store that no ambiguous move blocks.
+// writable resolves an At for a write: a writable, claimed store that no ambiguous move blocks. A
+// writable store that was never claimed, nor released, is claimed by this first write, as Claim
+// claims it, marker included (ADR 1791532020 r13): a workspace's or a registered root's store is
+// the daemon's to write from the start.
 func (m *Manager) writable(ctx context.Context, at At) (where, error) {
 	w, err := m.resolve(ctx, at)
 	if err != nil {
 		return w, err
+	}
+	if w.writable && !w.rec.Claimed && w.rec.ReleasedAt.IsZero() {
+		if err := m.Claim(ctx, at); err != nil {
+			return w, err
+		}
+		if w, err = m.resolve(ctx, at); err != nil {
+			return w, err
+		}
 	}
 	return w, m.mayWrite(ctx, w)
 }

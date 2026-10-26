@@ -14,13 +14,32 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 )
 
-// Before the cutover every write is refused; reads work. After Release the daemon is read-only
-// again.
-func TestWritesWaitForTheClaim(t *testing.T) {
+// A workspace's store is the daemon's from its first write (ADR 1791532020 r13): no claim comes
+// first. The write claims it as todos.claim does, marker included, and the task written there by
+// hand before is adopted, its file untouched. A store Release gave back takes no write at all, a
+// write no longer claiming it, until Claim; its tasks read all along. The claim, and the release,
+// are the daemon's records: each survives a restart.
+func TestAStoreIsClaimedByItsFirstWrite(t *testing.T) {
 	e := newEnv(t)
-	e.disk.WriteFile(kbStore+"/open/t.md", []byte(taskFile("t", "open")))
+	hand := taskFile("t", "open")
+	e.disk.WriteFile(kbStore+"/open/t.md", []byte(hand))
 	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 1 {
-		t.Fatalf("reads before the claim: %+v %v", l, err)
+		t.Fatalf("reads before any write: %+v %v", l, err)
+	}
+	if e.exists(kbStore + "/.autodoc-owner") {
+		t.Error("a marker before any write")
+	}
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+		t.Fatalf("the first write to a workspace's store: %v", err)
+	}
+	if !strings.HasPrefix(e.read(kbStore+"/.autodoc-owner"), "claimed by autodoc at ") {
+		t.Error("the first write wrote no marker")
+	}
+	if got := e.read(kbStore + "/open/t.md"); got != hand {
+		t.Errorf("the hand-written task was rewritten by the claim:\n%s", got)
+	}
+	if r, err := e.m.Resolve(ctx, kb); err != nil || !r.Claimed || r.Released {
+		t.Errorf("after the first write: %+v %v; want claimed", r, err)
 	}
 	task := e.get("t")
 	writes := func() map[string]error {
@@ -34,40 +53,59 @@ func TestWritesWaitForTheClaim(t *testing.T) {
 		return map[string]error{"add": add, "update": upd, "status": st, "assign": as, "refresh": ref, "scaffold": sc, "move_store": mv,
 			"remove": e.m.Remove(ctx, kb, "t", task.Rev), "remove_malformed": e.m.RemoveMalformed(ctx, kb, "open/t.md")}
 	}
-	for verb, err := range writes() {
-		if !is(err, todo.ErrUnclaimed) {
-			t.Errorf("%s before the claim: %v", verb, err)
-		}
-	}
-	if e.exists(kbStore + "/.autodoc-owner") {
-		t.Error("a marker before the claim")
-	}
-	e.must(e.m.Claim(ctx, kb))
-	if !strings.HasPrefix(e.read(kbStore+"/.autodoc-owner"), "claimed by autodoc at ") {
-		t.Error("the claim wrote no marker")
-	}
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "after"}); err != nil {
-		t.Errorf("after the claim: %v", err)
-	}
 	e.must(e.m.Release(ctx, kb))
 	if e.exists(kbStore + "/.autodoc-owner") {
 		t.Error("the release left the marker")
+	}
+	if r, err := e.m.Resolve(ctx, kb); err != nil || r.Claimed || !r.Released {
+		t.Errorf("after the release: %+v %v; want released", r, err)
 	}
 	for verb, err := range writes() {
 		if !is(err, todo.ErrUnclaimed) {
 			t.Errorf("%s after the release: %v", verb, err)
 		}
 	}
-	// the claim is the daemon's record: it survives a restart
-	e.must(e.m.Claim(ctx, kb))
+	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 2 {
+		t.Errorf("reads after the release: %+v %v", l, err)
+	}
 	e.restart()
-	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "after a restart"}); err != nil {
-		t.Errorf("after a restart: %v", err)
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "after a restart"}); !is(err, todo.ErrUnclaimed) {
+		t.Errorf("a released store's write after a restart: %v; want it still released", err)
+	}
+	e.must(e.m.Claim(ctx, kb))
+	if r, err := e.m.Resolve(ctx, kb); err != nil || !r.Claimed || r.Released {
+		t.Errorf("claimed again: %+v %v", r, err)
+	}
+	e.restart()
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "claimed again, after a restart"}); err != nil {
+		t.Errorf("claimed again, after a restart: %v", err)
 	}
 }
 
-// A project that is not a workspace: Register, then the cutover's Claim (before its .todo-list
-// exists), then Scaffold, which makes the directory, its buckets and the marker.
+// A workspace's first task makes its store, as it claims it: no .todo-list, no scaffold first.
+func TestAWorkspacesFirstTaskMakesItsStore(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.disk.FS.Stat(ctx, strings.TrimPrefix(kbStore, "/")); err == nil {
+		t.Fatal("the fixture has a store already")
+	}
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "first"}); err != nil {
+		t.Fatalf("the first task of a workspace with no store: %v", err)
+	}
+	for _, b := range todo.Statuses {
+		if fi, err := e.disk.FS.Stat(ctx, strings.TrimPrefix(kbStore, "/")+"/"+b); err != nil || !fi.IsDir() {
+			t.Errorf("bucket %s", b)
+		}
+	}
+	if !e.exists(kbStore + "/.autodoc-owner") {
+		t.Error("no marker")
+	}
+	if l, err := e.m.List(ctx, kb, todo.ListOpts{}); err != nil || len(l.Tasks) != 1 {
+		t.Errorf("the first task: %+v %v", l, err)
+	}
+}
+
+// A project that is not a workspace: Register, then Scaffold, which claims its store and makes the
+// directory, its buckets and the marker. An unregistered root is never claimed nor written.
 func TestNewProjectOrder(t *testing.T) {
 	e := newEnv(t)
 	e.disk.MkdirAll("/src/proj")
@@ -78,19 +116,15 @@ func TestNewProjectOrder(t *testing.T) {
 	if _, err := e.m.Scaffold(ctx, at); !is(err, todo.ErrNotWritable) {
 		t.Errorf("scaffolding an unregistered root: %v", err)
 	}
+	if _, err := e.m.Add(ctx, at, todo.Spec{Title: "x"}); !is(err, todo.ErrNotWritable) {
+		t.Errorf("a task in an unregistered root: %v", err)
+	}
 	added, err := e.m.Register(ctx, "/src/proj")
 	if err != nil || !added {
 		t.Fatalf("register: %v %v", added, err)
 	}
 	if again, _ := e.m.Register(ctx, "/src/proj"); again {
 		t.Error("registered twice")
-	}
-	if _, err := e.m.Scaffold(ctx, at); !is(err, todo.ErrUnclaimed) {
-		t.Errorf("scaffold before the claim: %v", err)
-	}
-	e.must(e.m.Claim(ctx, at))
-	if e.exists("/src/proj/.todo-list/.autodoc-owner") {
-		t.Error("a marker with no directory")
 	}
 	o, err := e.m.Scaffold(ctx, at)
 	if err != nil || !o.Scaffolded || o.Store != "/src/proj/.todo-list" {
@@ -103,6 +137,9 @@ func TestNewProjectOrder(t *testing.T) {
 	}
 	if !e.exists("/src/proj/.todo-list/.autodoc-owner") {
 		t.Error("scaffold wrote no marker")
+	}
+	if r, err := e.m.Resolve(ctx, at); err != nil || !r.Claimed {
+		t.Errorf("scaffolded, the store is not claimed: %+v %v", r, err)
 	}
 	if o, _ := e.m.Scaffold(ctx, at); o.Scaffolded {
 		t.Error("a second scaffold made something")

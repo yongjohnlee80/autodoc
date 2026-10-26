@@ -126,7 +126,7 @@ func varDetail(c Core, v map[string]any) string {
 // machine-only name), set for this machine, add, and clear a value set here.
 func (t *todos) syncVarActions() {
 	s := t.cur
-	writable := s != nil && s.claimed
+	writable := !t.readOnly(s)
 	v := t.varAt(t.varCursor)
 	src := str(v, "source")
 	t.c.Set("App.todoActVarSet", writable && v != nil)

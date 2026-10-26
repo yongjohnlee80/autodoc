@@ -865,7 +865,7 @@ Window {
                     // ---- end of the todos task buttons' keys ----
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: qsTrId("autodoc.main.read_only_until_the_cutover"); visible: App.todoReadOnly }
+                        Text { text: qsTrId("autodoc.main.read_only_this_store_was_released"); visible: App.todoReadOnly }
                         Button { id: todoStatusButton; text: qsTrId("autodoc.main.status"); toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
                         Text { text: " "; visible: App.todoActAssign }
                         Button { text: qsTrId("autodoc.main.assign"); toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
