@@ -27,6 +27,7 @@ Inside `.todo-list/`, a task's physical directory placement corresponds directly
 - `completed/` — Finished tasks retained in the active working set for up to 28 days (`status: completed`).
 - `archived/YYYY/MM/` — Completed tasks older than 28 days (or explicitly archived), partitioned by year and month of completion/archival so active listing remains instantaneous even as historical archives grow to thousands of files.
 - `.autodoc-owner` — The durable ownership marker the daemon writes when it claims the store: at the store's first write when it lies at a registered root (an AutoDoc workspace, or a root `todos.register` adds), or by `todos.claim`.
+  - A store `todos.release` gave back stays read-only: a write no longer claims it, and `todos.claim` takes it back. **If you released a store with `todos.release` before v0.3.0, release it again after upgrading:** a release made before then left no record, so the store's first write would claim it.
 - `.trash/` — Staging directory used during the 3-phase crash-safe deletion protocol (`todos.remove` and `todos.remove_malformed`).
 
 ### Stat-Keyed Read Caching and On-Demand Archives

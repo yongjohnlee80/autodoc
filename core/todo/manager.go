@@ -389,6 +389,11 @@ type ClaimOpts struct {
 	// Neovim's project root, not the store's workspace. The claim rewrites each adr and review ref
 	// $WORKSPACE/<rest> that resolves under it and not under the store's own $WORKSPACE.
 	LegacyWorkspace string `json:"legacy_workspace,omitempty"`
+
+	// automatic is a write's own claim (writable): it claims a store never released, and leaves a
+	// released one as it is, decided in the claim's own transaction. A caller's claim (todos.claim)
+	// is not automatic: it claims a released store too.
+	automatic bool
 }
 
 // Claim lets the daemon write an At's store. A write claims a store itself, the first time
@@ -400,8 +405,9 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	var o ClaimOpts
 	for _, x := range opts {
 		if x.LegacyWorkspace != "" {
-			o = x
+			o.LegacyWorkspace = x.LegacyWorkspace
 		}
+		o.automatic = o.automatic || x.automatic
 	}
 	if o.LegacyWorkspace != "" && (!path.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
 		return fmt.Errorf("%w: legacy_workspace %q is not a clean absolute path", ErrInvalid, o.LegacyWorkspace)
@@ -415,16 +421,22 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	}
 	m.claimMu.Lock()
 	defer m.claimMu.Unlock()
-	fresh := false
+	fresh, left := false, false
+	var before StoreRecord // the store's record as it was: what a failed claim puts back
 	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 		rec := s.Stores[w.rec.ID]
-		if !rec.Claimed {
+		switch {
+		case rec.Claimed:
+		case o.automatic && !rec.ReleasedAt.IsZero():
+			left = true // released, by the record this transaction reads: a write's claim leaves it so
+		default:
+			before = rec
 			rec.Claimed, rec.ClaimedAt, rec.ReleasedAt, fresh = true, m.now(), time.Time{}, true
 			s.Stores[w.rec.ID] = rec
 		}
 		return nil
 	})
-	if err != nil {
+	if err != nil || left {
 		return err
 	}
 	if err := m.finishClaim(ctx, w, o); err != nil {
@@ -434,7 +446,7 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 			// the request's own context may be what failed: the undo has one of its own, bounded
 			uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), undoTimeout)
 			defer cancel()
-			if uerr := m.unclaim(uctx, w.rec.ID); uerr != nil {
+			if uerr := m.putBack(uctx, w.rec.ID, before); uerr != nil {
 				return errors.Join(err, uerr)
 			}
 		}
@@ -479,11 +491,10 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 // undoTimeout bounds a failed claim's undo, which runs whether or not its request was cancelled.
 const undoTimeout = 10 * time.Second
 
-// unclaim records a store as not claimed.
-func (m *Manager) unclaim(ctx context.Context, id string) error {
+// putBack writes a store's record back as it was before a claim that failed, so the claim leaves no
+// trace: unclaimed, and released again if it was.
+func (m *Manager) putBack(ctx context.Context, id string, rec StoreRecord) error {
 	return m.j.UpdateSettings(ctx, func(s *Settings) error {
-		rec := s.Stores[id]
-		rec.Claimed, rec.ClaimedAt = false, time.Time{}
 		s.Stores[id] = rec
 		return nil
 	})
@@ -524,8 +535,8 @@ func (m *Manager) writable(ctx context.Context, at At) (where, error) {
 	if err != nil {
 		return w, err
 	}
-	if w.writable && !w.rec.Claimed && w.rec.ReleasedAt.IsZero() {
-		if err := m.Claim(ctx, at); err != nil {
+	if w.writable && !w.rec.Claimed { // whether it may be claimed is the claim's own question (automatic)
+		if err := m.Claim(ctx, at, ClaimOpts{automatic: true}); err != nil {
 			return w, err
 		}
 		if w, err = m.resolve(ctx, at); err != nil {

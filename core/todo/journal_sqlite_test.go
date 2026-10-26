@@ -124,6 +124,8 @@ var sqliteSuites = []struct {
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
 	{"EveryVerbAnswers", TestEveryVerbAnswers},
 	{"AClaimItCannotServeIsUndone", TestAClaimItCannotServeIsUndone},
+	{"AFailedClaimOfAReleasedStoreKeepsItReleased", TestAFailedClaimOfAReleasedStoreKeepsItReleased},
+	{"AWritesClaimLeavesAReleaseMadeMeanwhile", TestAWritesClaimLeavesAReleaseMadeMeanwhile},
 	{"AFailedClaimIsUndoneWhateverItsRequest", TestAFailedClaimIsUndoneWhateverItsRequest},
 	{"ScaffoldAnEmptyOverride", TestScaffoldAnEmptyOverride},
 	{"DiskFailuresSurface", TestDiskFailuresSurface},

@@ -583,6 +583,78 @@ func TestAClaimItCannotServeIsUndone(t *testing.T) {
 	}
 }
 
+// releaseMidway is a journal that runs between once, right after the first Settings it reads
+// returns: a Release landing between a write's snapshot of the store and its claim.
+type releaseMidway struct {
+	todo.Journal
+	once    atomic.Bool
+	between func()
+}
+
+func (j *releaseMidway) Settings(ctx context.Context) (todo.Settings, error) {
+	s, err := j.Journal.Settings(ctx)
+	if err == nil && j.once.CompareAndSwap(false, true) {
+		j.between()
+	}
+	return s, err
+}
+
+// A write's own claim is decided in the claim's transaction, against the record it reads there: a
+// Release that lands after the write read the store unclaimed, and before it claims, wins. The
+// write is refused, the store stays released, and no marker is written.
+func TestAWritesClaimLeavesAReleaseMadeMeanwhile(t *testing.T) {
+	e := newEnv(t)
+	e.disk.WriteFile(kbStore+"/open/t.md", []byte(taskFile("t", "open")))
+	if r, err := e.m.Resolve(ctx, kb); err != nil || r.Claimed || r.Released {
+		t.Fatalf("the fixture: %+v %v; want a store never claimed", r, err)
+	}
+	j := &releaseMidway{Journal: e.j}
+	m := todo.New(e.roots, e.disk, j)
+	released := false
+	j.between = func() {
+		e.must(m.Release(ctx, kb))
+		released = true
+	}
+	_, err := m.Add(ctx, kb, todo.Spec{Title: "a write meeting a release"})
+	if !released {
+		t.Fatal("the release never landed between the write's read and its claim")
+	}
+	r, rerr := m.Resolve(ctx, kb)
+	if rerr != nil || r.Claimed || !r.Released || !is(err, todo.ErrUnclaimed) {
+		t.Fatalf("the write: %v; the store: %+v %v; want the write refused and the store still released", err, r, rerr)
+	}
+	if e.exists(kbStore + "/.autodoc-owner") {
+		t.Error("a marker on a store still released")
+	}
+}
+
+// A claim of a released store that fails leaves no trace: the store is put back as it was, released,
+// so after a restart it is still released, and a write is still refused rather than claiming it.
+func TestAFailedClaimOfAReleasedStoreKeepsItReleased(t *testing.T) {
+	e := claimed(t)
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "kept"}); err != nil {
+		t.Fatal(err)
+	}
+	e.must(e.m.Release(ctx, kb))
+	e.disk.SetFault(func(op, name string) error {
+		if strings.HasSuffix(name, ".autodoc-owner") && op != "stat" && op != "read" {
+			return errors.New("disk full")
+		}
+		return nil
+	})
+	if err := e.m.Claim(ctx, kb); err == nil {
+		t.Fatal("a claim whose marker cannot be written succeeded")
+	}
+	e.disk.SetFault(nil)
+	e.restart()
+	if r, err := e.m.Resolve(ctx, kb); err != nil || r.Claimed || !r.Released {
+		t.Fatalf("after the failed claim and a restart: %+v %v; want released as before", r, err)
+	}
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "x"}); !is(err, todo.ErrUnclaimed) {
+		t.Fatalf("a write to the store still released: %v; want it refused", err)
+	}
+}
+
 // TestAFailedClaimIsUndoneWhateverItsRequest: a request cancelled after its claim was recorded is
 // still undone, on a context of the undo's own; and of two claims racing on one store, one
 // failing, the undo never clears the other's claim: claims are one at a time.
