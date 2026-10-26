@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 28; the daemon serves sessions from protocol 12.
+Verbs at protocol 29; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
