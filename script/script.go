@@ -127,6 +127,9 @@ type Engine struct {
 	handlers map[string][]*lua.LFunction
 	// calling is the gated script whose proxy called the host function running now (Caller)
 	calling *gatedScript
+	// answering counts the Answer calls running now: they count as running (Running) without
+	// an editor to edit
+	answering int
 }
 
 // Registration is one command{…} as a host's registrar takes it: its id and title, the file that
@@ -234,9 +237,9 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 // Close releases the Lua state.
 func (e *Engine) Close() { e.L.Close() }
 
-// Running reports whether a script is running now: a file loading, a command, a completion or a
-// callback. A host does not close the engine (a reload) from inside one.
-func (e *Engine) Running() bool { return e.cur != nil || e.loading != "" }
+// Running reports whether a script is running now: a file loading, a command, a completion, a
+// callback or an answer. A host does not close the engine (a reload) from inside one.
+func (e *Engine) Running() bool { return e.cur != nil || e.loading != "" || e.answering > 0 }
 
 // Global is the global table scripts register through: a host adds its own fields to it, tables
 // of functions among them (AutoDoc's autodoc.search.query). Only the loop touches it.
@@ -416,10 +419,31 @@ func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) err
 // call is protect for a function that answers: its first nret results (nil for one it did not
 // give), read before the deadline is lifted.
 func (e *Engine) call(name string, fn *lua.LFunction, nret int, args ...lua.LValue) ([]lua.LValue, error) {
+	return e.callBy(time.Time{}, name, fn, nret, args...)
+}
+
+// callBy is call stopped by by too, when it isn't the zero time. Its deadline is the earliest of
+// the engine's own, by, and the deadline of the call it runs inside (a command a callback runs
+// through autodoc.run): a nested call never outlives the one that made it.
+func (e *Engine) callBy(by time.Time, name string, fn *lua.LFunction, nret int, args ...lua.LValue) ([]lua.LValue, error) {
 	L := e.L
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
 	outer := L.Context()
+	parent := outer
+	if parent == nil {
+		parent = context.Background()
+	}
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(parent, e.timeout)
+	defer cancel()
+	if !by.IsZero() {
+		var stop context.CancelFunc
+		ctx, stop = context.WithDeadline(ctx, by)
+		defer stop()
+	}
+	limit := e.timeout
+	if d, ok := ctx.Deadline(); ok && d.Sub(start) < limit {
+		limit = d.Sub(start).Round(time.Millisecond)
+	}
 	L.SetContext(ctx)
 	defer func() {
 		if outer != nil {
@@ -433,7 +457,7 @@ func (e *Engine) call(name string, fn *lua.LFunction, nret int, args ...lua.LVal
 		L.Push(a)
 	}
 	if err := L.PCall(len(args), nret, nil); err != nil {
-		return nil, e.failure(name, ctx, err)
+		return nil, e.failureAfter(name, ctx, limit, err)
 	}
 	out := make([]lua.LValue, nret)
 	for i := range out {
@@ -441,6 +465,24 @@ func (e *Engine) call(name string, fn *lua.LFunction, nret int, args ...lua.LVal
 	}
 	L.Pop(nret)
 	return out, nil
+}
+
+// Answer calls fn with args and returns its first result, before the engine's own deadline or by,
+// whichever is first (by's zero time: the engine's alone): on the loop, as a completer's function
+// is called, with no undo step and no editor to edit. Its error is the script's or the deadline's;
+// one of a replaced engine's functions is ErrStale and isn't run. The engine counts as running
+// while it does, so a reload the function asks for is refused, as one a command asks for is.
+func (e *Engine) Answer(by time.Time, name string, fn *lua.LFunction, args ...lua.LValue) (lua.LValue, error) {
+	if !e.owns(fn) {
+		return lua.LNil, ErrStale
+	}
+	e.answering++
+	defer func() { e.answering-- }()
+	out, err := e.callBy(by, name, fn, 1, args...)
+	if err != nil {
+		return lua.LNil, err
+	}
+	return out[0], nil
 }
 
 // completer is a command's complete field as golib's Command.Complete: a list is its candidates
@@ -500,7 +542,12 @@ func stringList(t *lua.LTable) []string {
 // deadline is asked again after the value is described: describing a table runs its __tostring,
 // script code under the same deadline, and a formatter that ran out the time is the deadline's.
 func (e *Engine) failure(name string, ctx context.Context, err error) error {
-	stopped := fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
+	return e.failureAfter(name, ctx, e.timeout, err)
+}
+
+// failureAfter is failure for a call whose deadline was limit after it began.
+func (e *Engine) failureAfter(name string, ctx context.Context, limit time.Duration, err error) error {
+	stopped := fmt.Errorf("%s: the script ran past %s and was stopped", name, limit)
 	if ctx.Err() != nil {
 		return stopped
 	}
