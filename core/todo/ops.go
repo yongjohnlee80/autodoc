@@ -94,6 +94,7 @@ func (m *Manager) List(ctx context.Context, at At, opts ListOpts) (Listing, erro
 		return Listing{}, err
 	}
 	defer st.mu.Unlock()
+	opts = opts.canonical()
 	buckets := opts.Buckets
 	if len(buckets) == 0 {
 		buckets = append(slices.Clone(activeBuckets), "automated")
@@ -151,6 +152,14 @@ func (m *Manager) List(ctx context.Context, at At, opts ListOpts) (Listing, erro
 }
 
 var partitionRe = regexp.MustCompile(`^archived/[0-9]{4}/[0-9]{2}$`)
+
+// canonical is o with its priority spelled as the newest format's enum does: normal is medium.
+func (o ListOpts) canonical() ListOpts {
+	if decl, ok := newest.schema.Field("priority"); ok {
+		o.Priority = decl.Canonical(o.Priority)
+	}
+	return o
+}
 
 func (o ListOpts) matches(t Task) bool {
 	return (o.Tag == "" || slices.Contains(t.Tags, o.Tag)) && (o.Assignee == "" || t.Assignee == o.Assignee) &&

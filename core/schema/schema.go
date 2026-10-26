@@ -59,6 +59,9 @@ type Field struct {
 	Managed  bool     // only the file's owner writes it: a writer refuses a client's change to it
 	Items    []Field  // ItemType Map: the fields of each item, in the schema's order
 	Line     int      // where the schema declares it
+	// Aliases are legacy spellings of Enum's values, each to its value: an alias validates with no
+	// diagnostic, and reads as its value (Canonical). Nil when the field has none.
+	Aliases map[string]string
 }
 
 // Schema is a parsed, valid schema.
@@ -490,7 +493,7 @@ func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, 
 	if decl.Kind != pyaml.KindMapping {
 		return f, false, p.fail(decl, "field %q: the declaration must be a mapping with a type", name)
 	}
-	var enum, def, items *pyaml.Node
+	var enum, def, items, aliases *pyaml.Node
 	for _, pr := range decl.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -516,6 +519,8 @@ func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, 
 			f.Required, wroteRequired = b, true
 		case "enum":
 			enum = pr.Value
+		case "aliases":
+			aliases = pr.Value
 		case "default":
 			def = pr.Value
 		case "managed":
@@ -527,13 +532,16 @@ func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, 
 		case "fields":
 			items = pr.Value
 		default:
-			return f, false, p.fail(pr.Key, "field %q: unknown key %q (the keys are type, item_type, required, enum, default, managed and fields)", name, key)
+			return f, false, p.fail(pr.Key, "field %q: unknown key %q (the keys are type, item_type, required, enum, aliases, default, managed and fields)", name, key)
 		}
 	}
 	if f.Type == "" {
 		return f, false, p.fail(decl, "field %q needs a type", name)
 	}
 	if f.Type == List && f.ItemType == Map {
+		if aliases != nil {
+			return f, false, p.fail(aliases, "field %q: a list of map items has no aliases (its items' fields have no enum of their own here)", name)
+		}
 		return p.mapItems(f, wroteRequired, decl, enum, def, items, declared)
 	}
 	if items != nil {
@@ -564,6 +572,11 @@ func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, 
 			}
 		}
 	}
+	if aliases != nil {
+		if err := p.aliases(&f, itemType, aliases); err != nil {
+			return f, false, err
+		}
+	}
 	if def != nil {
 		if f.Required {
 			return f, false, p.fail(def, "field %q: a required field has no default (it must be written)", name)
@@ -581,6 +594,62 @@ func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, 
 		}
 	}
 	return f, wroteRequired, nil
+}
+
+// aliases reads a field's aliases: a mapping of legacy spellings to values of its enum. An alias
+// is never itself a value of the enum, so a value means one thing.
+func (p parser) aliases(f *Field, itemType Type, n *pyaml.Node) error {
+	switch {
+	case len(f.Enum) == 0:
+		return p.fail(n, "field %q: aliases are spellings of enum values, and it has no enum", f.Name)
+	case n.Kind != pyaml.KindMapping || len(n.Pairs) == 0:
+		return p.fail(n, "field %q: aliases must be a non-empty mapping, a legacy spelling to its enum value", f.Name)
+	case len(n.Pairs) > maxEnum:
+		return p.fail(n, "field %q: aliases has more than %d entries", f.Name, maxEnum)
+	}
+	f.Aliases = map[string]string{}
+	for _, pr := range n.Pairs {
+		from, okFrom := facetValue(itemType, p.value(pr.Key))
+		to, okTo := facetValue(itemType, p.value(pr.Value))
+		switch {
+		case !okFrom || !okTo:
+			return p.fail(pr.Key, "field %q: an alias and its value are each a %s", f.Name, itemType)
+		case slices.Contains(f.Enum, from):
+			return p.fail(pr.Key, "field %q: alias %q is a value of its enum already", f.Name, from)
+		case !slices.Contains(f.Enum, to):
+			return p.fail(pr.Value, "field %q: alias %q names %q, which is not one of its enum", f.Name, from, to)
+		}
+		if _, dup := f.Aliases[from]; dup {
+			return p.fail(pr.Key, "field %q: alias %q is given twice", f.Name, from)
+		}
+		f.Aliases[from] = to
+	}
+	return nil
+}
+
+// Canonical is v as the field's enum spells it: an alias's value, or v itself.
+func (f Field) Canonical(v string) string {
+	if to, ok := f.Aliases[v]; ok {
+		return to
+	}
+	return v
+}
+
+// canonical is vals as the field's enum spells them, a copy when an alias changed one.
+func (f Field) canonical(vals []string) []string {
+	if len(f.Aliases) == 0 {
+		return vals
+	}
+	out, cloned := vals, false
+	for i, v := range vals {
+		if c := f.Canonical(v); c != v {
+			if !cloned {
+				out, cloned = slices.Clone(vals), true
+			}
+			out[i] = c
+		}
+	}
+	return out
 }
 
 // mapItems finishes a list of map items: its items' fields, each a scalar or a list of scalars with

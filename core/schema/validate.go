@@ -135,6 +135,7 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 					Message: fmt.Sprintf("%s %s", name, why)})
 				continue
 			}
+			vals = f.canonical(vals) // a legacy spelling (aliases) is its value: valid, and faceted as it
 			if bad := outsideEnum(f, vals); bad != "" {
 				r.Diagnostics = append(r.Diagnostics, Diagnostic{Field: name, Line: lineOf(pr.Value), Rule: RuleEnum,
 					Message: fmt.Sprintf("%s: %s is not one of %v", name, strconv.Quote(bad), f.Enum)})
@@ -213,7 +214,7 @@ func (s *Schema) items(f Field, n *pyaml.Node, tags yaml.Tags, lineOf func(*pyam
 				diag(pr.Value, RuleType, "%s item %d: %s %s", f.Name, i+1, key, why)
 				continue
 			}
-			if bad := outsideEnum(decl, vals); bad != "" {
+			if bad := outsideEnum(decl, decl.canonical(vals)); bad != "" {
 				diag(pr.Value, RuleEnum, "%s item %d: %s: %s is not one of %v", f.Name, i+1, key, strconv.Quote(bad), decl.Enum)
 			}
 		}
@@ -252,7 +253,11 @@ func (s *Schema) fieldsFor(root *pyaml.Node, tags yaml.Tags) (set fieldSet, typ 
 			break
 		}
 		vals, why := typed(f, v)
-		if why != "" || outsideEnum(f, vals) != "" {
+		if why != "" {
+			break
+		}
+		vals = f.canonical(vals) // an alias of a type is that type: its fields, as its facet already is
+		if outsideEnum(f, vals) != "" {
 			break
 		}
 		if t, ok := s.types[vals[0]]; ok {

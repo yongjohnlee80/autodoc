@@ -79,7 +79,7 @@ AutoDoc partitions frontmatter fields into three strict categories:
 2. **Verb-Managed Lifecycle Fields**:
    - `status` — Transitioned via `todos.status` (or implicitly from `open` to `in-progress` on `todos.assign`). Moving a task to `completed` stamps `completed_at`; moving it to `archived` stamps `archived_at` (preserving `completed_at` if it came from `completed`) and relocates the file into `archived/YYYY/MM/`.
    - `assignee` — Mutated via `todos.assign`. Per Decision D1 of ADR 1791532020, assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so a notification consumer (an assignment notifier reading `todos.changes`) can wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
-3. **Hand-Editable Fields**: `title`, `description` (the Markdown body), `priority` (`critical`, `high`, `medium`, `low`), `due` (`YYYY-MM-DD`), `tags`, `adr`, `review`, and `blocked`. Users and agents may edit the Markdown body directly on disk or pass a partial map to `todos.update` with the task's current `rev` token.
+3. **Hand-Editable Fields**: `title`, `description` (the Markdown body), `priority` (`low`, `medium`, `high`; `normal` is the legacy spelling of `medium`: a task that has it is valid and reads as `medium`, and its next write writes `medium`), `due` (`YYYY-MM-DD`), `tags`, `adr`, `review`, and `blocked`. Users and agents may edit the Markdown body directly on disk or pass a partial map to `todos.update` with the task's current `rev` token.
 
 ---
 
@@ -159,7 +159,7 @@ autodoc --call todos.update '[
   "kb",
   "2026-10-17-implement-sqlite-todo-journal",
   "a94f8c2e1b0d...",
-  {"priority": "critical", "adr": ["/home/me/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
+  {"priority": "high", "adr": ["/home/me/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
 ]'
 
 # 4. Transition status to completed (moves file to completed/ and stamps completed_at)

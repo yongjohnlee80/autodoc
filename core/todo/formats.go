@@ -186,14 +186,14 @@ func valueOf(decl schema.Field, v *node) (any, error) {
 			if it.kind != nString {
 				return nil, bad()
 			}
-			out = append(out, it.str)
+			out = append(out, decl.Canonical(it.str))
 		}
 		return out, nil
 	}
 	if v.kind != nString {
 		return nil, bad()
 	}
-	return v.str, nil
+	return decl.Canonical(v.str), nil // a legacy spelling (the schema's aliases) reads as its value
 }
 
 // encode renders t in its format (the newest for a new task) as auto-core's md.encode does, byte
@@ -216,7 +216,7 @@ func (f *format) encode(t Task) []byte {
 		switch v := t.get(name).(type) {
 		case string:
 			if v != "" || decl.Required || slices.Contains(t.blank, name) {
-				b.WriteString(name + ": " + yamlString(v, "") + "\n")
+				b.WriteString(name + ": " + yamlString(decl.Canonical(v), "") + "\n") // a write spells the value as the enum does
 			}
 		case int:
 			b.WriteString(name + ": " + strconv.Itoa(v) + "\n")
@@ -226,7 +226,7 @@ func (f *format) encode(t Task) []byte {
 			}
 			b.WriteString(name + ":")
 			for _, s := range v {
-				b.WriteString("\n  - " + yamlString(s, "    "))
+				b.WriteString("\n  - " + yamlString(decl.Canonical(s), "    "))
 			}
 			b.WriteString("\n")
 		case []map[string]string:

@@ -105,8 +105,11 @@ func TestFormatV1IsAutoCoresSchema(t *testing.T) {
 	if e := enum("status"); !reflect.DeepEqual(e, Statuses) {
 		t.Errorf("status enum = %v", e)
 	}
-	if e := enum("priority"); !reflect.DeepEqual(e, []string{"low", "normal", "high"}) {
+	if e := enum("priority"); !reflect.DeepEqual(e, []string{"low", "medium", "high"}) {
 		t.Errorf("priority enum = %v", e)
+	}
+	if p, _ := f.schema.Field("priority"); !reflect.DeepEqual(p.Aliases, map[string]string{"normal": "medium"}) {
+		t.Errorf("priority aliases = %v, want normal as medium's legacy spelling", p.Aliases)
 	}
 	errs, _ := f.schema.Field("errors")
 	var items []string

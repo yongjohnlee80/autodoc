@@ -161,6 +161,43 @@ func TestAStoreNotMadeYetReadsEmpty(t *testing.T) {
 	}
 }
 
+// Priority medium is the value, normal its legacy spelling (ADR 1791532020 r14). A task written with
+// normal is valid, with no error, and reads as medium; a refresh leaves its file byte for byte; its
+// next write writes medium. A new task given normal is written medium, and the normal filter lists
+// medium's tasks.
+func TestPriorityNormalIsTheLegacySpellingOfMedium(t *testing.T) {
+	e := claimed(t)
+	hand := taskFile("old", "open", "priority: normal")
+	e.disk.WriteFile(kbStore+"/open/old.md", []byte(hand))
+	l, err := e.m.List(ctx, kb, todo.ListOpts{})
+	if err != nil || len(l.Malformed) != 0 || len(l.Tasks) != 1 || l.Tasks[0].Priority != "medium" || len(l.Tasks[0].Errors) != 0 {
+		t.Fatalf("a task written with normal: %+v %v; want it valid, read as medium", l, err)
+	}
+	if _, err := e.m.Refresh(ctx, kb); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.read(kbStore + "/open/old.md"); got != hand {
+		t.Errorf("a refresh rewrote the file for its spelling:\n%s", got)
+	}
+	task := e.get("old")
+	if _, err := e.m.Update(ctx, kb, "old", task.Rev, todo.Patch{"title": "Renamed"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.read(kbStore + "/open/old.md"); !strings.Contains(got, "\npriority: medium\n") || strings.Contains(got, "priority: normal") {
+		t.Errorf("the task's next write kept normal:\n%s", got)
+	}
+	added, err := e.m.Add(ctx, kb, todo.Spec{Title: "Given normal", Priority: "normal"})
+	if err != nil || added.Priority != "medium" {
+		t.Fatalf("a new task given normal: %+v %v; want medium", added, err)
+	}
+	if got := e.read(kbStore + "/open/" + added.ID + ".md"); !strings.Contains(got, "\npriority: medium\n") {
+		t.Errorf("a new task given normal was written:\n%s", got)
+	}
+	if l, err := e.m.List(ctx, kb, todo.ListOpts{Priority: "normal"}); err != nil || len(l.Tasks) != 2 {
+		t.Errorf("the normal filter: %d tasks, %v; want medium's two", len(l.Tasks), err)
+	}
+}
+
 // A project that is not a workspace: Register, then Scaffold, which claims its store and makes the
 // directory, its buckets and the marker. An unregistered root is never claimed nor written.
 func TestNewProjectOrder(t *testing.T) {
