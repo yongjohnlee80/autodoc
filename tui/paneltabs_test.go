@@ -36,12 +36,21 @@ func ctrlTab(back bool) tui.KeyEvent {
 // TestCtrlTabMovesBetweenTheTerminalsTabs (v0.3.1): three shells, the newest's tab showing.
 // Ctrl+Tab goes round to the first, Ctrl+Shift+Tab back to the last, each tab keeping the keyboard,
 // in input and Normal mode alike, and no program gets either key. Ctrl+\ then Ctrl+Tab sends it to
-// the shell, and the tab stays.
+// the shell, and the tab stays. With one shell, or the keyboard on the page, it does nothing (the
+// command run on the loop: a key that does nothing has no effect to wait on).
 func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 	shell, report := recordingShell(t)
 	_, r := runTUIWithShell(t, shell, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	if moved := onLoop(r, func() bool {
+		p, _ := r.h.terminals.panel()
+		was := p.Active()
+		r.h.cyclePanelTab(1)
+		return p.Active() != was || !r.h.paneHasKeyboard("terminalView") // on the loop already: never r.focused
+	}); moved {
+		t.Fatal("Ctrl+Tab with one shell moved the tab or the keyboard")
+	}
 	onLoop(r, func() bool { r.h.terminals.newShell(); r.h.terminals.newShell(); return true })
 	tabs := func() []widget.TerminalTabID {
 		return onLoop(r, func() []widget.TerminalTabID {
@@ -82,6 +91,11 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 	if active() != ids[0] {
 		t.Error("Ctrl+\\ then Ctrl+Tab moved the tab")
 	}
+	onLoop(r, func() bool { r.h.focusEditor(); return true })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	if moved := onLoop(r, func() bool { r.h.cyclePanelTab(1); p, _ := r.h.terminals.panel(); return p.Active() != ids[0] }); moved {
+		t.Error("Ctrl+Tab with the keyboard on the page moved the terminal's tab")
+	}
 }
 
 // TestCtrlTabMovesBetweenTheAgentsTabs: two agents running, the second's tab showing. Ctrl+Tab goes
@@ -102,4 +116,33 @@ func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
 	r.s.WaitFor(t, "Ctrl+Tab round to one", func(string) bool { return selected() == "one" && r.focused("agentView") })
 	r.keys(t, ctrlTab(true))
 	r.s.WaitFor(t, "Ctrl+Shift+Tab back to two", func(string) bool { return selected() == "two" && r.focused("agentView") })
+}
+
+// TestNextTabGoesRoundPastClosingTabs: the tab a step away, round both ways; a tab closing is passed
+// over; with fewer than two open, or the active one closing, none.
+func TestNextTabGoesRoundPastClosingTabs(t *testing.T) {
+	tab := func(id string, closing bool) widget.TerminalTab {
+		return widget.TerminalTab{ID: widget.TerminalTabID(id), Closing: closing}
+	}
+	abc := []widget.TerminalTab{tab("a", false), tab("b", true), tab("c", false), tab("d", false)}
+	for _, c := range []struct {
+		tabs   []widget.TerminalTab
+		active string
+		step   int
+		want   string
+	}{
+		{abc, "a", 1, "c"},  // b closing: passed over
+		{abc, "d", 1, "a"},  // round
+		{abc, "a", -1, "d"}, // round back
+		{abc, "c", -1, "a"}, // back past b
+		{abc, "b", 1, ""},   // the active one closing: none
+		{abc, "z", 1, ""},   // the active one gone: none
+		{[]widget.TerminalTab{tab("a", false)}, "a", 1, ""},                 // one tab
+		{[]widget.TerminalTab{tab("a", false), tab("b", true)}, "a", 1, ""}, // one open
+	} {
+		got, ok := tabAfter(c.tabs, widget.TerminalTabID(c.active), c.step)
+		if string(got) != c.want || ok != (c.want != "") {
+			t.Errorf("tabAfter(%s, %+d) = %q %v, want %q", c.active, c.step, got, ok, c.want)
+		}
+	}
 }

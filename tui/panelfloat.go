@@ -92,34 +92,40 @@ func (h *Host) panelInHand() string {
 // tab, nothing.
 func (h *Host) cyclePanelTab(step int) {
 	var panel TerminalPanel
+	var err error
 	var pick func(widget.TerminalTabID)
 	switch {
 	case h.panelHasKeyboard("terminal"):
-		p, err := h.terminals.panel()
-		if err != nil {
-			return
-		}
-		panel, pick = p, func(id widget.TerminalTabID) { h.keep(p.Select(id)) }
+		panel, err = h.terminals.panel()
+		pick = func(id widget.TerminalTabID) { h.keep(panel.Select(id)) }
 	case h.panelHasKeyboard("agent"):
-		p, err := h.agents.runtime()
-		if err != nil {
-			return
-		}
-		panel, pick = p, h.agents.goToTab
+		panel, err = h.agents.runtime()
+		pick = h.agents.goToTab
 	default:
 		return
 	}
-	var tabs []widget.TerminalTabID
-	for _, tab := range panel.Tabs() {
+	if err != nil {
+		return // no panel: one with the keyboard always has its runtime
+	}
+	if next, ok := tabAfter(panel.Tabs(), panel.Active(), step); ok {
+		pick(next)
+	}
+}
+
+// tabAfter is the tab step away from active among tabs, round, a tab closing passed over: false
+// with fewer than two left, or with active closing (or gone), whose place among them is none.
+func tabAfter(tabs []widget.TerminalTab, active widget.TerminalTabID, step int) (widget.TerminalTabID, bool) {
+	var open []widget.TerminalTabID
+	for _, tab := range tabs {
 		if !tab.Closing {
-			tabs = append(tabs, tab.ID)
+			open = append(open, tab.ID)
 		}
 	}
-	at := slices.Index(tabs, panel.Active())
-	if len(tabs) < 2 || at < 0 {
-		return
+	at := slices.Index(open, active)
+	if len(open) < 2 || at < 0 {
+		return "", false
 	}
-	pick(tabs[(at+step+len(tabs))%len(tabs)])
+	return open[(at+step+len(open))%len(open)], true
 }
 
 // panelHasKeyboard is whether the panel's view, or a widget in it, has the keyboard.
