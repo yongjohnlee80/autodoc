@@ -39,7 +39,8 @@ func editorClient(t *testing.T, r *running, token string) func(verb string, para
 
 // An agent opens a file by its path, and finds the commands first. editor.commands answers with no
 // grant and asks the user nothing: :open is file.open_path's name, :e and :edit its aliases, and the
-// editor's own :w (write) is among them.
+// editor's own :w (write) is among them. A fresh agent's editor.open is refused, needing commands,
+// and asks the user; allowed, the same call opens the file.
 // editor.open opens a path relative to the workspace's root and an absolute one, and editor.run's
 // :e a name with a space in it, the whole line its path. A ':' name no command has is refused,
 // naming editor.commands; an empty path is refused.
@@ -75,13 +76,21 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 		t.Fatal("editor.commands asked for a grant")
 	}
 
-	onLoop(r, func() bool {
-		r.h.prefs.luaGrants = map[string]map[string]bool{"agent:zen": {"commands": true}}
-		return true
+	// a fresh agent's first open is refused and asks the user for commands; once allowed, it opens
+	if _, re := call("editor.open", "b.md"); re == nil || re.Code != codeEditorNotGranted || !strings.Contains(re.Message, "needs commands") {
+		t.Fatalf("an ungranted editor.open: %v", re)
+	}
+	if n := r.file(); n.path != "a.md" {
+		t.Fatalf("an ungranted editor.open opened %s", n.path)
+	}
+	r.s.WaitForText(t, "let the Lua script agent:zen use commands?")
+	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	r.s.WaitFor(t, "commands granted", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["commands"] })
 	})
 	root := onLoop(r, func() string { return r.h.rootOf("kb") })
 	if res, re := call("editor.open", "b.md"); re != nil || res.(map[string]any)["opening"] != filepath.Join(root, "b.md") {
-		t.Fatalf("editor.open b.md: %v %v", res, re)
+		t.Fatalf("editor.open b.md, allowed: %v %v", res, re)
 	}
 	r.waitFile(t, "b.md")
 	if _, re := call("editor.run", ":e c d.md"); re != nil {

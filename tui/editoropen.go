@@ -99,7 +99,7 @@ func commandRows(entries []*Entry, names func(id string) []string, core []widget
 		if ns := names(e.ID); len(ns) > 0 {
 			row["name"] = ns[0]
 			if len(ns) > 1 {
-				row["aliases"] = anys(ns[1:]) // msgpack takes []any, not []string
+				row["aliases"] = anyStrings(ns[1:]) // msgpack takes []any, not []string
 			}
 		}
 		if e.Args != "" {
@@ -121,7 +121,7 @@ func commandRows(entries []*Entry, names func(id string) []string, core []widget
 	for _, c := range own {
 		row := map[string]any{"name": c.Name, "source": "editor"}
 		if len(c.Aliases) > 0 {
-			row["aliases"] = anys(c.Aliases)
+			row["aliases"] = anyStrings(c.Aliases)
 		}
 		if c.Args != "" {
 			row["args"] = c.Args
@@ -170,15 +170,6 @@ func commandsReference(entries []*Entry) string {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", id, name, cell(args), cell(what))
 	}
 	return b.String()
-}
-
-// anys is s as []any, the shape msgpack encodes.
-func anys(s []string) []any {
-	out := make([]any, len(s))
-	for i, v := range s {
-		out[i] = v
-	}
-	return out
 }
 
 // asStrings is a row's []any of strings back as strings.
