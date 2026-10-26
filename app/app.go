@@ -16,6 +16,7 @@
 //	autodoc --editor editor.read '[1, 20]'
 //	autodoc --editor editor.buffers
 //	autodoc --editor editor.read '[1, 20, 3]'   # lines 1 to 20 of buffer 3, shown or not
+//	autodoc --editor editor.workspace           # the agent's workspace, the editor's, and the switches (ADR 1792988759)
 //
 // --contracts prints the verbs' contracts and the error codes, built in this process with no daemon:
 //

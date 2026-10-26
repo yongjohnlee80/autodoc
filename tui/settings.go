@@ -906,6 +906,7 @@ func (h *Host) saved(name string, c map[string]any) {
 		h.showWorkspaceRows(list)
 		if h.ws == name {
 			// the same workspace under another name: the open file stays open
+			h.noteRename(h.ws, to)
 			h.ws = to
 			h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), to))
 			if h.remember != nil {
