@@ -319,6 +319,33 @@ func TestParseV2FieldsAreTheUnion(t *testing.T) {
 	}
 }
 
+// An alias of a type is that type (Lector, #16 r0): a memo, memo an alias of note, is checked
+// against note's own fields, its required one and its enum, and faceted note.
+func TestADiscriminatorAliasIsItsType(t *testing.T) {
+	s := mustParse(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, required: true, enum: [note], aliases: {memo: note}}\n"+
+		"types:\n  note:\n    title: {type: string, required: true}\n    kind: {type: string, enum: [a, b]}\n")
+	for _, c := range []struct {
+		name, fm string
+		rules    []string
+		facets   []Facet
+	}{
+		{"note's required field", "type: memo\n", []string{"title:required"}, []Facet{{"type", "note"}}},
+		{"note's enum", "type: memo\ntitle: x\nkind: c\n", []string{"kind:enum"}, []Facet{{"type", "note"}, {"title", "x"}}},
+		{"note's fields", "type: memo\ntitle: x\nkind: a\n", nil, []Facet{{"type", "note"}, {"title", "x"}, {"kind", "a"}}},
+		{"note itself", "type: note\n", []string{"title:required"}, []Facet{{"type", "note"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := s.ValidateFile(note(c.fm))
+			if got := rules(r); !reflect.DeepEqual(got, c.rules) {
+				t.Errorf("diagnostics = %+v, want %v", r.Diagnostics, c.rules)
+			}
+			if !reflect.DeepEqual(r.Facets, c.facets) {
+				t.Errorf("facets = %v, want %v", r.Facets, c.facets)
+			}
+		})
+	}
+}
+
 // A document is checked against common merged with its type: a type adds fields, narrows a common
 // field's enum, makes it required or gives it its own default; a type the schema does not name is
 // diagnosed and checked against common alone.
@@ -482,5 +509,48 @@ func TestParseDate(t *testing.T) {
 		if _, ok := ParseDate(s); ok {
 			t.Errorf("%q is no date", s)
 		}
+	}
+}
+
+// An enum's aliases are its values' legacy spellings: an alias validates with no diagnostic and is
+// faceted as its value, and Canonical reads it as that value. A list's items read the same way.
+func TestAnAliasIsItsEnumValue(t *testing.T) {
+	s := mustParse(t, "version: 1\nfrontmatter:\n  verdict:\n    type: string\n    enum: [approved, change_requested]\n"+
+		"    aliases: {changes_requested: change_requested, changes-requested: change_requested}\n"+
+		"  labels:\n    type: list\n    enum: [a, b]\n    aliases: {old-a: a}\n")
+	r := s.ValidateFile(note("verdict: changes-requested\nlabels: [old-a, b]\n"))
+	if len(r.Diagnostics) != 0 {
+		t.Fatalf("an alias was diagnosed: %+v", r.Diagnostics)
+	}
+	want := []Facet{{"verdict", "change_requested"}, {"labels", "a"}, {"labels", "b"}}
+	if !reflect.DeepEqual(r.Facets, want) {
+		t.Errorf("facets = %v, want the canonical values %v", r.Facets, want)
+	}
+	if r := s.ValidateFile(note("verdict: changes requested (one P2)\n")); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != RuleEnum {
+		t.Errorf("a value neither in the enum nor an alias: %+v, want one enum diagnostic", r.Diagnostics)
+	}
+	f, _ := s.Field("verdict")
+	if f.Canonical("changes_requested") != "change_requested" || f.Canonical("approved") != "approved" || f.Canonical("x") != "x" {
+		t.Errorf("Canonical: %q %q %q", f.Canonical("changes_requested"), f.Canonical("approved"), f.Canonical("x"))
+	}
+}
+
+// Aliases need an enum, map to one of its values, are not values themselves, and are each given
+// once; a list of map items has none.
+func TestParseRefusesBadAliases(t *testing.T) {
+	for _, c := range []struct{ name, decl, msg string }{
+		{"no enum", "{type: string, aliases: {a: b}}", "has no enum"},
+		{"not a mapping", "{type: string, enum: [a], aliases: [a]}", "non-empty mapping"},
+		{"to a value outside the enum", "{type: string, enum: [a], aliases: {x: b}}", "not one of its enum"},
+		{"an alias that is a value", "{type: string, enum: [a, b], aliases: {a: b}}", "a value of its enum already"},
+		{"map items", "{type: list, item_type: map, fields: {code: {type: string}}, aliases: {a: b}}", "has no aliases"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte("version: 1\nfrontmatter:\n  f: " + c.decl + "\n"))
+			var se *Error
+			if !errors.As(err, &se) || !strings.Contains(se.Msg, c.msg) {
+				t.Errorf("err = %v, want one saying %q", err, c.msg)
+			}
+		})
 	}
 }

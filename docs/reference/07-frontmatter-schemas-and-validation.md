@@ -89,6 +89,7 @@ types:
 
 When `core/schema/schema.go` merges `types.<name>` over `common`, it enforces strict covariance rules at schema load time:
 
+- **Aliases:** a field with an `enum` may name legacy spellings of its values, `aliases: {changes_requested: change_requested}`. An alias validates with no diagnostic and is faceted as its value, so `verdict:change_requested` finds both spellings. An alias can't be a value of the enum itself, and each names one of its values.
 - **Narrowing Only:** A specialized type may narrow a `common` field's `enum` to a subset, promote an optional `common` field to `required: true`, or supply a type-specific `default`.
 - **No Widening or Type Mutation:** A type may **never** change a field's scalar `type` (for example, `number: integer` in `adr` and `number: string` in `pr` is rejected with the offending line number) or add enum values disallowed by `common`.
 - **Safe Schema Reloads:** Editing `_schema/frontmatter.yaml` immediately re-validates all workspace documents without re-embedding their text vectors. If an edit introduces a syntax error or violates a narrowing rule, AutoDoc reports the line number in `workspace.list` (`schema.error`, `schema.line`) and keeps the last valid schema active until you fix the file.
