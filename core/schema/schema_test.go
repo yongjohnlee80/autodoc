@@ -3,6 +3,7 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -552,5 +553,30 @@ func TestParseRefusesBadAliases(t *testing.T) {
 				t.Errorf("err = %v, want one saying %q", err, c.msg)
 			}
 		})
+	}
+}
+
+// The KB schema AutoDoc ships parses, and its review verdict reads every spelling of a requested
+// change as change_requested, the one a new review writes.
+func TestTheShippedKBSchemaReadsTheVerdictsSpellings(t *testing.T) {
+	src, err := os.ReadFile("../../lua/autodoc/kb/templates/_schema/frontmatter.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := mustParse(t, string(src))
+	for _, v := range []string{"change_requested", "changes_requested", "changes-requested", "change-requested"} {
+		r := s.ValidateFile(note("type: review\nstatus: completed\ncreated: 2026-10-26\ntags: [x]\nabstract: a\nreviewer: r\nsubject: s\nverdict: " + v + "\n"))
+		if len(r.Diagnostics) != 0 {
+			t.Errorf("verdict %s: %+v, want none", v, r.Diagnostics)
+		}
+		got := ""
+		for _, f := range r.Facets {
+			if f.Field == "verdict" {
+				got = f.Value
+			}
+		}
+		if got != "change_requested" {
+			t.Errorf("verdict %s is faceted %q, want change_requested", v, got)
+		}
 	}
 }

@@ -53,7 +53,8 @@ types:
     status: {type: string, enum: [in-progress, completed]}
     reviewer: {type: string, required: true}
     subject: {type: string, required: true}
-    verdict: {type: string, enum: [approved, approved_with_notes, change_requested, rejected, commented]}
+    # change_requested is the spelling a new review writes; the others read as it
+    verdict: {type: string, enum: [approved, approved_with_notes, change_requested, rejected, commented], aliases: {changes_requested: change_requested, changes-requested: change_requested, change-requested: change_requested}}
     round: {type: integer}
     repo: {type: string}
     pr: {type: integer}
