@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -353,6 +354,15 @@ func (r *pluginRun) onNote(method string, params []any) {
 			return
 		}
 		r.pl.c.Post(func() { r.pl.acceptSession(r, values) })
+	case plugin.MethodMenu:
+		// decoded and bounded here, on the link's goroutine; applied on the loop by acceptMenu, for
+		// this run only if it is still the plugin's live run
+		u, err := plugin.ReadMenu(params)
+		if err != nil || r.e.m.Protocol < 11 {
+			r.log.note("host.menu refused: " + menuRefusal(err, r.e.m.Protocol))
+			return
+		}
+		r.pl.c.Post(func() { r.pl.acceptMenu(r, u) })
 	case plugin.MethodNotify:
 		// decoded and bounded here, on the link's goroutine; posted on the loop by acceptNotice, for
 		// this run only if it is still the plugin's live run
@@ -471,6 +481,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	r.endReason = reason
 	r.mu.Unlock()
 	r.pl.endNotices(r) // before the run leaves pl.running: a replacement's notices are its own
+	r.pl.forgetMenu(r)
 	if r.focused {
 		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
 	}
@@ -612,6 +623,44 @@ func (pl *plugins) endNotices(r *pluginRun) {
 func pluginNoticeNS(name string) string { return "plugin:" + name }
 
 // noticeRefusal is why a host.notify was refused, without its message.
+// acceptMenu is a host.menu from r, on the loop: the row's pushed title and whether it's enabled,
+// kept until the plugin stops. A row its manifest doesn't declare is refused.
+func (pl *plugins) acceptMenu(r *pluginRun, u plugin.MenuUpdate) {
+	if r.closing || pl.running[r.e.key()] != r {
+		return
+	}
+	row := pl.c.MenuRows().find("plugin:"+r.e.m.Name, fromManifest, u.ID)
+	if row == nil {
+		r.log.note("host.menu refused: no [[menu]] row " + strconv.Quote(u.ID))
+		return
+	}
+	if u.Title != nil {
+		t := *u.Title
+		row.pushed = &t
+	}
+	if u.Enabled != nil {
+		row.disabled = !*u.Enabled
+	}
+}
+
+// forgetMenu forgets what r pushed to its plugin's rows: a stopped plugin's rows show their manifest's
+// titles, enabled.
+func (pl *plugins) forgetMenu(r *pluginRun) {
+	for _, row := range pl.c.MenuRows().rows {
+		if row.owner == "plugin:"+r.e.m.Name && row.source == fromManifest {
+			row.pushed, row.disabled = nil, false
+		}
+	}
+}
+
+// menuRefusal is why a host.menu was refused.
+func menuRefusal(err error, protocol int) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("the manifest's protocol %d is before 11", protocol)
+}
+
 func noticeRefusal(err error, protocol int) string {
 	if err != nil {
 		return err.Error()

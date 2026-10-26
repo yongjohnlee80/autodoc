@@ -163,3 +163,35 @@ func TestAPluginThatOpensAnExtensionDeclaresIt(t *testing.T) {
 		t.Errorf("declares %q: want it to say it opens .ipynb files", d)
 	}
 }
+
+// menuHead is a protocol-11 dialog with run and stop commands, for [[menu]]'s rules.
+const menuHead = "name = \"p\"\nkind = \"dialog\"\nprotocol = 11\ncommand = [\"./p\"]\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n[[commands]]\nid = \"stop\"\ntitle = \"Stop\"\n"
+
+// A [[menu]] row needs protocol 11, one of the plugin's own commands (one row a command), the editor
+// for its place and valid globs; a valid one is read with its fields and declared for the install.
+func TestAMenuRowIsCheckedWithItsManifest(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{openHead + "[[menu]]\ncommand = \"import\"\nwhere = \"editor\"\n", "declares [[menu]]: needs protocol = 11"},
+		{menuHead + "[[menu]]\ncommand = \"nope\"\nwhere = \"editor\"\n", `[[menu]]: command "nope" is none of its [[commands]]`},
+		{menuHead + "[[menu]]\ncommand = \"run\"\nwhere = \"editor\"\n[[menu]]\ncommand = \"run\"\nwhere = \"editor\"\n", `[[menu]]: command "run" has two rows`},
+		{menuHead + "[[menu]]\ncommand = \"run\"\nwhere = \"plugins\"\n", `[[menu]] "run": where "plugins": want editor`},
+		{menuHead + "[[menu]]\ncommand = \"run\"\n", `[[menu]] "run": where "": want editor`},
+		{menuHead + "[[menu]]\ncommand = \"run\"\nwhere = \"editor\"\nfiles = [\"[\"]\n", `[[menu]] "run": "[" is not a glob`},
+		{menuHead + "[[menu]]\ncommand = \"run\"\nwhere = \"editor\"\nlabel = \"x\"\n", `unknown key`},
+	} {
+		if _, err := ParsePlugin([]byte(c.src)); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q\n err = %v\nwant %q", c.src, err, c.want)
+		}
+	}
+	m, err := ParsePlugin([]byte(menuHead + "[[menu]]\ncommand = \"run\"\nwhere = \"editor\"\nfiles = [\"*.sql\"]\ntitle = \"&Execute\"\n" +
+		"[[menu]]\ncommand = \"stop\"\nwhere = \"editor\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := m.Menus; len(r) != 2 || r[0].Command != "run" || r[0].Where != "editor" || r[0].Title != "&Execute" || !slices.Equal(r[0].Files, []string{"*.sql"}) {
+		t.Fatalf("the rows: %+v", m.Menus)
+	}
+	if d := m.Declares(); !slices.Contains(d, "editor menu rows: &Execute (*.sql), Stop") {
+		t.Fatalf("Declares: %q", d)
+	}
+}

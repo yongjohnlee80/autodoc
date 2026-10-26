@@ -166,6 +166,17 @@ func runTestPlugin(mode string) int {
 						}
 						_ = link.Notify(ctx, plugin.MethodNotify, []any{n})
 					}
+				case "menuwith": // protocol 11: args are the row's id, its title ("" for none), enabled ("1", "0", "" for none)
+					if args := plugin.ReadCommandArgs(p); len(args) >= 3 {
+						m := map[string]any{"id": args[0]}
+						if args[1] != "" {
+							m["title"] = args[1]
+						}
+						if args[2] != "" {
+							m["enabled"] = args[2] == "1"
+						}
+						_ = link.Notify(ctx, plugin.MethodMenu, []any{m})
+					}
 				case "badnotify": // a message that is not a string; an ongoing notice with no id
 					_ = link.Notify(ctx, plugin.MethodNotify, []any{map[string]any{"message": 7}})
 					_ = link.Notify(ctx, plugin.MethodNotify, []any{map[string]any{"message": "no id", "ongoing": true}})
@@ -1719,6 +1730,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 // TestThePluginReferenceKeepsUp (ADR 1791268009 §4): docs/plugins.md is the published reference.
 // Every notification the protocol defines (each plugin.Method* constant, read from the source) is
 // documented, and every manifest sample in it runs: it decodes, strictly, with no reason against it.
+// One sample declares editor menu rows ([[menu]], protocol 11).
 func TestThePluginReferenceKeepsUp(t *testing.T) {
 	doc, err := os.ReadFile("../docs/plugins.md")
 	if err != nil {
@@ -1751,15 +1763,15 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 			}
 		}
 	}
-	if methods < 21 { // thirteen the host sends, eight the plugin sends
+	if methods < 22 { // thirteen the host sends, nine the plugin sends
 		t.Fatalf("read %d Method constants from protocol.go: the reader is not seeing them", methods)
 	}
 
 	samples := regexp.MustCompile("(?s)```toml\n(.*?)```").FindAllSubmatch(doc, -1)
-	if len(samples) != 4 {
-		t.Fatalf("%d manifest samples, want 4 (a dialog, a card, a service, a card with a table)", len(samples))
+	if len(samples) != 5 {
+		t.Fatalf("%d manifest samples, want 5 (a dialog, a card, a service, a card with a table, a dialog with editor menu rows)", len(samples))
 	}
-	kinds := map[string]bool{}
+	kinds, menus := map[string]bool{}, 0
 	for _, m := range samples {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)
@@ -1768,6 +1780,9 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 		if e.reason != "" {
 			t.Errorf("a sample does not run (%s):\n%s", e.reason, m[1])
 			continue
+		}
+		if len(e.m.Menus) > 0 && e.m.Protocol >= 11 {
+			menus++
 		}
 		switch {
 		case e.m.Service():
@@ -1780,6 +1795,9 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 	}
 	if want := map[string]bool{"dialog": true, "card": true, "service use": true}; !reflect.DeepEqual(kinds, want) {
 		t.Errorf("the samples are %v, want %v", kinds, want)
+	}
+	if menus != 1 {
+		t.Errorf("%d samples declare [[menu]] rows at protocol 11, want 1", menus)
 	}
 }
 

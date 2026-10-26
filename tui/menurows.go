@@ -94,6 +94,19 @@ func (m *menuRows) drop(match func(*addedRow) bool) {
 	m.rows = kept
 }
 
+// find is owner's row id from source, nil for none.
+func (m *menuRows) find(owner string, source rowSource, id string) *addedRow {
+	for _, r := range m.rows {
+		if r.owner == owner && r.source == source && r.id == id {
+			return r
+		}
+	}
+	return nil
+}
+
+// MenuRows is the menus' added rows, the scripts' and the plugins' (menurows.go).
+func (c core) MenuRows() *menuRows { return &c.h.luaFeature().rows }
+
 // bySerial is the row with serial n.
 func (m *menuRows) bySerial(n int) *addedRow {
 	for _, r := range m.rows {
