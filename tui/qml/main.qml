@@ -214,6 +214,11 @@ Window {
                 MenuItem { text: qsTrId("autodoc.main.renderer_auto");   group: "renderer"; checked: App.rendererAuto;   onTriggered: App.setRenderer("auto") }
                 MenuItem { text: qsTrId("autodoc.main.renderer_opengl"); group: "renderer"; checked: App.rendererOpenGL; onTriggered: App.setRenderer("opengl") }
             }
+            // the terminal and agent panels (terminal.go): Ctrl+h/j/k/l kept from their programs
+            Menu {
+                title: qsTrId("autodoc.main.terminal_options")
+                MenuItem { text: qsTrId("autodoc.main.terminal_panel_keys"); checkable: true; checked: App.terminalPanelKeys; onTriggered: App.toggleTerminalPanelKeys() }
+            }
             MenuSeparator {}
             MenuItem { text: qsTrId("autodoc.main.editor_preferences"); onTriggered: App.openPrefs() }
             // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these

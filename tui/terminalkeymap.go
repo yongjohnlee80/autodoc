@@ -12,8 +12,13 @@ import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 var terminalPanels = []string{"terminalView", "agentView"}
 
 // applyTerminalKeymap gives both panels' tabs p's keymap: modeless scroll and the normal-mode hint
-// under "text", neither under "vim". A rebuilt panel gets them again (reloaded).
+// under "text", neither under "vim". A rebuilt panel gets them again (reloaded). And the keys their
+// programs never see, the panel moves among them while p says so (tui.terminal.panel_keys).
 func (h *Host) applyTerminalKeymap(p prefs) {
+	h.keys.panelKeys = p.termPanelKeys
+	if h.p != nil {
+		h.keep(h.p.SetMany(h.keys.terminalKeys()))
+	}
 	text := p.keymap == "text"
 	hint := ""
 	if text {

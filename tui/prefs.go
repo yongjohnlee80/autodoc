@@ -112,6 +112,9 @@ type prefs struct {
 	// termTheme is the theme the terminals' area is drawn in: "page" (or "") the page's, else one
 	// golib ships (terminal.go)
 	termTheme string
+	// termPanelKeys: Ctrl+h/j/k/l move between panels from a terminal's or agent's input mode too,
+	// kept from their programs (terminal.go); on by default
+	termPanelKeys bool
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
@@ -496,6 +499,14 @@ func (h *Host) writePref() {
 }
 
 // The preference commands, as the menu, the leader and the Preferences dialog give them.
+
+// toggleTerminalPanelKeys is Options › Terminal's item: the other setting, applied at once, so the
+// terminals' host keys follow it (applyTerminalKeymap). Through the row alone (Core.SetPref) the
+// keys would keep the old setting until the next apply.
+func (h *Host) toggleTerminalPanelKeys() {
+	v := !h.prefs.termPanelKeys
+	h.setPref(prefTermPanelKeys, strconv.FormatBool(v), func(p *prefs) { p.termPanelKeys = v })
+}
 
 func (h *Host) toggleMenuBar() {
 	v := !h.prefs.menuHidden

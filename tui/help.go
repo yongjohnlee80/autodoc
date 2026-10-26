@@ -164,7 +164,9 @@ const helpKeys = `KEYS
               editor mode's Insert, Ctrl+W is Vim's: it deletes the word before the cursor (Esc
               first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
               Normal-mode command
-  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
+  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page; in the
+              terminal and agent panels too, while typing (Options › Terminal turns that off),
+              and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go <name>, goes to one by name (Go › Widget…)
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
@@ -256,7 +258,13 @@ THE PANELS
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  shell, Esc too, but Ctrl+Z (no program stops on it, and Resume wakes one a suspend stopped)
+  and Ctrl+h/j/k/l, which move between panels. Ctrl+\ then one of these sends it to the program
+  after all: Ctrl+\ Ctrl+j is an agent's newline, Ctrl+\ Ctrl+l clears the shell. In a terminal
+  whose Backspace sends ^H (stty erase ^H), Ctrl+H can't be told from Backspace without kitty's
+  keyboard protocol: there Ctrl+H is Backspace everywhere, the page's Normal mode included. In one
+  whose Backspace is DEL but whose Ctrl+Backspace sends ^H (GNOME Terminal, Windows Terminal),
+  that Ctrl+Backspace is Ctrl+H and moves a panel. kitty, Ghostty, WezTerm and foot tell them apart.
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.

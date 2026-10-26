@@ -771,6 +771,14 @@
         <source>search models</source>
         <translation>modelos de busca</translation>
     </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>Ctrl+h/j/k/l trocam de painel também ao digitar</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys.help">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>Ctrl+h/j/k/l trocam de painel também ao digitar</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>resultados: copiar seleção (as células selecionadas, ou a do cursor, como TSV)</translation>
@@ -2448,7 +2456,9 @@
               editor mode's Insert, Ctrl+W is Vim's: it deletes the word before the cursor (Esc
               first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
               Normal-mode command
-  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
+  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page; in the
+              terminal and agent panels too, while typing (Options › Terminal turns that off),
+              and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
@@ -2513,7 +2523,9 @@
               Insert do editor Vim, Ctrl+W é do Vim: apaga a palavra antes do cursor (Esc
               antes para trocar). Ctrl+U do Insert apaga até a indentação, e Ctrl+O executa um
               comando do modo Normal
-  Ctrl+h/j/k/l  no modo Normal, para o painel aberto daquele lado, e de volta à página
+  Ctrl+h/j/k/l  no modo Normal, para o painel aberto daquele lado, e de volta à página; nos painéis
+              de terminal e de agentes também ao digitar (Opções › Terminal desliga), e chegando por elas
+              já se digita
   F6 and Shift+F6  o widget aberto seguinte ou anterior: o editor e os painéis, nunca a
               barra de menus. SPC Tab, ou :go &lt;nome&gt;, vai a um pelo nome (Ir › Widget…)
   F10, Alt+letter  a barra de menus, oculta até então (Opções › Preferências do editor pode mantê-la).
@@ -2641,7 +2653,13 @@ THE PANELS
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  shell, Esc too, but Ctrl+Z (no program stops on it, and Resume wakes one a suspend stopped)
+  and Ctrl+h/j/k/l, which move between panels. Ctrl+\ then one of these sends it to the program
+  after all: Ctrl+\ Ctrl+j is an agent's newline, Ctrl+\ Ctrl+l clears the shell. In a terminal
+  whose Backspace sends ^H (stty erase ^H), Ctrl+H can't be told from Backspace without kitty's
+  keyboard protocol: there Ctrl+H is Backspace everywhere, the page's Normal mode included. In one
+  whose Backspace is DEL but whose Ctrl+Backspace sends ^H (GNOME Terminal, Windows Terminal),
+  that Ctrl+Backspace is Ctrl+H and moves a panel. kitty, Ghostty, WezTerm and foot tell them apart.
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
@@ -2762,7 +2780,7 @@ OS PAINÉIS
   todos os shells e fecha o painel, com uma só pergunta enquanto algum roda. Tema e fonte… (também a linha de terminal das Preferências e Opções › Fontes
   e zoom…) define o tema dos terminais, só o texto, o fundo e o cursor, as cores próprias de um programa
   continuando as dele, e numa janela a fonte; Esc nele devolve o que havia. Toda tecla vai para o
-  shell, Esc também, exceto Ctrl+Z: nenhum programa para com ela, e Continuar retoma um que uma suspensão parou; Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
+  shell, Esc também, exceto Ctrl+Z (nenhum programa para com ela, e Continuar retoma um que uma suspensão parou) e Ctrl+h/j/k/l, que trocam de painel. Ctrl+\ e depois uma delas a envia ao programa: Ctrl+\ Ctrl+j é a quebra de linha de um agente, Ctrl+\ Ctrl+l limpa o shell. Num terminal cujo Backspace envia ^H (stty erase ^H), sem o protocolo de teclado do kitty não dá para distinguir Ctrl+H de Backspace: ali Ctrl+H é Backspace em toda parte, inclusive no modo Normal da página. Num cujo Backspace é DEL mas cujo Ctrl+Backspace envia ^H (GNOME Terminal, Windows Terminal), esse Ctrl+Backspace é Ctrl+H e troca de painel. kitty, Ghostty, WezTerm e foot os distinguem. Ctrl+T (ou Ctrl+\ Ctrl+n) sai para o modo Normal, onde h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / e ? percorrem o histórico, v ou V seleciona e y copia, e Ctrl+T, i ou
   Enter volta. As teclas do painel de agentes são as mesmas.
   Escape no modo Normal, ou SPC ` de novo, o oculta; o teclado vai para a janela de cima ainda aberta. Quando
@@ -3428,6 +3446,14 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.main.terminal_2">
         <source>terminal</source>
         <translation>terminal</translation>
+    </message>
+    <message id="autodoc.main.terminal_options">
+        <source>Termi&amp;nal</source>
+        <translation>Termi&amp;nal</translation>
+    </message>
+    <message id="autodoc.main.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between &amp;panels while typing</source>
+        <translation>Ctrl+h/j/k/l trocam de &amp;painel também ao digitar</translation>
     </message>
     <message id="autodoc.main.theme">
         <source>&amp;Theme</source>

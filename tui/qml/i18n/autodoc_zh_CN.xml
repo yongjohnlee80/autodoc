@@ -771,6 +771,14 @@
         <source>search models</source>
         <translation>搜索模型</translation>
     </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>输入时也用 Ctrl+h/j/k/l 切换面板</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.terminal_panel_keys.help">
+        <source>Ctrl+h/j/k/l move between panels while typing</source>
+        <translation>输入时也用 Ctrl+h/j/k/l 切换面板</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>结果：复制所选内容(所选单元格或光标所在单元格，TSV 格式)</translation>
@@ -2448,7 +2456,9 @@
               editor mode's Insert, Ctrl+W is Vim's: it deletes the word before the cursor (Esc
               first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
               Normal-mode command
-  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
+  Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page; in the
+              terminal and agent panels too, while typing (Options › Terminal turns that off),
+              and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
@@ -2513,7 +2523,8 @@
               编辑器模式的 Insert 模式下，Ctrl+W 保持 Vim 原义：删除光标前的词(先按 Esc
               再切换)。Insert 模式下 Ctrl+U 删除到缩进处，Ctrl+O 运行一条
               Normal 模式命令
-  Ctrl+h/j/k/l  在 Normal 模式下，移到该方向上已打开的面板，再返回页面
+  Ctrl+h/j/k/l  在 Normal 模式下，移到该方向上已打开的面板，再返回页面；在终端和代理面板中输入时
+              也可用（在 选项 › 终端 中关闭），用它们到达后即可直接输入
   F6 and Shift+F6  下一个或上一个已打开的控件：编辑器和各面板，不含
               菜单栏。SPC Tab 或 :go &lt;name&gt; 按名称转到控件(转到 › 控件…)
   F10, Alt+letter  菜单栏，平时隐藏(“选项 › 编辑器首选项”可让它常驻)。
@@ -2636,7 +2647,13 @@ THE PANELS
   every shell and closes the panel, asked once while any runs. Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
-  shell, Esc too, but Ctrl+Z: no program stops on it, and Resume wakes one a suspend stopped;
+  shell, Esc too, but Ctrl+Z (no program stops on it, and Resume wakes one a suspend stopped)
+  and Ctrl+h/j/k/l, which move between panels. Ctrl+\ then one of these sends it to the program
+  after all: Ctrl+\ Ctrl+j is an agent's newline, Ctrl+\ Ctrl+l clears the shell. In a terminal
+  whose Backspace sends ^H (stty erase ^H), Ctrl+H can't be told from Backspace without kitty's
+  keyboard protocol: there Ctrl+H is Backspace everywhere, the page's Normal mode included. In one
+  whose Backspace is DEL but whose Ctrl+Backspace sends ^H (GNOME Terminal, Windows Terminal),
+  that Ctrl+Backspace is Ctrl+H and moves a panel. kitty, Ghostty, WezTerm and foot tell them apart.
   Ctrl+T (or Ctrl+\ Ctrl+n) leaves for Normal mode, where h j k l, w b e, gg G,
   Ctrl+u/d/b/f, / and ? move over its history, v or V selects and y copies, and Ctrl+T, i or
   Enter goes back. The agent panel's keys are the same.
@@ -2752,7 +2769,7 @@ WHAT A KEY NEEDS
   所有 shell 并关闭面板(有运行中的 shell 时只询问一次)。主题与字体…(也可通过首选项的终端一行及“选项 › 字体
   与缩放…”)设置终端的主题，仅限文字、背景和光标，程序自身的
   颜色保持不变，在窗口中还可设置字体；在其中按 Esc 恢复原样。所有按键都发送给
-  shell，包括 Esc，但 Ctrl+Z 除外：程序不会因它而停止，被挂起停止的程序可用“继续”恢复;Ctrl+T(或 Ctrl+\ Ctrl+n)进入 Normal 模式，在其中 h j k l、w b e、gg G、
+  shell，包括 Esc，但 Ctrl+Z（程序不会因它而停止，被挂起停止的程序可用“继续”恢复）和在面板间移动的 Ctrl+h/j/k/l 除外。先按 Ctrl+\ 再按其中之一，就会把它发给程序：Ctrl+\ Ctrl+j 是代理的换行，Ctrl+\ Ctrl+l 清空 shell。在 Backspace 发送 ^H 的终端（stty erase ^H）中，没有 kitty 键盘协议就无法区分 Ctrl+H 和 Backspace：那里的 Ctrl+H 处处都是 Backspace，包括页面的 Normal 模式。在 Backspace 为 DEL 而 Ctrl+Backspace 发送 ^H 的终端（GNOME Terminal、Windows Terminal）中，该 Ctrl+Backspace 即 Ctrl+H，会移动面板。kitty、Ghostty、WezTerm 和 foot 能区分两者。Ctrl+T(或 Ctrl+\ Ctrl+n)进入 Normal 模式，在其中 h j k l、w b e、gg G、
   Ctrl+u/d/b/f、/ 和 ? 在历史中移动，v 或 V 选择，y 复制，Ctrl+T、i 或
   Enter 返回。智能体面板的按键相同。
   在 Normal 模式下按 Escape，或再按 SPC `，即可隐藏它；键盘焦点移到仍打开的最上层窗口。
@@ -3418,6 +3435,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.terminal_2">
         <source>terminal</source>
         <translation>终端</translation>
+    </message>
+    <message id="autodoc.main.terminal_options">
+        <source>Termi&amp;nal</source>
+        <translation>终端(&amp;N)</translation>
+    </message>
+    <message id="autodoc.main.terminal_panel_keys">
+        <source>Ctrl+h/j/k/l move between &amp;panels while typing</source>
+        <translation>输入时也用 Ctrl+h/j/k/l 切换面板(&amp;P)</translation>
     </message>
     <message id="autodoc.main.theme">
         <source>&amp;Theme</source>
