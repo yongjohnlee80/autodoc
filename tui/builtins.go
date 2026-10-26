@@ -30,7 +30,7 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("buffer.close_left", "close the buffers to the left", "App.closeBuffersLeft()", func() { h.closeBeside(-1) }),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
 		{ID: "file.open_path", Title: "open a file by its path", Verb: "open", Aliases: []string{"e", "edit"}, Args: "<path>",
-			Help: "open a file by its path, absolute or relative to the workspace in use, as File › Open any file does once it is chosen: its workspace's when one indexes it",
+			Help: "open a file by its path, as File › Open any file does once it is chosen: on the command line absolute, ~/… or relative to the workspace in use; from Lua, a key or a plugin, absolute",
 			Run:  h.runOpenPath},
 		builtin("file.save", "save", "App.save()", h.save),
 		builtin("file.reload", "reload from disk", "App.reload()", h.reload),
