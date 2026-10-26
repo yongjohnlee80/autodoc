@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/paths"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
@@ -34,6 +35,9 @@ type TodoRegistry struct {
 	Stores []TodoStore
 	Vars   map[string]map[string]string
 	Files  []string
+	// Check is how the todo system judges a task file's frontmatter (ADR 1792015212 amendment 2):
+	// a store's documents are checked by it, never by their workspace's KB schema. nil for none.
+	Check func(src []byte) schema.Result
 }
 
 // varsPoll is how often the registry's variable files are checked for an edit.
@@ -50,10 +54,11 @@ type registry struct {
 	files  []string
 	roots  []string               // the workspace roots of vars, longest first
 	modes  map[string]*index.Vars // vars as a mode's, by root
+	check  func([]byte) schema.Result
 }
 
 func newRegistry(r TodoRegistry) *registry {
-	g := &registry{stores: r.Stores, vars: r.Vars, files: r.Files, modes: map[string]*index.Vars{}}
+	g := &registry{stores: r.Stores, vars: r.Vars, files: r.Files, check: r.Check, modes: map[string]*index.Vars{}}
 	sort.Slice(g.stores, func(i, j int) bool { return len(g.stores[i].Dir) > len(g.stores[j].Dir) })
 	for root, vs := range r.Vars {
 		g.modes[root] = index.NewVars(vs)
@@ -187,6 +192,14 @@ func (m *Workspaces) readTodoStores() bool {
 	return true
 }
 
+// taskCheck is the registry's check of a task file's frontmatter; nil before it is read.
+func (m *Workspaces) taskCheck() func([]byte) schema.Result {
+	if g := m.stores.Load(); g != nil {
+		return g.check
+	}
+	return nil
+}
+
 // storeAt is the todo store holding abs, the innermost one, and the variables abs resolves with;
 // nil for none.
 func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
@@ -250,7 +263,7 @@ func (h *modes) mode(p string) index.Mode {
 	var md index.Mode
 	st, vars := h.m.storeAt(filepath.Join(h.root, filepath.FromSlash(p)))
 	if st != nil {
-		md.Store = &index.TodoStore{ID: st.ID}
+		md.Store = &index.TodoStore{ID: st.ID, Check: h.m.taskCheck()}
 	}
 	md.Vars = vars
 	switch {

@@ -175,3 +175,68 @@ func TestAFreshWorkspacesStoreReadsEmpty(t *testing.T) {
 }
 
 func asSlice(v any) []any { s, _ := v.([]any); return s }
+
+// TestATaskIsCheckedByTheTodoFormatNotTheKBSchema (ADR 1792015212 amendment 2): with a KB schema
+// that requires a type, a task the daemon wrote has no diagnostic, from doc.validate or the index.
+// A file outside the store still has the KB schema's.
+func TestATaskIsCheckedByTheTodoFormatNotTheKBSchema(t *testing.T) {
+	dir := short(t)
+	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	kb := mustEval(t, t.TempDir())
+	schemaSrc := "version: 1\nfrontmatter:\n  type: {type: string, enum: [note], required: true}\n"
+	if err := os.WriteFile(filepath.Join(kb, "schema.yaml"), []byte(schemaSrc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := writeConfig(t, sock, state, "", "kb="+kb)
+	start(t, cfg, sock)
+	ctx := context.Background()
+	callJSON := func(method, params string) any {
+		t.Helper()
+		var out bytes.Buffer
+		if err := runCall(ctx, cfg, method, params, &out); err != nil {
+			t.Fatalf("%s %s: %v", method, params, err)
+		}
+		var v any
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+			t.Fatalf("%s: %v: %s", method, err, out.String())
+		}
+		return v
+	}
+	callJSON("workspace.configure", `["kb", {"schema": "`+filepath.Join(kb, "schema.yaml")+`"}]`)
+	task := callJSON("todos.add", `["kb", {"title": "The first task", "priority": "medium"}]`).(map[string]any)
+	path := ".todo-list/" + task["path"].(string)
+	src, err := os.ReadFile(filepath.Join(kb, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate := func(p, content string) []any {
+		t.Helper()
+		b, _ := json.Marshal([]any{"kb", p, content})
+		r := callJSON("doc.validate", string(b)).(map[string]any)
+		return asSlice(r["diagnostics"])
+	}
+	if d := validate(path, string(src)); len(d) != 0 {
+		t.Errorf("doc.validate of the task: %v, want none (the todo format's judgement)", d)
+	}
+	if d := validate("note.md", "---\ntitle: x\n---\n"); len(d) != 1 {
+		t.Errorf("doc.validate of a file outside the store: %v, want the KB schema's one (type required)", d)
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		docs := callJSON("index.documents", `["kb", {"diagnosed": true, "limit": 50}]`).(map[string]any)
+		listed := false
+		for _, d := range asSlice(docs["docs"]) {
+			listed = listed || d.(map[string]any)["path"] == path
+		}
+		indexed := callJSON("index.documents", `["kb", {"limit": 50}]`).(map[string]any)
+		seen := false
+		for _, d := range asSlice(indexed["docs"]) {
+			seen = seen || d.(map[string]any)["path"] == path
+		}
+		if seen && !listed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the task indexed %v, diagnosed %v: want indexed and not diagnosed", seen, listed)
+		}
+	}
+}

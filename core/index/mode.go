@@ -12,6 +12,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/search/chunk"
+
+	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
 // Mode is how one workspace path is indexed beyond include and exclude (ADR 1792015212).
@@ -32,6 +34,10 @@ type TodoStore struct {
 	// ID is the store's stable id in the todo registry: a task answers to "#todo:<ID>/<task id>",
 	// so two stores' identical ids never meet.
 	ID string
+	// Check is how the todo format judges a task file's frontmatter (core/todo's CheckFile, the
+	// daemon's): a task is never checked against the workspace's KB schema (ADR 1792015212
+	// amendment 2). nil checks it against the KB schema, as a build without the todo system does.
+	Check func(src []byte) schema.Result
 }
 
 // Vars are a workspace's variables' values, by name; a name with no value is left out. Make them
@@ -66,6 +72,9 @@ func (m Mode) version() string {
 	}
 	if m.Store != nil {
 		b.WriteString(";todo=" + m.Store.ID)
+		if m.Store.Check != nil {
+			b.WriteString(";fm=todo") // checked by the todo format: a task the KB schema checked is indexed again
+		}
 	}
 	return b.String()
 }

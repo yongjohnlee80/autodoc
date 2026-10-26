@@ -394,7 +394,7 @@ func todoStores(m *todo.Manager) serving.TodoStores {
 		if err != nil {
 			return serving.TodoRegistry{}, err
 		}
-		reg := serving.TodoRegistry{Stores: make([]serving.TodoStore, 0, len(list))}
+		reg := serving.TodoRegistry{Stores: make([]serving.TodoStore, 0, len(list)), Check: todo.CheckFile}
 		for _, s := range list {
 			reg.Stores = append(reg.Stores, serving.TodoStore{ID: s.ID, Dir: s.Path, KB: s.KB})
 		}

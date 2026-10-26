@@ -117,6 +117,8 @@ AutoDoc resolves frontmatter using the YAML 1.2 Core schema (`golib/yaml`) and c
 
 ### Non-Blocking Live Editor Banner
 
+A task in a todo store is not a document type, so the workspace's schema never checks it: the todo format does, the way `todos.list` reads it. A task the format can't read has the diagnostic `todo-malformed`, and each entry of its `errors[]` (an `adr` that names no file, say) has `todo-<code>` on the field it names. Its facets are the format's own fields, so `status:open` and `priority:high` filter tasks.
+
 When you open or edit a Markdown file in the TUI or GUI (`autodoc --ui` / `--gui`), AutoDoc validates the buffer's YAML frontmatter on every keystroke against the workspace's active schema. If a required field is missing or an enum value is misspelled (`status: aproved`), a diagnostic banner appears directly above the top ruler showing the line number, field name, and rule violation—while allowing `Ctrl+S` saves at any time.
 
 ### Pre-Flight Validation via `doc.validate`
