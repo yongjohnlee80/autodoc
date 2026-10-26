@@ -60,8 +60,12 @@ Search › Find in page finds in the page.
 Every file opened is a buffer, and the GUI shows them as tabs. The status line (`SPC t`) shows `[+]` while the shown one has unsaved changes.
 
 - `H` and `L` in Normal mode show the buffer before or after the shown one, in the order of the GUI's tabs, wrapping around.
-- `SPC B` or `:b` switches buffer from a picker, each buffer previewed with its unsaved text. `:b <number>` or `:b <name>` goes straight to one.
-- `SPC C` or `:bd` closes the shown buffer, asking first over unsaved changes.
+- `SPC b` opens the buffer card, whose keys act on the buffers:
+  - `1` to `9` show the 1st to the 9th buffer in the tabs' order (`H` and `L`'s), and `0` the 10th. A place past the last buffer does nothing.
+  - `d` (or `:bd`) closes the shown buffer, asking first over unsaved changes.
+  - `r` and `l` close the buffers to the right and to the left of the shown one, nearest first, each as `d` closes it. A Stay on an unsaved one stops the rest, and leaves that buffer shown, as Close others' Stay does; otherwise the shown buffer is shown again.
+  - `s` (or `:b`) switches buffer from a picker, each buffer previewed with its unsaved text. `:b <number>` or `:b <name>` goes straight to one.
+  - `b` goes back to the previous document.
 
 AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the GUI's HTML preview pane (`SPC H`) sit beside or over it.
 
@@ -71,8 +75,8 @@ AutoDoc shows one page at a time: there are no window splits, and no folding. Th
 
 In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/keys.go` and AutoDoc's features bind them:
 
-- **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` goes back; `SPC B` switches buffer.
-- **File:** `SPC n` a new file; `SPC C` closes the buffer; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
+- **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` the buffer card (§3.3), where `SPC b b` goes back.
+- **File:** `SPC n` a new file; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
 - **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC M` maximizes a panel; `SPC h` the notifications.
 - **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles; `SPC a` the agents' card, where `SPC a b` sends the page to an agent and `SPC a f` the selection or the clipboard.
 - **Manage:** `SPC w` switches workspace; `SPC W` manages workspaces; `SPC s` the search models; `SPC ,` the editor preferences; `SPC k` the editor mode (Vim, Text).
@@ -173,7 +177,7 @@ To see how the editor and the panels work together in practice, consider reviewi
 1. **Open the Document (`SPC o`)**: Press `SPC o`, type `0048 rrf`, and press `Enter` to open `adrs/0048-hybrid-rrf-fusion.md` in the center page.
 2. **Survey Its Structure (`SPC O`)**: Press `SPC O` (Go › Outline…) to list the file's headings, choose `## 3. Reciprocal Rank Fusion Formula`, and press `Enter` to jump there.
 3. **Inspect What Links Here (`SPC l`)**: Press `SPC l` to open the **Relations** panel: the ADR's links and its backlinks, such as the synthesis notes and reviews that link to `[[0048-hybrid-rrf-fusion]]`, and a task whose `adr:` names it.
-4. **Follow a Link (`SPC j`)**: Move the cursor onto the `[[wikilink]]` naming the benchmark report and press `SPC j` to open it. `SPC b` goes back to the ADR, where you left it.
+4. **Follow a Link (`SPC j`)**: Move the cursor onto the `[[wikilink]]` naming the benchmark report and press `SPC j` to open it. `SPC b b` goes back to the ADR, where you left it.
 5. **Check the Diagrams (`Ctrl+T`)**: In `autodoc --gui`, press `Ctrl+T` to switch the page into **Rendered View**, its diagrams, Vega-Lite charts, and CSV tables drawn in place. `Ctrl+T` again shows the source.
 6. **Update the Linked Task (`SPC x`)**: Press `SPC x` to open the **Todos** panel, select the review task, and press `s` to choose its new status (the daemon's `todos.status` verb).
 

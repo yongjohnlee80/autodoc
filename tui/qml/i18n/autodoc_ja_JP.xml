@@ -15,6 +15,18 @@
         <source>SPC a — agents</source>
         <translation>SPC a — エージェント</translation>
     </message>
+    <message id="autodoc.card.buffer.help">
+        <source>THE BUFFER CARD (SPC b)</source>
+        <translation>バッファカード (SPC b)</translation>
+    </message>
+    <message id="autodoc.card.buffer.keyhelp">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>キーでコマンドを実行 · Backspace で戻る · q または Esc で閉じる</translation>
+    </message>
+    <message id="autodoc.card.buffer.title">
+        <source>SPC b — buffers</source>
+        <translation>SPC b — バッファ</translation>
+    </message>
     <message id="autodoc.card.group.agents">
         <source>AGENTS</source>
         <translation>エージェント</translation>
@@ -379,6 +391,22 @@
         <source>close the buffer</source>
         <translation>バッファを閉じる</translation>
     </message>
+    <message id="autodoc.cmd.buffer.close_left">
+        <source>close the buffers to the left</source>
+        <translation>左側のバッファを閉じる</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_left.help">
+        <source>close the buffers to the left</source>
+        <translation>左側のバッファを閉じる</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right">
+        <source>close the buffers to the right</source>
+        <translation>右側のバッファを閉じる</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right.help">
+        <source>close the buffers to the right</source>
+        <translation>右側のバッファを閉じる</translation>
+    </message>
     <message id="autodoc.cmd.buffer.delete">
         <source>close the buffer</source>
         <translation>バッファを閉じる</translation>
@@ -410,6 +438,86 @@
     <message id="autodoc.cmd.buffer.pick.help">
         <source>switch buffer</source>
         <translation>バッファを切り替え</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1">
+        <source>show the 1st buffer</source>
+        <translation>1 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1.help">
+        <source>show the 1st buffer</source>
+        <translation>1 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10">
+        <source>show the 10th buffer</source>
+        <translation>10 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10.help">
+        <source>show the 10th buffer</source>
+        <translation>10 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2">
+        <source>show the 2nd buffer</source>
+        <translation>2 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2.help">
+        <source>show the 2nd buffer</source>
+        <translation>2 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3">
+        <source>show the 3rd buffer</source>
+        <translation>3 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3.help">
+        <source>show the 3rd buffer</source>
+        <translation>3 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4">
+        <source>show the 4th buffer</source>
+        <translation>4 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4.help">
+        <source>show the 4th buffer</source>
+        <translation>4 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5">
+        <source>show the 5th buffer</source>
+        <translation>5 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5.help">
+        <source>show the 5th buffer</source>
+        <translation>5 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6">
+        <source>show the 6th buffer</source>
+        <translation>6 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6.help">
+        <source>show the 6th buffer</source>
+        <translation>6 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7">
+        <source>show the 7th buffer</source>
+        <translation>7 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7.help">
+        <source>show the 7th buffer</source>
+        <translation>7 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8">
+        <source>show the 8th buffer</source>
+        <translation>8 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8.help">
+        <source>show the 8th buffer</source>
+        <translation>8 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9">
+        <source>show the 9th buffer</source>
+        <translation>9 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9.help">
+        <source>show the 9th buffer</source>
+        <translation>9 番目のバッファを表示</translation>
     </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
@@ -2442,9 +2550,12 @@
   * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
               back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
-  SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
-              its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
-              first over unsaved changes
+  SPC b       the buffer card: 1 to 9 show the 1st to the 9th buffer in the tabs' order (H and
+              L's), 0 the 10th; d closes the one shown (File › Close buffer, :bd), asking first
+              over unsaved changes; r and l close the buffers to its right and left, nearest
+              first, each asked about as d asks: a Stay stops there, that buffer shown; s
+              switches buffer (Go › Buffers…, :b), the open files and drafts each previewed with
+              its unsaved text; b goes back
   H L         in the page, in Vim's Normal mode, the buffer before or after the shown one, in the
               order of the GUI's tabs, wrapping (bufferline's Shift+h / Shift+l): this replaces
               Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
@@ -2512,9 +2623,12 @@
   * #         ページ内、Vim のノーマルモードで、カーソル下の語を単語単位で前方または後方に
               検索 (g* g# は語の一部としても): これがページの検索になり、n と N で続行
   SPC o       ドキュメントを開く: ワークスペースのファイルを絞り込み、プレビュー付き
-  SPC B       バッファを切り替え (移動 › バッファ…、:b): 開いているファイルと下書き。それぞれ
-              未保存のテキストでプレビュー。SPC C で表示中のものを閉じ (ファイル › バッファを
-              閉じる、:bd)、未保存の変更があれば先に確認
+  SPC b       バッファカード: 1〜9 でタブ順 (H と L の順) の 1〜9 番目のバッファ、0 で 10 番目を
+              表示。d で表示中のものを閉じ (ファイル › バッファを閉じる、:bd)、未保存の変更が
+              あれば先に確認。r と l でその右側と左側のバッファを近い順に閉じ、それぞれ d と同じく
+              確認: とどまるでそこで止まり、そのバッファを表示。s でバッファを切り替え (移動 ›
+              バッファ…、:b): 開いているファイルと下書き。それぞれ未保存のテキストでプレビュー。
+              b で戻る
   H L         ページ内、Vim のノーマルモードで、表示中のバッファの前/後のバッファへ。GUI の
               タブ順で循環 (bufferline の Shift+h / Shift+l): ノーマルモードでのみ Vim の H と L
               (画面の最上行と最下行) を置き換えます。ビジュアルモードでは元のまま、挿入モード
@@ -2643,8 +2757,8 @@ THE PANELS
   dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it.
   Enter on a file opens it, closing the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
-  SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
-  time, within a document too). The page's right-click menu has both, Go to link (on a link)
+  SPC b b goes back to the previous document, where you left it (Ctrl+O steps back one jump at
+  a time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
   In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
   follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
@@ -2769,7 +2883,7 @@ WHAT A KEY NEEDS
   元のまま再表示)、+ は最大化し (もう一度で元に戻す)、x は閉じます。ファイル上で Enter
   を押すと開き、エクスプローラーからはパネルを閉じ、リンクからは隠します。
   SPC j はカーソル下のリンク先へ移動: リンクが指すドキュメント、なければ Web アドレスやファイル。
-  SPC b は前のドキュメントの離れた位置へ戻ります (Ctrl+O はジャンプを 1 つずつ
+  SPC b b は前のドキュメントの離れた位置へ戻ります (Ctrl+O はジャンプを 1 つずつ
   戻り、ドキュメント内でも有効)。ページの右クリックメニューに両方あります: リンクへ移動 (リンク上) と
   戻る。
   GUI ではポインターがクリックの動作を示します: テキストの上では I ビーム、クリックでリンク先へ
@@ -2893,6 +3007,10 @@ WHAT A KEY NEEDS
         <source>back</source>
         <translation>戻る</translation>
     </message>
+    <message id="autodoc.key.buffers">
+        <source>buffers…</source>
+        <translation>バッファ…</translation>
+    </message>
     <message id="autodoc.key.choose_the_store">
         <source>choose the store</source>
         <translation>ストアを選択</translation>
@@ -2900,6 +3018,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.close_the_buffer">
         <source>close the buffer</source>
         <translation>バッファを閉じる</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_left">
+        <source>close the buffers to the left</source>
+        <translation>左側のバッファを閉じる</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_right">
+        <source>close the buffers to the right</source>
+        <translation>右側のバッファを閉じる</translation>
     </message>
     <message id="autodoc.key.editor_preferences">
         <source>editor preferences</source>
@@ -3032,6 +3158,46 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
         <translation>メニュー表示/フォーカス/隠す</translation>
+    </message>
+    <message id="autodoc.key.show_the_10th_buffer">
+        <source>show the 10th buffer</source>
+        <translation>10 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_1st_buffer">
+        <source>show the 1st buffer</source>
+        <translation>1 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_2nd_buffer">
+        <source>show the 2nd buffer</source>
+        <translation>2 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_3rd_buffer">
+        <source>show the 3rd buffer</source>
+        <translation>3 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_4th_buffer">
+        <source>show the 4th buffer</source>
+        <translation>4 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_5th_buffer">
+        <source>show the 5th buffer</source>
+        <translation>5 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_6th_buffer">
+        <source>show the 6th buffer</source>
+        <translation>6 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_7th_buffer">
+        <source>show the 7th buffer</source>
+        <translation>7 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_8th_buffer">
+        <source>show the 8th buffer</source>
+        <translation>8 番目のバッファを表示</translation>
+    </message>
+    <message id="autodoc.key.show_the_9th_buffer">
+        <source>show the 9th buffer</source>
+        <translation>9 番目のバッファを表示</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -4078,8 +4244,8 @@ WHAT A KEY NEEDS
         <translation>%1 はなくなりました: ジャンプリストから外しました (Ctrl+O でさらに戻ります)</translation>
     </message>
     <message id="autodoc.notice.navigation.nothing_to_go_back_to_spc_b_returns_to_the_docum">
-        <source>nothing to go back to: SPC b returns to the documents opened before this one</source>
-        <translation>戻る先がありません: SPC b はこのドキュメントの前に開いたドキュメントに戻ります</translation>
+        <source>nothing to go back to: SPC b b returns to the documents opened before this one</source>
+        <translation>戻る先がありません: SPC b b はこのドキュメントの前に開いたドキュメントに戻ります</translation>
     </message>
     <message id="autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows">
         <source>%1 has no headings to navigate: the breadcrumb shows %2</source>

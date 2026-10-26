@@ -209,7 +209,7 @@ func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true, nil) }
 
 // openRef opens ref, asking first over unsaved changes: in the workspace in use, outside every
 // workspace (ws ""), or in another workspace, entering it. The document left behind goes on the
-// history (SPC b) when remember is set; going back does not set it. proceed, when not nil, runs
+// history (SPC b b) when remember is set; going back does not set it. proceed, when not nil, runs
 // once the open goes ahead — after the unsaved question's Save or Discard, never after its Stay.
 func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 	h.openRefTo(ref, remember, proceed, nil)

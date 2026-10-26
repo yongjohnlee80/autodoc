@@ -182,6 +182,48 @@ func (h *Host) bufferChord(kc widget.KeyChord) bool {
 	return true
 }
 
+// showBufferAt is SPC b 1 to 9, and 0 for the 10th: the nth buffer in the order the tabs show
+// them, H and L's. A place past the last buffer shows none.
+func (h *Host) showBufferAt(n int) {
+	if n >= 1 && n <= len(h.buffers) {
+		h.showBuffer(h.buffers[n-1])
+	}
+}
+
+// closeBeside is SPC b r (step 1) and SPC b l (step -1): the buffers to the right or the left of
+// the shown one, in the tabs' order, closed nearest first, each as SPC b d closes it: a modified
+// one is shown and asked about. A Stay stops the rest, the buffer asked about shown, as a Stay
+// leaves it after Close others; else the shown one is shown again: a buffer asked about is shown
+// from it, and closing that buffer shows the most recent other (dropBuffer), the shown one.
+func (h *Host) closeBeside(step int) {
+	i := slices.Index(h.buffers, h.active)
+	if i < 0 {
+		return
+	}
+	var side []*openBuffer
+	for j := i + step; j >= 0 && j < len(h.buffers); j += step {
+		side = append(side, h.buffers[j])
+	}
+	var next func(left []*openBuffer)
+	next = func(left []*openBuffer) {
+		for len(left) > 0 && !slices.Contains(h.buffers, left[0]) {
+			left = left[1:] // closed meanwhile
+		}
+		if len(left) == 0 {
+			return
+		}
+		b := left[0]
+		h.guard(b, h.askBefore("close"), func() {
+			h.dropBuffer(b)
+			// the next question waits for the next turn of the loop, as guardEach's: the answer
+			// that runs this closes the dialog, and the same dialog opened again in this turn does
+			// not show
+			h.p.Post(func() { next(left[1:]) })
+		})
+	}
+	next(side)
+}
+
 // closeBufferTab is a press on a tab's ×: its buffer closed, asked about first when it is modified.
 func (h *Host) closeBufferTab(id string) {
 	if b := h.bufferOfTab(id); b != nil {

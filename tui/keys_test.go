@@ -149,7 +149,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 	}
 	lq, _ := k.card(leader)
 	if q := cardQML(lq, k.on(leader)); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.leader.open.agentsCard"); onActivated: { leader.close(); agentsCard.open() } }`) || !binds(t, k, q, "Shift+Y") {
-		t.Error("SPC B does not close SPC's card and open the agents'")
+		t.Error("SPC Y does not close SPC's card and open the agents'")
 	}
 	if !binds(t, k, qml, "b") || !binds(t, k, qml, "f") {
 		t.Error("the agents' card's commands do not hold b and f")

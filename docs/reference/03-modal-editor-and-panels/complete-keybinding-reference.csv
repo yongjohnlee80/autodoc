@@ -7,14 +7,16 @@ Vim Modes,: / Ctrl+;,Normal / any,Command Line,Open the command line (:w :q :fin
 Navigation,gg / G,Normal,Buffer Extremes,Jump to the first or the last line
 Navigation,{ / },Normal,Paragraph,Move by paragraph ([ and ] too)
 Navigation,Ctrl+O / Ctrl+I,Normal,Jump List,Back and forward along the jumps; across documents too
-Navigation,SPC j / SPC b,Normal,Follow Link / Back,Go to the link under the cursor; go back to where you left
+Navigation,SPC j / SPC b b,Normal,Follow Link / Back,Go to the link under the cursor; go back to where you left
 Navigation,Ctrl+h/j/k/l,Normal,Move Between Panes,To the open panel on that side and back to the page
 Find,/ / n / N,Normal,Find in Page,Find in the page; the next or the previous match
 Help,?,Normal,Vim Keys Card,Show or hide the Vim keys' card
 Find,* / #,Normal,Find the Word,Find the word under the cursor forward or back
 Buffers,H / L,Normal,Previous / Next Buffer,The buffer before or after the shown one in tab order
-Buffers,SPC B / :b,Normal,Switch Buffer,Pick one of the open buffers
-Buffers,SPC C / :bd,Normal,Close Buffer,Close the shown buffer (asks about unsaved changes)
+Buffers,SPC b 1-9 / SPC b 0,Normal,Show the Nth Buffer,The 1st to the 9th buffer in tab order; 0 the 10th
+Buffers,SPC b s / :b,Normal,Switch Buffer,Pick one of the open buffers
+Buffers,SPC b d / :bd,Normal,Close Buffer,Close the shown buffer (asks about unsaved changes)
+Buffers,SPC b r / SPC b l,Normal,Close to the Right / Left,Close the buffers to the right or the left of the shown one (each asked about; Stay stops)
 Leader Chords,SPC / or SPC SPC / Ctrl+G,Normal,Search,Search the workspace (full text / links / backlinks / frontmatter / embeddings)
 Leader Chords,SPC o,Normal,Open a Document,A filter over the workspace's files with a preview
 Leader Chords,SPC f,Normal,Open a File Anywhere,The file dialog: any file on the machine

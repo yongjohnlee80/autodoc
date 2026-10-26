@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 )
 
 // THE BUILT-IN COMMANDS — AutoDoc's own entries in the command catalog (catalog.go): what a menu
@@ -19,7 +20,7 @@ func builtin(id, title, twin string, fn func()) Entry {
 func (l legacy) Catalog() []Entry { return l.h.builtinEntries() }
 
 func (h *Host) builtinEntries() []Entry {
-	return append([]Entry{
+	return slices.Concat([]Entry{
 		// File
 		builtin("file.new", "new file", "App.newFile()", h.newFile),
 		builtin("panel.maximize", "maximize or restore the terminal or agents", "App.maximizePanel()", h.maximizePanel),
@@ -27,6 +28,8 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("file.open", "open a document", "App.openPicker()", h.openPicker),
 		builtin("buffer.pick", "switch buffer", "App.openBuffers()", h.openBuffers),
 		builtin("buffer.close", "close the buffer", "App.closeBuffer()", h.closeShownBuffer),
+		builtin("buffer.close_right", "close the buffers to the right", "App.closeBuffersRight()", func() { h.closeBeside(1) }),
+		builtin("buffer.close_left", "close the buffers to the left", "App.closeBuffersLeft()", func() { h.closeBeside(-1) }),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
 		{ID: "file.open_path", Title: "open a file by its path", Args: "<absolute path>",
 			Help: "open a file by its absolute path, as File › Open any file does once it is chosen: its workspace's when one indexes it",
@@ -79,7 +82,7 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("help.keys", "help", "help.open()", func() { h.open("help") }),
 		builtin("help.tutorial", "the tutorial", "App.openTutorial()", h.openTutorial),
 		builtin("help.about", "about", "about.open()", func() { h.open("about") }),
-	}, append(append(append(h.editorEntries(), h.bufferEntries()...), h.widgetEntries()...), h.layoutEntries()...)...)
+	}, h.editorEntries(), h.bufferEntries(), h.bufferSlotEntries(), h.widgetEntries(), h.layoutEntries())
 }
 
 // runEntry is App.run(id): a key running a catalog entry. What it cannot run is said, as a key's

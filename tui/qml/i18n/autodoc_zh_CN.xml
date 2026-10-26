@@ -15,6 +15,18 @@
         <source>SPC a — agents</source>
         <translation>SPC a — 智能体</translation>
     </message>
+    <message id="autodoc.card.buffer.help">
+        <source>THE BUFFER CARD (SPC b)</source>
+        <translation>缓冲区卡片(SPC b)</translation>
+    </message>
+    <message id="autodoc.card.buffer.keyhelp">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>按键运行对应命令 · Backspace 返回 · q 或 Esc 关闭</translation>
+    </message>
+    <message id="autodoc.card.buffer.title">
+        <source>SPC b — buffers</source>
+        <translation>SPC b — 缓冲区</translation>
+    </message>
     <message id="autodoc.card.group.agents">
         <source>AGENTS</source>
         <translation>智能体</translation>
@@ -379,6 +391,22 @@
         <source>close the buffer</source>
         <translation>关闭缓冲区</translation>
     </message>
+    <message id="autodoc.cmd.buffer.close_left">
+        <source>close the buffers to the left</source>
+        <translation>关闭左侧的缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_left.help">
+        <source>close the buffers to the left</source>
+        <translation>关闭左侧的缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right">
+        <source>close the buffers to the right</source>
+        <translation>关闭右侧的缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.close_right.help">
+        <source>close the buffers to the right</source>
+        <translation>关闭右侧的缓冲区</translation>
+    </message>
     <message id="autodoc.cmd.buffer.delete">
         <source>close the buffer</source>
         <translation>关闭缓冲区</translation>
@@ -410,6 +438,86 @@
     <message id="autodoc.cmd.buffer.pick.help">
         <source>switch buffer</source>
         <translation>切换缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1">
+        <source>show the 1st buffer</source>
+        <translation>显示第 1 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_1.help">
+        <source>show the 1st buffer</source>
+        <translation>显示第 1 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10">
+        <source>show the 10th buffer</source>
+        <translation>显示第 10 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_10.help">
+        <source>show the 10th buffer</source>
+        <translation>显示第 10 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2">
+        <source>show the 2nd buffer</source>
+        <translation>显示第 2 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_2.help">
+        <source>show the 2nd buffer</source>
+        <translation>显示第 2 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3">
+        <source>show the 3rd buffer</source>
+        <translation>显示第 3 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_3.help">
+        <source>show the 3rd buffer</source>
+        <translation>显示第 3 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4">
+        <source>show the 4th buffer</source>
+        <translation>显示第 4 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_4.help">
+        <source>show the 4th buffer</source>
+        <translation>显示第 4 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5">
+        <source>show the 5th buffer</source>
+        <translation>显示第 5 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_5.help">
+        <source>show the 5th buffer</source>
+        <translation>显示第 5 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6">
+        <source>show the 6th buffer</source>
+        <translation>显示第 6 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_6.help">
+        <source>show the 6th buffer</source>
+        <translation>显示第 6 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7">
+        <source>show the 7th buffer</source>
+        <translation>显示第 7 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_7.help">
+        <source>show the 7th buffer</source>
+        <translation>显示第 7 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8">
+        <source>show the 8th buffer</source>
+        <translation>显示第 8 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_8.help">
+        <source>show the 8th buffer</source>
+        <translation>显示第 8 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9">
+        <source>show the 9th buffer</source>
+        <translation>显示第 9 个缓冲区</translation>
+    </message>
+    <message id="autodoc.cmd.buffer.show_9.help">
+        <source>show the 9th buffer</source>
+        <translation>显示第 9 个缓冲区</translation>
     </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
@@ -2442,9 +2550,12 @@
   * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
               back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
-  SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
-              its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
-              first over unsaved changes
+  SPC b       the buffer card: 1 to 9 show the 1st to the 9th buffer in the tabs' order (H and
+              L's), 0 the 10th; d closes the one shown (File › Close buffer, :bd), asking first
+              over unsaved changes; r and l close the buffers to its right and left, nearest
+              first, each asked about as d asks: a Stay stops there, that buffer shown; s
+              switches buffer (Go › Buffers…, :b), the open files and drafts each previewed with
+              its unsaved text; b goes back
   H L         in the page, in Vim's Normal mode, the buffer before or after the shown one, in the
               order of the GUI's tabs, wrapping (bufferline's Shift+h / Shift+l): this replaces
               Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
@@ -2512,9 +2623,11 @@
   * #         在页面中、Vim 的 Normal 模式下，向后或向前查找光标下的整个词
               (g* g# 也匹配词的一部分)：它成为页面的查找词，n 和 N 可继续
   SPC o       打开文档：对工作区文件进行筛选，并带预览
-  SPC B       切换缓冲区(转到 › 缓冲区…,:b)：已打开的文件和草稿，预览中包含
-              其未保存的文本；SPC C 关闭当前显示的缓冲区(文件 › 关闭缓冲区，:bd)，
-              有未保存的更改时会先询问
+  SPC b       缓冲区卡片：1 到 9 按标签顺序(H 和 L 的顺序)显示第 1 到第 9 个缓冲区，0 显示第 10 个；
+              d 关闭当前显示的缓冲区(文件 › 关闭缓冲区，:bd)，有未保存的更改时会先询问；r 和 l
+              由近及远关闭其右侧和左侧的缓冲区，每个都像 d 一样询问：选择留下即在此停止，并显示
+              该缓冲区；s 切换缓冲区(转到 › 缓冲区…,:b)：已打开的文件和草稿，预览中包含其未保存
+              的文本；b 后退
   H L         在页面中、Vim 的 Normal 模式下，切换到当前缓冲区的前一个或后一个，
               按 GUI 标签页的顺序循环(如 bufferline 的 Shift+h / Shift+l)：这仅在 Normal 模式下
               替代 Vim 的 H 和 L(屏幕顶行和底行)；Visual 模式
@@ -2638,8 +2751,8 @@ THE PANELS
   dock, whose icon shows it again as it was, + maximizes it (again to restore), and x closes it.
   Enter on a file opens it, closing the panel from the Explorer and hiding it from the Links.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
-  SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
-  time, within a document too). The page's right-click menu has both, Go to link (on a link)
+  SPC b b goes back to the previous document, where you left it (Ctrl+O steps back one jump at
+  a time, within a document too). The page's right-click menu has both, Go to link (on a link)
   and Back.
   In the GUI the pointer tells what a click does: an I-beam over text, a hand where a click
   follows a link (the HTML pane's links and the links' rows), arrows on an edge or divider to
@@ -2762,7 +2875,7 @@ WHAT A KEY NEEDS
   切换标签页。标签栏右端的 _ 将其隐藏到停靠栏，图标可按原样再显示它，+ 将其最大化(再按一次还原)，x
   则关闭它。在文件上按 Enter 打开它：从资源管理器会关闭面板，从链接则隐藏面板。
   SPC j 转到光标下的链接：其指向的文档，否则为其网址或文件。
-  SPC b 返回上一个文档，回到你离开时的位置(Ctrl+O 每次后退一次
+  SPC b b 返回上一个文档，回到你离开时的位置(Ctrl+O 每次后退一次
   跳转，文档内也适用)。页面的右键菜单两者都有：转到链接(在链接上)
   和后退。
   在 GUI 中，指针表示点击会做什么：在文本上是 I 形光标，在点击会跟随链接的地方(HTML 窗格的
@@ -2884,6 +2997,10 @@ WHAT A KEY NEEDS
         <source>back</source>
         <translation>后退</translation>
     </message>
+    <message id="autodoc.key.buffers">
+        <source>buffers…</source>
+        <translation>缓冲区…</translation>
+    </message>
     <message id="autodoc.key.choose_the_store">
         <source>choose the store</source>
         <translation>选择待办库</translation>
@@ -2891,6 +3008,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.close_the_buffer">
         <source>close the buffer</source>
         <translation>关闭缓冲区</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_left">
+        <source>close the buffers to the left</source>
+        <translation>关闭左侧的缓冲区</translation>
+    </message>
+    <message id="autodoc.key.close_the_buffers_to_the_right">
+        <source>close the buffers to the right</source>
+        <translation>关闭右侧的缓冲区</translation>
     </message>
     <message id="autodoc.key.editor_preferences">
         <source>editor preferences</source>
@@ -3023,6 +3148,46 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
         <translation>显示/聚焦或隐藏菜单</translation>
+    </message>
+    <message id="autodoc.key.show_the_10th_buffer">
+        <source>show the 10th buffer</source>
+        <translation>显示第 10 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_1st_buffer">
+        <source>show the 1st buffer</source>
+        <translation>显示第 1 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_2nd_buffer">
+        <source>show the 2nd buffer</source>
+        <translation>显示第 2 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_3rd_buffer">
+        <source>show the 3rd buffer</source>
+        <translation>显示第 3 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_4th_buffer">
+        <source>show the 4th buffer</source>
+        <translation>显示第 4 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_5th_buffer">
+        <source>show the 5th buffer</source>
+        <translation>显示第 5 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_6th_buffer">
+        <source>show the 6th buffer</source>
+        <translation>显示第 6 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_7th_buffer">
+        <source>show the 7th buffer</source>
+        <translation>显示第 7 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_8th_buffer">
+        <source>show the 8th buffer</source>
+        <translation>显示第 8 个缓冲区</translation>
+    </message>
+    <message id="autodoc.key.show_the_9th_buffer">
+        <source>show the 9th buffer</source>
+        <translation>显示第 9 个缓冲区</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
@@ -4069,8 +4234,8 @@ WHAT A KEY NEEDS
         <translation>%1 已不存在：已从跳转列表中移除(再按 Ctrl+O 可继续后退)</translation>
     </message>
     <message id="autodoc.notice.navigation.nothing_to_go_back_to_spc_b_returns_to_the_docum">
-        <source>nothing to go back to: SPC b returns to the documents opened before this one</source>
-        <translation>没有可后退的位置：按 SPC b 可返回此前打开的文档</translation>
+        <source>nothing to go back to: SPC b b returns to the documents opened before this one</source>
+        <translation>没有可后退的位置：按 SPC b b 可返回此前打开的文档</translation>
     </message>
     <message id="autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows">
         <source>%1 has no headings to navigate: the breadcrumb shows %2</source>

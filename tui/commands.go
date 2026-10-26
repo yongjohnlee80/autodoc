@@ -63,6 +63,9 @@ func (h *Host) commands() map[string]Command {
 		"App.openPicker":            none(h.openPicker),
 		"App.openBuffers":           none(h.openBuffers),
 		"App.closeBuffer":           none(h.closeShownBuffer),
+		"App.showBufferAt":          oneNumber("a place among the tabs", h.showBufferAt),
+		"App.closeBuffersRight":     none(func() { h.closeBeside(1) }),
+		"App.closeBuffersLeft":      none(func() { h.closeBeside(-1) }),
 
 		// the plugins
 

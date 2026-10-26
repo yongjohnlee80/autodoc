@@ -17,10 +17,8 @@ Dialog {
     Shortcut { sequence: keyId("autodoc.leader.openFileDialog"); onActivated: { leader.close(); App.openFileDialog() } }
     Shortcut { sequence: keyId("autodoc.leader.openRecent"); onActivated: { leader.close(); App.openRecent() } }
     Shortcut { sequence: keyId("autodoc.leader.followLink"); onActivated: { leader.close(); App.followLink() } }
-    Shortcut { sequence: keyId("autodoc.leader.goBack"); onActivated: { leader.close(); App.goBack() } }
-    Shortcut { sequence: keyId("autodoc.leader.openBuffers"); onActivated: { leader.close(); App.openBuffers() } }
+    Shortcut { sequence: keyId("autodoc.leader.open.buffer"); onActivated: { leader.close(); buffer.open() } }
     Shortcut { sequence: keyId("autodoc.leader.newFile"); onActivated: { leader.close(); App.newFile() } }
-    Shortcut { sequence: keyId("autodoc.leader.closeBuffer"); onActivated: { leader.close(); App.closeBuffer() } }
     Shortcut { sequence: keyId("autodoc.leader.openOutline"); onActivated: { leader.close(); App.openOutline() } }
     Shortcut { sequence: keyId("autodoc.leader.previewDiagram"); onActivated: { leader.close(); App.previewDiagram() } }
     Shortcut { sequence: keyId("autodoc.leader.previewHTML"); onActivated: { leader.close(); App.previewHTML() } }
