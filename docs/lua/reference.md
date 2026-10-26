@@ -579,8 +579,9 @@ tables. The codes an `err` carries are listed at the end of `--contracts`.
 | Domain | Verbs |
 |---|---|
 | `doc` | `outline`, `read`, `read_raw`, `remove`, `rename`, `validate`, `write`, `write_raw` |
-| `embedding` | `add`, `cancel_switch`, `log`, `model_context`, `models`, `providers`, `remove`, `update`, `usage`, `use` |
+| `embedding` | `add`, `cancel_switch`, `catalog`, `estimate`, `log`, `model_context`, `models`, `providers`, `pull`, `pull_cancel`, `pull_status`, `remove`, `update`, `usage`, `use` |
 | `file` | `locate`, `read`, `read_raw`, `write`, `write_raw` |
+| `host` | `probe` |
 | `graph` | `backlinks`, `links`, `map`, `neighborhood`, `resolve`, `unresolved` |
 | `index` | `changes`, `documents`, `list`, `models`, `purge_model`, `reindex`, `status` |
 | `preference` | `list`, `set` |

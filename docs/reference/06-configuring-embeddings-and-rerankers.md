@@ -41,9 +41,38 @@ When you register a cloud provider (`ollama-cloud`, `openai`, or `rerank-api`) w
 
 For local workstations and developer servers, AutoDoc's recommended stack pairs **Ollama** for Stage 2 bi-encoder embeddings with **HuggingFace Text Embeddings Inference (TEI)** for Stage 3 cross-encoder reranking.
 
-![GPU VRAM usage at 8k context tokens versus Top-3 retrieval recall across embedding and reranker stacks](model-accuracy-vs-vram.chart.json)
+### Setting Up the Embedding Model from AutoDoc (`Set up…`)
+
+Once Ollama is installed and running, AutoDoc sets up the embedding side itself. Open **Search models › Embedding Models › Set up…**. The command palette also has it as *set up semantic search*, and the search picker offers it while semantic search is off. The dialog works in five steps:
+
+1. **Check** asks the Ollama at `http://localhost:11434`; edit the URL to ask another. AutoDoc reads what this machine has from the system, without a network: the GPU and its memory, the RAM, the free disk, and Ollama's version.
+2. It lists the models AutoDoc has measured. Each shows where it fits here (on the GPU, in memory, too large, or can't tell), its download size, and whether Ollama already has it. The recommended one is picked: the best fit on a GPU, or the lightest multilingual model on a CPU.
+3. It shows every workspace with a tick, what it does now, what **Use** will do to it, and three estimates: its texts, the room their vectors take, and the time to embed them. The time appears once the model is installed, because it is measured on a sample of the workspace's own texts. A workspace with its own provider keeps it unless you tick it. An unticked workspace that would embed with the daemon's provider is turned off, and its row says so.
+4. **Download** pulls the model into Ollama. The daemon owns the download, so closing the dialog doesn't stop it. **Stop download** cancels it: Ollama stops unless another client is pulling the same model, and a later download resumes where it stopped.
+5. **Use** applies the plan in order:
+   - it turns off the unticked workspaces;
+   - it adds the provider, or reuses an equal one;
+   - it makes that provider the one in use;
+   - it sets each ticked workspace's provider and policy.
+
+   A step that fails stops the plan there, and the dialog names that step. **Retry** runs the whole plan again; steps that already finished do nothing the second time.
+
+The dialog is built on six verbs, which agents can call too:
+
+```sh
+autodoc --call host.probe                    # the GPU, RAM, free disk and Ollama's version ("" when none answers)
+autodoc --call embedding.catalog             # the measured models: where each fits, the one recommended, whether it is installed
+autodoc --call embedding.estimate '["qwen3-embedding:0.6b", ["kb"]]'   # per workspace: texts, bytes, and seconds once installed
+autodoc --call embedding.pull '["qwen3-embedding:0.6b"]'               # starts the download; answers its job
+autodoc --call embedding.pull_status '["<job>"]'                       # running, done, failed or cancelled, with bytes, rate and time left
+autodoc --call embedding.pull_cancel '["<job>"]'
+```
+
+`host.probe`, `embedding.catalog`, `embedding.estimate` and `embedding.pull` take the Ollama's URL as an optional last parameter. Before the model is installed, `embedding.estimate` is provisional (`"basis": "provisional"`): it counts every text and gives no time. Only one pull runs at a time. A second one is refused as a conflict, and a status or cancel for a job that is no longer the current one is not found.
 
 ### Why Context Window (`num_ctx`) Controls GPU VRAM
+
+![GPU VRAM usage at 8k context tokens versus Top-3 retrieval recall across embedding and reranker stacks](model-accuracy-vs-vram.chart.json)
 
 Each Markdown section is embedded as an independent stateless request. However, Ollama allocates KV-cache memory according to the `num_ctx` parameter sent with the request:
 
@@ -53,7 +82,7 @@ Each Markdown section is embedded as an independent stateless request. However, 
 
 ### Starting Local Ollama and TEI Servers
 
-Pull the embedding models into Ollama (`http://127.0.0.1:11434`):
+To pull the embedding models into Ollama (`http://127.0.0.1:11434`) by hand instead of with **Set up…**:
 
 ```sh
 ollama pull qwen3-embedding:0.6b
