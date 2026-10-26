@@ -70,6 +70,8 @@ Window {
     Shortcut { sequence: keyId("autodoc.window.pickWorkspace"); onActivated: App.pickWorkspace() }
     Shortcut { sequence: keyId("autodoc.window.quit"); onActivated: App.quit() }
     Shortcut { sequence: keyId("autodoc.window.maximizePanel"); onActivated: App.maximizePanel() }
+    Shortcut { sequence: keyId("autodoc.window.nextPanelTab"); onActivated: App.nextPanelTab() }
+    Shortcut { sequence: keyId("autodoc.window.previousPanelTab"); onActivated: App.previousPanelTab() }
     Shortcut { sequence: keyId("autodoc.window.cycleWidget"); onActivated: App.cycleWidget() }
     Shortcut { sequence: keyId("autodoc.window.cycleWidgetBack"); onActivated: App.cycleWidgetBack() }
     Shortcut { sequence: keyId("autodoc.window.help.open"); onActivated: help.open() }

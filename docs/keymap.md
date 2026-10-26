@@ -74,8 +74,9 @@ key a pane uses is legal, and the checker warns of it.
 
 F1's help opens with **YOUR KEYS**: every key your file moves, with its line. The cards (SPC's and
 the rest) name a moved key by its new keys. A terminal keeps the Window's maximize key
-(`autodoc.window.maximizePanel`) and its suspend key (`autodoc.terminal.suspend`) from its program,
-whichever keys those are now.
+(`autodoc.window.maximizePanel`), its suspend key (`autodoc.terminal.suspend`) and the tab keys
+(`autodoc.window.nextPanelTab`, `autodoc.window.previousPanelTab`) from its program, whichever keys
+those are now.
 
 ## AutoDoc's commands
 
@@ -100,6 +101,8 @@ opens the card (SPC, then the card's key).
 | `autodoc.window.pickWorkspace` | `global` | Ctrl+W |
 | `autodoc.window.quit` | `global` | Ctrl+Q |
 | `autodoc.window.maximizePanel` | `global` | F11 |
+| `autodoc.window.nextPanelTab` | `global` | Ctrl+Tab |
+| `autodoc.window.previousPanelTab` | `global` | Ctrl+Shift+Tab |
 | `autodoc.window.cycleWidget` | `global` | F6 |
 | `autodoc.window.cycleWidgetBack` | `global` | Shift+F6 |
 | `autodoc.window.help.open` | `global` | F1 |

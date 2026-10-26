@@ -56,6 +56,7 @@ func TestAUsersKeymapMovesAKey(t *testing.T) {
 <shortcut id="autodoc.window.maximizePanel"><key value="F9"/></shortcut>
 <shortcut id="autodoc.terminal.mode"><key value="Ctrl+Y"/></shortcut>
 <shortcut id="autodoc.terminal.suspend"><key value="Ctrl+B"/></shortcut>
+<shortcut id="autodoc.window.nextPanelTab"><key value="F7"/></shortcut>
 </mapping>`)
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
 	r.s.WaitForText(t, "connected — autodoc v-test")
@@ -70,10 +71,10 @@ func TestAUsersKeymapMovesAKey(t *testing.T) {
 		return strings.Contains(help, "YOUR KEYS") && strings.Contains(help, "autodoc.window.openSearch") &&
 			strings.Contains(help, "keymap.xml, line 2")
 	})
-	// a terminal keeps maximize's, suspend's and the four move keys from its program, and toggles its
-	// mode on the mode key: all follow the map
+	// a terminal keeps maximize's, suspend's, the two tab keys and the four move keys from its program,
+	// and toggles its mode on the mode key: all follow the map
 	r.s.WaitFor(t, "the terminals follow the moved keys", func(string) bool {
-		return r.sourceKeys("App.terminalHostKeys") == "F9 Ctrl+B Ctrl+H Ctrl+J Ctrl+K Ctrl+L" && r.sourceKeys("App.terminalModeKey") == "Ctrl+Y"
+		return r.sourceKeys("App.terminalHostKeys") == "F9 Ctrl+B F7 Ctrl+Shift+Tab Ctrl+H Ctrl+J Ctrl+K Ctrl+L" && r.sourceKeys("App.terminalModeKey") == "Ctrl+Y"
 	})
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF5})
 	r.s.WaitForText(t, "words; a * ends a prefix")
@@ -89,7 +90,7 @@ func TestTheKeymapFileIsFollowed(t *testing.T) {
 	if got := r.keysOfCommand("autodoc.leader.openRecent"); !slices.Equal(got, tuikey.MustParse("R")) {
 		t.Fatalf("with no file, openRecent's keys: %v, want r", got)
 	}
-	if hk, mk := r.sourceKeys("App.terminalHostKeys"), r.sourceKeys("App.terminalModeKey"); hk != "F11 Ctrl+Z Ctrl+H Ctrl+J Ctrl+K Ctrl+L" || mk != "Ctrl+T" {
+	if hk, mk := r.sourceKeys("App.terminalHostKeys"), r.sourceKeys("App.terminalModeKey"); hk != "F11 Ctrl+Z Ctrl+Tab Ctrl+Shift+Tab Ctrl+H Ctrl+J Ctrl+K Ctrl+L" || mk != "Ctrl+T" {
 		t.Errorf("with no file, the terminals' keys: hostKeys %q, modeKey %q", hk, mk)
 	}
 	writeKeymap(t, file, `<mapping><shortcut id="autodoc.leader.openRecent"><key value="Shift+R"/></shortcut></mapping>`)

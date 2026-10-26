@@ -219,6 +219,10 @@ var windowKeys = []Key{
 	{Seq: "Ctrl+Q", Show: "Ctrl+Q", Run: "App.quit()"},
 	// the terminal's or the agents' panel maximized or restored, from inside it too (SPC M off it)
 	{Seq: "F11", Show: "F11", Run: "App.maximizePanel()"},
+	// the terminal's or the agents' next or previous tab, from inside it (Host.cyclePanelTab); the
+	// TUI tells Ctrl+Tab from Tab only with kitty's keyboard protocol, elsewhere it is Tab
+	{Seq: "Ctrl+Tab", Show: "Ctrl+Tab and Ctrl+Shift+Tab", Run: "App.nextPanelTab()"},
+	{Seq: "Ctrl+Shift+Tab", Show: "Ctrl+Tab and Ctrl+Shift+Tab", Run: "App.previousPanelTab()"},
 	// the widgets, one after another, the menu bar never among them (widgets.go)
 	{Seq: "F6", Show: "F6 and Shift+F6", Run: "App.cycleWidget()"},
 	{Seq: "Shift+F6", Show: "F6 and Shift+F6", Run: "App.cycleWidgetBack()"},
@@ -444,6 +448,10 @@ const (
 	suspendID      = "autodoc.terminal.suspend"
 )
 
+// panelTabIDs are Ctrl+Tab's and Ctrl+Shift+Tab's commands (windowKeys): a terminal keeps their keys
+// from its program always, as it keeps maximize's, so they move between its panel's tabs.
+var panelTabIDs = []string{"autodoc.window.nextPanelTab", "autodoc.window.previousPanelTab"}
+
 // keysValue is the keys the App's map gives command id, as a terminal's hostKeys and modeKey take
 // them: each one key, never split, so the comma key is one too (tuidecl.Keys). The declared keys
 // before the program runs; none when a scheme unbinds them.
@@ -462,10 +470,14 @@ func (k keyset) keysValue(id string) tuidecl.Keys {
 // movePaneIDs are App.movePane's commands, one per direction (windowKeys).
 var movePaneIDs = []string{"autodoc.window.movePane.h", "autodoc.window.movePane.j", "autodoc.window.movePane.k", "autodoc.window.movePane.l"}
 
-// terminalKeys are the terminals' key sources, as the map binds them now: with panelKeys, the panel
-// moves are host keys too, so a moved binding moves what the programs lose.
+// terminalKeys are the terminals' key sources, as the map binds them now: maximize's, suspend's and
+// the tab keys' always, and with panelKeys the panel moves too, so a moved binding moves what the
+// programs lose.
 func (k keyset) terminalKeys() map[string]any {
 	host := tuidecl.Keys(slices.Concat(k.keysValue(maximizeID), k.keysValue(suspendID))) // a copy: never the map's own slices
+	for _, id := range panelTabIDs {
+		host = append(host, k.keysValue(id)...)
+	}
 	if k.panelKeys {
 		for _, id := range movePaneIDs {
 			host = append(host, k.keysValue(id)...)

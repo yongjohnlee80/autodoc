@@ -36,6 +36,8 @@ func (h *Host) commands() map[string]Command {
 		"App.panelPlaced":           stringAndFourNumbers("a panel and its x, y, width and height", h.panelPlaced),
 		"App.panelChanged":          twoStringsAndBool("a panel, its window operation and whether it is maximized", h.panelChanged),
 		"App.maximizePanel":         none(h.maximizePanel),
+		"App.nextPanelTab":          none(func() { h.cyclePanelTab(1) }),
+		"App.previousPanelTab":      none(func() { h.cyclePanelTab(-1) }),
 		"App.resumePanel":           none(h.resumePanel),
 		"App.arrangePanel":          none(h.arrangePanel),
 		"App.arrangeStep":           oneString("a step", h.arrangeStep),
