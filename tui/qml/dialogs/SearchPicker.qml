@@ -33,5 +33,7 @@ Picker {
         CheckBox { text: qsTrId("autodoc.dialog.searchPicker.semantic"); checked: App.stageSemantic; visible: App.stageSemanticShown; onToggled: App.toggleSearchStage("semantic") }
         Text { text: "  "; visible: App.stageRerankShown }
         CheckBox { text: App.stageRerankText; checked: App.stageRerank; visible: App.stageRerankShown; onToggled: App.toggleSearchStage("rerank") }
+        Text { text: "  "; visible: App.searchSetupShown }
+        Button { text: qsTrId("autodoc.dialog.searchPicker.semantic_search_is_off_set_up"); visible: App.searchSetupShown; onClicked: App.openEmbeddingSetup() }
     }
 }

@@ -785,6 +785,19 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 	r.s.WaitForText(t, "model switch ended; search in kb remains words-only")
 }
 
+// An updated model, the same name with another digest, says it refills rather than that the search
+// switches to a new model (ADR 1793005098 §4.4).
+func TestAnUpdatedModelSaysItRefills(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		r.h.showProgress(1, 0, embedProgress{on: true, model: "ollama|embedder|sha256:a|4", target: "ollama|embedder|sha256:b|4",
+			semantic: "switching", texts: 2, targetPending: 1}, 1)
+	})
+	r.s.WaitForText(t, "embedder was updated")
+}
+
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 	d := startManaged(t, map[string]string{
 		"alpha": fileDir(t, "a.md", "# A\n\nzebra plains\n"),

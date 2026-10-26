@@ -87,6 +87,7 @@ Dialog {
         }
     }
     DialogButtonBox {
+        Button { text: qsTrId("autodoc.dialog.aIModels.set_up"); visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openEmbeddingSetup() }
         Button { text: qsTrId("autodoc.dialog.aIModels.add"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiAdd() }
         Button { text: qsTrId("autodoc.dialog.aIModels.edit"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiEdit(providerTable.currentIndex) }
         Button { text: qsTrId("autodoc.dialog.aIModels.use"); enabled: App.aiUseEnabled; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiUse(providerTable.currentIndex) }

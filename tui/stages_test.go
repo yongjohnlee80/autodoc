@@ -162,9 +162,12 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	r.h.p.Post(func() { r.h.searchLive("kestrel") })
 	rec.waitSent(t, r, n) // every box checked: auto
 	r.s.WaitForText(t, "[x] Lexical")
-	if sc := r.s.String(); strings.Contains(sc, "Semantic") || strings.Contains(sc, "Rerank") {
+	// a box is drawn "[ ] Name": the footer's "Semantic search is off" button is no box
+	if sc := r.s.String(); strings.Contains(sc, "] Semantic") || strings.Contains(sc, "] Rerank") {
 		t.Errorf("no model and no ranker, yet a box for one:\n%s", sc)
 	}
+	// the search's answer says semantic search is off; the picker offers to set it up once it lands
+	r.s.WaitForText(t, "Semantic search is off")
 
 	n = rec.count()
 	r.h.p.Post(func() { r.h.toggleSearchStage(stageLexical) })

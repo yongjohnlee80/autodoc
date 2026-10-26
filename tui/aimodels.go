@@ -18,11 +18,12 @@ type aiModels struct {
 	c         Core
 	providers *providers
 	rankers   *rankers
+	setup     *embedSetup // Set up… (embedsetup.go)
 	tab       int
 }
 
 func newAIModels(c Core) *aiModels {
-	a := &aiModels{c: c, providers: newProviders(c)}
+	a := &aiModels{c: c, providers: newProviders(c), setup: newEmbedSetup(c)}
 	a.rankers = newRankers(c, a.syncButtons)
 	return a
 }
@@ -39,6 +40,7 @@ func (a *aiModels) State() map[string]any {
 	}
 	maps.Copy(s, a.providers.State())
 	maps.Copy(s, a.rankers.State())
+	maps.Copy(s, a.setup.State())
 	return s
 }
 
@@ -53,12 +55,14 @@ func (a *aiModels) Commands() map[string]Command {
 	}
 	maps.Copy(cmds, a.providers.Commands())
 	maps.Copy(cmds, a.rankers.Commands())
+	maps.Copy(cmds, a.setup.Commands())
 	return cmds
 }
 
 // Catalog is the dialog's user command (catalog.go): it runs what App.openAIModels runs.
 func (a *aiModels) Catalog() []Entry {
-	return []Entry{builtin("prefs.search_models", "search models", "App.openAIModels()", a.open)}
+	return []Entry{builtin("prefs.search_models", "search models", "App.openAIModels()", a.open),
+		builtin("prefs.set_up_semantic_search", "set up semantic search", "App.openEmbeddingSetup()", a.setup.open)}
 }
 
 // open opens the AI models: the providers listed, and the rankers when their tab is the one showing.
