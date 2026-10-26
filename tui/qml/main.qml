@@ -235,7 +235,16 @@ Window {
                         Instantiator { model: model.rows; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.pluginEntry(model.target) } } } }
                 }
             }
-            Instantiator { model: App.luaMenus; MenuItem { text: model.label; onTriggered: App.luaMenu(model.target) } }
+            // scripts' rows (menurows.go): a row, or a submenu of a script's rows (autodoc.menu's menu)
+            Instantiator {
+                model: App.luaMenus
+                DelegateChooser {
+                    role: "kind"
+                    DelegateChoice { roleValue: "item"; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.luaMenu(model.target) } }
+                    DelegateChoice { roleValue: "submenu"; Menu { title: model.label
+                        Instantiator { model: model.rows; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.luaMenu(model.target) } } } }
+                }
+            }
             // every plugin's commands, by plugin: the SPC p card, which says so when there are none
             MenuItem { text: qsTrId("autodoc.main.commands_spc_p"); onTriggered: App.openPluginChooser() }
             MenuSeparator {}

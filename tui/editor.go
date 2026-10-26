@@ -65,5 +65,6 @@ func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	if h.fonts != nil { // the window's zoom; a terminal's is its own
 		items = append(items, widget.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
 	}
-	return append(items, h.luaFeature().editorRows()...) // a script's rows (luakeys.go)
+	s := h.luaFeature()
+	return append(items, s.rows.editorItems(s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)
 }

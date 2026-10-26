@@ -4011,6 +4011,10 @@ WHAT A KEY NEEDS
         <source>the plugin %1's Lua package is replaced by yours, lua/%2</source>
         <translation>the plugin %1's Lua package is replaced by yours, lua/%2</translation>
     </message>
+    <message id="autodoc.notice.menurows.menu_rows_left_out_their_scripts_took_longer_tha">
+        <source>%1 menu rows left out: their scripts took longer than %2</source>
+        <translation>%1 menu rows left out: their scripts took longer than %2</translation>
+    </message>
     <message id="autodoc.notice.navigation.is_gone_it_left_the_jump_list_ctrl_o_again_goes">
         <source>%1 is gone: it left the jump list (Ctrl+O again goes further back)</source>
         <translation>%1 is gone: it left the jump list (Ctrl+O again goes further back)</translation>

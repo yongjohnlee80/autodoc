@@ -54,9 +54,11 @@ type scripting struct {
 	reload  func() error
 	install func(url string) error // :lua-install's (Host.installPackage)
 	// line runs a key's or a menu row's command line (Host: core.RunCommand); ui is the running
-	// engine's keys and rows, menuRows the Plugins menu's model of them (luakeys.go)
+	// engine's keys; rows the menu rows, scripts' and plugins' (menurows.go), and menuRows the
+	// Plugins menu's model of those it shows (luakeys.go)
 	line     func(string) error
 	ui       luaUI
+	rows     menuRows
 	menuRows *tuidecl.ListModel
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
 	// autodoc.ui.pick's picker, pickCB the callback of the one open
