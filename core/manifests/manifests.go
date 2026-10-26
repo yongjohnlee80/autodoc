@@ -11,9 +11,11 @@
 package manifests
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -95,6 +97,9 @@ type Plugin struct {
 	} `toml:"feed"`
 	// Commands are the plugin's own, on the Plugins menu and the SPC p card.
 	Commands []Command `toml:"commands"`
+	// Menus are its rows on the editor's right-click menu, each running one of its commands, under
+	// its title (protocol 11).
+	Menus []Menu `toml:"menu"`
 	// Calls are the command catalog's ids the plugin may run through host.call: exact ids, never a
 	// plugin's.
 	Calls []string `toml:"calls"`
@@ -135,6 +140,17 @@ type Command struct {
 	ID    string `toml:"id"`
 	Title string `toml:"title"`
 	Key   string `toml:"key"`
+}
+
+// Menu is one of a manifest's [[menu]]: a row on the editor's right-click menu that runs one of the
+// plugin's own [[commands]] (Command, also the row's id), shown where Where says ("editor", the only
+// place), for the files whose base names match Files (none: every file), titled Title (the
+// command's when it's empty). A running plugin may change its title, or disable it (host.menu).
+type Menu struct {
+	Command string   `toml:"command"`
+	Where   string   `toml:"where"`
+	Files   []string `toml:"files"`
+	Title   string   `toml:"title"`
 }
 
 // Modal is whether the plugin's dialog holds the keys: a dialog's does, unless it says
@@ -261,6 +277,9 @@ func checkProtocolTwo(m *Plugin, md toml.MetaData) string {
 		return why
 	}
 	if why := checkSurface(m, md); why != "" {
+		return why
+	}
+	if why := checkMenu(m, md); why != "" {
 		return why
 	}
 	switch {
@@ -402,7 +421,27 @@ func (m *Plugin) Declares() []string {
 	if len(m.Open.Extensions) > 0 {
 		parts = append(parts, "opens "+strings.Join(m.Open.Extensions, ", ")+" files")
 	}
+	if len(m.Menus) > 0 {
+		rows := make([]string, len(m.Menus))
+		for i, row := range m.Menus {
+			rows[i] = cmp.Or(row.Title, m.commandTitle(row.Command))
+			if len(row.Files) > 0 {
+				rows[i] += " (" + strings.Join(row.Files, ", ") + ")"
+			}
+		}
+		parts = append(parts, "editor menu rows: "+strings.Join(rows, ", "))
+	}
 	return parts
+}
+
+// commandTitle is the title of m's command id.
+func (m *Plugin) commandTitle(id string) string {
+	for _, c := range m.Commands {
+		if c.ID == id {
+			return c.Title
+		}
+	}
+	return id
 }
 
 // Package is a Lua package's package.toml.
@@ -467,6 +506,36 @@ func ValidPackageName(n string) bool {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
+}
+
+// checkMenu is why m's [[menu]] cannot run ("" when it can): it needs protocol = 11, and each row
+// runs one of the plugin's own [[commands]], one row a command, in the editor's menu, for files
+// named by valid globs.
+func checkMenu(m *Plugin, md toml.MetaData) string {
+	if !md.IsDefined("menu") {
+		return ""
+	}
+	if m.Protocol < 11 {
+		return "declares [[menu]]: needs protocol = 11"
+	}
+	seen := map[string]bool{}
+	for _, row := range m.Menus {
+		switch {
+		case !slices.ContainsFunc(m.Commands, func(c Command) bool { return c.ID == row.Command }):
+			return "[[menu]]: command " + strconv.Quote(row.Command) + " is none of its [[commands]]"
+		case seen[row.Command]:
+			return "[[menu]]: command " + strconv.Quote(row.Command) + " has two rows"
+		case row.Where != "editor":
+			return "[[menu]] " + strconv.Quote(row.Command) + ": where " + strconv.Quote(row.Where) + ": want editor"
+		}
+		for _, g := range row.Files {
+			if _, err := path.Match(g, ""); err != nil || g == "" {
+				return "[[menu]] " + strconv.Quote(row.Command) + ": " + strconv.Quote(g) + " is not a glob"
+			}
+		}
+		seen[row.Command] = true
+	}
+	return ""
 }
 
 // checkSurface is why m's [surface] cannot run ("" when it can): it needs protocol = 10, a dialog or

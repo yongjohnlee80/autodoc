@@ -119,9 +119,29 @@ func (pl *plugins) syncPluginEntries() {
 	}
 	pl.c.RemovePluginEntries()
 	pl.pluginCmds = map[string]pluginCommandRef{}
+	rows := pl.c.MenuRows()
+	declared := map[*addedRow]bool{} // each plugin's [[menu]] rows as found now
 	for _, e := range pl.pluginList {
 		if e.reason != "" {
 			continue
+		}
+		for _, row := range e.m.Menus { // a [[menu]] row runs its command, under the plugin's title
+			key, cmd := e.key(), row.Command
+			title := row.Title
+			for _, c := range e.m.Commands {
+				if c.ID == cmd {
+					title = cmp.Or(title, c.Title)
+				}
+			}
+			r := &addedRow{owner: "plugin:" + e.m.Name, source: fromManifest, id: cmd, where: "editor", files: row.Files,
+				menu: e.label(), title: title, run: func() { pl.runPluginCommand(key, cmd) }}
+			// a row declared as it was keeps what the plugin's live run pushed to it (a stopped
+			// plugin's pushed nothing: forgetMenu)
+			if old := rows.find(r.owner, fromManifest, cmd); old != nil &&
+				old.title == r.title && old.menu == r.menu && slices.Equal(old.files, r.files) {
+				r.pushed, r.disabled = old.pushed, old.disabled
+			}
+			declared[rows.add(r)] = true // in its place, when it was there
 		}
 		title := cmp.Or(e.m.Title, e.m.Name)
 		for _, c := range e.m.Commands {
@@ -135,6 +155,7 @@ func (pl *plugins) syncPluginEntries() {
 			pl.pluginCmds[id] = pluginCommandRef{plugin: e.m.Name, key: key, id: cmd, letter: c.Key}
 		}
 	}
+	rows.drop(func(r *addedRow) bool { return r.source == fromManifest && !declared[r] }) // a row no manifest declares now
 }
 
 // bindPluginKeys gives the catalog's plugin commands their letters on their plugins' SPC p cards,

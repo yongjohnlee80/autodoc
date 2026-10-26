@@ -85,7 +85,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 10 // 10: [surface], the side channel, plugin.surface.* (ADR 1792797354)
+	Protocol    = 11 // 11: [[menu]] and host.menu (ADR 1792991184); 10: [surface] (ADR 1792797354)
 )
 
 // The notifications the host sends.

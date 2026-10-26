@@ -285,6 +285,7 @@ type pluginHost interface {
 	RemovePluginEntries()                    // every plugin.* entry
 	CommandsChanged()                        // F1 and the command line list the commands again
 	RunEntry(id string, args []string) error // a plugin's host.call of a catalog command
+	MenuRows() *menuRows                     // the menus' added rows: a manifest's [[menu]] joins them (menurows.go)
 	// SetPluginPref sets a tui.plugin.* preference, applied and stored; ErrNotPluginPref for any other
 	SetPluginPref(name, value string) error
 	Context() context.Context // the program's lifetime: a running plugin's calls end with it

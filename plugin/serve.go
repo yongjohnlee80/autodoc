@@ -147,6 +147,20 @@ func (p *Peer) SetSession(values map[string]string) error {
 	return p.link.Notify(p.ctx, MethodSession, SessionParams(values))
 }
 
+// MenuRow (protocol 11) sets one of the plugin's [[menu]] rows, by its command's id: its title, or
+// whether it's enabled, each nil to leave as it is, from the next time the editor's menu opens. As
+// Notify, the negotiated protocol is checked first, then the update.
+func (p *Peer) MenuRow(id string, title *string, enabled *bool) error {
+	if p.protocol.Load() < 11 {
+		return ErrNoMenu
+	}
+	u := MenuUpdate{ID: id, Title: title, Enabled: enabled}
+	if err := CheckMenu(u); err != nil {
+		return err
+	}
+	return p.link.Notify(p.ctx, MethodMenu, MenuParams(u))
+}
+
 // Notify posts n (protocol 8): a toast kept in the history, or with an id one updated in place
 // while Ongoing and ended by a post without it (notify.go). As SetSession, the negotiated protocol
 // is checked first, then n; a nil error means it was sent: the host drops a notice from a run that
