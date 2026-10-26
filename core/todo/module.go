@@ -14,7 +14,7 @@ const (
 	CodeNotAStore   int64 = -32074 // todos.scaffold, or todos.set_dir
 	CodeExists      int64 = -32075 // another id, or another move_store target
 	CodeNotWritable int64 = -32076 // a workspace's or a registered root's store, or a set_dir override
-	CodeUnclaimed   int64 = -32077 // the store is auto-core's until the cutover claims it
+	CodeUnclaimed   int64 = -32077 // the store was released (todos.release): only todos.claim lets the daemon write it again
 	// codeNoWorkspace is the daemon's shared code (rpc's CodeNoSuchWorkspace).
 	codeNoWorkspace int64 = -32060
 )
@@ -49,8 +49,8 @@ func (m *Manager) Errors() []module.PublicError {
 			Message: "not a writable todo store: a workspace's or a registered root's .todo-list, or a set_dir override",
 			Next:    "todos.register the project's root, or todos.set_dir"},
 		{Err: ErrUnclaimed, Code: CodeUnclaimed, Name: "todos.unclaimed",
-			Message: "the daemon does not write this store yet: auto-core does, until the cutover claims it",
-			Next:    "edit it through AutoVim until the cutover"},
+			Message: "this todo store was released (todos.release): AutoDoc only reads it",
+			Next:    "todos.claim it to write it again"},
 		{Err: ErrNoWorkspace, Code: codeNoWorkspace, Name: "todos.no_such_workspace", Message: "no such workspace",
 			Next: "re-list the workspaces"},
 	}
@@ -195,7 +195,7 @@ func (m *Manager) Verbs() []module.Verb {
 	writes := []int64{CodeNotWritable, CodeUnclaimed}
 	task := "task: {id, version, status, title, …, rev, path, description}"
 	verbs := []module.Verb{
-		module.Handle(read("todos.resolve", "{store_id, store, root, override?, writable, claimed}",
+		module.Handle(read("todos.resolve", "{store_id, store, root, override?, writable, claimed, released?}",
 			"Where an at's store is, and whether the daemon may write it."),
 			func(ctx context.Context, p atParams) (Resolved, error) { return m.Resolve(ctx, p.At) }),
 		module.Handle(read("todos.open", "{store_id, store, scaffolded: false}",
@@ -211,12 +211,12 @@ func (m *Manager) Verbs() []module.Verb {
 				fresh, err := m.Register(ctx, p.Root)
 				return map[string]bool{"new": fresh}, err
 			}),
-		module.Handle(settings(write("todos.set_dir", "{store_id, store, root, override?, writable, claimed}",
+		module.Handle(settings(write("todos.set_dir", "{store_id, store, root, override?, writable, claimed, released?}",
 			"Points an at's root at another store directory, or back at <root>/.todo-list.", user, CodeInvalid)),
 			func(ctx context.Context, p setDirParams) (Resolved, error) { return m.SetDir(ctx, p.At, p.Dir) }),
-		module.Handle(read("todos.stores", "[{id, path, roots, claimed, last_use}]", "The stores the daemon knows."),
+		module.Handle(read("todos.stores", "[{id, path, roots, claimed, released?, last_use}]", "The stores the daemon knows."),
 			func(ctx context.Context, _ struct{}) ([]StoreInfo, error) { return m.Stores(ctx) }),
-		module.Handle(settings(write("todos.move_store", "{store_id, store, root, override?, writable, claimed}",
+		module.Handle(settings(write("todos.move_store", "{store_id, store, root, override?, writable, claimed, released?}",
 			"Moves an at's store to a new directory; its claim, change log and cursors move with it.",
 			user, append(writes, CodeExists)...)),
 			func(ctx context.Context, p moveParams) (Resolved, error) { return m.MoveStore(ctx, p.At, p.To) }),
@@ -266,10 +266,10 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(quiet("todos.ack", module.EffectWrite, "nil", "Advances a consumer's cursor once it has handled the changes up to seq.", user, CodeNoTask),
 			func(ctx context.Context, p ackParams) (none, error) { return nil, m.Ack(ctx, p.At, p.Consumer, p.Seq) }),
 		module.Handle(settings(write("todos.claim", "nil",
-			"The cutover: the daemon writes the store from now on. Only the release that removes auto-core's writer calls it.",
+			"Lets the daemon write a store todos.release gave back. A store never released needs none: its first write claims it.",
 			user, CodeNotWritable, CodeInvalid)),
 			func(ctx context.Context, p claimParams) (none, error) { return nil, m.Claim(ctx, p.At, p.Opts) }),
-		module.Handle(settings(write("todos.release", "nil", "The cutover's rollback: the daemon only reads the store again.", user)),
+		module.Handle(settings(write("todos.release", "nil", "Gives the store back: the daemon only reads it, and a write no longer claims it, until todos.claim.", user)),
 			func(ctx context.Context, p atParams) (none, error) { return nil, m.Release(ctx, p.At) }),
 		module.Handle(write("todos.migrate_refs", "{candidates?: [{kind?, id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
 			"Migrates refs a plan lists, Lua-era $WORKSPACE refs (to $PROJECT_ROOT) or refs into removed git worktrees (kind worktree, to the main worktree's copy): an apply rewrites exactly the reviewed list, journaled.",

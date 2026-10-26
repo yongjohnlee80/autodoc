@@ -3330,9 +3330,9 @@ LO QUE NECESITA UNA TECLA
         <source>Preview o&amp;ption</source>
         <translation>O&amp;pción de vista previa</translation>
     </message>
-    <message id="autodoc.main.read_only_until_the_cutover">
-        <source>read-only until the cutover</source>
-        <translation>solo lectura hasta la migración</translation>
+    <message id="autodoc.main.read_only_this_store_was_released">
+        <source>read-only: this store was released (todos.release)</source>
+        <translation>solo lectura: este almacén fue liberado (todos.release)</translation>
     </message>
     <message id="autodoc.main.recent_files">
         <source>Recen&amp;t files…</source>
@@ -4838,9 +4838,9 @@ LO QUE NECESITA UNA TECLA
         <source>todos: %1 is labelled %2</source>
         <translation>tareas: %1 se ha etiquetado %2</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo">
-        <source>todos: %1 is loaded, read-only: its new store waits for the cutover</source>
-        <translation>tareas: %1 está cargado, en solo lectura: su nuevo almacén espera a la migración</translation>
+    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
+        <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
+        <translation>tareas: %1 está cargado, en solo lectura: su almacén fue liberado (todos.release)</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>

@@ -11,7 +11,7 @@ import (
 )
 
 // todos_ux_test.go: the todos panel as Johno asked for it after v0.1.41-rc1: it opens large, the
-// user's size kept; its status line says only what needs the user; and a store not claimed takes
+// user's size kept; its status line says only what needs the user; and a released store takes
 // no key as an error.
 
 // TestTodosPanelOpensLargeAndKeepsTheUsersSize: before the user sizes it the panel is about 65% of
@@ -105,10 +105,10 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	}
 }
 
-// TestTodosAReadOnlyStoreTakesNoKeyAsAnError: on a store the daemon has not claimed, every key of
-// the panel, on a task, on an empty tab and on Archived's months, writes nothing, says nothing and
-// fails nothing: the action row says it is read-only. R reads it again, and L labels it (AutoDoc's
-// own name for it). New… on a folder whose store is not claimed loads it and says its store waits.
+// TestTodosAReadOnlyStoreTakesNoKeyAsAnError: on a store todos.release gave back, every key of the
+// panel, on a task, on an empty tab and on Archived's months, writes nothing, says nothing and fails
+// nothing: the action row says it is read-only. R reads it again, and L labels it (AutoDoc's own
+// name for it). New… on a folder whose store was released loads it and says so.
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
 	s := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
@@ -158,15 +158,15 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	n := len(s.calls)
 	v.folderAs = "new"
 	v.folderChosen("/n")
-	if s.called("todos.scaffold") || len(s.notes) != 1 || s.notes[0] != "todos: /n is loaded, read-only: its new store waits for the cutover" ||
+	if s.called("todos.scaffold") || len(s.notes) != 1 || s.notes[0] != "todos: /n is loaded, read-only: its store was released (todos.release)" ||
 		!slices.Contains(s.calls[n:], "todos.stores[]") {
-		t.Errorf("New… on a folder not claimed: calls %v, notes %q", s.calls[n:], s.notes)
+		t.Errorf("New… on a folder whose store was released: calls %v, notes %q", s.calls[n:], s.notes)
 	}
 }
 
 // TestTodosEnterOnTheCardOfKeysOpensTheRow: Enter on ?'s card is Enter in the tab shown: the task
 // under the cursor's file opens; on Archived's months, the month under their cursor; with no task,
-// nothing. A write asked of a store not claimed is never sent.
+// nothing. A write asked of a released store is never sent.
 func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)

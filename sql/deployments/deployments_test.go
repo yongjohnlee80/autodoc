@@ -2,6 +2,7 @@ package deployments_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -208,6 +209,9 @@ func TestTheTodoSearchDefault(t *testing.T) {
 		t.Fatalf("a new workspace's todo_graph_only %s, want 0: its tasks in search", got)
 	}
 	exec(t, db, "UPDATE workspace SET todo_graph_only = 1 WHERE id = 2")
+	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
+		t.Fatalf("revert 000024, the scripts after: %s, %v", name, err)
+	}
 	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
 		t.Fatalf("revert 000023, the script after: %s, %v", name, err)
 	}
@@ -255,6 +259,9 @@ func TestTheWorkspaceVarsScript(t *testing.T) {
 	if _, err := db.ExecContext(ctx, "INSERT INTO todo_workspace_var(kb, name, value) VALUES ('/kb', 'DUMPS', '/x')"); err == nil {
 		t.Fatal("two values of one name in one workspace")
 	}
+	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
+		t.Fatalf("revert 000024, the script after: %s, %v", name, err)
+	}
 	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
 		t.Fatalf("revert 000023: %s, %v", name, err)
 	}
@@ -263,6 +270,51 @@ func TestTheWorkspaceVarsScript(t *testing.T) {
 	}
 	if _, err := db.QueryContext(ctx, "SELECT 1 FROM todo_workspace_var"); err == nil {
 		t.Fatal("the revert left todo_workspace_var")
+	}
+}
+
+// 000024 records a todo store's release (ADR 1791532020 r13): NULL for a store never released, the
+// time todos.release gave it back otherwise. The revert drops the column and keeps the stores.
+func TestTheTodoStoreReleasedScript(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	exec(t, db, "INSERT INTO todo_store(id, path, claimed) VALUES ('s', '/kb/.todo-list', 1)")
+	exec(t, db, "INSERT INTO todo_store(id, path, claimed, released_at) VALUES ('r', '/r/.todo-list', 0, 42)")
+	rows, err := db.QueryContext(ctx, "SELECT id, released_at FROM todo_store ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for rows.Next() {
+		var id string
+		var at sql.NullInt64
+		if err := rows.Scan(&id, &at); err != nil {
+			t.Fatal(err)
+		}
+		got[id] = at
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got["s"] != (sql.NullInt64{}) || got["r"] != (sql.NullInt64{Int64: 42, Valid: true}) {
+		t.Fatalf("released_at %v: want NULL for a store never released, the time for one released", got)
+	}
+	if name, err := deployments.Runner().Revert(ctx, db, 24); err != nil || !strings.Contains(name, "000024") {
+		t.Fatalf("revert 000024: %s, %v", name, err)
+	}
+	if _, err := db.QueryContext(ctx, "SELECT released_at FROM todo_store"); err == nil {
+		t.Fatal("the revert left todo_store.released_at")
+	}
+	left, err := db.QueryContext(ctx, "SELECT id FROM todo_store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for left.Next() {
+		n++
+	}
+	if err := left.Close(); err != nil || n != 2 {
+		t.Fatalf("the revert kept %d stores, %v; want both", n, err)
 	}
 }
 

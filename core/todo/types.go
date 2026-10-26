@@ -100,6 +100,9 @@ type Resolved struct {
 	Override string `json:"override,omitempty"`
 	Writable bool   `json:"writable"`
 	Claimed  bool   `json:"claimed"`
+	// Released is a store todos.release gave back: a write no longer claims it, only todos.claim
+	// does. A store neither claimed nor released is claimed by its first write.
+	Released bool `json:"released,omitempty"`
 }
 
 // Opened is a store Open found, or Scaffold made.
@@ -111,11 +114,13 @@ type Opened struct {
 
 // StoreInfo is one store the daemon knows.
 type StoreInfo struct {
-	ID      string    `json:"id"`
-	Path    string    `json:"path"`
-	Roots   []string  `json:"roots"`
-	Claimed bool      `json:"claimed"`
-	LastUse time.Time `json:"last_use"`
+	ID      string   `json:"id"`
+	Path    string   `json:"path"`
+	Roots   []string `json:"roots"`
+	Claimed bool     `json:"claimed"`
+	// Released is a store todos.release gave back (Resolved.Released).
+	Released bool      `json:"released,omitempty"`
+	LastUse  time.Time `json:"last_use"`
 	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4): the recorded one
 	// while a workspace has it, or else the deepest containing the store; "" for none.
 	KB string `json:"kb,omitempty"`

@@ -23,8 +23,8 @@ var (
 	// .todo-list, or a SetDir override.
 	ErrNotWritable = errs.Sentinel(errs.ErrPrecondition, "todo: not a writable store")
 
-	// ErrUnclaimed is a write to a store the daemon has not claimed: until the cutover, auto-core
-	// writes the store and the daemon only reads it.
+	// ErrUnclaimed is a write to a store Release gave back: the daemon only reads it until Claim. A
+	// store never released is claimed by its first write instead (Manager.writable).
 	ErrUnclaimed = errs.Sentinel(errs.ErrPrecondition, "todo: the store is not claimed")
 
 	// ErrNoWorkspace is an At naming a workspace the daemon does not have.

@@ -501,7 +501,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "nil",
-      doc = "The cutover: the daemon writes the store from now on. Only the release that removes auto-core's writer calls it.",
+      doc = "Lets the daemon write a store todos.release gave back. A store never released needs none: its first write claims it.",
     },
     ["todos.get"] = {
       since = 20, scope = "global", audience = "agent",
@@ -536,7 +536,7 @@ return {
         { name = "at", type = "workspace | {root}" },
         { name = "to", type = "string" }
       },
-      result = "{store_id, store, root, override?, writable, claimed}",
+      result = "{store_id, store, root, override?, writable, claimed, released?}",
       doc = "Moves an at's store to a new directory; its claim, change log and cursors move with it.",
     },
     ["todos.open"] = {
@@ -570,7 +570,7 @@ return {
         { name = "at", type = "workspace | {root}" }
       },
       result = "nil",
-      doc = "The cutover's rollback: the daemon only reads the store again.",
+      doc = "Gives the store back: the daemon only reads it, and a write no longer claims it, until todos.claim.",
     },
     ["todos.remove"] = {
       since = 20, scope = "global", audience = "agent",
@@ -596,7 +596,7 @@ return {
       params = {
         { name = "at", type = "workspace | {root}" }
       },
-      result = "{store_id, store, root, override?, writable, claimed}",
+      result = "{store_id, store, root, override?, writable, claimed, released?}",
       doc = "Where an at's store is, and whether the daemon may write it.",
     },
     ["todos.scaffold"] = {
@@ -613,7 +613,7 @@ return {
         { name = "at", type = "workspace | {root}" },
         { name = "dir", type = "string" }
       },
-      result = "{store_id, store, root, override?, writable, claimed}",
+      result = "{store_id, store, root, override?, writable, claimed, released?}",
       doc = "Points an at's root at another store directory, or back at <root>/.todo-list.",
     },
     ["todos.set_kb"] = {
@@ -649,7 +649,7 @@ return {
     ["todos.stores"] = {
       since = 20, scope = "global", audience = "agent",
       params = {},
-      result = "[{id, path, roots, claimed, last_use}]",
+      result = "[{id, path, roots, claimed, released?, last_use}]",
       doc = "The stores the daemon knows.",
     },
     ["todos.update"] = {
@@ -823,7 +823,7 @@ return {
     { code = -32074, name = "todos.not_a_store", next = "todos.scaffold one, or todos.set_dir to another" },
     { code = -32075, name = "todos.exists", next = "pick another id, or another move_store target" },
     { code = -32076, name = "todos.not_writable", next = "todos.register the project's root, or todos.set_dir" },
-    { code = -32077, name = "todos.unclaimed", next = "edit it through AutoVim until the cutover" },
+    { code = -32077, name = "todos.unclaimed", next = "todos.claim it to write it again" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

@@ -62,7 +62,7 @@ func (t *todos) statusPane(c todoStatusChoice) pane {
 }
 
 // chooseStatus is s: the task under the cursor, in a store taking writes here, offered every
-// status. Off a task, or on a store not claimed, it does nothing: the action row offers it only
+// status. Off a task, or on a released store, it does nothing: the action row offers it only
 // where it applies.
 func (t *todos) chooseStatus() {
 	s, x := t.cursor()

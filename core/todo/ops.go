@@ -177,6 +177,12 @@ func render(t Task) (Task, []byte, error) {
 // starts in-progress (D1), and its change is an assign, delivered as todos.assign's is.
 func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	w, st, err := m.writing(ctx, at)
+	if errors.Is(err, ErrNotAStore) {
+		// a workspace's first task makes its store, as its first write claims it (ADR 1791532020 r13)
+		if _, err = m.Scaffold(ctx, at); err == nil {
+			w, st, err = m.writing(ctx, at)
+		}
+	}
 	if err != nil {
 		return Task{}, err
 	}
@@ -457,14 +463,15 @@ func (m *Manager) RemoveMalformed(ctx context.Context, at At, p string) error {
 // an interrupted move removed. Archives are not read: a refresh never rewrites them. A refresh
 // that finds nothing to change writes nothing.
 func (m *Manager) Refresh(ctx context.Context, at At) (RefreshSummary, error) {
-	w, err := m.resolve(ctx, at)
+	w, err := m.writable(ctx, at) // asked for, it is a write: a store never claimed is claimed by it
 	if err != nil {
 		return RefreshSummary{}, err
 	}
 	return m.refresh(ctx, w)
 }
 
-// refresh is Refresh of a resolved store: the verb's, and the daily one's (RefreshDue).
+// refresh is Refresh of a resolved store: the verb's, and the daily one's (RefreshDue), which claims
+// nothing: a store no write has claimed is left as it is.
 func (m *Manager) refresh(ctx context.Context, w where) (RefreshSummary, error) {
 	if err := m.mayWrite(ctx, w); err != nil {
 		return RefreshSummary{}, err

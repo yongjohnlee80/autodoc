@@ -79,6 +79,7 @@ const (
 	tcClaimedAt    todoCol = "claimed_at"
 	tcLastUse      todoCol = "last_use"
 	tcRefreshedAt  todoCol = "refreshed_at"
+	tcReleasedAt   todoCol = "released_at"
 	tcRoot         todoCol = "root"
 	tcOverride     todoCol = "override"
 	tcRegistered   todoCol = "registered"
@@ -94,6 +95,7 @@ type (
 		ID, Path, KB                    string
 		Claimed                         int64
 		ClaimedAt, LastUse, RefreshedAt *int64
+		ReleasedAt                      *int64
 	}
 	todoRootRow struct {
 		Root, Override, KBRoot   string
@@ -179,6 +181,7 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcClaimedAt:   func(r *todoStoreRow) any { return &r.ClaimedAt },
 			tcLastUse:     func(r *todoStoreRow) any { return &r.LastUse },
 			tcRefreshedAt: func(r *todoStoreRow) any { return &r.RefreshedAt },
+			tcReleasedAt:  func(r *todoStoreRow) any { return &r.ReleasedAt },
 			tcKB:          func(r *todoStoreRow) any { return &r.KB },
 		}, []todoCol{tcID}, map[todoSort]string{byKey: `"todo_store"."id"`}),
 		roots: todoTable(c, "todo_root", map[todoCol]func(*todoRootRow) any{
@@ -525,7 +528,8 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 	}
 	for _, r := range stores {
 		s.Stores[r.ID] = todo.StoreRecord{ID: r.ID, Path: r.Path, Claimed: r.Claimed != 0,
-			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse), RefreshedAt: fromNanos(r.RefreshedAt), KB: r.KB}
+			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse), RefreshedAt: fromNanos(r.RefreshedAt),
+			ReleasedAt: fromNanos(r.ReleasedAt), KB: r.KB}
 	}
 	roots, err := t.roots.On(tx).Select()
 	if err != nil {
@@ -573,7 +577,8 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 func saveSettings(tx *dao.Transaction, t *todoTables, before, after todo.Settings) error {
 	err := syncRecords(after.Stores, before.Stores, func(id string, r todo.StoreRecord) error {
 		return t.stores.On(tx).SetMap(map[todoCol]any{tcID: id, tcPath: r.Path, tcClaimed: flag(r.Claimed),
-			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse), tcRefreshedAt: nanos(r.RefreshedAt), tcKB: r.KB}).Upsert()
+			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse), tcRefreshedAt: nanos(r.RefreshedAt),
+			tcReleasedAt: nanos(r.ReleasedAt), tcKB: r.KB}).Upsert()
 	}, func(id string) error { return t.stores.On(tx).With(tcID, id).Delete() })
 	if err != nil {
 		return err

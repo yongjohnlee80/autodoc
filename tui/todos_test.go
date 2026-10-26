@@ -97,18 +97,18 @@ func listedIn(t *testing.T, d *daemon, bucket string) []todo.Task {
 	return l.Tasks
 }
 
-// TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover: SPC x opens the panel on the workspace's
-// store, its tasks numbered in the Open tab. On a store not claimed the action row offers nothing,
-// only its note, and every write's key does nothing: no dialog, no notice, no error. SPC x again
-// closes the panel.
-func TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover(t *testing.T) {
+// TestTodosShowsAReleasedStoreReadOnly: SPC x opens the panel on the workspace's store, its tasks
+// numbered in the Open tab. On a store todos.release gave back the action row offers nothing, only
+// its note, and every write's key does nothing: no dialog, no notice, no error. SPC x again closes
+// the panel.
+func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, false, todo.Spec{Title: "Write the view", Priority: "high"})
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
 	r.s.WaitForText(t, "Write the view")
 	r.s.WaitForText(t, "status: open")
-	r.s.WaitForText(t, "read-only until the cutover")
+	r.s.WaitForText(t, "read-only: this store was released (todos.release)")
 	r.keys(t, key('a'), key('s'), key('d'), key('A'), key('M'))
 	time.Sleep(300 * time.Millisecond)
 	sc := r.s.String()
@@ -123,6 +123,40 @@ func TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover(t *testing.T) {
 	}
 	r.leader(t, 'x')
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "Write the view") })
+}
+
+// TestTodosAddsAFreshWorkspacesFirstTask: AutoDoc on its own (ADR 1791532020 r13): a workspace that
+// never had a store, nothing claimed or scaffolded first. The todos panel opens on it writable, no
+// note of read-only, and a adds its first task on the first try: the task lands, its store made
+// and claimed by that write, marker and all.
+func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
+	r.leader(t, 'x')
+	r.s.WaitForText(t, "[ Add ]")
+	if strings.Contains(r.s.String(), "read-only") {
+		t.Fatalf("a fresh workspace's store is read-only:\n%s", r.s.String())
+	}
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoOpenTable", "forceActiveFocus")); return true })
+	r.keys(t, key('a'))
+	r.s.WaitForText(t, "new task")
+	r.keys(t, decltest.Type("The first task")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the task added", func(string) bool {
+		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{"open"}})
+		return err == nil && len(l.Tasks) == 1 && l.Tasks[0].Title == "The first task"
+	})
+	if res, err := d.todos.Resolve(context.Background(), kbTodos); err != nil || !res.Claimed {
+		t.Fatalf("the first task's store: %+v %v; want it claimed by that write", res, err)
+	}
+	res, _ := d.todos.Resolve(context.Background(), kbTodos)
+	if _, err := d.todoDisk.ReadFile(res.Store + "/.autodoc-owner"); err != nil {
+		t.Errorf("no marker in the store the first task made, %s: %v", res.Store, err)
+	}
+	if strings.Contains(r.s.String(), "todos.unclaimed") || strings.Contains(r.s.String(), "not claimed") {
+		t.Errorf("a refusal on the way:\n%s", r.s.String())
+	}
 }
 
 // TestTodosAddsChoosesAStatusAndRemoves: on a claimed store a adds a task, shown in Open under the

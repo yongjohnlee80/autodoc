@@ -3328,9 +3328,9 @@ WHAT A KEY NEEDS
         <source>Preview o&amp;ption</source>
         <translation>プレビューオプション(&amp;p)</translation>
     </message>
-    <message id="autodoc.main.read_only_until_the_cutover">
-        <source>read-only until the cutover</source>
-        <translation>切り替えまで読み取り専用</translation>
+    <message id="autodoc.main.read_only_this_store_was_released">
+        <source>read-only: this store was released (todos.release)</source>
+        <translation>読み取り専用: このストアは解放されています (todos.release)</translation>
     </message>
     <message id="autodoc.main.recent_files">
         <source>Recen&amp;t files…</source>
@@ -4836,9 +4836,9 @@ WHAT A KEY NEEDS
         <source>todos: %1 is labelled %2</source>
         <translation>ToDo: %1 のラベルを %2 にしました</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo">
-        <source>todos: %1 is loaded, read-only: its new store waits for the cutover</source>
-        <translation>ToDo: %1 を読み取り専用で読み込みました: 新しいストアは切り替えを待っています</translation>
+    <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
+        <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
+        <translation>ToDo: %1 を読み取り専用で読み込みました: ストアは解放されています (todos.release)</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
