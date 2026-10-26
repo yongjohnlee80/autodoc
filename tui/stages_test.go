@@ -219,7 +219,7 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	r.s.WaitFor(t, "the hits in recall order", func(sc string) bool {
 		return strings.Contains(sc, "hits (2)") && !strings.Contains(sc, "re-ranked by")
 	})
-	r.s.WaitFor(t, "the choice kept", func(string) bool {
+	r.waitWithin(t, "the choice kept", daemonWait, func() bool {
 		p, _ := d.db.Preferences(ctx)
 		return p[prefSearchStages] == "lexical,semantic"
 	})
@@ -245,7 +245,7 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	if rec.count() != n {
 		t.Errorf("unchecking the last retriever searched again: %v", rec.last())
 	}
-	r.s.WaitFor(t, "the choice kept", func(string) bool {
+	r.waitWithin(t, "the choice kept", daemonWait, func() bool {
 		p, _ := d.db.Preferences(ctx)
 		return p[prefSearchStages] == "semantic"
 	})

@@ -329,7 +329,7 @@ func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T)
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitFor(t, "canonical default persisted", func(string) bool {
+	r.waitWithin(t, "canonical default persisted", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m[prefAgentDefaultCodename] == "a"
 	})
@@ -485,7 +485,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.panelResized("agent", 60, 70); return true })
-	r.s.WaitFor(t, "kept", func(string) bool {
+	r.waitWithin(t, "kept", daemonWait, func() bool {
 		got, _ := d.db.Preferences(context.Background())
 		return got["tui.agent.bottom.size"] == "60" && got["tui.agent.bottom.length"] == "70"
 	})
@@ -523,7 +523,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 		r.h.agents.setAgentLength(99)
 		return true
 	}) // out of range: ignored
-	r.s.WaitFor(t, "kept", func(string) bool {
+	r.waitWithin(t, "kept", daemonWait, func() bool {
 		got, _ := d.db.Preferences(context.Background())
 		return got["tui.agent.edge"] == "center" && got["tui.agent.bottom.size"] == "70" && got["tui.agent.bottom.length"] == "60"
 	})

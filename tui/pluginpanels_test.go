@@ -390,7 +390,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 		t2, l2, _, _, ok := frameOf(sc, "Card")
 		return ok && l2 == left-20 && t2 == top+3
 	})
-	r.s.WaitFor(t, "the move kept", func(string) bool {
+	r.waitWithin(t, "the move kept", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		_, ok := panelgeometry.ParseFloat(m["tui."+cardPanelID("card")+".float"])
 		return ok
@@ -405,7 +405,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 	altDrag(t, r, tuicore.MouseRight, left+1, bottom-1, -6, 2)
 	waitSaid(t, logs, "card", "resize "+strconv.Itoa(w+6)+"x"+strconv.Itoa(h+2))
 	var kept string
-	r.s.WaitFor(t, "the resize kept", func(string) bool {
+	r.waitWithin(t, "the resize kept", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		kept = m["tui."+cardPanelID("card")+".float"]
 		_, ok := panelgeometry.ParseFloat(kept)
@@ -507,7 +507,7 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 		t2, l2, _, _, ok := frameOf(sc, "Card")
 		return ok && l2 == left-4 && t2 == top+1
 	})
-	r.s.WaitFor(t, "kept once", func(string) bool {
+	r.waitWithin(t, "kept once", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		_, ok := panelgeometry.ParseFloat(m["tui."+cardPanelID("card")+".float"])
 		return ok

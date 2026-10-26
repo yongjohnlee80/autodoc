@@ -32,7 +32,7 @@ func altDrag(t *testing.T, r *running, button tuicore.MouseButton, x, y, dx, dy 
 // storedPref waits for the store's preference name to be want ("" for unset).
 func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
 	t.Helper()
-	r.s.WaitFor(t, name+" = "+want, func(string) bool {
+	r.waitWithin(t, name+" = "+want, daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m[name] == want
 	})
@@ -57,7 +57,7 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row >= 0 })
 	altDrag(t, r, tuicore.MouseRight, 20, 10, 10, 0)
-	r.s.WaitFor(t, "the explorer floating 45% wide", func(string) bool {
+	r.waitWithin(t, "the explorer floating 45% wide", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		f, ok := panelgeometry.ParseFloat(m["tui.explorer.float"])
 		return ok && f[0] == 0 && f[2] == 45
@@ -93,7 +93,7 @@ func TestArrangingAPanelIsOneChange(t *testing.T) {
 	r.s.WaitForText(t, "arrange the explorer")
 	r.keys(t, key('j'), key('L'), enter())
 	r.s.WaitFor(t, "a row down", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row == row0+1 })
-	r.s.WaitFor(t, "kept once", func(string) bool {
+	r.waitWithin(t, "kept once", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		return strings.HasPrefix(m["tui.explorer.float"], "0,")
 	})
@@ -161,7 +161,7 @@ func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
 	r.keys(t, key('l'))
 	r.s.WaitFor(t, "four columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
 	r.keys(t, enter())
-	r.s.WaitFor(t, "kept at 0.8%", func(string) bool {
+	r.waitWithin(t, "kept at 0.8%", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		return strings.HasPrefix(m["tui.explorer.float"], "0.8,")
 	})

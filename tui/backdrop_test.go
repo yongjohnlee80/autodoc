@@ -82,7 +82,7 @@ func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
 		t.Fatalf("%s's menu label %q has no access key", last, label)
 	}
 	r.keys(t, key(rune(strings.ToLower(label[amp+1 : amp+2])[0])))
-	r.s.WaitFor(t, "tui.theme = "+last, func(string) bool {
+	r.waitWithin(t, "tui.theme = "+last, daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.theme"] == last
 	})
@@ -109,7 +109,7 @@ func TestSepiaIsOnTheThemeMenu(t *testing.T) {
 	r.keys(t, key('t'))
 	r.s.WaitForText(t, "Sepia")
 	r.keys(t, key('s'))
-	r.s.WaitFor(t, "tui.theme = sepia", func(string) bool {
+	r.waitWithin(t, "tui.theme = sepia", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.theme"] == "sepia"
 	})

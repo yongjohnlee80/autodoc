@@ -42,7 +42,7 @@ func TestAGatedScriptAsksAndIsHeld(t *testing.T) {
 	r.s.WaitFor(t, "the grant kept", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["pkg"]["workspace.read"] })
 	})
-	r.s.WaitFor(t, "lua.grants in the store", func(string) bool {
+	r.waitWithin(t, "lua.grants in the store", daemonWait, func() bool {
 		all, err := d.db.Preferences(context.Background())
 		return err == nil && strings.Contains(all[prefLuaGrants], `"pkg":{"workspace.read":true}`)
 	})

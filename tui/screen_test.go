@@ -392,7 +392,7 @@ func TestPreferencesAreKept(t *testing.T) {
 	r.s.WaitFor(t, "the status line hidden", func(sc string) bool { return !strings.Contains(sc, "NORMAL") })
 	// the store holds the tests' "true" before the toggle's write lands: wait for the value
 	// written, not any value
-	r.s.WaitFor(t, "tui.status.shown = false stored", func(string) bool {
+	r.waitWithin(t, "tui.status.shown = false stored", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.status.shown"] == "false"
 	})
@@ -402,7 +402,7 @@ func TestPreferencesAreKept(t *testing.T) {
 	r.h.p.Post(func() { r.h.setRuler("30") })
 	r.s.WaitForText(t, "40 to 400")
 	r.h.p.Post(func() { r.h.setRuler("80") })
-	r.s.WaitFor(t, "the width stored", func(string) bool {
+	r.waitWithin(t, "the width stored", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		return m["tui.ruler"] == "80"
 	})
@@ -1008,7 +1008,8 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitForText(t, "Remove the provider local?")
 	r.keys(t, key('y'))
 	// the list, not the status line: a scan ending ("indexed 3 files") can replace the message
-	r.s.WaitFor(t, "local gone from the store and the list", func(sc string) bool {
+	r.waitWithin(t, "local gone from the store and the list", daemonWait, func() bool {
+		sc := r.s.String()
 		ps, err := d.db.Providers(ctx)
 		return err == nil && len(ps) == 1 && !strings.Contains(sc, "local           Ollama")
 	})
@@ -1250,7 +1251,7 @@ func TestTheTextKeymap(t *testing.T) {
 	if got := d.read(t, "kb", "a.md"); got != "hi there aaa\n" {
 		t.Fatalf("a.md holds %q", got)
 	}
-	r.s.WaitFor(t, "the keymap kept", func(string) bool {
+	r.waitWithin(t, "the keymap kept", daemonWait, func() bool {
 		m, _ := d.db.Preferences(context.Background())
 		return m["tui.editor.keymap"] == "text"
 	})
@@ -2115,7 +2116,7 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 		c, ok := r.s.Backend.CursorColor()
 		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xff, G: 0xaf, B: 0x00}
 	})
-	r.s.WaitFor(t, "kept", func(string) bool {
+	r.waitWithin(t, "kept", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.editor.linenumbers"] == "true" && m["tui.editor.wrap"] == "true"
 	})

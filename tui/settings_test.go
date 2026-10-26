@@ -311,7 +311,7 @@ func TestTheSettingsSchema(t *testing.T) {
 	}
 	r.saveForm(func(f *settingsForm) { f.schema = "broken.yaml" })
 	// the first save's notice may still be on screen: wait for the second save in the store
-	r.s.WaitFor(t, "broken.yaml stored", func(string) bool {
+	r.waitWithin(t, "broken.yaml stored", daemonWait, func() bool {
 		ws, err := d.db.Workspaces(context.Background())
 		return err == nil && len(ws) == 1 && ws[0].SchemaPath != nil && *ws[0].SchemaPath == "broken.yaml"
 	})
@@ -337,7 +337,7 @@ func TestTheSettingsTextTypes(t *testing.T) {
 	r.s.WaitForText(t, "derived document format")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.texts = "" })
-	r.s.WaitFor(t, ".log removed with its include", func(string) bool {
+	r.waitWithin(t, ".log removed with its include", daemonWait, func() bool {
 		ws, err := d.db.Workspaces(context.Background())
 		return err == nil && len(ws) == 1 && ws[0].TextExtensions == nil && !slices.Contains(ws[0].Include, "**/*.log")
 	})
