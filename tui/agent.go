@@ -457,7 +457,12 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"- `editor.insert '[line, col, \"text\", revision]'`, `editor.replace '[l1, c1, l2, c2, \"text\", revision]'`, " +
 	"`editor.delete '[l1, c1, l2, c2, revision]'`: pass the revision you read, so an edit of a page the user has " +
 	"changed since is refused rather than misplaced. Each edit is one undo step for the user.\n" +
-	"- `editor.run '[\"command line\"]'`: a `:` command, as the user would type it.\n" +
+	"- `editor.commands`: every command, its `:` name and aliases, its arguments and what it does, Lua and plugin " +
+	"commands included. It needs no permission. Check it before you run a command, rather than guess one.\n" +
+	"- `editor.run '[\"command line\"]'`: a `:` command, as the user would type it, such as `:open <path>`.\n" +
+	"- `editor.open '[\"path\"]'`: open a file, its path absolute or relative to the root of the workspace the " +
+	"editor is in (`workspace_in_use`). It answers once the open is on its way: the user may be asked first (unsaved " +
+	"changes), so read `editor.document` to see it open.\n" +
 	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
 	"to their lua/ folder only if they say yes.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +

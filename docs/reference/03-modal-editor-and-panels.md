@@ -200,6 +200,7 @@ AutoDoc is file-canonical, so another program (`git pull`, an AI agent) may chan
 
 ```text
 :<number>               Go to that line
+:open <path>  (:e, :edit)  Open a file: its absolute path, ~/…, or a path in the workspace in use
 :w  (:write)            Save
 :q  (:quit) / :q!       Quit; :q! discards unsaved changes
 :wq                     Save, then quit
@@ -222,7 +223,7 @@ AutoDoc is file-canonical, so another program (`git pull`, an AI agent) may chan
 :usage                  What AutoDoc uses
 ```
 
-Every other command has a key or a menu row, and a Lua script reaches any of them with `autodoc.run(id)`. A plugin's commands run from `SPC p`.
+Every other command has a key or a menu row, and a Lua script reaches any of them with `autodoc.run(id)`. A plugin's commands run from `SPC p`. `autodoc --commands-reference` lists every command AutoDoc is built with, by its id, with its `:` names ([`docs/commands.md`](../commands.md)). An agent AutoDoc started lists the live ones, your Lua and plugin commands included, with `autodoc --editor editor.commands`, and opens a file with `autodoc --editor editor.open '["path"]'`.
 
 ### Finding and Replacing
 

@@ -520,6 +520,7 @@ were. F1's help starts with the keys your file moves, and the cards name each by
 
 ```sh
 autodoc --keymap-reference   # the file's format, and every AutoDoc command with its keys
+autodoc --commands-reference # every command, by its id, with its `:` names and arguments
 autodoc --check-keymap       # check keymap.xml beside config.toml, with no UI or daemon
 ```
 
@@ -539,6 +540,7 @@ does. A plugin runs one with `host.call` (protocol 3, [docs/plugins.md](docs/plu
 | Command | Does |
 |---|---|
 | `:12` | go to line 12 (refused past the last line) |
+| `:open <path>`, `:e`, `:edit` | open a file: its absolute path, `~/…`, or a path in the workspace in use; spaces and all |
 | `:w`, `:wq`, `:x`, `:q`, `:q!` | save; save and quit; save if changed and quit; quit (asks over unsaved changes); quit discarding them |
 | `:find <term>`, `:nohl` | the page's find, as `/` is: marked, `n` and `N` go on; clear it |
 | `:terminal`, `:term` | open the terminal, with the keyboard in it |
