@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -250,4 +251,42 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 	onLoop(r, func() bool { core{r.h}.SetPref(tileEdgeKey("terminal"), "top"); return true })
 	r.s.WaitFor(t, "the terminal tiled at the top, set elsewhere", func(string) bool { return tiledAt("top") })
 	wantEdgeChecked("top")
+}
+
+// TestAnEdgeChosenTilesThePanelAsItIsNow (Zen, #16 r1): :layout terminal open on the tiled
+// terminal, its Tiled › showing, the store floats it (as another TUI's choice, read back by a
+// reload). Right then docks it at the right and tiles it: the Layout as it is when chosen, not as
+// it was when the menu was built.
+func TestAnEdgeChosenTilesThePanelAsItIsNow(t *testing.T) {
+	d, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	onLoop(r, func() bool {
+		core{r.h}.SetPref(layoutKey("terminal"), layoutTiled)
+		r.h.focusEditor()
+		return true
+	})
+	r.command(t, "layout terminal")
+	r.s.WaitForText(t, "Float")
+	r.keys(t, key('t'))
+	r.s.WaitForText(t, "Bottom")
+	r.s.WaitFor(t, "the terminal's Layout stored Tiled", func(string) bool {
+		p, err := d.db.Preferences(context.Background())
+		return err == nil && p[layoutKey("terminal")] == layoutTiled
+	})
+	if err := d.db.SetPreference(context.Background(), layoutKey("terminal"), layoutFloat); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.loadPrefs(); return true })
+	r.s.WaitFor(t, "the reload floating it", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.Value(layoutKey("terminal")) == layoutFloat })
+	})
+	r.s.WaitForText(t, "Bottom") // Tiled › still open
+	r.keys(t, key('r'))
+	r.s.WaitFor(t, "Right chosen", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.Value(tileEdgeKey("terminal")) == "right" })
+	})
+	if got := onLoop(r, func() string { return r.h.prefs.Value(layoutKey("terminal")) }); got != layoutTiled {
+		t.Fatalf("Tiled › Right on the menu left the terminal %s after a reload floated it", got)
+	}
 }
