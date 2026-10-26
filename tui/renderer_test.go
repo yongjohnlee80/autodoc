@@ -31,7 +31,7 @@ func TestTheRendererPreferenceIsMirroredForTheNextStart(t *testing.T) {
 		return mirrored(file) == RendererOpenGL && r.source("App.rendererOpenGL") == "true" &&
 			r.noticed("the renderer changes at the next start")
 	})
-	r.s.WaitFor(t, "the store keeping it", func(string) bool {
+	r.waitWithin(t, "the store keeping it", daemonWait, func() bool {
 		m, _ := d.db.Preferences(t.Context())
 		return m[prefRenderer] == RendererOpenGL
 	})

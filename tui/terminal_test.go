@@ -215,7 +215,7 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 	}
 	// Kept in the daemon's store, so a restart finds them. The screen follows a change at once and
 	// its write lands after: wait for the values written, not any value.
-	r.s.WaitFor(t, "edge right, center.size 40, bottom.size 50 stored", func(string) bool {
+	r.waitWithin(t, "edge right, center.size 40, bottom.size 50 stored", daemonWait, func() bool {
 		got, err := d.db.Preferences(context.Background())
 		return err == nil && got["tui.terminal.edge"] == "right" && got["tui.terminal.center.size"] == "40" &&
 			got["tui.terminal.bottom.size"] == "50"

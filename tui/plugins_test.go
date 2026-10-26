@@ -852,7 +852,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 		return -1
 	})
 	r.h.p.Post(func() { r.h.plugins.placePlugin(i) })
-	r.s.WaitFor(t, "the choice stored", func(string) bool {
+	r.waitWithin(t, "the choice stored", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.plugin.side.placement"] == "left"
 	})
