@@ -461,8 +461,10 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"commands included. It needs no permission. Check it before you run a command, rather than guess one.\n" +
 	"- `editor.run '[\"command line\"]'`: a `:` command, as the user would type it, such as `:open <path>`.\n" +
 	"- `editor.open '[\"path\"]'`: open a file, its path absolute or relative to the root of the workspace the " +
-	"editor is in (`workspace_in_use`). It answers once the open is on its way: the user may be asked first (unsaved " +
-	"changes), so read `editor.document` to see it open.\n" +
+	"editor is in (`workspace_in_use`). It needs the `commands` permission, as `editor.run` does: the first call " +
+	"asks the user, and is refused with `needs commands` until they allow it. It answers once the open is on its " +
+	"way, not once the file is open: the user may be asked first (unsaved changes), so read `editor.document` " +
+	"until it shows the file before you act on it.\n" +
 	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
 	"to their lua/ folder only if they say yes.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
