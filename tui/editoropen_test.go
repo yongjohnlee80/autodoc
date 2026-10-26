@@ -109,6 +109,13 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 	if _, re := call("editor.open", " "); re == nil || re.Code != codeEditorRefused || !strings.Contains(re.Message, "takes a path") {
 		t.Fatalf("an empty path: %v", re)
 	}
+
+	// a key bound to an id no command has (a keymap's typo) says so, and opens nothing
+	onLoop(r, func() bool { r.h.runEntry("file.no_such_open"); return true })
+	r.s.WaitFor(t, "the unknown id said", func(string) bool { return r.noticed("unknown: file.no_such_open") })
+	if n := r.file(); n.path != "a.md" {
+		t.Fatalf("an unknown id moved the page to %s", n.path)
+	}
 }
 
 // A relative path is the editor's workspace's, whichever workspace the agent asking started in: an
