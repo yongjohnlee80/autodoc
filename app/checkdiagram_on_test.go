@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
+	"github.com/yongjohnlee80/golib/gui/vegalite"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
@@ -68,5 +70,38 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 	if code != diagramsNotDrawn || !strings.Contains(out, at("shapes.md")+":11: not drawn: "+pieWhy.Error()) ||
 		!strings.Contains(out, at("shapes.md")+":16: ok (mermaid)") || strings.Contains(out, at("shapes.md")+":4:") {
 		t.Errorf("a quoted pie, a text example and a flowchart: %d\n%s", code, out)
+	}
+}
+
+// --diagram-reference is golib's own tables: every kind gui/mermaid draws with each of its keywords,
+// and each list of gui/vegalite's subset, as golib answers them; exit 0. A few names are pinned too,
+// so the reference is seen to carry them.
+func TestTheDiagramReferenceIsGolibs(t *testing.T) {
+	code, out := runMain(t, nil, "--diagram-reference")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	code1 := func(names []string) string {
+		q := make([]string, len(names))
+		for i, n := range names {
+			q[i] = "`" + n + "`"
+		}
+		return strings.Join(q, ", ")
+	}
+	var want []string
+	for _, k := range guimermaid.Kinds() {
+		want = append(want, "- "+k.Kind.String()+": "+code1(k.Keywords)+"\n")
+	}
+	s := vegalite.Subset()
+	want = append(want, "- Marks: "+code1(s.Marks), "- Channels: "+code1(s.Channels), "- Field types: "+code1(s.FieldTypes),
+		"- Scale types: "+code1(s.ScaleTypes), "- Aggregates: "+code1(s.Aggregates))
+	for place, keys := range s.Passed {
+		want = append(want, "- "+place+": "+code1(keys)+"\n")
+	}
+	want = append(want, "- flowchart: `flowchart`, `graph`\n", "- timeline: `timeline`\n", "`rule`", "`average`", "`utc`")
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("the reference lacks %q:\n%s", w, out)
+		}
 	}
 }
