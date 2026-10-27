@@ -1,5 +1,7 @@
 ---AutoDoc's public Lua API: what the drawer, the picker, auto-finder and other plugins call.
----Every function is asynchronous, `cb(result, err)` with err as `{code, message}`.
+---The daemon's calls are asynchronous, `cb(result, err)` with err as `{code, message}`. The drawer's
+---calls back `cb(ok, value)` as the host registry does; primary, selected, select and set_primary
+---answer at once.
 ---@module 'autodoc.api'
 
 local session = require("autodoc.session")
