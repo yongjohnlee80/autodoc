@@ -156,6 +156,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
 	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
 	fs.Bool("commands-reference", false, "print the reference for the commands AutoDoc is built with: each one's id, its ':' name and arguments, with no UI or daemon")
+	fs.Bool("check-diagram", false, "check the diagrams in the files after the flags (.mmd, .mermaid, .chart.json, .vl.json, or a .md's mermaid and vega-lite fences) as --gui draws them, with golib's renderer; print ok or golib's error for each, with no UI or daemon. Exit 0 all drawn, 1 any not drawn, 2 no file, 3 a build without the GUI")
 	fs.Bool("check-keymap", false, "check a keymap.xml (the file after the flags, or the one beside config.toml) as AutoDoc reads it; report every problem, without a UI or daemon")
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
@@ -206,6 +207,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
+		{flag: "check-diagram", many: true, run: func(string) int { return checkDiagrams(fs.Args(), stdout) }},
 		{flag: "check-keymap", arg: true, run: func(file string) int {
 			if err := checkKeymap(*configPath, file, stdout); err != nil {
 				return failed(err, 1)

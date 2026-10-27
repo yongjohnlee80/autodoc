@@ -17,6 +17,9 @@ type mode struct {
 	arg bool
 	// flagsAfter: flags may follow the argument too (autodoc --contracts todos.* --format md)
 	flagsAfter bool
+	// many: the mode takes every argument after the flags (autodoc --check-diagram a.mmd b.md); its
+	// run reads them from the flag set, and arg is the first
+	many bool
 	// oneOf are its flags that exclude each other: at most one is given
 	oneOf []string
 	// run runs the mode with its argument ("" for none) and is the process's exit code
@@ -49,17 +52,24 @@ func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companio
 		return given[m.flag]
 	}
 	byFlag := map[string]mode{}
-	var takers []string
+	var takers, severals []string
 	for _, m := range modes {
 		byFlag[m.flag] = m
 		if m.arg {
 			takers = append(takers, "--"+m.flag)
+		}
+		if m.many {
+			severals = append(severals, "--"+m.flag)
 		}
 	}
 	positional := fs.Args()
 	// shown is what a refusal names: what is left after a reparse, else every argument
 	rest, shown, took := positional, positional, false
 	for _, m := range modes {
+		if m.many && asked(m) && len(positional) > 0 {
+			arg, rest, took = positional[0], nil, true
+			break
+		}
 		if !m.arg || !asked(m) || len(positional) == 0 {
 			continue
 		}
@@ -74,7 +84,11 @@ func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companio
 		break
 	}
 	if len(rest) > 0 || !took && len(positional) > 0 {
-		fmt.Fprintf(fs.Output(), "autodoc: unexpected arguments: %v (only %s take one argument)\n", shown, list(takers))
+		also := ""
+		if len(severals) > 0 {
+			also = ", and " + list(severals) + " several"
+		}
+		fmt.Fprintf(fs.Output(), "autodoc: unexpected arguments: %v (only %s take one argument%s)\n", shown, list(takers), also)
 		return mode{}, "", 2, false
 	}
 	var chosen []string
