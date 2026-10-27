@@ -269,8 +269,9 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
 `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a fence is, read as the preview reads it.
 
 - **The menu bar** shows at the top. Set to hide (`Options › Editor preferences`), it hides until
-  `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter` is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
-  and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
+  `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter` is `Alt+letter` whatever the
+  terminal's Option setting (on a US layout; `Option+E`, `I`, `N` and `U` are dead keys there, so
+  their menus need `F10`), and `F10` may need `Fn`.
 - **The explorer**, one panel of two tabs. **Explorer** (`SPC e`): every workspace's folders and
   files, as a tree. **Links** (`SPC l`, `Relations › Links`): what this file is connected to, by
   kind and direction (superseded by, supersedes, sources, cited by, amends, amended by, related,
@@ -356,7 +357,8 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   badges it `[no workspace]`. It stays open when the workspace changes. `File › Open document…`
   (`SPC o`) is the fast picker over the workspace's own files.
 - **The status line** (`SPC t`), shown by default: the editor's mode, the workspace, and the file,
-  with `[+]` while it has unsaved changes. Hidden, it still shows while the TUI is not connected, whatever the preference says.
+  with `[+]` while it has unsaved changes. Set to hide, it still shows while the TUI is not
+  connected.
 - **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
   (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
   has none. **The outline** (`SPC O`, `Go › Outline…`) lists a Markdown file's headings, as the
