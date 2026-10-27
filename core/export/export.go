@@ -362,6 +362,9 @@ func page(colors palette, body string, diagrams, diagramPage bool, charts charts
 		if charts.drawn {
 			output.WriteString("div.chart svg{max-width:100%;height:auto}")
 		}
+		if media {
+			output.WriteString("video{display:block;max-width:100%;height:auto;margin:1rem 0}")
+		}
 		if charts.failed {
 			output.WriteString("p.chart-error{margin:1rem 0 .3rem;color:var(--muted);font-style:italic}")
 		}

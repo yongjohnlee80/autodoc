@@ -323,6 +323,7 @@ func TestASitePublishesItsMedia(t *testing.T) {
 		`<video controls muted playsinline preload="metadata" src="media/bare.webm">bare</video>`,
 		`<em>inline</em>`,
 		`content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'"`,
+		`video{display:block;max-width:100%;height:auto;margin:1rem 0}`,
 	} {
 		if !strings.Contains(front, want) {
 			t.Errorf("the front page lacks %s:\n%s", want, front)
@@ -400,7 +401,7 @@ func TestAPageOnItsOwnKeepsItsMediaInline(t *testing.T) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
 		}
 	}
-	if strings.Contains(page, "<video") || strings.Contains(page, "media-src") {
+	if strings.Contains(page, "<video") || strings.Contains(page, "media-src") || strings.Contains(page, "video{") {
 		t.Errorf("a page on its own has a video or a media policy:\n%s", page)
 	}
 }
