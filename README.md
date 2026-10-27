@@ -1,6 +1,6 @@
 # AutoDoc
 
-![An AI agent researches a question in AutoDoc: it searches the workspace, reads the passages it finds, and writes its report beside your notes](docs/media/gif/ai-research.gif)
+![An AI agent researches a question in AutoDoc: it searches the workspace, reads the passages it finds, and writes its report beside your notes](docs/media/gif/ai-research-1024.gif)
 
 **A document knowledge base you and your AI agents work in together.**
 
