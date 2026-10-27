@@ -47,9 +47,10 @@ func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 		strip.SetMaxTabWidth(bufferTabWidth) // a backstop: each label comes cut to fit (bufferTabLabel)
 		strip.SetOnClose(h.closeBufferTab)
 	}
+	labels := h.bufferTabLabels(bufferTabWidth - 2) // 2: the padding
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
-		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: h.bufferTabLabel(b, bufferTabWidth-2)} // 2: the padding
+		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: labels[b]}
 	}
 	strip.SetTabs(tabs)
 	if h.active != nil {
@@ -57,19 +58,36 @@ func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 	}
 }
 
-// bufferTabLabel is b's tab within w cells, its padding not counted (0: whole), told apart from
-// every other buffer's: its file's name; its path where another buffer's file has that name; its
-// workspace and path where another's has that path (in another workspace); a draft's hint
-// (buffer.new's), or untitled, with its number while another draft has that name. [+] while modified. A name longer than w is cut in its middle,
-// its start (the workspace, the folder) and its end (the file's name and kind) kept, and [+] after
-// it; two cut alike take their buffer's number, so the tabs drawn still tell every buffer apart.
-func (h *Host) bufferTabLabel(b *openBuffer, w int) string {
-	label := h.cutTabName(b, "", w)
-	if slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && h.cutTabName(o, "", w) == label }) {
-		label = h.cutTabName(b, " #"+strconv.Itoa(b.n), w)
+// bufferTabLabels are every buffer's tab within w cells, its padding not counted (0: whole), each told
+// apart from every other buffer's: its file's name; its path where another buffer's file has that
+// name; its workspace and path where another's has that path (in another workspace); a draft's hint
+// (buffer.new's), or untitled, with its number while another draft has that name. [+] while
+// modified. A name longer than w is cut in its middle, its start (the workspace, the folder) and its
+// end (the file's name and kind) kept, and [+] after it; two cut alike take their buffer's number, so
+// the tabs drawn still tell every buffer apart. They are resolved together, from facts counted once
+// (bufferTabNames), so the tabs and SPC b's card cost one pass over the buffers a change.
+func (h *Host) bufferTabLabels(w int) map[*openBuffer]string {
+	h.labelPasses++
+	names := h.bufferTabNames()
+	cut := make(map[*openBuffer]string, len(h.buffers))
+	same := map[string]int{}
+	for _, b := range h.buffers {
+		cut[b] = cutTabName(names[b], "", w)
+		same[cut[b]]++
 	}
-	return label + bufferMarks(b)
+	out := make(map[*openBuffer]string, len(h.buffers))
+	for _, b := range h.buffers {
+		label := cut[b]
+		if same[label] > 1 {
+			label = cutTabName(names[b], " #"+strconv.Itoa(b.n), w)
+		}
+		out[b] = label + bufferMarks(b)
+	}
+	return out
 }
+
+// bufferTabLabel is b's tab within w cells (bufferTabLabels).
+func (h *Host) bufferTabLabel(b *openBuffer, w int) string { return h.bufferTabLabels(w)[b] }
 
 // bufferMarks are b's marks after its name: [+] while modified, ! while its file changed or went
 // on disk (diskwatch.go); "" for neither.
@@ -87,14 +105,14 @@ func bufferMarks(b *openBuffer) string {
 	return " [" + marks + "]"
 }
 
-// cutTabName is b's name, then mark, cut in the middle to fit w cells with room for its marks
-// (always, so a cut label does not change length as the buffer is edited); 0 leaves it whole.
-func (h *Host) cutTabName(b *openBuffer, mark string, w int) string {
+// cutTabName is name, then mark, cut in the middle to fit w cells with room for its marks (always,
+// so a cut label does not change length as the buffer is edited); 0 leaves it whole.
+func cutTabName(name, mark string, w int) string {
 	if w <= 0 {
-		return h.bufferTabName(b) + mark
+		return name + mark
 	}
 	room := w - len(" [+!]") - tuicore.StringWidth(mark)
-	return elideMiddle(h.bufferTabName(b), room) + mark
+	return elideMiddle(name, room) + mark
 }
 
 // elideMiddle is s within w cells: whole if it fits, else its start and its longer end around an
@@ -128,25 +146,34 @@ func elideMiddle(s string, w int) string {
 	return head + "…" + tail
 }
 
-func (h *Host) bufferTabName(b *openBuffer) string {
-	other := func(match func(o *openBuffer) bool) bool {
-		return slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && match(o) })
-	}
-	if !b.file.open {
-		name := b.file.name() // its hint, or untitled
-		if other(func(o *openBuffer) bool { return !o.file.open && o.file.name() == name }) {
-			return name + " " + strconv.Itoa(b.n)
+// bufferTabNames are the buffers' names, each told apart from the others' (bufferTabLabels' rules),
+// from facts counted once: the drafts by name, the files by base name and by path.
+func (h *Host) bufferTabNames() map[*openBuffer]string {
+	drafts, bases, paths := map[string]int{}, map[string]int{}, map[string]int{}
+	for _, b := range h.buffers {
+		if !b.file.open {
+			drafts[b.file.name()]++
+			continue
 		}
-		return name
+		bases[path.Base(b.file.path)]++
+		paths[b.file.path]++
 	}
-	base := path.Base(b.file.path)
-	if !other(func(o *openBuffer) bool { return o.file.open && path.Base(o.file.path) == base }) {
-		return base
+	out := make(map[*openBuffer]string, len(h.buffers))
+	for _, b := range h.buffers {
+		switch base := path.Base(b.file.path); {
+		case !b.file.open && drafts[b.file.name()] > 1:
+			out[b] = b.file.name() + " " + strconv.Itoa(b.n)
+		case !b.file.open:
+			out[b] = b.file.name() // its hint, or untitled
+		case bases[base] == 1:
+			out[b] = base
+		case paths[b.file.path] == 1 || b.file.ws == "":
+			out[b] = b.file.path
+		default:
+			out[b] = b.file.ws + ": " + b.file.path
+		}
 	}
-	if !other(func(o *openBuffer) bool { return o.file.open && o.file.path == b.file.path }) || b.file.ws == "" {
-		return b.file.path
-	}
-	return b.file.ws + ": " + b.file.path
+	return out
 }
 
 // bufferOfTab is the buffer a tab's id names (its number), or nil.
@@ -184,7 +211,7 @@ func (h *Host) bufferChord(kc widget.KeyChord) bool {
 }
 
 // bufferCardText is SPC b's card as the buffers are now: a row for each open buffer up to the 10th,
-// its slot key and its tab's label (bufferTabLabel, as wide as the card allows: a longer one is cut
+// its slot key and its tab's label (bufferTabLabels, as wide as the card allows: a longer one is cut
 // in its middle, its file's name kept), and no row for a slot with no buffer; then the card's other
 // keys, as cardText lists them. F1 lists the card's keys as declared (helpCards).
 func (h *Host) bufferCardText() string {
@@ -198,13 +225,18 @@ func (h *Host) bufferCardText() string {
 		rest = append(rest, key)
 	}
 	var rows []string
+	labels := map[int]map[*openBuffer]string{} // by width: one unless a scheme gives slot keys of other widths
 	for i, b := range h.buffers[:min(len(h.buffers), bufferSlots)] {
 		key, ok := slot[bufferSlotRun(i+1)]
 		if !ok {
 			continue // a test's catalog of features alone declares no buffer card
 		}
 		shown := h.keys.shown(key)
-		rows = append(rows, shown+"  "+h.bufferTabLabel(b, cardBodyWidth-tuicore.StringWidth(shown)-2))
+		w := cardBodyWidth - tuicore.StringWidth(shown) - 2
+		if labels[w] == nil {
+			labels[w] = h.bufferTabLabels(w)
+		}
+		rows = append(rows, shown+"  "+labels[w][b])
 	}
 	return strings.Join(append(rows, h.keys.cardText(nil, rest)), "\n")
 }

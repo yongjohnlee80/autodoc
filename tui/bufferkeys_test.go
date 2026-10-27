@@ -376,3 +376,111 @@ func TestTheBufferCardFollowsTheBuffers(t *testing.T) {
 		return strings.Contains(sc, "SPC b — buffers") && strings.Contains(sc, "1  b.md") && strings.Contains(sc, "2  c.md")
 	})
 }
+
+// TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn: the first edit of a clean buffer puts [+] on
+// its tab and its row on SPC b's card, one pass over the buffers' labels (bufferTabLabels); the
+// edits after it change neither and resolve nothing.
+func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	for _, p := range []string{"a.md", "b.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	passes := func() int { return onLoop(r, func() int { return r.h.labelPasses }) }
+	before := passes()
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	if first := passes() - before; first == 0 {
+		t.Fatal("[+] came on with no pass over the labels: the tabs and the card do not show it")
+	}
+	r.leader(t, 'b')
+	r.s.WaitFor(t, "the card marking b.md modified", func(sc string) bool { return strings.Contains(sc, "2  b.md [+]") })
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "SPC b — buffers") })
+	before = passes()
+	r.typeInEditor(t, "more typing")
+	r.s.WaitFor(t, "the typing in", func(string) bool { return strings.Contains(r.editorText(), "more typing") })
+	if again := passes() - before; again != 0 {
+		t.Errorf("11 more edits of a modified buffer made %d passes over the labels, want none", again)
+	}
+}
+
+// TestTheBufferLabelsTakeOnePassAChange: SPC b's card resolves its labels once whatever the number
+// of buffers (one width, one pass), and the cost of a pass grows with the buffers, not with their
+// square: eight times the buffers take well under the 64 times a pass over every pair would.
+func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
+	h := bufferCardHostN(1600)
+	before := h.labelPasses
+	h.bufferCardText()
+	if got := h.labelPasses - before; got != 1 {
+		t.Errorf("the card made %d passes over 1600 buffers' labels, want 1", got)
+	}
+	cost := func(n int) float64 {
+		h := bufferCardHostN(n)
+		best := 0.0
+		for range 3 { // the best of three: a pause of the collector inflates one, never deflates
+			ns := float64(testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					h.bufferCardText()
+				}
+			}).NsPerOp())
+			if best == 0 || ns < best {
+				best = ns
+			}
+		}
+		return best
+	}
+	small, large := cost(200), cost(1600)
+	if ratio := large / small; ratio > 24 {
+		t.Errorf("1600 buffers' card costs %.0f times 200's (%.0f ns against %.0f): a pass grows with the square of the buffers", ratio, large, small)
+	}
+}
+
+// bufferCardHostN is a host with its catalog and n buffers, files of distinct short names.
+func bufferCardHostN(n int) *Host {
+	h := newHost(NewSession("unused", nil), Options{})
+	h.features()
+	h.buffers = nil
+	for i := range n {
+		b := h.newBuffer()
+		b.file.open, b.file.ws, b.file.path = true, "kb", fmt.Sprintf("notes/n%d.md", i)
+	}
+	return h
+}
+
+// BenchmarkBufferCardText is SPC b's card's text, which syncBuffers sets on every change of the buffer
+// list, by the number of buffers open.
+func BenchmarkBufferCardText(b *testing.B) {
+	for _, n := range []int{10, 100, 300, 1000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			h := bufferCardHostN(n)
+			b.ReportAllocs()
+			for b.Loop() {
+				h.bufferCardText()
+			}
+		})
+	}
+}
+
+// TestARestoreIntoTheShownBufferMarksItsRow: kept text restored into the buffer shown makes it
+// modified, and SPC b's card (as the tabs) marks it so. The restore's edit reaches edited within
+// its Replace, the buffer still clean, which syncs the buffers once [+] comes on; were it to come
+// after the restore's setDirty, it would sync nothing, and the mark would never show.
+func TestARestoreIntoTheShownBufferMarksItsRow(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	for _, p := range []string{"a.md", "b.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	onLoop(r, func() bool {
+		r.h.applyRecovered(r.h.active, recovered{WS: "kb", Path: "b.md", Text: "kept b\n"})
+		return true
+	})
+	r.s.WaitFor(t, "the kept text in, modified", func(string) bool { return r.editorText() == "kept b\n" && r.file().dirty })
+	r.leader(t, 'b')
+	r.s.WaitFor(t, "the card marking b.md modified", func(sc string) bool { return strings.Contains(sc, "2  b.md [+]") })
+}
