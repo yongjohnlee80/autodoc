@@ -4,13 +4,15 @@ AutoDoc is one program, `autodoc`. Pick the way that suits your machine:
 
 | On | Install with |
 | --- | --- |
-| macOS, Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` |
-| Linux, macOS | mise: `mise use -g github:yongjohnlee80/autodoc` |
+| Linux, macOS, with Go | the window: `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Any, with Go | the terminal UI: `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| macOS, Linux | mise: `mise use -g github:yongjohnlee80/autodoc` (with the window) |
+| Linux, a server or container | mise, the terminal UI: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (on arm64, `linux-arm64-tui`) |
+| macOS, Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` (on Linux, the terminal UI) |
 | Linux, macOS | a release archive from the project's Releases page, `amd64` or `arm64` |
-| Any, with Go | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | Windows | WSL2, then any Linux way |
 
-**Two ways to run it.** `autodoc --ui` runs in your terminal. `autodoc --gui` opens a window of its own, with diagrams drawn and fonts you choose. On Linux the window needs a `-gui` release archive, or `go install -tags gui …`.
+**Two ways to run it.** `autodoc --ui` runs in your terminal. `autodoc --gui` opens a window of its own, with diagrams drawn and fonts you choose. `--gui` is how you run it; `-tags gui` is how Go builds the window in. On Linux, mise and the plain release archive have the window, and need a desktop's graphics libraries (EGL, Wayland, X11) even for `--ui`: on a server or in a container, take the `-tui` archive. Homebrew on Linux installs the terminal UI alone.
 
 ```mermaid
 flowchart LR

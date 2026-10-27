@@ -15,16 +15,19 @@ New to AutoDoc? The [tutorials](../tutorials/README.md) start here, a few minute
 
 | Platform | Install |
 | --- | --- |
-| macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
-| Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
-| Any, with Go 1.26.9+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
-| Linux, macOS, with Go 1.26.9+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Linux, macOS, with Go 1.26.9+, the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Any, with Go 1.26.9+, the TUI | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| macOS, Linux | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` (the GUI build) |
+| Linux, a server or container | mise, the TUI build: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (`autodoc-*-linux-arm64-tui.tar.gz` on arm64) |
+| macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` (on Linux, the TUI build) |
 | Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
 | Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
 
 Use `autodoc --gui` to open the native GUI. It shares the same daemon and store as `autodoc --ui`
-and `autodoc --call`. On Linux, use a `-gui` release archive or build with `-tags gui`; the regular
-Linux release binary and Linux Homebrew formula provide the TUI without GUI support.
+and `autodoc --call`. `--gui` is the flag you run it with; `-tags gui` is the build tag that builds the
+GUI into the binary. On Linux, mise and the plain release archive are the GUI build, and so is
+`go install -tags gui`; the `-tui` archive, the Linux Homebrew formula and a `go install` without
+`-tags gui` are the TUI without GUI support.
 
 The enterprise search server (`autodoc --server`, [docs/enterprise](../enterprise/README.md)) is
 in its own build: a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`.
@@ -35,6 +38,18 @@ The other builds leave it out, and say so when asked for `--server`.
 Each installs the one `autodoc` binary. Homebrew and mise install the release's binaries, and Homebrew
 pins each to the SHA-256 the release published: nothing is compiled on your machine, so neither needs
 Xcode. Start it with `autodoc --ui`: the TUI starts the daemon when nothing answers.
+
+**Which build mise installs.** mise picks the release archive that matches the machine:
+- On macOS that is the `darwin-<arch>` archive, which has the GUI.
+- On Linux it is the plain `linux-<arch>` archive, the GUI build. It links the window system's
+  libraries (EGL, Wayland, X11), so it starts only where they are installed, even for `autodoc --ui`.
+  Over SSH to a desktop it runs. On a server or in a container without them, name the `-tui`
+  archive, the terminal build:
+
+  ```sh
+  mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'   # amd64
+  mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-arm64-tui.tar.gz]'   # arm64
+  ```
 
 ### Building from Source (`go install`)
 
@@ -99,15 +114,15 @@ The GUI needs cgo, and it is the only part that does:
   `libvulkan-dev` (Debian/Ubuntu) or `vulkan-headers` (Arch) to compile it in. `VULKAN=1` requires
   it and fails naming the package; `VULKAN=0` leaves it out even where it is installed.
 
-  The releases carry both: `autodoc-<tag>-linux-<arch>` (static, the TUI) and
-  `autodoc-<tag>-linux-<arch>-gui`. The Neovim plugin's `build.lua` installs the `-gui` one when
-  it runs in a graphical session (`WAYLAND_DISPLAY` or `DISPLAY`), else the static one;
+  The releases carry both: `autodoc-<tag>-linux-<arch>` (the GUI) and
+  `autodoc-<tag>-linux-<arch>-tui` (static, the TUI). The Neovim plugin's `build.lua` installs the
+  GUI one when it runs in a graphical session (`WAYLAND_DISPLAY` or `DISPLAY`), else the `-tui` one;
   `AUTODOC_GUI=1` or `0` chooses.
 
 A build without the GUI says so when asked for `--gui`, and how to get one.
 
 > [!TIP]
-> On Linux systems using Wayland or X11, `autodoc --gui` dynamically loads `libwayland-client`, `libxkbcommon`, and Vulkan/EGL drivers at runtime when launched in GUI mode, while `autodoc --ui` and `autodoc --call` run cleanly on headless servers without any display libraries installed.
+> On Linux, the GUI build links `libEGL`, `libwayland-*`, `libxkbcommon(-x11)`, `libX11(-xcb)`, `libXcursor` and `libXfixes`, so it does not start without them, even for `autodoc --ui` or `autodoc --call`. On a headless server or in a container, install the `-tui` build (or `make build`): it is static and needs no display libraries.
 
 ---
 

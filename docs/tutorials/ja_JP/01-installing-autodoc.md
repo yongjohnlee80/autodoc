@@ -4,13 +4,15 @@ AutoDoc は `autodoc` というひとつのプログラムです。お使いの�
 
 | 対象 | インストール方法 |
 | --- | --- |
-| macOS、Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` |
-| Linux、macOS | mise: `mise use -g github:yongjohnlee80/autodoc` |
+| Linux、macOS (Go あり) | ウィンドウ版: `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Go があればどこでも | ターミナル版: `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| macOS、Linux | mise: `mise use -g github:yongjohnlee80/autodoc` (ウィンドウ版) |
+| Linux (サーバーやコンテナ) | mise でターミナル版: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (arm64 では `linux-arm64-tui`) |
+| macOS、Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` (Linux ではターミナル版) |
 | Linux、macOS | プロジェクトの Releases ページにあるリリースアーカイブ (`amd64` または `arm64`) |
-| Go があればどこでも | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | Windows | WSL2 を入れてから、Linux のいずれかの方法で |
 
-**実行方法は 2 つあります。** `autodoc --ui` はターミナルの中で動きます。`autodoc --gui` は専用のウィンドウを開き、図を描画し、お好みのフォントで表示します。Linux でウィンドウ版を使うには、`-gui` 付きのリリースアーカイブか、`go install -tags gui …` が必要です。
+**実行方法は 2 つあります。** `autodoc --ui` はターミナルの中で動きます。`autodoc --gui` は専用のウィンドウを開き、図を描画し、お好みのフォントで表示します。`--gui` は実行するときのフラグ、`-tags gui` は Go がウィンドウ版をビルドするためのビルドタグです。Linux では、mise と接尾辞なしのリリースアーカイブがウィンドウ版で、`--ui` で使うときでもデスクトップのグラフィックライブラリ (EGL、Wayland、X11) が必要です。サーバーやコンテナでは `-tui` アーカイブを使ってください。Linux の Homebrew はターミナル版だけを入れます。
 
 ```mermaid
 flowchart LR
