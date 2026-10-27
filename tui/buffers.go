@@ -172,12 +172,14 @@ func (h *Host) editorFor(b *openBuffer) *widget.EditorCore {
 // debounced Lua change with b's own baseline. A headless edit calls it after its Batch: no
 // textChanged reaches the host from a headless editor.
 func (h *Host) bufferEdited(b *openBuffer) {
-	if b == h.active {
-		h.setDirty(true)
-	} else {
-		b.file.dirty = true
+	if !b.file.dirty { // [+] comes on: the buffer list's surfaces show it; a later edit changes none
+		if b == h.active {
+			h.setDirty(true)
+		} else {
+			b.file.dirty = true
+		}
+		h.syncBuffers()
 	}
-	h.syncBuffers()
 	h.changeSoonFor(b)
 }
 

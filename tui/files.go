@@ -657,8 +657,10 @@ func (h *Host) closeFile() {
 
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
-	h.setDirty(true)
-	h.syncBuffers()
+	if !h.file.dirty { // [+] comes on: the buffer list's surfaces show it; a later edit changes none
+		h.setDirty(true)
+		h.syncBuffers()
+	}
 	h.pageVersion++ // an edit: the next page taken carries it (Page.Version)
 	// a check or a feed the last pause scheduled is of text this keystroke changed: the next
 	// pause schedules them again, from this keystroke
