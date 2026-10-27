@@ -75,7 +75,7 @@ func writeDiagramReference(out io.Writer, s drawnSubset) {
 		w("- Layers: drawn, each a mark of its own over shared scales\n")
 	}
 	w("- Limits: %d rows of data, %d categories on a discrete axis, %d colour series\n\n", s.maxRows, s.maxBands, s.maxSeries)
-	w("The other keys taken, by where they sit. Most change only how a chart looks or behaves in a browser, and are ignored; ")
+	w("The keys golib also takes, by where they sit. Most change only how a chart looks or behaves in a browser, and are ignored; ")
 	w("a title's text and subtitle, and a selection's type, are read.\n\n")
 	places := make([]string, 0, len(s.passed))
 	for p := range s.passed {
@@ -85,6 +85,9 @@ func writeDiagramReference(out io.Writer, s drawnSubset) {
 	for _, p := range places {
 		w("- %s: %s\n", p, code(s.passed[p]))
 	}
-	w("\nAnything else that changes what a chart says (a transform, a log scale, a binned or time-unit field, another channel) is not drawn: ")
+	w("\nThese are the names golib's tables hold. A mark, a channel and a scale also read keys of their own (a mark's colour or stroke width, ")
+	w("a channel's field, sort or axis, a scale's domain), which golib's reader checks as it draws: `--check-diagram` says whether a spec is drawn, ")
+	w("and golib's package documentation (`golib/gui/vegalite`) describes the subset. ")
+	w("Anything outside them that changes what a chart says (a transform, a log scale, a binned or time-unit field, another channel) is not drawn: ")
 	w("the Rendered view shows golib's reason in its place, and an export writes it above the chart's spec.\n")
 }
