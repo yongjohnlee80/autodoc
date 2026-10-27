@@ -229,25 +229,46 @@ t.section("install: the release binary", function()
   t.eq(install.parse_sha256(string.rep("a", 64) .. "  autodoc.tar.gz\n"), string.rep("a", 64), "a shasum line")
   t.eq(install.parse_sha256("deadbeef  x"), nil, "a short sum is none")
 
-  -- the GUI build on a Linux desktop, the static TUI on a Linux without a display, macOS's one build
+  -- the archives' names by release: from v0.3.4 the unsuffixed Linux archive is the GUI build and the
+  -- terminal build is "-tui"; up to v0.3.3 the GUI build was "-gui" and the terminal build unsuffixed
+  t.eq(install.gui_is_default("v0.3.3"), false, "v0.3.3: the old names")
+  t.eq(install.gui_is_default("v0.3.4"), true, "v0.3.4: the GUI is the unsuffixed archive")
+  t.eq(install.gui_is_default("v0.3.10"), true, "v0.3.10: compared as numbers, not text")
+  t.eq(install.gui_is_default("v0.2.9"), false, "v0.2.9: the old names")
+  t.eq(install.gui_is_default("v0.4.0"), true, "v0.4.0: the new names")
+  t.eq(install.gui_is_default("v1.0.0"), true, "v1.0.0: the new names")
+  t.eq(install.gui_is_default(nil), true, "no tag: the newer names")
+
+  -- the GUI build on a Linux desktop, the terminal build on a Linux without a display, macOS's one
+  -- build, each named as its release names it
   local env = function(vars) return function(k) return vars[k] end end
-  t.eq(install.flavour("linux-amd64", env({ WAYLAND_DISPLAY = "wayland-1" })), "-gui", "Linux on Wayland: the GUI build")
-  t.eq(install.flavour("linux-arm64", env({ DISPLAY = ":0" })), "-gui", "Linux on X11: the GUI build")
-  t.eq(install.flavour("linux-amd64", env({})), "", "Linux with no display: the static TUI")
-  t.eq(install.flavour("linux-amd64", env({ DISPLAY = ":0", AUTODOC_GUI = "0" })), "", "AUTODOC_GUI=0 keeps the TUI")
-  t.eq(install.flavour("linux-amd64", env({ AUTODOC_GUI = "1" })), "-gui", "AUTODOC_GUI=1 asks for the GUI")
-  t.eq(install.flavour("darwin-arm64", env({ AUTODOC_GUI = "1" })), "", "macOS: one build, the GUI in it")
+  for _, era in ipairs({ { tag = "v0.3.4", gui = "", tui = "-tui" }, { tag = "v0.3.3", gui = "-gui", tui = "" } }) do
+    local tag = era.tag
+    t.eq(install.flavour("linux-amd64", env({ WAYLAND_DISPLAY = "wayland-1" }), tag), era.gui, tag .. ": Linux on Wayland, the GUI build")
+    t.eq(install.flavour("linux-arm64", env({ DISPLAY = ":0" }), tag), era.gui, tag .. ": Linux on X11, the GUI build")
+    t.eq(install.flavour("linux-amd64", env({}), tag), era.tui, tag .. ": Linux with no display, the terminal build")
+    t.eq(install.flavour("linux-amd64", env({ DISPLAY = ":0", AUTODOC_GUI = "0" }), tag), era.tui, tag .. ": AUTODOC_GUI=0 keeps the terminal build")
+    t.eq(install.flavour("linux-amd64", env({ AUTODOC_GUI = "1" }), tag), era.gui, tag .. ": AUTODOC_GUI=1 asks for the GUI")
+    t.eq(install.flavour("darwin-arm64", env({ AUTODOC_GUI = "1" }), tag), "", tag .. ": macOS, one build, the GUI in it")
+  end
 
   -- a release laid out as GitHub serves it, under a file:// base
   local plat = assert(install.platform())
+  local linux = plat:match("^linux%-") ~= nil
   local rel = t.tmp("release")
-  local name = "autodoc-v9.9.9-" .. plat
-  vim.fn.mkdir(rel .. "/v9.9.9", "p")
-  vim.fn.writefile({ "#!/bin/sh", "echo autodoc v9.9.9" }, rel .. "/" .. name)
-  vim.fn.system({ "chmod", "+x", rel .. "/" .. name })
-  vim.fn.system({ "tar", "-czf", rel .. "/v9.9.9/" .. name .. ".tar.gz", "-C", rel, name })
-  local sum = vim.fn.system({ "sh", "-c", "sha256sum " .. vim.fn.shellescape(rel .. "/v9.9.9/" .. name .. ".tar.gz") })
-  vim.fn.writefile({ sum }, rel .. "/v9.9.9/" .. name .. ".tar.gz.sha256")
+  -- publish puts a release's one archive, named as that release names its terminal build (on
+  -- Linux: "-tui" from v0.3.4, unsuffixed before; macOS has the one build)
+  local function publish(tag, suffix)
+    local asset = "autodoc-" .. tag .. "-" .. plat .. suffix
+    vim.fn.mkdir(rel .. "/" .. tag, "p")
+    vim.fn.writefile({ "#!/bin/sh", "echo autodoc " .. tag }, rel .. "/" .. asset)
+    vim.fn.system({ "chmod", "+x", rel .. "/" .. asset })
+    vim.fn.system({ "tar", "-czf", rel .. "/" .. tag .. "/" .. asset .. ".tar.gz", "-C", rel, asset })
+    local s = vim.fn.system({ "sh", "-c", "sha256sum " .. vim.fn.shellescape(rel .. "/" .. tag .. "/" .. asset .. ".tar.gz") })
+    vim.fn.writefile({ s }, rel .. "/" .. tag .. "/" .. asset .. ".tar.gz.sha256")
+    return asset
+  end
+  local name = publish("v9.9.9", linux and "-tui" or "")
   local base = install.BASE
   install.BASE = "file://" .. rel
 
@@ -266,6 +287,20 @@ t.section("install: the release binary", function()
   t.ok(ok, "the release binary is installed", err)
   t.eq(vim.fn.system({ dir .. "/bin/autodoc" }), "autodoc v9.9.9\n", "bin/autodoc is the release's, and runs")
   t.eq(vim.fn.glob(dir .. "/bin/.autodoc.new"), "", "nothing staged is left behind")
+  if linux then
+    -- the GUI asked for, a release with only its terminal build: that build, as the release names it
+    vim.env.AUTODOC_GUI = "1"
+    local said = {}
+    vim.fn.writefile({ "old" }, dir .. "/bin/autodoc")
+    local gok, gerr = install.download(dir, "v9.9.9", function(m) said[#said + 1] = m end)
+    t.ok(gok and vim.fn.system({ dir .. "/bin/autodoc" }) == "autodoc v9.9.9\n", "no GUI build: the -tui build is installed", gerr)
+    t.ok(table.concat(said, "\n"):find("no GUI build", 1, true), "and it says so", table.concat(said, "\n"))
+    -- a release from before v0.3.4: its terminal build is the unsuffixed archive
+    vim.env.AUTODOC_GUI = "0"
+    publish("v0.3.3", "")
+    local ook, oerr = install.download(dir, "v0.3.3", function() end)
+    t.ok(ook and vim.fn.system({ dir .. "/bin/autodoc" }) == "autodoc v0.3.3\n", "v0.3.3's terminal build: the unsuffixed archive", oerr)
+  end
 
   -- a checksum that does not match installs nothing
   vim.fn.writefile({ "old" }, dir .. "/bin/autodoc")

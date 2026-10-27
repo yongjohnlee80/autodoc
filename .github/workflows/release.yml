@@ -10,26 +10,29 @@ permissions:
   contents: write
 
 jobs:
-  # Linux builds static, the TUI alone, from Ubuntu. A Linux "-server" build is the enterprise search
-  # server (--server, the server tag): static too, it adds Postgres and the enterprise packages,
-  # which every other archive leaves out. A Linux "-gui" build adds the GUI (--gui):
-  # cgo, against the window system's libraries, which it then needs to run; built natively on each
-  # architecture's runner. macOS builds with cgo, on a Mac: golib watches the workspace roots with
-  # FSEvents there, which needs cgo and the SDK, so its one build carries the GUI too, and needs
-  # only macOS itself to run. The Ubuntu runners are pinned to 24.04, not ubuntu-latest (whose
-  # move to Ubuntu 26 begins 2026-10-19): a "-gui" build needs the glibc it was built against, and
-  # the apt names below are 24.04's, so a release moves to a new Ubuntu only when someone chooses to.
+  # On Linux, from v0.3.4, the unsuffixed archive is the GUI build (--gui): cgo, against the window
+  # system's libraries, which it then needs to run; built natively on each architecture's runner. It
+  # is unsuffixed so that a plain install (mise's github backend takes the archive with no suffix)
+  # gets the GUI. The "-tui" archive is the static build of the TUI alone (unsuffixed up to v0.3.3,
+  # when the GUI build was "-gui": autodoc.nvim's installer and the Homebrew tap choose by the tag).
+  # A Linux "-server" build is the enterprise search server (--server, the server tag): static too,
+  # it adds Postgres and the enterprise packages, which every other archive leaves out. macOS builds
+  # with cgo, on a Mac: golib watches the workspace roots with FSEvents there, which needs cgo and
+  # the SDK, so its one build carries the GUI too, and needs only macOS itself to run. The Ubuntu
+  # runners are pinned to 24.04, not ubuntu-latest (whose move to Ubuntu 26 begins 2026-10-19): the
+  # GUI build needs the glibc it was built against, and the apt names below are 24.04's, so a release
+  # moves to a new Ubuntu only when someone chooses to.
   build:
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "" }
-          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "" }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "-tui" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04,     cgo: "0", tags: "",    suffix: "-tui" }
           - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "0", tags: "server", suffix: "-server" }
           - { goos: linux,  goarch: arm64, runner: ubuntu-24.04,     cgo: "0", tags: "server", suffix: "-server" }
-          - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "1", tags: "gui", suffix: "-gui" }
-          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04-arm, cgo: "1", tags: "gui", suffix: "-gui" }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-24.04,     cgo: "1", tags: "gui", suffix: "" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04-arm, cgo: "1", tags: "gui", suffix: "" }
           - { goos: darwin, goarch: amd64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
           - { goos: darwin, goarch: arm64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
     steps:

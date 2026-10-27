@@ -27,20 +27,54 @@ function M.platform(uname)
   return os_name .. "-" .. arch
 end
 
----flavour is the release asset's suffix for this machine: "-gui" on Linux with a graphical session
----(WAYLAND_DISPLAY or DISPLAY set), the build that carries --gui and needs the window system's
----libraries, which a desktop has; "" elsewhere: macOS's one build carries the GUI, and a Linux with
----no display takes the static TUI. AUTODOC_GUI=1 or 0 chooses instead.
+---gui_is_default is whether tag's Linux archives name the GUI build with no suffix and the terminal
+---build "-tui", as from v0.3.4 (a plain `mise use` gets the GUI); before it, the GUI build was
+---"-gui" and the terminal build had no suffix. A tag that is no vX.Y.Z is taken as the newer naming.
+---@param tag string?
+---@return boolean
+function M.gui_is_default(tag)
+  local a, b, c = (tag or ""):match("^v(%d+)%.(%d+)%.(%d+)")
+  if not a then return true end
+  a, b, c = tonumber(a), tonumber(b), tonumber(c)
+  if a ~= 0 then return a > 0 end
+  if b ~= 3 then return b > 3 end
+  return c >= 4
+end
+
+---linux_suffix is the Linux archive suffix of tag's GUI build (gui) or its terminal build.
+---@param tag string?
+---@param gui boolean
+---@return string
+function M.linux_suffix(tag, gui)
+  if M.gui_is_default(tag) then return gui and "" or "-tui" end
+  return gui and "-gui" or ""
+end
+
+---wants_gui is whether this machine takes the Linux GUI build: with a graphical session
+---(WAYLAND_DISPLAY or DISPLAY set), as the GUI build needs the window system's libraries, which a
+---desktop has; AUTODOC_GUI=1 or 0 chooses instead. False off Linux: macOS's one build carries the
+---GUI.
 ---@param platform string? M.platform()'s
 ---@param getenv (fun(name: string): string?)? os.getenv's shape (a test seam)
-function M.flavour(platform, getenv)
+---@return boolean
+function M.wants_gui(platform, getenv)
   getenv = getenv or os.getenv
-  if not platform or not platform:match("^linux%-") then return "" end
+  if not platform or not platform:match("^linux%-") then return false end
   local choice = getenv("AUTODOC_GUI")
-  if choice == "1" then return "-gui" end
-  if choice == "0" then return "" end
-  if (getenv("WAYLAND_DISPLAY") or "") ~= "" or (getenv("DISPLAY") or "") ~= "" then return "-gui" end
-  return ""
+  if choice == "1" then return true end
+  if choice == "0" then return false end
+  return (getenv("WAYLAND_DISPLAY") or "") ~= "" or (getenv("DISPLAY") or "") ~= ""
+end
+
+---flavour is tag's release asset suffix for this machine: on Linux, the GUI build's or the terminal
+---build's, as tag names them (linux_suffix); "" elsewhere, macOS having one build.
+---@param platform string? M.platform()'s
+---@param getenv (fun(name: string): string?)? os.getenv's shape (a test seam)
+---@param tag string? the release's tag
+---@return string
+function M.flavour(platform, getenv, tag)
+  if not platform or not platform:match("^linux%-") then return "" end
+  return M.linux_suffix(tag, M.wants_gui(platform, getenv))
 end
 
 ---asset is the release asset's name and URL for tag on platform.
@@ -130,12 +164,12 @@ function M.download(dir, tag, log)
   for _, tool in ipairs({ "curl", "tar" }) do
     if vim.fn.executable(tool) ~= 1 then return false, tool .. " is not installed" end
   end
-  local flavour = M.flavour(platform)
-  local ok, err = M.fetch(dir, tag, platform .. flavour, log)
-  if not ok and flavour ~= "" then
+  local gui = M.wants_gui(platform)
+  local ok, err = M.fetch(dir, tag, platform .. M.flavour(platform, nil, tag), log)
+  if not ok and gui then
     -- a release from before the GUI builds, or one without this one: the static TUI still serves
     log("no GUI build (" .. tostring(err) .. "); installing the TUI build")
-    ok, err = M.fetch(dir, tag, platform, log)
+    ok, err = M.fetch(dir, tag, platform .. M.linux_suffix(tag, false), log)
   end
   return ok, err
 end
