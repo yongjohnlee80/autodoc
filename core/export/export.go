@@ -259,7 +259,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 				}
 				dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info())), string(node.Literal))
 				after := node
-				for _, f := range lab.Outputs(labFS{embedder.files}, dir, key) {
+				for _, f := range embedder.outputs(dir, key) {
 					if html, ok := embedder.output(f); ok {
 						after = insertAfter(after, drawn.add(html, true))
 					}

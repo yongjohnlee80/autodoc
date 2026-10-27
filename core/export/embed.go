@@ -15,14 +15,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
-	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/lab"
 )
 
 // EMBEDS — a page's ![alt](path) of a file beside its document is drawn in the page, as xmd draws
@@ -58,44 +57,6 @@ var imageTypes = map[string]string{
 	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
 	".svg": "image/svg+xml", ".webp": "image/webp", ".avif": "image/avif", ".bmp": "image/bmp",
 }
-
-// labFS is the document's folder as an io/fs.ReadDirFS for lab.Outputs, listed through golib vfs:
-// lab.Outputs only lists (fs.ReadDir), so Open is refused.
-type labFS struct{ files *local.FS }
-
-func (l labFS) Open(name string) (fs.File, error) {
-	return nil, &fs.PathError{Op: "open", Path: name, Err: errors.ErrUnsupported}
-}
-
-func (l labFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	infos, err := l.files.ReadDir(embedCtx, name)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]fs.DirEntry, len(infos))
-	for i, info := range infos {
-		out[i] = labEntry{info}
-	}
-	return out, nil
-}
-
-// labEntry is a vfs entry as an fs.DirEntry: lab.Outputs reads its name and type.
-type labEntry struct{ fi vfs.FileInfo }
-
-func (e labEntry) Name() string               { return e.fi.Name }
-func (e labEntry) IsDir() bool                { return e.fi.Mode.IsDir() }
-func (e labEntry) Type() fs.FileMode          { return e.fi.Mode.Type() }
-func (e labEntry) Info() (fs.FileInfo, error) { return labInfo(e), nil }
-
-// labInfo is a vfs entry as an fs.FileInfo.
-type labInfo struct{ fi vfs.FileInfo }
-
-func (i labInfo) Name() string       { return i.fi.Name }
-func (i labInfo) Size() int64        { return i.fi.Size }
-func (i labInfo) Mode() fs.FileMode  { return i.fi.Mode }
-func (i labInfo) ModTime() time.Time { return i.fi.ModTime }
-func (i labInfo) IsDir() bool        { return i.fi.Mode.IsDir() }
-func (i labInfo) Sys() any           { return nil }
 
 // videoTypes are the video files a site's page draws as a <video> (Options.Media), by extension.
 var videoTypes = map[string]bool{".mp4": true, ".webm": true}
@@ -212,6 +173,24 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 		return table, true, false, ok
 	}
 	return "", false, false, false
+}
+
+// outputs are the output files of the cell with key under dir (lab.OutDir), as slash paths in name
+// order, listed through files: lab.Outputs's rule (lab.IsOutput) on golib vfs's listing, which is
+// sorted by name as io/fs's is. None when the cell has none.
+func (e *embedder) outputs(dir, key string) []string {
+	cell := path.Join(dir, key)
+	infos, err := e.files.ReadDir(embedCtx, cell)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, fi := range infos {
+		if lab.IsOutput(fi.Name, fi.IsRegular()) {
+			out = append(out, path.Join(cell, fi.Name))
+		}
+	}
+	return out
 }
 
 // output is the HTML of one output file of a lab note's cell (lab.Outputs): text in a
