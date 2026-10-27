@@ -36,7 +36,16 @@ Inside the repository, `go generate ./rpc` runs `internal/contractsgen` over thi
 
 ## 2. Wiring CLI Coding Agents to `autodoc --call`
 
-Any agent with a shell tool can invoke the daemon using `autodoc --call <verb> '<json-array>'`:
+**From a shell, or an AI agent.** `autodoc --call <verb> '<JSON array of parameters>'` calls any verb of the daemon (starting it when nothing answers) and prints the result as JSON:
+
+```sh
+autodoc --call workspace.list
+autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
+```
+
+[AGENTS.md](../../AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the options (`stages`, `paths`, `tags`, `facets`, `limit`) and the errors.
+
+A typical agent session:
 
 ```sh
 # 1. Discover available workspaces and confirm "kb" is in state "ready"

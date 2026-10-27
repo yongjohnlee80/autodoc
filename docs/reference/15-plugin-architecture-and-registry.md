@@ -18,11 +18,15 @@ In-process plugin hosts (shared libraries, unsandboxed interpreters, or synchron
 
 ## 15.2 The Three Plugin Shapes: Dialogs, Cards, and Services
 
+A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins** menu. The first one is AutoTetris, [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris).
+
 Every plugin directory contains a strictly decoded `plugin.toml` manifest at its root that declares its shape:
 
 - **Modal Dialog (`kind = "dialog"`, default `modal = true`)**: AutoDoc draws a bordered overlay over the page (`width`, `height`, `placements = ["right", "left", "center", ...]`). While open, the dialog receives every keystroke except `Esc`, which either terminates the plugin (`esc = "close"`, the default) or hides the overlay (`esc = "hide"`) while sending `plugin.hide`.
 - **Non-Modal Docked Card (`kind = "dialog"`, `[dialog] modal = false`, Protocol 2+)**: A docked panel beside, above, or below the editor that behaves just like AutoDoc's built-in panels. It can be dragged and resized with `Alt/Option`-mouse or `Go › Arrange panel`. A card only receives keys when focused (`plugin.focus {focused: true}`). Pressing `Esc` closes the card's panel and returns focus to the editor while sending `plugin.hide`—the plugin process continues running, preserving its live database sessions or state until reopened (`plugin.show`) or explicitly turned off.
 - **Background Service (`kind = "service"`, Protocol 2+)**: Has no visual surface (`host.frame` and `host.title` are ignored). Starts either on first command/document feed (`start = "use"`, default) or alongside the TUI (`start = "launch"`). Ideal for live browser preview servers or background linters.
+
+**Cards.** A card plugin (AutoDB's, say) is a docked panel of its own beside the page, at the edge its manifest names first (AutoDB's: the right), and moves, resizes and keeps its place as every panel does (Alt/Option-drag, or in `--gui` a plain drag of its title row or border, **Go › Arrange panel**). It takes the keys when clicked or when one of its commands runs, and then every key is the plugin's, q included. Esc, or **Close (Esc)** on its right-click menu, closes the panel and hands the keys back to the page; the plugin runs on, its results and session kept, and a command or its Plugins menu entry opens the panel again.
 
 ---
 
@@ -58,6 +62,8 @@ Protocol 4 (`[table]`) offloads tabular result rendering from the plugin to Auto
 1. **Exact Byte Offsets (`cursor_byte`, `selection_bytes`)**: Because `cursor` and `selection` count UTF-8 grapheme clusters, slicing `text` in a compiled language would otherwise require re-implementing Unicode grapheme segmentation. Protocol 4 adds `cursor_byte` and `selection_bytes` (`[start, end)` byte offsets) computed from the exact same cluster pass.
 2. **Document Snapshot in `plugin.command`**: Because `plugin.document` waits for a 300 ms typing pause, invoking a command immediately after moving the cursor or typing could otherwise run against a stale buffer. Under Protocol 4 + `[feed] document = true`, `plugin.command {id, document}` embeds the exact buffer state as it stood at the instant the command was triggered.
 3. **Demand-Paged `host.table` and `plugin.table.fetch`**: The plugin opens a result set with `host.table {id, title, fields, rows, more}`. As the user scrolls near the bottom of the loaded rows, AutoDoc sends `plugin.table.fetch {id, n}` (at most one fetch in flight at a time), and the plugin replies with `host.rows {id, rows, more}` or `host.table_end {id, error}` up to a 100,000-row safety cap.
+
+**The results panel.** A plugin may show a table of rows (a query's result, say) in AutoDoc's own results panel, at the bottom (**Go › Results**): numbered rows, a cursor on cells with vim's keys (`h j k l` with counts, `gg`, `G`; `v`, `V` and Ctrl+V select cells, rows and a block; `y` copies), an ORDER BY bar and `s` to sort the loaded rows, and a right-click menu. The panel acts on the table in the view: its sort, copies (TSV, CSV, JSON, Markdown), `results.markdown` and exports (CSV or JSON, written whole or not at all) take the loaded rows in the order shown, and none of them fetches a row. An export writes the rows loaded in the view; scroll to load more, or change the query. Closing the panel lets the table go.
 
 ![Hosted Table Page Transfer and Render Latency](plugin-frame-latency.chart.json)
 
@@ -160,6 +166,8 @@ key   = "s"
 
 ## 15.5 Writing a Plugin with the Go SDK
 
+Writing one: [`docs/plugins.md`](../plugins.md) covers the manifest, the protocol, and the SDK in package `plugin`.
+
 The `github.com/yongjohnlee80/autodoc/plugin` Go package implements Protocols 1–7 with concurrency-safe `Peer` methods and optional handler interfaces (`DocumentReader`, `Commander`, `CommandArgser`, `CommandDocer`, `Focuser`, `TableFetcher`, `Hider`, `PointerHandler`):
 
 ```go
@@ -224,7 +232,26 @@ Each example's test drives its plugin over the protocol, as AutoDoc does: open, 
 
 ## 15.7 Installing from a Git URL, Security Boundaries, and Debugging
 
-Add a plugin with **Plugins › Add from a git URL…**; there is no registry yet (one is coming), and **Plugins › Manage plugins…** updates, places and removes the plugins you have. AutoDoc clones the repository and runs nothing; before it builds or starts the plugin (`[install] build = [...]`), it presents an explicit capability summary derived from `plugin.toml`—showing the build command, executable argv, surface type (`dialog`, `card`, or `service`), whether it reads the open note (`[feed]`), every `[[commands]]` shortcut on `SPC p`, every host command in `calls`, and whether it publishes to the `[table]` Results panel. You can also override any plugin command's `SPC p` key letter via the preference `tui.plugin.<name>.key.<id>`.
+**Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a `plugin.toml` at its top. There is no hub: the URL is the source.
+- AutoDoc clones it and runs nothing yet. It asks first, showing:
+  - the plugin and where it came from, at which commit;
+  - the build its manifest asks for, and the command it starts.
+- **A plugin is a program that runs as you, with your files.** AutoDoc does not check what a plugin does. Add only plugins you trust: adding one is at your own risk.
+- **Yes, at my own risk** builds it and lists it in the Plugins menu. **No** throws the clone away.
+- It needs git, and whatever the plugin's build uses (Go, for autodoc-tetris).
+
+Before it builds or starts the plugin (`[install] build = [...]`), AutoDoc presents an explicit capability summary derived from `plugin.toml`—showing the build command, executable argv, surface type (`dialog`, `card`, or `service`), whether it reads the open note (`[feed]`), every `[[commands]]` shortcut on `SPC p`, every host command in `calls`, and whether it publishes to the `[table]` Results panel. You can also override any plugin command's `SPC p` key letter via the preference `tui.plugin.<name>.key.<id>`.
+
+**Managing them.** **Plugins › Manage plugins…** lists each plugin with its source, commit and placement.
+- **Place** moves the plugin's dialog to the next placement it is designed for (AutoTetris: right or left), and keeps the choice. A card's panel docks at that edge.
+- **Update…** fetches the source and asks the same question about the new commit's build.
+- **Remove…** deletes the plugin's directory.
+- A plugin put in the folder by hand is listed as local.
+
+**Where they are.**
+- The folder is `plugins/`, beside the config: `$XDG_CONFIG_HOME/autodoc/plugins/<name>/`.
+- Each plugin's stderr is kept in `$XDG_STATE_HOME/autodoc/plugins/<name>.log`, and its build's output in `<name>-install.log`.
+- A plugin that exits, stops answering, or speaks another protocol closes its dialog, and a toast says why.
 
 ### What a Plugin May Not Do
 

@@ -8,34 +8,103 @@ This chapter walks through installing the `autodoc` binary, launching your first
 
 ## 2.1 Installing AutoDoc
 
-AutoDoc ships as a single statically linked binary containing the daemon (`--serve`), the terminal UI (`--ui`), the native GPU desktop interface (`--gui`), the headless RPC client (`--call`), and the offline HTML exporter (`--export`).
+AutoDoc ships as a single binary containing the daemon (`--serve`), the terminal UI (`--ui`), the native GPU desktop interface (`--gui`, in the builds with the GUI: see [The GUI Build](#the-gui-build-cgo)), the headless RPC client (`--call`), and the offline HTML exporter (`--export`).
+
+New to AutoDoc? The [tutorials](../tutorials/README.md) start here, a few minutes each; the
+[Reference Book](README.md) has the whole story.
+
+| Platform | Install |
+| --- | --- |
+| macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
+| Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
+| Any, with Go 1.26.9+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
+| Linux, macOS, with Go 1.26.9+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
+| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
+
+Use `autodoc --gui` to open the native GUI. It shares the same daemon and store as `autodoc --ui`
+and `autodoc --call`. On Linux, use a `-gui` release archive or build with `-tags gui`; the regular
+Linux release binary and Linux Homebrew formula provide the TUI without GUI support.
+
+The enterprise search server (`autodoc --server`, [docs/enterprise](../enterprise/README.md)) is
+in its own build: a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`.
+The other builds leave it out, and say so when asked for `--server`.
 
 ### Package Managers (`brew` and `mise`)
 
-On macOS and Linux, install the prebuilt release binary via Homebrew or `mise`:
-
-```bash
-# Homebrew (macOS & Linux)
-brew install yongjohnlee80/tap/autodoc
-
-# mise-en-place tool version manager
-mise use --global github:yongjohnlee80/autodoc@latest
-```
+Each installs the one `autodoc` binary. Homebrew and mise install the release's binaries, and Homebrew
+pins each to the SHA-256 the release published: nothing is compiled on your machine, so neither needs
+Xcode. Start it with `autodoc --ui`: the TUI starts the daemon when nothing answers.
 
 ### Building from Source (`go install`)
 
-If you have Go 1.26.9 or newer installed, you can compile AutoDoc directly from source. The default build is the terminal UI; the native Gio GUI needs `-tags gui` (and so cgo, a C compiler, and on Linux the window system's development libraries):
+If you have Go 1.26.9 or newer installed, you can compile AutoDoc directly from source. `go install` builds from the tagged source, and `autodoc --version` then reports the module's
+version, as a release binary does.
 
 ```bash
 # The terminal UI
 go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
 
-# The terminal UI and the GUI
-GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
-
 # Verify binary version and supported features
 autodoc --version
 ```
+
+**`go install` on macOS** compiles with cgo, because the daemon watches workspace roots with the
+system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
+Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,
+or build without cgo — `CGO_ENABLED=0 go install …` — and the daemon polls the roots instead of
+watching them: it works, but a change is noticed only after a scan of the root. On Linux, the
+TUI's `go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
+
+**The GUI with `go install`** needs `-tags gui`, on every platform: without it, `go install` builds
+the TUI alone, and `autodoc --gui` says so. With it, the build uses cgo, so it needs a C compiler
+and, on Linux, the window system's development libraries ([The GUI](#the-gui-build-cgo) lists them):
+
+```sh
+GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
+```
+
+`GOBIN` puts the binary in `~/.local/bin` (keep it on your `PATH`) rather than in `$(go env GOPATH)/bin`.
+
+### Building from a Checkout (`make`)
+
+Go 1.26.9. `make build` links no cgo: the daemon and the TUI. `make build-gui` adds the GUI (`--gui`,
+golib's gui on Gio), the one part that needs cgo; on macOS `make build` is `make build-gui`.
+
+```sh
+git clone https://github.com/yongjohnlee80/autodoc && cd autodoc && make build   # → bin/autodoc
+```
+
+`make build` stamps the version from `git describe`. The tests and the checks to run are in
+[CONTRIBUTING.md](../../CONTRIBUTING.md#running-the-checks). Before sending a change, read
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+### The GUI Build (cgo)
+
+The GUI needs cgo, and it is the only part that does:
+
+- **macOS:** `make build` includes it. The release binary has it too. (cgo is already needed on
+  macOS, for the FSEvents watcher.)
+- **`go install`:** add `-tags gui` (see [Install](#building-from-source-go-install)).
+- **Linux:** `make build` is the static TUI alone, with no cgo. `make build-gui` adds the GUI,
+  which needs the window system's development libraries:
+  - Debian/Ubuntu: `libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev
+    libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev`;
+  - Arch: `wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa`.
+
+  Gio's Vulkan backend is optional and is not in that list: the GUI draws through EGL/OpenGL by
+  default (a Wayland window tries EGL first unless the app asks for `app.PreferVulkan`, and X11
+  keeps Vulkan off entirely), so a build without it is a complete GUI. `make build-gui` probes for
+  `vulkan/vulkan.h` and builds `-tags gui,novulkan` when it is absent, saying so. Install
+  `libvulkan-dev` (Debian/Ubuntu) or `vulkan-headers` (Arch) to compile it in. `VULKAN=1` requires
+  it and fails naming the package; `VULKAN=0` leaves it out even where it is installed.
+
+  The releases carry both: `autodoc-<tag>-linux-<arch>` (static, the TUI) and
+  `autodoc-<tag>-linux-<arch>-gui`. The Neovim plugin's `build.lua` installs the `-gui` one when
+  it runs in a graphical session (`WAYLAND_DISPLAY` or `DISPLAY`), else the static one;
+  `AUTODOC_GUI=1` or `0` chooses.
+
+A build without the GUI says so when asked for `--gui`, and how to get one.
 
 > [!TIP]
 > On Linux systems using Wayland or X11, `autodoc --gui` dynamically loads `libwayland-client`, `libxkbcommon`, and Vulkan/EGL drivers at runtime when launched in GUI mode, while `autodoc --ui` and `autodoc --call` run cleanly on headless servers without any display libraries installed.
@@ -54,12 +123,12 @@ autodoc --call workspace.add '["engineering-kb", "/home/me/Notes/engineering-kb"
 autodoc --ui engineering-kb
 ```
 
-When you run `autodoc --call workspace.add` followed by `autodoc --ui engineering-kb` (or add the workspace interactively inside `autodoc --ui` by pressing `w` to open the Workspace Manager), four things happen automatically:
+When you run `autodoc --call workspace.add` followed by `autodoc --ui engineering-kb` (or add the workspace interactively inside `autodoc --ui` with `Go › Manage workspaces…`), four things happen automatically:
 
 1. **Daemon Bootstrap**: If `autodoc --serve` is not yet running, the client starts it in the background and connects over the `0600` Unix domain socket.
 2. **Store-Backed Workspace Registration**: AutoDoc persists the workspace definition (`engineering-kb`) inside its SQLite store (`autodoc.db`) with your include and exclude globs.
 3. **Watch-Before-Scan Indexing**: The daemon attaches filesystem watches, scans all matching `.md` files and `.todo-list/` tasks, extracts YAML frontmatter, splits prose into heading-aligned chunks, and populates the SQLite FTS5 index.
-4. **Interactive Workspace Open**: The terminal TUI opens with the **Files** tree docked on the left, the **120-column page editor** centered in the middle, and the **Outline** and **Relations** inspector ready on the right.
+4. **Interactive Workspace Open**: The terminal TUI opens on the page: the **120-column page editor**, centred. The **Files**, **Outline** and **Relations** panels come when they are asked for (Chapter 3).
 
 To launch the native desktop window instead of the terminal TUI, pass `--gui`:
 
@@ -67,11 +136,39 @@ To launch the native desktop window instead of the terminal TUI, pass `--gui`:
 autodoc --gui engineering-kb
 ```
 
+### Choosing the Workspace, and Recording Input (`--debug`)
+
+```sh
+autodoc --ui                # attaches to the daemon (starting it when nothing answers), in the last workspace used
+autodoc --ui kb             # in workspace kb; a name the daemon does not have is refused, with the names it has
+autodoc --ui --debug         # also record the event stream to autodoc-debug-<date>.jsonl, for an input or IME bug report
+autodoc --ui --debug=r.jsonl # the same, to r.jsonl
+```
+
+`--debug` is `--ui` and `--gui`'s: without one of them it is refused. It records the input and
+event stream to one JSONL file — the window's platform events and IME state when there is a
+window, the TUI's own trace in both modes — in the order everything happened, so one file reads
+platform → IME → TUI. **The file contains everything typed, passwords included**: it is written
+only where the flag says, never anywhere by default. How to record, and how a recording becomes
+the test that reproduces a bug on any machine, is in [docs/filing-input-and-ime-bugs.md](../filing-input-and-ime-bugs.md).
+
 ---
 
 ## 2.3 Registering and Configuring Workspaces
 
-Workspaces in AutoDoc are stored inside the SQLite database (`autodoc.db`) rather than in `config.toml`, allowing you to add, rename, and reconfigure workspaces live from the TUI (`w`), the GUI, Neovim, or the CLI (`workspace.add` and `workspace.configure`) without restarting the daemon.
+Workspaces in AutoDoc are stored inside the SQLite database (`autodoc.db`) rather than in `config.toml`, allowing you to add, rename, reconfigure and delete workspaces live from the TUI (`Go › Manage workspaces…`), the GUI, Neovim, or the CLI (`workspace.add` and `workspace.configure`) without restarting the daemon.
+
+### What a Workspace Is: a Name, a Root and Patterns
+
+A workspace has a name (what `--ui` and
+every API call take), a root directory, and include and exclude patterns. New workspaces include
+`**/*.md`, `**/*.txt`, `**/*.yaml`, and `**/*.yml`, and exclude `.git/**` and `**/node_modules/**`
+by default. An excluded directory is never walked or watched. A workspace
+added before node_modules joined the defaults, still with `.git/**` alone, moves to the current
+default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are
+root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+`**` matches any number of whole segments. Bounded brace alternatives such as `**/*.{md,txt}` are
+expanded before matching. Existing workspaces keep their stored include patterns.
 
 ### Registering and Configuring a Workspace via CLI (`workspace.add` and `workspace.configure`)
 
@@ -101,23 +198,78 @@ autodoc --call workspace.configure '[
 ]'
 ```
 
+### A Document's Resources
+
+A design doc often shows files beside it, as `![flow](plan/flow.mmd)`:
+diagrams, tables, pages. Include the ones that hold text, and they are searched with it and tied to
+it:
+
+```
+**/*.md   **/*.mmd   **/*.csv   **/*.html
+```
+
+- Mermaid (`.mmd`) and CSV (`.csv`) are read as plain text, and HTML as the text derived from the
+  page. So is source code AutoDoc highlights (`.sql`, `.go`, `.py`, …): it opens as code, with no
+  rendered view. Leave pictures and other binary files out: a file AutoDoc does not know is read as
+  Markdown.
+- `![alt](path)` is an embed of the workspace path it names, as `![[./path]]` is: the resource's
+  backlinks name the document that shows it. It is a link only to a note or to a file the
+  workspace indexes, so a picture left out is not a missing link.
+
+### The Manage Workspaces Dialog (`Go › Manage workspaces…`)
+
+`Go › Manage workspaces…` lists the workspaces by title and directory on the left, and the settings
+of the one under the cursor on the right. **Its settings are one dialog with two tabs**, opened by
+Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and Enter in a field saves:
+
+- **Edit**: the title; the root (typed or browsed to when the workspace is added, then fixed: add
+  another directory as a workspace of its own); the frontmatter schema; the file types; and the
+  include and exclude lists, semicolon-separated root-relative patterns (a blank include matches no
+  files). Markdown, plain text and YAML are toggled here, and your own text types (`.log`, `.rst`,
+  …) are entered here: each is read as UTF-8 plain text by declaration (never sniffed) and admitted
+  with an include unless the rules already admit it. **Code** (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`,
+  `.mjs`, `.py`, `.rs`) and **documents** (`.docx`, `.htm`, `.html`) are turned on in their own
+  rows: every build reads them. Code is cut a chunk per declaration and embedded by its signature
+  and doc comment; turning it on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to
+  the excludes. A document is read as its text: a DOCX's paragraphs, headings, lists and tables; an
+  HTML page's content, without its scripts, styles, navigation or footer (only its `main` or
+  `article` when it has one). `.doc`, `.odt` and `.pdf` are read only by a build with a deriver for
+  them (see [Builds of your own](09-code-symbol-indexing.md)). None of these can be declared as text: a
+  text type a build before this one stored for `.html` is dropped from the field with a note, and
+  HTML stays included, as a document. `Options › Editor preferences… › File types…` opens this tab
+  for the workspace in use.
+- **Advanced**: the section size, the embedding policy and the embedding provider; and, where the
+  edition offers them, the databases: a **source** (postgres or sqlite) that the workspace's `.view`
+  files read, with the arguments they take, and the **destination** its index is kept in, the local
+  store or postgres with pgvector (with its schema and vector index, hnsw or ivfflat). A
+  connection's DSN is sealed in the store and never shown again: the dialog shows where it points,
+  and a blank DSN keeps the stored one.
+
+Save sends what changed in one `workspace.configure`, which saves all of it or none: a refused
+setting leaves every setting as it was, and the dialog opens again as it was typed with the reason.
+
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[workspace]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, and `[embedding_queue]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, and `[embedding_queue]` settings:
 
 ```toml
+# $XDG_CONFIG_HOME/autodoc/config.toml
 [server]
-# Optional custom paths; omit to use XDG defaults
-# socket = "/run/user/1000/autodoc.sock"
-# state_dir = "/home/me/.local/state/autodoc"
-# data_dir = "/home/me/.local/share/autodoc"
+socket = ""                 # default: $XDG_RUNTIME_DIR/autodoc.sock
+state_dir = ""              # default: $XDG_STATE_HOME/autodoc (the daemon's log)
+data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store, autodoc.db)
 
 [follow]
-poll_interval = "2s"
+poll_interval = "2s"        # the listing interval when a root cannot be watched
 
 [embedding_queue]
-max_inflight = 1
+max_inflight = 1            # requests to the shared provider, 1 or 2
 ```
+
+A missing file is every default.
+
+The embedding providers are kept in the store too, their API keys sealed, and
+added and chosen in the TUI's Search models dialog (see [Semantic search](06-configuring-embeddings-and-rerankers.md)).
 
 ![Complete Workspace Settings Reference](workspace-settings-reference.csv)
 
@@ -137,14 +289,29 @@ A classic subtle bug in file-watching indexers is the **scan-to-watch race windo
 
 AutoDoc prevents this race in `core/follow` by enforcing a strict **Watch-Before-Scan** state machine whenever a workspace boots or a new subdirectory appears.
 
+The files change under AutoDoc at any time: an editor, git, an agent. `core/follow` makes the index
+converge on the root's content, and treats every event as a hint that names a path:
+
+- **It watches first, then scans.** The start scan runs after the watch is up, so a change made during
+  the scan is already in the watch stream.
+- **It never has a silent gap.** Where the driver has no watch, or the watch fails at setup, it polls.
+  A watch that ends is set up again, with a full scan.
+- **A subtree it cannot read is unknown, not empty.** Its indexed documents are kept, it is rescanned
+  with backoff until it reads, and the status names it.
+- **Degraded still converges.** If neither the watch nor the poll can be set up (the root itself
+  unreadable), it scans the whole root every poll interval and keeps retrying the setup.
+
 ![Watch-Before-Scan Workspace Boot Sequence](workspace-boot-sequence.mmd)
 
 ### How Watch-Before-Scan Converges Without Gaps
 
-1. **Attach Watches First**: Before reading a single Markdown file's contents, `core/follow` walks the directory hierarchy to register recursive OS watch descriptors (`inotify` on Linux, `kqueue`/`FSEvents` on macOS) and begins buffering incoming filesystem events in memory.
-2. **Baseline Snapshot Scan**: While filesystem events accumulate in the buffer, the scanner walks the tree, compares each file against the SQLite store, and indexes any added or changed files.
+1. **Attach Watches First**: Before reading a single Markdown file's contents, `core/follow` walks the directory hierarchy to register recursive OS watch descriptors (`inotify` on Linux, `FSEvents` on macOS) and begins buffering incoming filesystem events in memory.
+2. **Baseline Snapshot Scan**: While filesystem events accumulate in the buffer, the scanner walks the tree, compares each file against the SQLite store, and hands any added or changed file to the indexer.
 3. **Coalesced Buffer Drain**: Once the baseline scan finishes, `core/follow` drains the buffered watch events. Multiple rapid events on the same path (such as Neovim writing a temp file and executing `rename(2)` over the target `.md` file) are coalesced by path.
-4. **Version Idempotency**: Each coalesced path is reconciled against the store. If the baseline scan already indexed that exact file version, the buffered event is a no-op; if a concurrent edit landed after the scanner visited that path, the follower immediately indexes the newer version.
+4. **Version Idempotency**: Each coalesced path is reconciled against the store. If the baseline scan already indexed that exact file version, the buffered event is a no-op; if a concurrent edit landed after the scanner visited that path, the follower hands the path to the indexer again, which indexes the newer version.
+
+The follower never writes the index. It hands paths to the indexer, the store's one writer, which
+decides from each file's current state whether to delete, skip or re-index it.
 
 ![Illustrative Scaling Profile: Full Tree Scan vs Single-File Watch Update](indexing-throughput.chart.json)
 

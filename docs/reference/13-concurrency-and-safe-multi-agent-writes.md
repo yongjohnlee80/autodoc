@@ -130,6 +130,10 @@ When a feature initiates an async operation, it requests a `Ticket` bound to a p
 
 When the background goroutine posts its result back to the UI loop, the callback checks `if !tk.Current() { return }` as its very first line—silently discarding any superseded answer before a single QML property is touched.
 
+### Several Clients Share One Daemon
+
+Each TUI keeps its own workspace, open file and search; a change one makes to the shared configuration (a model switch, a workspace's rules, schema or name) is logged, and the others say so in a notification without moving focus or touching an unsaved file. A workspace another client renames is followed; one it deletes leaves your unsaved text as an untitled draft.
+
 ![Summary Reference of Concurrency Guards Across All AutoDoc Layers](concurrency-guards-summary.csv)
 
 ---

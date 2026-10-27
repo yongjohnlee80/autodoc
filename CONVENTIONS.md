@@ -38,8 +38,7 @@ These come before every rule below. When no rule covers a case, they decide it.
 
 ## 2. Packages and dependencies
 
-The packages and their jobs are in [architecture §2](docs/architecture.md#2-packages) and the
-[README](README.md). The rules:
+The packages and their jobs are in [architecture §2](docs/architecture.md#2-packages). The rules:
 
 | Rule | Enforced by |
 | --- | --- |

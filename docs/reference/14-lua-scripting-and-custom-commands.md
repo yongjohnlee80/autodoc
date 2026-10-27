@@ -1,17 +1,24 @@
 # Chapter 14: Lua Scripting & Custom Commands
 
-AutoDoc embeds a deterministic, sandboxed Lua 5.1 runtime (`gopher-lua`) directly inside the terminal UI so you can author custom `:` commands, modal keybindings, interactive fuzzy pickers, and asynchronous workspace workflows without compiling external binaries. In fact, AutoDoc's built-in `:table` formatter and `:mermaid` scaffolding commands are written in this exact Lua environment.
+AutoDoc embeds a deterministic, sandboxed Lua 5.1 runtime (`gopher-lua`) directly inside the terminal UI so you can author custom `:` commands, modal keybindings, interactive fuzzy pickers, and asynchronous workspace workflows without compiling external binaries. In fact, AutoDoc's built-in `:table` formatter and `:mermaid` scaffolding commands are written in this exact Lua environment. The engine is the package [`github.com/yongjohnlee80/autodoc/script`](../../script/README.md), which any program with a golib editor can import.
 
-This chapter covers where scripts and shareable packages live, how the 2-second execution sandbox and single-step undo batching protect your notes, how to manipulate buffers using grapheme-aware coordinates, and how to combine interactive UI pickers with capability-gated daemon RPCs. For a step-by-step beginner walkthrough, see `docs/lua/tutorial-vim-commands.md`; for the exhaustive method catalog, cross-reference `docs/lua/reference.md`.
+This chapter covers where scripts and shareable packages live, how the 2-second execution sandbox and single-step undo batching protect your notes, how to manipulate buffers using grapheme-aware coordinates, and how to combine interactive UI pickers with capability-gated daemon RPCs.
+
+Help › Tutorial… walks through it all. Its pages are the [tutorials](../tutorials/README.md): 09 to 11 are the scripting ones, ending with a worked `:todo` command.
+
+[`docs/lua/`](../lua/) has all of it: [Lua in AutoDoc](../lua/README.md), where scripts live and how they load; a step-by-step [tutorial for your own Vim commands](../lua/tutorial-vim-commands.md), from `:hello` to `:wc`, `:toc` and a `:link` that searches the workspace; and the [Lua reference](../lua/reference.md), every function a script can call.
 
 ---
 
 ## 14.1 Where Scripts Live, Load Order, and Hot Reloading
 
-Personal Lua scripts live in `~/.config/autodoc/lua/` (or `$XDG_CONFIG_HOME/autodoc/lua/`, or alongside the configuration file passed to `--config`). At startup, AutoDoc initializes a fresh Lua state, loads its built-in scripts (`table.lua`, `mermaid.lua`), and then evaluates every `*.lua` file in your `lua/` directory in lexicographical filename order.
+Personal Lua scripts live in `~/.config/autodoc/lua/` (or `$XDG_CONFIG_HOME/autodoc/lua/`, or alongside the configuration file passed to `--config`). At startup, AutoDoc initializes a fresh Lua state, loads its built-in scripts (`table.lua`, `mermaid.lua`), and then evaluates every `*.lua` file in your `lua/` directory in lexicographical filename order. `table` and `mermaid` are Lua scripts (`tui/lua/`).
 
-- **Replacing Built-In Commands**: Every command in AutoDoc has both a catalog ID (such as `terminal.open` or `lua.table`) and one or more `:` names. When your script registers a command whose name matches an existing `:` command, your command claims that `:` name while leaving the built-in command's catalog ID intact.
+Each command is a catalog entry, `lua.<name>` (or the `id` it gives, under `lua.`), named in F1 by its `title`.
+
+- **Replacing Built-In Commands**: Every command in AutoDoc has both a catalog ID (such as `terminal.open` or `lua.table`) and one or more `:` names. A command of yours named like one of AutoDoc's takes that name, and only it: `:term` of yours leaves `:terminal` opening the terminal, and AutoDoc's command stays runnable by its id.
 - **Instant Reloading (`:lua-reload`)**: Running `:lua-reload`—or simply saving any file inside `~/.config/autodoc/lua/` from within AutoDoc's editor—discards the current Lua state, drops old event handlers and keybindings, and reloads all scripts cleanly from disk. Any in-flight daemon callback belonging to the discarded generation is safely ignored when its reply arrives.
+- **The Screen's QML (`--dev`)**: The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows edits to it.
 
 ---
 
@@ -27,7 +34,7 @@ Scripts receive Lua 5.1's `base`, `string`, `table`, and `math` libraries plus t
 
 ### The 2-Second Execution Deadline
 
-Every script load, command invocation (`run`), argument completion (`complete`), event handler (`autodoc.on`), and asynchronous daemon callback is governed by a strict **2-second context deadline**. If an accidental infinite loop runs past 2,000 milliseconds, the VM halts execution and surfaces `<command>: the script ran past 2s and was stopped`. In normal operation, Lua commands complete in a fraction of a millisecond to a few milliseconds:
+Every script load, command invocation (`run`), argument completion (`complete`), event handler (`autodoc.on`), and asynchronous daemon callback is governed by a strict **2-second context deadline**. If an accidental infinite loop runs past 2,000 milliseconds, the VM halts execution and surfaces `<command>: the script ran past 2s and was stopped`. A script that fails or runs past two seconds shows its error in the prompt. In normal operation, Lua commands complete in a fraction of a millisecond to a few milliseconds:
 
 ![Typical Lua Command Execution Time vs 2000ms Sandbox Cap](lua-execution-budget.chart.json)
 
@@ -40,6 +47,20 @@ Every buffer mutation performed during a command's `run` function—or inside an
 ## 14.3 Registering `:commands`, Completions, and Modal Keymaps
 
 You register custom Ex commands with `autodoc.command` (aliased conceptually to `autodoc.command` in personal scripts and packages) and bind keys with `autodoc.map` (`autodoc.keymap`).
+
+```lua
+-- :upper [line] — upper-case a line (the cursor's by default)
+autodoc.command{
+  name = "upper", args = "[line]", help = "upper-case a line",
+  run = function(ed, args, line)
+    local n = tonumber(args[1]) or ed:cursor()
+    ed:replace(n, 1, n, #ed:line(n) + 1, ed:line(n):upper())
+    autodoc.notify("upper-cased line " .. n)
+  end,
+}
+```
+
+A fuller command, with completion, keys and a menu row:
 
 ```lua
 -- ~/.config/autodoc/lua/adr_stamp.lua
@@ -91,7 +112,7 @@ When raising user-facing validation errors inside `run`, pass level `0` to `erro
 
 ## 14.4 Buffer Manipulation and Grapheme-Aware Coordinates
 
-Inside `run(ed, args, line, cmd)` and daemon callbacks, the editor handle `ed` (along with multi-buffer handles returned by `autodoc.buffers()` and `autodoc.buffer(n)`, the buffer manipulation surface often referred to as `autodoc.buf.*`) provides direct access to lines, selections, and search.
+Inside `run(ed, args, line, cmd)` and daemon callbacks, the editor handle `ed` (along with multi-buffer handles returned by `autodoc.buffers()` and `autodoc.buffer(n)`, the buffer manipulation surface often referred to as `autodoc.buf.*`) provides direct access to lines, selections, and search. `ed` is the editor: `ed:value()`, `ed:line(n)`, `ed:cursor()`, `ed:insert(text)`, `ed:replace(l1, c1, l2, c2, text)`, `ed:find(term)`, `ed:run(":12")` and more.
 
 ### Grapheme Clusters vs. Byte Lengths
 
@@ -137,6 +158,15 @@ autodoc.map{ mode = "visual", keys = "<C-t>", command = "toggle-check" }
 ## 14.5 Interactive Fuzzy Pickers and Daemon RPC (`autodoc.call`)
 
 Lua scripts never block the UI thread waiting for the AutoDoc daemon. Whether you call `autodoc.call(verb, params, cb)` (the generic CLI/daemon RPC bridge `autodoc.cli`) or a domain helper generated from `sys.contracts` (`autodoc.search.query`, `autodoc.doc.read`, `autodoc.todos.list`), the call returns immediately and invokes `cb(result, err)` on the UI loop once the daemon replies.
+
+A script calls the daemon too. Every verb it offers scripts is a function by its name, and `autodoc.call(verb, params, cb)` reaches any of them by name; the protocol's own (`sys.hello`, `sys.shutdown`) are refused. A call never waits: the answer comes to the callback later, as `cb(result, err)`, with `err` the daemon's code and message (`"-32061 not found"`). `autodoc --contracts` lists the verbs and their params.
+
+```lua
+autodoc.search.query("kb", "kestrel", {limit = 5}, function(res, err)
+  if err then autodoc.notify("search failed: " .. err) return end
+  autodoc.notify(#res.hits .. " hits")
+end)
+```
 
 ### Guarding Against Concurrent Edits with `ed:revision()`
 
@@ -222,6 +252,20 @@ When a user installs a package via `:lua-install <name or git-url>` (a name is t
 `:lua` opens a **Lua shell** in a tab of the terminal panel. An expression typed there shows its value, a statement runs, and a line that stops mid-statement asks for more with `..`. The shell's globals are its own, `ed` is the page, and `print` writes into the shell. `:lua <chunk>` runs one chunk and shows its values as a notification.
 
 A script can show a **card** beside the page with `autodoc.ui.card{title, text, every, tick}`: Markdown, refreshed by `tick` while the card is open, with a `vega-lite` fence drawn as a chart in the window (`--gui`). AutoDoc's own `:usage` is a card of the daemon's and the app's memory and CPU, read through `sys.stats` and `autodoc.app.stats()`, and of the workspace's index.
+
+---
+
+## 14.8 Running Catalog Commands (`autodoc.run`) and `buffer.new`
+
+`autodoc.run(id, args…)` runs any command of the catalog by its id, AutoDoc's or yours, and returns `ok, err` without raising: `err` is `"unknown: <id>"` for an id no command has, or the command's own error. A plugin's command (`plugin.…`) is never Lua's to run.
+
+```lua
+local ok, err = autodoc.run("todos.open")
+local ok, err = autodoc.run("lua.upper", "3")
+local ok, err = autodoc.run("buffer.new", "q.sql", "SELECT 1;\n") -- a new buffer: an unsaved draft named q.sql
+```
+
+`buffer.new [name] [text]` has no `:` name: it opens a new buffer holding the text, an unsaved draft that the save picker names. `name` is the draft's suggested name and how it reads (`q.sql` is SQL), never a path; nothing is written until Ctrl+S ([docs/plugins.md](../plugins.md#buffernew-a-draft-for-the-user-to-edit)).
 
 ---
 
