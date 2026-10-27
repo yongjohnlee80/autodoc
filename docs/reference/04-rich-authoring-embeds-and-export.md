@@ -52,27 +52,23 @@ To distinguish rich block figures (diagrams, charts, and tables) from inline bad
 
 ---
 
-## 4.3 Native Mermaid Diagrams (`.mmd` and `.mermaid`)
+## 4.3 Mermaid Diagrams (`.mmd` and `.mermaid`)
 
-AutoDoc parses and renders Mermaid diagrams natively in Go via `golib/parse/mermaid` and `golib/gui/mermaid`—requiring zero Node.js, Puppeteer, or browser dependencies. You store each diagram in your note's companion directory (`<note-stem>/diagram.mmd`) and embed it on a standalone line with `![Diagram Caption](diagram.mmd)`.
+You store each diagram in your note's companion directory (`<note-stem>/diagram.mmd`) and embed it on a standalone line with `![Diagram Caption](diagram.mmd)`, or write it in a ` ```mermaid ` fence.
 
-### Supported Diagram Types and Compatibility Rules
+### Two Renderers
 
-AutoDoc's native Mermaid engine supports three primary diagram families:
+A diagram is drawn by one of two renderers, and they don't support the same things:
 
-1. **Flowcharts (`flowchart LR`, `flowchart TD`, `flowchart TB`)**: Directed graphs with rectangular, rounded, diamond, and cylinder nodes, labeled edges (`-->|"Yes"|`), and nested `subgraph` containers.
-2. **Sequence Diagrams (`sequenceDiagram`)**: Participant lifelines, synchronous/asynchronous arrows (`->>`, `-->>`), `alt`/`else`/`loop` blocks, and activation bars.
-3. **State Diagrams (`stateDiagram-v2`)**: Initial/final states (`[*]`), clean state aliases (`state "Display Name" as ID`), and labeled state transitions.
+- **An export** (`--export html`, a site) writes the diagram's source into the page with the vendored **mermaid.js**, which the reader's browser runs: full Mermaid. A diagram mermaid.js can't draw shows mermaid's own error in place.
+- **The GUI** (`--gui`, the Rendered view, `Ctrl+T`) draws with **golib's native engine** (`golib/parse/mermaid` and `golib/gui/mermaid`), with no browser. (The HTML preview pane uses mermaid.js when it finds a browser, and golib's engine otherwise.) It draws a subset of Mermaid: the kinds and the syntax its package documentation lists. That documentation is the reference: [`golib/parse/mermaid`](https://pkg.go.dev/github.com/yongjohnlee80/golib/parse/mermaid). AutoDoc keeps no list of its own, which would fall behind golib's.
 
-### Strict Compatibility Guidelines for `golib/parse/mermaid`
+So a diagram can draw in an export and not in the GUI. In the GUI:
 
-To ensure 100% deterministic parsing and layout across both `autodoc --gui` and `autodoc --export`, follow these syntax conventions in all `.mmd` files:
+- a diagram outside golib's subset shows a notice in its place, saying why in golib's words: `diagram not drawn: <golib's error>`. Its source is in the Raw view, or in its `.mmd` file;
+- a diagram with a syntax error is drawn as the error and its line, in place.
 
-- **Always Double-Quote Complex Flowchart Labels**: Whenever a node label contains spaces, parentheses, colons, or slashes, enclose the label text in double quotes:
-  - Valid: `A["Markdown Files (.md)"] --> B["SQLite Index (WAL)"]`
-  - Invalid: `A[Markdown Files (.md)] --> B[SQLite Index: WAL]`
-- **No HTML Tags in Labels**: Never use `<br/>`, `<b>`, or `<i>` inside node or edge labels; use concise phrases or split concepts into sequential nodes instead.
-- **Clean State IDs in `stateDiagram-v2`**: Define human-readable state names using `state "Rendered View (Ctrl+T)" as RenderedView` and reference the clean identifier (`Normal --> RenderedView: Ctrl+T`) in transitions.
+To draw the same in both, stay inside golib's subset.
 
 ---
 

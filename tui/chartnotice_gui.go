@@ -13,8 +13,10 @@ import (
 // chartNotice is the fallback for the charts golib does not draw (its Vega-Lite subset declines
 // them, or one is over a limit): a short notice in place of the chart, not its spec as code, which
 // can run to hundreds of lines. It says why in golib's words, the error golib declined the chart
-// with (DiagramRequest.Declined), as an export's caption does. Anything else it declines (a
-// Mermaid diagram type), and a chart that is not JSON, stay code.
+// with (DiagramRequest.Declined), as an export's caption does. A Mermaid diagram golib declined
+// with a reason (a kind or syntax outside its subset) is a notice of that reason the same way. A
+// syntax error never reaches it (golib draws the error in place); anything else declined with no
+// reason, and a chart that is not JSON, stay code.
 type chartNotice struct{}
 
 // nativeDiagrams is golib's native chain, as AutoDoc draws with it: a chart it declines is the notice.
@@ -32,7 +34,13 @@ func chartNoticeOf(declined error) string {
 }
 
 func (chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ func()) guiwidget.DiagramAnswer {
-	if req.Lang != "vega-lite" && req.Lang != "vegalite" {
+	var text string
+	switch {
+	case req.Lang == "vega-lite" || req.Lang == "vegalite":
+		text = chartNoticeOf(req.Declined)
+	case req.Lang == "mermaid" && req.Declined != nil:
+		text = "diagram not drawn: " + req.Declined.Error() + ". Its source is in the Raw view, or in its .mmd file."
+	default:
 		return guiwidget.DiagramAnswer{State: guiwidget.Declined}
 	}
 	th := req.Theme
@@ -41,7 +49,6 @@ func (chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ fu
 	f.Italic = true
 	pad := f.Size
 	m, release := gui.AcquireMeasurer(req.Scale)
-	text := chartNoticeOf(req.Declined)
 	_, sz := m.Wrap(text, f, max(req.Width-2*pad, f.Size))
 	release()
 	n := noticeView{text: text, font: f, pad: pad, size: gui.Size{W: req.Width, H: sz.H + 2*pad},

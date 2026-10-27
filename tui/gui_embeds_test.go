@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"github.com/yongjohnlee80/golib/parse/mermaid"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -530,8 +531,45 @@ func TestTheChartNoticeSaysGolibsReason(t *testing.T) {
 	}
 }
 
-// The notice answers only a chart: whatever else golib declines (a Mermaid diagram type it does not
-// draw) stays declined, drawn as its source.
+// A Mermaid diagram golib's engine declines (a kind outside its subset: a pie) is a notice of golib's
+// reason, the parser's own words, as a chart is; a malformed one is still golib's picture of the
+// syntax error, never the notice.
+func TestADeclinedMermaidDiagramSaysWhy(t *testing.T) {
+	_, release := gui.AcquireMeasurer(1)
+	release()
+	d := nativeDiagrams()
+	ask := func(src string) guiwidget.DiagramAnswer {
+		t.Helper()
+		req := guiwidget.DiagramRequest{Lang: "mermaid", Src: src, Width: 400, Scale: 1, Theme: embedTheme}
+		ready := make(chan struct{}, 1)
+		a := d.Diagram(context.Background(), req, func() { ready <- struct{}{} })
+		if a.State == guiwidget.Pending {
+			select {
+			case <-ready:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the chain never called ready")
+			}
+			a = d.Diagram(context.Background(), req, func() {})
+		}
+		return a
+	}
+	pie := "pie\n  \"a\": 1"
+	_, why := mermaid.Parse(pie)
+	if why == nil {
+		t.Fatal("golib's parser takes a pie: the cell needs a kind outside its subset")
+	}
+	a := ask(pie)
+	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || !strings.HasPrefix(n.text, "diagram not drawn: ") || !strings.Contains(n.text, why.Error()) {
+		t.Errorf("a pie: %+v; want the notice of golib's %q", a, why)
+	}
+	a = ask("flowchart TB\n  A[unclosed --> B")
+	if _, notice := a.Pic.(noticeView); a.State != guiwidget.Ready || a.Pic == nil || notice {
+		t.Errorf("a malformed flowchart: %+v; want golib's picture of its error, not the notice", a)
+	}
+}
+
+// The notice answers only a chart, and a diagram golib declined with a reason: whatever else is
+// declined with none stays declined, drawn as its source.
 func TestTheChartNoticeAnswersOnlyACharts(t *testing.T) {
 	for lang, want := range map[string]guiwidget.DiagramState{"vega-lite": guiwidget.Ready, "vegalite": guiwidget.Ready, "mermaid": guiwidget.Declined} {
 		a := chartNotice{}.Diagram(context.Background(), guiwidget.DiagramRequest{Lang: lang, Width: 400, Scale: 1}, func() {})
