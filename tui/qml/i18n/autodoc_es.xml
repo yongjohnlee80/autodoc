@@ -2588,7 +2588,7 @@
               and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
-  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+  F10, Alt+letter  the menu bar, shown by default (Options › Editor preferences can hide it until then).
   SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
               keys there), and F10 may need Fn
@@ -2661,7 +2661,7 @@
               ellas se escribe en seguida
   F6 and Shift+F6  el widget abierto siguiente o anterior: el editor y los paneles, nunca la
               barra de menús. SPC Tab, o :go &lt;nombre&gt;, va a uno por su nombre (Ir › Widget…)
-  F10, Alt+letter  la barra de menús, oculta hasta entonces (Opciones › Preferencias del editor puede mantenerla).
+  F10, Alt+letter  la barra de menús, visible por defecto (Opciones › Preferencias del editor puede ocultarla hasta entonces).
   SPC m       mostrar y enfocar la barra de menús; otra vez la oculta
               En un Mac, Option+letra es Alt+letra (distribución US; Option+E, I, N, U son teclas muertas
               allí), y F10 puede necesitar Fn
