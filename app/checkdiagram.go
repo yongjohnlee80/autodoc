@@ -1,14 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/lab"
+	"github.com/yongjohnlee80/golib/parse/markdown"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
@@ -39,13 +42,9 @@ type checkDiagram struct {
 	lang, src string
 }
 
-// diagramFence is a mermaid or vega-lite fence's opening line: its marker (``` or ~~~, three or
-// more) and its language. Indented up to three spaces, as CommonMark's.
-var diagramFence = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})\\s*(mermaid|vega-lite|vegalite)\\s*$")
-
 // diagramsIn are the diagrams file holds: the whole of a .mmd or .mermaid (Mermaid), the whole of a
-// .chart.json or .vl.json (Vega-Lite), each mermaid and vega-lite fence of a .md, none for a .md
-// with none. Any other file is refused.
+// .chart.json or .vl.json (Vega-Lite), each mermaid and vega-lite fence of a .md (vegalite too), none
+// for a .md with none. Any other file is refused.
 func diagramsIn(file string) ([]checkDiagram, error) {
 	name := strings.ToLower(filepath.Base(file))
 	var lang string
@@ -65,28 +64,30 @@ func diagramsIn(file string) ([]checkDiagram, error) {
 	if lang != "" {
 		return []checkDiagram{{file: file, line: 1, lang: lang, src: string(data)}}, nil
 	}
+	// the fences are golib's Markdown parser's (kind.ParseMarkdown), as the export and the TUI find
+	// them: a fence shown inside a longer one is text, and one in a block quote or a list is a fence
 	var out []checkDiagram
-	lines := strings.Split(string(data), "\n")
-	for i := 0; i < len(lines); i++ {
-		m := diagramFence.FindStringSubmatch(strings.TrimRight(lines[i], "\r"))
-		if m == nil {
-			continue
-		}
-		marker, start := m[1], i+1
-		var src []string
-		for i++; i < len(lines); i++ {
-			l := strings.TrimRight(lines[i], "\r")
-			if t := strings.TrimLeft(l, " "); len(l)-len(t) <= 3 && strings.HasPrefix(t, marker[:3]) && strings.Trim(t, marker[:1]) == "" && len(t) >= len(marker) {
-				break // the closing fence: the same character, at least as many
+	doc := kind.ParseMarkdown(data)
+	var walk func(*markdown.Node)
+	walk = func(n *markdown.Node) {
+		for c := n.FirstChild; c != nil; c = c.Next {
+			if c.Kind != markdown.KindCodeBlock || c.Fence() == 0 {
+				walk(c)
+				continue
 			}
-			src = append(src, l)
+			lang := lab.FenceLang(string(c.Info()))
+			if lang == "vegalite" {
+				lang = "vega-lite"
+			}
+			if lang != "mermaid" && lang != "vega-lite" {
+				continue
+			}
+			// the source starts the line after its opening fence's
+			line := bytes.Count(data[:c.Span.Start], []byte("\n")) + 2
+			out = append(out, checkDiagram{file: file, line: line, lang: lang, src: string(c.Literal)})
 		}
-		lang := m[2]
-		if lang == "vegalite" {
-			lang = "vega-lite"
-		}
-		out = append(out, checkDiagram{file: file, line: start + 1, lang: lang, src: strings.Join(src, "\n")})
 	}
+	walk(doc.Root)
 	return out, nil
 }
 
