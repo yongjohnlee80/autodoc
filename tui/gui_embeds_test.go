@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -497,8 +498,8 @@ func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
 		t.Errorf("the chart painted %v: want its bars and labels", rc.Ops())
 	}
 	bl = draw(2)
-	if n, ok := bl.Picture.(noticeView); !ok || n.text != chartNoticeText {
-		t.Fatalf("a chart outside the subset is not the notice: %#v", bl)
+	if n, ok := bl.Picture.(noticeView); !ok || !strings.HasPrefix(n.text, "chart not drawn: ") || !strings.Contains(n.text, "a spec outside the subset drawn") {
+		t.Fatalf("a chart outside the subset is not the notice of golib's reason: %#v", bl)
 	}
 	if lh := max(embedTheme.Prose.Size, 10) * 1.4; bl.Height <= lh || bl.Height > 5*lh {
 		t.Errorf("the notice is %v high, want a few lines (a line is %v)", bl.Height, lh)
@@ -511,6 +512,21 @@ func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
 	bl = draw(4)
 	if code, ok := bl.Picture.(laidBlock); !ok || !strings.Contains(visible(code.bl), `"mark"`) {
 		t.Errorf("a chart that is not JSON is not its source as code: %#v", bl)
+	}
+}
+
+// The notice says why in golib's words when golib gave a reason (the error it declined the chart
+// with), and the general notice when it gave none.
+func TestTheChartNoticeSaysGolibsReason(t *testing.T) {
+	why := errors.New("vegalite: a spec outside the subset drawn: a rule coloured by a field")
+	a := chartNotice{}.Diagram(context.Background(), guiwidget.DiagramRequest{Lang: "vega-lite", Width: 400, Scale: 1, Declined: why}, func() {})
+	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok ||
+		n.text != "chart not drawn: vegalite: a spec outside the subset drawn: a rule coloured by a field. Its source is in the Raw view, or in its .chart.json file." {
+		t.Errorf("a chart golib declined with a reason: %+v", a)
+	}
+	a = chartNotice{}.Diagram(context.Background(), guiwidget.DiagramRequest{Lang: "vega-lite", Width: 400, Scale: 1}, func() {})
+	if n, ok := a.Pic.(noticeView); !ok || n.text != chartNoticeText {
+		t.Errorf("a chart declined with no reason: %+v", a)
 	}
 }
 

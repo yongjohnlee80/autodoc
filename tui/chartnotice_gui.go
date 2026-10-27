@@ -12,14 +12,24 @@ import (
 
 // chartNotice is the fallback for the charts golib does not draw (its Vega-Lite subset declines
 // them, or one is over a limit): a short notice in place of the chart, not its spec as code, which
-// can run to hundreds of lines. Anything else it declines (a Mermaid diagram type), and a chart
-// that is not JSON, stay code.
+// can run to hundreds of lines. It says why in golib's words, the error golib declined the chart
+// with (DiagramRequest.Declined), as an export's caption does. Anything else it declines (a
+// Mermaid diagram type), and a chart that is not JSON, stay code.
 type chartNotice struct{}
 
 // nativeDiagrams is golib's native chain, as AutoDoc draws with it: a chart it declines is the notice.
 func nativeDiagrams() guiwidget.Diagrammer { return guiwidget.Diagrams(chartNotice{}) }
 
 const chartNoticeText = "This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file."
+
+// chartNoticeOf is the notice for a chart golib declined with declined: why, in its words, then
+// where the source is; with no reason given, chartNoticeText.
+func chartNoticeOf(declined error) string {
+	if declined == nil {
+		return chartNoticeText
+	}
+	return "chart not drawn: " + declined.Error() + ". Its source is in the Raw view, or in its .chart.json file."
+}
 
 func (chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ func()) guiwidget.DiagramAnswer {
 	if req.Lang != "vega-lite" && req.Lang != "vegalite" {
@@ -31,9 +41,10 @@ func (chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ fu
 	f.Italic = true
 	pad := f.Size
 	m, release := gui.AcquireMeasurer(req.Scale)
-	_, sz := m.Wrap(chartNoticeText, f, max(req.Width-2*pad, f.Size))
+	text := chartNoticeOf(req.Declined)
+	_, sz := m.Wrap(text, f, max(req.Width-2*pad, f.Size))
 	release()
-	n := noticeView{text: chartNoticeText, font: f, pad: pad, size: gui.Size{W: req.Width, H: sz.H + 2*pad},
+	n := noticeView{text: text, font: f, pad: pad, size: gui.Size{W: req.Width, H: sz.H + 2*pad},
 		ink: orColor(th.Muted, th.Text), ground: orColor(th.CodeBackground, th.Background)}
 	return guiwidget.DiagramAnswer{State: guiwidget.Ready, Pic: n, Size: n.size}
 }
