@@ -13,7 +13,7 @@ func TestAboutListsItsLabelledLines(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	info := AboutInfo{Version: "v9.9.9", BuildDate: "2026-10-11", Config: "/cfg/config.toml", Log: "/state/serve.log", Plugins: "/cfg/plugins"}
 	r := runTUI(t, NewSession(d.sock, nil), Options{AboutInfo: info})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.leader(t, 'A')
 	r.s.WaitForText(t, "AutoDoc v9.9.9 (2026-10-11)")
 	for _, want := range []string{"CONFIG: /cfg/config.toml", "(log: /state/serve.log)", "PLUGINS: /cfg/plugins",
@@ -63,7 +63,7 @@ func TestAboutWithoutADateAndWithAReplacement(t *testing.T) {
 func TestAboutDimsTheBackground(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{AboutInfo: AboutInfo{Version: "v9.9.9"}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitForText(t, "NORMAL")
 	y, x := -1, -1
 	for row, line := range strings.Split(r.s.String(), "\n") {

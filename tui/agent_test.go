@@ -90,7 +90,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	// The stored preferences carry the profiles and the default, and their answer is not ordered
 	// with the listing's: SPC g before they land finds no default and opens the profiles.

@@ -32,7 +32,7 @@ end }`)
 	write("b.lua", `autodoc.command{ name = "find", title = "mine", run = function(ed) ed:insert("myfind") end }`)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitNamespaces(t)
 	owner := func(name string) string { return onLoop(r, func() string { return r.h.cat.names[name] }) }
 

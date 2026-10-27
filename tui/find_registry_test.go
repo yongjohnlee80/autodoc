@@ -73,7 +73,7 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 		h.options(Options{Layout: []byte(main)})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 
 	names := onLoop(r, func() []string {
 		var out []string

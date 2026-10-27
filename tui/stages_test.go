@@ -293,7 +293,7 @@ func TestTheGUIKeepsItsOwnTheme(t *testing.T) {
 
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n"}})
 	g := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
-	g.s.WaitForText(t, "connected — autodoc v-test")
+	g.connected(t)
 	if th := onLoop(g, func() string { return g.h.theme }); th != "sepia" {
 		t.Fatalf("a window starts in %q, want sepia", th)
 	}
@@ -304,13 +304,13 @@ func TestTheGUIKeepsItsOwnTheme(t *testing.T) {
 
 	// the store has the window's choice: the next window starts in it
 	g2 := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
-	g2.s.WaitForText(t, "connected — autodoc v-test")
+	g2.connected(t)
 	g2.s.WaitFor(t, "the next window in the kept mono", func(string) bool {
 		return onLoop(g2, func() string { return g2.h.theme }) == "mono"
 	})
 	// and the terminal, which reads the same store, keeps its own: still dark once it has read it
 	tr := runTUI(t, NewSession(d.sock, nil), Options{})
-	tr.s.WaitForText(t, "connected — autodoc v-test")
+	tr.connected(t)
 	time.Sleep(300 * time.Millisecond) // a wrong read would switch it by now; g2 read in less
 	if th := onLoop(tr, func() string { return tr.h.theme }); th != "dark" {
 		t.Fatalf("the terminal after the window chose mono: %q, want its own dark", th)

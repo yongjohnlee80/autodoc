@@ -147,7 +147,7 @@ autodoc.command{ name = "w", run = function(ed) ed:insert("lua's w") end }
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x two words y\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")

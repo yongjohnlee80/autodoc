@@ -350,9 +350,18 @@ func runTUI(t *testing.T, sess *Session, opt Options) *running {
 func attached(t *testing.T, d *daemon) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return r
+}
+
+// connected waits for the TUI to connect and for the store's preferences to be in (loadPrefs). Until
+// then it runs on the built-in defaults, the menu bar and the status line shown (v0.3.3), so a key
+// pressed in between can open a menu on a bar the store's preferences then hide.
+func (r *running) connected(t *testing.T) {
+	t.Helper()
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the store's preferences in", func(string) bool { return onLoop(r, func() bool { return r.h.luaPrefsRead }) })
 }
 
 // listed is the workspace's files, as the pickers filter them.
@@ -757,7 +766,7 @@ func TestSpawnsTheDaemonOnce(t *testing.T) {
 		return "/state/serve.log", nil
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitListed(t, 1)
 	if n := spawns.Load(); n != 1 {
 		t.Errorf("spawned %d times", n)
@@ -772,7 +781,7 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			src := themeImport.ReplaceAll(layout, []byte("import autodoc.theme."+name+" 1.0"))
 			r := runTUI(t, NewSession(d.sock, nil), Options{Layout: src})
-			r.s.WaitForText(t, "connected — autodoc v-test")
+			r.connected(t)
 			r.waitListed(t, 1) // the picker filters the files listed: listed first
 			r.openByPicker(t, "a.md")
 			r.waitFile(t, "a.md")

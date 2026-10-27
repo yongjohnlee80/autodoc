@@ -279,7 +279,7 @@ func TestALuaPackageIsInstalledByItsRegistryName(t *testing.T) {
 	dir := t.TempDir()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitNamespaces(t)
 
 	r.mustRun(t, "lua-install hello")

@@ -22,7 +22,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	sockDir, luaDir := t.TempDir(), t.TempDir()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: sockDir, LuaDir: luaDir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 
@@ -224,7 +224,7 @@ func askText(r *running) string {
 func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
 	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
 	ctx := context.Background()

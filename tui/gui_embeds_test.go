@@ -234,7 +234,7 @@ func TestOnlyTheNoteEditorDrawsEmbeds(t *testing.T) {
 	})
 	r := runTUI(t, NewSession(d.sock, nil), Options{NoteFile: notes.SetNote,
 		ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native(note))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")

@@ -533,7 +533,7 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 	t.Helper()
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	t.Cleanup(func() {
 		runs := onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
@@ -823,7 +823,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	logs := t.TempDir()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	t.Cleanup(func() {
 		for _, p := range onLoop(r, func() []*pluginRun {
 			var out []*pluginRun

@@ -109,7 +109,7 @@ func TestTheRequestersBuildServesNext(t *testing.T) {
 	communitySess.SetProcess(-1) // another process: the test's TUIs share one
 	pro := runTUI(t, proSess, Options{Registrations: proTables})
 	community := runTUI(t, communitySess, Options{})
-	community.s.WaitForText(t, "connected — autodoc v-test")
+	community.connected(t)
 	pro.s.WaitFor(t, "the offer", func(sc string) bool { return strings.Contains(sc, regQuestion) })
 	onLoop(pro, func() bool {
 		pro.h.awaitExit = func(ctx context.Context, _ int64) bool {

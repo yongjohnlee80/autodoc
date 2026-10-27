@@ -14,7 +14,7 @@ import (
 func TestTheGUISpacePeriodMenuHasTheKeyboard(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.leader(t, '.')
 	r.s.WaitForText(t, "View diagram")
 	r.keys(t, esc())

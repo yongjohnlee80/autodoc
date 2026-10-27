@@ -50,8 +50,8 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 // clock: under -race on a loaded VM43 it outran decltest's WaitTimeout.
 func (r *running) ready(t *testing.T) {
 	t.Helper()
-	r.waitWithin(t, "connected, the notes listed", daemonWait, func() bool {
-		return onLoop(r, func() bool { return r.h.connected && len(r.h.files.Paths) > 0 })
+	r.waitWithin(t, "connected, the notes listed, the store's preferences in", daemonWait, func() bool {
+		return onLoop(r, func() bool { return r.h.connected && len(r.h.files.Paths) > 0 && r.h.luaPrefsRead })
 	})
 }
 
@@ -158,7 +158,7 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
 		daemonOpts{prefs: map[string]string{"tui.menu.autohide": "false", "tui.status.shown": "true"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test") // a toast is up
+	r.connected(t) // a toast is up
 	r.s.WaitFor(t, "the menu bar", func(sc string) bool { return strings.Contains(strings.Split(sc, "\n")[0], "File") })
 	row := strings.Split(r.s.String(), "\n")[0]
 	x := len([]rune(row[:strings.Index(row, "File")])) + 1
@@ -172,7 +172,7 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "10"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	var x, y = -1, -1
 	for i, row := range strings.Split(r.s.String(), "\n") {
 		if j := strings.Index(row, "connected — autodoc v-test"); j >= 0 {
@@ -448,7 +448,7 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	// Initial preference migrations are stored through the same queue. Count
 	// only the two user changes after those startup writes have answered.
 	r.s.WaitFor(t, "initial preference writes answered", func(string) bool {

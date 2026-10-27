@@ -33,7 +33,7 @@ func liveCardTUI(t *testing.T, dir string, prefs map[string]string, gui bool) (*
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: all})
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui, Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	t.Cleanup(func() {
 		for _, p := range onLoop(r, func() []*pluginRun { return slices.Collect(maps.Values(r.h.plugins.running)) }) {
 			p.shutdown()

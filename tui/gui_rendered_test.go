@@ -22,7 +22,7 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 		"kb": {"a.md", "# Alpha\n\n## a heading\n", "a.go", goWithAHashLine, "b.md", "# Bravo\n"},
 	}, daemonOpts{goChunker: wholeGo{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	ed := func() *guiwidget.Editor {
 		return onLoop(r, func() *guiwidget.Editor { e, _ := r.h.editor.(*guiwidget.Editor); return e })
@@ -111,7 +111,7 @@ func TestCtrlTIsTheTerminalsInItAndThePagesOnThePage(t *testing.T) {
 	t.Setenv("PS1", "$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# Alpha\n\nsome text\n"}}, daemonOpts{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	view := func() tuiwidget.EditorView {
 		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
@@ -157,7 +157,7 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 		"kb": {"a.md", "# Alpha\n\n- one\n", "a.go", goWithAHashLine},
 	}, daemonOpts{goChunker: wholeGo{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	onLoop(r, func() bool { r.h.openSearch(); return true })
 	show := func(p, want string) {
@@ -181,7 +181,7 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n\nsee [[b]]\n", "b.md", "# B\n"}}, daemonOpts{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	view := func() tuiwidget.EditorView {
 		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
@@ -209,7 +209,7 @@ func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 func TestCtrlWInTheGUIsVimInsert(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n"}}, daemonOpts{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")

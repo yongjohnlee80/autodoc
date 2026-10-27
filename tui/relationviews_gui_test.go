@@ -753,7 +753,7 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 func windowed(t *testing.T, d *daemon) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return r
 }
@@ -765,7 +765,7 @@ func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	for _, gui := range []bool{false, true} {
 		r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui})
-		r.s.WaitForText(t, "connected — autodoc v-test")
+		r.connected(t)
 		doc, feats, cmds := onLoop(r, func() string { return string(r.h.layoutSrc) }), onLoop(r, func() int { return len(r.h.relationViews) }),
 			onLoop(r, func() []string {
 				var out []string

@@ -842,7 +842,7 @@ func resultsTUI(t *testing.T, dir string, workspaces map[string][]string, o daem
 	o.prefs = testPrefs
 	d := startDaemonWith(t, "", workspaces, o)
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	return r, logs
 }
 
