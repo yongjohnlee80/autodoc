@@ -3,8 +3,10 @@ package export
 import (
 	"bufio"
 	"cmp"
+	"context"
 	"fmt"
 	stdhtml "html"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/yongjohnlee80/golib/vfs/local"
 )
 
 // THE SITE (ADR 1792395460) — a folder of Markdown published as a website by this package's own
@@ -103,8 +106,11 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 		byRel[pg.rel] = pg.source
 		byFile[pg.source] = pg.rel
 	}
-	published := map[string]bool{} // the media written, by their paths in the site
-	var mediaErr error
+	media, err := openSiteMedia(docs, write)
+	if err != nil {
+		return err
+	}
+	defer media.files.Close()
 	for i, pg := range pages {
 		src, err := os.ReadFile(pg.source)
 		if err != nil {
@@ -116,15 +122,15 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 			Chrome:   chromeFor(cfg, pages, i),
 			Chart:    opts.Chart,
 			Media: func(file string) (string, bool) {
-				rel, ok := publishMedia(file, real, byRel, published, write, &mediaErr)
+				rel, ok := media.publish(file)
 				if !ok {
 					return "", false
 				}
 				return relPath(pg.rel, rel), true
 			},
 		})
-		if mediaErr != nil {
-			return mediaErr
+		if media.err != nil {
+			return media.err
 		}
 		if err != nil {
 			return fmt.Errorf("site: %s: %w", pg.source, err)
@@ -136,40 +142,53 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 	return write(".nojekyll", nil)
 }
 
-// publishMedia writes file, a file a page draws, at its path under the docs folder (real, its
-// symlinks resolved), once however many pages draw it, and answers that path. It refuses a file
-// that is not under docs once its links are followed, is no regular file, is over maxSiteMedia, or
-// would take a page's path. A failed write is kept in werr, which ends the build.
-func publishMedia(file, real string, pages map[string]string, published map[string]bool,
-	write func(rel string, page []byte) error, werr *error) (string, bool) {
-	r, err := filepath.EvalSymlinks(file)
+// siteMedia publishes the files a site's pages draw (Options.Media): each at its path under the
+// docs folder, once however many pages draw it. It reads them through files, the docs folder as
+// golib vfs's local filesystem, so a path or a link out of docs, or a folder, is refused as the file
+// is opened, whatever it was when the page's embed found it.
+type siteMedia struct {
+	docs      string // the docs folder, absolute: a page's file paths are under it
+	files     *local.FS
+	published map[string]bool // the paths in the site written so far
+	write     func(rel string, page []byte) error
+	err       error // the first write that failed: nothing is published after it, and the build ends
+}
+
+func openSiteMedia(docs string, write func(rel string, page []byte) error) (*siteMedia, error) {
+	files, err := local.New(docs)
+	if err != nil {
+		return nil, err
+	}
+	return &siteMedia{docs: docs, files: files, published: map[string]bool{}, write: write}, nil
+}
+
+// publish writes file, a file a page draws, and answers its path in the site. It refuses one out
+// of docs, a folder, and one over maxSiteMedia.
+func (m *siteMedia) publish(file string) (string, bool) {
+	if m.err != nil {
+		return "", false
+	}
+	rel, _ := filepath.Rel(m.docs, file) // both absolute; a path out of docs fails to open below
+	site := filepath.ToSlash(rel)
+	if m.published[site] {
+		return site, true
+	}
+	// Site takes no context: a site build reads a local folder, and is not cancelled
+	f, err := m.files.Open(context.Background(), site, 0)
 	if err != nil {
 		return "", false
 	}
-	rel, err := filepath.Rel(real, r)
-	if err != nil || !filepath.IsLocal(rel) {
-		return "", false
-	}
-	site := filepath.ToSlash(rel)
-	if published[site] {
-		return site, true
-	}
-	if _, page := pages[site]; page {
-		return "", false
-	}
-	info, err := os.Stat(r)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxSiteMedia {
-		return "", false
-	}
-	data, err := os.ReadFile(r)
+	defer f.Close()
+	// the bytes of the file opened, not of what its path names now; one over the cap is not read whole
+	data, err := io.ReadAll(io.LimitReader(f, maxSiteMedia+1))
 	if err != nil || len(data) > maxSiteMedia {
 		return "", false
 	}
-	if err := write(site, data); err != nil {
-		*werr = err
+	if err := m.write(site, data); err != nil {
+		m.err = err
 		return "", false
 	}
-	published[site] = true
+	m.published[site] = true
 	return site, true
 }
 

@@ -405,3 +405,26 @@ func TestAPageOnItsOwnKeepsItsMediaInline(t *testing.T) {
 		t.Errorf("a page on its own has a video or a media policy:\n%s", page)
 	}
 }
+
+// A media write that fails ends the build with its error, and nothing is written after it: not the
+// page's next image, nor the page.
+func TestASitesFailedMediaWriteEndsTheBuild(t *testing.T) {
+	docs := fixture(t, map[string]string{
+		"site.toml":   mediaMap,
+		"README.md":   "# Front\n\n![a](media/a.gif) and ![b](media/b.gif)\n",
+		"media/a.gif": "a", "media/b.gif": "b",
+		"tutorials/README.md": "# T\n",
+	})
+	full := errors.New("disk full")
+	var calls []string
+	err := export.Site(docs, export.SiteOptions{}, func(rel string, _ []byte) error {
+		calls = append(calls, rel)
+		if rel == "media/a.gif" {
+			return full
+		}
+		return nil
+	})
+	if !errors.Is(err, full) || !slices.Equal(calls, []string{"media/a.gif"}) {
+		t.Errorf("err %v, writes %v; want the write's error, and nothing written after it", err, calls)
+	}
+}

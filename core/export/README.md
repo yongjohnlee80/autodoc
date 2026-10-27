@@ -40,8 +40,10 @@ kind is shown as its alt text.
 - a video (`.mp4`, `.webm`) alone in its paragraph is drawn as
   `<video controls muted playsinline preload="metadata">`, its source written the same way. A
   `.jpg` of the same name beside it is its poster;
-- each file is written once, however many pages draw it. One over 64 MiB (`maxSiteMedia`), or out
-  of the docs folder once its links are followed, is shown as its alt text;
+- each file is written once, however many pages draw it. It is read through the docs folder
+  opened as a root, so a path or a link out of docs is refused as the file is opened. One out of
+  docs, or over 64 MiB (`maxSiteMedia`), is shown as its alt text;
+- a media write that fails ends the build with its error, and nothing is written after it;
 - the page's policy adds `img-src 'self'` and `media-src 'self'`.
 
 A page on its own (no `Options.Media`) is unchanged: its images are `data:` URIs, and a video is its
