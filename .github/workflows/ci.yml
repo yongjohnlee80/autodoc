@@ -208,7 +208,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
             libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev
-      # VULKAN=1, not the default probe: this job stands in for release.yml's -gui
+      # VULKAN=1, not the default probe: this job stands in for release.yml's Linux GUI
       # artifacts, which are built with the Vulkan backend in, so a runner image that
       # stopped carrying libvulkan-dev must fail here rather than quietly switch to
       # -tags gui,novulkan and leave that backend uncompiled.
