@@ -113,10 +113,16 @@ Use `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`, `
 
 ## 18.4 Scripting `autodoc.nvim` from Your Own Neovim Config
 
-`autodoc.nvim`'s public API is `require("autodoc.api")`: `search`, `documents`, `workspaces`, the drawer's
-`drawer_open` / `drawer_toggle` / `drawer_focus`, and `todos`. Every function is asynchronous: `cb(result, err)`,
-with `err` as `{code, message}`, called on Neovim's main loop. Build your own keymaps, statusline components or
-picker actions on it without blocking the editor:
+`autodoc.nvim`'s public API is `require("autodoc.api")`. Its calls to the daemon (`search`, `documents`,
+`workspaces`, `add_location`, and `todos.*`) are asynchronous: `cb(result, err)`, with `err` as `{code, message}`,
+called on Neovim's main loop. The rest are not calls to the daemon:
+
+- `drawer_open`, `drawer_toggle` and `drawer_focus` show the kb drawer in whichever host is active, and
+  call back `cb(ok, value)`, as the host registry does;
+- `primary()`, `selected()`, `select(name)` and `set_primary(ws, confirmed)` answer at once: the project's
+  primary KB, the selected KB's name, nothing, and `ok, err`.
+
+Build your own keymaps, statusline components or picker actions on the calls without blocking the editor:
 
 ```lua
 -- Example: <leader>mv searches the selected KB for the word under the cursor, and names the top hit
