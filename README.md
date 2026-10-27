@@ -1,1207 +1,184 @@
 # AutoDoc
 
-AutoDoc indexes and searches a tree of Markdown files, and follows the files as they change. The files
-are canonical: the index is derived from them, lives outside the tree, and can always be rebuilt.
-
-It is one binary with the modes as flags, after [AutoDB](https://github.com/yongjohnlee80/autodb):
-`autodoc --serve` is the daemon, and the TUI (`--ui`), the native GUI (`--gui`), Neovim
-([autodoc.nvim](#neovim)), plugins and `autodoc --call` are its clients, all over one msgpack-RPC API
-on a 0600 unix socket. It also keeps the workspaces' todo lists (Todos › Open todos…, the `todos.*`
-verbs).
-
-How it is put together, and the convention a new feature follows, is
-[docs/architecture.md](docs/architecture.md); what an AI agent may call, and how, is
-[AGENTS.md](AGENTS.md) (`autodoc --contracts` prints every verb's contract).
-The rules a change follows are [CONVENTIONS.md](CONVENTIONS.md), and how to send one is
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-| Package | What it does |
-| --- | --- |
-| `core/module` | the convention's types: a verb's contract and typed handler, public errors, a `Module` |
-| `core/config` | reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket, the state directory and the store |
-| `core/store` | the one store: every workspace and its index, in one SQLite file, read and written through golib `dao` (one declaration per table), with the lease that makes one daemon its only server |
-| `sql/deployments` | the store's schema as numbered SQL scripts, applied by golib `dao/deploy` (see `docs/ops/schema-scripts.md`) |
-| `core/workspace` | opens a workspace's root as a `golib/vfs` filesystem, with its include/exclude patterns |
-| `core/follow` | keeps a workspace's index following its root |
-| `core/index` | one workspace's index in the store, its indexer, the link graph, and search |
-| `core/docs` | reads and writes files for AutoDoc's own apps, conditional on the version the writer read |
-| `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
-| `core/todo` | the todo system: the format, the rules and every write of a `.todo-list`; the `todos.*` verbs |
-| `rpc` | the msgpack-RPC API: every verb registered from its contract, rpc's own and the modules' |
-| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the explorer's Links tab and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
-| `script` | the Lua engine for the editor's commands, exportable to other programs |
-| `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
-| `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
-| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract; a main hands it its version (ADR 0216) |
-| `cmd/autodoc` | the binary, the community build: `app.Main` with no registrations |
-
-## Install
-
-New to AutoDoc? The [tutorials](docs/tutorials/README.md) start here, a few minutes each; the
-[Reference Book](docs/reference/README.md) has the whole story.
-
-| Platform | Install |
-| --- | --- |
-| macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
-| Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
-| Any, with Go 1.26.9+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
-| Linux, macOS, with Go 1.26.9+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
-| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
-
-Each installs the one `autodoc` binary. Homebrew and mise install the release's binaries, and Homebrew
-pins each to the SHA-256 the release published: nothing is compiled on your machine, so neither needs
-Xcode. `go install` builds from the tagged source, and `autodoc --version` then reports the module's
-version, as a release binary does. Start it with `autodoc --ui`: the TUI starts the daemon when
-nothing answers.
-
-Use `autodoc --gui` to open the native GUI. It shares the same daemon and store as `autodoc --ui`
-and `autodoc --call`. On Linux, use a `-gui` release archive or build with `-tags gui`; the regular
-Linux release binary and Linux Homebrew formula provide the TUI without GUI support.
-
-The enterprise search server (`autodoc --server`, [docs/enterprise](docs/enterprise/README.md)) is
-in its own build: a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`.
-The other builds leave it out, and say so when asked for `--server`.
-
-**`go install` on macOS** compiles with cgo, because the daemon watches workspace roots with the
-system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
-Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,
-or build without cgo — `CGO_ENABLED=0 go install …` — and the daemon polls the roots instead of
-watching them: it works, but a change is noticed only after a scan of the root. On Linux, the
-TUI's `go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
-
-**The GUI with `go install`** needs `-tags gui`, on every platform: without it, `go install` builds
-the TUI alone, and `autodoc --gui` says so. With it, the build uses cgo, so it needs a C compiler
-and, on Linux, the window system's development libraries ([The GUI](#the-gui) lists them):
-
-```sh
-GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
-```
-
-`GOBIN` puts the binary in `~/.local/bin` (keep it on your `PATH`) rather than in `$(go env GOPATH)/bin`.
-
-## Configuration
-
-```toml
-# $XDG_CONFIG_HOME/autodoc/config.toml
-[server]
-socket = ""                 # default: $XDG_RUNTIME_DIR/autodoc.sock
-state_dir = ""              # default: $XDG_STATE_HOME/autodoc (the daemon's log)
-data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store, autodoc.db)
-
-[follow]
-poll_interval = "2s"        # the listing interval when a root cannot be watched
-```
-
-A missing file is every default. An unknown setting is an error, so a misspelling is reported.
-
-**Workspaces are not configured here.** They are kept in the store: add, edit and delete them in
-the TUI (`Go › Manage workspaces…`) or with `workspace.add` and `workspace.configure`. A workspace has a name (what `--ui` and
-every API call take), a root directory, and include and exclude patterns. New workspaces include
-`**/*.md`, `**/*.txt`, `**/*.yaml`, and `**/*.yml`, and exclude `.git/**` and `**/node_modules/**`
-by default. An excluded directory is never walked or watched. A workspace
-added before node_modules joined the defaults, still with `.git/**` alone, moves to the current
-default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are
-root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
-`**` matches any number of whole segments. Bounded brace alternatives such as `**/*.{md,txt}` are
-expanded before matching. Existing workspaces keep their stored include patterns. A config file
-that still has a `[[workspace]]` section is
-refused with a message saying so.
-
-**A document's resources.** A design doc often shows files beside it, as `![flow](plan/flow.mmd)`:
-diagrams, tables, pages. Include the ones that hold text, and they are searched with it and tied to
-it:
-
-```
-**/*.md   **/*.mmd   **/*.csv   **/*.html
-```
-
-- Mermaid (`.mmd`) and CSV (`.csv`) are read as plain text, and HTML as the text derived from the
-  page. So is source code AutoDoc highlights (`.sql`, `.go`, `.py`, …): it opens as code, with no
-  rendered view. Leave pictures and other binary files out: a file AutoDoc does not know is read as
-  Markdown.
-- `![alt](path)` is an embed of the workspace path it names, as `![[./path]]` is: the resource's
-  backlinks name the document that shows it. It is a link only to a note or to a file the
-  workspace indexes, so a picture left out is not a missing link.
-
-`Go › Manage workspaces…` lists the workspaces by title and directory on the left, and the settings
-of the one under the cursor on the right. **Its settings are one dialog with two tabs**, opened by
-Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and Enter in a field saves:
-
-- **Edit**: the title; the root (typed or browsed to when the workspace is added, then fixed: add
-  another directory as a workspace of its own); the frontmatter schema; the file types; and the
-  include and exclude lists, semicolon-separated root-relative patterns (a blank include matches no
-  files). Markdown, plain text and YAML are toggled here, and your own text types (`.log`, `.rst`,
-  …) are entered here: each is read as UTF-8 plain text by declaration (never sniffed) and admitted
-  with an include unless the rules already admit it. **Code** (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`,
-  `.mjs`, `.py`, `.rs`) and **documents** (`.docx`, `.htm`, `.html`) are turned on in their own
-  rows: every build reads them. Code is cut a chunk per declaration and embedded by its signature
-  and doc comment; turning it on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to
-  the excludes. A document is read as its text: a DOCX's paragraphs, headings, lists and tables; an
-  HTML page's content, without its scripts, styles, navigation or footer (only its `main` or
-  `article` when it has one). `.doc`, `.odt` and `.pdf` are read only by a build with a deriver for
-  them (see [Builds of your own](#builds-of-your-own)). None of these can be declared as text: a
-  text type a build before this one stored for `.html` is dropped from the field with a note, and
-  HTML stays included, as a document. `Options › Editor preferences… › File types…` opens this tab
-  for the workspace in use.
-- **Advanced**: the section size, the embedding policy and the embedding provider; and, where the
-  edition offers them, the databases: a **source** (postgres or sqlite) that the workspace's `.view`
-  files read, with the arguments they take, and the **destination** its index is kept in, the local
-  store or postgres with pgvector (with its schema and vector index, hnsw or ivfflat). A
-  connection's DSN is sealed in the store and never shown again: the dialog shows where it points,
-  and a blank DSN keeps the stored one.
-
-Save sends what changed in one `workspace.configure`, which saves all of it or none: a refused
-setting leaves every setting as it was, and the dialog opens again as it was typed with the reason.
-
-**Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
-added and chosen in the TUI's Search models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
-A config file with an `[embedding]` section is refused with a message saying so.
-
-## The daemon
-
-```sh
-autodoc --serve             # or: autodoc --serve --config path/to/config.toml
-```
-
-It listens on its unix socket, mode 0600: the file is the access control, so there is no login
-locally. It opens the store, takes its lease, and serves every workspace in it, then records where
-it serves (the store's lease-info, beside the store). A second `--serve` that finds this store's
-daemon already serving, on the same socket or another config's, says where and exits 0; anything
-else on its socket, or a lease it cannot account for, is refused.
-
-```sh
-autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
-autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
-autodoc --print-endpoint --restart  # stop the daemon serving the store, start this build in its place
-autodoc --compact                   # with the daemon stopped: reclaim unused vectors, rewrite the store
-```
-
-`--restart` stops whatever daemon serves the store, of any protocol: it says `sys.hello` at that
-daemon's own protocol, then `sys.shutdown`, both frozen across protocols. It waits for the
-process to exit, so nothing starts while the store's lease is still held. Meanwhile it holds the
-other clients back from starting one of their own. A daemon serving another store is refused and
-left alone. With nothing serving, `--restart` only starts.
-
-A client that dials the socket itself asks the binary where it is, so it never repeats the rules.
-Every client speaks one API. A session starts with `sys.hello({protocol, name})`, and until then
-only `sys.hello` answers. The daemon serves a range of protocols (`min_protocol` to its own): a
-session keeps the one it declared, and a verb added after it answers as an unknown method.
-[AGENTS.md](AGENTS.md)'s tables list every verb with its params, its answer, the protocol it arrived
-in and its error codes; they are generated from the verbs' contracts, which `autodoc --contracts`
-prints as JSON with no daemon (`--format md` for the tables), and `sys.contracts` answers on a
-connection.
-
-The server only answers: it never sends a notification. A client follows changes by pulling
-`index.changes` from a cursor. When that cursor has expired, it takes `index.status`'s cursor, re-lists
-with `index.list`, and resumes `index.changes` from that cursor. Errors carry a code that says what
-to do next: re-list, merge a conflict, read after a write that landed, and so on.
-
-## The TUI
-
-```sh
-autodoc --ui                # attaches to the daemon (starting it when nothing answers), in the last workspace used
-autodoc --ui kb             # in workspace kb; a name the daemon does not have is refused, with the names it has
-autodoc --ui --debug         # also record the event stream to autodoc-debug-<date>.jsonl, for an input or IME bug report
-autodoc --ui --debug=r.jsonl # the same, to r.jsonl
-```
-
-`--debug` is `--ui` and `--gui`'s: without one of them it is refused. It records the input and
-event stream to one JSONL file — the window's platform events and IME state when there is a
-window, the TUI's own trace in both modes — in the order everything happened, so one file reads
-platform → IME → TUI. **The file contains everything typed, passwords included**: it is written
-only where the flag says, never anywhere by default. How to record, and how a recording becomes
-the test that reproduces a bug on any machine, is in [docs/filing-input-and-ime-bugs.md](docs/filing-input-and-ime-bugs.md).
-
-The screen is a page and nothing else: the file, 120 columns wide and centred, the ruler at its
-right edge. With no file open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
-names and saves it as a file. Everything else comes when it is asked for:
-
-`File › Preview HTML` (in a terminal; the GUI opens [a pane](#the-gui) instead) renders the current Markdown editor buffer (including unsaved
-edits) into an offline, light/dark themed cache file and opens it with the system browser. A
-browser-launch error is reported in the TUI. Export a Markdown file without the daemon with
-`autodoc --export=html --theme=light --output=/path/page.html /path/page.md` or use
-`--export=text` for stripped text. Export requires an explicit destination and refuses to
-overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
-and remote resources are not loaded. `--output`, `--theme` and `--base` are refused without
-`--export`.
-
-**Embeds are drawn.** In the preview, the GUI's pane and an HTML export, `![title](path)` of a file
-beside the note is drawn in the page, as xmd draws it:
-- a Mermaid diagram (`.mmd`) as the diagram;
-- a `.csv` as a table, its first row the header;
-- an image (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, …) as the image.
-
-The file is looked for beside the note, then in its resources folder (the note's name without
-`.x.md` or `.md`: `plan.x.md`'s is `plan/`), and nowhere else. A diagram or table drawn this way
-must be alone in its paragraph. A file that is missing, too large or of another kind shows its
-title instead.
-
-In the GUI's Rendered view the note stays editable, and a diagram or table embed alone in its
-paragraph is drawn in its line's place, natively, as if the file were written there: a diagram as a
-`mermaid` fence, a table as a Markdown table of 16 rows, its values as the file has them. While
-typing on the line (Insert) it is its source again. Only the note's own editor draws them: the
-search preview and a todo's details show other files' text, not the note's. An embed by reference
-(`![flow][ref]`) stays as written there, as its file is named elsewhere in the note; the preview
-draws it.
-
-**Relative links reach their files wherever the page is written.** An HTML export reads each
-link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
-own directory and writes it as the `file://` URL of the file it names, percent-encoded (a space,
-a `#`, a byte past ASCII), its query and `#fragment` kept; an absolute path (`/etc/hosts`) becomes
-its own `file://` URL. `--base <dir>` reads them from another directory instead: for a page made
-from a copy of a file kept elsewhere, say. A URL with a scheme (`https:`, `mailto:`, …), one naming
-another host (`//host/…`) and a bare `#fragment` are written as they are, and Obsidian
-`[[wikilinks]]` are not resolved. A link is navigation, not a load, so the page's policy, which
-loads nothing from outside it, stays as it is. The TUI's HTML preview reads them from the open
-file's directory.
-
-**Mermaid diagrams are drawn by mermaid itself**: mermaid 12.1.0 is vendored in the binary
-(`core/export/mermaid`, MIT), so every diagram kind it knows (flowcharts, sequence, state, class,
-ER, gantt, mindmaps, …) is drawn as the Mermaid project draws it, offline. An HTML export with a
-```` ```mermaid ```` block carries the script (about 5.5 MB) and draws its diagrams when opened; its
-policy allows that script and the one that starts it, by digest, and no other, and a page without
-a diagram has no script at all. A diagram mermaid cannot read shows mermaid's own error in its
-place. `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
-terminal, as below; where it cannot, it shows the block's source and why. The GUI draws it the same
-way, by mermaid.js, and so does its HTML pane each diagram of the page; a window with no browser
-draws them natively, by golib's Mermaid, where golib draws their type. A line embedding a
-`.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a fence is, read as the preview reads it.
-
-- **The menu bar** shows at the top. Set to hide (`Options › Editor preferences`), it hides until
-  `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter` is `Alt+letter` whatever the
-  terminal's Option setting (on a US layout; `Option+E`, `I`, `N` and `U` are dead keys there, so
-  their menus need `F10`), and `F10` may need `Fn`.
-- **The explorer**, one panel of two tabs. **Explorer** (`SPC e`): every workspace's folders and
-  files, as a tree. **Links** (`SPC l`, `Relations › Links`): what this file is connected to, by
-  kind and direction (superseded by, supersedes, sources, cited by, amends, amended by, related,
-  adr, links, backlinks), then the relations that name nothing and the supersession loops; `d`
-  there adds the files two links away, under the one that reaches them. It opens over the page,
-  which does not move, from the side the editor's preferences name. `SPC e` and `SPC l` open it on
-  their tab, or go to it from the other, and on their own tab close it, as `Escape` does;
-  `Ctrl+PageUp` and `Ctrl+PageDown` change tabs. At the strip's right end, `_` hides it to the
-  dock, whose icon shows it again as it was, `+` maximizes it (again to restore), and `x` closes it. `Enter` opens a row, closing the
-  panel from the Explorer and hiding it from the Links. The links' own panel was folded in: where
-  the explorer keeps no place of its own, it opens where the links were left. `SPC j` goes to the link under the cursor (the document it names, else its web address or
-  file); `SPC b b` goes back to the previous document, where you left it (`Ctrl+O` steps back
-  one jump at a time, within a document too); the page's right-click menu has both.
-- **The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
-  workspace and the links among them, placed by force, each document's dot coloured by its group
-  (groups are seeded from the schema's types and the folders; `l` shows their legend) and a
-  superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
-  every link, body links and relations, and a click opens the document. **Relations › GlobeMap
-  settings…** and **Mindmap settings…** choose how each draws. **Mindmap**: the page's
-  document and those one link from it (`d` shows two), as a mind map shaped by type; a click opens that
-  document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
-- **The terminal's and the agents' tabs**: each shell or agent has a tab; `+` adds one, and the
-  strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
-  has **Go to ›**, the panel's own rows (the terminal: **New**, **Close**; the agents: **Restart**,
-  **Close**, **Profiles…**), **Theme and font…** (the terminals' theme, and in the GUI their font:
-  the same settings as Preferences and Fonts and zoom…; Esc puts them back), in the GUI **Text
-  size ›** (the shells' text in both panels, **Smaller** and **Larger** a step of 10 % each, 50 %
-  to 150 % of the cell size; Fonts and zoom… sets it too), **Maximize** (the
-  panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
-  leaves every shell and agent running. At the strip's right end, `_` does the same, `+` maximizes the panel
-  (again to restore), as Maximize does, and `x` stops every shell or agent in the panel and closes it,
-  asked once while any runs. Every key goes
-  to the shell or agent, `Esc` included; `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
-  `Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's.
-- **Every panel moves and resizes**: the explorer, the terminal, the agent, the HTML
-  preview, and in the GUI the GlobeMap and the Mindmap. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
-  with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
-  `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
-  keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
-  percentages of the window; its side in the preferences says only where it first appears.
-- **The todos** (`SPC x`): one todo store at a time, its tasks a tab per status, as autofinder's
-  todos panel shows them, in a large panel at the left (about 65% of the window wide and 80% tall
-  until you size it; the size and the side you leave it at are kept). Along the top, a dropdown
-  chooses the store shown among the ones AutoDoc knows (the workspace's first), by its label or its
-  name; under it, buttons make a new store (New), load one from a folder (Load), rename the store
-  shown (Edit: its label, AutoDoc's own) and refresh it (Refresh), framed; then the tabs, Open, In
-  progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
-  its months, a month's tasks beside them. Under the tabs the task under the cursor's details,
-  then one row of the actions that apply: Status…, Assign and Remove on a task, and Add. A store
-  is written from its first write, with no step first; only one released with `todos.release`
-  shows none, only "read-only: this store was released (todos.release)".
-  `?` opens the card of the panel's keys, by purpose; `?` again or `Esc` closes it.
-
-  | Key | In the todos panel |
-  | --- | --- |
-  | `Enter` | open the task's file; on Archived's months, open a month |
-  | `Backspace` | back to Archived's months |
-  | `1`–`5`, `[` `]` | a tab; the tab before, after |
-  | `i`, `o` | the details, shown or hidden |
-  | `a` | add a task |
-  | `d` | remove the task |
-  | `s` | Status…: a picker of every status (open, in-progress, deferred, completed, archived), the task's own marked; choosing one moves the task there, its tab showing with the cursor on it |
-  | `A` | assign the task to an agent |
-  | `S` | the store dropdown (`Enter` opens it) |
-  | `N`, `O` | a new store; load a store from a folder |
-  | `L`, `R`, `M` | rename (label), refresh or move the store |
-  | `?` | the card of these keys |
-
-  **`A` assigns the task under the cursor to one of AutoDoc's own agents**:
-  pick the agent, then type an optional instruction (`Esc` cancels; empty is "Task assigned to
-  you."). The task's assignee becomes `autodoc:<codename>`, and an open task moves to in progress.
-  The agent is then handed the task in its terminal: its title, its file and the instruction. If
-  the agent isn't running, you're asked first, and it's handed over once it starts. If you decline,
-  or the agent can't take it, the task stays assigned and a notice says so; `A` again delivers it.
-  AutoDoc assigns only to its own agents.
-  `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
-  one. A terminal may keep `Alt`+click for itself; the keys always work.
-- **Files anywhere.** `File › Open file…` (`SPC f`) opens any file on this machine's disk in a
-  file dialog with a preview; `File › New file…` (`Ctrl+N`, `SPC n`) makes one in any folder.
-  A file inside a workspace's folder opens as that workspace's file. Any other is in no
-  workspace: it edits, saves (a change on disk since it was read asks first), exports and
-  reaches the plugins, but has no search, relations or frontmatter check, and the status line
-  badges it `[no workspace]`. It stays open when the workspace changes. `File › Open document…`
-  (`SPC o`) is the fast picker over the workspace's own files.
-- **The status line** (`SPC t`), shown by default: the editor's mode, the workspace, and the file,
-  with `[+]` while it has unsaved changes. Set to hide, it still shows while the TUI is not
-  connected.
-- **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
-  (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
-  has none. **The outline** (`SPC O`, `Go › Outline…`) lists a Markdown file's headings, as the
-  editor's text has them, saved or not; Enter jumps to the one under the cursor.
-- **Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
-  they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
-  (inside tmux, `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline.
-  The whole page (or the whole diagram) is rendered and **scrolls** in its dialog: the arrows,
-  `j` `k` `h` `l`, `Page Up`/`Page Down`, `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in**
-  and **Zoom out** draw it again larger or smaller (50 % to 200 %, as a browser zooms), in the same
-  dialog. Elsewhere a diagram shows its source and HTML opens in the default browser, and the
-  preview says which was missing; turning `Image previews` off compares the two on the same file.
-  Both follow the active theme's colours (light, dark, sepia, retro, mono), as
-  `autodoc --export html --theme …` does.
-- **A derived document is read-only.** A DOCX or an HTML file, or a PDF where the daemon's build
-  derives one (see [Builds of your own](#builds-of-your-own)), opens as its derived text in a
-  read-only page, the frame and the status line badged `[HTML · read-only]`. Motions, find, copy and the outline
-  over its headings work; edits and saves do not. `File › Open with Default App` opens the file itself in the desktop's
-  viewer, for its diagrams and layout.
-- **An HTML file asks how to open it.**
-  - **Simplified** (`Enter`) is the derived text above, read-only.
-  - **Raw** is the HTML itself, edited and saved like any file; reading it again keeps it raw.
-  - In the GUI, a raw file's Rendered view (`Ctrl+T`) is its page, drawn natively.
-- **A CSV or TSV file's Rendered view is an editable table**, in the GUI and in the terminal.
-  `Ctrl+T` flips between it and the text, which is always there to edit. In the table:
-  - `Enter` (or `i`, or typing) opens a cell, and its exact value is kept: line breaks, tabs and
-    quotes. `Enter` keeps the cell, `Alt+Enter` adds a line, and `Esc` drops the edit.
-  - `o` adds a row under the cursor; `dd` deletes a row; `x` empties a cell.
-  - The extra row and field after the last, each marked `+`, append to the file.
-  - An edit is one undo step, undone by the editor's own key (`u`, or `Ctrl+Z`), and marks the
-    file modified. Only the edited record's lines change on save.
-  - A file that is not valid CSV (a stray quote) opens read-only in the table; its text still
-    edits.
-  - A workspace opens its CSV and TSV files once its include names them (`**/*.csv`,
-    `**/*.tsv`): the default include is Markdown, text and YAML.
-- **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
-  has a schema (`Manage… › Edit…`); they never block a save.
-- **The pickers** (search, open a document, add a workspace) share one layout: the fields over the
-  list on the left, the file under the cursor on the right, the buttons beneath. The search runs
-  as it is typed and refreshes its open query after a model or workspace transition; its preview
-  is at the hit, the words marked. Under it, a checkbox for each stage the search can run:
-  **Lexical**, **Semantic** while an embedding model is in use, and **Rerank (<model>)** while a
-  ranker is. All start checked; each change searches again at once, so flipping them shows what
-  each stage changes. One of Lexical and Semantic always stays checked. The choice is kept, and a
-  box that hides while its stage is unavailable comes back as it was left.
-
-| Key | Does |
-| --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …), listed by purpose: find and open, this file, the panels, the agents, help, managing, the window |
-| `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
-| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
-| `SPC o`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
-| `Ctrl+O`, `Ctrl+I` | back and forward along the jumps, Vim's jump list (Normal mode): links followed, documents opened, and the page's own jumps (`G`, `gg`, `%`, `{ }`, a mark's); back to another document opens it where you left it, in the view you left it in. `Ctrl+O` no longer opens a document: `SPC o` does |
-| `SPC f`, `SPC l`, `SPC j` | open a file anywhere, the links, the link under the cursor |
-| `SPC b` | the buffer card: `1` to `9` show the 1st to the 9th buffer in the tabs' order, `0` the 10th; `d` closes the one shown (`File › Close buffer`, `:bd`), asking first over unsaved changes; `r` and `l` close the buffers to its right and left, nearest first, each asked about as `d` asks, a Stay stopping there with that buffer shown; `s` switches buffer (`Go › Buffers…`, `:b`: every open file and draft, previewed with its unsaved text; `:b 3`, `:b name`); `b` goes back |
-| `H`, `L` (`Shift+h`, `Shift+l`) | in the page, in Normal mode, the buffer before or after the shown one, in the order of the GUI's tabs, wrapping at the ends (bufferline's keys, as in autovim). This replaces Vim's `H` and `L` (the screen's top and bottom line) in Normal mode only: Visual mode keeps them, Insert mode types them, and a script's own `autodoc.map` of `H` or `L` wins |
-| `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
-| `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
-| `Ctrl+W` | switch workspace (`SPC w` too); its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them. In the Vim editor mode's Insert, `Ctrl+W` is Vim's: it deletes the word before the cursor (`Esc` first to switch), as Insert's `Ctrl+U` deletes back to the indent and `Ctrl+O` runs one Normal-mode command |
-| `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
-| `SPC L` | arrange the panel with the keyboard: move and resize it (`Go › Arrange panel…`) |
-| `Shift+F10`, the Menu key, `SPC .` | the page's right-click menu, at the cursor (the Menu key where the terminal sends it) |
-| `Ctrl+=`, `Ctrl+-`, `Ctrl+0` | in the GUI, zoom in, out, and back to 100 % |
-| `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit; `Help › Tutorial…` is the tutorial |
-
-**Options** is the menu for the editor:
-
-- **Editor mode:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
-  text editor's keys). `SPC k` switches between them.
-- **Theme:** Dark, Light, Mono, Retro or Sepia (a reader's warm paper and brown ink).
-- **Editor preferences…** (`SPC ,`): the editor mode, the page's width (applied as it is typed), the
-  theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
-  Two more say what happens as AutoDoc starts. **Show About at startup** opens Help › About over the
-  page. **Look for a new version at startup** asks GitHub, once a start, for AutoDoc's latest
-  release (`api.github.com/repos/yongjohnlee80/autodoc/releases/latest`; nothing else is sent).
-  When it is newer than this one, About and a notification say so and how to update: `brew upgrade
-  autodoc`, `mise upgrade`, or the release's page. AutoDoc never downloads or installs anything
-  itself. A build that is not a release (`dev`, or a commit after a tag) does not look. Both are on
-  until you turn them off.
-- **Fonts and zoom…** (the GUI's): the cell font everything on the grid is drawn in and its size,
-  the terminals' font (the terminal's and the agents' shells; the cell font's unless chosen) and
-  the shells' text size (a share of the cell size, 50 % to 150 % by 10 %, 90 % unless chosen),
-  the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
-  applies at once. **Zoom in**, **Zoom out** and **Actual size** are below it. A zoom or a size
-  that would leave the window under 80 × 20 is refused, so the screen never needs enlarging to get
-  back; a stored zoom a smaller window cannot hold is drawn at the largest step it can. A
-  terminal's own settings choose its font, so there these hide.
-
-**System**, right of Options, is the menu for the backend:
-
-- **Search models…** (`SPC s`): two tabs. **Embedding Models** has the embedding providers on the
-  left, and the one under the cursor's usage by day and latest calls on the right (see below).
-  **Ranker Models** has the rankers the same way, the one in use and how many candidates it
-  ranks (`Window…`). Add…, Edit…, Use and Remove… act on the tab that is open.
-- **Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its place, so
-  an update takes effect without quitting. The question says which version runs and which one
-  starts. Indexing and embedding carry on where they stopped. A TUI built with more registrations
-  than the daemon (below) offers this once a session; see [Builds of your own](#builds-of-your-own).
-
-The preferences and the search models are kept in the daemon's store, so they are the same whichever
-workspace is open. **Embedding is scheduled across the daemon**: the open TUI workspace has first
-turn, then recently searched workspaces, while background work gets regular turns. A workspace's
-embedding setting (Manage workspaces › Advanced…) chooses `always` (default), `when opened` (continues
-after first opening), or `never` (words-only). The progress line says which workspace a pending
-one waits for, or that its setting paused embedding. An optional `[embedding_queue]`
-`max_inflight = 1` in `config.toml` bounds concurrent provider calls to 1 (or 2 if set to 2).
-
-**Notifications.** What happens — a save, a workspace added, the connection, indexing — shows in
-a corner as a toast, saying how long ago it came ("now", "15s ago"). Up to three show at once, the
-newest nearest the corner; the rest wait and show in turn. A finished one stays 3 seconds (1 to 10
-in Preferences), a task's progress stays until the task ends, and Preferences moves them to any
-corner. Go › Notifications… (`SPC h`) lists every one, with its time. What the page says — a
-find's result, the editor mode — is the status line's, not a notification.
-
-**The page** wraps long lines at its width, and can number its lines in a dimmed gutter: View ›
-Wrap long lines and Line numbers, or Preferences. `?` in Normal mode shows the Vim keys in a card
-at the bottom right; the page keeps the keyboard, and `?` again closes it.
-
-About names the author, Yong Sung John Lee, and the license, Apache 2.0 (NOTICE).
-
-The status line ends with semantic search's state: a green dot and "semantic search" while a
-provider answers, a red one and "lexical search" while it doesn't (none in use, a model switch
-under way, or the provider not answering). While the provider embeds, a spinner turns beside a bar
-of the sections covered. A model switch notifies when search is temporarily words-only and when
-semantic search returns; a search already open refreshes its hits without another keystroke.
-
-Open files follow the disk. The folder of every open file is watched (inotify, FSEvents; polled
-where neither is there), so a file another program or an agent changes is picked up at once: one
-with no unsaved changes is reloaded in place, one undo step, the cursor on its text; one with
-unsaved changes is marked "changed on disk" (`[!]` on its tab and in the Buffers picker) and asked
-about when you next open or save it, never while you type. A file deleted on disk keeps its text,
-marked "deleted on disk", and a save creates it again. Preferences' **files changed on disk**
-(`tui.disk_reload`) can ask first for clean files too. The TUI's own saves are never taken for a
-change.
-
-A save writes only over the version the file was opened at. If the file changed on disk since, the
-TUI asks: keep editing, reload the disk's version (`u` brings your text back), or overwrite it with
-yours. Opening, switching or quitting over unsaved changes asks first, too. A lost connection loses nothing: the open file stays
-on the page through the reconnect, unsaved changes and cursor as they were. It is read again if it
-changed on disk meanwhile and has no unsaved changes; if it is gone, closing it asks first; if its
-workspace is no longer served, its unsaved text stays as the untitled draft.
-
-Every way out asks over unsaved changes, and the answers are the same everywhere: **Save** (then
-quit once the file is written), **Discard** or **Stay**. That covers `File › Exit`, `Ctrl+Q`,
-`SPC Q`, `:q`, the too-small screen's Quit and the GUI window's close button. When AutoDoc ends
-without being asked to (`SIGTERM`, or `SIGHUP` because the terminal closed), the unsaved text is
-kept in the state folder's `recovery/`. At the next start AutoDoc says so: "<file> had unsaved
-changes when AutoDoc last closed … We kept a copy for you, just in case. Restore it?"
-
-- **Restore** opens the file with the kept text, still unsaved. The disk's version is one undo away.
-- **Discard** deletes the copy.
-- **Later** asks again at the next start.
-
-### Your keys
-
-Every key is a command with an id, AutoDoc's (`autodoc.window.save`, `autodoc.leader.openRecent`)
-and golib's widgets' (`tui.list.down`, `tui.editor.vim.normal.undo`). A `keymap.xml` beside
-`config.toml` moves any of them, unbinds them, or gives one several keys; it is followed while
-AutoDoc runs, and a file it can't read is refused whole, with its line, the keys staying as they
-were. F1's help starts with the keys your file moves, and the cards name each by its new keys.
-
-```sh
-autodoc --keymap-reference   # the file's format, and every AutoDoc command with its keys
-autodoc --commands-reference # every command, by its id, with its `:` names and arguments
-autodoc --check-keymap       # check keymap.xml beside config.toml, with no UI or daemon
-```
-
-[docs/keymap.md](docs/keymap.md) is the reference; [Reference Book §3.9](docs/reference/03-modal-editor-and-panels.md#39-moving-your-keys-keymapxml) walks through one.
-
-### The command line
-
-`:` in the Vim mode's Normal mode opens **VIM Commands** (golib's editor prompt). Tab completes a
-command and lists the candidates with their arguments; Enter runs it; Esc closes it.
-
-Every command a user can run is in one **command catalog**, by a stable id (`file.open`,
-`todos.open`, `terminal.toggle`, `lua.upper`, `plugin.<name>.<id>`): AutoDoc's own, its features',
-your Lua commands and the plugins'. The command line, the keys, SPC p and Lua all run them from
-there, and F1 lists every one under **COMMANDS**, with its id, its `:` names, its keys and what it
-does. A plugin runs one with `host.call` (protocol 3, [docs/plugins.md](docs/plugins.md)).
-
-| Command | Does |
-|---|---|
-| `:12` | go to line 12 (refused past the last line) |
-| `:open <path>`, `:e`, `:edit` | open a file: its absolute path, `~/…`, or a path in the workspace in use; spaces and all |
-| `:w`, `:wq`, `:x`, `:q`, `:q!` | save; save and quit; save if changed and quit; quit (asks over unsaved changes); quit discarding them |
-| `:find <term>`, `:nohl` | the page's find, as `/` is: marked, `n` and `N` go on; clear it |
-| `:terminal`, `:term` | open the terminal, with the keyboard in it |
-| `:todos` | the todos (SPC x) |
-| `:replace <term> <with>` | each match in turn: `y` replaces, `n` skips, `q` or Esc stops; one undo for all |
-| `:table <cols> <rows>` | a Markdown table (`Column1…`, `Item1.1…`). In Insert mode, Tab walks its cells and selects each one's text so typing replaces it; past the last cell, Tab adds a row |
-| `:mermaid <type>` | a Mermaid diagram to start from: flowchart, sequence, class, state, er, gantt, pie, mindmap, timeline, journey |
-
-### Lua commands
-
-`table` and `mermaid` are Lua scripts (`tui/lua/`). Your own commands go in
-`~/.config/autodoc/lua/*.lua`, beside `config.toml`, and load at start in name order. Each is a
-catalog entry, `lua.<name>` (or the `id` it gives, under `lua.`), named in F1 by its `title`. A command
-of yours named like one of AutoDoc's takes that name, and only it: `:term` of yours leaves
-`:terminal` opening the terminal, and AutoDoc's command stays runnable by its id.
+![An AI agent researches a question in AutoDoc: it searches the workspace, reads the passages it finds, and writes its report beside your notes](docs/media/gif/ai-research.gif)
+
+**A document knowledge base you and your AI agents work in together.**
+
+AutoDoc keeps a folder of Markdown files as they are, and gives them an editor, search by words and
+by meaning, the links between them, and room for AI agents to work beside you. It runs in your
+terminal (`autodoc --ui`) or in a window of its own (`autodoc --gui`).
+
+[Documentation](https://yongjohnlee80.github.io/autodoc/) ·
+[Tutorials](docs/tutorials/README.md) ·
+[Reference](docs/reference/README.md) ·
+[Install](#quick-start)
+
+## What it is for
+
+### 1. Find it fast: one search, for you and your agents
+
+The question is usually "where did we write that down?". AutoDoc answers it by meaning, not only by
+the words you remember.
+
+- **Search by meaning, then by order of relevance.** A search for "why did we pick SQLite" finds the
+  note that says "we chose an embedded database". Words and meaning are searched together, and a
+  reranker can order the top hits again.
+- **The same search serves your AI agents.** An agent calls it with `autodoc --call search.query`
+  and gets ranked passages, each with its file, the headings it sits under and its lines. It reads
+  the passage it needs instead of grepping the tree and opening whole files.
+- **What that saves.** Less time for you. For an agent, fewer files read and fewer tokens spent on
+  a question.
+- **Agents are told to work this way.** [AGENTS.md](AGENTS.md) tells an agent to search the
+  workspace first, and how: the verbs, the query syntax and the errors. `autodoc --contracts`
+  prints every verb's contract.
+
+### 2. Make it yours: an editor you shape with Lua
+
+The page is a Vim or ordinary-keys editor, and almost everything in it is a command you can call,
+bind or replace.
+
+- **Your own commands, keys and menu rows.** A Lua file adds a `:` command (`autodoc.command`), binds
+  it to a key (`autodoc.map`) and puts it in a menu (`autodoc.menu`). Scripts can edit the page,
+  call the daemon and react to the editor's events.
+- **An agent can write them for you.** The [Lua reference](docs/lua/reference.md) documents every
+  function a script can call, and `autodoc --commands-reference` lists every command by its id.
+  Describe the command you want, and your agent has what it needs to write it.
+
+### 3. Extend it: plugins you imagine, an agent can build
+
+A plugin is a program AutoDoc runs beside your notes, in a dialog, a docked card or the results
+panel.
+
+- **A documented protocol and SDK.** [Writing a plugin](docs/plugins.md) covers the manifest, the
+  protocol and the Go SDK in package `plugin`: cards, panels, results tables, menu rows and
+  commands.
+- **AutoDB is the proof.** The SQL workbench below is a plugin, built on that same protocol.
+- **Add one from a git URL.** **Plugins › Add from a git URL…** clones it and asks before it builds
+  anything. The [plugin registry](https://github.com/yongjohnlee80/autodoc-plugin-registry) lists
+  the ones published.
+
+## A tour
+
+### AI agents beside your notes
+
+AutoDoc runs AI agents' command lines (Claude Code, Codex, OpenCode and others) in a panel of their
+own. Each starts in a folder where AutoDoc has written what it needs to know about your workspace,
+and the `autodoc` on its path reaches the same index you search. The clip at the top of this page
+is one at work: it searches, reads the passages it found, and writes its report. **SPC g** shows
+the panel; **SPC a** sends it the page or the selection.
+
+### Search by meaning
+
+![Searching a workspace by meaning: the hits ranked, the passage under the cursor previewed, and the stages that ran](docs/media/gif/search-engine.gif)
+
+One search box over the whole workspace (**Ctrl+G**). It searches by words and, with an embedding
+model, by meaning; a reranker can order the hits again. Check boxes under it turn each stage on and
+off, so you can see what each one changes. An embedding model runs on your machine (Ollama) or at a
+provider you choose.
+
+### The links between notes: GlobeMap and Mindmap
+
+![GlobeMap: every document of the workspace and the links among them, coloured by group](docs/media/gif/graph-navigation.gif)
+
+**GlobeMap** draws every document of the workspace and the links among them, coloured by type or
+folder; a click opens one. **Mindmap** draws the note you are on and its neighbours, and follows
+you as you open them. Links come from `[[wikilinks]]`, Markdown links and typed frontmatter
+(supersedes, sources, related).
+
+![Mindmap: the current note and the notes one link away](docs/media/gif/mindmap.gif)
+
+### Diagrams and charts, drawn in place
+
+![Mermaid diagrams and Vega-Lite charts drawn natively in the Rendered view](docs/media/gif/native-diagrams.gif)
+
+Mermaid diagrams and Vega-Lite charts are drawn in the page's Rendered view (**Ctrl+T**), from a
+fence or a file beside the note. A diagram the native renderer can't draw says why, and
+`autodoc --check-diagram` checks one before you show it.
+
+### HTML, and the Rendered view
+
+![An HTML page drawn natively, and a note's export previewed beside its editor](docs/media/gif/html.gif)
+
+In the window, an HTML file opens as text to edit or as its page, drawn natively, and
+**File › Preview HTML** shows a note's export beside the editor, following the cursor as you type.
+`autodoc --export html` writes a note as one offline page.
+
+### Todos
+
+![The todos panel: a store's tasks by status, their details, and the actions on them](docs/media/gif/todos.gif)
+
+Each workspace keeps its todo list as plain files, one per task (**SPC x**). Tasks move between
+open, in progress, deferred and completed, and one can be handed to an AI agent in a keystroke. The
+same tasks are reachable from agents and scripts through the `todos.*` verbs.
+
+### Plugins: the AutoDB SQL workbench
+
+![The AutoDB plugin: a SQL query run from a note, its rows in the results panel](docs/media/gif/plugins.gif)
+
+[AutoDB](https://github.com/yongjohnlee80/autodb)'s plugin runs SQL from a note against your
+databases and shows the rows in AutoDoc's results panel: sort them, copy them as CSV or Markdown,
+or export them. It is a plugin like any other, built on the protocol in
+[Writing a plugin](docs/plugins.md); [Reference, Chapter 16](docs/reference/16-autodb-live-sql-workbench.md)
+covers it.
+
+### Your own commands in Lua
 
 ```lua
--- :upper [line] — upper-case a line (the cursor's by default)
+-- today.lua: :today puts a dated heading at the cursor; Q, SPC u t and the right-click menu run it
 autodoc.command{
-  name = "upper", args = "[line]", help = "upper-case a line",
-  run = function(ed, args, line)
-    local n = tonumber(args[1]) or ed:cursor()
-    ed:replace(n, 1, n, #ed:line(n) + 1, ed:line(n):upper())
-    autodoc.notify("upper-cased line " .. n)
-  end,
+  name = "today",
+  help = "insert today's heading",
+  run = function(ed) ed:insert("## " .. autodoc.date("%A, %Y-%m-%d") .. "\n") end,
 }
+autodoc.map{ mode = "normal", keys = "Q", command = "today" }
+autodoc.map{ mode = "leader", keys = "t", command = "today", title = "today's heading" }
+autodoc.menu{ where = "editor", title = "Insert &today's heading", command = "today" }
 ```
 
-`ed` is the editor: `ed:value()`, `ed:line(n)`, `ed:cursor()`, `ed:insert(text)`,
-`ed:replace(l1, c1, l2, c2, text)`, `ed:find(term)`, `ed:run(":12")` and more. Positions are
-1-based, and a command's edits undo as one step. A script that fails or runs past two seconds shows
-its error in the prompt. Scripts get Lua's base, table, string and math libraries, with no `os`,
-`io` or files. The engine is the package
-[`github.com/yongjohnlee80/autodoc/script`](script/README.md), which any program with a golib
-editor can import.
-
-A script calls the daemon too. Every verb it offers scripts is a function by its name, and
-`autodoc.call(verb, params, cb)` reaches any of them by name; the protocol's own (`sys.hello`,
-`sys.shutdown`) are refused. A call never waits: the answer comes to the callback later, as
-`cb(result, err)`, with `err` the daemon's code and message (`"-32061 not found"`).
-`autodoc --contracts` lists the verbs and their params.
-
-```lua
-autodoc.search.query("kb", "kestrel", {limit = 5}, function(res, err)
-  if err then autodoc.notify("search failed: " .. err) return end
-  autodoc.notify(#res.hits .. " hits")
-end)
-```
-
-`autodoc.run(id, args…)` runs any command of the catalog by its id, AutoDoc's or yours, and returns
-`ok, err` without raising: `err` is `"unknown: <id>"` for an id no command has, or the command's own
-error. A plugin's command (`plugin.…`) is never Lua's to run.
-
-```lua
-local ok, err = autodoc.run("todos.open")
-local ok, err = autodoc.run("lua.upper", "3")
-local ok, err = autodoc.run("buffer.new", "q.sql", "SELECT 1;\n") -- a new buffer: an unsaved draft named q.sql
-```
-
-`buffer.new [name] [text]` has no `:` name: it opens a new buffer holding the text, an unsaved
-draft that the save picker names. `name` is the draft's suggested name and how it reads (`q.sql` is
-SQL), never a path; nothing is written until Ctrl+S ([docs/plugins.md](docs/plugins.md#buffernew-a-draft-for-the-user-to-edit)).
-
-Help › Tutorial… walks through it all. Its pages are the [tutorials](docs/tutorials/README.md):
-09 to 11 are the scripting ones, ending with a worked `:todo` command.
-
-[`docs/lua/`](docs/lua/) has all of it: [Lua in AutoDoc](docs/lua/README.md), where scripts live
-and how they load; a step-by-step [tutorial for your own Vim commands](docs/lua/tutorial-vim-commands.md),
-from `:hello` to `:wc`, `:toc` and a `:link` that searches the workspace; and the
-[Lua reference](docs/lua/reference.md), every function a script can call.
-
-The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
-edits to it.
-
-## The GUI
-
-```sh
-autodoc --gui               # the TUI in a window of its own, attached to the daemon as --ui is
-autodoc --gui kb            # in workspace kb
-autodoc --gui --debug       # also record the window's input stream and the TUI's trace (see The TUI)
-```
-
-`--gui` runs the same screen as `--ui` in a native window (golib's `gui`, on Gio): the same
-keys, menus, dialogs and panels. Buttons, check boxes, text fields, tabs and scrollbars are
-drawn natively, in the theme's colours, and a dialog dims what is behind it. The window can
-be resized freely; below 80 × 20 cells it asks to be enlarged. `Options › Fonts and zoom…`
-chooses the fonts it draws in, and `Ctrl+=` and `Ctrl+-` zoom everything in it together.
-
-On macOS, holding a letter repeats it instead of opening the accent picker, so holding `j` or
-`k` continues moving through the document. AutoDoc sets this preference for its GUI process at
-startup; no `defaults` command is needed, and other apps and saved preferences are unaffected.
-
-**`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
-It shows the note's export drawn natively, with proportional text and the export's own styles, so
-it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).
-
-- **Live:** it follows edits after a moment of quiet, unsaved ones included.
-- **Follows the cursor:** the block under the editor's cursor comes to the pane's top.
-- **Images** load from the note's folder only.
-- **Links:** a click on a link opens what it names:
-  - a note or a file, in the editor;
-  - a web or mail address, in the browser.
-
-**An HTML file opened Raw** has its page as the editor's Rendered view in the GUI: `Ctrl+T` flips
-between the HTML, which you edit, and the page, which is read-only. On the page:
-
-- `j`/`k` or the arrows scroll a line, `Ctrl+D`/`Ctrl+U` half a page, `Space`/`PgDn`/`PgUp` a page,
-  and `g`/`G` (or `Home`/`End`) go to the ends;
-- a drag selects and `y` or `Ctrl+C` copies;
-- links open as the preview pane's do.
-
-The page is drawn with its own stylesheets, linked or inline, and its images, SVG included. CSS
-layout, flex, grid and `<details>` work; JavaScript and form controls do not run.
-
-- **In a workspace,** a file's stylesheets and images load from anywhere in that workspace, so a
-  site whose pages share `../assets` shows them.
-- **Outside every workspace,** they load from the file's own folder only.
-  - A refused stylesheet or image is said once, in a notification.
-  - Add the site's folder as a workspace to let its pages reach above themselves.
-
-The GUI needs cgo, and it is the only part that does:
-
-- **macOS:** `make build` includes it. The release binary has it too. (cgo is already needed on
-  macOS, for the FSEvents watcher.)
-- **`go install`:** add `-tags gui` (see [Install](#install)).
-- **Linux:** `make build` is the static TUI alone, with no cgo. `make build-gui` adds the GUI,
-  which needs the window system's development libraries:
-  - Debian/Ubuntu: `libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev
-    libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev`;
-  - Arch: `wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa`.
-
-  Gio's Vulkan backend is optional and is not in that list: the GUI draws through EGL/OpenGL by
-  default (a Wayland window tries EGL first unless the app asks for `app.PreferVulkan`, and X11
-  keeps Vulkan off entirely), so a build without it is a complete GUI. `make build-gui` probes for
-  `vulkan/vulkan.h` and builds `-tags gui,novulkan` when it is absent, saying so. Install
-  `libvulkan-dev` (Debian/Ubuntu) or `vulkan-headers` (Arch) to compile it in. `VULKAN=1` requires
-  it and fails naming the package; `VULKAN=0` leaves it out even where it is installed.
-
-  The releases carry both: `autodoc-<tag>-linux-<arch>` (static, the TUI) and
-  `autodoc-<tag>-linux-<arch>-gui`. The Neovim plugin's `build.lua` installs the `-gui` one when
-  it runs in a graphical session (`WAYLAND_DISPLAY` or `DISPLAY`), else the static one;
-  `AUTODOC_GUI=1` or `0` chooses.
-
-A build without the GUI says so when asked for `--gui`, and how to get one.
-
-## Neovim
-
-The repository is also a Neovim plugin (Neovim 0.12+). It talks to the same daemon over its
-socket, and needs [auto-core.nvim](https://github.com/yongjohnlee80/auto-core.nvim):
-
-```lua
-{
-  "yongjohnlee80/autodoc",
-  build = "build.lua", -- the release binary for this version, under bin/; else make build
-  dependencies = { "yongjohnlee80/auto-core.nvim" },
-  opts = {
-    bin = nil,     -- the autodoc binary; default: the plugin's own, then PATH
-    config = nil,  -- autodoc's config.toml; default: the binary's own
-    keys = false,  -- true maps the <leader>m group below (and <leader>fk)
-    preview = {},  -- the preview's options; false leaves it off
-    offer_restart = true, -- offer to restart a daemon older than the plugin
-  },
-}
-```
-
-`build.lua` (which lazy.nvim also runs on its own) installs `bin/autodoc` from the release built
-for the plugin's tag, after checking it against the published SHA-256. That needs no Go, and on
-macOS the binary is built with cgo, so it keeps the FSEvents watcher. On a checkout that is not a
-release tag, offline, or on a platform without a release binary, it runs `make build`, which
-needs Go.
-
-**Use one binary per machine.** The TUI is the `autodoc` on your PATH. When the shared daemon
-refuses a TUI of another build, the TUI restarts the daemon as itself. Make the TUI the plugin's
-binary instead: `ln -sf <plugin>/bin/autodoc ~/.local/bin/autodoc`. `:AutodocMaintenance
-versions` shows all three versions (the daemon's, the plugin's and the one on PATH) and gives
-that command when they differ.
-
-| Key | Command | |
-| --- | --- | --- |
-| `<leader>mf` | `:AutodocSearch [query]` | search the selected KB (also `<leader>fk`) |
-| `<leader>mF` | `:AutodocFiles` | a document of the selected KB by name |
-| `<leader>mr` | `:AutodocRecent` | the files opened last, newest first, across KBs |
-| `<leader>ml` | `:AutodocRelations` | what this file is connected to, by kind (`:AutodocBacklinks`: the documents linking to it) |
-| `<leader>mo` | `:AutodocBack` | back to the document opened before |
-| `<leader>mk` | `:AutodocDrawer` | the kb drawer |
-| `<leader>mw` | `:AutodocSelect [workspace]` | choose the KB to search |
-| `<leader>mX` | `:AutodocMaintenance [restart\|install\|versions]` | restart the daemon, install the binary again, versions |
-| `<leader>mp` | `:AutodocPreviewFind` | a Markdown file under the cwd into a preview slot |
-| `<leader>m1` … `md`, `m!` … `mD`, `mc`, `mb` | | the preview's slots: focus, render, close all, the browser |
-
-`setup()` connects nothing. The first call that needs the daemon asks the binary where it is
-(`autodoc --print-endpoint --ensure`), which starts it when nothing serves the store, so loading
-the plugin costs nothing. A daemon serving a different store is refused, not used. A daemon older
-than the plugin refuses it. The plugin then offers to restart that daemon as the plugin's own build
-(`--print-endpoint --restart`), once per daemon. It doesn't offer again after a restart of its own:
-a daemon that still refuses then means the binary itself is older.
-`:checkhealth autodoc` says which binary was found, where the daemon is, and the protocol both
-speak.
-
-- **The kb drawer** (`:AutodocDrawer`) lists the workspaces and their documents, which follow the
-  files as they change, along with the embedding models and the reranker. With
-  [auto-finder.nvim](https://github.com/yongjohnlee80/auto-finder.nvim) installed it opens in
-  auto-finder's panel; otherwise in its own. `?` shows its keys: `s` selects the KB to search, `P`
-  makes a KB this project's primary (stored by auto-core, and only after you confirm), and `A`
-  adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`. Its
-  **Relations** section follows the KB file in the editor, as the TUI's `SPC l` drawer does:
-  superseded by, supersedes, sources, cited by, amends, amended by, related, adr, links and
-  backlinks, then the relations that name nothing and the supersession loops. `<CR>` opens a row,
-  and `d` adds the files two links away.
-- **Relations and back.** `:AutodocRelations` (`<leader>ml`) lists what the current file is
-  connected to in a picker, each row showing its kind. Opening one, from the picker or the drawer,
-  remembers the file you left: `:AutodocBack` (`<leader>mo`) returns to it, as the TUI's `SPC b b`
-  does. With `keys = true` (or `popup = true`), the right-click menu has **AutoDoc: Go to
-  related…** and **AutoDoc: Back** on a KB file.
-- **Linking the primary KB.** auto-core's first-run import records the project's primary KB by its
-  root alone. auto-agents gives a spawned agent `$AUTODOC_WORKSPACE` only when that record names a
-  workspace. So when the workspaces are first listed and the primary names none, the plugin offers to
-  link it, once per session. If a workspace already serves that folder, it is linked. Otherwise the
-  folder is added under a name you confirm (`AutoVimKB` for AutoVim's global KB) and then linked.
-  "Don't ask again" is remembered per folder. `:AutodocLinkKb` asks on demand, and
-  `offer_link = false` turns the offer off.
-- **Search** (`:AutodocSearch [query]`, `<leader>mf`) searches the selected KB, which defaults
-  to the project's primary KB, matched by its root when auto-core records no workspace name. Results update as you type; the title says which stages ran and
-  why any were skipped, and `<M-l>` / `<M-s>` / `<M-r>` toggle lexical, semantic and rerank. A hit
-  opens at its line, and `<M-p>` sends it to a preview slot. It uses snacks.picker when that is
-  installed, and `vim.ui.input` / `vim.ui.select` otherwise. `:AutodocSelect [workspace]` picks
-  the KB to search.
-- **By name, recent, and links.** `:AutodocFiles` lists every document of the selected KB, for the
-  picker to match by name. `:AutodocRecent` lists the files opened last. The TUI keeps the same list
-  (its `tui.recent` preference), and a KB file you open in Neovim joins it while a session is up.
-  `:AutodocBacklinks` lists the documents that link to the current file; `:AutodocRelations`
-  lists them with every other relation.
-- **The preview** renders Markdown in six floating slots, and replaces md-harpoon.nvim. Use
-  `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`,
-  `:AutodocPreviewFind` (`<leader>mp`), `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and
-  `:AutodocPreviewBrowser` (the document as HTML, through `autodoc --export html`). In a float, a
-  Mermaid block is marked, and `B` opens the document in the browser, where it is drawn; `gx`
-  opens the link or image under the cursor. A slot follows its file as it changes.
-- **The KB migration** (`:AutodocKbMigrate [root]`) moves a KB to the current layout. The plain
-  command is a dry run: it writes a checksummed manifest, a diff and a summary, and changes
-  nothing. `--apply` applies that manifest after checking that no file changed since. It first
-  saves a full copy of every file it will touch, so `--undo` restores the KB without git, and
-  `--forget` deletes that copy. In a git repository it commits the migration's paths; it never
-  pushes.
-- **The KB layout** is the one the drawer's scaffold writes. Each folder's `ABOUT.md` says what
-  belongs there. The `_` folders use `_ABOUT.md` instead, because on a case-insensitive
-  filesystem (macOS's default) `_templates/ABOUT.md` and `_templates/about.md` (the `about` type's
-  template) are the same file. A KB an older scaffold wrote keeps the old names. Rename them
-  on a Linux host and commit: `git mv _templates/ABOUT.md _templates/_ABOUT.md` and
-  `git mv _schema/ABOUT.md _schema/_ABOUT.md`. A macOS clone then checks out both files cleanly.
-
-- **Todos from Lua.** `require("autodoc.todos")`, also `require("autodoc.api").todos`, calls the
-  daemon's `todos.*` verbs. Each takes the verb's params in order, then `cb(result, err)`. The first
-  param of most is where the store is: a workspace name, or `{ root = "/abs/project" }`
-  (`stores` and `set_var` take none).
-
-  ```lua
-  require("autodoc.todos").list("kb", {}, function(listing, err) … end)
-  ```
-
-  `autodoc --contracts 'todos.*'` lists the verbs; the functions are bound from the same contracts,
-  generated into `lua/autodoc/contracts.lua`. A workspace's store is AutoDoc's from its first
-  write, `todos.add` making it if it is missing. Only a store released with `todos.release`
-  answers `-32077` (`todos.unclaimed`), and `todos.claim` lets AutoDoc write it again.
-
-Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.
-
-## Plugins
-
-A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins** menu. It draws
-into the dialog, and it gets every key but Esc, which closes it. The first one is AutoTetris,
-[autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris).
-
-**Cards.** A card plugin (AutoDB's, say) is a docked panel of its own beside the page, at the edge
-its manifest names first (AutoDB's: the right), and moves, resizes and keeps its place as every
-panel does (Alt/Option-drag, or in `--gui` a plain drag of its title row or border, **Go › Arrange
-panel**). It takes the keys when clicked or when one of
-its commands runs, and then every key is the plugin's, q included. Esc, or **Close (Esc)** on its
-right-click menu, closes the panel and hands the keys back to the page; the plugin runs on, its
-results and session kept, and a command or its Plugins menu entry opens the panel again. Its
-toggle hides an open panel the same way, the plugin running on; **Turn off** on its Plugins menu
-stops it.
-
-**Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a
-`plugin.toml` at its top. There is no hub: the URL is the source.
-- AutoDoc clones it and runs nothing yet. It asks first, showing:
-  - the plugin and where it came from, at which commit;
-  - the build its manifest asks for, and the command it starts.
-- **A plugin is a program that runs as you, with your files and your files.** AutoDoc does not check
-  what a plugin does. Add only plugins you trust: adding one is at your own risk.
-- **Yes, at my own risk** builds it and lists it in the Plugins menu. **No** throws the clone away.
-- It needs git, and whatever the plugin's build uses (Go, for autodoc-tetris).
-
-**Managing them.** **Plugins › Manage plugins…** lists each plugin with its source, commit and
-placement.
-- **Place** moves the plugin's dialog to the next placement it is designed for (AutoTetris: right or
-  left), and keeps the choice. A card's panel docks at that edge.
-- **Update…** fetches the source and asks the same question about the new commit's build.
-- **Remove…** deletes the plugin's directory.
-- A plugin put in the folder by hand is listed as local.
-
-**Where they are.**
-- The folder is `plugins/`, beside the config: `$XDG_CONFIG_HOME/autodoc/plugins/<name>/`.
-- Each plugin's stderr is kept in `$XDG_STATE_HOME/autodoc/plugins/<name>.log`, and its build's output
-  in `<name>-install.log`.
-- A plugin that exits, stops answering, or speaks another protocol closes its dialog, and a toast
-  says why.
-
-**The results panel.** A plugin may show a table of rows (a query's result, say) in AutoDoc's own
-results panel, at the bottom (**Go › Results**): numbered rows, a cursor on cells with vim's keys
-(`h j k l` with counts, `gg`, `G`; `v`, `V` and Ctrl+V select cells, rows and a block; `y` copies),
-an ORDER BY bar and `s` to sort the loaded rows, and a right-click menu. More rows load as the
-cursor nears the end of those loaded, up to 100 000. The panel acts on the table in the view: its
-sort, copies (TSV, CSV, JSON, Markdown), `results.markdown` and exports (CSV or JSON, written whole
-or not at all) take the loaded rows in the order shown, and none of them fetches a row. An export
-writes the rows loaded in the view; scroll to load more, or change the query. Closing the panel
-lets the table go.
-
-Writing one: `docs/plugins.md` covers the manifest, the protocol, and the SDK in package `plugin`.
-
-## Following the files
-
-The files change under AutoDoc at any time: an editor, git, an agent. `core/follow` makes the index
-converge on the root's content, and treats every event as a hint that names a path:
-
-- **It watches first, then scans.** The start scan runs after the watch is up, so a change made during
-  the scan is already in the watch stream.
-- **It never has a silent gap.** Where the driver has no watch, or the watch fails at setup, it polls.
-  A watch that ends is set up again, with a full scan.
-- **A subtree it cannot read is unknown, not empty.** Its indexed documents are kept, it is rescanned
-  with backoff until it reads, and the status names it.
-- **Degraded still converges.** If neither the watch nor the poll can be set up (the root itself
-  unreadable), it scans the whole root every poll interval and keeps retrying the setup.
-
-The follower never writes the index. It hands paths to the indexer, the store's one writer, which
-decides from each file's current state whether to delete, skip or re-index it.
-
-## The index
-
-The index is in the store, one SQLite file for every workspace, with each workspace's rows keyed by
-it. One connection writes, and any number read, each from one snapshot:
-
-- **Files are chunked by heading.** Chunks are about 350 estimated tokens, and each carries its breadcrumb
-  (the title and the headings above it). An edit writes only the chunks it changed: each document has
-  generations, and a reader sees the old one or the new one, never a mix.
-- **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too.
-- **A frontmatter schema types it.** A workspace may name a YAML schema file
-  (`Go › Manage workspaces… › Edit…`, suggested at `<root>/.autodoc/schema.yaml`). Each Markdown file's
-  frontmatter is checked against it when it is indexed, and in the editor as it is typed. A field
-  the schema admits becomes a facet that search can filter by exactly. A field it does not admit is
-  a diagnostic: shown over the page, counted in `index.status`, and never a reason to refuse a save or
-  to take the file's text out of search. A default is what the facet answers for a missing field;
-  the file is never rewritten. Editing the schema re-checks the files, keeping their vectors; an
-  invalid edit is reported with its line, and the last valid schema stays in use until it is fixed.
-
-  ```yaml
-  version: 1
-  strict: false          # true: report fields the schema does not declare
-  frontmatter:
-    type:    {type: string, enum: [note, adr, review], required: true}
-    status:  {type: string, enum: [draft, active, archived], default: active}
-    tags:    {type: list, item_type: string}
-    created: {type: date}          # YYYY-MM-DD, or an RFC 3339 time (its date is the facet)
-    count:   {type: integer}
-  ```
-
-  The types are `string`, `integer`, `number`, `boolean`, `date` and `list` (of `item_type`, strings
-  by default; a lone value is a list of one). A required field has no default.
-
-  **Version 2 declares fields by document type**, still in one file that validates every document.
-  The `discriminator` names a string field of `common`; a file is checked against `common` merged
-  with the `types` entry its value names:
-
-  ```yaml
-  version: 2
-  strict: false
-  discriminator: type            # the field whose value picks the type
-  common:                        # every document
-    type:    {type: string, required: true}
-    status:  {type: string, enum: [draft, proposed, accepted, approved], default: draft}
-    tags:    {type: list}
-  types:                         # merged over common when type has this value
-    adr:
-      number:  {type: string, required: true}
-      status:  {type: string, enum: [proposed, accepted], default: proposed}
-    review:
-      verdict: {type: string, enum: [approved, rejected], required: true}
-    note:                        # common alone
-  ```
-
-  - A type adds fields and narrows common's: a smaller enum, `required: true`, its own default. It
-    never widens one or changes a field's type, and a name has one type across the file; a schema
-    that breaks either is refused with its line, as an invalid version 1 schema is.
-  - A file whose type the schema does not name is diagnosed (`unknown type "memo"`, rule
-    `unknown_type`) and checked against `common` alone.
-  - `strict: true` reports the fields the file's own type does not declare: a `verdict` on an ADR.
-  - Every field of every type is a facet, so `verdict:approved` filters as `type:adr` does.
-
-  Version 1 schemas are read as before.
-- **Links are resolved per workspace, as Obsidian does.** A link reaches the file whose path is its name.
-  Failing that, it reaches the one file whose file name, path suffix or alias it is, and of several,
-  the one nearest the root. A tie leaves it unresolved. Links resolve again whenever a file that could
-  be their target appears, goes, or changes its aliases.
-- **A change log feeds clients' incremental sync.** It is kept for at least 7 days and 100 000 changes.
-
-## Search
-
-Search is lexical (SQLite FTS5, BM25) with no model at all. Every word of a query is a word: nothing in
-it is FTS syntax, and a `*` ending the last word is a prefix.
-
-- **Title, breadcrumb and tags weigh more than the body.**
-- **Links and tags lift a file after fusion.** A file linked from other files, or tagged with a query
-  word, ranks higher.
-- **At most three hits come from one file.**
-- **`field:value` filters by a schema field.** With a schema declaring `type` and `status`,
-  `migration type:adr status:active` finds the words among files with both values, before any
-  ranking limit; the value is read as the field's type (`count:0x10` is 16). A `field:value` for a
-  field the schema does not declare is searched as words. Filters alone (`type:adr`) list the files
-  they admit, in path order.
-
-With an embedding provider, search is hybrid. A 1-bit code scan over the chunks is rescored with the
-float vectors, and its results are fused with BM25 by reciprocal rank.
-
-- **Embedding is asynchronous and per document.** A file half embedded answers lexically until all of
-  its chunks have vectors, and the answer says the semantic side is `partial`.
-- **A new model fills in the background, and search is by words meanwhile.** The old model goes
-  offline when the new one is chosen: its server is told to unload it, so the two are never loaded
-  together. The answer says the semantic side is `switching` until the new model covers every chunk.
-- **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
-- **A search can ask for its stages**: `lexical` (words), `semantic` (meaning) and `rerank` (the
-  ranker below), at least one of the first two; asked for none, it runs them all. Meaning alone
-  fails where it cannot answer, rather than answer by words. The answer's `stages` says which ran
-  and why each other did not.
-
-**A ranker can re-order the top hits** (ADR 0215). It is a cross-encoder that reads the query
-beside each candidate's text (its chunk's breadcrumb and body) and scores them. Add one in
-`Search models… › Ranker Models` and Use it: a [TEI](https://github.com/huggingface/text-embeddings-inference)
-server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank API.
-
-- **It ranks the top window** of what words and meaning found: 40 by default, 10 to 100. A wider
-  window ranks deeper and takes longer. On a CPU, `bge-reranker-v2-m3` takes about a quarter of a
-  second a text as an ONNX export and about half a second as is, so give a CPU ranker 10 to 20.
-- **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and
-  the TUI's hits title says `re-ranked by <model>` or `not re-ranked: <why>`. The search picker's
-  Rerank checkbox names the ranker in use as soon as it opens; unchecked, the hits are in the order
-  they were found.
-- **A search that leaves `rerank` out is never ranked**, even under a build that answers ranked
-  or not at all, so a client can compare the two.
-- **A ranker that does not answer leaves the hits in the order they were found**, and the answer's
-  `rank` says why. Its calls are metered like a provider's.
-
-**From a shell, or an AI agent.** `autodoc --call <verb> '<JSON array of parameters>'` calls any
-verb of the daemon (starting it when nothing answers) and prints the result as JSON:
-
-```sh
-autodoc --call workspace.list
-autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
-```
-
-**A workspace may embed with its own provider** (`Manage workspaces… › Advanced…`): one of the stored
-providers instead of the daemon's. Choosing it sets it up first, and only that workspace's vectors
-fill again; a switch of the daemon's provider leaves it as it is, and deleting the provider returns
-it to the daemon's. Every provider shares the daemon's limit on requests in flight, and the queue
-keeps consecutive background batches on one model (up to 16 in a row) so a local server is not
-made to swap models every batch. A workspace whose provider cannot be set up searches by words
-and says why; it is never given another model.
-
-**Several clients share one daemon.** Each TUI keeps its own workspace, open file and search; a
-change one makes to the shared configuration (a model switch, a workspace's rules, schema or
-name) is logged, and the others say so in a notification without moving focus or touching an
-unsaved file. A workspace another client renames is followed; one it deletes leaves your unsaved
-text as an untitled draft.
-
-[AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
-options (`stages`, `paths`, `tags`, `facets`, `limit`) and the errors.
-
-## Semantic search and embedding models
-
-Semantic search finds a file by what it means, not only by the words it shares with the query. A
-search for "why did we pick SQLite" also finds the file that says "we chose an embedded database",
-and "login bug" finds "authentication fails". Exact words still count: the two are fused, and a
-file that matches both the words and the meaning ranks highest.
-
-**How it works.** An embedding model turns each section of a file into a vector, a list of numbers
-that places the text by meaning. A query is turned into a vector the same way, and the sections
-whose vectors are closest are the matches.
-
-**Vectors are made once, and kept.**
-
-- **A file is parsed only when its file changes,** never at search time. On a restart, an unchanged
-  file is skipped by its version (size, modification time, inode).
-- **A section's vector is kept in the store,** keyed by its text's hash: an edit re-embeds only the
-  sections it changed, and two identical passages share one vector. Each workspace keeps its own.
-- **A vector lives as long as a section has its text.** When an edit or a removal takes the last
-  section with a text, that text's vectors go in the same write. The daemon sweeps what is left over
-  at each start, in small batches while it serves.
-- **A search reads what is stored.** The only model call it makes is for the query itself.
-- **Switching models embeds everything once more.** The old model goes offline at once, unloaded
-  from its server, and search is by words until the new one covers every section; then it takes
-  over.
-- **A workspace keeps one model's vectors** (two while a switch fills): the old model's are deleted
-  once the new one answers, a cancelled switch's partial vectors with the cancel, and removing the
-  provider in use deletes its model's, unless another provider serves that model. Switching back
-  embeds again. Unused vectors slow the scans of the ones kept, so the store does not carry them.
-- **The store gives the room back.** After the upgrade that brought this, the daemon compacts the
-  store once, when there is free space for it: about twice the store. `autodoc --compact` does it
-  again with the daemon stopped.
-
-**Providers.** Semantic search is off until a provider is chosen in the TUI's Search models
-(`System › Search models…`). A
-provider is one of three kinds, with the model it embeds with:
-
-- **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by
-  default. It takes no key.
-- **Ollama Cloud:** `https://ollama.com`, with the account's API key, which it requires. Its
-  models are those the cloud serves: many are chat models (GLM, gpt-oss), which cannot embed.
-- **OpenAI-compatible:** any endpoint that serves `/v1/embeddings`, with a key if it takes one.
-
-The store keeps any number of them, and one is in use; switching is a choice in a list, with no
-restart. The model list is the provider's own (Ollama's models, or the endpoint's `/v1/models`).
-
-- **An API key is sealed in the store,** with AES-256-GCM under the store's key: a file beside the
-  store, `autodoc.db.key`, made 0600 the first time a key is kept, and refused if others can read
-  it. A copied store without that file opens no key. A key is never shown again, only whether a
-  provider has one.
-- **Each provider keeps its usage and a log:** requests, texts, the tokens it counted, failures and
-  usage-limit refusals by day, and its last 200 calls. A provider at its limit (HTTP 429) or
-  refusing its key (401, 403) is named as such, so you can switch to another.
-
-**A model's input limit.** Each section is its own request, with no conversation and no memory
-between requests, so nothing builds up and nothing needs flushing. What matters is the length of
-one section against the model's input limit (8,192 tokens for `nomic-embed-text`, 512 for
-`mxbai-embed-large`):
-
-- **A text longer than the model's context is refused** (HTTP 400, 413 or 422). Ollama refuses it
-  too, even when asked to truncate. The indexer narrows the batch to the one text refused, sets it
-  aside for an hour, and embeds the rest. The status shows it as refused, and the section is still
-  found by its words.
-- **An Ollama provider has a context window,** 8,192 tokens unless you change it in the provider's
-  form, and sent as `num_ctx` with every request. The server loads the model at that size, and the
-  size decides its memory: left to the server's own default (`OLLAMA_CONTEXT_LENGTH`, or the
-  model's full context), `qwen3-embedding:4b` took 12.4 GB of GPU memory at 40,960 tokens against
-  4.6 GB at 8,192. A larger window admits longer sections, at that cost.
-- **Sections are split at headings,** so most are well under any limit.
-
-**Which model.** An embedding model, not a chat model. A chat model such as `gpt-oss-20b` produces
-text, not vectors: it appears in Ollama's model list, but AutoDoc embeds a probe text before it
-switches, and a model that cannot embed is refused, the one in use staying. For a local provider,
-pull one of these:
-
-| model | input limit | |
-| --- | --- | --- |
-| `nomic-embed-text` | 8,192 tokens | small and fast; a good default |
-| `mxbai-embed-large` | 512 tokens | stronger, on shorter sections |
-| `snowflake-arctic-embed2` | 8,192 tokens | multilingual |
-| `qwen3-embedding:4b` | 40,960 tokens | strong; 2,560 dimensions, about 3× snowflake's time |
-
-They are small beside a chat model and run alongside one.
-
-## Enterprise search
-
-`autodoc --server server.toml` indexes an enterprise's **database rows**, not files: each row of a
-`.view` query is rendered to a document and kept in PostgreSQL with pgvector, in a schema of its
-own beside the business tables, current as the rows change, and embedded centrally with the
-enterprise's model, once per distinct text, for a web application to search with an access scope
-on every query. `autodoc --server --check server.toml` validates the configuration and every view,
-confirms each view's order against the database, read-only, and asks the embedding provider for a
-probe.
-It is in the server build only (a `linux-<arch>-server` release archive, `make build-server`, or
-`-tags server`).
-
-[`docs/enterprise/`](docs/enterprise/) has all of it: [what it is and when to use
-it](docs/enterprise/README.md), [the server configuration](docs/enterprise/server-config.md), and
-[writing a `.view` source](docs/enterprise/views.md).
-
-## Builds of your own
-
-`cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community
-one included, has golib's code chunkers (`search/chunk/code`) and derives `.docx`, `.htm` and
-`.html` (golib's `extract/docx` and `extract/html`; ADR 1791429611). Another main can hand `app.Main`
-more chunkers and a deriver (ADR 0216):
-
-```go
-func main() {
-	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
-		Version:  version,                                       // -X main.version, as cmd/autodoc's
-		Chunkers: map[string]search.Chunker{".zig": zigChunker}, // golib's search.Chunker, by extension
-		Deriver:  pdfDeriver,                                    // more formats' text, read-only
-		Rank:     app.Rank{Ranker: slmRanker, Window: 20},       // golib's rank.Ranker: the only one in use
-	}))
-}
-```
-
-- **They are checked once, at the start.** A chunker's extension that is upper-case, built in (`.md`,
-  `.txt`, `.yaml`, `.yml`, `.mmd`, `.csv`), one of golib's code types or a derived format; a deriver's format that
-  every build already derives (`.docx`, `.htm`, `.html`); or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
-  may hold `/` too, up to 64), stops the binary, naming it. Each version is read once.
-- **A registered file is code, read as text.** Its kind is the chunker's, after the built-in kinds and
-  before the workspace's own text types (one of which naming it is refused). Its chunks keep the
-  chunker's version and its own embed text, so a vector is made of exactly what its hash names. Code
-  is opt-in: the Edit tab offers the daemon's registered types beside the built-in ones, and turning
-  one on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to the excludes.
-- **A derived document is indexed from its text.** A file of a format the deriver offers is handed
-  to it, read at offsets, and its Markdown is chunked as Markdown files are (no wikilinks, tags or
-  frontmatter), under `d<ext>:<id>@<version>+<built-in>` in `document.indexer`. Its file may be up
-  to 250 MiB, since a PDF is mostly images and fonts, and its text up to 16 MiB, refused by its
-  stated size before a byte is read; a text file stays at 16 MiB. When the deriver fails (an
-  error, a panic, its cache's text evicted twice), the file keeps what was indexed, and it is tried
-  again with the indexer's backoff. A text refused for what the same bytes would give again (made
-  under another identity, too large, not UTF-8) waits for the file to change, and leaves the index
-  only if the file changed since it was indexed. An unchanged file is derived again only when its
-  format's id or version (as the deriver describes it at the start) or the section size changes.
-- **`doc.read` serves the derived text, read-only.** `doc.write`, `doc.rename` and `doc.remove` of
-  it are refused. Text longer than one read carries (just under 4 MiB) is cut at a paragraph's end
-  and ends with one line of AutoDoc's own, after a `---` rule, beginning `[autodoc: truncated]` and
-  saying how much of how much it shows. A cache's eviction miss (a deriver's
-  error matching `fs.ErrNotExist`) is retried once. The deriver's own text limit, if it has one,
-  is its own.
-- **A build's own ranker is the only one in use** (`app.Options.Rank`). It is probed at startup and
-  kept for the daemon's life, even when the probe fails: then each search answers unranked, its
-  `rank` state `error`. It is not stored. The ranker chosen in the TUI is kept as it was, and
-  cannot be changed while the build's is in use; it comes back for a build without one.
-  `Rank.Texts` gives the ranker the build's own text for each hit in place of its chunk's.
-  `Rank.Required` answers ranked or not at all: a search that asks for `rerank` (or auto) and the
-  ranker cannot rank is refused (code -32070). A search that leaves `rerank` out is answered,
-  unranked: the client chose it.
-- **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
-  or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted
-  in `index.status`, and deleted only when the file or the rules say so. A file a community daemon
-  indexed as Markdown is cut by a build with its chunker, and a derived file is held only by a
-  build that derives no such format: one that does derives it again, under its own identity.
-- **The TUI offers the build that reads more.** A TUI whose binary registers a strict superset of the
-  daemon's registrations offers, once a session, to restart the daemon as its own build; a community
-  TUI never offers to replace a registered daemon. While one client restarts the daemon, the others
-  only reconnect (a handoff beside the daemon's log, at most 30 seconds), so its build is the one
-  that serves next.
-
-## Building
-
-Go 1.26.9. `make build` links no cgo: the daemon and the TUI. `make build-gui` adds the GUI (`--gui`,
-golib's gui on Gio), the one part that needs cgo; on macOS `make build` is `make build-gui`.
-
-```sh
-git clone https://github.com/yongjohnlee80/autodoc && cd autodoc && make build   # → bin/autodoc
-```
-
-`make build` stamps the version from `git describe`.
-
-Tests run through the Makefile:
-
-```sh
-make test    # or: make race, make cover
-```
-
-The Postgres destination's cells need `AUTODOC_TEST_PGURL`, a PostgreSQL with pgvector whose user
-may create databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)). CI runs
-`make race`'s command against a pgvector service with those cells required
-(`AUTODOC_TEST_PG_REQUIRED=1`), and on a pull request a separate coverage policy. Before sending a change, read
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Drop it in your Lua folder (`~/.config/autodoc/lua/`), or ask your agent for one like it. The
+[Lua tutorial](docs/lua/tutorial-vim-commands.md) goes from `:hello` to a command that searches the
+workspace.
+
+## Why AutoDoc
+
+- **Your files stay yours.** Notes are plain Markdown on your disk. AutoDoc's index of them lives
+  elsewhere, follows every change, and can always be rebuilt from the files.
+- **One program, many ways in.** The terminal, a native window, Neovim
+  ([autodoc.nvim](docs/reference/18-neovim-integration-and-kb-migration.md)), plugins and AI agents
+  all reach the same notes through one daemon.
+- **Search that understands.** By words, or with a model by meaning, ordered again by a reranker,
+  for you and for your agents alike.
+- **An editor for reading and writing.** A page centred on the screen, Vim or ordinary keys,
+  diagrams, charts and tables drawn in place.
+- **Built to be extended.** Lua for your own commands, and plugins for whole new tools.
+
+## Quick start
+
+1. **Install it.**
+   - macOS: `brew install yongjohnlee80/tap/autodoc`
+   - Linux: the `-gui` [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest)
+     for your machine (`amd64` or `arm64`). Homebrew on Linux installs the terminal UI alone.
+   - Windows: use WSL2 and a Linux method.
+2. **Start it.** `autodoc --gui` opens the window; `autodoc --ui` runs in your terminal. Either
+   starts AutoDoc's background service when it isn't running.
+3. **Add your notes.** **Go › Manage workspaces…** (SPC W), then **Add…**: a short name, and the
+   folder your Markdown lives in. Then search it with **Ctrl+G**.
+
+The [tutorials](docs/tutorials/README.md) go on from there, a few minutes each. Every way to install
+it, `go install` and building from source included, is in
+[Reference, Chapter 2](docs/reference/02-quickstart-and-workspaces.md).
+
+## Learn more
+
+- **[Documentation site](https://yongjohnlee80.github.io/autodoc/)**: the tutorials and the
+  reference, with the full-length videos.
+- **[Tutorials](docs/tutorials/README.md)**: from installing to your first plugin.
+- **[Reference Book](docs/reference/README.md)**: every surface and setting.
+- **[AGENTS.md](AGENTS.md)**: what an AI agent may call, and how.
+- **[Lua reference](docs/lua/reference.md)** and **[writing a plugin](docs/plugins.md)**.
+- **[Plugin registry](https://github.com/yongjohnlee80/autodoc-plugin-registry)**.
+- **[Architecture](docs/architecture.md)**, **[CONVENTIONS.md](CONVENTIONS.md)** and
+  **[CONTRIBUTING.md](CONTRIBUTING.md)**: how it is put together, and how to send a change.
 
 ## License
 
