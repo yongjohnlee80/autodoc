@@ -22,7 +22,7 @@ func guiResultsTUI(t *testing.T) *running {
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock},
 		ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	t.Cleanup(func() {
 		if p := onLoop(r, func() *pluginRun { return r.h.plugins.running["kinds"] }); p != nil {
 			p.shutdown()

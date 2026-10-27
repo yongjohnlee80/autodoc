@@ -47,7 +47,7 @@ func editorClient(t *testing.T, r *running, token string) func(verb string, para
 func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "bee\n", "c d.md", "sea\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
@@ -177,7 +177,7 @@ func TestALuaCommandNamedOpenIsListedAsOwningIt(t *testing.T) {
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir(), LuaDir: luaDir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the Lua command registered", func(string) bool {
 		return onLoop(r, func() bool {
 			return r.h.cat != nil && r.h.cat.names["open"] != "" && r.h.cat.names["open"] != "file.open_path"

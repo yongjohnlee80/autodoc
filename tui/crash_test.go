@@ -22,7 +22,7 @@ func crashTUI(t *testing.T) (*running, string) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	dir := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{CrashDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return r, dir
 }

@@ -326,7 +326,7 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF12})
 	select {
 	case core := <-ran:

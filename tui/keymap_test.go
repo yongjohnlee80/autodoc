@@ -59,7 +59,7 @@ func TestAUsersKeymapMovesAKey(t *testing.T) {
 <shortcut id="autodoc.window.nextPanelTab"><key value="F7"/></shortcut>
 </mapping>`)
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	if got := r.keysOfCommand("autodoc.window.openSearch"); !slices.Equal(got, tuikey.MustParse("F5")) {
 		t.Fatalf("openSearch's keys: %v, want F5 alone", got)
 	}
@@ -86,7 +86,7 @@ func TestTheKeymapFileIsFollowed(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	file := filepath.Join(t.TempDir(), "keymap.xml")
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	if got := r.keysOfCommand("autodoc.leader.openRecent"); !slices.Equal(got, tuikey.MustParse("R")) {
 		t.Fatalf("with no file, openRecent's keys: %v, want r", got)
 	}
@@ -113,7 +113,7 @@ func runShellWithKeymap(t *testing.T, file string) *running {
 	t.Setenv("PS1", "$ ")
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	return r
 }
 

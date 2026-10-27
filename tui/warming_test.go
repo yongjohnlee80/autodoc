@@ -26,6 +26,6 @@ func TestTheFilesAreListedOnceTheDaemonIsReady(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}},
 		daemonOpts{notReady: 4})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitListed(t, 2)
 }

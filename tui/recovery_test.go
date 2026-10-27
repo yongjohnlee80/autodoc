@@ -13,7 +13,7 @@ import (
 func attachedWith(t *testing.T, d *daemon, dir string) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{RecoveryDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	return r
 }
 

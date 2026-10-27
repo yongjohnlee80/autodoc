@@ -100,7 +100,7 @@ func runWindowTUI(t *testing.T, prefs map[string]string, fonts *fakeFonts) (*dae
 			}
 			return []string{"Go", "Go Mono", "JetBrains Mono", "Noto Serif"}
 		}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	return d, r
 }
 

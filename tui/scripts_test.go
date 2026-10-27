@@ -102,7 +102,7 @@ func TestTheUsersLuaCommandsAndTheTableInTheProgram(t *testing.T) {
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.keys(t, key('i'))
 	r.keys(t, esc())
 	r.command(t, "hello")
@@ -127,7 +127,7 @@ func luaTUI(t *testing.T, text string, files map[string]string) (*daemon, *runni
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", text}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return d, r
 }

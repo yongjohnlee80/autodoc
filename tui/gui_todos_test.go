@@ -20,7 +20,7 @@ func TestTheGUITodosPanelActionRowCardAndStatusPicker(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	openTodos(t, r, "kb", '1')
 	r.s.WaitForText(t, "Ship it")
 	r.s.WaitForText(t, "status: open")

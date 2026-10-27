@@ -44,7 +44,7 @@ end }`,
 	})
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitNamespaces(t)
 	r.s.WaitForText(t, "let the Lua script wc use workspace.read?")
 	r.waitNotice(t, "the Lua package bad: package.toml names other, but its folder is bad")
@@ -135,7 +135,7 @@ end }`,
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	r.waitNotice(t, "the Lua package linked: no init.lua in the package's folder")
 	r.page("", 1, 1)
 	r.mustRun(t, "sly")

@@ -11,7 +11,7 @@ import (
 func TestBuiltinEntriesRunByTheirIDs(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.connected(t)
 	run := func(id string) {
 		t.Helper()
 		if err := onLoop(r, func() error { return r.h.cat.run(id, nil) }); err != nil {
