@@ -279,3 +279,128 @@ func TestTheDocsSiteBuilds(t *testing.T) {
 		}
 	}
 }
+
+// mediaMap is a site of one front page and one tutorial, each drawing media.
+const mediaMap = `[[section]]
+path = "README.md"
+url = ""
+[[section]]
+path = "tutorials"
+url = "tutorials/"
+`
+
+// A site publishes the media its pages draw as files, at their paths under docs, and links them:
+// an image is no data: URI there, and a video alone in its paragraph is a <video> with its
+// attributes, its poster a .jpg of the same name when there is one. A file two pages draw is
+// written once. A video in a sentence is its alt text, and the page's policy loads its own media.
+func TestASitePublishesItsMedia(t *testing.T) {
+	docs := fixture(t, map[string]string{
+		"site.toml": mediaMap,
+		"README.md": "# Front\n\n![hero](media/hero.gif)\n\n![the clip](media/clip.mp4)\n\n![bare](media/bare.webm)\n\n" +
+			"A sentence with ![inline](media/clip.mp4) in it.\n\n![again](media/hero.gif)\n",
+		"media/hero.gif":         "GIF89a-hero",
+		"media/clip.mp4":         "mp4-bytes",
+		"media/clip.jpg":         "jpg-poster",
+		"media/bare.webm":        "webm-bytes",
+		"tutorials/README.md":    "# T\n",
+		"tutorials/01-one.md":    "# One\n\n![shot](one/shot.png)\n",
+		"tutorials/one/shot.png": "png-bytes",
+	})
+	site := build(t, docs, export.SiteOptions{})
+	for rel, want := range map[string]string{
+		"media/hero.gif": "GIF89a-hero", "media/clip.mp4": "mp4-bytes", "media/clip.jpg": "jpg-poster",
+		"media/bare.webm": "webm-bytes", "tutorials/one/shot.png": "png-bytes",
+	} {
+		if site[rel] != want {
+			t.Errorf("%s: %q, want the file's bytes %q", rel, site[rel], want)
+		}
+	}
+	front := site["index.html"]
+	for _, want := range []string{
+		`<img src="media/hero.gif" alt="hero" />`,
+		`<img src="media/hero.gif" alt="again" />`,
+		`<video controls muted playsinline preload="metadata" src="media/clip.mp4" poster="media/clip.jpg">the clip</video>`,
+		`<video controls muted playsinline preload="metadata" src="media/bare.webm">bare</video>`,
+		`<em>inline</em>`,
+		`content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'"`,
+	} {
+		if !strings.Contains(front, want) {
+			t.Errorf("the front page lacks %s:\n%s", want, front)
+		}
+	}
+	if strings.Contains(front, "data:image") {
+		t.Errorf("a site's image is inlined:\n%s", front)
+	}
+	if one := site["tutorials/01-one.html"]; !strings.Contains(one, `<img src="one/shot.png" alt="shot" />`) {
+		t.Errorf("a tutorial's image is not linked relative to its page:\n%s", one)
+	}
+}
+
+// A file a page draws is published only from inside docs, and at most maxSiteMedia bytes: a
+// symlink out of docs and a file one byte over are their alt text, and nothing is written for
+// them; a file of exactly maxSiteMedia bytes is published.
+func TestASitesMediaStayInItsFolderAndUnderTheCap(t *testing.T) {
+	outside := fixture(t, map[string]string{"secret.gif": "GIF89a-secret"})
+	docs := fixture(t, map[string]string{
+		"site.toml":           mediaMap,
+		"README.md":           "# Front\n\n![out](media/out.gif)\n\n![big](media/big.mp4)\n\n![full](media/full.mp4)\n",
+		"tutorials/README.md": "# T\n",
+	})
+	if err := os.MkdirAll(filepath.Join(docs, "media"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.gif"), filepath.Join(docs, "media", "out.gif")); err != nil {
+		t.Fatal(err)
+	}
+	for name, size := range map[string]int64{"big.mp4": export.MaxSiteMedia + 1, "full.mp4": export.MaxSiteMedia} {
+		f, err := os.Create(filepath.Join(docs, "media", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Truncate(size); err != nil { // sparse: no disk for the bytes
+			t.Fatal(err)
+		}
+		f.Close()
+	}
+	sizes := map[string]int{}
+	var front string
+	if err := export.Site(docs, export.SiteOptions{}, func(rel string, page []byte) error {
+		sizes[rel] = len(page)
+		if rel == "index.html" {
+			front = string(page)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sizes["media/out.gif"]; ok || strings.Contains(front, "media/out.gif") || !strings.Contains(front, "<em>out</em>") {
+		t.Errorf("a symlink out of docs was published (%v):\n%s", sizes, front)
+	}
+	if _, ok := sizes["media/big.mp4"]; ok || !strings.Contains(front, "<em>big</em>") {
+		t.Errorf("a video over the cap was published (%v):\n%s", sizes, front)
+	}
+	if sizes["media/full.mp4"] != int(export.MaxSiteMedia) || !strings.Contains(front, `src="media/full.mp4"`) {
+		t.Errorf("a video of exactly the cap was not published (%v):\n%s", sizes, front)
+	}
+}
+
+// A page on its own, with no Media, is as it was: its image a data: URI, a video its alt text, and
+// the policy loading nothing but data: images.
+func TestAPageOnItsOwnKeepsItsMediaInline(t *testing.T) {
+	dir := fixture(t, map[string]string{"note.md": "# N\n\n![pic](pic.gif)\n\n![clip](clip.mp4)\n", "pic.gif": "GIF89a", "clip.mp4": "mp4"})
+	html, err := export.RenderWith([]byte("# N\n\n![pic](pic.gif)\n\n![clip](clip.mp4)\n"), export.HTML, "dark",
+		export.Options{Document: filepath.Join(dir, "note.md")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, want := range []string{`<img src="data:image/gif;base64,`, `<em>clip</em>`,
+		`content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %s:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "<video") || strings.Contains(page, "media-src") {
+		t.Errorf("a page on its own has a video or a media policy:\n%s", page)
+	}
+}

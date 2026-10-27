@@ -22,6 +22,10 @@ import (
 // the sections and the current section's pages, and its previous and next pages) and Chart. The
 // pages are handed to the caller's write: the package still reads only.
 
+// maxSiteMedia is the most a file a site's page draws (an image, a video, a poster) may hold to be
+// published: a larger one is drawn as its alt text. It bounds what a stray file costs the site.
+const maxSiteMedia = 64 << 20
+
 // SiteOptions are a site build's inputs besides its folder.
 type SiteOptions struct {
 	Theme string                                          // one of Themes; "" is site.toml's, else dark
@@ -60,7 +64,9 @@ type sitePage struct {
 }
 
 // Site builds the site docs/site.toml describes, handing each page and its path in the site to
-// write, and ".nojekyll" last, so GitHub Pages serves the site as it is. It writes nothing itself.
+// write, each image or video a page draws at its path under docs (once, however many pages draw
+// it; publishMedia), and ".nojekyll" last, so GitHub Pages serves the site as it is. It writes
+// nothing itself.
 func Site(docs string, opts SiteOptions, write func(rel string, page []byte) error) error {
 	docs, err := filepath.Abs(docs)
 	if err != nil {
@@ -97,6 +103,8 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 		byRel[pg.rel] = pg.source
 		byFile[pg.source] = pg.rel
 	}
+	published := map[string]bool{} // the media written, by their paths in the site
+	var mediaErr error
 	for i, pg := range pages {
 		src, err := os.ReadFile(pg.source)
 		if err != nil {
@@ -107,7 +115,17 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 			Links:    linksFrom(pg, byFile, docs, cfg.Source),
 			Chrome:   chromeFor(cfg, pages, i),
 			Chart:    opts.Chart,
+			Media: func(file string) (string, bool) {
+				rel, ok := publishMedia(file, real, byRel, published, write, &mediaErr)
+				if !ok {
+					return "", false
+				}
+				return relPath(pg.rel, rel), true
+			},
 		})
+		if mediaErr != nil {
+			return mediaErr
+		}
 		if err != nil {
 			return fmt.Errorf("site: %s: %w", pg.source, err)
 		}
@@ -116,6 +134,43 @@ func Site(docs string, opts SiteOptions, write func(rel string, page []byte) err
 		}
 	}
 	return write(".nojekyll", nil)
+}
+
+// publishMedia writes file, a file a page draws, at its path under the docs folder (real, its
+// symlinks resolved), once however many pages draw it, and answers that path. It refuses a file
+// that is not under docs once its links are followed, is no regular file, is over maxSiteMedia, or
+// would take a page's path. A failed write is kept in werr, which ends the build.
+func publishMedia(file, real string, pages map[string]string, published map[string]bool,
+	write func(rel string, page []byte) error, werr *error) (string, bool) {
+	r, err := filepath.EvalSymlinks(file)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(real, r)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", false
+	}
+	site := filepath.ToSlash(rel)
+	if published[site] {
+		return site, true
+	}
+	if _, page := pages[site]; page {
+		return "", false
+	}
+	info, err := os.Stat(r)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxSiteMedia {
+		return "", false
+	}
+	data, err := os.ReadFile(r)
+	if err != nil || len(data) > maxSiteMedia {
+		return "", false
+	}
+	if err := write(site, data); err != nil {
+		*werr = err
+		return "", false
+	}
+	published[site] = true
+	return site, true
 }
 
 // readSiteMap reads docs/site.toml and checks it: no key it does not know, a section's path inside

@@ -35,6 +35,18 @@ A diagram or a table is drawn when it is its paragraph's only content. A file th
 large (1 MiB for a diagram or table, 6 MiB for an image, 32 MiB of images per page) or of another
 kind is shown as its alt text.
 
+**A site's page** (`Site`, or `Options.Media` set) publishes its media rather than inlining them:
+- an image is written as a file at its path under the docs folder, and linked from the page;
+- a video (`.mp4`, `.webm`) alone in its paragraph is drawn as
+  `<video controls muted playsinline preload="metadata">`, its source written the same way. A
+  `.jpg` of the same name beside it is its poster;
+- each file is written once, however many pages draw it. One over 64 MiB (`maxSiteMedia`), or out
+  of the docs folder once its links are followed, is shown as its alt text;
+- the page's policy adds `img-src 'self'` and `media-src 'self'`.
+
+A page on its own (no `Options.Media`) is unchanged: its images are `data:` URIs, and a video is its
+alt text.
+
 Text drops frontmatter, link reference definitions and raw
 HTML, keeps code blocks as written, and ignores the theme.
 
