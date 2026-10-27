@@ -405,6 +405,9 @@ type Options struct {
 	// disk of a note read as Markdown, or "" for any other document: a window build's Rendered view
 	// draws the note's embeds from it. nil: nothing is told.
 	NoteFile func(path string)
+	// NoteTranslator is told the host's trf as the host is made: a window build's Rendered view
+	// composes its notices with it, in the UI's language. nil: nothing is told.
+	NoteTranslator func(trf func(id string, args ...any) string)
 	// Fonts are the window's fonts (--gui's backend); nil in a terminal. FontFamilies lists the
 	// installed families, and DefaultCellFont is the cell font the window draws in by default.
 	Fonts           FontControl
@@ -452,6 +455,9 @@ func newHost(session *Session, opt Options) *Host {
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
+	if opt.NoteTranslator != nil {
+		opt.NoteTranslator(h.trf)
+	}
 	// buffer 1 is the page from the start; attach gives it the editor's own buffer
 	first := h.newBuffer()
 	first.buf = nil

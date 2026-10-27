@@ -3799,6 +3799,18 @@ WHAT A KEY NEEDS
         <source>you didn't start %1</source>
         <translation>%1 を起動しませんでした</translation>
     </message>
+    <message id="autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view">
+        <source>chart not drawn: %1. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>チャートを描画できません: %1。ソースは「そのまま」表示か、.chart.json ファイルにあります。</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie">
+        <source>diagram not drawn: %1. Its source is in the Raw view, or in its .mmd file.</source>
+        <translation>図を描画できません: %1。ソースは「そのまま」表示か、.mmd ファイルにあります。</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc">
+        <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>この Vega-Lite チャートは AutoDoc ではまだサポートされていません。ソースは「そのまま」表示か、.chart.json ファイルにあります。</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>右クリックメニューは画面上のカーソル位置に開きます: カーソルが見えるまでスクロールしてください</translation>

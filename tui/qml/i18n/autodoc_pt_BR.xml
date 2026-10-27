@@ -3801,6 +3801,18 @@ O QUE UMA TECLA PRECISA
         <source>you didn't start %1</source>
         <translation>você não iniciou %1</translation>
     </message>
+    <message id="autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view">
+        <source>chart not drawn: %1. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>gráfico não desenhado: %1. O código-fonte está na vista Bruto ou no arquivo .chart.json.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie">
+        <source>diagram not drawn: %1. Its source is in the Raw view, or in its .mmd file.</source>
+        <translation>diagrama não desenhado: %1. O código-fonte está na vista Bruto ou no arquivo .mmd.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc">
+        <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>O AutoDoc ainda não suporta este gráfico Vega-Lite. O código-fonte está na vista Bruto ou no arquivo .chart.json.</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>o menu do botão direito abre onde o cursor está na tela: role até ele ficar visível</translation>

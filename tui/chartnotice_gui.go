@@ -17,30 +17,48 @@ import (
 // with a reason (a kind or syntax outside its subset) is a notice of that reason the same way. A
 // syntax error never reaches it (golib draws the error in place); anything else declined with no
 // reason, and a chart that is not JSON, stay code.
-type chartNotice struct{}
-
-// nativeDiagrams is golib's native chain, as AutoDoc draws with it: a chart it declines is the notice.
-func nativeDiagrams() guiwidget.Diagrammer { return guiwidget.Diagrams(chartNotice{}) }
-
-const chartNoticeText = "This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file."
-
-// chartNoticeOf is the notice for a chart golib declined with declined: why, in its words, then
-// where the source is; with no reason given, chartNoticeText.
-func chartNoticeOf(declined error) string {
-	if declined == nil {
-		return chartNoticeText
-	}
-	return "chart not drawn: " + declined.Error() + ". Its source is in the Raw view, or in its .chart.json file."
+//
+// Its sentences are the UI's, translated whole in trf's language (the host's trf), golib's error
+// filled in as golib wrote it; with trf nil, English.
+type chartNotice struct {
+	trf func(id string, args ...any) string
 }
 
-func (chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ func()) guiwidget.DiagramAnswer {
-	var text string
+// nativeDiagrams is golib's native chain, as AutoDoc draws with it: a chart it declines is the
+// notice, in trf's language.
+func nativeDiagrams(trf func(id string, args ...any) string) guiwidget.Diagrammer {
+	return guiwidget.Diagrams(chartNotice{trf})
+}
+
+// The notice's sentences: a chart golib declined with no reason, a chart it declined with one, and
+// a Mermaid diagram it declined with one (%1, golib's error).
+const (
+	chartNoticeUnsupported = "autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc"
+	chartNoticeNotDrawn    = "autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view"
+	diagramNoticeNotDrawn  = "autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie"
+)
+
+// text is the notice for req, and whether it has one: a chart's, with golib's reason when it gave
+// one; a Mermaid diagram's when golib gave a reason.
+func (c chartNotice) text(req guiwidget.DiagramRequest) (string, bool) {
+	trf := c.trf
+	if trf == nil {
+		trf = inEnglish{}.Trf
+	}
 	switch {
+	case (req.Lang == "vega-lite" || req.Lang == "vegalite") && req.Declined == nil:
+		return trf(chartNoticeUnsupported), true
 	case req.Lang == "vega-lite" || req.Lang == "vegalite":
-		text = chartNoticeOf(req.Declined)
+		return trf(chartNoticeNotDrawn, req.Declined.Error()), true
 	case req.Lang == "mermaid" && req.Declined != nil:
-		text = "diagram not drawn: " + req.Declined.Error() + ". Its source is in the Raw view, or in its .mmd file."
-	default:
+		return trf(diagramNoticeNotDrawn, req.Declined.Error()), true
+	}
+	return "", false
+}
+
+func (c chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ func()) guiwidget.DiagramAnswer {
+	text, ok := c.text(req)
+	if !ok {
 		return guiwidget.DiagramAnswer{State: guiwidget.Declined}
 	}
 	th := req.Theme
