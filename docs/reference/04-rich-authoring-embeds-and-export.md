@@ -87,7 +87,7 @@ AutoDoc draws a chart with golib's `gui/vegalite`, and what it draws is golib's 
 A chart outside the subset is not drawn, and AutoDoc says why in golib's words. An export (`--export html`, or a site) writes the chart's spec as code, with a caption above it:
 
 ```text
-chart not drawn: vegalite: a spec outside the subset drawn: a rule coloured by a field
+chart not drawn: unsupported: vegalite: a spec outside the subset drawn: a rule coloured by a field
 ```
 
 A build without the GUI draws no chart in an export, so its charts are their specs, with no caption.
