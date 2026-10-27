@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -388,7 +389,7 @@ func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
 		r.openByPicker(t, p)
 		r.waitFile(t, p)
 	}
-	passes := func() int { return onLoop(r, func() int { return r.h.labelPasses }) }
+	passes := countLabelPasses(t)
 	before := passes()
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
@@ -412,9 +413,9 @@ func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
 // square: eight times the buffers take well under the 64 times a pass over every pair would.
 func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
 	h := bufferCardHostN(1600)
-	before := h.labelPasses
+	passes := countLabelPasses(t)
 	h.bufferCardText()
-	if got := h.labelPasses - before; got != 1 {
+	if got := passes(); got != 1 {
 		t.Errorf("the card made %d passes over 1600 buffers' labels, want 1", got)
 	}
 	cost := func(n int) float64 {
@@ -436,6 +437,14 @@ func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
 	if ratio := large / small; ratio > 24 {
 		t.Errorf("1600 buffers' card costs %.0f times 200's (%.0f ns against %.0f): a pass grows with the square of the buffers", ratio, large, small)
 	}
+}
+
+// countLabelPasses counts bufferTabLabels' passes from now until the test ends (labelsResolved).
+func countLabelPasses(t *testing.T) func() int64 {
+	var n atomic.Int64
+	labelsResolved = func() { n.Add(1) }
+	t.Cleanup(func() { labelsResolved = nil })
+	return n.Load
 }
 
 // bufferCardHostN is a host with its catalog and n buffers, files of distinct short names.

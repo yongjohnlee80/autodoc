@@ -57,19 +57,17 @@ import (
 type Host struct {
 	p        *tuidecl.Program
 	session  *Session
-	reg      *registry  // the features, merged (feature.go)
-	cat      *catalog   // the user commands, every source's (catalog.go): the registry's
-	asker    *asker     // the one yes-or-no question (ask.go)
-	prefRows []PrefSpec // every preference declared, the host's and the features' (prefspec.go)
-	keys     keyset     // the keys and their cards, the host's and the features' (keys.go)
-	// labelPasses counts bufferTabLabels' passes over the buffers, for the cells (bufferkeys_test.go)
-	labelPasses int
-	started     bool               // the first preferences were applied: the program has started (applyPrefs)
-	editor      editorWidget       // main.qml's Editor, terminal or native (editor.go)
-	core        *widget.EditorCore // its core: the text, the cursor and the modes
-	gui         bool               // in a window (Options.GUI): the theme kept is gui.theme
-	ctx         context.Context
-	cancel      context.CancelFunc
+	reg      *registry          // the features, merged (feature.go)
+	cat      *catalog           // the user commands, every source's (catalog.go): the registry's
+	asker    *asker             // the one yes-or-no question (ask.go)
+	prefRows []PrefSpec         // every preference declared, the host's and the features' (prefspec.go)
+	keys     keyset             // the keys and their cards, the host's and the features' (keys.go)
+	started  bool               // the first preferences were applied: the program has started (applyPrefs)
+	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
+	core     *widget.EditorCore // its core: the text, the cursor and the modes
+	gui      bool               // in a window (Options.GUI): the theme kept is gui.theme
+	ctx      context.Context
+	cancel   context.CancelFunc
 
 	// todoNoted are the workspaces' todo_excluded already said this session, by name and patterns
 	todoNoted map[string]bool
