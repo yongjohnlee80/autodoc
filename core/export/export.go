@@ -106,7 +106,7 @@ func DiagramPage(source, theme string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 	}
-	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true, chartsOn{}, nil), nil
+	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true, chartsOn{}, nil, false), nil
 }
 
 // mermaidBlock is a mermaid fence as the renderer writes it: its pre's attributes (data-src, with
@@ -158,6 +158,13 @@ type Options struct {
 	// captioned "chart not drawn: <the error>" (chartFallback). nil keeps every spec, uncaptioned.
 	// The GUI build gives one (golib's gui/vegalite); core/export draws none of its own.
 	Chart func(spec []byte, theme string) (svg string, err error)
+	// Media publishes a file an embed draws, for a page with somewhere to put it: a site
+	// (site.go). It is handed the file's path on disk and answers the URL the page links it at, or
+	// false to draw the embed as its alt text. With Media, an image is linked rather than inlined
+	// as a data: URI, a video (.mp4, .webm) alone in its paragraph is drawn as a <video>, and the
+	// page's policy lets it load images and media from its own site. nil: a page on its own, every
+	// image inlined and every video its alt text.
+	Media func(file string) (url string, ok bool)
 }
 
 // Chrome is a site page's frame, drawn by the page in its palette: the site's title, the
@@ -217,7 +224,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		chart := chartIn(options.Chart, theme, &charts)
 		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
 		if embedder != nil {
-			embedder.chart = chart
+			embedder.chart, embedder.media = chart, options.Media
 			defer embedder.close()
 		}
 		mapLink := options.Links
@@ -304,7 +311,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 			}
 			return `<div class="embed"` + m[1] + `>` + table + `</div>`
 		})
-		return page(colors, rendered, diagrams, false, charts, options.Chrome), nil
+		return page(colors, rendered, diagrams, false, charts, options.Chrome, options.Media != nil), nil
 	case Text:
 		var output bytes.Buffer
 		writeText(&output, document.Root, document.Source)
@@ -319,7 +326,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 // of them is as it always was; a diagram page
 // has the diagram alone, at its own size. A chrome puts a site's sidebar beside the
 // body and its previous and next pages under it, in the same palette and under the same policy.
-func page(colors palette, body string, diagrams, diagramPage bool, charts chartsOn, chrome *Chrome) []byte {
+func page(colors palette, body string, diagrams, diagramPage bool, charts chartsOn, chrome *Chrome, media bool) []byte {
 	var output bytes.Buffer
 	output.WriteString("<!doctype html>\n<html lang=\"en\"")
 	if diagrams {
@@ -330,6 +337,10 @@ func page(colors palette, body string, diagrams, diagramPage bool, charts charts
 	}
 	output.WriteString("><head><meta charset=\"utf-8\">\n")
 	policy := "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+	if media {
+		// a site's page links its images and videos, published beside it (Options.Media)
+		policy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'"
+	}
 	if diagrams {
 		policy += "; script-src " + scriptPolicy()
 	}

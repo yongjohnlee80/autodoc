@@ -57,13 +57,18 @@ var imageTypes = map[string]string{
 	".svg": "image/svg+xml", ".webp": "image/webp", ".avif": "image/avif", ".bmp": "image/bmp",
 }
 
+// videoTypes are the video files a site's page draws as a <video> (Options.Media), by extension.
+var videoTypes = map[string]bool{".mp4": true, ".webm": true}
+
 // embedder draws a document's embeds: its folder, opened as a root, and its resources folder's name.
 type embedder struct {
 	root      *os.Root
+	dir       string // the document's folder, the root's path on disk
 	resources string
 	fit       tableFit
 	images    int64                             // the images' bytes so far, against maxEmbedImages
 	chart     func(spec []byte) (string, error) // Options.Chart in the page's theme; nil: the spec
+	media     func(file string) (string, bool)  // Options.Media; nil: images inlined, videos their alt text
 }
 
 // newEmbedder is the embedder for the document at doc; nil when there is none ("") or its folder
@@ -88,7 +93,7 @@ func newEmbedder(doc string, fit tableFit) *embedder {
 			break
 		}
 	}
-	return &embedder{root: root, resources: name, fit: fit}
+	return &embedder{root: root, dir: filepath.Dir(abs), resources: name, fit: fit}
 }
 
 func (e *embedder) close() { e.root.Close() }
@@ -104,6 +109,17 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 	ext := strings.ToLower(path.Ext(p))
 	mime, image := imageTypes[ext]
 	switch {
+	case image && e.media != nil:
+		href, ok := e.publish(p)
+		if !ok {
+			return "", false, false, false
+		}
+		return `<img src="` + stdhtml.EscapeString(href) + `" alt="` + stdhtml.EscapeString(alt) + `" />`, false, false, true
+	case videoTypes[ext]:
+		if e.media == nil || !block {
+			return "", false, false, false
+		}
+		return e.video(p, alt)
 	case image:
 		data, ok := e.read(p, min(maxEmbedImage, maxEmbedImages-e.images))
 		if !ok {
@@ -212,6 +228,52 @@ func (e *embedder) read(p string, limit int64) ([]byte, bool) {
 		}
 	}
 	return nil, false
+}
+
+// locate is where p is, beside the document or else in its resources folder, when it is a file
+// there.
+func (e *embedder) locate(p string) (string, bool) {
+	for _, candidate := range []string{p, path.Join(e.resources, p)} {
+		info, err := e.root.Stat(candidate)
+		if err == nil {
+			return candidate, info.Mode().IsRegular()
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", false // there, but refused: not looked for elsewhere
+		}
+	}
+	return "", false
+}
+
+// publish hands the file p names to Options.Media, and answers the URL the page links it at.
+func (e *embedder) publish(p string) (string, bool) {
+	found, ok := e.locate(p)
+	if !ok {
+		return "", false
+	}
+	return e.media(filepath.Join(e.dir, filepath.FromSlash(found)))
+}
+
+// video is the <video> a site's page draws for p, with alt as what a browser that plays none
+// shows. A .jpg of the same name beside it is its poster.
+func (e *embedder) video(p, alt string) (string, bool, bool, bool) {
+	found, ok := e.locate(p)
+	if !ok {
+		return "", false, false, false
+	}
+	href, ok := e.media(filepath.Join(e.dir, filepath.FromSlash(found)))
+	if !ok {
+		return "", false, false, false
+	}
+	poster := ""
+	still := strings.TrimSuffix(found, path.Ext(found)) + ".jpg"
+	if info, err := e.root.Stat(still); err == nil && info.Mode().IsRegular() {
+		if src, ok := e.media(filepath.Join(e.dir, filepath.FromSlash(still))); ok {
+			poster = ` poster="` + stdhtml.EscapeString(src) + `"`
+		}
+	}
+	return `<video controls muted playsinline preload="metadata" src="` + stdhtml.EscapeString(href) + `"` + poster + `>` +
+		stdhtml.EscapeString(alt) + `</video>`, true, false, true
 }
 
 var errTooLarge = errors.New("export: an embed is too large")
