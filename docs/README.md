@@ -15,7 +15,7 @@ terminal (`autodoc --ui`) or in a window of its own (`autodoc --gui`).
 The question is usually "where did we write that down?". AutoDoc answers it by meaning, not only by
 the words you remember.
 
-- **Search by meaning, then by order of relevance.** A search for "why did we pick SQLite" finds the
+- **Search by meaning, then by order of relevance.** A search for "why did we pick SQLite" can find the
   note that says "we chose an embedded database". Words and meaning are searched together, and a
   reranker can order the top hits again.
 - **The same search serves your AI agents.** An agent calls it with `autodoc --call search.query`
@@ -62,7 +62,7 @@ Each video plays here, muted; its controls go full screen.
 AutoDoc runs AI agents' command lines (Claude Code, Codex, OpenCode and others) in a panel of their
 own. Each starts in a folder where AutoDoc has written what it needs to know about your workspace,
 and the `autodoc` on its path reaches the same index you search. **SPC g** shows the panel;
-**SPC a** sends it the page or the selection.
+**SPC a**'s card sends it the page (**b**) or the selection (**f**).
 
 ### Search by meaning
 
