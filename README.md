@@ -154,10 +154,25 @@ workspace.
 
 ## Quick start
 
-1. **Install it.**
-   - macOS: `brew install yongjohnlee80/tap/autodoc`
-   - Linux: the `-gui` [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest)
-     for your machine (`amd64` or `arm64`). Homebrew on Linux installs the terminal UI alone.
+1. **Install it.** Each installs the one `autodoc` binary.
+
+   | How | Command |
+   | --- | --- |
+   | Homebrew (macOS) | `brew install yongjohnlee80/tap/autodoc` |
+   | **With Go, the window** | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+   | With Go, the terminal UI | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+   | mise (macOS, Linux) | `mise use -g github:yongjohnlee80/autodoc` |
+   | A release archive | the [latest release](https://github.com/yongjohnlee80/autodoc/releases/latest): `autodoc-<version>-<os>-<arch>` has the window |
+
+   - `-tags gui` is a build tag: it builds the window into the binary. `--gui` is the flag you run
+     it with (`autodoc --gui`). Without `-tags gui`, `go install` builds the terminal UI alone.
+   - `go install -tags gui` builds with cgo, so it needs a C compiler and, on Linux, the window
+     system's development libraries ([Reference, Chapter 2](docs/reference/02-quickstart-and-workspaces.md)
+     lists them). `GOBIN` puts the binary in `~/.local/bin`; keep it on your `PATH`.
+   - On Linux, mise and the plain archive are the GUI build. It needs a desktop's graphics
+     libraries (EGL, Wayland, X11) even for `autodoc --ui`. On a server or container without them,
+     use the terminal build: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'`
+     (`linux-arm64-tui` on arm64), or the `-tui` archive. Homebrew on Linux installs the terminal UI.
    - Windows: use WSL2 and a Linux method.
 2. **Start it.** `autodoc --gui` opens the window; `autodoc --ui` runs in your terminal. Either
    starts AutoDoc's background service when it isn't running.
