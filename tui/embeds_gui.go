@@ -39,10 +39,25 @@ const embedTableRows = 16
 
 // NoteEmbeds is the open note's file, which the host tells it as each document opens
 // (Options.NoteFile), and the note editor's renderer reads.
-type NoteEmbeds struct{ note atomic.Pointer[string] }
+type NoteEmbeds struct {
+	note atomic.Pointer[string]
+	tr   atomic.Pointer[func(id string, args ...any) string]
+}
 
 // SetNote is the host's NoteFile: the open note's file on disk, "" for none.
 func (n *NoteEmbeds) SetNote(path string) { n.note.Store(&path) }
+
+// SetTranslator is the host's NoteTranslator: its trf, which the Rendered view's notices are
+// composed in. Until it is told, they are English.
+func (n *NoteEmbeds) SetTranslator(trf func(id string, args ...any) string) { n.tr.Store(&trf) }
+
+// trf is the host's trf once it is told (SetTranslator), else English.
+func (n *NoteEmbeds) trf(id string, args ...any) string {
+	if f := n.tr.Load(); f != nil && *f != nil {
+		return (*f)(id, args...)
+	}
+	return inEnglish{}.Trf(id, args...)
+}
 
 func (n *NoteEmbeds) file() string {
 	if p := n.note.Load(); p != nil {
@@ -63,7 +78,7 @@ func GUIStyle(notes *NoteEmbeds, opts ...guidecl.NativeOption) tuidecl.Style {
 // noteRenderer is the note editor's renderer as GUIStyle installs it: notes' embeds, drawn through
 // golib's native chain with AutoDoc's notice for a chart it declines.
 func noteRenderer(notes *NoteEmbeds) func(tuidecl.RendererSpec) guiwidget.Renderer {
-	return notes.Renderer(nativeDiagrams())
+	return notes.Renderer(nativeDiagrams(notes.trf))
 }
 
 // Renderer makes the note editor's renderer for its NoteRenderer declaration (NoteRendererKind):

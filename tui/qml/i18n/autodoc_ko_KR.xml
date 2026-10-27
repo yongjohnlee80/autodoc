@@ -3795,6 +3795,18 @@ WHAT A KEY NEEDS
         <source>you didn't start %1</source>
         <translation>%1을(를) 시작하지 않았습니다</translation>
     </message>
+    <message id="autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view">
+        <source>chart not drawn: %1. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>차트를 그리지 못했습니다: %1. 소스는 원본 보기나 .chart.json 파일에 있습니다.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie">
+        <source>diagram not drawn: %1. Its source is in the Raw view, or in its .mmd file.</source>
+        <translation>다이어그램을 그리지 못했습니다: %1. 소스는 원본 보기나 .mmd 파일에 있습니다.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc">
+        <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>이 Vega-Lite 차트는 AutoDoc에서 아직 지원되지 않습니다. 소스는 원본 보기나 .chart.json 파일에 있습니다.</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>오른쪽 클릭 메뉴는 화면의 커서 위치에서 열립니다: 커서가 보이도록 스크롤하세요</translation>

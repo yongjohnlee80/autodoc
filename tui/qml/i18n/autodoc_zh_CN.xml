@@ -3789,6 +3789,18 @@ WHAT A KEY NEEDS
         <source>you didn't start %1</source>
         <translation>你未启动 %1</translation>
     </message>
+    <message id="autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view">
+        <source>chart not drawn: %1. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>图表未绘制：%1。其源码在原始视图中，或在其 .chart.json 文件中。</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie">
+        <source>diagram not drawn: %1. Its source is in the Raw view, or in its .mmd file.</source>
+        <translation>图示未绘制：%1。其源码在原始视图中，或在其 .mmd 文件中。</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc">
+        <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>AutoDoc 暂不支持此 Vega-Lite 图表。其源码在原始视图中，或在其 .chart.json 文件中。</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>右键菜单会在光标所在屏幕位置打开：请先将其滚动到可见区域</translation>

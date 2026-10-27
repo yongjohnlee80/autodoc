@@ -61,6 +61,9 @@ type LaunchOptions struct {
 	// NoteFile is told the open note's file as it opens (Options.NoteFile): --gui's Rendered view
 	// draws its embeds from it. nil: nothing is told.
 	NoteFile func(path string)
+	// NoteTranslator is told the host's trf (Options.NoteTranslator): --gui's Rendered view
+	// composes its notices with it. nil: nothing is told.
+	NoteTranslator func(trf func(id string, args ...any) string)
 	// Fonts, FontFamilies and DefaultCellFont are the window's fonts (Options.Fonts): --gui's.
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
@@ -170,6 +173,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		KeymapFile:      filepath.Join(filepath.Dir(configPath), "keymap.xml"),
 		ProgramOptions:  o.ProgramOptions,
 		NoteFile:        o.NoteFile,
+		NoteTranslator:  o.NoteTranslator,
 		Fonts:           o.Fonts,
 		FontFamilies:    o.FontFamilies,
 		DefaultCellFont: o.DefaultCellFont,

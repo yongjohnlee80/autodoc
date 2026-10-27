@@ -3802,6 +3802,18 @@ LO QUE NECESITA UNA TECLA
         <source>you didn't start %1</source>
         <translation>no iniciaste %1</translation>
     </message>
+    <message id="autodoc.notice.chartnotice.chart_not_drawn_s_its_source_is_in_the_raw_view">
+        <source>chart not drawn: %1. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>gráfico no dibujado: %1. Su código fuente está en la vista Sin procesar o en su archivo .chart.json.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.diagram_not_drawn_s_its_source_is_in_the_raw_vie">
+        <source>diagram not drawn: %1. Its source is in the Raw view, or in its .mmd file.</source>
+        <translation>diagrama no dibujado: %1. Su código fuente está en la vista Sin procesar o en su archivo .mmd.</translation>
+    </message>
+    <message id="autodoc.notice.chartnotice.this_vega_lite_chart_isn_t_supported_in_autodoc">
+        <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
+        <translation>AutoDoc aún no admite este gráfico de Vega-Lite. Su código fuente está en la vista Sin procesar o en su archivo .chart.json.</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>el menú contextual se abre donde está el cursor en la pantalla: desplázalo para verlo</translation>

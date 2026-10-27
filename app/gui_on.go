@@ -34,7 +34,7 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		// host tells it which note is open, and its diagrams draw through one chain, as golib's
 		// renderer's do. Every other Editor keeps golib's MarkdownRenderer.
 		notes := &tui.NoteEmbeds{}
-		o.NoteFile = notes.SetNote
+		o.NoteFile, o.NoteTranslator = notes.SetNote, notes.SetTranslator
 		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(tui.GUIStyle(notes)))
 		// gui.Main ends the process when this callback returns, so this is the last
 		// code that runs: the run's owners close here (the recording, with the TUI's

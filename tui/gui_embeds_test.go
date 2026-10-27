@@ -526,8 +526,52 @@ func TestTheChartNoticeSaysGolibsReason(t *testing.T) {
 		t.Errorf("a chart golib declined with a reason: %+v", a)
 	}
 	a = chartNotice{}.Diagram(context.Background(), guiwidget.DiagramRequest{Lang: "vega-lite", Width: 400, Scale: 1}, func() {})
-	if n, ok := a.Pic.(noticeView); !ok || n.text != chartNoticeText {
+	if n, ok := a.Pic.(noticeView); !ok || n.text != englishText(chartNoticeUnsupported) || !strings.HasPrefix(n.text, "This Vega-Lite chart isn't supported") {
 		t.Errorf("a chart declined with no reason: %+v", a)
+	}
+}
+
+// The notice is the UI's, in its language: each sentence translated whole, golib's error filled in
+// as golib wrote it. In Korean, a chart and a diagram golib declined with a reason, and a chart with
+// none, are the Korean catalog's sentences, with no English framing left.
+func TestTheChartNoticeIsInTheUIsLanguage(t *testing.T) {
+	ko := func(id string, args ...any) string {
+		text, ok := englishCatalog().Lookup("ko_KR", id)
+		if !ok {
+			t.Fatalf("%s is not in the Korean catalog", id)
+		}
+		return fill(text, args...)
+	}
+	why := errors.New("unsupported: vegalite: a spec outside the subset drawn: a rule coloured by a field")
+	for _, c := range []struct {
+		req  guiwidget.DiagramRequest
+		want string
+	}{
+		{guiwidget.DiagramRequest{Lang: "vega-lite", Declined: why}, "차트를 그리지 못했습니다: " + why.Error() + ". 소스는 원본 보기나 .chart.json 파일에 있습니다."},
+		{guiwidget.DiagramRequest{Lang: "mermaid", Declined: why}, "다이어그램을 그리지 못했습니다: " + why.Error() + ". 소스는 원본 보기나 .mmd 파일에 있습니다."},
+		{guiwidget.DiagramRequest{Lang: "vegalite"}, ko(chartNoticeUnsupported)},
+	} {
+		c.req.Width, c.req.Scale = 400, 1
+		a := chartNotice{trf: ko}.Diagram(context.Background(), c.req, func() {})
+		if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || n.text != c.want || strings.Contains(n.text, "Its source") {
+			t.Errorf("%s in Korean: %+v; want %q", c.req.Lang, a, c.want)
+		}
+	}
+
+	// the Rendered view's notices are in the host's language once it is told (the host tells
+	// NoteTranslator its trf as it is made); English before
+	notes := &NoteEmbeds{}
+	if got := notes.trf(chartNoticeUnsupported); got != englishText(chartNoticeUnsupported) {
+		t.Errorf("before the host's trf: %q", got)
+	}
+	notes.SetTranslator(ko)
+	if got := notes.trf(chartNoticeUnsupported); got != ko(chartNoticeUnsupported) {
+		t.Errorf("once told a Korean trf: %q", got)
+	}
+	var told func(id string, args ...any) string
+	newHost(NewSession("unused", nil), Options{NoteTranslator: func(trf func(string, ...any) string) { told = trf }})
+	if told == nil || told(chartNoticeUnsupported) != englishText(chartNoticeUnsupported) {
+		t.Error("the host did not tell NoteTranslator its trf")
 	}
 }
 
@@ -537,7 +581,7 @@ func TestTheChartNoticeSaysGolibsReason(t *testing.T) {
 func TestADeclinedMermaidDiagramSaysWhy(t *testing.T) {
 	_, release := gui.AcquireMeasurer(1)
 	release()
-	d := nativeDiagrams()
+	d := nativeDiagrams(nil)
 	ask := func(src string) guiwidget.DiagramAnswer {
 		t.Helper()
 		req := guiwidget.DiagramRequest{Lang: "mermaid", Src: src, Width: 400, Scale: 1, Theme: embedTheme}
