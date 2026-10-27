@@ -67,7 +67,9 @@ func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 // the tabs drawn still tell every buffer apart. They are resolved together, from facts counted once
 // (bufferTabNames), so the tabs and SPC b's card cost one pass over the buffers a change.
 func (h *Host) bufferTabLabels(w int) map[*openBuffer]string {
-	h.labelPasses++
+	if labelsResolved != nil {
+		labelsResolved()
+	}
 	names := h.bufferTabNames()
 	cut := make(map[*openBuffer]string, len(h.buffers))
 	same := map[string]int{}
@@ -85,6 +87,10 @@ func (h *Host) bufferTabLabels(w int) map[*openBuffer]string {
 	}
 	return out
 }
+
+// labelsResolved, when a test sets it, is told each pass bufferTabLabels makes over the buffers (the
+// cells count them, bufferkeys_test.go); nil in AutoDoc.
+var labelsResolved func()
 
 // bufferTabLabel is b's tab within w cells (bufferTabLabels).
 func (h *Host) bufferTabLabel(b *openBuffer, w int) string { return h.bufferTabLabels(w)[b] }
