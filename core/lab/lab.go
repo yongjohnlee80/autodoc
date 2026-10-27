@@ -63,11 +63,16 @@ func Outputs(fsys fs.FS, dir, key string) []string {
 	}
 	var out []string
 	for _, e := range entries { // fs.ReadDir sorts by name
-		name := e.Name()
-		if !e.Type().IsRegular() || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".part") {
-			continue
+		if IsOutput(e.Name(), e.Type().IsRegular()) {
+			out = append(out, path.Join(cell, e.Name()))
 		}
-		out = append(out, path.Join(cell, name))
 	}
 	return out
+}
+
+// IsOutput reports whether an entry of a cell's output folder, by its name and whether it is a
+// regular file, is one of the cell's outputs (Outputs): a file being written (".part") or hidden is
+// not one yet. A lister other than io/fs (golib vfs) applies the same rule with it.
+func IsOutput(name string, regular bool) bool {
+	return regular && !strings.HasPrefix(name, ".") && !strings.HasSuffix(name, ".part")
 }
