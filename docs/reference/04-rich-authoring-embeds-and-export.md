@@ -61,7 +61,7 @@ You store each diagram in your note's companion directory (`<note-stem>/diagram.
 A diagram is drawn by one of two renderers, and they don't support the same things:
 
 - **An export** (`--export html`, a site) writes the diagram's source into the page with the vendored **mermaid.js**, which the reader's browser runs: full Mermaid. A diagram mermaid.js can't draw shows mermaid's own error in place.
-- **The GUI** (`--gui`, the Rendered view, `Ctrl+T`) draws with **golib's native engine** (`golib/parse/mermaid` and `golib/gui/mermaid`), with no browser. (The HTML preview pane uses mermaid.js when it finds a browser, and golib's engine otherwise.) It draws a subset of Mermaid: the kinds and the syntax its package documentation lists. That documentation is the reference: [`golib/parse/mermaid`](https://pkg.go.dev/github.com/yongjohnlee80/golib/parse/mermaid). AutoDoc keeps no list of its own, which would fall behind golib's.
+- **The GUI** (`--gui`, the Rendered view, `Ctrl+T`) draws with **golib's native engine** (`golib/parse/mermaid` and `golib/gui/mermaid`), with no browser. (The HTML preview pane uses mermaid.js when it finds a browser, and golib's engine otherwise.) It draws a subset of Mermaid. `autodoc --diagram-reference` prints the kinds it draws, and the first word that starts each, read from golib's own tables, so the list is always this build's. Within a kind, the syntax drawn is in golib's package documentation: [`golib/parse/mermaid`](https://pkg.go.dev/github.com/yongjohnlee80/golib/parse/mermaid).
 
 So a diagram can draw in an export and not in the GUI. In the GUI:
 
@@ -78,7 +78,7 @@ For quantitative benchmarks, latency distributions, and time-series metrics, Aut
 
 ### What It Draws: golib's Subset
 
-AutoDoc draws a chart with golib's `gui/vegalite`, and what it draws is golib's subset. That package's documentation lists the marks, data, encodings, layers, scales and parameters it draws, and it is the reference: [`golib/gui/vegalite`](https://pkg.go.dev/github.com/yongjohnlee80/golib/gui/vegalite). AutoDoc keeps no list of its own, which would fall behind golib's.
+AutoDoc draws a chart with golib's `gui/vegalite`, and what it draws is golib's subset. `autodoc --diagram-reference` prints it, read from the tables golib's reader checks a spec against: the marks, channels, field types, scale types and aggregates, layers, the limits, and the other keys taken in each place. It needs the GUI build, and exits 3 without it. The package documentation explains the subset: [`golib/gui/vegalite`](https://pkg.go.dev/github.com/yongjohnlee80/golib/gui/vegalite).
 
 A chart outside the subset is not drawn, and AutoDoc says why in golib's words. An export (`--export html`, or a site) writes the chart's spec as code, with a caption above it:
 

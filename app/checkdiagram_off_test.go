@@ -15,3 +15,11 @@ func TestCheckDiagramNeedsTheGUIBuild(t *testing.T) {
 		t.Fatalf("without the GUI: %d %s", code, out)
 	}
 }
+
+// --diagram-reference reads golib/gui, which the build without the GUI has not: it says so, and
+// exits 3, as --check-diagram does.
+func TestDiagramReferenceNeedsTheGUIBuild(t *testing.T) {
+	if code, out := runMain(t, nil, "--diagram-reference"); code != diagramsNoGUI || !strings.Contains(out, "needs the GUI build") {
+		t.Fatalf("without the GUI: %d %s", code, out)
+	}
+}

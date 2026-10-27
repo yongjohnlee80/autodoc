@@ -85,3 +85,26 @@ func TestCheckDiagramWithoutFiles(t *testing.T) {
 		t.Fatalf("no file: %d %s", code, out)
 	}
 }
+
+// The reference writes what it is given: each Mermaid kind with its keywords, each Vega-Lite list,
+// the layers and limits, and the taken keys by place, in name order.
+func TestTheDiagramReferenceWritesTheSubset(t *testing.T) {
+	var out strings.Builder
+	writeDiagramReference(&out, drawnSubset{
+		kinds: []drawnKind{{"flowchart", []string{"flowchart", "graph"}}, {"timeline", []string{"timeline"}}},
+		marks: []string{"bar", "line"}, channels: []string{"x", "y"}, fieldTypes: []string{"nominal"},
+		scaleTypes: []string{"linear"}, aggs: []string{"sum"}, layers: true, maxRows: 10, maxBands: 2, maxSeries: 3,
+		passed: map[string][]string{"top": {"$schema"}, "axis": {"labelAngle", "orient"}},
+	})
+	text := out.String()
+	for _, want := range []string{
+		"## Mermaid", "- flowchart: `flowchart`, `graph`\n", "- timeline: `timeline`\n",
+		"## Vega-Lite", "- Marks: `bar`, `line` ", "- Channels: `x`, `y` ", "- Field types: `nominal`\n",
+		"- Scale types: `linear`\n", "- Aggregates: `sum` ", "- Layers: drawn", "- Limits: 10 rows of data, 2 categories on a discrete axis, 3 colour series",
+		"- axis: `labelAngle`, `orient`\n- top: `$schema`\n", "autodoc --check-diagram",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the reference lacks %q:\n%s", want, text)
+		}
+	}
+}
