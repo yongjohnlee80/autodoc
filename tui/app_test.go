@@ -361,6 +361,14 @@ func attached(t *testing.T, d *daemon) *running {
 func (r *running) connected(t *testing.T) {
 	t.Helper()
 	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.prefsIn(t)
+}
+
+// prefsIn waits for the store's preferences to be read and applied (loadPrefs). A cell that sets
+// h.prefs itself must wait for them first, or the store's answer, arriving later, replaces its
+// setting.
+func (r *running) prefsIn(t *testing.T) {
+	t.Helper()
 	r.s.WaitFor(t, "the store's preferences in", func(string) bool { return onLoop(r, func() bool { return r.h.luaPrefsRead }) })
 }
 

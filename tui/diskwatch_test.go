@@ -28,6 +28,7 @@ func onDisk(t *testing.T, opt Options) (*running, string) {
 	opt.Workspace = "alpha"
 	r := runTUI(t, NewSession(d.sock, nil), opt)
 	r.s.WaitForText(t, "· alpha")
+	r.prefsIn(t) // the cells set h.prefs (diskReload): the store's answer must be in before they do
 	return r, root
 }
 

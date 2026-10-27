@@ -242,6 +242,7 @@ func TestAnAgentActsOnABufferNotShown(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: sockDir, LuaDir: luaDir})
 	r.waitListed(t, 3)
+	r.prefsIn(t) // the cell sets h.prefs (luaGrants)
 	r.openByPicker(t, "c.md")
 	r.waitFile(t, "c.md")
 	r.openByPicker(t, "a.md")
