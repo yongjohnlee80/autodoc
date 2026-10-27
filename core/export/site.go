@@ -24,8 +24,8 @@ import (
 
 // SiteOptions are a site build's inputs besides its folder.
 type SiteOptions struct {
-	Theme string                                         // one of Themes; "" is site.toml's, else dark
-	Chart func(spec []byte, theme string) (string, bool) // Options.Chart for every page; nil: specs
+	Theme string                                          // one of Themes; "" is site.toml's, else dark
+	Chart func(spec []byte, theme string) (string, error) // Options.Chart for every page; nil: specs
 }
 
 // siteMap is docs/site.toml.
@@ -372,15 +372,28 @@ const chromeStyle = "body{max-width:none;margin:0;padding:0}" +
 	".pager{display:flex;justify-content:space-between;gap:1rem;margin-top:3rem;padding-top:1rem;border-top:1px solid var(--border)}" +
 	"@media (max-width:48rem){.site{display:block}.site-nav{width:auto;border-right:0;border-bottom:1px solid var(--border)}}"
 
-// chartIn is chart in theme, for the embedder and the fences, setting *drawn once it draws one; nil
-// when there is none.
-func chartIn(chart func(spec []byte, theme string) (string, bool), theme string, drawn *bool) func([]byte) (string, bool) {
+// chartsOn is what a page's charts need of its style: one drawn (their sizing), one not (their
+// captions' style).
+type chartsOn struct{ drawn, failed bool }
+
+// chartIn is chart in theme, for the embedder and the fences, noting in *on each it draws and each
+// it cannot; nil when there is none.
+func chartIn(chart func(spec []byte, theme string) (string, error), theme string, on *chartsOn) func([]byte) (string, error) {
 	if chart == nil {
 		return nil
 	}
-	return func(spec []byte) (string, bool) {
-		svg, ok := chart(spec, theme)
-		*drawn = *drawn || ok
-		return svg, ok
+	return func(spec []byte) (string, error) {
+		svg, err := chart(spec, theme)
+		on.drawn = on.drawn || err == nil
+		on.failed = on.failed || err != nil
+		return svg, err
 	}
+}
+
+// chartFallback is a chart Chart could not draw: a caption saying why, in its words, escaped (they
+// can quote the spec), above the <pre class="vega-lite"> of its spec (already escaped), whose attrs
+// (a fence's data-src) it keeps.
+func chartFallback(err error, attrs, spec string) string {
+	return `<p class="chart-error">chart not drawn: ` + stdhtml.EscapeString(err.Error()) + `</p>` +
+		`<pre class="vega-lite"` + attrs + `>` + spec + `</pre>`
 }
