@@ -59,7 +59,7 @@ The packages and their jobs are in [architecture §2](docs/architecture.md#2-pac
 | --- | --- |
 | A package has a `doc.go` (what it is, its concurrency claim) and a `README.md` | review |
 | Constructors are `New(required…, opts ...Option)`; `ctx` comes first on any I/O | review |
-| **No direct I/O in new `core/` code.** A filesystem operation goes through golib `vfs`. Known deviations remain: `core/store`'s SQLite plumbing (the lease, the key slot) and `core/export`'s site and embed reading the local disk. A change does not extend them, and moves one when it touches it | review |
+| **No direct I/O in new `core/` code.** A filesystem operation goes through golib `vfs`. Known deviations remain: `core/store`'s SQLite plumbing (the lease, the key slot) and `core/export`'s site reading its pages and folders from the local disk (its embeds and a site's media read through `vfs/local`). A change does not extend them, and moves one when it touches it | review |
 | **Data access goes through `core/store`** (or `core/pgstore`). Nowhere else imports `golib/dao/sqlite` or runs SQL | `core/store/source_test.go` `TestNoDataAccessOutsideTheStore` |
 | A table a workspace owns has a scope accessor, and every accessor and join stays inside its workspace | `core/index/tables_test.go`, `core/store/store_test.go` |
 | Time comes from the injected clock: no `time.Now()` in logic | review |
