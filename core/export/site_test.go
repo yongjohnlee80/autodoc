@@ -1,6 +1,7 @@
 package export_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -137,9 +138,9 @@ func TestASitesEmbedsAreDrawn(t *testing.T) {
 		t.Fatalf("the embeds are not drawn:\n%s", b)
 	}
 	var themes []string
-	charted := build(t, docs, export.SiteOptions{Theme: "light", Chart: func(spec []byte, theme string) (string, bool) {
+	charted := build(t, docs, export.SiteOptions{Theme: "light", Chart: func(spec []byte, theme string) (string, error) {
 		themes = append(themes, theme)
-		return `<svg data-chart="` + string(rune('0'+len(spec)%10)) + `"></svg>`, true
+		return `<svg data-chart="` + string(rune('0'+len(spec)%10)) + `"></svg>`, nil
 	}})
 	for _, p := range []string{"reference/02-b.html", "tutorials/02-second.html"} {
 		if s := charted[p]; !strings.Contains(s, `<div class="embed chart"`) || !strings.Contains(s, "<svg data-chart") || strings.Contains(s, `class="vega-lite"`) {
@@ -148,6 +149,14 @@ func TestASitesEmbedsAreDrawn(t *testing.T) {
 	}
 	if len(themes) != 2 || themes[0] != "light" {
 		t.Errorf("Chart was asked in %q, want the site's theme twice", themes)
+	}
+	failing := build(t, docs, export.SiteOptions{Chart: func([]byte, string) (string, error) {
+		return "", errors.New("a bar of temporal x and quantitative y")
+	}})
+	for _, p := range []string{"reference/02-b.html", "tutorials/02-second.html"} {
+		if s := failing[p]; !strings.Contains(s, `<p class="chart-error">chart not drawn: a bar of temporal x and quantitative y</p><pre class="vega-lite"`) {
+			t.Errorf("%s: a chart Chart cannot draw is not captioned with why:\n%s", p, s)
+		}
 	}
 }
 

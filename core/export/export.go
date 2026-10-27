@@ -106,7 +106,7 @@ func DiagramPage(source, theme string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 	}
-	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true, false, nil), nil
+	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true, chartsOn{}, nil), nil
 }
 
 // mermaidBlock is a mermaid fence as the renderer writes it: its pre's attributes (data-src, with
@@ -152,10 +152,12 @@ type Options struct {
 	Links func(dest string) (url string, ok bool)
 	// Chrome is the frame around the body: a site's sidebar and previous/next. nil: a bare page.
 	Chrome *Chrome
-	// Chart draws a Vega-Lite spec as inline SVG in the page's theme; nil, or ok false, keeps the
-	// <pre class="vega-lite"> of its spec. It draws a .chart.json embed and a vega-lite fence. The
-	// GUI build gives one (golib's gui/vegalite); core/export draws none of its own.
-	Chart func(spec []byte, theme string) (svg string, ok bool)
+	// Chart draws a Vega-Lite spec as inline SVG in the page's theme. It draws a .chart.json embed
+	// and a vega-lite fence. Its error says why it could not (golib's gui/vegalite's own words, a
+	// chart outside its subset): the spec is then the <pre class="vega-lite"> it is without Chart,
+	// captioned "chart not drawn: <the error>" (chartFallback). nil keeps every spec, uncaptioned.
+	// The GUI build gives one (golib's gui/vegalite); core/export draws none of its own.
+	Chart func(spec []byte, theme string) (svg string, err error)
 }
 
 // Chrome is a site page's frame, drawn by the page in its palette: the site's title, the
@@ -211,7 +213,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		digest := sha256.Sum256(source)
 		placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
 		var resolved []string
-		charts := false // a chart drawn as SVG, whose sizing the page then carries
+		var charts chartsOn // a chart drawn, whose sizing the page then carries, or captioned
 		chart := chartIn(options.Chart, theme, &charts)
 		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
 		if embedder != nil {
@@ -285,9 +287,11 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		rendered = chartBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			m := chartBlock.FindStringSubmatch(block)
 			if chart != nil {
-				if svg, ok := chart([]byte(stdhtml.UnescapeString(m[2]))); ok {
+				svg, err := chart([]byte(stdhtml.UnescapeString(m[2])))
+				if err == nil {
 					return `<div class="embed chart"` + m[1] + `>` + svg + `</div>`
 				}
+				return chartFallback(err, m[1], m[2])
 			}
 			return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
 		})
@@ -310,11 +314,12 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 	}
 }
 
-// page is a whole HTML document of body in colors, with the diagrams' script when it has any and
-// the charts' sizing when it draws any, so a page with neither is as it always was; a diagram page
+// page is a whole HTML document of body in colors, with the diagrams' script when it has any, the
+// charts' sizing when it draws any and their captions' style when it has any, so a page with none
+// of them is as it always was; a diagram page
 // has the diagram alone, at its own size. A chrome puts a site's sidebar beside the
 // body and its previous and next pages under it, in the same palette and under the same policy.
-func page(colors palette, body string, diagrams, diagramPage, charts bool, chrome *Chrome) []byte {
+func page(colors palette, body string, diagrams, diagramPage bool, charts chartsOn, chrome *Chrome) []byte {
 	var output bytes.Buffer
 	output.WriteString("<!doctype html>\n<html lang=\"en\"")
 	if diagrams {
@@ -343,8 +348,11 @@ func page(colors palette, body string, diagrams, diagramPage, charts bool, chrom
 		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
 		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")
 		output.WriteString("img{max-width:100%}div.embed{margin:1rem 0;overflow:auto}")
-		if charts {
+		if charts.drawn {
 			output.WriteString("div.chart svg{max-width:100%;height:auto}")
+		}
+		if charts.failed {
+			output.WriteString("p.chart-error{margin:1rem 0 .3rem;color:var(--muted);font-style:italic}")
 		}
 		if chrome != nil {
 			output.WriteString(chromeStyle)

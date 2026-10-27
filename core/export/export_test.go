@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -643,8 +644,10 @@ func TestChartsAndCSVFencesAreDrawn(t *testing.T) {
 	}
 }
 
-// Without a chart drawn, a page is what an export without Chart writes, byte for byte, with no
-// chart sizing in its style: Chart nil, or one that draws nothing. A chart drawn adds the sizing.
+// Without a chart drawn, a page is what an export without Chart writes, with no chart sizing in its
+// style. A Chart that cannot draw adds only, to each chart, a caption saying why in its words,
+// escaped, and the captions' style: taken out, the page is byte for byte the one without Chart. A
+// chart drawn adds the sizing.
 func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
 	doc := embedDoc(t, map[string]string{
 		"docs/plan/sales.chart.json": "{\"mark\": \"bar\"}\n",
@@ -652,7 +655,7 @@ func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
 		"docs/plan/rows.csv":         "h,v\na,1\n",
 	})
 	source := []byte("# Plan\n\n![flow](flow.mmd)\n\n![rows](rows.csv)\n\n![sales](sales.chart.json)\n\n```vega-lite\n{\"mark\": \"line\"}\n```\n")
-	render := func(chart func([]byte, string) (string, bool)) string {
+	render := func(chart func([]byte, string) (string, error)) string {
 		t.Helper()
 		content, err := export.RenderWith(source, export.HTML, "light", export.Options{Document: doc, Chart: chart})
 		if err != nil {
@@ -664,10 +667,20 @@ func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
 	if strings.Contains(plain, "div.chart") {
 		t.Errorf("a page with no chart drawn has the charts' sizing:\n%s", plain)
 	}
-	if failed := render(func([]byte, string) (string, bool) { return "", false }); failed != plain {
-		t.Errorf("a Chart that draws nothing changed the page:\n%s\nwant\n%s", failed, plain)
+	if strings.Contains(plain, "chart-error") {
+		t.Errorf("a page with no Chart has a chart caption:\n%s", plain)
 	}
-	if drawn := render(func([]byte, string) (string, bool) { return "<svg></svg>", true }); !strings.Contains(drawn, "div.chart svg{max-width:100%;height:auto}") {
+	failed := render(func([]byte, string) (string, error) { return "", errors.New(`a rule coloured by a field <"s">`) })
+	caption := `<p class="chart-error">chart not drawn: a rule coloured by a field &lt;&#34;s&#34;&gt;</p>`
+	style := "p.chart-error{margin:1rem 0 .3rem;color:var(--muted);font-style:italic}"
+	if n := strings.Count(failed, caption+`<pre class="vega-lite">`); n != 2 || !strings.Contains(failed, style) {
+		t.Errorf("a Chart that cannot draw: %d captions above their specs (want 2, the embed and the fence), the style %v:\n%s",
+			n, strings.Contains(failed, style), failed)
+	}
+	if bare := strings.ReplaceAll(strings.ReplaceAll(failed, caption, ""), style, ""); bare != plain {
+		t.Errorf("a Chart that cannot draw changed the page beyond its captions:\n%s\nwant\n%s", bare, plain)
+	}
+	if drawn := render(func([]byte, string) (string, error) { return "<svg></svg>", nil }); !strings.Contains(drawn, "div.chart svg{max-width:100%;height:auto}") || strings.Contains(drawn, "chart-error") {
 		t.Errorf("a page with a chart drawn lacks the charts' sizing:\n%s", drawn)
 	}
 }

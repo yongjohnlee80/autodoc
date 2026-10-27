@@ -62,8 +62,8 @@ type embedder struct {
 	root      *os.Root
 	resources string
 	fit       tableFit
-	images    int64                            // the images' bytes so far, against maxEmbedImages
-	chart     func(spec []byte) (string, bool) // Options.Chart in the page's theme; nil: the spec
+	images    int64                             // the images' bytes so far, against maxEmbedImages
+	chart     func(spec []byte) (string, error) // Options.Chart in the page's theme; nil: the spec
 }
 
 // newEmbedder is the embedder for the document at doc; nil when there is none ("") or its folder
@@ -125,9 +125,11 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 			return "", false, false, false
 		}
 		if e.chart != nil {
-			if svg, ok := e.chart(data); ok {
+			svg, err := e.chart(data)
+			if err == nil {
 				return `<div class="embed chart">` + svg + `</div>`, true, false, true
 			}
+			return chartFallback(err, "", stdhtml.EscapeString(string(data))), true, false, true
 		}
 		return `<pre class="vega-lite">` + stdhtml.EscapeString(string(data)) + `</pre>`, true, false, true
 	case ext == ".csv":

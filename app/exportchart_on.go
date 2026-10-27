@@ -18,9 +18,10 @@ import (
 const chartWidth = 640
 
 // chartSVG draws a Vega-Lite spec as the app's Rendered view does, with golib's gui/vegalite, on a
-// gui.SVGCanvas: inline SVG in the export's palette (ADR 1792395460 §4.4). A chart outside
-// vegalite's subset stays its spec.
-var chartSVG = func(spec []byte, theme string) (string, bool) {
+// gui.SVGCanvas: inline SVG in the export's palette (ADR 1792395460 §4.4). A chart vegalite cannot
+// lay out answers its error, in vegalite's words (a chart outside its subset says which part): the
+// export captions the spec with it.
+var chartSVG = func(spec []byte, theme string) (string, error) {
 	bg, fg, muted, border := export.Colors(theme)
 	m, release := gui.AcquireMeasurer(1)
 	defer release()
@@ -28,11 +29,11 @@ var chartSVG = func(spec []byte, theme string) (string, bool) {
 		Background: nrgba(bg), Text: nrgba(fg), Axis: nrgba(muted), Grid: nrgba(border),
 	}, m)
 	if err != nil {
-		return "", false
+		return "", err
 	}
 	c := gui.NewSVGCanvas(laid.Size(), nil)
 	laid.Paint(c)
-	return string(c.Bytes()), true
+	return string(c.Bytes()), nil
 }
 
 // nrgba is a palette colour (#rrggbb) as gui draws it.

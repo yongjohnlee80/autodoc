@@ -80,19 +80,19 @@ To ensure 100% deterministic parsing and layout across both `autodoc --gui` and 
 
 For quantitative benchmarks, latency distributions, and time-series metrics, AutoDoc embeds a native Vega-Lite specification parser and vector chart renderer (`golib/gui/vegalite`).
 
-### Supported Vega-Lite Grammar Subset
+### What It Draws: golib's Subset
 
-AutoDoc's Vega-Lite engine renders single-view declarative JSON specifications with deterministic layout and an automatic **Tableau-10** categorical color palette:
+AutoDoc draws a chart with golib's `gui/vegalite`, and what it draws is golib's subset. That package's documentation lists the marks, data, encodings, layers, scales and parameters it draws, and it is the reference: [`golib/gui/vegalite`](https://pkg.go.dev/github.com/yongjohnlee80/golib/gui/vegalite). AutoDoc keeps no list of its own, which would fall behind golib's.
 
-- **Allowed Top-Level Keys**: `"$schema"`, `"title"`, `"description"`, `"width"`, `"height"`, `"data": {"values": [...]}`, `"mark"`, and `"encoding"`.
-- **Supported Marks (`"mark"`)**:
-  - `"bar"` (or `{"type": "bar"}`) for vertical, horizontal, stacked (`"stack": "zero"`), normalized (`"stack": "normalize"`), or grouped (`"stack": null`) bar charts.
-  - `"line"` (or `{"type": "line", "point": true}`) for multi-series trend lines with optional vertex markers.
-  - `"area"` for cumulative stacked or overlapping area charts.
-  - `"point"` and `"circle"` for 2D scatter plots.
-- **Supported Encoding Channels (`"encoding"`)**:
-  - Allowed channels: `"x"`, `"y"`, and optional `"color"` (multi-view composition keys such as `"layer"`, `"hconcat"`, `"vconcat"`, `"xOffset"`, `"transform"`, or `"size"` are intentionally omitted to keep rendering fast and predictable).
-  - Channel properties: `"field"` (use clean identifiers without dots), `"type"` (`"quantitative"`, `"nominal"`, `"ordinal"`, `"temporal"`), `"title"`, `"stack"` (`"zero"`, `"normalize"`, or `null`), `"sort"` (`"ascending"`, `"descending"`, or `null`), and `"axis"` (`{"labelAngle": 0}`).
+A chart outside the subset is not drawn, and AutoDoc says why in golib's words. An export (`--export html`, or a site) writes the chart's spec as code, with a caption above it:
+
+```text
+chart not drawn: vegalite: a spec outside the subset drawn: a rule coloured by a field
+```
+
+A build without the GUI draws no chart in an export, so its charts are their specs, with no caption.
+
+A bar chart, for example:
 
 ```json
 {
