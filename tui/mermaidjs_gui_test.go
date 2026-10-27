@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -285,7 +286,7 @@ func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
 		}
 		a = onLoop(r, func() guiwidget.DiagramAnswer { return m.Diagram(context.Background(), req, func() {}) })
 	}
-	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || n.text != chartNoticeText {
-		t.Errorf("a declined chart in the pane: %+v, want the notice", a)
+	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || !strings.HasPrefix(n.text, "chart not drawn: ") || !strings.Contains(n.text, `a spec outside the subset drawn: "transform"`) {
+		t.Errorf("a declined chart in the pane: %+v, want the notice of golib's reason", a)
 	}
 }
