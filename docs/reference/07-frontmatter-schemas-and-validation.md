@@ -14,11 +14,26 @@ AutoDoc (`core/schema`) solves metadata drift without turning your text editor i
 
 ## 1. Schema `version: 1` (Flat) vs. Schema `version: 2` (Discriminated Types)
 
-A workspace binds its schema file via `Go › Manage workspaces… › Edit…` or the `workspace.set_schema` RPC verb (typically pointing to `_schema/frontmatter.yaml` or `.autodoc/schema.yaml`).
+A workspace binds its schema file via `Go › Manage workspaces… › Edit…` or the `workspace.set_schema` RPC verb. The form suggests `<root>/.autodoc/schema.yaml`; a knowledge base typically uses `_schema/frontmatter.yaml`.
 
 ### Schema `version: 1`: Flat Workspace Metadata
 
 A `version: 1` schema validates every Markdown file in the workspace against a single flat `frontmatter:` field map. It is ideal for homogeneous note collections or runbook repositories:
+
+```yaml
+version: 1
+strict: false          # true: report fields the schema does not declare
+frontmatter:
+  type:    {type: string, enum: [note, adr, review], required: true}
+  status:  {type: string, enum: [draft, active, archived], default: active}
+  tags:    {type: list, item_type: string}
+  created: {type: date}          # YYYY-MM-DD, or an RFC 3339 time (its date is the facet)
+  count:   {type: integer}
+```
+
+The types are `string`, `integer`, `number`, `boolean`, `date` and `list` (of `item_type`, strings by default; a lone value is a list of one). A required field has no default.
+
+A fuller one, with a writer order and stricter fields:
 
 ```yaml
 # .autodoc/schema.yaml (Schema Version 1)
@@ -40,9 +55,33 @@ In a multi-artifact engineering knowledge base, an Architecture Decision Record 
 
 Schema `version: 2` expresses this cleanly in a single file using three top-level sections:
 
-1. **`discriminator: type`:** Names a required `string` field in `common` (or `base`) whose value selects the document's specialized type definition.
+1. **`discriminator: type`:** Names a `string` field of `common` whose value selects the document's specialized type definition.
 2. **`common:` (Base Shared Fields):** Declares fields shared by every document in the workspace (`type`, `status`, `created`, `tags`, `abstract`, `updated`, `author`, `sources`, `related`, `supersedes`, `superseded_by`, `amends`).
 3. **`types.<name>:` (Per-Type Specializations):** Declares fields specific to each discriminator value and optionally narrows shared `common` fields.
+
+**Version 2 declares fields by document type**, still in one file that validates every document. The `discriminator` names a string field of `common`; a file is checked against `common` merged with the `types` entry its value names:
+
+```yaml
+version: 2
+strict: false
+discriminator: type            # the field whose value picks the type
+common:                        # every document
+  type:    {type: string, required: true}
+  status:  {type: string, enum: [draft, proposed, accepted, approved], default: draft}
+  tags:    {type: list}
+types:                         # merged over common when type has this value
+  adr:
+    number:  {type: string, required: true}
+    status:  {type: string, enum: [proposed, accepted], default: proposed}
+  review:
+    verdict: {type: string, enum: [approved, rejected], required: true}
+  note:                        # common alone
+```
+
+- A file whose type the schema does not name is diagnosed (`unknown type "memo"`, rule `unknown_type`) and checked against `common` alone.
+- `strict: true` reports the fields the file's own type does not declare: a `verdict` on an ADR.
+
+A production knowledge base's version 2 schema:
 
 ```yaml
 # _schema/frontmatter.yaml (Schema Version 2)

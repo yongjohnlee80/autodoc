@@ -86,20 +86,41 @@ When resolving a link (`graph.resolve`), AutoDoc applies Obsidian-compatible det
 
 ## 3. Navigating the Graph in the TUI, GUI, and Neovim (`SPC l`)
 
-### The Interactive Relations Drawer (`SPC l`)
+### The Explorer and Its Links Tab (`SPC e`, `SPC l`)
 
-Pressing `SPC l` in the TUI or GUI (or `:AutodocRelations` / `<leader>ml` in Neovim) opens the **Relations drawer** docked beside the current page. Unlike a flat backlinks list, the drawer groups connections by semantic role and direction:
+**The explorer** is one panel of two tabs. **Explorer** (`SPC e`): every workspace's folders and
+files, as a tree. **Links** (`SPC l`, `Relations › Links`): what this file is connected to, by
+kind and direction, then the relations that name nothing and the supersession loops; `d`
+there adds the files two links away, under the one that reaches them. Unlike a flat backlinks list, the Links tab groups connections by semantic role and direction:
 
 - **Lineage & Governance:** `Superseded by`, `Supersedes`, `Amends`, `Amended by`, `ADR`, `Review`
 - **Evidence & Context:** `Sources`, `Cited by`, `Related`
 - **Prose Links:** `Links` (outbound), `Backlinks` (inbound)
 - **Diagnostics:** `Unresolved links` (targets naming no document) and `Supersession loops` (circular `supersedes` chains)
 
-Inside the Relations drawer:
+In Neovim, `:AutodocRelations` / `<leader>ml` lists the current file's relations in a picker, a kind each.
 
-- Press **`Enter`** on any row to open the target document in the editor; the drawer closes, as the explorer's Enter does.
-- Press **`d`** to toggle **Depth 2** expansion, which reveals documents *two hops away* nested directly beneath the intermediate neighbor that reaches them.
-- On the editor page itself, press **`SPC j`** to follow the link under the cursor and **`SPC b b`** (or `Ctrl+O` in Normal mode, `:AutodocBack` / `<leader>mo` in Neovim) to jump back to the exact line and view you left.
+It opens over the page, which does not move, from the side the editor's preferences name. `SPC e` and `SPC l` open it on
+their tab, or go to it from the other, and on their own tab close it, as `Escape` does;
+`Ctrl+PageUp` and `Ctrl+PageDown` change tabs. At the strip's right end, `_` hides it to the
+dock, whose icon shows it again as it was, `+` maximizes it (again to restore), and `x` closes it. `Enter` opens a row, closing the
+panel from the Explorer and hiding it from the Links. The links' own panel was folded in: where
+the explorer keeps no place of its own, it opens where the links were left.
+
+On the editor page itself, `SPC j` goes to the link under the cursor (the document it names, else its web address or
+file); `SPC b b` goes back to the previous document, where you left it (`Ctrl+O` steps back
+one jump at a time, within a document too); the page's right-click menu has both. In Neovim, `:AutodocBack` / `<leader>mo` goes back.
+
+### The GUI's Relation Views: GlobeMap and Mindmap
+
+**The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
+workspace and the links among them, placed by force, each document's dot coloured by its group
+(groups are seeded from the schema's types and the folders; `l` shows their legend) and a
+superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
+every link, body links and relations, and a click opens the document. **Relations › GlobeMap
+settings…** and **Mindmap settings…** choose how each draws. **Mindmap**: the page's
+document and those one link from it (`d` shows two), as a mind map shaped by type; a click opens that
+document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
 
 ---
 
@@ -171,7 +192,7 @@ AutoDoc prevents this with **supersession-aware ranking** (`demote_superseded: t
 
 1. **Bidirectional Edge Inference:** Whether `ADR-0001` declares `superseded_by: [0009-sqlite-wal]` or `ADR-0009` declares `supersedes: [0001-legacy-store]`, AutoDoc resolves the transitive successor along the supersession chain.
 2. **Relative Ordering Guarantee:** Whenever hits from a superseded document and its active successor both appear in `search.query`, AutoDoc moves the superseded document's hits below the successor's hits and sets `"superseded_by": "adrs/0009-sqlite-wal.md"` on each demoted hit.
-3. **Cycle Safety:** If two documents accidentally declare a circular supersession loop (`A supersedes B` and `B supersedes A`), AutoDoc detects the cycle, surfaces it under **Supersession loops** in the `SPC l` Relations drawer, and leaves their search order untouched.
+3. **Cycle Safety:** If two documents accidentally declare a circular supersession loop (`A supersedes B` and `B supersedes A`), AutoDoc detects the cycle, surfaces it under **Supersession loops** in the explorer's Links tab (`SPC l`), and leaves their search order untouched.
 
 ### Auditing Broken and Ambiguous Links (`graph.unresolved`)
 

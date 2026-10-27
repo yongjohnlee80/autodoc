@@ -46,21 +46,34 @@ Both the shell terminal drawer (`` SPC ` `` / `:terminal`) and the agent drawer 
 
 ### Tab Strip Controls and Lifecycle
 
+**The terminal's and the agents' tabs**: each shell or agent has a tab; `+` adds one, and the
+strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
+has **Go to ›**, the panel's own rows (the terminal: **New**, **Close**; the agents: **Restart**,
+**Close**, **Profiles…**), **Theme and font…** (the terminals' theme, and in the GUI their font:
+the same settings as Preferences and Fonts and zoom…; Esc puts them back), in the GUI **Text
+size ›** (the shells' text in both panels, **Smaller** and **Larger** a step of 10 % each, 50 %
+to 150 % of the cell size; Fonts and zoom… sets it too), **Maximize** (the
+panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
+leaves every shell and agent running. At the strip's right end, `_` does the same, `+` maximizes the panel
+(again to restore), as Maximize does, and `x` stops every shell or agent in the panel and closes it,
+asked once while any runs.
+
 - **Adding Tabs (`+`)**:
   - In the **Terminal Panel**, clicking `+` (or selecting **New** from the strip menu `≡`) spawns a fresh login shell in the active workspace's root directory.
   - In the **Agent Panel**, clicking `+` opens a menu of all configured agent profiles (`addRows` in `tui/agenttabs.go`), badging currently running profiles with `▶`. Selecting a running agent switches to its tab; selecting a stopped profile spawns it in a new tab named by its `codename`.
-- **The Strip Menu (`≡`, Right-Click, or `Enter` on the Strip)**:
+- **The Strip Menu's Rows**:
   - **Go to ›** — Jump directly to any open tab by label.
   - **Restart / Close** — In the Agent Panel, **Restart** (`restartAgent`) starts a stopped agent or prompts for confirmation (`&Yes, restart it`) before terminating a running agent and respawning its updated command in a fresh tab. **Close** (`closeAgent`) stops the process and removes the tab.
   - **Profiles…** — Opens the **Agent profiles…** dialog to add, edit, or set the default agent.
   - **Resume** — Sends the tab's program a SIGCONT, waking one that a suspend stopped. `Ctrl+Z` itself never reaches a program here; `panel.resume` (the command) and `autodoc.agents.resume` (Lua) do the same.
-  - **Theme and font…** — Customizes the terminal color palette and (in `--gui`) the monospace terminal font independently of the editor's prose font.
-  - **Maximize / Restore (`F11`)** — Expands the drawer to fill the entire dock area or restores its saved percentage geometry.
-  - **Hide** — Closes the drawer while leaving every child shell and agent process running in the background.
+  - **Theme and font…** — The terminals' look is set independently of the editor's prose font.
+  - **Maximize / Restore** — `F11` does the same; Restore returns the panel to its saved percentage geometry.
 
 ### Live Input vs. PTY Normal Mode (`Ctrl+T`)
 
-When focus is inside a terminal or agent PTY, **every keystroke—including `Esc`—is sent directly to the child process** so interactive TUI agents (such as Claude Code, Vim inside a shell, or `htop`) behave naturally.
+Every key goes
+to the shell or agent, `Esc` included; `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
+`Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's. Interactive TUI agents (such as Claude Code, Vim inside a shell, or `htop`) so behave as they do in a terminal of their own.
 
 To scroll back through history, search terminal output, or copy text without reaching for the mouse:
 

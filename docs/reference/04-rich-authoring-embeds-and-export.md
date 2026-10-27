@@ -13,6 +13,8 @@ In AutoDoc, every Markdown document `<note-stem>.md` can have an optional compan
 1. **Beside the Note**: `<note-dir>/<target-path>`
 2. **Inside the Companion Directory**: `<note-dir>/<note-stem>/<target-path>`
 
+The file is looked for beside the note, then in its resources folder (the note's name without `.x.md` or `.md`: `plan.x.md`'s is `plan/`), and nowhere else.
+
 For example, for the chapter file `docs/reference/04-rich-authoring-embeds-and-export.md`, its companion directory is `docs/reference/04-rich-authoring-embeds-and-export/`, holding:
 
 - `04-rich-authoring-embeds-and-export/embed-resolution-pipeline.mmd`
@@ -44,11 +46,19 @@ Because knowledge bases often ingest external repositories or untrusted PR branc
 
 ## 4.2 Block-Embed Syntax Rules
 
+**Embeds are drawn.** In the preview, the GUI's pane and an HTML export, `![title](path)` of a file
+beside the note is drawn in the page, as xmd draws it:
+
+- a Mermaid diagram (`.mmd`) as the diagram;
+- a `.csv` as a table, its first row the header;
+- an image (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, …) as the image.
+
 To distinguish rich block figures (diagrams, charts, and tables) from inline badge icons inside a sentence, AutoDoc enforces the **Standalone Paragraph Block-Embed Rule**:
 
 - A `.mmd`, `.mermaid`, `.chart.json`, `.vl.json`, or `.csv` reference is promoted to a rendered `<figure>` block **only when `![Caption](path)` is the sole node inside its Markdown paragraph**—meaning it is preceded and followed by a blank line.
 - The image alt text (`Caption`) becomes the rendered figure's `<figcaption>` title below the diagram, chart, or table.
 - If a `.mmd`, `.chart.json`, or `.csv` link appears inline next to other text on the same line, it is left untouched rather than breaking paragraph flow.
+- A file that is missing, too large or of another kind shows its title instead.
 
 ---
 
@@ -61,7 +71,7 @@ You store each diagram in your note's companion directory (`<note-stem>/diagram.
 A diagram is drawn by one of two renderers, and they don't support the same things:
 
 - **An export** (`--export html`, a site) writes the diagram's source into the page with the vendored **mermaid.js**, which the reader's browser runs: full Mermaid. A diagram mermaid.js can't draw shows mermaid's own error in place.
-- **The GUI** (`--gui`, the Rendered view, `Ctrl+T`) draws with **golib's native engine** (`golib/parse/mermaid` and `golib/gui/mermaid`), with no browser. (The HTML preview pane uses mermaid.js when it finds a browser, and golib's engine otherwise.) It draws a subset of Mermaid. `autodoc --diagram-reference` prints the kinds it draws, and the first word that starts each, read from golib's own tables, so the list is always this build's. Within a kind, the syntax drawn is in golib's package documentation: [`golib/parse/mermaid`](https://pkg.go.dev/github.com/yongjohnlee80/golib/parse/mermaid).
+- **The GUI** (`--gui`, the Rendered view, `Ctrl+T`) draws with **golib's native engine** (`golib/parse/mermaid` and `golib/gui/mermaid`), with no browser. (The HTML preview pane and `File › Preview Mermaid diagram…` use mermaid.js by default, and golib's engine when **File › Preview option** chooses native, or when no browser is found.) It draws a subset of Mermaid. `autodoc --diagram-reference` prints the kinds it draws, and the first word that starts each, read from golib's own tables, so the list is always this build's. Within a kind, the syntax drawn is in golib's package documentation: [`golib/parse/mermaid`](https://pkg.go.dev/github.com/yongjohnlee80/golib/parse/mermaid).
 
 So a diagram can draw in an export and not in the GUI. In the GUI:
 
@@ -69,6 +79,23 @@ So a diagram can draw in an export and not in the GUI. In the GUI:
 - a diagram with a syntax error is drawn as the error and its line, in place.
 
 To draw the same in both, stay inside golib's subset. `autodoc --check-diagram <file>…` checks a diagram against the GUI's renderer with no UI: it prints `file:line: ok`, or golib's error, for each `.mmd` or `.mermaid`, and each `mermaid` fence of a `.md` (§4.4 has the details).
+
+### Mermaid Itself, Vendored
+
+**Mermaid diagrams are drawn by mermaid itself**: mermaid 12.1.0 is vendored in the binary
+(`core/export/mermaid`, MIT), so every diagram kind it knows (flowcharts, sequence, state, class,
+ER, gantt, mindmaps, …) is drawn as the Mermaid project draws it, offline. An HTML export with a
+```` ```mermaid ```` block carries the script (about 5.5 MB) and draws its diagrams when opened; its
+policy allows that script and the one that starts it, by digest, and no other, and a page without
+a diagram has no script at all.
+
+`File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
+terminal, as §4.11 describes; where it cannot, it shows the block's source and why. The GUI's
+`Preview Mermaid diagram…` draws it the same way, by mermaid.js, and so does its HTML pane each
+diagram of the page; with **File › Preview option** set to native, or in a window with no browser,
+they are drawn natively, by golib's Mermaid, where golib draws their type. The terminal always uses
+mermaid.js. A line embedding a `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a
+fence is, read as the preview reads it.
 
 ---
 
@@ -148,15 +175,53 @@ To guarantee fast rendering and prevent malicious content injection, `resolveIma
 
 ---
 
-## 4.7 Interactive Rendered View (`Ctrl+T`) and Click-to-Edit in `--gui`
+## 4.7 Interactive Rendered View (`Ctrl+T`) in `--gui`
 
 While authoring in `autodoc --gui`, pressing **`Ctrl+T`** toggles the editor between the Markdown source and **Rendered View**.
 
-Rendered View in `--gui` is not an embedded webview: every heading, code block, callout box, `.mmd` diagram, `.chart.json` chart, and `.csv` table is drawn directly onto Gio's GPU vector canvas. Furthermore, Rendered View is **bidirectionally interactive**:
+Rendered View in `--gui` is not an embedded webview: every heading, code block, callout box, `.mmd` diagram, `.chart.json` chart, and `.csv` table is drawn directly onto Gio's GPU vector canvas.
 
-1. **Hover Inspection**: Hovering over a rendered Mermaid diagram, Vega-Lite chart, or CSV table highlights its figure frame and displays the backing companion file path (`04-rich-authoring-embeds-and-export/embed-resolution-pipeline.mmd`).
-2. **Click-to-Edit Backing Source**: Clicking any rendered `.mmd`, `.chart.json`, or `.csv` figure opens an inline modal source editor bound directly to that companion file on disk.
-3. **Instant Live Re-Render**: When you modify a node label in `.mmd`, tweak a data value in `.chart.json`, or add a row to `.csv` and press `Ctrl+s` (or `Esc`), AutoDoc atomically saves the companion file and re-renders the vector graphic in place within milliseconds.
+In the GUI's Rendered view the note stays editable, and a diagram or table embed alone in its
+paragraph is drawn in its line's place, natively, as if the file were written there: a diagram as a
+`mermaid` fence, a table as a Markdown table of 16 rows, its values as the file has them. While
+typing on the line (Insert) it is its source again. Only the note's own editor draws them: the
+search preview and a todo's details show other files' text, not the note's. An embed by reference
+(`![flow][ref]`) stays as written there, as its file is named elsewhere in the note; the preview
+draws it.
+
+### The HTML Preview Pane (`File › Preview HTML`)
+
+**`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
+It shows the note's export drawn natively, with proportional text and the export's own styles, so
+it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).
+
+- **Live:** it follows edits after a moment of quiet, unsaved ones included.
+- **Follows the cursor:** the block under the editor's cursor comes to the pane's top.
+- **Images** load from the note's folder only.
+- **Links:** a click on a link opens what it names:
+  - a note or a file, in the editor;
+  - a web or mail address, in the browser.
+
+In a terminal, `File › Preview HTML` is an image or the browser instead (§4.11).
+
+### An HTML File Opened Raw
+
+**An HTML file opened Raw** has its page as the editor's Rendered view in the GUI: `Ctrl+T` flips
+between the HTML, which you edit, and the page, which is read-only. On the page:
+
+- `j`/`k` or the arrows scroll a line, `Ctrl+D`/`Ctrl+U` half a page, `Space`/`PgDn`/`PgUp` a page,
+  and `g`/`G` (or `Home`/`End`) go to the ends;
+- a drag selects and `y` or `Ctrl+C` copies;
+- links open as the preview pane's do.
+
+The page is drawn with its own stylesheets, linked or inline, and its images, SVG included. CSS
+layout, flex, grid and `<details>` work; JavaScript and form controls do not run.
+
+- **In a workspace,** a file's stylesheets and images load from anywhere in that workspace, so a
+  site whose pages share `../assets` shows them.
+- **Outside every workspace,** they load from the file's own folder only.
+  - A refused stylesheet or image is said once, in a notification.
+  - Add the site's folder as a workspace to let its pages reach above themselves.
 
 ---
 
@@ -175,7 +240,27 @@ autodoc --export html --theme dark --output /tmp/chapter-04-dark.html docs/refer
 autodoc --export text --output /tmp/chapter-04.txt docs/reference/04-rich-authoring-embeds-and-export.md
 ```
 
-During HTML export (`core/export`), AutoDoc resolves every companion `.mmd` diagram, `.chart.json` chart, `.csv` table, and image, renders diagrams and charts into inline blocks, encodes raster images as `data:<mime>;base64,...` URIs, and bundles print-ready responsive CSS with theme support. The resulting `.html` file has **zero external network requests**, making it safe to archive in compliance artifacts, attach to pull requests, or view inside air-gapped environments.
+Export a Markdown file without the daemon with
+`autodoc --export=html --theme=light --output=/path/page.html /path/page.md` or use
+`--export=text` for stripped text. Export requires an explicit destination and refuses to
+overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
+and remote resources are not loaded. `--output`, `--theme` and `--base` are refused without
+`--export`.
+
+During HTML export (`core/export`), AutoDoc resolves every companion `.mmd` diagram, `.chart.json` chart, `.csv` table, and image, renders charts and tables into inline blocks, writes each Mermaid diagram for the vendored mermaid script to draw when the page is opened (§4.3), encodes raster images as `data:<mime>;base64,...` URIs, and bundles print-ready responsive CSS with theme support. The resulting `.html` file has **zero external network requests**, making it safe to archive in compliance artifacts, attach to pull requests, or view inside air-gapped environments.
+
+### Relative Links in an HTML Export (`--base`)
+
+**Relative links reach their files wherever the page is written.** An HTML export reads each
+link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
+own directory and writes it as the `file://` URL of the file it names, percent-encoded (a space,
+a `#`, a byte past ASCII), its query and `#fragment` kept; an absolute path (`/etc/hosts`) becomes
+its own `file://` URL. `--base <dir>` reads them from another directory instead: for a page made
+from a copy of a file kept elsewhere, say. A URL with a scheme (`https:`, `mailto:`, …), one naming
+another host (`//host/…`) and a bare `#fragment` are written as they are, and Obsidian
+`[[wikilinks]]` are not resolved. A link is navigation, not a load, so the page's policy, which
+loads nothing from outside it, stays as it is. The TUI's HTML preview reads them from the open
+file's directory.
 
 ---
 
@@ -221,6 +306,25 @@ plan.lab/out/<cell key>/03.chart.json   a Vega-Lite chart (and .csv for a table)
 ```
 
 The cell key is a hash of the fence's language and its code, so a cell's outputs belong to that exact code: editing a cell hides its old outputs until it runs again, and a fence of another language holding the same text never shows them. The HTML preview and export draw each cell's outputs right after its fence, in name order; `--gui`'s Rendered View draws them under the fence, off the cursor (text, every diagram and chart, tables and images). Opening an `.ipynb` hands it to the plugin, which writes the lab note beside it and opens that.
+
+---
+
+## 4.11 Previews in the Terminal (`File › Preview HTML`, `Preview Mermaid diagram`)
+
+`File › Preview HTML` (in a terminal; the GUI opens [a pane](#the-html-preview-pane-file--preview-html) instead) renders the current Markdown editor buffer (including unsaved
+edits) into an offline, light/dark themed cache file and opens it with the system browser. A
+browser-launch error is reported in the TUI.
+
+**Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
+they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
+(inside tmux, `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline.
+The whole page (or the whole diagram) is rendered and **scrolls** in its dialog: the arrows,
+`j` `k` `h` `l`, `Page Up`/`Page Down`, `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in**
+and **Zoom out** draw it again larger or smaller (50 % to 200 %, as a browser zooms), in the same
+dialog. Elsewhere a diagram shows its source and HTML opens in the default browser, and the
+preview says which was missing; turning `Image previews` off compares the two on the same file.
+Both follow the active theme's colours (light, dark, sepia, retro, mono), as
+`autodoc --export html --theme …` does.
 
 ---
 

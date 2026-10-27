@@ -21,29 +21,31 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 
 | Package | Job |
 | --- | --- |
-| `core/module` | the convention's types: a verb's `Contract`, `Handle[P, R]`, `PublicError`, `Module` |
-| `core/todo` | the todo system: format (versioned schema files), rules, every write; a `Module` |
-| `core/schema` | frontmatter schemas: the KB's `schema.yaml` and the todo formats |
-| `core/docs` | versioned, conditional reads and writes of a workspace's files over a `vfs.FS` |
-| `core/index` | the indexer, links, graph, search, and the writer port its documents are kept through; a path's mode (`Mode`): full, or graph-only (its links and relations, no chunks), and the todo store it lies in (ADR 1792015212) |
-| `core/store` | the SQLite store: lease, migrations, its tables (workspaces, preferences, and the metered services: embedding providers and rankers, keys sealed, calls metered), and the seam a module declares its own through |
+| `core/module` | the convention's types: a verb's contract (`Contract`) and typed handler (`Handle[P, R]`), public errors (`PublicError`), a `Module` |
+| `core/todo` | the todo system: the format (versioned schema files), the rules and every write of a `.todo-list`; the `todos.*` verbs, as a `Module` |
+| `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
+| `core/docs` | reads and writes files for AutoDoc's own apps, conditional on the version the writer read: versioned reads and writes of a workspace's files over a `vfs.FS` |
+| `core/index` | one workspace's index in the store: its indexer, links, the link graph, search, and the writer port its documents are kept through; a path's mode (`Mode`): full, or graph-only (its links and relations, no chunks), and the todo store it lies in (ADR 1792015212) |
+| `core/store` | the one store: every workspace and its index, in one SQLite file, read and written through golib `dao` (one declaration per table), with the lease that makes one daemon its only server; migrations, its tables (workspaces, preferences, and the metered services: embedding providers and rankers, keys sealed, calls metered), and the seam a module declares its own through |
+| `sql/deployments` | the store's schema as numbered SQL scripts, applied by golib `dao/deploy` (see `docs/ops/schema-scripts.md`) |
 | `core/todo/sqlitejournal` | the todo system's Journal on the store, its tables declared through the seam |
-| `core/follow` | watching and polling a workspace |
+| `core/follow` | keeps a workspace's index following its root: watching and polling it |
 | `core/kind`, `registrations`, `derived` | file kinds, chunkers, derivers |
-| `core/workspace` | a workspace as it is added (`Spec`, `Normalize`, the default patterns), its glob grammar and matcher, and opening its root |
-| `core/config` | the daemon's own settings (`config.toml`) and its XDG paths, resolved without touching the disk |
+| `core/workspace` | a workspace as it is added (`Spec`, `Normalize`, the default patterns), its glob grammar and matcher, and opening its root as a `golib/vfs` filesystem, with its include/exclude patterns |
+| `core/config` | the daemon's own settings: reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket, the state directory and the store (its XDG paths, resolved without touching the disk) |
 | `core/pgstore`, `pgwriter` | a Postgres search store and the index's second writer (the enterprise destination) |
 | `enterprise/config`, `ingest`, `embedder` | the enterprise search server (`--server`): `server.toml`, the `.view` ingesters (one writer per tenant), and the one central embedding worker |
 | `core/paths`, `clock` | the path helpers and the one clock the core packages share |
 | `core/outline`, `export`, `edition` | as named |
-| `rpc` | the daemon's socket: registers every verb from its contract; `Catalog`. A `file.write` on a file a workspace indexes is that workspace's `doc.write` |
-| `internal/daemon` | the served workspaces, each path's mode from the todo registry and the workspace's `graph_only` and `todo_search`; the todo system's disk and roots |
+| `rpc` | the daemon's socket, the msgpack-RPC API: every verb registered from its contract, rpc's own and the modules'; `Catalog`. A `file.write` on a file a workspace indexes is that workspace's `doc.write` |
+| `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs; each path's mode from the todo registry and the workspace's `graph_only` and `todo_search`; the todo system's disk and roots |
 | `internal/client` | the daemon's client: the session (handshake, spawning `--serve`), restart handoffs |
 | `internal/endpoint` | which socket serves a config's store |
-| `app` | the modes (`--serve`, `--ui`, `--call`, `--contracts`, …) and the one module list |
-| `tui` | the TUI/GUI host and its features |
-| `script` | the exportable Lua engine (gopher-lua); no AutoDoc imports |
-| `plugin` | the plugin protocol |
+| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract, …; the one module list; a main hands it its version (ADR 0216) |
+| `cmd/autodoc` | the binary, the community build: `app.Main` with no registrations |
+| `tui` | the terminal UI and the GUI, their host and its features: search, the files, a Vim-keyed editor, the explorer's Links tab and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
+| `script` | the Lua engine for the editor's commands (gopher-lua), exportable to other programs; no AutoDoc imports |
+| `plugin` | the plugin protocol and the SDK a plugin is written with ([plugins.md](plugins.md)) |
 | `internal/contractsgen` | writes AGENTS.md's verb and error tables, and autodoc.nvim's `contracts.lua`, from the contracts |
 
 ## 3. Dependency rules

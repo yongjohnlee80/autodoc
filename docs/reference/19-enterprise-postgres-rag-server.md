@@ -4,6 +4,10 @@ Chapters 1 through 17 focused on indexing local Markdown workspaces on an indivi
 
 `autodoc --server` is a single headless Go binary that reads your PostgreSQL business tables through declarative `.view` contracts, renders each row into Markdown, chunks it using AutoDoc's heading-aware splitter, stores the index in a dedicated schema (`autodoc_search`) alongside your tables using PostgreSQL + `pgvector`, embeds distinct chunk hashes centrally, and serves multi-tenant hybrid RAG queries over `POST /v1/search` (or in-process via the `enterprise/search` Go library).
 
+It is in the server build only (a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`).
+
+[`docs/enterprise/`](../enterprise/) has all of it: [what it is and when to use it](../enterprise/README.md), [the server configuration](../enterprise/server-config.md), and [writing a `.view` source](../enterprise/views.md).
+
 ---
 
 ## 19.1 Architecture Overview (`core/pgstore` & `enterprise/*`)

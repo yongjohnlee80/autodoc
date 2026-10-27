@@ -2,13 +2,17 @@
 
 AutoDoc separates its always-on lexical index from its optional neural inference tiers: dense bi-encoder embeddings (`core/embedding`) and cross-encoder rerankers (`core/rank`). Because both tiers are managed dynamically by the daemon and persisted in the SQLite store (`autodoc.db`) with AES-256-GCM sealed API keys (`autodoc.db.key`), you can add, switch, meter, or disable local and cloud models at runtime without restarting the daemon or interrupting lexical search.
 
+Semantic search finds a file by what it means, not only by the words it shares with the query. A search for "why did we pick SQLite" also finds the file that says "we chose an embedded database", and "login bug" finds "authentication fails". Exact words still count: the two are fused, and a file that matches both the words and the meaning ranks highest.
+
+**How it works.** An embedding model turns each section of a file into a vector, a list of numbers that places the text by meaning. A query is turned into a vector the same way, and the sections whose vectors are closest are the matches.
+
 ![Provider routing architecture across config.toml, runtime RPC/TUI, local servers, cloud APIs, and lexical fallback](provider-routing-architecture.mmd)
 
 ---
 
 ## 1. Daemon Queue Configuration in `config.toml` vs. Sealed Store Providers
 
-In AutoDoc's architecture, `~/.config/autodoc/config.toml` holds only process-level daemon and queue settings (`[server]`, `[follow]`, and `[embedding_queue]`). Provider endpoints, model names, context windows, and API keys are stored inside `autodoc.db` so they can be switched live across all attached TUI, GUI, and Neovim clients and so API secrets never sit in plaintext dotfiles.
+In AutoDoc's architecture, `~/.config/autodoc/config.toml` holds only process-level daemon and queue settings (`[server]`, `[follow]`, and `[embedding_queue]`). Provider endpoints, model names, context windows, and API keys are stored inside `autodoc.db` so they can be switched live across all attached TUI, GUI, and Neovim clients and so API secrets never sit in plaintext dotfiles. The preferences and the search models are kept in the daemon's store, so they are the same whichever workspace is open.
 
 ```toml
 # ~/.config/autodoc/config.toml
@@ -29,8 +33,9 @@ max_inflight = 1 # 1 (default) or 2 concurrent provider calls across all workspa
 
 ### Sealed API Keys (`autodoc.db.key`)
 
-When you register a cloud provider (`ollama-cloud`, `openai`, or `rerank-api`) with a secret `key`, AutoDoc encrypts the credential using **AES-256-GCM** under a 256-bit master key stored beside the database at `$XDG_DATA_HOME/autodoc/autodoc.db.key` (file mode `0600`).
+When you register a cloud provider (`ollama-cloud`, `openai`, or `rerank-api`) with a secret `key`, AutoDoc encrypts the credential using **AES-256-GCM** under a 256-bit master key stored beside the database at `$XDG_DATA_HOME/autodoc/autodoc.db.key` (file mode `0600`), made the first time a key is kept.
 
+- A copied store without that file opens no key.
 - If `autodoc.db.key` has permissions wider than `0600`, the daemon refuses to open keys (`-32068 rpc.provider_refused: "the store's keyslot file is readable by others: make it 0600"`).
 - Subsequent `embedding.providers` or `ranker.list` calls return `"has_key": true` without ever echoing the secret back over RPC or into the UI.
 - Updating a provider with an omitted `key` preserves the existing sealed key; passing `"key": ""` erases it.
@@ -70,15 +75,28 @@ autodoc --call embedding.pull_cancel '["<job>"]'
 
 `host.probe`, `embedding.catalog`, `embedding.estimate` and `embedding.pull` take the Ollama's URL as an optional last parameter. Before the model is installed, `embedding.estimate` is provisional (`"basis": "provisional"`): it counts every text and gives no time. Only one pull runs at a time. A second one is refused as a conflict, and a status or cancel for a job that is no longer the current one is not found.
 
+### Which Embedding Model
+
+An embedding model, not a chat model. A chat model such as `gpt-oss-20b` produces text, not vectors: it appears in Ollama's model list, but AutoDoc embeds a probe text before it switches, and a model that cannot embed is refused, the one in use staying. For a local provider, pull one of these:
+
+| model | input limit | |
+| --- | --- | --- |
+| `nomic-embed-text` | 8,192 tokens | small and fast; a good default |
+| `mxbai-embed-large` | 512 tokens | stronger, on shorter sections |
+| `snowflake-arctic-embed2` | 8,192 tokens | multilingual |
+| `qwen3-embedding:4b` | 40,960 tokens | strong; 2,560 dimensions, about 3× snowflake's time |
+
+They are small beside a chat model and run alongside one.
+
 ### Why Context Window (`num_ctx`) Controls GPU VRAM
 
 ![GPU VRAM usage at 8k context tokens versus Top-3 retrieval recall across embedding and reranker stacks](model-accuracy-vs-vram.chart.json)
 
-Each Markdown section is embedded as an independent stateless request. However, Ollama allocates KV-cache memory according to the `num_ctx` parameter sent with the request:
+Each Markdown section is embedded as an independent stateless request, with no conversation and no memory between requests, so nothing builds up and nothing needs flushing. What matters is the length of one section against the model's input limit (8,192 tokens for `nomic-embed-text`, 512 for `mxbai-embed-large`). Ollama also allocates KV-cache memory according to the `num_ctx` parameter sent with the request:
 
-- Left to a model's maximum context length (`40,960` tokens for `qwen3-embedding:4b`), Ollama reserves **12.4 GB** of VRAM.
-- AutoDoc defaults every Ollama provider's context window to **`8,192` tokens** (`context = 8192`, sent as `num_ctx` on every request), reducing `qwen3-embedding:4b`'s VRAM footprint to **4.6 GB** and `qwen3-embedding:0.6b`'s footprint to **1.2 GB**.
-- Because AutoDoc splits documents at headings (`section_tokens = 350`), almost all chunks are well under 1,000 tokens. If an extraordinary chunk exceeds the model's context window (HTTP `400`, `413`, or `422`), the indexer isolates the single oversized chunk, sets it aside for one hour (`failing` in `index.status`), and embeds the rest of the batch; the oversized section remains searchable via Stage 1 lexical BM25.
+- Left to the server's own default (`OLLAMA_CONTEXT_LENGTH`, or the model's full context: `40,960` tokens for `qwen3-embedding:4b`), Ollama reserves **12.4 GB** of VRAM.
+- AutoDoc defaults every Ollama provider's context window to **`8,192` tokens** unless you change it in the provider's form (`context = 8192`, sent as `num_ctx` on every request), reducing `qwen3-embedding:4b`'s VRAM footprint to **4.6 GB** and `qwen3-embedding:0.6b`'s footprint to **1.2 GB**. A larger window admits longer sections, at that cost.
+- Because AutoDoc splits documents at headings (`section_tokens = 350`), almost all chunks are well under 1,000 tokens. A text longer than the model's context is refused (HTTP 400, 413 or 422). Ollama refuses it too, even when asked to truncate. The indexer narrows the batch to the one text refused, sets it aside for an hour, and embeds the rest. The status shows it as refused (`embeddings.refused` and `embeddings.refused_texts` in `index.status`), and the section is still found by its words (Stage 1 lexical BM25).
 
 ### Starting Local Ollama and TEI Servers
 
@@ -125,7 +143,17 @@ Check a ranker through AutoDoc, never by calling TEI by hand. `search.query`'s `
 
 ## 3. Managing Embedding Providers via RPC and TUI (`SPC s`)
 
-In the TUI or GUI, press `SPC s` (`System › Search models…`) to open the two-tab **Search models** dialog (**Embedding Models** and **Ranker Models**). Every action in that dialog maps directly to the `embedding.*` RPC domain (`core/embedding`).
+In the TUI or GUI, press `SPC s` (`System › Search models…`) to open the two-tab **Search models** dialog. **Embedding Models** has the embedding providers on the left, and the one under the cursor's usage by day and latest calls on the right. **Ranker Models** has the rankers the same way, the one in use and how many candidates it ranks (`Window…`). Add…, Edit…, Use and Remove… act on the tab that is open. Every action in the Embedding Models tab maps directly to the `embedding.*` RPC domain (`core/embedding`).
+
+### Provider Kinds
+
+Semantic search is off until a provider is chosen in the TUI's Search models (`System › Search models…`). A provider is one of three kinds, with the model it embeds with:
+
+- **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by default. It takes no key.
+- **Ollama Cloud:** `https://ollama.com`, with the account's API key, which it requires. Its models are those the cloud serves: many are chat models (GLM, gpt-oss), which cannot embed.
+- **OpenAI-compatible:** any endpoint that serves `/v1/embeddings`, with a key if it takes one.
+
+The store keeps any number of them, and one is in use; switching is a choice in a list, with no restart. The model list is the provider's own (Ollama's models, or the endpoint's `/v1/models`).
 
 ### Adding, Probing, and Activating an Embedding Provider
 
@@ -169,15 +197,21 @@ autodoc --call embedding.usage '["local-qwen-0.6b", 14]'
 autodoc --call embedding.log '["local-qwen-0.6b", 20]'
 ```
 
+**Each provider keeps its usage and a log:** requests, texts, the tokens it counted, failures and usage-limit refusals by day, and its last 200 calls. A provider at its limit (HTTP 429) or refusing its key (401, 403) is named as such, so you can switch to another.
+
 ### Per-Workspace Provider Overrides and Embedding Policies
 
 While `embedding.use` sets the daemon-wide default provider, individual workspaces can override both the provider and the scheduling policy (`Manage workspaces… › Advanced…`):
 
 - **`embedding_policy` (`workspace.embedding_policy`):**
   - `"always"` *(default)*: Embeds new and edited sections continuously in the background.
-  - `"when opened"`: Defers embedding until a client opens or searches the workspace, then continues in the background.
+  - `"when opened"`: Defers embedding until a client first opens the workspace, then continues in the background.
   - `"never"`: Disables semantic indexing for the workspace (words-only lexical search).
-- **`provider` (`workspace.set_provider`):** Pins a workspace to a specific stored provider (`""` uses the daemon's active provider). The background scheduler groups up to 16 consecutive batches per model so a local Ollama server does not thrash VRAM swapping between two workspace models.
+- **`provider` (`workspace.set_provider`):** Pins a workspace to a specific stored provider (`""` uses the daemon's active provider).
+
+A workspace may embed with its own provider (`Manage workspaces… › Advanced…`): one of the stored providers instead of the daemon's. Choosing it sets it up first, and only that workspace's vectors fill again; a switch of the daemon's provider leaves it as it is, and deleting the provider returns it to the daemon's. Every provider shares the daemon's limit on requests in flight (`[embedding_queue] max_inflight`), and the queue keeps consecutive background batches on one model (up to 16 in a row) so a local server is not made to swap models every batch. A workspace whose provider cannot be set up searches by words and says why; it is never given another model.
+
+**Embedding is scheduled across the daemon**: the open TUI workspace has first turn, then recently searched workspaces, while background work gets regular turns. The progress line says which workspace a pending one waits for, or that its setting paused embedding.
 
 ---
 
@@ -202,7 +236,7 @@ autodoc --call ranker.add '[
 # 2. Activate the reranker (or pass "" to turn reranking off: rank.off)
 autodoc --call ranker.use '["tei-bge-m3"]'
 
-# 3. Tune the candidate window (10..100, default 40; use 15..20 for CPU inference)
+# 3. Tune the candidate window (10..100, default 40; use 10..20 for CPU inference)
 autodoc --call ranker.window '[25]'
 
 # 4. Inspect configured rankers, active state, window size, and daily usage metrics
@@ -222,6 +256,12 @@ autodoc --call ranker.use '[""]'
 
 Changing embedding models in a large knowledge base requires re-embedding every chunk because vectors from different models (for example, 768-dim `nomic-embed-text` vs. 2,560-dim `qwen3-embedding:4b`) inhabit incompatible vector spaces. AutoDoc (`core/index/reclaim.go`, ADR 1791284787) orchestrates model transitions with zero search downtime and automatic storage reclamation:
 
+### Vectors Are Made Once, and Kept
+
+- **A file is parsed only when its file changes,** never at search time. On a restart, an unchanged file is skipped by its version (size, modification time, inode).
+- **A vector lives as long as a section has its text.** When an edit or a removal takes the last section with a text, that text's vectors go in the same write. The daemon sweeps what is left over at each start, in small batches while it serves.
+- **A search reads what is stored.** The only model call it makes is for the query itself.
+
 ### Step-by-Step Model Switch Lifecycle
 
 1. **Immediate Unload of Old Model:** When you invoke `embedding.use '["local-qwen4b"]'`, the daemon probes the new model, marks it as the workspace's `target` model in SQLite (`model.target = 1`), and immediately takes the previous model offline—instructing Ollama (`keep_alive: 0`) to unload the old model from GPU RAM so both models are never resident simultaneously.
@@ -233,9 +273,12 @@ Changing embedding models in a large knowledge base requires re-embedding every 
 
 AutoDoc guarantees that each workspace retains vectors for at most its `active` model and its in-flight `target` model. Every superseded, cancelled, or removed model fingerprint is swept by `reclaim.go`:
 
+- **A workspace keeps one model's vectors** (two while a switch fills): the old model's are deleted once the new one answers, a cancelled switch's partial vectors with the cancel, and removing the provider in use deletes its model's, unless another provider serves that model. Switching back embeds again. Unused vectors slow the scans of the ones kept, so the store does not carry them.
+
 - **Interleaved Write Batches (`reclaimBatch = 2000`):** To prevent long SQLite write locks from stalling file saves or indexing, `Store.reclaim` deletes obsolete vectors in batches of `2,000` `text_hash` rows per transaction (`core/index/reclaim.go:27-95`).
 - **Pre-Batch Safety Check:** Before deleting each batch of 2,000 vectors, the transaction re-verifies that `m.Active == 0 && m.Target == 0`. If the user switched back to that model mid-reclaim, garbage collection halts immediately and preserves all remaining vectors so the indexer only has to fill the delta.
 - **Page Reclamation (`IncrementalVacuum`):** After removing the last vector batch and deleting the `model` metadata row, AutoDoc runs `s.db.IncrementalVacuum(ctx)` to return freed SQLite pages to the operating system.
+- **The store gives the room back.** After the upgrade that brought this, the daemon compacts the store once, when there is free space for it: about twice the store. `autodoc --compact` does it again with the daemon stopped.
 
 ```sh
 # Inspect stored models and byte footprints (f32_bytes, bits_bytes, key_bytes) for workspace "kb"

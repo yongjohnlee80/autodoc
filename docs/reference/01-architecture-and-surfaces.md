@@ -8,6 +8,9 @@ Whether you author Architecture Decision Records (ADRs) in the terminal TUI (`au
 
 ## 1.1 The File-Canonical Philosophy
 
+AutoDoc indexes and searches a tree of Markdown files, and follows the files as they change. The files
+are canonical: the index is derived from them, lives outside the tree, and can always be rebuilt.
+
 The foundational invariant of AutoDoc is simple: **your files on disk are the single source of truth**. Every note, architecture decision record, runbook, review, and synthesis document lives as a standard UTF-8 Markdown file (`.md`) with YAML frontmatter in your regular filesystem directory tree. Similarly, every project task lives as an explicit YAML file inside your workspace's `.todo-list/` directory (`open/`, `deferred/`, `completed/`, `archived/`).
 
 ```yaml
@@ -25,8 +28,8 @@ abstract: "Enforces a single-writer lock over the derived SQLite WAL index while
 Because files on disk are canonical, AutoDoc never requires an import or export step to interoperate with standard Unix tools:
 
 1. **Git-Native Versioning**: You branch, diff, blame, cherry-pick, and merge your knowledge base using standard `git` workflows. AutoDoc never hides metadata in sidecar binary blobs that cause merge conflicts.
-2. **External Editor Harmony**: You can edit a file with `nvim`, `sed`, `awk`, or an AI coding assistant while `autodoc --ui` or `autodoc --gui` is open. The daemon's filesystem follower (`core/follow`) detects the atomic rename or write within milliseconds, re-parses only the changed sections, and broadcasts incremental buffer and outline updates to all connected UI clients.
-3. **Disposable, Reconstructible Index**: The SQLite store (`autodoc.db`) is strictly a derived cache containing parsed frontmatter fields, section chunks, FTS5 lexical postings, wikilink edges, and vector embeddings. If you delete the store, AutoDoc deterministically rebuilds the exact same index state from your Markdown files and `.todo-list/` YAML records on the next startup.
+2. **External Editor Harmony**: You can edit a file with `nvim`, `sed`, `awk`, or an AI coding assistant while `autodoc --ui` or `autodoc --gui` is open. The daemon's filesystem follower (`core/follow`) detects the atomic rename or write within milliseconds, re-parses only the changed sections, and records the change for the connected clients, which pull it (`index.changes`, §1.3).
+3. **Disposable, Reconstructible Index**: A workspace's index in the SQLite store (`autodoc.db`) is a derived cache containing parsed frontmatter fields, section chunks, FTS5 lexical postings, wikilink edges, and vector embeddings. AutoDoc can rebuild the same index state from your Markdown files and `.todo-list/` YAML records at any time. The store also keeps what is not derived from the files: the workspaces and the embedding providers (§1.6).
 
 ![AutoDoc Daemon and Surface Topology](daemon-topology.mmd)
 
@@ -59,7 +62,23 @@ When any document changes on disk, `core/store` compares the incoming file's SHA
 
 ## 1.3 The msgpack-RPC Daemon (`autodoc --serve`)
 
-At the center of AutoDoc's runtime architecture is `autodoc --serve`, a lightweight background daemon that manages workspace watchers, the SQLite WAL store, the hybrid ranking pipeline, and the Lua plugin host.
+At the center of AutoDoc's runtime architecture is `autodoc --serve`, a lightweight background daemon that manages workspace watchers, the SQLite WAL store, and the hybrid ranking pipeline.
+
+It is one binary with the modes as flags, after [AutoDB](https://github.com/yongjohnlee80/autodb):
+`autodoc --serve` is the daemon, and the TUI (`--ui`), the native GUI (`--gui`), Neovim
+([autodoc.nvim](18-neovim-integration-and-kb-migration.md)), plugins and `autodoc --call` are its clients, all over one msgpack-RPC API
+on a 0600 unix socket. It also keeps the workspaces' todo lists (Todos › Open todos…, the `todos.*`
+verbs).
+
+```sh
+autodoc --serve             # or: autodoc --serve --config path/to/config.toml
+```
+
+It listens on its unix socket, mode 0600: the file is the access control, so there is no login
+locally. It opens the store, takes its lease, and serves every workspace in it, then records where
+it serves (the store's lease-info, beside the store). A second `--serve` that finds this store's
+daemon already serving, on the same socket or another config's, says where and exits 0; anything
+else on its socket, or a lease it cannot account for, is refused.
 
 All surfaces communicate with the daemon over a user-private Unix domain socket named `autodoc.sock`, created with strict `0600` filesystem permissions. Unless `server.socket` is set in `config.toml`, the daemon resolves its directory in this order (`core/config/config.go`, `runtimeDir`):
 
@@ -77,13 +96,29 @@ You rarely need to launch `autodoc --serve` manually. Whenever you invoke an int
 
 1. **Dial Socket**: The client attempts to connect to the local Unix domain socket.
 2. **Spawn on Miss**: If the socket does not exist or refuses connection, the client spawns `autodoc --serve` as a detached background process and polls with exponential backoff until the socket becomes ready.
-3. **Internal Protocol Handshake (`sys.hello`)**: Upon connecting, the client library automatically sends an internal `sys.hello` frame (`[{"protocol": 28, "name": "cli"}]`). The daemon replies with `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`. If a binary upgrade occurred while an older daemon was still running, the client detects the version/protocol mismatch, issues `sys.shutdown` to the stale daemon, and seamlessly starts a fresh daemon matching the new binary.
+3. **Internal Protocol Handshake (`sys.hello`)**: Upon connecting, the client library automatically sends an internal `sys.hello` frame (`[{"protocol": 28, "name": "cli"}]`). The daemon replies with `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`. If a binary upgrade occurred while an older daemon was still running, and the older daemon refuses the new build's protocol, the client keeps it as stale, for a restart (`autodoc --print-endpoint --restart`, §1.6).
+
+Every client speaks one API. A session starts with `sys.hello({protocol, name})`, and until then
+only `sys.hello` answers. The daemon serves a range of protocols (`min_protocol` to its own): a
+session keeps the one it declared, and a verb added after it answers as an unknown method.
+
+### Following Changes: the Server Only Answers
+
+The server only answers: it never sends a notification. A client follows changes by pulling
+`index.changes` from a cursor. When that cursor has expired, it takes `index.status`'s cursor, re-lists
+with `index.list`, and resumes `index.changes` from that cursor. Errors carry a code that says what
+to do next: re-list, merge a conflict, read after a write that landed, and so on.
 
 ### Core Daemon Modules
 
 The daemon exposes a structured namespace of RPC methods organized by domain module (`autodoc --contracts`):
 
-- **`sys.*`**: Session negotiation and shutdown (`sys.hello`, `sys.shutdown` — internal to client libraries), edition and verb capability discovery (`sys.capabilities`), live configuration/lifecycle event streaming (`sys.events`), and self-describing protocol catalog inspection (`sys.contracts`).
+[AGENTS.md](../../AGENTS.md)'s tables list every verb with its params, its answer, the protocol it arrived
+in and its error codes; they are generated from the verbs' contracts, which `autodoc --contracts`
+prints as JSON with no daemon (`--format md` for the tables), and `sys.contracts` answers on a
+connection.
+
+- **`sys.*`**: Session negotiation and shutdown (`sys.hello`, `sys.shutdown` — internal to client libraries), edition and verb capability discovery (`sys.capabilities`), live configuration/lifecycle events, which clients poll (`sys.events`), and self-describing protocol catalog inspection (`sys.contracts`).
 - **`workspace.*`**: Multi-workspace lifecycle (`workspace.list`, `workspace.add`, `workspace.rename`, `workspace.remove`) and store-backed policy configuration (`workspace.configure`, `workspace.set_patterns`, `workspace.set_schema`, `workspace.section_size`, `workspace.embedding_policy`, `workspace.set_provider`, `workspace.set_text_extensions`, `workspace.focus`, `workspace.of`, `workspace.vars`, `workspace.set_var`).
 - **`doc.*`**: Versioned document reading (`doc.read`, `doc.read_raw`), optimistic-concurrency writing (`doc.write`, `doc.write_raw`), heading outline extraction (`doc.outline`), frontmatter schema validation (`doc.validate`), and atomic file operations (`doc.rename`, `doc.remove`).
 - **`index.*`**: Real-time watcher and embedding queue status (`index.status`), frontmatter-projected document listing (`index.documents`, `index.list`), incremental cursor change feeds (`index.changes`), single-file re-indexing (`index.reindex`), and vector model inspection/cleanup (`index.models`, `index.purge_model`).
@@ -170,6 +205,23 @@ AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
   - `autodoc.db`, `autodoc.db-wal`, `autodoc.db-shm`: The SQLite WAL database files storing workspaces, chunks, links, vectors, and sealed provider configurations.
   - `.autodoc-lease-<device>-<inode>`: The sidecar file the running daemon holds an exclusive `flock(2)` on — the single-writer lease, named for the store's device and inode (`core/store/lease.go`).
   - `.autodoc-lease-<device>-<inode>.json`: The lease-info record (`store_id`, `store_path`, `addr`, `pid`, `instance`, `version`, `protocol`, `min_protocol`, `since`) a client reads to find the daemon serving this store, even when it was started with a different config and socket.
+
+### Finding, Restarting and Compacting the Daemon (`--print-endpoint`, `--compact`)
+
+```sh
+autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
+autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
+autodoc --print-endpoint --restart  # stop the daemon serving the store, start this build in its place
+autodoc --compact                   # with the daemon stopped: reclaim unused vectors, rewrite the store
+```
+
+`--restart` stops whatever daemon serves the store, of any protocol: it says `sys.hello` at that
+daemon's own protocol, then `sys.shutdown`, both frozen across protocols. It waits for the
+process to exit, so nothing starts while the store's lease is still held. Meanwhile it holds the
+other clients back from starting one of their own. A daemon serving another store is refused and
+left alone. With nothing serving, `--restart` only starts.
+
+A client that dials the socket itself asks the binary where it is, so it never repeats the rules.
 
 ### Inspecting Daemon Capabilities and Contracts (`sys.capabilities` and `sys.contracts`)
 

@@ -16,6 +16,14 @@ To bridge both regimes without sacrificing interactive latency, AutoDoc (`core/i
 
 Before any retrieval stage executes, AutoDoc cuts each indexed document into semantically coherent chunks rather than arbitrary fixed-character sliding windows.
 
+### The Index in the Store
+
+The index is in the store, one SQLite file for every workspace, with each workspace's rows keyed by it. One connection writes, and any number read, each from one snapshot:
+
+- **An edit writes only the chunks it changed:** each document has generations, and a reader sees the old one or the new one, never a mix.
+- **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too. A frontmatter schema types it ([Chapter 7](./07-frontmatter-schemas-and-validation.md)).
+- **A change log feeds clients' incremental sync.** It is kept for at least 7 days and 100 000 changes.
+
 ### Markdown Section Splitting
 
 When the indexer (`core/index`) processes a Markdown file, it parses the heading hierarchy (`# H1` through `###### H6`) and splits the body at heading boundaries:
@@ -95,9 +103,14 @@ After summing RRF contributions across every retriever that found chunk $c$, Aut
 
 ## 5. Stage 3: Cross-Encoder Reranking (`core/rank`)
 
-Bi-encoder embeddings compress an entire chunk into a single vector independent of the query. Stage 3 (`StageRerank`) passes the top fused window (`ranker.window`, default `40`, configurable from `10` to `100`) to a **cross-encoder reranker** (`core/rank`).
+Bi-encoder embeddings compress an entire chunk into a single vector independent of the query. Stage 3 (`StageRerank`, ADR 0215) passes the top fused window (`ranker.window`, default `40`, configurable from `10` to `100`) to a **cross-encoder reranker** (`core/rank`).
 
 The cross-encoder reads the raw query string side by side with each candidate chunk's breadcrumb and body text, computing full cross-attention across query and document tokens to emit a calibrated logit (`Hit.RankScore`). Hits in the top window are re-sorted by `RankScore` descending, and `"rank"` is appended to `Hit.Via`.
+
+- **The window.** A wider window ranks deeper and takes longer. On a CPU, `bge-reranker-v2-m3` takes about a quarter of a second a text as an ONNX export and about half a second as is, so give a CPU ranker 10 to 20.
+- **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and the TUI's hits title says `re-ranked by <model>` or `not re-ranked: <why>`. The search picker's Rerank checkbox names the ranker in use as soon as it opens; unchecked, the hits are in the order they were found.
+- **A search that leaves `rerank` out is never ranked**, even under a build that answers ranked or not at all, so a client can compare the two.
+- **A ranker that does not answer leaves the hits in the order they were found**, and the answer's `rank` says why. Its calls are metered like a provider's.
 
 ![Benchmark comparison of Top-3 Recall across Keyword Grep, Lexical BM25, Hybrid RRF, and Full 3-Stage Reranking](retrieval-accuracy-by-stage.chart.json)
 
@@ -150,7 +163,7 @@ sed -n '41,77p' /path/to/kb/adrs/0203-storage-lease.md
 
 ## 7. Honest Stage Reporting (`stages.requested`, `performed`, `skipped`)
 
-Distributed systems and AI agents need to know whether a search result reflects full semantic + cross-encoder understanding or a fallback to words-only BM25 during a model switch. Every `search.query` response includes a deterministic `stages` record (`core/index/stages.go`) alongside `mode_used`, `semantic`, and `rank`:
+Distributed systems and AI agents need to know whether a search result reflects full semantic + cross-encoder understanding or a fallback to words-only BM25 during a model switch. A search can ask for its stages: `lexical` (words), `semantic` (meaning) and `rerank` (the ranker), at least one of the first two; asked for none, it runs them all. Every `search.query` response includes a deterministic `stages` record (`core/index/stages.go`) alongside `mode_used`, `semantic`, and `rank`:
 
 ```json
 {
@@ -198,7 +211,9 @@ Distributed systems and AI agents need to know whether a search result reflects 
 
 ### Interactive Stage Toggles in the TUI and Neovim
 
-In the TUI search picker (`Ctrl+G` or `SPC /`), three checkboxes sit directly beneath the query input: **`[x] Lexical`**, **`[x] Semantic`**, and **`[x] Rerank (<model>)`**. In Neovim (`:AutodocSearch`), `<M-l>`, `<M-s>`, and `<M-r>` toggle these three stages live. Flipping any stage immediately re-runs the query so you can inspect how semantic recall and cross-encoder reranking reorder the candidate list in real time.
+The TUI's pickers (search, open a document, add a workspace) share one layout: the fields over the list on the left, the file under the cursor on the right, the buttons beneath. The search (`Ctrl+G` or `SPC /`) runs as it is typed and refreshes its open query after a model or workspace transition; its preview is at the hit, the words marked. Under it, a checkbox for each stage the search can run: **Lexical**, **Semantic** while an embedding model is in use, and **Rerank (<model>)** while a ranker is. All start checked; each change searches again at once, so flipping them shows what each stage changes. One of Lexical and Semantic always stays checked. The choice is kept, and a box that hides while its stage is unavailable comes back as it was left.
+
+In Neovim (`:AutodocSearch`), `<M-l>`, `<M-s>`, and `<M-r>` toggle these three stages live, and each flip re-runs the query.
 
 If a caller explicitly requests semantic-only retrieval (`"stages": ["semantic"]` or `"mode": "semantic"`) while no embedding model is available or a model switch is in progress, AutoDoc refuses to silently substitute lexical hits—it returns an explicit RPC error (`-32065 rpc.unsupported`, `-32067 rpc.embed_failed`, or `-32069 rpc.switching`). When `"lexical"` is included alongside `"semantic"` (the default), AutoDoc gracefully answers via `lexical` and records the exact skip reason in `stages.skipped.semantic`.
 

@@ -132,16 +132,51 @@ If the daemon crashes at any point, recovery runs automatically the next time th
 
 ## 5. The Interactive Todos Panel (`SPC x`)
 
-In the AutoDoc TUI and GUI, pressing `SPC x` (or selecting **Todos › Open todos…**) opens the native Todos Panel—a resizable, dockable drawer (`65%` window width by `80%` height by default) implemented as a modular TUI `Feature` (`tui/todos.go`).
+In the AutoDoc TUI and GUI, pressing `SPC x` (or selecting **Todos › Open todos…**) opens the native Todos Panel, implemented as a modular TUI `Feature` (`tui/todos.go`). **The todos** (`SPC x`): one todo store at a time, its tasks a tab per status, as autofinder's
+todos panel shows them, in a large panel at the left (about 65% of the window wide and 80% tall
+until you size it; the size and the side you leave it at are kept).
 
 ### Navigating Stores, Buckets, and Variables
 
-- **Store Selector Bar (`S`, `N`, `O`, `L`, `R`, `M`)**: Along the top of the panel, a dropdown (`S`) switches between the active workspace's store and any project stores enrolled via `todos.register`. Action buttons beside it create a **New** store (`N`), **Load** an existing project folder (`O`), edit the store's display **Label** (`L`, persisted in preferences by stable store ID so it survives directory moves), **Refresh** and reconcile the store (`R`), or **Move** the store to a new directory (`M`).
-- **Six Bucket & Variable Tabs (`1`–`6`, `[` / `]`)**:
-  - Tabs `1` through `4` display numbered tables for **Open**, **In progress**, **Deferred**, and **Completed** tasks.
-  - Tab `5` (**Archived**) displays a two-level browser: the left list shows `YYYY/MM` archive partitions with task counts; pressing `Enter` on a month loads its tasks into the table, and `Backspace` returns focus to the month list.
+- **Store Selector Bar (`S`, `N`, `O`, `L`, `R`, `M`)**: Along the top, a dropdown
+  chooses the store shown among the ones AutoDoc knows (the workspace's first), by its label or its
+  name; under it, buttons make a new store (New), load one from a folder (Load), rename the store
+  shown (Edit: its label, AutoDoc's own) and refresh it (Refresh), framed. A label is persisted in preferences by stable store ID, so it survives directory moves. `M` moves the store to a new directory.
+- **Bucket & Variable Tabs (`1`–`6`, `[` / `]`)**: then the tabs, Open, In
+  progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
+  its months, a month's tasks beside them.
+  - Tab `5` (**Archived**) lists each `YYYY/MM` archive partition with its task count.
   - Tab `6` (**Variables**) inspects the store's effective symbolic path variables (`$KB_ROOT`, `$PROJECT_ROOT`, `$HOME`, and custom variables), showing each variable's resolved path and scope (`e` sets a workspace-scoped variable in `.autodoc-vars.toml`; `m` sets a machine-local override).
-- **Details Pane & Contextual Action Row (`i` / `o`)**: Below the table, a toggleable Markdown preview renders the selected task's metadata, any validation `errors[]`, and its description body. The bottom action row dynamically surfaces only valid operations (`Add`, `Status…`, `Assign`, `Remove`), hiding all write actions when viewing a store released with `todos.release`, which names `todos.claim` to take it back. Pressing `?` opens a grouped keybinding overlay card.
+- **Details Pane & Contextual Action Row (`i` / `o`)**: Under the tabs the task under the cursor's details,
+  then one row of the actions that apply: Status…, Assign and Remove on a task, and Add. The details pane renders the selected task's metadata, any validation `errors[]`, and its description body. A store
+  is written from its first write, with no step first; only one released with `todos.release`
+  shows none, only "read-only: this store was released (todos.release)".
+  `?` opens the card of the panel's keys, by purpose; `?` again or `Esc` closes it.
+
+| Key | In the todos panel |
+| --- | --- |
+| `Enter` | open the task's file; on Archived's months, open a month |
+| `Backspace` | back to Archived's months |
+| `1`–`6`, `[` `]` | a tab (`6` is Variables); the tab before, after |
+| `i`, `o` | the details, shown or hidden |
+| `a` | add a task |
+| `d` | remove the task |
+| `s` | Status…: a picker of every status (open, in-progress, deferred, completed, archived), the task's own marked; choosing one moves the task there, its tab showing with the cursor on it |
+| `A` | assign the task to an agent |
+| `S` | the store dropdown (`Enter` opens it) |
+| `N`, `O` | a new store; load a store from a folder |
+| `L`, `R`, `M` | rename (label), refresh or move the store |
+| `?` | the card of these keys |
+
+### Assigning a Task to an Agent (`A`)
+
+**`A` assigns the task under the cursor to one of AutoDoc's own agents**:
+pick the agent, then type an optional instruction (`Esc` cancels; empty is "Task assigned to
+you."). The task's assignee becomes `autodoc:<codename>`, and an open task moves to in progress.
+The agent is then handed the task in its terminal: its title, its file and the instruction. If
+the agent isn't running, you're asked first, and it's handed over once it starts. If you decline,
+or the agent can't take it, the task stays assigned and a notice says so; `A` again delivers it.
+AutoDoc assigns only to its own agents. [Chapter 11 §3](./11-terminal-tabs-and-agent-handoff.md#3-the-one-key-agent-task-handoff-workflow-spc-x---a) walks through the handoff step by step.
 
 ---
 

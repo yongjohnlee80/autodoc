@@ -154,16 +154,64 @@ autodoc --call sys.capabilities '[]'
 
 ## 5. Custom Compile-Time Chunkers (`app.Options.Chunkers`) and Held Files
 
-Through `app.Main` (`ADR 0216`), custom builds of AutoDoc can register additional domain-specific `search.Chunker` implementations keyed by file extension:
+`cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community one included, has golib's code chunkers (`search/chunk/code`) and derives `.docx`, `.htm` and `.html` (golib's `extract/docx` and `extract/html`; ADR 1791429611). Another main can hand `app.Main` more chunkers and a deriver (ADR 0216):
 
 ```go
-os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
-    Version:  version,
-    Chunkers: map[string]search.Chunker{".dsl": dslChunker},
-}))
+func main() {
+	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
+		Version:  version,                                       // -X main.version, as cmd/autodoc's
+		Chunkers: map[string]search.Chunker{".zig": zigChunker}, // golib's search.Chunker, by extension
+		Deriver:  pdfDeriver,                                    // more formats' text, read-only
+		Rank:     app.Rank{Ranker: slmRanker, Window: 20},       // golib's rank.Ranker: the only one in use
+	}))
+}
 ```
 
-Because multiple AutoDoc builds can share a single SQLite store (`autodoc.db`), a community binary that attaches to a store containing `.dsl` chunks produced by a custom build **never overwrites or drops those chunks**. Instead, it marks those files as **held** (`Hit.Hold` set to `"current"`, `"stale"`, or `"unchecked"`, and counted under `held` in `index.status`), keeping every declaration searchable across builds.
+Because multiple AutoDoc builds can share a single SQLite store (`autodoc.db`), a community binary that attaches to a store containing `.zig` chunks produced by a custom build **never overwrites or drops those chunks**. Instead, it marks those files as **held** (`Hit.Hold` set to `"current"`, `"stale"`, or `"unchecked"`, and counted under `held` in `index.status`), keeping every declaration searchable across builds.
+
+- **They are checked once, at the start.** A chunker's extension that is upper-case, built in (`.md`,
+  `.txt`, `.yaml`, `.yml`, `.mmd`, `.csv`), one of golib's code types or a derived format; a deriver's format that
+  every build already derives (`.docx`, `.htm`, `.html`); or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
+  may hold `/` too, up to 64), stops the binary, naming it. Each version is read once.
+- **A registered file is code, read as text.** Its kind is the chunker's, after the built-in kinds and
+  before the workspace's own text types (one of which naming it is refused). Its chunks keep the
+  chunker's version and its own embed text, so a vector is made of exactly what its hash names. Code
+  is opt-in: the Edit tab offers the daemon's registered types beside the built-in ones, and turning
+  one on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to the excludes.
+- **A derived document is indexed from its text.** A file of a format the deriver offers is handed
+  to it, read at offsets, and its Markdown is chunked as Markdown files are (no wikilinks, tags or
+  frontmatter), under `d<ext>:<id>@<version>+<built-in>` in `document.indexer`. Its file may be up
+  to 250 MiB, since a PDF is mostly images and fonts, and its text up to 16 MiB, refused by its
+  stated size before a byte is read; a text file stays at 16 MiB. When the deriver fails (an
+  error, a panic, its cache's text evicted twice), the file keeps what was indexed, and it is tried
+  again with the indexer's backoff. A text refused for what the same bytes would give again (made
+  under another identity, too large, not UTF-8) waits for the file to change, and leaves the index
+  only if the file changed since it was indexed. An unchanged file is derived again only when its
+  format's id or version (as the deriver describes it at the start) or the section size changes.
+- **`doc.read` serves the derived text, read-only.** `doc.write`, `doc.rename` and `doc.remove` of
+  it are refused. Text longer than one read carries (just under 4 MiB) is cut at a paragraph's end
+  and ends with one line of AutoDoc's own, after a `---` rule, beginning `[autodoc: truncated]` and
+  saying how much of how much it shows. A cache's eviction miss (a deriver's
+  error matching `fs.ErrNotExist`) is retried once. The deriver's own text limit, if it has one,
+  is its own.
+- **A build's own ranker is the only one in use** (`app.Options.Rank`). It is probed at startup and
+  kept for the daemon's life, even when the probe fails: then each search answers unranked, its
+  `rank` state `error`. It is not stored. The ranker chosen in the TUI is kept as it was, and
+  cannot be changed while the build's is in use; it comes back for a build without one.
+  `Rank.Texts` gives the ranker the build's own text for each hit in place of its chunk's.
+  `Rank.Required` answers ranked or not at all: a search that asks for `rerank` (or auto) and the
+  ranker cannot rank is refused (code -32070). A search that leaves `rerank` out is answered,
+  unranked: the client chose it.
+- **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
+  or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted
+  in `index.status`, and deleted only when the file or the rules say so. A file a community daemon
+  indexed as Markdown is cut by a build with its chunker, and a derived file is held only by a
+  build that derives no such format: one that does derives it again, under its own identity.
+- **The TUI offers the build that reads more.** A TUI whose binary registers a strict superset of the
+  daemon's registrations offers, once a session, to restart the daemon as its own build; a community
+  TUI never offers to replace a registered daemon. While one client restarts the daemon, the others
+  only reconnect (a handoff beside the daemon's log, at most 30 seconds), so its build is the one
+  that serves next.
 
 ---
 

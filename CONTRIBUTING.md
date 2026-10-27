@@ -57,6 +57,7 @@ make fmt          # gofmt: the tree must be formatted
 make vet          # go vet, untagged and with -tags server
 make test         # the tests, with -tags server
 make race         # the tests under -race, twice
+make cover        # the tests with a coverage profile (coverage.out), and the total
 go vet -tags gui ./tui/ ./app/
 go test -tags gui ./tui/
 make test-lua     # autodoc.nvim's Lua suites (see below)
@@ -64,7 +65,9 @@ make test-lua     # autodoc.nvim's Lua suites (see below)
 
 - **Never run `go test -tags gui ./app/`**: it opens a window.
 - The Postgres cells need `AUTODOC_TEST_PGURL`, a PostgreSQL with pgvector whose user may create
-  databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)).
+  databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)). CI runs
+  `make race`'s command against a pgvector service with those cells required
+  (`AUTODOC_TEST_PG_REQUIRED=1`), and on a pull request a separate coverage policy.
 - **The Lua suites** (`make test-lua`, which runs `tests/run-all.sh`) need:
   - Neovim on `PATH` (CI uses v0.12.2);
   - a checkout of [auto-core.nvim](https://github.com/yongjohnlee80/auto-core.nvim), named by
