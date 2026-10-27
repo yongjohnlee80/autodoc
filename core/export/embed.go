@@ -2,23 +2,25 @@ package export
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/csv"
 	"errors"
-	"fmt"
 	stdhtml "html"
 	"io"
 	"io/fs"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
+	"github.com/yongjohnlee80/golib/vfs"
+	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
@@ -57,13 +59,52 @@ var imageTypes = map[string]string{
 	".svg": "image/svg+xml", ".webp": "image/webp", ".avif": "image/avif", ".bmp": "image/bmp",
 }
 
+// labFS is the document's folder as an io/fs.ReadDirFS for lab.Outputs, listed through golib vfs:
+// lab.Outputs only lists (fs.ReadDir), so Open is refused.
+type labFS struct{ files *local.FS }
+
+func (l labFS) Open(name string) (fs.File, error) {
+	return nil, &fs.PathError{Op: "open", Path: name, Err: errors.ErrUnsupported}
+}
+
+func (l labFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	infos, err := l.files.ReadDir(embedCtx, name)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fs.DirEntry, len(infos))
+	for i, info := range infos {
+		out[i] = labEntry{info}
+	}
+	return out, nil
+}
+
+// labEntry is a vfs entry as an fs.DirEntry: lab.Outputs reads its name and type.
+type labEntry struct{ fi vfs.FileInfo }
+
+func (e labEntry) Name() string               { return e.fi.Name }
+func (e labEntry) IsDir() bool                { return e.fi.Mode.IsDir() }
+func (e labEntry) Type() fs.FileMode          { return e.fi.Mode.Type() }
+func (e labEntry) Info() (fs.FileInfo, error) { return labInfo(e), nil }
+
+// labInfo is a vfs entry as an fs.FileInfo.
+type labInfo struct{ fi vfs.FileInfo }
+
+func (i labInfo) Name() string       { return i.fi.Name }
+func (i labInfo) Size() int64        { return i.fi.Size }
+func (i labInfo) Mode() fs.FileMode  { return i.fi.Mode }
+func (i labInfo) ModTime() time.Time { return i.fi.ModTime }
+func (i labInfo) IsDir() bool        { return i.fi.Mode.IsDir() }
+func (i labInfo) Sys() any           { return nil }
+
 // videoTypes are the video files a site's page draws as a <video> (Options.Media), by extension.
 var videoTypes = map[string]bool{".mp4": true, ".webm": true}
 
-// embedder draws a document's embeds: its folder, opened as a root, and its resources folder's name.
+// embedder draws a document's embeds: its folder, read through golib vfs's local filesystem (an
+// os.Root underneath, so nothing is read from outside it), and its resources folder's name.
 type embedder struct {
-	root      *os.Root
-	dir       string // the document's folder, the root's path on disk
+	files     *local.FS
+	dir       string // the document's folder, files' root on disk
 	resources string
 	fit       tableFit
 	images    int64                             // the images' bytes so far, against maxEmbedImages
@@ -81,7 +122,7 @@ func newEmbedder(doc string, fit tableFit) *embedder {
 	if err != nil {
 		return nil
 	}
-	root, err := os.OpenRoot(filepath.Dir(abs))
+	files, err := local.New(filepath.Dir(abs))
 	if err != nil {
 		return nil
 	}
@@ -93,10 +134,24 @@ func newEmbedder(doc string, fit tableFit) *embedder {
 			break
 		}
 	}
-	return &embedder{root: root, dir: filepath.Dir(abs), resources: name, fit: fit}
+	return &embedder{files: files, dir: filepath.Dir(abs), resources: name, fit: fit}
 }
 
-func (e *embedder) close() { e.root.Close() }
+func (e *embedder) close() { e.files.Close() }
+
+// RenderWith takes no context: an embed is read from the document's own folder, and a render is
+// not cancelled.
+var embedCtx = context.Background()
+
+// has reports whether p is a file that opens in the document's folder: not missing, not a folder,
+// and not a link out of it. err is why not; fs.ErrNotExist when it is not there.
+func (e *embedder) has(p string) error {
+	f, err := e.files.Open(embedCtx, p, 0)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
 
 // embed is the HTML that draws dest, with alt as an image's alt text; block says the embed is its
 // paragraph's only content, which a diagram and a table need. diagram says it is a Mermaid diagram,
@@ -234,9 +289,9 @@ func (e *embedder) read(p string, limit int64) ([]byte, bool) {
 // there.
 func (e *embedder) locate(p string) (string, bool) {
 	for _, candidate := range []string{p, path.Join(e.resources, p)} {
-		info, err := e.root.Stat(candidate)
+		err := e.has(candidate)
 		if err == nil {
-			return candidate, info.Mode().IsRegular()
+			return candidate, true
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
 			return "", false // there, but refused: not looked for elsewhere
@@ -267,7 +322,7 @@ func (e *embedder) video(p, alt string) (string, bool, bool, bool) {
 	}
 	poster := ""
 	still := strings.TrimSuffix(found, path.Ext(found)) + ".jpg"
-	if info, err := e.root.Stat(still); err == nil && info.Mode().IsRegular() {
+	if e.has(still) == nil {
 		if src, ok := e.media(filepath.Join(e.dir, filepath.FromSlash(still))); ok {
 			poster = ` poster="` + stdhtml.EscapeString(src) + `"`
 		}
@@ -278,22 +333,18 @@ func (e *embedder) video(p, alt string) (string, bool, bool, bool) {
 
 var errTooLarge = errors.New("export: an embed is too large")
 
-func (e *embedder) readAt(p string, limit int64) ([]byte, error) {
-	f, err := e.root.Open(p)
+// readAt is p's bytes in the document's folder, at most limit of them (readFile).
+func (e *embedder) readAt(p string, limit int64) ([]byte, error) { return readFile(e.files, p, limit) }
+
+// readFile is p's bytes in files, at most limit of them: a folder, or a link out of files' folder,
+// is refused as it is opened, and a file over limit is errTooLarge, read no further. The bytes are
+// the opened file's, whatever p names by the time they are read.
+func readFile(files *local.FS, p string, limit int64) ([]byte, error) {
+	f, err := files.Open(embedCtx, p, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("export: %s is not a file", p)
-	}
-	if info.Size() > limit {
-		return nil, errTooLarge
-	}
 	data, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return nil, err

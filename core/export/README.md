@@ -53,5 +53,6 @@ Text drops frontmatter, link reference definitions and raw
 HTML, keeps code blocks as written, and ignores the theme.
 
 Every function is safe for concurrent use: shared state is read-only or built once under a
-`sync.Once`. The only disk reads are `Options.Document`'s embeds, inside its folder; `RenderWith`
-reads the working directory when `Options.Base` or `Options.Document` is relative.
+`sync.Once`. The only disk reads are `Options.Document`'s embeds, inside its folder, read through
+golib `vfs/local`; `RenderWith` reads the working directory when `Options.Base` or
+`Options.Document` is relative.

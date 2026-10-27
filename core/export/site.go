@@ -3,10 +3,8 @@ package export
 import (
 	"bufio"
 	"cmp"
-	"context"
 	"fmt"
 	stdhtml "html"
-	"io"
 	"net/url"
 	"os"
 	"path"
@@ -173,15 +171,8 @@ func (m *siteMedia) publish(file string) (string, bool) {
 	if m.published[site] {
 		return site, true
 	}
-	// Site takes no context: a site build reads a local folder, and is not cancelled
-	f, err := m.files.Open(context.Background(), site, 0)
+	data, err := readFile(m.files, site, maxSiteMedia)
 	if err != nil {
-		return "", false
-	}
-	defer f.Close()
-	// the bytes of the file opened, not of what its path names now; one over the cap is not read whole
-	data, err := io.ReadAll(io.LimitReader(f, maxSiteMedia+1))
-	if err != nil || len(data) > maxSiteMedia {
 		return "", false
 	}
 	if err := m.write(site, data); err != nil {
