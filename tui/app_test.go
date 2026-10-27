@@ -190,7 +190,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			prefs[k] = "false"
 		}
 	}
-	if !o.newUser {
+	switch {
+	case o.newUser && o.prefs == nil:
+		delete(prefs, prefStatus) // testPrefs' own: a new user's store holds neither
+		delete(prefs, prefMenuHide)
+	case !o.newUser:
 		for k, v := range map[string]string{prefMenuHide: "true", prefStatus: "false"} {
 			if _, set := prefs[k]; !set {
 				prefs[k] = v
