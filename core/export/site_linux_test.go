@@ -70,3 +70,58 @@ func TestASitesMediaStayInDocsWhileAFileIsSwapped(t *testing.T) {
 		t.Fatal("media/asset.gif was never published: the cell saw no build read it")
 	}
 }
+
+// A site build never waits on a FIFO exchanged for the page's image after the embed found it: the
+// image and a FIFO are swapped back and forth (renameat2's exchange) while the site is built 500
+// times, in a child a deadline ends (inChild). Each build publishes the image or refuses the FIFO,
+// and the image is published in some.
+func TestASiteNeverWaitsOnAFIFOSwappedIn(t *testing.T) {
+	if docs := os.Getenv(fifoDocs); docs != "" {
+		file, swap := filepath.Join(docs, "media", "asset.gif"), filepath.Join(docs, "media", "swap.gif")
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if err := unix.Renameat2(unix.AT_FDCWD, file, unix.AT_FDCWD, swap, unix.RENAME_EXCHANGE); err != nil {
+					t.Errorf("renameat2: %v", err)
+					return
+				}
+			}
+		})
+		defer func() { close(stop); wg.Wait() }()
+		published := 0
+		for range 500 {
+			err := export.Site(docs, export.SiteOptions{}, func(rel string, data []byte) error {
+				if rel == "media/asset.gif" {
+					published++
+					if string(data) != "GIF89a-public" {
+						t.Errorf("media/asset.gif published as %q", data)
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if published == 0 {
+			t.Fatal("media/asset.gif was never published: the cell saw no build read it")
+		}
+		return
+	}
+	docs := fixture(t, map[string]string{
+		"site.toml":           mediaMap,
+		"README.md":           "# Front\n\n![asset](media/asset.gif)\n",
+		"media/asset.gif":     "GIF89a-public",
+		"tutorials/README.md": "# T\n",
+	})
+	if err := unix.Mkfifo(filepath.Join(docs, "media", "swap.gif"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inChild(t, "TestASiteNeverWaitsOnAFIFOSwappedIn", docs)
+}
