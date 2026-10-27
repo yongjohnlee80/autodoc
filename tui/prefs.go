@@ -187,11 +187,12 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		choicePref(prefLanguage, "en", languages, func(p *prefs) *string { return &p.language }).
 			chooser("App.languageIndex", "App.setLanguageIndex").
 			shows(func(p prefs) map[string]any { return languageChecks(p.language) }),
-		boolPref(prefMenuHide, true, func(p *prefs) *bool { return &p.menuHidden }).
+		// the menu bar and the status line show for a new user (Johno, v0.3.3); a stored choice wins
+		boolPref(prefMenuHide, false, func(p *prefs) *bool { return &p.menuHidden }).
 			chooser("App.menuHiddenIndex", "App.setMenuHiddenIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)} }).
 			then(func(p prefs) { h.saidMenuBar(p.menuHidden) }),
-		boolPref(prefStatus, false, func(p *prefs) *bool { return &p.statusOn }).
+		boolPref(prefStatus, true, func(p *prefs) *bool { return &p.statusOn }).
 			chooser("App.statusShownIndex", "App.setStatusShownIndex"),
 		choicePref(prefExplorer, "left", edges, func(p *prefs) *string { return &p.explorerEdge }).
 			chooser("App.explorerEdgeIndex", "App.setExplorerEdge").

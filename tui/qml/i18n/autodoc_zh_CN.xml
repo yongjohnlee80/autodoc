@@ -2588,7 +2588,7 @@
               and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
-  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+  F10, Alt+letter  the menu bar, shown by default (Options › Editor preferences can hide it until then).
   SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
               keys there), and F10 may need Fn
@@ -2659,7 +2659,7 @@
               也可用（在 选项 › 终端 中关闭），用它们到达后即可直接输入
   F6 and Shift+F6  下一个或上一个已打开的控件：编辑器和各面板，不含
               菜单栏。SPC Tab 或 :go &lt;name&gt; 按名称转到控件(转到 › 控件…)
-  F10, Alt+letter  菜单栏，平时隐藏(“选项 › 编辑器首选项”可让它常驻)。
+  F10, Alt+letter  菜单栏，默认显示(“选项 › 编辑器首选项”可将它隐藏，按下时才出现)。
   SPC m       显示并聚焦菜单栏；再按一次隐藏
               在 Mac 上，Option+字母键即 Alt+字母键(美式布局；Option+E、I、N、U 在该布局下
               是死键)，F10 可能需要配合 Fn

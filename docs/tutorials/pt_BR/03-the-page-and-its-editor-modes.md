@@ -17,7 +17,7 @@ flowchart LR
 
 **O leader.** No modo Normal do Vim, **Espaço** abre o cartão leader: uma tecla para cada comando. Em qualquer modo, **Ctrl+Space** o abre. Quase tudo o que vem a seguir é uma tecla nele.
 
-**A barra de menus** fica escondida até que **F10** ou **Alt+letra** a traga (no Mac, Option+letra). **SPC m** a mostra e a mantém visível.
+**A barra de menus** aparece no topo. Se você a configurar para se esconder (Opções › Preferências do editor), ela fica escondida até que **F10** ou **Alt+letra** a traga (no Mac, Option+letra). **SPC m** a mostra e a mantém visível.
 
 **O dock** é a ponta direita da barra de menus: um ícone para cada widget aberto. **✎**, o editor, vem primeiro, depois cada painel aberto ou que ainda roda atrás da gaveta fechada: o shell de um terminal, um agente, o plugin de um cartão de plugin. Aponte para um ícone para ver o nome. Um clique num painel visível o esconde, e um clique num escondido o traz de volta como você o deixou, com o teclado nele. Um painel escondido guarda tudo o que tem, e o ícone dele fica esmaecido. **✎** esconde todos os painéis visíveis; clique de novo para trazer os mesmos de volta. Abrir uma nota pelo GlobeMap, pelo Mindmap ou pela gaveta de Links o esconde do mesmo jeito. Enquanto o dock lista mais que o editor, a barra fica visível e a página desce uma linha.
 

@@ -172,7 +172,7 @@ const helpKeys = `KEYS
               and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go <name>, goes to one by name (Go › Widget…)
-  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+  F10, Alt+letter  the menu bar, shown by default (Options › Editor preferences can hide it until then).
   SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
               keys there), and F10 may need Fn

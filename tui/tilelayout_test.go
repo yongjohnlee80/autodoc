@@ -21,7 +21,8 @@ var defaultScreenGolden = filepath.Join("testdata", "default_screen.golden")
 // The default reads as before: the page tiled alone is the whole base, so the screen is v0.2.6's,
 // cell for cell.
 func TestTheDefaultLayoutReadsAsTheReleasedOne(t *testing.T) {
-	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1"}})
+	// the menu bar and the status line hidden, as they were by default then: the base is the page
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1", prefMenuHide: "true", prefStatus: "false"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.s.WaitFor(t, "the start's toasts gone", func(sc string) bool {

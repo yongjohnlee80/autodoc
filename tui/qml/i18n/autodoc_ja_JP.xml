@@ -2588,7 +2588,7 @@
               and arriving there by one of them you type at once
   F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
               menu bar. SPC Tab, or :go &lt;name&gt;, goes to one by name (Go › Widget…)
-  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+  F10, Alt+letter  the menu bar, shown by default (Options › Editor preferences can hide it until then).
   SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
               keys there), and F10 may need Fn
@@ -2660,7 +2660,7 @@
               エージェントのパネルでは入力中も使え(オプション › ターミナルでオフにできる)、これで移るとすぐ入力できます
   F6 and Shift+F6  次/前の開いているウィジェット: エディターとパネル (メニューバーは
               含まない)。SPC Tab または :go &lt;name&gt; で名前を指定して移動 (移動 › ウィジェット…)
-  F10, Alt+letter  メニューバー (それまでは非表示。オプション › エディターの設定 で常に表示可能)。
+  F10, Alt+letter  メニューバー (既定で表示。オプション › エディターの設定 でそれまで非表示にできます)。
   SPC m       メニューバーを表示してフォーカス。もう一度押すと隠す
               Mac では Option+文字キーが Alt+文字キー (US 配列。Option+E、I、N、U はデッド
               キー)。F10 には Fn が必要な場合あり

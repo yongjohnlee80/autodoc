@@ -81,8 +81,12 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 // store starts with, nil for the tests' own (the status line shown, which most tests read); emb
 // serves embedding providers.
 type daemonOpts struct {
-	hold    *scanHold
-	prefs   map[string]string
+	hold  *scanHold
+	prefs map[string]string
+	// newUser leaves the menu bar and the status line to their defaults (shown, v0.3.3); without it
+	// the store hides the menu bar and the status line unless prefs names them, as the cells were
+	// written against
+	newUser bool
 	emb     rpc.Embeddings
 	version string // its hello's; "" is v-test
 	// warming is each workspace's index.status warming reasons; nil is ready
@@ -184,6 +188,13 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	for _, k := range []string{prefAboutAt, prefUpdates} {
 		if _, set := prefs[k]; !set {
 			prefs[k] = "false"
+		}
+	}
+	if !o.newUser {
+		for k, v := range map[string]string{prefMenuHide: "true", prefStatus: "false"} {
+			if _, set := prefs[k]; !set {
+				prefs[k] = v
+			}
 		}
 	}
 	for k, v := range prefs {
