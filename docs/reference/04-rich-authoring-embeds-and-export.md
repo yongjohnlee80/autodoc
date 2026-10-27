@@ -68,7 +68,7 @@ So a diagram can draw in an export and not in the GUI. In the GUI:
 - a diagram outside golib's subset shows a notice in its place, saying why in golib's words: `diagram not drawn: <golib's error>`. Its source is in the Raw view, or in its `.mmd` file;
 - a diagram with a syntax error is drawn as the error and its line, in place.
 
-To draw the same in both, stay inside golib's subset.
+To draw the same in both, stay inside golib's subset. `autodoc --check-diagram <file>…` checks a diagram against the GUI's renderer with no UI: it prints `file:line: ok`, or golib's error, for each `.mmd` or `.mermaid`, and each `mermaid` fence of a `.md` (§4.4 has the details).
 
 ---
 
@@ -87,6 +87,15 @@ chart not drawn: unsupported: vegalite: a spec outside the subset drawn: a rule 
 ```
 
 A build without the GUI draws no chart in an export, so its charts are their specs, with no caption.
+
+To check a chart before you show it, run `autodoc --check-diagram <file>…`. It lays out each `.chart.json` or `.vl.json`, each `.mmd` or `.mermaid`, and each `vega-lite` or `mermaid` fence of a `.md` with golib's renderer, as the GUI does, with no UI or daemon. It prints `file:line: ok (vega-lite)` or `file:line: not drawn: <golib's error>` for each, and exits:
+
+| Code | Meaning |
+|---|---|
+| 0 | every diagram drawn |
+| 1 | one or more not drawn, or a file it couldn't read or that holds no diagram kind |
+| 2 | no file given |
+| 3 | this build has no GUI, so it can't draw |
 
 A bar chart, for example:
 

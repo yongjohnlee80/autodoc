@@ -8,7 +8,7 @@ import (
 )
 
 // TestChooseDerivesItsChecksFromTheTable: the refusals name the table's own modes and flags, and a
-// mode's argument, flags after it included, is handed to it.
+// mode's argument, flags after it included, is handed to it; a mode taking several takes them all.
 func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 	table := func() (*flag.FlagSet, *bytes.Buffer, []mode, []companion) {
 		var out bytes.Buffer
@@ -17,6 +17,7 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 		fs.Bool("a", false, "")
 		fs.Bool("b", false, "")
 		fs.Bool("c", false, "")
+		fs.Bool("d", false, "")
 		fs.String("x", "", "")
 		fs.Bool("y", false, "")
 		fs.Bool("z", false, "")
@@ -24,6 +25,7 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 			{flag: "a", oneOf: []string{"y", "z"}, run: func(string) int { return 10 }},
 			{flag: "b", arg: true, run: func(string) int { return 11 }},
 			{flag: "c", arg: true, flagsAfter: true, run: func(string) int { return 12 }},
+			{flag: "d", many: true, run: func(string) int { return 13 }},
 		}
 		return fs, &out, modes, []companion{{flags: []string{"x"}, modes: []string{"b", "c"}}}
 	}
@@ -37,9 +39,11 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 		{args: []string{"-a"}, ok: true, run: 10},
 		{args: []string{"-b", "w"}, ok: true, run: 11, arg: "w"},
 		{args: []string{"-c", "f", "-x", "v"}, ok: true, run: 12, arg: "f"},
-		{args: []string{"-b", "w", "-x", "v"}, says: "unexpected arguments: [w -x v] (only --b and --c take one argument)"},
+		{args: []string{"-b", "w", "-x", "v"}, says: "unexpected arguments: [w -x v] (only --b and --c take one argument, and --d several)"},
 		{args: []string{"-c", "f", "g"}, says: "unexpected arguments: [g]"},
 		{args: []string{"-a", "w"}, says: "unexpected arguments: [w]"},
+		{args: []string{"-d", "f", "g", "h"}, ok: true, run: 13, arg: "f"},
+		{args: []string{"-b", "-d", "f"}, says: "autodoc: --b and --d are separate modes: give one\n"},
 		{args: []string{"-a", "-x", "v"}, says: "--x is for --b and --c"},
 		{args: []string{"-x", "v", "-b"}, ok: true, run: 11},
 		{args: []string{"-a", "-b", "w"}, says: "autodoc: --a and --b are separate modes: give one\n"},

@@ -467,3 +467,13 @@ example. Start with `autodoc --new-theme mytheme --from sepia`, edit the printed
 run `autodoc --check-theme /path/themes/mytheme.qml` until it succeeds. These commands need no
 daemon or UI. `--config` places new themes beside that config file. Built-in names cannot be
 shadowed; every colour key is required. See [docs/themes.md](docs/themes.md).
+
+## Diagrams and charts (agent authoring)
+
+Before you show the user a Mermaid diagram or a Vega-Lite chart, check that AutoDoc's GUI draws it:
+`autodoc --check-diagram notes/flow.mmd notes/sales.chart.json notes/report.md`. It lays each one
+out with golib's renderer, as the Rendered view does, and prints `file:line: ok` or `file:line: not
+drawn: <golib's error>`; a `.md` is checked fence by fence. Exit 0 means every diagram is drawn, 1
+that one is not, 2 that no file was given, 3 that this build has no GUI. A Mermaid diagram golib
+does not draw still draws in an export (mermaid.js), so say which the user will see. What golib draws is its
+own documentation's: `golib/parse/mermaid` and `golib/gui/vegalite`.
