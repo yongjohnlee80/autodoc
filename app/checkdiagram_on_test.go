@@ -53,7 +53,11 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 	// in a block quote is one, and a closing fence with trailing spaces ends the flowchart it closes
 	example := strings.SplitAfter(diagramShapes, "````\n")[0]
 	spaced := "```mermaid\nflowchart LR\n  A --> B\n```   \nAfter the fence, prose.\n"
-	dir = writeFiles(t, map[string]string{"example.md": example, "spaced.md": spaced, "shapes.md": diagramShapes})
+	dir = writeFiles(t, map[string]string{"example.md": example, "spaced.md": spaced, "shapes.md": diagramShapes,
+		"cr.md": "# Note\r\r```mermaid\rflowchart LR\r  A --> B\r```\r"})
+	if code, out := runMain(t, nil, "--check-diagram", at("cr.md")); code != diagramsDrawn || !strings.Contains(out, at("cr.md")+":4: ok (mermaid)") {
+		t.Errorf("a note whose lines end in a lone CR: %d\n%s", code, out)
+	}
 	if code, out := runMain(t, nil, "--check-diagram", at("example.md")); code != diagramsDrawn || !strings.Contains(out, "no mermaid or vega-lite diagrams") {
 		t.Errorf("a mermaid fence shown as text: %d\n%s", code, out)
 	}

@@ -23,7 +23,8 @@ func writeFiles(t *testing.T, files map[string]string) string {
 // vega-lite fence of a .md (``` or ~~~, vegalite spelled either way), with the line its source
 // starts on, others' fences passed over; none for a .md without one. Another file is refused.
 // The fences are the Markdown parser's: one shown inside a longer fence is text, one in a block
-// quote is a diagram, and a closing fence with trailing spaces closes it.
+// quote is a diagram, and a closing fence with trailing spaces closes it. A line ends as the parser
+// ends one: \n, \r\n or a lone \r.
 func TestDiagramsAreFoundInFiles(t *testing.T) {
 	md := "# Report\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```go\nx := 1\n```\n\n~~~~ vegalite\n{\"mark\": \"bar\"}\n~~~~\n"
 	dir := writeFiles(t, map[string]string{"report.md": md, "shapes.md": diagramShapes, "plain.md": "# none\n", "flow.mmd": "flowchart LR\n  A --> B\n",
@@ -53,6 +54,15 @@ func TestDiagramsAreFoundInFiles(t *testing.T) {
 	}
 	if got[1].line != 16 || got[1].src != "flowchart LR\n  A --> B\n" {
 		t.Errorf("the flowchart closed by a fence with trailing spaces: %+v", got[1])
+	}
+	for name, eol := range map[string]string{"cr.md": "\r", "crlf.md": "\r\n"} {
+		src := strings.ReplaceAll("# Note\n\n```mermaid\nflowchart LR\n  A --> B\n```\n", "\n", eol)
+		if err := os.WriteFile(at(name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := diagramsIn(at(name)); err != nil || len(got) != 1 || got[0].line != 4 {
+			t.Errorf("%s: %+v, %v; want its fence's source at line 4", name, got, err)
+		}
 	}
 	if got, err := diagramsIn(at("plain.md")); err != nil || len(got) != 0 {
 		t.Errorf("a .md without diagrams: %+v, %v", got, err)

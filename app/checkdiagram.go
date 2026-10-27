@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -82,8 +81,9 @@ func diagramsIn(file string) ([]checkDiagram, error) {
 			if lang != "mermaid" && lang != "vega-lite" {
 				continue
 			}
-			// the source starts the line after its opening fence's
-			line := bytes.Count(data[:c.Span.Start], []byte("\n")) + 2
+			// the source starts the line after its opening fence's, as the parser counts lines
+			// (\n, \r\n or a lone \r)
+			line := doc.Position(c.Span.Start).Line + 1
 			out = append(out, checkDiagram{file: file, line: line, lang: lang, src: string(c.Literal)})
 		}
 	}
