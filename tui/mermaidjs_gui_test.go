@@ -290,3 +290,28 @@ func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
 		t.Errorf("a declined chart in the pane: %+v, want the notice of golib's reason", a)
 	}
 }
+
+// The pane's notice for a chart golib declines is in the UI's language: with Korean chosen on the
+// host, a chart outside golib's subset asked of the pane's chain is the Korean sentence, golib's
+// error in it as golib wrote it.
+func TestThePanesChartNoticeIsInTheUIsLanguage(t *testing.T) {
+	r, m := paneDrawer(t, &fakeBrowser{})
+	onLoop(r, func() bool { r.h.useLanguage("ko_KR"); return true })
+	req := guiwidget.DiagramRequest{Lang: "vega-lite", Src: `{"data":{"values":[]},"mark":"bar","transform":[]}`, Width: 400, Scale: 1}
+	ready := make(chan struct{}, 1)
+	a := onLoop(r, func() guiwidget.DiagramAnswer {
+		return m.Diagram(context.Background(), req, func() { ready <- struct{}{} })
+	})
+	if a.State == guiwidget.Pending {
+		select {
+		case <-ready:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the chain never called ready")
+		}
+		a = onLoop(r, func() guiwidget.DiagramAnswer { return m.Diagram(context.Background(), req, func() {}) })
+	}
+	if n, ok := a.Pic.(noticeView); !ok || !strings.HasPrefix(n.text, "차트를 그리지 못했습니다: ") || !strings.Contains(n.text, `"transform"`) ||
+		strings.Contains(n.text, "Its source") {
+		t.Fatalf("the pane's notice in Korean: %+v", a)
+	}
+}
