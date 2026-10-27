@@ -224,7 +224,7 @@ jobs:
       # The export's GUI cells: the chart hook draws a chart as SVG (ADR 1792395460). Named, since
       # app's other cells start the GUI, which needs a display.
       - name: the export's GUI cells
-        run: go test -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|ExportASite|ExportThroughTheCommandLine' ./app/
+        run: go test -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|AnExportedChartGolibCannotDrawSaysWhy|ExportASite|ExportThroughTheCommandLine' ./app/
 
   coverage:
     name: coverage policy
