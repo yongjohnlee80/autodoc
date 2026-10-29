@@ -134,3 +134,34 @@ func TestFetchWritesAProfile(t *testing.T) {
 		t.Error("HoldsLabels: want cpu and goroutine alone")
 	}
 }
+
+// Close is for good: a Start after it, as a start queued before the process ended may run, is
+// ErrClosed and leaves no monitor, socket or directory; Stop still toggles before it.
+func TestCloseIsTerminal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p := profiling.New(ctx, "gui")
+	first := filepath.Join(shortDir(t), "a")
+	if _, err := p.Start(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Start(first); err != nil {
+		t.Fatalf("a start after a stop: %v", err)
+	}
+	if err := p.Close(); err != nil || p.Dir() != "" {
+		t.Fatalf("close: %v, dir %q", err, p.Dir())
+	}
+	late := filepath.Join(shortDir(t), "late")
+	if dir, err := p.Start(late); !errors.Is(err, profiling.ErrClosed) || dir != "" || p.Dir() != "" {
+		t.Errorf("a start after close: %q, %v, dir %q; want ErrClosed and nothing", dir, err, p.Dir())
+	}
+	if _, err := os.Stat(late); !os.IsNotExist(err) {
+		t.Errorf("a start after close made its directory: %v", err)
+	}
+	if err := p.Close(); err != nil {
+		t.Errorf("a second close: %v", err)
+	}
+}

@@ -241,3 +241,23 @@ func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
 		t.Errorf("after the start: state %v, busy %v", c.set, f.backendBusy)
 	}
 }
+
+// A window start queued before the program closed its profiler, and run after, starts no monitor:
+// the close is for good, so the start is refused and the item stays off.
+func TestAWindowStartQueuedPastTheCloseStartsNothing(t *testing.T) {
+	shortRuntime(t)
+	c := &heldCore{scriptedCore: newScripted("kb")} // embedsetup_test.go's: Go holds the worker
+	prof := profiling.New(context.Background(), "gui")
+	f := newProfiling(c, prof, nil)
+	f.toggleWindow()
+	if len(c.held) != 1 {
+		t.Fatalf("%d works queued; want the start", len(c.held))
+	}
+	if err := prof.Close(); err != nil { // the owner's close at exit
+		t.Fatal(err)
+	}
+	c.run(0)
+	if prof.Dir() != "" || c.set["App.profilingWindow"] == true || len(c.failed) != 1 {
+		t.Errorf("a start run after the close: dir %q, state %v, failed %v", prof.Dir(), c.set, c.failed)
+	}
+}
