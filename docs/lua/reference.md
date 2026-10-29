@@ -610,12 +610,30 @@ call answers `nil` and `needs <capability>: not granted`, and does nothing.
 
 | Capability | Lets a package |
 |---|---|
-| `workspace.read` | call the daemon's reading verbs: `autodoc.search`, `autodoc.doc.read`, `autodoc.graph`, … |
-| `workspace.write` | call its writing verbs: write, rename and remove documents and tasks |
-| `settings` | change AutoDoc's settings: workspaces, models, rankers, preferences |
+| `workspace.read` | call the daemon's reading verbs: `autodoc.search`, `autodoc.doc.read`, `autodoc.graph`, `file.read`, … on the files of your workspaces |
+| `workspace.write` | call its writing verbs: create, edit, rename and remove the files of the workspace you have open, and its tasks |
+| `settings` | change AutoDoc's settings: workspaces, models, rankers, preferences (not `lua.grants` or `tui.agent.profiles`) |
 | `clipboard` | `autodoc.clipboard.read` and `.write` |
-| `agents` | `autodoc.agents.list`, `.send` and `.resume` |
+| `agents` | `autodoc.agents.list`, `.send` and `.resume`. An agent runs commands on your computer, so this one reaches what the agent does |
 | `commands` | run commands: `autodoc.run`, `ed:run`, and the keys and menu rows it binds (`autodoc.map`, `autodoc.menu`: they register either way, and say they need it when pressed) |
+
+**What a package's files can be.** Every call a package makes, and every command it runs, is held
+to your workspaces (the daemon checks each file the call reaches):
+
+- **Reads** reach a file inside a served workspace; **writes** only inside the workspace you have
+  open. A path outside every workspace answers `nil` and `… is outside the workspace: a script may
+  not reach it`.
+- **Hidden files are off limits**, read or write: a name starting with `.` anywhere below the
+  workspace's root (`.ssh/`, `.bashrc`, `.git/`, `.config/`), but AutoDoc's own `.autodoc/`,
+  `.todo-list/` and `.autodoc-vars.toml`. A link that leads to one is refused the same way.
+- **AutoDoc's own files are off limits**, wherever they are: the store, the daemon's state folder,
+  and the config folder (`lua/`, `plugins/`, `themes/`, `config.toml`).
+- **A package moves, copies and removes files, not folders**, and a file with a second hard link
+  is refused.
+- **Commands run within the same limits:** `:e` of a path a package names opens only what it could
+  read, `:w` saves only into the open workspace, and a link it follows reaches the browser only as
+  an `http`, `https` or `mailto` address. `:lua`, *open with the default app* and `kbtype.apply`
+  are yours to run, never a package's.
 
 - **Every daemon verb says which of the first three it needs** (its effect, in `autodoc
   --contracts`). A verb whose effect the daemon does not say (an older daemon) is refused to a

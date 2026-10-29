@@ -102,11 +102,11 @@ end }`))
 func TestALuaGrantNamesEachCapability(t *testing.T) {
 	got := luaGrantText(inEnglish{}.Trf, []string{"workspace.read", "workspace.write", "settings", "clipboard", "agents", "commands", "rockets"})
 	for _, want := range []string{
-		"workspace.read: read the workspace's documents, search them and follow their links\n",
-		"workspace.write: write, rename and remove documents and tasks\n",
+		"workspace.read: read the files in your workspaces, except hidden ones, search them and follow their links\n",
+		"workspace.write: create, edit, rename and remove the files of this workspace, except hidden ones, and its tasks\n",
 		"settings: change AutoDoc's settings: workspaces, models, preferences\n",
 		"clipboard: read and write the clipboard\n",
-		"agents: list the agents and type into them\n",
+		"agents: list the agents and send them text: an agent can run commands on your computer\n",
 		"commands: run any of AutoDoc's commands\n",
 		"rockets: a capability AutoDoc does not know\n",
 	} {
