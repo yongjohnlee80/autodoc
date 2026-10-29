@@ -59,6 +59,7 @@ func (h *Host) startScripts() []error {
 	h.luaFeature().install = h.installPackage
 	h.luaFeature().shell = h.terminals.newLuaShell
 	h.luaFeature().line = h.core.RunCommand
+	h.luaFeature().who, h.luaFeature().bounds, h.luaFeature().as = h.authorityNow, h.bounds, h.actingAs // authority.go
 	// a script's chords, through golib (luakeys.go), then H and L between the buffers (buffertabs.go):
 	// a script's own H or L wins
 	h.core.SetChordHook(func(kc widget.KeyChord) bool { return h.luaFeature().chord(kc) || h.bufferChord(kc) })

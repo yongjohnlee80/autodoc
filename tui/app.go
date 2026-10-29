@@ -335,6 +335,9 @@ type Host struct {
 	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
 	relationViews []Feature
 	graphUserFile string // graph.toml beside the config: the user's groups and palette (graphconf.go)
+	cfgDir        string // the folder beside the config (lua/, plugins/, themes/): a gated call's protect (authority.go)
+	// invoking is a gated script's key or row running its line, for authorityNow; nil otherwise
+	invoking *authority
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -487,6 +490,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
+		h.cfgDir = filepath.Dir(opt.ConfigPath)
 	}
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.cands = newCandidates(core{h})
@@ -584,6 +588,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	h.cat = h.reg.catalog
 	h.cat.tr = h.trOr // the command line's help in the UI's language (language.go)
+	h.cat.who = h.authorityNow // a user-only entry is refused to a gated script's run (authority.go)
 	cmds, err := h.keys.commands()
 	if err != nil {
 		panic(err) // the registry's check refuses it first: a build that cannot start

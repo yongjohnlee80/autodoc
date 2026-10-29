@@ -94,6 +94,11 @@ func (e *Engine) registerEditorType() {
 			L.Push(lua.LString("needs commands: not granted"))
 			return 2
 		}
+		// the command runs as the script, as autodoc.run's does: Caller is set while it runs, so its
+		// paths are bounded and a user-only entry refused (ADR 1792004705 §4.2a.2c)
+		prev := e.calling
+		e.calling = g
+		defer func() { e.calling = prev }()
 		return e.edRun(L)
 	}
 	lock(L.NewTypeMetatable(gatedEditorType), gated)

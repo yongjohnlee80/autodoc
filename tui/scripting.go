@@ -56,7 +56,12 @@ type scripting struct {
 	// line runs a key's or a menu row's command line (Host: core.RunCommand); ui is the running
 	// engine's keys; rows the menu rows, scripts' and plugins' (menurows.go), and menuRows the
 	// Plugins menu's model of those it shows (luakeys.go)
-	line     func(string) error
+	line func(string) error
+	// who is who the invocation beginning now acts for (Host.authorityNow); bounds a gated one's
+	// bounds for a call (Host.bounds). Both are the host's, set with line (scripts.go).
+	who      func() authority
+	bounds   func(a authority, read bool) map[string]any
+	as       func(a authority, fn func() error) error // runs fn as a's invocation (Host.actingAs)
 	ui       luaUI
 	rows     menuRows
 	menuRows *tuidecl.ListModel
@@ -87,7 +92,7 @@ func (s *scripting) Catalog() []Entry {
 			}
 			return s.reload()
 		}},
-		{ID: "scripts.shell", Title: "a Lua shell, or run Lua", Verb: "lua", Args: "[chunk]",
+		{ID: "scripts.shell", Title: "a Lua shell, or run Lua", Verb: "lua", Args: "[chunk]", UserOnly: true,
 			Help: "alone, a Lua shell in the terminal; with a chunk, run it and show its values",
 			Run: func(inv Invocation) error {
 				if inv.Line == "" {
@@ -335,7 +340,7 @@ func (s *scripting) luaCall(L *lua.LState) int {
 	default:
 		L.ArgError(2, "params is a list, the verb's params in order: {\"kb\", \"words\"}")
 	}
-	s.call(verb, params, L.OptFunction(3, nil))
+	s.call(s.authority(), verb, params, L.OptFunction(3, nil))
 	return 0
 }
 
@@ -392,7 +397,7 @@ func (s *scripting) namespaced(v luaVerb) lua.LGFunction {
 			}
 			params[i] = p
 		}
-		s.call(v.verb, params, cb)
+		s.call(s.authority(), v.verb, params, cb)
 		return 0
 	}
 }
@@ -426,11 +431,29 @@ type luaAnswer struct {
 	err error
 }
 
-// call sends verb to the daemon off the loop and gives cb the answer on it. Without the contracts
-// yet (a script run before the first connect has answered), it fetches them first: a verb is
-// refused by its contract's audience before it is ever sent.
-func (s *scripting) call(verb string, params []any, cb *lua.LFunction) {
+// authority is who the Lua call beginning now acts for: the gated script calling (its wrapper sets
+// Engine.Caller), else the user's own scripts. A host that set no who (a test of the feature alone)
+// runs everything as the user's.
+func (s *scripting) authority() authority {
+	if s.who == nil {
+		return userAuthority()
+	}
+	return s.who()
+}
+
+// call sends verb to the daemon off the loop, as a acts, and gives cb the answer on it. Without the
+// contracts yet (a script run before the first connect has answered), it fetches them first: a verb
+// is refused by its contract's audience before it is ever sent. A gated script's call is refused a
+// preference that holds rights or commands (AS-2b), and carries its bounds past the verb's own
+// params (ADR 1792004705 §4.2a.1), which the daemon holds every file it reaches to.
+func (s *scripting) call(a authority, verb string, params []any, cb *lua.LFunction) {
 	known := s.verbs
+	if a.gated() {
+		if err := refusedPreference(verb, params); err != nil {
+			s.c.Post(func() { s.answer(verb, cb, luaAnswer{err: err}) })
+			return
+		}
+	}
 	s.c.Go(func(ctx context.Context) any {
 		verbs := known
 		if verbs == nil {
@@ -446,9 +469,38 @@ func (s *scripting) call(verb string, params []any, cb *lua.LFunction) {
 		if ok {
 			params = v.shape(params)
 		}
+		if a.gated() {
+			if !ok {
+				return luaAnswer{err: fmt.Errorf("%s: the daemon does not say its parameters, so a script's call cannot carry its bounds", verb)}
+			}
+			params = v.bounded(params, s.bounds(a, v.effect == "read"))
+		}
 		res, err := s.c.Call(ctx, verb, params...)
 		return luaAnswer{res: res, err: err}
 	}, func(a any) { s.answer(verb, cb, a.(luaAnswer)) })
+}
+
+// bounded is params cut to, or padded with nil to, the verb's own, and then the gate's bounds: a
+// script that passes more (a within of its own) reaches only what the gate allows.
+func (v luaVerb) bounded(params []any, bounds map[string]any) []any {
+	out := make([]any, len(v.params), len(v.params)+1)
+	copy(out, params)
+	return append(out, bounds)
+}
+
+// userPreferences are the preferences whose value is rights (the grants) or a command (the agent
+// profiles' commands, run as /bin/sh -c): the user's to write, never a gated script's (AS-2b).
+var userPreferences = map[string]bool{prefLuaGrants: true, prefAgentProfiles: true}
+
+// refusedPreference is the refusal of a gated script's preference.set of one of userPreferences.
+func refusedPreference(verb string, params []any) error {
+	if verb != "preference.set" || len(params) == 0 {
+		return nil
+	}
+	if name, _ := params[0].(string); userPreferences[name] {
+		return fmt.Errorf("%s is the user's: a script may not write it", name)
+	}
+	return nil
 }
 
 // shape makes an empty table a list where the contract says a param is one: Lua's {} is a map

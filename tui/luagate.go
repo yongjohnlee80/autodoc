@@ -126,11 +126,11 @@ func luaGrantText(trf func(string, ...any) string, caps []string) string {
 
 // luaCapabilityText is what each capability lets a script do, by its catalog id.
 var luaCapabilityText = map[string]string{
-	"workspace.read":  "autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f",
-	"workspace.write": "autodoc.question.luagate.write_rename_and_remove_documents_and_tasks",
+	"workspace.read":  "autodoc.question.luagate.read_the_files_in_your_workspaces_except_hidden",
+	"workspace.write": "autodoc.question.luagate.create_edit_rename_and_remove_the_files_of_this",
 	"settings":        "autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref",
 	"clipboard":       "autodoc.question.luagate.read_and_write_the_clipboard",
-	"agents":          "autodoc.question.luagate.list_the_agents_and_type_into_them",
+	"agents":          "autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can",
 	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
 }
 

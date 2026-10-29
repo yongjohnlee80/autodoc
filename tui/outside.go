@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -105,15 +106,32 @@ func (h *Host) locate(ctx context.Context, abs string) located {
 }
 
 // openAbsolute opens the file at abs, chosen in the file dialog: as its workspace's file when one
-// indexes it, else outside every workspace.
-func (h *Host) openAbsolute(abs string) {
+// indexes it, else outside every workspace. A gated script's open (file.open_path, a link it
+// follows) opens only what the daemon's bounds let it read: a file inside a served workspace, not
+// hidden, not AutoDoc's own (ADR 1792004705 §4.2a.2b); anything else is refused, and nothing opens.
+func (h *Host) openAbsolute(abs string) { h.openAbsoluteAs(h.authorityNow(), abs) }
+
+// openAbsoluteAs is openAbsolute as a acts: for a continuation, the authority its invocation began
+// with.
+func (h *Host) openAbsoluteAs(a authority, abs string) {
 	h.closeDialog("openAnyFile")
 	if abs == "" {
 		return
 	}
 	abs = filepath.Clean(abs)
 	tk := h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) located { return h.locate(ctx, abs) }, func(l located) {
+	do(h, func(ctx context.Context) located {
+		if a.gated() {
+			res, err := h.call(withAuthority(ctx, a), "file.locate", abs)
+			if err != nil {
+				return located{err: localOnly(err)}
+			}
+			if res == nil {
+				return located{err: fmt.Errorf("%s is outside the workspace: a script may not open it", abs)}
+			}
+		}
+		return h.locate(ctx, abs)
+	}, func(l located) {
 		if !tk.Current() {
 			return
 		}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
 
@@ -66,8 +67,9 @@ func (h *Host) followLink() {
 // else a web or mail address in the browser, or a Markdown link's file, as the HTML pane opens
 // them. A link to no document, or to several, says so.
 func (h *Host) goToLink(l cursorLink) {
+	who := h.authorityNow()               // the answer comes later: whoever followed the link, it opens as they act
 	if !h.file.open || h.file.outside() { // in no workspace's graph: the link as written
-		h.htmlLink(l.dest)
+		h.htmlLinkAs(who, l.dest)
 		return
 	}
 	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, TicketFile)
@@ -81,6 +83,8 @@ func (h *Host) goToLink(l cursorLink) {
 		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {
 		case a.err != nil:
 			h.failed("go to link", a.err)
+		case path != "" && who.gated(): // a document, opened within the script's bounds
+			h.openAbsoluteAs(who, filepath.Join(h.rootOf(ws), filepath.FromSlash(path)))
 		case path != "":
 			h.openIn(ws, path)
 		case reason == "ambiguous":
@@ -88,7 +92,7 @@ func (h *Host) goToLink(l cursorLink) {
 		case reason != "" || l.wiki:
 			h.notify(h.trf("autodoc.notice.golink.names_no_document_in_this_workspace", l.raw))
 		default:
-			h.htmlLink(l.dest)
+			h.htmlLinkAs(who, l.dest)
 		}
 	})
 }

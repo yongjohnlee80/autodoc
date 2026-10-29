@@ -62,6 +62,10 @@ type openedFile struct {
 	hint string
 	// then is what the unsaved question guards: run after save or discard, dropped by stay.
 	then func()
+	// thenAuth is who the unsaved question's Save writes as, and saveAuth who the conflict's
+	// Overwrite does: the invocation that raised the question, whose step the answer continues
+	// (ADR 1792004705 §4.2a.2c), never the user's by default
+	thenAuth, saveAuth authority
 	// disk is how the file stands on disk, as its last check found it (diskwatch.go): diskVersion
 	// the newer version a change found, diskAsked the one the user was last asked about
 	disk                   diskState
@@ -171,15 +175,15 @@ func (h *Host) guard(b *openBuffer, ask unsavedAsk, then func()) {
 		return
 	}
 	h.activate(b)
-	b.file.then = then
+	b.file.then, b.file.thenAuth = then, h.authorityNow()
 	h.set("App.unsavedQuestion", ask(b.file.name()))
 	h.open("unsavedFile")
 }
 
 // unsaved answers the unsaved question.
 func (h *Host) unsaved(answer string) {
-	then := h.file.then
-	h.file.then = nil
+	then, who := h.file.then, h.file.thenAuth
+	h.file.then, h.file.thenAuth = nil, authority{}
 	h.closeDialog("unsavedFile")
 	switch answer {
 	case "save":
@@ -187,7 +191,7 @@ func (h *Host) unsaved(answer string) {
 			h.nameDraft(then) // the draft has no path yet: name it, then go on
 			return
 		}
-		h.write(h.active, h.core.Value(), h.file.version, then)
+		h.writeAs(who, h.active, h.core.Value(), h.file.version, then)
 	case "discard":
 		own, ok := h.active.ownRecovery()
 		h.settleRecovery(h.active, own, ok)
@@ -750,7 +754,28 @@ func cursorBytesOf(ed *widget.EditorCore) int {
 // still gone (want ""). A disk check of b waits while the write is out, and runs once after
 // (diskwatch.go): the TUI's own save is never an outside change.
 func (h *Host) write(b *openBuffer, content, want string, after func()) {
+	h.writeAs(h.authorityNow(), b, content, want, after)
+}
+
+// writeAs is write as who acts. A gated script's save (file.save, :w, a key or row's) is held to its
+// workspace (ADR 1792004705 §4.2a.2b): a document of the workspace it began in goes out as that
+// workspace's doc.write, a file outside every workspace as file.write, each with its bounds, which
+// the daemon holds the write to; a document of another workspace is refused here. A queued gated
+// save whose workspace is no longer the current one is dropped, never re-aimed at the new one.
+func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after func()) {
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
+	if err := who.check("save " + p); err != nil {
+		h.failed(h.trf("autodoc.notice.files.save", p), err)
+		return
+	}
+	switch {
+	case who.gated() && who.ws != h.ws:
+		h.notify(fmt.Sprintf("the workspace changed: %s's queued save of %s was dropped", who.script, p))
+		return
+	case who.gated() && ws != "" && ws != who.ws:
+		h.notify(fmt.Sprintf("%s is outside the workspace: a script may not save it", p))
+		return
+	}
 	if b.file.disk == diskDeleted {
 		want = "" // create only: refused if someone made it again meanwhile
 	}
@@ -771,6 +796,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
 	do(h, func(ctx context.Context) answer {
+		ctx = withAuthority(ctx, who)
 		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
 		if err == nil {
 			return answer{version: str(asMap(res), "version")}
@@ -818,7 +844,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 			case newer:
 				// what the save guarded (a close, a quit) would drop the newer edit: ask again, over b
 				h.activate(b)
-				b.file.then = after
+				b.file.then, b.file.thenAuth = after, who
 				h.set("App.unsavedQuestion", h.trf("autodoc.text.files.changed_again_while_it_was_saved_save_the_newer", p))
 				h.open("unsavedFile")
 			default:
@@ -828,6 +854,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 			h.notify(h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, wireMessage(a.readErr)))
 		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
+			b.file.saveAuth = who
 			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing", p))
 			h.open("fileConflict")
 		case code(a.err) == rpc.CodeNotFound:
@@ -877,6 +904,8 @@ func (h *Host) reloadShown() {
 // first, so the write is still conditional (a third writer in between is still a conflict).
 func (h *Host) overwrite() {
 	b := h.active
+	who := b.file.saveAuth // the save the conflict stopped: Overwrite goes on as it acted
+	b.file.saveAuth = authority{}
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
 	type answer struct {
 		version string
@@ -884,7 +913,7 @@ func (h *Host) overwrite() {
 		err     error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.readFile(ctx, ws, p, raw)
+		res, err := h.readFile(withAuthority(ctx, who), ws, p, raw)
 		if code(err) == rpc.CodeNotFound {
 			return answer{gone: true}
 		}
@@ -901,7 +930,7 @@ func (h *Host) overwrite() {
 			h.failed(h.trf("autodoc.notice.files.overwrite", p), a.err)
 		default:
 			// gone: a create ("") writes it back
-			h.write(b, h.editorFor(b).Value(), a.version, nil)
+			h.writeAs(who, b, h.editorFor(b).Value(), a.version, nil)
 		}
 	})
 }
@@ -958,7 +987,7 @@ func (h *Host) createFile(name string) {
 				return
 			}
 			h.activate(b)
-			b.file.then = ds.then
+			b.file.then, b.file.thenAuth = ds.then, userAuthority() // the user named the draft
 			h.set("App.unsavedQuestion", h.trf("autodoc.text.files.changed_again_while_it_was_saved_save_the_newer", name))
 			h.open("unsavedFile")
 			return
