@@ -100,7 +100,8 @@ func (n *NoteEmbeds) Renderer(chain guiwidget.Diagrammer) func(tuidecl.RendererS
 		if m.Mermaid {
 			opts = append(opts, guiwidget.WithDiagrams(chain))
 		}
-		return &embedRenderer{MarkdownRenderer: guiwidget.NewMarkdownRenderer(opts...), notes: n, diagrams: chain}
+		return &embedRenderer{MarkdownRenderer: guiwidget.NewMarkdownRenderer(opts...), notes: n, diagrams: chain,
+			retries: &embedRetries{delays: embedRetryDelays}}
 	}
 }
 
@@ -111,9 +112,10 @@ type embedRenderer struct {
 	diagrams guiwidget.Diagrammer // an embedded diagram's, whatever the declaration's mermaid flag
 	// alone are the lines Blocks last found holding an image alone, with their text then: the
 	// editor lays blocks out from the lines it split them from
-	alone  map[int]aloneEmbed
-	joined map[guiwidget.Block]bool // the paragraphs Blocks last made one block
-	images decodedImages            // the images drawn, decoded once per file (labcells_gui.go)
+	alone   map[int]aloneEmbed
+	joined  map[guiwidget.Block]bool // the paragraphs Blocks last made one block
+	images  decodedImages            // the images drawn, decoded once per file (labcells_gui.go)
+	retries *embedRetries            // the embeds whose file did not read, laid out again later (embedretry_gui.go)
 }
 
 type aloneEmbed struct{ text, dest string }
@@ -197,6 +199,7 @@ func (r *embedRenderer) LayOut(b guiwidget.Block, lines []string, width float32,
 		if md, ok := csvFence(lines, b); ok {
 			return r.layEmbed(b, md, width, t, th, host)
 		}
+		r.retryUnread(lines, b, host)
 	}
 	return r.MarkdownRenderer.LayOut(b, lines, width, inside, t, th, host)
 }
@@ -215,19 +218,40 @@ func (r *embedRenderer) layLines(b guiwidget.Block, lines []string, width float3
 	return out
 }
 
-// embedded is the Markdown drawn for block b when it is a line holding an image alone in its
-// paragraph, of the open note, and the file is one the Rendered view draws.
-func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, bool) {
+// aloneAt is the destination of the image block b holds alone in its paragraph, and the open note,
+// when b is such a line of the open note.
+func (r *embedRenderer) aloneAt(lines []string, b guiwidget.Block) (note, dest string, ok bool) {
 	ln := b.From
 	e, ok := r.alone[ln]
 	if !ok || b.To-b.From != 1 || ln >= len(lines) || lines[ln] != e.text {
+		return "", "", false
+	}
+	note = r.notes.file()
+	return note, e.dest, note != ""
+}
+
+// embedded is the Markdown drawn for block b when it is a line holding an image alone in its
+// paragraph, of the open note, and the file is one the Rendered view draws.
+func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, bool) {
+	note, dest, ok := r.aloneAt(lines, b)
+	if !ok {
 		return "", false
 	}
-	note := r.notes.file()
-	if note == "" {
-		return "", false
+	md, ok := export.EmbedMarkdown(note, dest, embedTableRows)
+	if ok {
+		r.retries.read(note, dest)
 	}
-	return export.EmbedMarkdown(note, e.dest, embedTableRows)
+	return md, ok
+}
+
+// retryUnread has block b laid out again later when it is a line holding alone an embed the
+// Rendered view draws, of the open note, whose file did not read as it was laid out now: it is
+// drawn as its link meanwhile (embedretry_gui.go).
+func (r *embedRenderer) retryUnread(lines []string, b guiwidget.Block, host guiwidget.DiagramHost) {
+	note, dest, ok := r.aloneAt(lines, b)
+	if ok && (decodesImage(dest) || export.IsMarkdownEmbed(dest)) {
+		r.retries.ask(host, b, note, dest)
+	}
 }
 
 // csvFence is the table a ```csv fence, block b, is drawn as: its rows as a .csv embed's
@@ -244,16 +268,15 @@ func csvFence(lines []string, b guiwidget.Block) (string, bool) {
 // embeddedImage is the picture of block b when it is a line holding an image alone in its paragraph,
 // of the open note, and the file is an image the Rendered view decodes.
 func (r *embedRenderer) embeddedImage(lines []string, b guiwidget.Block, width float32) (imagePicture, bool) {
-	ln := b.From
-	e, ok := r.alone[ln]
-	if !ok || b.To-b.From != 1 || ln >= len(lines) || lines[ln] != e.text {
+	note, dest, ok := r.aloneAt(lines, b)
+	if !ok {
 		return imagePicture{}, false
 	}
-	note := r.notes.file()
-	if note == "" {
-		return imagePicture{}, false
+	pic, ok := r.image(note, dest, width)
+	if ok {
+		r.retries.read(note, dest)
 	}
-	return r.image(note, e.dest, width)
+	return pic, ok
 }
 
 // layEmbed lays the embed of block b out as md, the Markdown its file stands for, drawn as the

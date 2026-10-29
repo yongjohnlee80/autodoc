@@ -438,12 +438,8 @@ func csvRows(data []byte, fit tableFit) (csvShown, bool) {
 // most rows rows (0: maxTableRows). ok is false for any other embed, and for a file that is
 // missing, refused, too large or not CSV: the line stays as written.
 func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
-	p, ok := embedPath(dest)
+	p, ext, ok := markdownEmbed(dest)
 	if !ok {
-		return "", false
-	}
-	ext := strings.ToLower(path.Ext(p))
-	if ext != ".mmd" && ext != ".csv" && !isChart(p) {
 		return "", false
 	}
 	e := newEmbedder(doc, tableFit{rows: rows})
@@ -462,6 +458,28 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 		return fenced("vega-lite", string(data)), true
 	}
 	return CSVMarkdown(data, rows)
+}
+
+// IsMarkdownEmbed reports whether dest names a file EmbedMarkdown draws: a Mermaid diagram (.mmd), a
+// Vega-Lite chart (x.chart.json) or a table (.csv), in the document's folder. Whether the file is
+// there and reads is EmbedMarkdown's to answer.
+func IsMarkdownEmbed(dest string) bool {
+	_, _, ok := markdownEmbed(dest)
+	return ok
+}
+
+// markdownEmbed is dest as a path in the document's folder, and its extension in lower case, when
+// it names a file EmbedMarkdown draws.
+func markdownEmbed(dest string) (p, ext string, ok bool) {
+	p, ok = embedPath(dest)
+	if !ok {
+		return "", "", false
+	}
+	ext = strings.ToLower(path.Ext(p))
+	if ext != ".mmd" && ext != ".csv" && !isChart(p) {
+		return "", "", false
+	}
+	return p, ext, true
 }
 
 // OutputMarkdown is one output file of a lab note's cell (lab.Outputs, a path in doc's folder) as
