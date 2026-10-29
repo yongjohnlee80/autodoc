@@ -155,6 +155,27 @@ func (s *Store) PathsUnder(ctx context.Context, dir string) ([]string, error) {
 	return out, err
 }
 
+// VersionsUnder is the Version each indexed path under dir ("." for all) was indexed at: the
+// follower's start compares a walk with it in one read (follow.VersionLister).
+func (s *Store) VersionsUnder(ctx context.Context, dir string) (map[string]vfs.Version, error) {
+	out := map[string]vfs.Version{}
+	err := s.read(ctx, func(tx *store.Tx) error {
+		d := s.documents(tx)
+		if dir != "." {
+			d = d.WithPredicate(under(`"document"."path"`, dir))
+		}
+		docs, err := d.Select(DocPath, DocVersion)
+		for _, x := range docs {
+			out[x.Path] = vfs.Version(x.Version)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // under is the condition that the path column col is dir or below it: the range ["dir/", "dir0")
 // holds exactly the paths below dir.
 func under(col, dir string) dao.Predicate {

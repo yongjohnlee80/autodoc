@@ -1009,3 +1009,32 @@ func TestReindexEverythingFindsNewFiles(t *testing.T) {
 
 // indexedPaths is PathsUnder's paths, for a test whose store reads.
 func indexedPaths(ps []string, _ error) []string { return ps }
+
+// TestTheIndexerListsVersionsForTheFollower: the indexer is a follow.VersionLister, so a follower's
+// start reads the index once (AP-9), and its listing is each indexed path's version under the
+// directory asked.
+func TestTheIndexerListsVersionsForTheFollower(t *testing.T) {
+	var _ follow.VersionLister = (*Indexer)(nil)
+	e := newEnv(t, options{})
+	e.put("a/x.md", "# X\n", "a/y.md", "# Y\n", "b/z.md", "# Z\n")
+	got, err := e.ix.VersionsUnder(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"a/x.md", "a/y.md", "b/z.md"} {
+		v, ok, err := e.ix.Version(context.Background(), p)
+		if err != nil || !ok {
+			t.Fatalf("%s: %v %v", p, ok, err)
+		}
+		if under := strings.HasPrefix(p, "a/"); under != (got[p] == v) {
+			t.Errorf("%s: listed %q, indexed at %q", p, got[p], v)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("listed %v under a, want a/x.md and a/y.md", got)
+	}
+	all, err := e.ix.VersionsUnder(context.Background(), ".")
+	if err != nil || len(all) != 3 {
+		t.Errorf("listed %v, %v under the root, want all three", all, err)
+	}
+}

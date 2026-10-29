@@ -23,6 +23,14 @@ type Store interface {
 	PathsUnder(ctx context.Context, dir string) ([]string, error)
 }
 
+// VersionLister is a Store that lists the Versions of the indexed paths under a directory in one
+// read. A reconcile asks it once for the directory it walks, where a Store without it is asked
+// Version once a file: a start over a large root is then one read of the index, not one a file.
+type VersionLister interface {
+	// VersionsUnder is the Version of each indexed path under dir ("." for all of them).
+	VersionsUnder(ctx context.Context, dir string) (map[string]vfs.Version, error)
+}
+
 // Queue takes paths for the indexer to re-read. Touch must not block for long: the follower calls
 // it while it drains watch events, and a watcher whose consumer stalls overflows.
 type Queue interface {
@@ -324,6 +332,24 @@ func (f *Follower) match(p string) bool { return f.opts.match == nil || f.opts.m
 func (f *Follower) reconcile(ctx context.Context, dir string) {
 	seen := map[string]bool{}
 	failed := map[string]error{}
+	// the index's versions under dir, read once before the walk when the store can list them: a
+	// file indexed while the walk runs is then compared with its older version and touched again,
+	// which costs the indexer one comparison of its own. A listing that fails has each file asked.
+	var listed map[string]vfs.Version
+	if l, ok := f.store.(VersionLister); ok {
+		if vs, err := l.VersionsUnder(ctx, dir); err == nil {
+			listed = vs
+		}
+	}
+	changed := func(fi vfs.FileInfo) bool {
+		if listed != nil {
+			v, ok := listed[fi.Path]
+			return !ok || v != fi.Version
+		}
+		// an index that cannot say has the indexer read it: it compares the version itself
+		v, ok, err := f.store.Version(ctx, fi.Path)
+		return err != nil || !ok || v != fi.Version
+	}
 	for fi, err := range vfs.Walk(ctx, f.fsys, dir, vfs.WalkSkipDirs(f.opts.excluded)) {
 		if err != nil {
 			if ctx.Err() != nil {
@@ -342,8 +368,7 @@ func (f *Follower) reconcile(ctx context.Context, dir string) {
 			continue
 		}
 		seen[fi.Path] = true
-		// an index that cannot say has the indexer read it: it compares the version itself
-		if v, ok, err := f.store.Version(ctx, fi.Path); err != nil || !ok || v != fi.Version {
+		if changed(fi) {
 			f.queue.Touch(fi.Path)
 		}
 	}

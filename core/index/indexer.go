@@ -375,6 +375,9 @@ func (x *Indexer) Version(ctx context.Context, path string) (vfs.Version, bool, 
 func (x *Indexer) PathsUnder(ctx context.Context, dir string) ([]string, error) {
 	return x.store.PathsUnder(ctx, dir)
 }
+func (x *Indexer) VersionsUnder(ctx context.Context, dir string) (map[string]vfs.Version, error) {
+	return x.store.VersionsUnder(ctx, dir)
+}
 
 // Run writes the store until ctx ends. It first takes up the jobs a previous run left, and every
 // document indexed under another IndexerVersion.
