@@ -17,11 +17,14 @@ import (
 )
 
 // hearingAgent is an agent that takes bracketed pastes (mode 2004), as agent CLIs do, and writes
-// every byte it is sent, its tty raw, into heard-<its first argument> in dir.
+// every byte it is sent, its tty raw, into heard-<its first argument> in dir. It says "started"
+// only once it takes bracketed pastes, so a test that waits for that line may hand a running
+// instance a task: a running agent that doesn't take them yet refuses a delivery at once, and a
+// "started" written first left a window where it did (seen under coverage on CI).
 func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "hearing-agent")
-	script := "#!/bin/sh\necho \"started $1\"\nstty raw -echo\nprintf '\\033[?2004h'\nexec cat >> " +
+	script := "#!/bin/sh\nstty raw -echo\nprintf '\\033[?2004hstarted %s\\r\\n' \"$1\"\nexec cat >> " +
 		shellQuote(dir) + "/heard-\"$1\"\n"
 	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
