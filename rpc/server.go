@@ -477,10 +477,12 @@ var errNoPreferences = errors.New("rpc: this server keeps no preferences")
 var errNoEvents = errors.New("rpc: this server keeps no event log")
 
 // errNoProfiler answers sys.profile on a server given no profiler; errProfileRefused a monitor
-// that could not start (its reason is logged, never sent).
+// that could not start, and errProfileIncomplete a stop that could not write its last samples
+// (their reasons are logged, never sent).
 var (
-	errNoProfiler     = errors.New("rpc: this server keeps no profiler")
-	errProfileRefused = errors.New("rpc: the monitor did not start")
+	errNoProfiler        = errors.New("rpc: this server keeps no profiler")
+	errProfileRefused    = errors.New("rpc: the monitor did not start")
+	errProfileIncomplete = errors.New("rpc: the monitor stopped, its samples incomplete")
 )
 
 // workspace resolves a verb's first parameter.

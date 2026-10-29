@@ -6335,6 +6335,10 @@ O QUE UMA TECLA PRECISA
         <source>this terminal does not draw images (no kitty graphics)</source>
         <translation>este terminal não desenha imagens (sem kitty graphics)</translation>
     </message>
+    <message id="autodoc.text.profiling.badge">
+        <source>◉ profiling</source>
+        <translation>◉ perfilando</translation>
+    </message>
     <message id="autodoc.text.progress.embedding_paused_by_workspace_setting">
         <source>embedding paused by workspace setting</source>
         <translation>embedding pausado pela configuração do espaço de trabalho</translation>

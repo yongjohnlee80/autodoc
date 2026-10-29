@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -150,5 +151,34 @@ func TestSysProfileNeedsProtocol32(t *testing.T) {
 	}
 	if _, err := old.Call(context.Background(), "sys.profile", "status", ""); code(err) != golibrpc.CodeMethodNotFound {
 		t.Errorf("sys.profile at 31: %v, want an unknown method", err)
+	}
+}
+
+// TestSysProfileSaysAnIncompleteStop: a stop whose last heap profile cannot be written (its file's
+// name taken by a directory) answers the internal code, never success, and the monitor is off.
+func TestSysProfileSaysAnIncompleteStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	prof := profiling.New(ctx, "serve")
+	t.Cleanup(func() { _ = prof.Close() })
+	cli, _, err := helloAs(serveWith(t, WithProfiler(prof)), Protocol, "a-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := profileDir(t)
+	profileOf(t, cli, "start", dir)
+	heaps, _ := filepath.Glob(filepath.Join(dir, "heap-*.pb.gz"))
+	n := len(heaps)
+	for i := n + 1; i <= n+8; i++ { // the final snapshot's name, whichever number it takes
+		if err := os.MkdirAll(filepath.Join(dir, "heap-"+strconv.Itoa(i)+".pb.gz"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = cli.Call(context.Background(), "sys.profile", "stop", "")
+	if c, msg := wireError(err); c != golibrpc.CodeInternal || filepath.IsAbs(msg) || msg == "" {
+		t.Errorf("an incomplete stop: %d %q; want the internal code, without a path", c, msg)
+	}
+	if on, d := profileOf(t, cli, "status", ""); on || d != "" {
+		t.Errorf("after an incomplete stop: on %v, dir %q; want off", on, d)
 	}
 }

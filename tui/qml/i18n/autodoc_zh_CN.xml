@@ -6323,6 +6323,10 @@ WHAT A KEY NEEDS
         <source>this terminal does not draw images (no kitty graphics)</source>
         <translation>此终端无法绘制图像(不支持 kitty 图形协议)</translation>
     </message>
+    <message id="autodoc.text.profiling.badge">
+        <source>◉ profiling</source>
+        <translation>◉ 性能分析中</translation>
+    </message>
     <message id="autodoc.text.progress.embedding_paused_by_workspace_setting">
         <source>embedding paused by workspace setting</source>
         <translation>嵌入已按工作区设置暂停</translation>

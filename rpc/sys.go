@@ -140,7 +140,7 @@ func (s *Server) sysVerbs() []module.Verb {
 		// for a peer on the unix socket alone, since a monitor writes files and serves its profiles on
 		// a socket of its own (Protocol 32).
 		module.Handle(module.Contract{Verb: "sys.profile", Effect: module.EffectSettings, Since: 32, Scope: module.ScopeLocalPeer, Audience: internal,
-			Result: "{on, dir}", Errors: []int64{golibrpc.CodeAccessDenied, golibrpc.CodeInvalidParams, CodeUnsupported},
+			Result: "{on, dir}", Errors: []int64{golibrpc.CodeAccessDenied, golibrpc.CodeInvalidParams, CodeUnsupported, golibrpc.CodeInternal},
 			Doc: "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off."},
 			s.profile),
 		module.Handle(module.Contract{Verb: "sys.contracts", Effect: module.EffectRead, Since: 20, Audience: agent,
@@ -219,7 +219,8 @@ func StatsOf(st procstat.Stats, version string, now time.Time) StatsJSON {
 }
 
 // profile answers sys.profile. A monitor already running is kept by start; stop when none runs is
-// no error.
+// no error, and a stop whose last samples could not be written is one (the monitor is off all
+// the same: status says so).
 func (s *Server) profile(_ context.Context, p sysProfile) (profileJSON, error) {
 	if s.profiler == nil {
 		return profileJSON{}, errNoProfiler
@@ -232,7 +233,8 @@ func (s *Server) profile(_ context.Context, p sysProfile) (profileJSON, error) {
 		}
 	case profileStop:
 		if err := s.profiler.Stop(); err != nil {
-			logger.Warning(s.log, err, "sys.profile: the monitor's samples are incomplete")
+			logger.Warning(s.log, err, "sys.profile: the monitor stopped, its samples incomplete")
+			return profileJSON{}, errProfileIncomplete
 		}
 	case profileStatus:
 	default:

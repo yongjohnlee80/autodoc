@@ -1411,7 +1411,8 @@
       "errors": [
         -32001,
         -32602,
-        -32065
+        -32065,
+        -32603
       ],
       "doc": "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off."
     },
@@ -1950,7 +1951,10 @@
     {
       "code": -32603,
       "name": "rpc.internal",
-      "next": "a failure the daemon's log details: retry, or report it"
+      "next": "a failure the daemon's log details: retry, or report it",
+      "messages": [
+        "the monitor stopped, but its last samples could not be written: the daemon's log says why"
+      ]
     }
   ]
 }

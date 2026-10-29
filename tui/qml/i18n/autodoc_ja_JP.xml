@@ -6333,6 +6333,10 @@ WHAT A KEY NEEDS
         <source>this terminal does not draw images (no kitty graphics)</source>
         <translation>このターミナルは画像を描画しません (kitty グラフィックスなし)</translation>
     </message>
+    <message id="autodoc.text.profiling.badge">
+        <source>◉ profiling</source>
+        <translation>◉ プロファイリング中</translation>
+    </message>
     <message id="autodoc.text.progress.embedding_paused_by_workspace_setting">
         <source>embedding paused by workspace setting</source>
         <translation>ワークスペースの設定により埋め込みを一時停止中</translation>
