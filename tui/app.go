@@ -587,7 +587,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.cat = h.reg.catalog
-	h.cat.tr = h.trOr // the command line's help in the UI's language (language.go)
+	h.cat.tr = h.trOr          // the command line's help in the UI's language (language.go)
 	h.cat.who = h.authorityNow // a user-only entry is refused to a gated script's run (authority.go)
 	cmds, err := h.keys.commands()
 	if err != nil {
