@@ -10,6 +10,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
@@ -26,12 +27,37 @@ import (
 
 var errNoFiles = errors.New("rpc: this server serves no files outside its workspaces")
 
+// Under a gated script's bounds (ADR 1792004705 §4.2a.1), file.* never reaches the "/" vfs: the
+// path is routed into the served workspace that holds it (the guard's Locate), and runs on that
+// workspace's files behind the guard, which checks it again for the operation.
+
+// boundedFile is the workspace and name a bounded file.* path is routed to; bounded is false for
+// the user's call, which keeps the "/" vfs.
+func (s *Server) boundedFile(ctx context.Context, abs string) (w Workspace, name string, bounded bool, err error) {
+	if _, ok := fsbounds.From(ctx); !ok {
+		return nil, "", false, nil
+	}
+	root, name, err := s.guard.Locate(abs)
+	if err != nil {
+		return nil, "", true, err
+	}
+	w, ok := s.workspaces.Get(root.Name)
+	if !ok || w.Err() != nil || w.Files() == nil {
+		return nil, "", true, fsbounds.Outside(abs)
+	}
+	return w, name, true, nil
+}
+
 // errNotText is a file the editor cannot hold: not UTF-8, or with a NUL in it.
 var errNotText = invalid("not a text file: AutoDoc opens UTF-8 text files")
 
 // WithFiles serves file.read and file.write on d, the documents of a vfs rooted at "/" (the
 // daemon's own disk). Without it they answer that the server serves no outside files.
 func WithFiles(d *docs.Docs) Option { return func(o *options) { o.files = d } }
+
+// WithGuard holds a bounded file.* to g (ADR 1792004705 §4.2a.1): the guard the workspaces' files
+// are wrapped in, which routes a bounded path into its workspace.
+func WithGuard(g *fsbounds.Guard) Option { return func(o *options) { o.guard = g } }
 
 // local is verb for a peer on the unix socket only: the daemon's own user (the socket is 0600),
 // for whom a path on its disk is nothing new. Over TCP a token would reach any file the daemon can
@@ -94,9 +120,17 @@ func (s *Server) fileVerbs() []module.Verb {
 			if err != nil {
 				return nil, err
 			}
-			read := s.files.Read
+			files := s.files
+			w, rel, bounded, err := s.boundedFile(ctx, p.Path)
+			if err != nil {
+				return nil, err
+			}
+			if bounded {
+				files, name = w.Files(), rel
+			}
+			read := files.Read
 			if raw {
-				read = s.files.ReadRaw
+				read = files.ReadRaw
 			}
 			d, err := read(ctx, name)
 			if err != nil {
@@ -120,16 +154,30 @@ func (s *Server) fileVerbs() []module.Verb {
 			if !kind.Textual(p.Content) {
 				return nil, errNotText
 			}
-			if w, rel := s.located(p.Path); w != nil {
+			files := s.files
+			bw, brel, bounded, err := s.boundedFile(ctx, p.Path)
+			if err != nil {
+				return nil, err
+			}
+			if bounded {
+				if bw.Docs().Admits(brel) { // a document: the workspace's doc.write, indexed at once
+					v, err := writeDoc(ctx, bw, brel, p.Content, vfs.Version(p.Version), raw)
+					if err != nil {
+						return nil, err
+					}
+					return &versionJSON{Version: string(v)}, nil
+				}
+				files, name = bw.Files(), brel
+			} else if w, rel := s.located(p.Path); w != nil {
 				v, err := writeDoc(ctx, w, rel, p.Content, vfs.Version(p.Version), raw)
 				if err != nil {
 					return nil, err
 				}
 				return &versionJSON{Version: string(v)}, nil
 			}
-			write := s.files.Write
+			write := files.Write
 			if raw {
-				write = s.files.WriteRaw
+				write = files.WriteRaw
 			}
 			v, err := write(ctx, name, p.Content, vfs.Version(p.Version))
 			if err != nil {
@@ -151,10 +199,17 @@ func (s *Server) fileVerbs() []module.Verb {
 			Errors: writeErrs, Doc: "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw."}, true),
 		module.Handle(module.Contract{Verb: "file.locate", Effect: module.EffectRead, Since: 17, Scope: local, Audience: module.AudienceAgent,
 			Result: "{workspace, path} | nil", Errors: []int64{golibrpc.CodeAccessDenied},
-			Doc: "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none."},
-			func(_ context.Context, p filePath) (*locatedJSON, error) {
+			Doc: "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Under a gated script's bounds, the workspace that holds any file the script may read, indexed or not."},
+			func(ctx context.Context, p filePath) (*locatedJSON, error) {
 				if _, err := absName(p.Path); err != nil {
 					return nil, err
+				}
+				if b, ok := fsbounds.From(ctx); ok { // membership, not admission: a gated open of data.csv
+					root, rel, err := s.guard.Locate(p.Path)
+					if err != nil || s.guard.CheckRead(root, rel, b) != nil {
+						return nil, nil
+					}
+					return &locatedJSON{Workspace: root.Name, Path: rel}, nil
 				}
 				w, rel := s.located(p.Path)
 				if w == nil {

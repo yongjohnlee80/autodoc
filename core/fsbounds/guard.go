@@ -298,3 +298,10 @@ func withPath(err error, path string) error {
 func within(root, p string) bool {
 	return p == root || strings.HasPrefix(p, root+string(filepath.Separator)) || root == string(filepath.Separator)
 }
+
+// CheckRead is the check a bounded read of name in ws gets: nil when b lets it through. file.locate
+// asks it, to answer only a file a bounded read would reach.
+func (g *Guard) CheckRead(ws Root, name string, b Bounds) error { return g.check(ws, name, b, opRead) }
+
+// Outside is the refusal of path for being outside every served workspace.
+func Outside(path string) error { return refuse(path, whyOutside) }

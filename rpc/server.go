@@ -25,6 +25,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -268,6 +269,7 @@ type Preferences interface {
 type Server struct {
 	reg          registrations.Tables // the build's registrations, sys.capabilities reports them
 	files        *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
+	guard        *fsbounds.Guard      // a gated script's bounds, for file.* (WithGuard); nil: every bounded file.* refused
 	profiler     *profiling.Profiler  // the daemon's own monitor, for sys.profile (WithProfiler); nil: none
 	rpc          *golibrpc.Server
 	workspaces   Workspaces
@@ -298,6 +300,7 @@ type options struct {
 	events      Events
 	reg         registrations.Tables
 	files       *docs.Docs
+	guard       *fsbounds.Guard
 	profiler    *profiling.Profiler
 	storeID     string
 	modules     []module.Module
@@ -341,7 +344,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}

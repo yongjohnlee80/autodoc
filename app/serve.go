@@ -22,6 +22,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -83,6 +84,7 @@ type process struct {
 	ws      *serving.Workspaces
 	emb     *serving.Embedding
 	files   *docs.Docs
+	guard   *fsbounds.Guard // a gated script's bounds (ADR 1792004705 §4.2a.1), over every workspace's files
 	srv     *rpc.Server
 	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
 	mods    []module.Module // the modules, built before any workspace starts
@@ -200,9 +202,12 @@ func (d *process) startWorkspaces() error {
 	d.ranking = serving.NewRanking(db, holder, serving.Supplied{Ranker: b.rank.Ranker, Window: b.rank.Window}, d.log)
 	d.ranking.Start(wsCtx)
 	d.stops.push(d.ranking.Wait)
+	// a gated script never reaches the daemon's own: the store's folder, STATE, and its config and the
+	// folder beside it (lua/, plugins/ and the rest the TUI loads), whichever workspace holds them
+	d.guard = fsbounds.NewGuard(filepath.Dir(d.p.Store), d.p.StateDir, d.e.ConfigPath, filepath.Dir(d.e.ConfigPath))
 	d.ws = serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: d.log,
 		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
-		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}})
+		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard})
 	// the modules, the todo system first among them, before any workspace starts: a workspace's
 	// index reads the todo stores, so its first pass indexes their tasks graph-only (ADR 1792015212)
 	d.deps = &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log, onStores: d.ws.TodoStoresChanged}
@@ -234,7 +239,10 @@ func (d *process) openFiles() error {
 		return err
 	}
 	d.stops.push(func() { _ = disk.Close() })
-	d.files = docs.New(disk, nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
+	// a bounded file.* is routed into its workspace (rpc's boundedFile) and never reaches "/": behind no
+	// guard at all, every bounded operation here is refused, should a route ever skip that
+	var none *fsbounds.Guard
+	d.files = docs.New(none.Wrap(func() string { return "" }, "/", disk), nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
 	return nil
 }
 
@@ -243,7 +251,7 @@ func (d *process) openFiles() error {
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files),
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
 		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),

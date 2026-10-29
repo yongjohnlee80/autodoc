@@ -15,13 +15,20 @@ import (
 	"path/filepath"
 
 	"github.com/yongjohnlee80/golib/vfs/local"
+
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 )
 
 // WriteFile replaces the file at path with content, atomically: a temporary file beside it,
-// renamed over it. path's directory must exist.
+// renamed over it. path's directory must exist. Under a gated script's bounds it writes nothing:
+// a bounded call reaches files only through a workspace's guarded filesystem (ADR 1792004705
+// §4.2a.1), so a route here is one the guard never checked.
 func WriteFile(ctx context.Context, path string, content []byte) error {
 	if path == "" {
 		return errors.New("localfs: no file to write")
+	}
+	if _, bounded := fsbounds.From(ctx); bounded {
+		return fsbounds.Outside(path)
 	}
 	dir, err := local.New(filepath.Dir(path))
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/vfs"
 
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/kbtype"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -170,7 +171,10 @@ func scaffoldManaged(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc
 // publicReason is what a file's refusal says on the wire: the kind of failure, never a driver's
 // own text, which may name a path outside the workspace.
 func publicReason(err error) string {
+	var refused *fsbounds.Refusal
 	switch {
+	case errors.As(err, &refused): // a gated script's scaffold past its bounds (ADR 1792004705 §4.2a.1)
+		return refused.Why + ": a script may not reach it"
 	case errors.Is(err, vfs.ErrNotExist):
 		return "not found"
 	case errors.Is(err, vfs.ErrConflict):
