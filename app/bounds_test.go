@@ -254,3 +254,35 @@ func TestBoundsArriveFromProtocol34(t *testing.T) {
 		t.Errorf("a protocol-33 session's extra parameter: %v, want invalid params", err)
 	}
 }
+
+// TestTheDaemonsOwnPathsAreRefused: the daemon's STATE (its store, its log) and its config with the
+// folder beside it are refused to a bounded call, read and write, when a workspace's root holds
+// them; the workspace's other files are reached.
+func TestTheDaemonsOwnPathsAreRefused(t *testing.T) {
+	dir := short(t)
+	root := filepath.Join(dir, "kb")
+	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
+	state := filepath.Join(root, "state")
+	sock := filepath.Join(dir, "a.sock")
+	made := writeConfig(t, sock, state, "", "kb="+root)
+	body, err := os.ReadFile(made)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(root, "conf", "config.toml") // the daemon's own config, inside the root
+	writeAt(t, cfg, string(body))
+	start(t, cfg, sock)
+	f := &boundsFixture{t: t, root: root, sock: sock, cli: dial(t, sock)}
+	f.cfg = filepath.Join(dir, "elsewhere") // the TUI's config is not in the root: only the daemon's own
+	for _, p := range []string{filepath.Join(state, "autodoc.db"), cfg} {
+		_, err := f.try("file.read", p, f.bounds("*"))
+		f.denied("a read of "+p, err, "AutoDoc's own")
+	}
+	_, err = f.try("file.write", filepath.Join(state, "new.md"), "x", "", f.bounds("kb"))
+	f.denied("a write into STATE", err, "AutoDoc's own")
+	_, err = f.try("file.write", filepath.Join(root, "conf", "lua.md"), "x", "", f.bounds("kb"))
+	f.denied("a write beside the daemon's config", err, "AutoDoc's own")
+	if _, err := f.try("file.read", filepath.Join(root, "notes", "a.md"), f.bounds("*")); err != nil {
+		t.Errorf("the workspace's own file: %v", err)
+	}
+}

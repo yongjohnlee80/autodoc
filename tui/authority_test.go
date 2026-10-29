@@ -40,6 +40,7 @@ autodoc.command{ name = "peek", run = function(ed)
   autodoc.call("file.read", {PROBE}, function(res, e) ed:insert("[peek " .. tostring(res and res.content) .. " " .. tostring(e) .. "]") end)
 end }
 autodoc.command{ name = "closeit", run = function(ed) say(ed, autodoc.run("buffer.close")) end }
+autodoc.command{ name = "touch", run = function(ed) ed:insert("EDITED") end }
 autodoc.command{ name = "bind", run = function(ed)
   autodoc.map{ mode = "leader", keys = "z", command = "w", title = "save" }
   autodoc.menu{ where = "plugins", title = "save it", command = "w" }
@@ -340,7 +341,8 @@ func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
 	g := newGatedRig(t)
 	onLoop(g.running, func() bool { g.h.openAbsolute(g.probe); return true })
 	g.waitFile(t, g.probe)
-	g.page("EDITED\n", 1, 1)
+	g.mustRun(t, "touch")
+	g.s.WaitFor(t, "the edit", func(string) bool { return onLoop(g.running, func() bool { return g.h.file.dirty }) })
 	g.mustRun(t, "closeit")
 	g.s.WaitFor(t, "the unsaved question", func(string) bool { return onLoop(g.running, func() bool { return g.h.file.then != nil }) })
 	g.saved(t, func() { onLoop(g.running, func() bool { g.h.unsaved("save"); return true }) })
