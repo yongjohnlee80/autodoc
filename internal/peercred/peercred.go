@@ -44,6 +44,8 @@ func ourUID() int {
 // as their folder's owner, until restore: every real peer is then another user's. It is a test's
 // seam, in any package, to show the daemon and its clients refusing another user's process; nothing
 // else calls it. A daemon or client running meanwhile reads the new uid at its next check.
+// NOTE: process-wide, as the uid it stands for: never from a parallel test (t.Parallel), whose
+// neighbours' sockets would see another user too.
 func PlayUser(uid int) (restore func()) {
 	played.Store(int64(uid) + 1)
 	return func() { played.Store(0) }
