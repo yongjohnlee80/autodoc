@@ -138,44 +138,42 @@ func (s *Store) Map(ctx context.Context, o MapOpts) (Map, error) {
 
 // graphMap is Map, rooted at o.Root when rooted: an empty or unknown root is then ErrNoDocument,
 // as Neighborhood has always answered; unrooted, o.Root is unused.
+//
+// Rooted, it reads only the neighbourhood (AP-6): the links of the frontier, both ways, one step
+// at a time, then the links among the documents reached, and those documents' rows, tags and
+// supersession; never the workspace's every link, tag and supersession, which a rooted map of a
+// few documents used to read whole. Its answer is golib's graph.Neighborhood's over the whole
+// graph: every document within depth links of the root either way, and every link of the given
+// kinds whose two ends were both reached.
 func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, error) {
 	var m Map
 	err := s.read(ctx, func(tx *store.Tx) error {
-		var start int64
+		var ids []int64 // the documents of the map; nil: every one
+		var links []*LinkRow
 		if rooted {
+			start, err := s.docID(tx, o.Root)
+			if err != nil {
+				return err
+			}
+			if ids, links, err = s.neighbourhood(tx, start, min(max(o.Depth, 1), 2), o.Kinds); err != nil {
+				return err
+			}
+		} else {
 			var err error
-			if start, err = s.docID(tx, o.Root); err != nil {
+			if links, err = kindsIn(s.linksOut(tx), o.Kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
+				Select(LinkSrc, LinkDst, LinkKind); err != nil {
 				return err
 			}
 		}
-		rows, err := kindsIn(s.linksOut(tx), o.Kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
-			Select(LinkSrc, LinkDst, LinkKind)
+		found, err := s.docsByID(tx, ids)
 		if err != nil {
 			return err
 		}
-		g := graph.New[int64]()
-		for _, l := range rows {
-			g.Add(graph.Edge[int64]{Src: l.SrcDoc, Dst: *l.DstDoc, Kind: l.Kind})
-		}
-		docs := s.documents(tx)
-		if rooted {
-			g.AddNode(start)
-			g = g.Neighborhood(start, min(max(o.Depth, 1), 2), graph.Both, graph.Filter{})
-			var ids []any
-			for id := range g.Nodes() {
-				ids = append(ids, id)
-			}
-			docs = docs.With(DocID, ids...)
-		}
-		found, err := docs.Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
+		superseded, err := s.superseded(tx, ids)
 		if err != nil {
 			return err
 		}
-		superseded, err := s.superseded(tx)
-		if err != nil {
-			return err
-		}
-		tags, err := s.tagsByDoc(tx)
+		tags, err := s.tagsByDoc(tx, ids)
 		if err != nil {
 			return err
 		}
@@ -187,6 +185,10 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 				n.Title = *d.Title
 			}
 			m.Nodes = append(m.Nodes, n)
+		}
+		g := graph.New[int64]() // a link repeated (one document linking another twice) is one edge
+		for _, l := range links {
+			g.Add(graph.Edge[int64]{Src: l.SrcDoc, Dst: *l.DstDoc, Kind: l.Kind})
 		}
 		for e := range g.Edges(graph.Filter{}) {
 			m.Edges = append(m.Edges, Edge{paths[e.Src], paths[e.Dst], e.Kind})
@@ -210,11 +212,91 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 	return m, nil
 }
 
-// tagsByDoc is every document's tags, sorted, by document.
-func (s *Store) tagsByDoc(tx *store.Tx) (map[int64][]string, error) {
-	rows, err := s.tags(tx).Select(DocValueDoc, DocValueValue)
-	if err != nil {
-		return nil, err
+// neighbourhood walks the resolved links of the given kinds from start, both ways, depth steps: the
+// documents reached (start first), and the links among them. Each step reads only its frontier's
+// links, through link_src and link_dst, in parts small enough for one IN list.
+func (s *Store) neighbourhood(tx *store.Tx, start int64, depth int, kinds []string) ([]int64, []*LinkRow, error) {
+	resolved := func() dao.DAO[*LinkRow, LinkField, int64] {
+		return kindsIn(s.linksOut(tx), kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`))
+	}
+	reached := map[int64]bool{start: true}
+	ids := []int64{start}
+	frontier := []int64{start}
+	for step := 0; step < depth && len(frontier) > 0; step++ {
+		var next []int64
+		visit := func(id int64) {
+			if !reached[id] {
+				reached[id] = true
+				next = append(next, id)
+			}
+		}
+		for part := range inParts(frontier) {
+			out, err := resolved().With(LinkSrc, part...).Select(LinkDst)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, l := range out {
+				visit(*l.DstDoc)
+			}
+			in, err := resolved().With(LinkDst, part...).Select(LinkSrc)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, l := range in {
+				visit(l.SrcDoc)
+			}
+		}
+		ids = append(ids, next...)
+		frontier = next
+	}
+	var links []*LinkRow
+	for part := range inParts(ids) {
+		rows, err := resolved().With(LinkSrc, part...).Select(LinkSrc, LinkDst, LinkKind)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, l := range rows {
+			if reached[*l.DstDoc] {
+				links = append(links, l)
+			}
+		}
+	}
+	return ids, links, nil
+}
+
+// docsByID is the rows graph.map shows of the documents ids, in parts; every document when ids is
+// nil.
+func (s *Store) docsByID(tx *store.Tx, ids []int64) ([]*Document, error) {
+	if ids == nil {
+		return s.documents(tx).Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
+	}
+	var out []*Document
+	for part := range inParts(ids) {
+		rows, err := s.documents(tx).With(DocID, part...).Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+// tagsByDoc is the tags of the documents ids, sorted, by document; every document's when ids is
+// nil.
+func (s *Store) tagsByDoc(tx *store.Tx, ids []int64) (map[int64][]string, error) {
+	var rows []*DocValue
+	if ids == nil {
+		var err error
+		if rows, err = s.tags(tx).Select(DocValueDoc, DocValueValue); err != nil {
+			return nil, err
+		}
+	}
+	for part := range inParts(ids) {
+		r, err := s.tags(tx).With(DocValueDoc, part...).Select(DocValueDoc, DocValueValue)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, r...)
 	}
 	out := map[int64][]string{}
 	for _, r := range rows {
@@ -226,13 +308,31 @@ func (s *Store) tagsByDoc(tx *store.Tx) (map[int64][]string, error) {
 	return out, nil
 }
 
-// superseded is every document another one supersedes, by the resolved supersession links: a
-// supersedes link's target, and a superseded_by link's source.
-func (s *Store) superseded(tx *store.Tx) (map[int64]bool, error) {
-	rows, err := kindsIn(s.linksOut(tx), []string{"supersedes", "superseded_by"}).
-		WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).Select(LinkSrc, LinkDst, LinkKind)
-	if err != nil {
-		return nil, err
+// superseded is the documents among ids (every document when ids is nil) that another one
+// supersedes, by the resolved supersession links: a supersedes link's target, and a superseded_by
+// link's source.
+func (s *Store) superseded(tx *store.Tx, ids []int64) (map[int64]bool, error) {
+	supersession := func() dao.DAO[*LinkRow, LinkField, int64] {
+		return kindsIn(s.linksOut(tx), []string{"supersedes", "superseded_by"}).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`))
+	}
+	var rows []*LinkRow
+	if ids == nil {
+		var err error
+		if rows, err = supersession().Select(LinkSrc, LinkDst, LinkKind); err != nil {
+			return nil, err
+		}
+	}
+	for part := range inParts(ids) {
+		// a document is superseded by a supersedes link reaching it or a superseded_by link leaving it
+		to, err := supersession().With(LinkDst, part...).Select(LinkSrc, LinkDst, LinkKind)
+		if err != nil {
+			return nil, err
+		}
+		from, err := supersession().With(LinkSrc, part...).Select(LinkSrc, LinkDst, LinkKind)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(append(rows, to...), from...)
 	}
 	out := map[int64]bool{}
 	for _, l := range rows {
