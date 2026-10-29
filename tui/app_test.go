@@ -108,6 +108,9 @@ type daemonOpts struct {
 	// roots, when one names a workspace, is that workspace's files as another daemon left them: the
 	// same daemon after a restart. Its notes are not written again.
 	roots map[string]*memfs.FS
+	// storeAt, when set, is where the daemon's store is: the path a config names, so a client bound
+	// to that config's store finds its daemon serving it (a real daemon's store_id). "" is a temp one.
+	storeAt string
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -156,11 +159,21 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	var served []rpc.Workspace
 	var cores sync.WaitGroup // the indexers and followers, stopped before the store closes
 	// one store for the daemon's workspaces; closed after the indexers stop (cleanups run last first)
-	db, err := openDaemonStore(t)
+	storePath := o.storeAt
+	if storePath == "" {
+		storePath = filepath.Join(t.TempDir(), "autodoc.db")
+	}
+	db, err := openDaemonStoreAt(t, storePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	// a daemon says the store it serves (store_id), as a real one does: a client bound to a config's
+	// store refuses one from protocol 13 on that says none (endpoint.CheckStore)
+	storeID, err := store.Identity(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	d.db = db
 	var derives *registrations.Table
 	var docOpts []docs.Option
@@ -268,7 +281,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithFiles(diskFiles(t, docOpts...))}
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithStoreID(storeID), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithFiles(diskFiles(t, docOpts...))}
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}

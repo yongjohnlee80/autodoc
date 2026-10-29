@@ -12,6 +12,8 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+
+	"github.com/yongjohnlee80/autodoc/core/config"
 )
 
 // TestLaunchRunsAnotherClientsLayoutAndDaemon: a program launching AutoDoc's TUI with a layout and
@@ -37,7 +39,8 @@ func TestLaunchRunsAnotherClientsLayoutAndDaemon(t *testing.T) {
 			t.Errorf("spawned with %q, %q", configPath, stateDir)
 		}
 		spawns.Add(1)
-		startDaemonOn(t, sock, map[string][]string{"kb": {"a.md", "a\n"}})
+		// the config's own store: a client bound to it believes only a daemon that serves it
+		startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{storeAt: filepath.Join(dir, "data", config.StoreName)})
 		return filepath.Join(stateDir, "serve.log"), nil
 	}
 	marker := "a layout of its own"

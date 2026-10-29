@@ -31,11 +31,20 @@ var daemonStoreImage = sync.OnceValues(func() ([]byte, error) {
 
 func openDaemonStore(t *testing.T) (*store.Store, error) {
 	t.Helper()
+	return openDaemonStoreAt(t, filepath.Join(t.TempDir(), "autodoc.db"))
+}
+
+// openDaemonStoreAt is openDaemonStore at path, its folder made: the store a config names, for a
+// fake daemon that serves it as a real one would (launch_test, debug_test).
+func openDaemonStoreAt(t *testing.T, path string) (*store.Store, error) {
+	t.Helper()
 	image, err := daemonStoreImage()
 	if err != nil {
 		return nil, fmt.Errorf("daemon store image: %w", err)
 	}
-	path := filepath.Join(t.TempDir(), "autodoc.db")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
 	if err := os.WriteFile(path, image, 0o600); err != nil {
 		return nil, err
 	}
