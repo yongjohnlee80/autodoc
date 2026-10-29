@@ -21,6 +21,9 @@ type Workspace interface {
 	// Index and Docs are the workspace's indexer and files; nil when it was not opened.
 	Index() *index.Indexer
 	Docs() *docs.Docs
+	// Files are every file of its root, admitted by its patterns or not, behind the guard: a bounded
+	// file.*'s (ADR 1792004705 §4.2a.1); nil when it was not opened.
+	Files() *docs.Docs
 	// SectionTokens and EmbeddingPolicy are its settings now ("" policy: the default, always).
 	SectionTokens() int
 	EmbeddingPolicy() string
@@ -58,6 +61,7 @@ func (s *static) Exclude() []string        { return s.w.Exclude }
 func (s *static) Err() error               { return s.w.Err }
 func (s *static) Index() *index.Indexer    { return s.w.Index }
 func (s *static) Docs() *docs.Docs         { return s.w.Docs }
+func (s *static) Files() *docs.Docs        { return s.w.Files }
 func (s *static) Provider() ProviderChoice { return s.w.Provider }
 
 func (s *static) SectionTokens() int {

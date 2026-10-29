@@ -19,6 +19,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -109,7 +110,9 @@ type served struct {
 	// the rest is nil or zero for one that could not be opened
 	ix            *index.Indexer
 	docs          *docs.Docs
-	fsys          vfs.FS // the root, golib vfs/local (os.Root): workspace.scaffold writes through it, borrowed, never closed there
+	files         *docs.Docs             // every file of the root, admitted or not: a bounded file.*'s (ADR 1792004705 §4.2a.1)
+	fsys          vfs.FS                 // the root, golib vfs/local (os.Root) behind the guard: workspace.scaffold writes through it, borrowed, never closed there
+	name          atomic.Pointer[string] // its name now, for the guard: a rename moves it
 	follower      *follow.Follower
 	schema        *schemaHolder
 	text          *textExtensions
@@ -145,6 +148,9 @@ type Options struct {
 	// Rank is the re-ranking stage every workspace's indexer wraps its searches in (ADR 0215): the
 	// daemon's one Holder, the texts the ranker reads, and whether a search is ranked or refused.
 	Rank index.Rank
+	// Guard holds a gated script's calls to their bounds (ADR 1792004705 §4.2a.1): every served
+	// workspace's files are reached through it. nil: every bounded call is refused.
+	Guard *fsbounds.Guard
 }
 
 // New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
@@ -162,7 +168,22 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
 		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1)}
 	m.queue = newEmbeddingQueue(m)
+	if o.Guard != nil {
+		o.Guard.SetServed(m.boundsRoots)
+	}
 	return m
+}
+
+// boundsRoots are the workspaces served now, opened or not, for the guard: the innermost holding a
+// path anchors its hidden rule.
+func (m *Workspaces) boundsRoots() []fsbounds.Root {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]fsbounds.Root, 0, len(m.served))
+	for name, s := range m.served {
+		out = append(out, fsbounds.Root{Name: name, Dir: s.root})
+	}
+	return out
 }
 
 // pastDefaultExcludes are the exclude patterns a workspace was given by default before the
@@ -308,11 +329,16 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 		_ = ws.Close()
 	}
 	s := &served{id: id, override: override, root: c.Root, include: c.Include, exclude: c.Exclude,
-		ix: ix, fsys: ws.FS, docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds()),
-			docs.WithDeriver(m.opts.Registrations)),
-		follower: f, schema: sh, text: text, sectionTokens: sectionTokens, policy: policy,
+		ix: ix, follower: f, schema: sh, text: text, sectionTokens: sectionTokens, policy: policy,
 		provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)},
 		ctx:      ctx, halt: halt, stop: stop}
+	s.name.Store(&c.Name)
+	// every request reaches the files through the guard; the indexer and the follower, which no
+	// request drives, read the root as it is
+	s.fsys = m.opts.Guard.Wrap(func() string { return *s.name.Load() }, c.Root, ws.FS)
+	s.docs = docs.New(s.fsys, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds()),
+		docs.WithDeriver(m.opts.Registrations))
+	s.files = docs.New(s.fsys, nil, docs.WithRegistrations(m.opts.Registrations.Kinds()), docs.WithDeriver(m.opts.Registrations))
 	s.view = &view{m: m, s: s, name: c.Name}
 	return s, nil
 }
@@ -680,6 +706,7 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 // renameServed serves s, renamed in the store, under its new name. m.chg and m.mu are held.
 func (m *Workspaces) renameServed(name, to string, s *served) {
 	s.view = &view{m: m, s: s, name: to}
+	s.name.Store(&to)
 	m.queue.rename(name, to)
 	delete(m.served, name)
 	m.served[to] = s
