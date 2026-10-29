@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -750,4 +751,78 @@ func TestAnIndexThatCannotBeReadIsRetried(t *testing.T) {
 	m.fail(nil)
 	converges(t, m, s, "the index readable again")
 	eventually(t, "the retry done", func() bool { return len(f.Status().Retrying) == 0 })
+}
+
+// lister is a model that can list its versions at once (follow.VersionLister), counting how the
+// follower asks it.
+type lister struct {
+	*model
+	asked struct {
+		sync.Mutex
+		version, under int
+	}
+}
+
+func (l *lister) Version(ctx context.Context, p string) (vfs.Version, bool, error) {
+	l.asked.Lock()
+	l.asked.version++
+	l.asked.Unlock()
+	return l.model.Version(ctx, p)
+}
+
+func (l *lister) VersionsUnder(_ context.Context, dir string) (map[string]vfs.Version, error) {
+	l.asked.Lock()
+	l.asked.under++
+	l.asked.Unlock()
+	m := l.model
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failing != nil {
+		return nil, m.failing
+	}
+	out := map[string]vfs.Version{}
+	for p, v := range m.docs {
+		if dir == "." || p == dir || strings.HasPrefix(p, dir+"/") {
+			out[p] = v
+		}
+	}
+	return out, nil
+}
+
+func (l *lister) counts() (version, under int) {
+	l.asked.Lock()
+	defer l.asked.Unlock()
+	return l.asked.version, l.asked.under
+}
+
+// TestAStartOverAStoreThatListsVersionsReadsThemOnce (AP-9): a store that lists the versions under
+// a directory is asked once for the reconcile's walk, never once a file; the walk still touches the
+// files whose version differs, and only those.
+func TestAStartOverAStoreThatListsVersionsReadsThemOnce(t *testing.T) {
+	root, fsys := localRoot(t)
+	for i := range 20 {
+		write(t, root, fmt.Sprintf("d/%02d.md", i), "x")
+	}
+	m := newModel(fsys)
+	for p, v := range truth(t, fsys) {
+		m.docs[p] = v // indexed as they are
+	}
+	write(t, root, "d/05.md", "changed") // but one, changed since
+	l := &lister{model: m}
+	f := follow.New(fsys, l, l, fast...)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- f.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	converges(t, m, fsys, "a start over a listing store")
+	version, under := l.counts()
+	if version != 0 || under < 1 {
+		t.Errorf("the start asked Version %d times and VersionsUnder %d; want 0 and at least 1", version, under)
+	}
+	m.mu.Lock()
+	touched := maps.Clone(m.touched)
+	m.mu.Unlock()
+	if touched["d/05.md"] == 0 || touched["d/04.md"] != 0 {
+		t.Errorf("touched %v: want the changed file, and not an unchanged one", touched)
+	}
 }
