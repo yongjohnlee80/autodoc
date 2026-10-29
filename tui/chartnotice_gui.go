@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"image/color"
+	"sync"
 
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
@@ -56,6 +57,31 @@ func (c chartNotice) text(req guiwidget.DiagramRequest) (string, bool) {
 	return "", false
 }
 
+// noticeShapers are the notices' shapers, one per scale, made once and kept: Diagram runs on the UI
+// loop, in a layout (golib's diagrams hand it a declined chart synchronously), so it never takes a
+// pooled measurer, which waits while the diagram workers hold them all (gui.AcquireMeasurer is for
+// workers).
+var noticeShapers struct {
+	mu sync.Mutex
+	m  map[float32]*gui.TextShaper
+}
+
+// noticeWrap wraps text at scale with the notices' shaper there, made the first time and kept. The
+// lock covers the wrap too: a shaper is not safe for concurrent use.
+func noticeWrap(scale float32, text string, f gui.Font, width float32) ([]string, gui.Size) {
+	noticeShapers.mu.Lock()
+	defer noticeShapers.mu.Unlock()
+	t := noticeShapers.m[scale]
+	if t == nil {
+		if noticeShapers.m == nil {
+			noticeShapers.m = map[float32]*gui.TextShaper{}
+		}
+		t = gui.NewTextShaper(scale)
+		noticeShapers.m[scale] = t
+	}
+	return t.Wrap(text, f, width)
+}
+
 func (c chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ func()) guiwidget.DiagramAnswer {
 	text, ok := c.text(req)
 	if !ok {
@@ -66,9 +92,7 @@ func (c chartNotice) Diagram(_ context.Context, req guiwidget.DiagramRequest, _ 
 	f.Size = max(f.Size*0.9, 10)
 	f.Italic = true
 	pad := f.Size
-	m, release := gui.AcquireMeasurer(req.Scale)
-	_, sz := m.Wrap(text, f, max(req.Width-2*pad, f.Size))
-	release()
+	_, sz := noticeWrap(req.Scale, text, f, max(req.Width-2*pad, f.Size))
 	n := noticeView{text: text, font: f, pad: pad, size: gui.Size{W: req.Width, H: sz.H + 2*pad},
 		ink: orColor(th.Muted, th.Text), ground: orColor(th.CodeBackground, th.Background)}
 	return guiwidget.DiagramAnswer{State: guiwidget.Ready, Pic: n, Size: n.size}
