@@ -447,10 +447,14 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	// again, and its lock's connection is killed: it stops, non-zero
 	done, stderr = f.serve(f.ctx)
 	f.started(stderr)
-	f.waitFor("the lock taken", func() bool { return f.locks() == "1" })
+	// NOTE: pg_locks shows the lock granted as soon as pg_try_advisory_lock runs, before the take's
+	// transaction commits; a kill in that window fails the take itself ("take the writer lock"),
+	// not a lock held. A row indexed is written under the lock, so the take had returned.
+	f.exec(`INSERT INTO track VALUES (4, 'A', 'heron song', now() - interval '1 minute')`)
+	f.waitFor("the lock taken and a row written under it", func() bool { return f.locks() == "1" && f.documents() == "4" })
 	f.exec(`SELECT pg_terminate_backend(pid) ` + ownLocks)
 	// a row to write: the next pass's commit confirms the lock first, sooner than the ping
-	f.exec(`INSERT INTO track VALUES (4, 'A', 'tern song', now() - interval '1 minute')`)
+	f.exec(`INSERT INTO track VALUES (5, 'A', 'tern song', now() - interval '1 minute')`)
 	if code := exitOf(t, done, stderr); code != 1 || !strings.Contains(stderr.String(), "writer lock was lost") {
 		t.Fatalf("--server after its lock was lost: exit %d: %s", code, stderr)
 	}
