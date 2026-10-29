@@ -155,3 +155,56 @@ func TestARootedMapReadsOnlyItsNeighbourhood(t *testing.T) {
 		t.Errorf("a rooted map read a table whole:\n%s", strings.Join(c.whole, "\n"))
 	}
 }
+
+// TestARootedMapSeeksItsFrontiersLinks (AP-6): under no ANALYZE statistics, as in every store, each
+// link statement of a rooted map is planned as a seek of its own key: link_src for a source list,
+// link_dst for a destination list. A range over link_dst's resolved links filtered by source (what
+// a "dst_doc IS NOT NULL" predicate made SQLite choose) reads the workspace's links, though the SQL
+// names a frontier.
+func TestARootedMapSeeksItsFrontiersLinks(t *testing.T) {
+	e := newEnv(t, options{})
+	e.put("a.md", "---\nsupersedes: [b.md]\nsuperseded_by: [c.md]\n---\n[[b]] [[nowhere]]\n", "b.md", "[[c]]", "c.md", "end",
+		"far1.md", "[[far2]]", "far2.md", "[[far1]] [[missing]]")
+	capture := &sqlCapture{}
+	s := &Store{db: e.db, sc: e.db.Workspace(e.ws).WithHooks(capture)}
+	if _, err := s.Map(context.Background(), MapOpts{Root: "a.md", Depth: 2}); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, q := range capture.stmts {
+		if q.Table != "link" {
+			continue
+		}
+		var want string
+		switch {
+		case strings.Contains(q.SQL, `"link"."src_doc" IN (`) || strings.Contains(q.SQL, `"link"."src_doc" = `):
+			want = "USING INDEX link_src (workspace_id=? AND src_doc=?)"
+		case strings.Contains(q.SQL, `"link"."dst_doc" IN (`) || strings.Contains(q.SQL, `"link"."dst_doc" = `):
+			want = "USING INDEX link_dst (workspace_id=? AND dst_doc=?)"
+		default:
+			t.Errorf("a link statement names no frontier: %s", q.SQL)
+			continue
+		}
+		seen[want] = true
+		rows, err := e.raw.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+q.SQL, q.Args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		if all := strings.Join(plan, "\n"); !strings.Contains(all, want) {
+			t.Errorf("planned otherwise than %q:\n%s\n%s", want, q.SQL, all)
+		}
+	}
+	if len(seen) != 2 {
+		t.Errorf("the rooted map's link statements sought %v; want both a source and a destination seek", seen)
+	}
+}
