@@ -36,6 +36,10 @@ autodoc.command{ name = "openit", run = function(ed) say(ed, autodoc.run("file.o
 autodoc.command{ name = "openline", run = function(ed) say(ed, pcall(function() return ed:run("e " .. PROBE) end)) end }
 autodoc.command{ name = "saveit", run = function(ed) ed:insert("EVIL"); say(ed, autodoc.run("file.save")) end }
 autodoc.command{ name = "follow", run = function(ed) say(ed, autodoc.run("file.follow_link")) end }
+autodoc.command{ name = "peek", run = function(ed)
+  autodoc.call("file.read", {PROBE}, function(res, e) ed:insert("[peek " .. tostring(res and res.content) .. " " .. tostring(e) .. "]") end)
+end }
+autodoc.command{ name = "closeit", run = function(ed) say(ed, autodoc.run("buffer.close")) end }
 autodoc.command{ name = "bind", run = function(ed)
   autodoc.map{ mode = "leader", keys = "z", command = "w", title = "save" }
   autodoc.menu{ where = "plugins", title = "save it", command = "w" }
@@ -60,7 +64,7 @@ func newGatedRig(t *testing.T) *gatedRig {
 	}
 	prefs := maps.Clone(testPrefs)
 	prefs[prefLuaGrants] = `{"pkg":{"commands":true,"settings":true,"workspace.read":true,"workspace.write":true}}`
-	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "kestrel\n"}}, daemonOpts{prefs: prefs})
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "kestrel\n"}, "kb2": {"b.md", "plover\n"}}, daemonOpts{prefs: prefs})
 	g := &gatedRig{running: attached(t, d), d: d, probe: probe}
 	g.waitNamespaces(t)
 	onLoop(g.running, func() bool {
@@ -269,5 +273,89 @@ func TestAGatedSaveLeftBehindIsDropped(t *testing.T) {
 	})
 	if !panicked {
 		t.Errorf("work with no authority went on")
+	}
+}
+
+// TestAGatedCallCarriesItsBounds: a gated script's own file.read of a path outside every workspace
+// is refused by the daemon (its bounds sent); the user's own read of it answers. And the bounds are
+// the gate's: a script's extra argument (a within of its own) is cut before them, a missing one
+// padded.
+func TestAGatedCallCarriesItsBounds(t *testing.T) {
+	g := newGatedRig(t)
+	g.page("", 1, 1)
+	g.mustRun(t, "peek")
+	g.s.WaitFor(t, "the read's answer", func(string) bool { return strings.Contains(g.editorText(), "[peek ") })
+	if got := g.editorText(); strings.Contains(got, "orig") || !strings.Contains(got, "a script may not reach it") {
+		t.Errorf("a gated read outside every workspace answered %q", got)
+	}
+	v := luaVerb{verb: "doc.write", params: []luaParam{{name: "workspace"}, {name: "path"}, {name: "content"}, {name: "version", optional: true}}}
+	gate := map[string]any{"within": "kb"}
+	got := v.bounded([]any{"kb", "a.md", "x", "", map[string]any{"within": "*"}}, gate)
+	if len(got) != 5 || got[4].(map[string]any)["within"] != "kb" {
+		t.Errorf("a script's own within: %v, want it cut and the gate's in its place", got)
+	}
+	got = v.bounded([]any{"kb", "a.md", "x"}, gate)
+	if len(got) != 5 || got[3] != nil || got[4].(map[string]any)["within"] != "kb" {
+		t.Errorf("a short call: %v, want it padded with nil, then the gate's bounds", got)
+	}
+}
+
+// TestAGatedFollowLaunchesNothing: a link of a scheme the desktop's opener would launch reaches no
+// opener when a gated script follows it.
+func TestAGatedFollowLaunchesNothing(t *testing.T) {
+	g := newGatedRig(t)
+	g.openByPicker(t, "a.md")
+	g.waitFile(t, "a.md")
+	g.page("[x](x-launch://payload)", 1, 2)
+	g.mustRun(t, "follow")
+	g.waitKept(t, "x-launch://payload is the user's to follow: a script may not")
+	if u := g.browsed(); len(u) != 0 {
+		t.Errorf("the opener was handed %v", u)
+	}
+}
+
+// TestAGatedSaveOfAnotherWorkspaceIsRefused: a document of a workspace other than the one the
+// script's invocation began in is not saved, here, before anything is sent.
+func TestAGatedSaveOfAnotherWorkspaceIsRefused(t *testing.T) {
+	g := newGatedRig(t)
+	onLoop(g.running, func() bool { g.h.openIn("kb2", "b.md"); return true })
+	g.waitFile(t, "b.md")
+	onLoop(g.running, func() bool { // the script began while kb was current; refused before anything is sent
+		a := g.h.authorityNow()
+		a.script, a.ws, a.user = "pkg", "kb", false
+		g.h.ws = "kb"
+		g.h.writeAs(a, g.h.active, "EVIL\n", g.h.file.version, nil)
+		return true
+	})
+	g.waitKept(t, "b.md is outside the workspace: a script may not save it")
+	if got := g.d.read(t, "kb2", "b.md"); got != "plover\n" {
+		t.Errorf("kb2's b.md is %q", got)
+	}
+}
+
+// TestAQuestionsAnswerContinuesTheScriptsStep: the unsaved question a gated script's close raised
+// saves, on the user's Save, as the script acted, so a buffer outside every workspace stays as it
+// was; and a gated save's conflict, answered Overwrite after the workspace changed, is dropped.
+func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
+	g := newGatedRig(t)
+	onLoop(g.running, func() bool { g.h.openAbsolute(g.probe); return true })
+	g.waitFile(t, g.probe)
+	g.page("EDITED\n", 1, 1)
+	g.mustRun(t, "closeit")
+	g.s.WaitFor(t, "the unsaved question", func(string) bool { return onLoop(g.running, func() bool { return g.h.file.then != nil }) })
+	g.saved(t, func() { onLoop(g.running, func() bool { g.h.unsaved("save"); return true }) })
+	g.probeIs(t, "orig\n")
+
+	g.openByPicker(t, "a.md")
+	g.waitFile(t, "a.md")
+	g.d.write(t, "kb", "a.md", "changed on disk\n") // the shown version is stale now
+	g.mustRun(t, "saveit")
+	g.s.WaitFor(t, "the conflict", func(string) bool {
+		return onLoop(g.running, func() bool { return g.h.file.saveAuth.gated() })
+	})
+	onLoop(g.running, func() bool { g.h.ws = "kb2"; g.h.overwrite(); return true })
+	g.waitKept(t, "the workspace changed")
+	if got := g.d.read(t, "kb", "a.md"); got != "changed on disk\n" {
+		t.Errorf("an Overwrite answered after the switch wrote %q", got)
 	}
 }
