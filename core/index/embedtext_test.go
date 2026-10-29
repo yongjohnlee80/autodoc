@@ -39,7 +39,7 @@ func TestTheEmbeddingWorkerSendsTheStoredEmbedText(t *testing.T) {
 	embedText := "func Alpha() // the signature and its documentation"
 	th := sha256.Sum256([]byte(embedText))
 	e.exec(`UPDATE chunk SET embed = ?, text_hash = ? WHERE doc_id = (SELECT id FROM document WHERE path = 'a.md')`, embedText, th[:])
-	hashes, texts, err := e.store.unembedded(context.Background(), "fp", nil)
+	hashes, texts, _, err := e.store.unembedded(context.Background(), "fp", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

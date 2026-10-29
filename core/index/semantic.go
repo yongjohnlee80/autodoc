@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -120,6 +121,10 @@ type semantic struct {
 	fillTotal   int64
 	fillBatches int64
 	fillDone    bool
+	// cursor is where the fill of model cursorFP resumes: the last chunk id its previous batch read
+	// (0: the start). The worker's own.
+	cursorFP string
+	cursor   int64
 
 	snapshotScans, fallbackScans atomic.Int64 // for tests: which path queries took
 	// beforeFetch, when set (tests only), runs inside a semantic query's read transaction before it
@@ -405,11 +410,11 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			}
 			return s.setReady(tx, changed)
 		case vb.fp == m.target.Model().Fingerprint():
-			missing, err := s.pendingUnrefused(tx, vb.fp, m.skip(vb.fp))
+			pending, err := s.pendingUnrefused(tx, vb.fp, m.skip(vb.fp))
 			if err != nil {
 				return err
 			}
-			if missing == 0 {
+			if !pending {
 				var err error
 				if superseded, err = s.activeModel(tx); err != nil {
 					return err
@@ -502,26 +507,29 @@ func (s *Store) pendingTexts(tx *store.Tx, fp string) (int64, error) {
 	return missing[0], nil
 }
 
-// pendingUnrefused counts target hashes with neither a vector nor a current refusal.
-func (s *Store) pendingUnrefused(tx *store.Tx, fp string, skip map[string]bool) (int64, error) {
-	have, err := s.embeddedTexts(tx, fp)
-	if err != nil {
-		return 0, err
-	}
-	rows, err := alive(s.chunks(tx)).Select(ChunkTextHash)
-	if err != nil {
-		return 0, err
-	}
-	seen := map[string]bool{}
-	var missing int64
-	for _, r := range rows {
-		h := string(r.TextHash)
-		if !seen[h] && !have[h] && !skip[h] {
-			missing++
+// pendingUnrefused reports whether any alive text has neither a vector under model fp nor a current
+// refusal: the writer asks it of every target batch, to flip once the target covers the workspace.
+// The vector's absence is decided in SQLite (noVector), and the scan runs from the newest chunk
+// down, where a fill (which embeds in id order) leaves its pending texts: while one is under way the
+// first page answers, and only the check that finds none reads every chunk, once (AP-2).
+func (s *Store) pendingUnrefused(tx *store.Tx, fp string, skip map[string]bool) (bool, error) {
+	before := int64(math.MaxInt64)
+	for {
+		rows, err := alive(s.chunks(tx)).WithPredicate(dao.Lt(`"chunk"."id"`, before)).WithPredicate(noVector(fp)).
+			OrderBy(dao.Desc(ChunkByID)).Limit(inPart).Select(ChunkID, ChunkTextHash)
+		if err != nil {
+			return false, err
 		}
-		seen[h] = true
+		for _, r := range rows {
+			before = r.ID
+			if !skip[string(r.TextHash)] {
+				return true, nil
+			}
+		}
+		if len(rows) < inPart {
+			return false, nil
+		}
 	}
-	return missing, nil
 }
 
 // textCoverage is the distinct texts of the alive chunks, and how many of them each model fps
@@ -683,11 +691,20 @@ func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 	p := m.target
 	fp, dims := p.Model().Fingerprint(), p.Model().Dims
 	started := time.Now()
-	hashes, texts, err := x.store.unembedded(ctx, fp, m.skip(fp))
+	skip := m.skip(fp)
+	from := m.resumeAt(fp)
+	hashes, texts, next, err := x.store.unembedded(ctx, fp, skip, from)
+	if err == nil && len(texts) == 0 && from > 0 {
+		// nothing past the cursor: look again from the start for what lies behind it (a text whose
+		// refusal has run out, a chunk written at an id a removed one had), so "none" is only ever
+		// said of the whole workspace
+		hashes, texts, next, err = x.store.unembedded(ctx, fp, skip, 0)
+	}
 	scanned := time.Since(started)
 	if err != nil {
 		return false, err
 	}
+	m.resumeFrom(fp, next)
 	if len(texts) == 0 {
 		if m.switching() {
 			// nothing left for the target: the writer checks coverage, and flips
@@ -846,6 +863,24 @@ func (m *semantic) skip(fp string) map[string]bool {
 	return out
 }
 
+// resumeAt is the chunk id the fill of model fp resumes after: 0 when the last batch was another
+// model's, or its scan reached the end.
+func (m *semantic) resumeAt(fp string) int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cursorFP != fp {
+		return 0
+	}
+	return m.cursor
+}
+
+// resumeFrom records where the next batch of model fp resumes.
+func (m *semantic) resumeFrom(fp string, next int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cursorFP, m.cursor = fp, next
+}
+
 func (x *Indexer) handVectors(ctx context.Context, vb vecBatch) error {
 	vb.done = make(chan error, 1)
 	select {
@@ -861,22 +896,24 @@ func (x *Indexer) handVectors(ctx context.Context, vb vecBatch) error {
 	}
 }
 
-// unembedded lists up to embedBatch distinct texts of alive chunks with no vector under fp, but
-// those set aside, in the order their first chunks were written. The text is the row's embed, or,
-// when that is "" (the built-in chunkers'), breadcrumb, a line feed and body: exactly what
-// text_hash names (search.Chunk.EmbedText), so every chunk of one hash has the same text.
-func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool) ([][]byte, []string, error) {
-	var hashes [][]byte
-	var texts []string
-	err := s.read(ctx, func(tx *store.Tx) error {
-		have, err := s.embeddedTexts(tx, fp)
-		if err != nil {
-			return err
-		}
+// unembedded lists up to embedBatch distinct texts of alive chunks after chunk id after with no
+// vector under fp, but those set aside, in the order their first chunks were written. The text is
+// the row's embed, or, when that is "" (the built-in chunkers'), breadcrumb, a line feed and body:
+// exactly what text_hash names (search.Chunk.EmbedText), so every chunk of one hash has the same
+// text. next is the id to resume from: the last chunk read when the batch filled, 0 when the scan
+// reached the end.
+//
+// A vector's absence is decided in SQLite (noVector), so neither the model's vectors nor the chunks
+// already embedded are read into Go, and a fill resuming at next reads each chunk about once
+// however many batches it takes, where reading from the start each time was quadratic in the
+// workspace (AP-1). A hash repeated within the call is listed once; one listed by an earlier call
+// has its vector by the next (the writer commits a batch before the worker asks again) or is set
+// aside.
+func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool, after int64) (hashes [][]byte, texts []string, next int64, err error) {
+	err = s.read(ctx, func(tx *store.Tx) error {
 		seen := map[string]bool{}
-		var after int64
-		for len(texts) < embedBatch {
-			rows, err := alive(s.chunks(tx)).WithPredicate(dao.Gt(`"chunk"."id"`, after)).
+		for {
+			rows, err := alive(s.chunks(tx)).WithPredicate(dao.Gt(`"chunk"."id"`, after)).WithPredicate(noVector(fp)).
 				OrderBy(dao.Asc(ChunkByID)).Limit(inPart).
 				Select(ChunkID, ChunkTextHash, ChunkBreadcrumb, ChunkBody, ChunkEmbed)
 			if err != nil {
@@ -885,20 +922,30 @@ func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool)
 			for _, r := range rows {
 				after = r.ID
 				h := string(r.TextHash)
-				if have[h] || seen[h] || skip[h] || len(texts) == embedBatch {
+				if seen[h] || skip[h] {
 					continue
 				}
 				seen[h] = true
 				c := search.Chunk{Breadcrumb: r.Breadcrumb, Body: r.Body, Embed: r.Embed}
 				hashes, texts = append(hashes, r.TextHash), append(texts, c.EmbedText())
+				if len(texts) == embedBatch {
+					next = after
+					return nil
+				}
 			}
 			if len(rows) < inPart {
-				break
+				return nil
 			}
 		}
-		return nil
 	})
-	return hashes, texts, err
+	return hashes, texts, next, err
+}
+
+// noVector is the predicate of a chunk whose text has no vector under model fp: a probe of
+// embedding_workspace_model_text for each chunk read.
+func noVector(fp string) dao.Predicate {
+	return dao.Raw(`NOT EXISTS (SELECT 1 FROM "embedding" WHERE "embedding"."workspace_id" = "chunk"."workspace_id"`+
+		` AND "embedding"."model_fp" = ? AND "embedding"."text_hash" = "chunk"."text_hash")`, fp)
 }
 
 // The states of a workspace's models (ModelInfo.State).
@@ -944,7 +991,7 @@ func (x *Indexer) Pending(ctx context.Context, fp string) (n int64, err error) {
 // embed them first (unembedded's order and text): what the embedding setup times a model on. n is
 // at most embedBatch.
 func (x *Indexer) PendingSample(ctx context.Context, fp string, n int) ([]string, error) {
-	_, texts, err := x.store.unembedded(ctx, fp, nil)
+	_, texts, _, err := x.store.unembedded(ctx, fp, nil, 0)
 	if err != nil {
 		return nil, err
 	}
