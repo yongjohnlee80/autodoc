@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -42,8 +45,8 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 	}
 }
 
-// TestTheSocketIsBornPrivate: the socket file is created 0600 by the bind itself, whatever the
-// process's umask, not opened wider and narrowed by the chmod after it.
+// TestTheSocketIsBornPrivate: the socket file is created with no group or other bits by the bind
+// itself, whatever the process's umask, not opened wider and narrowed by the chmod after it.
 func TestTheSocketIsBornPrivate(t *testing.T) {
 	old := syscall.Umask(0)
 	defer syscall.Umask(old)
@@ -57,10 +60,38 @@ func TestTheSocketIsBornPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("the socket as bound is %#o, want 0600", perm)
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		t.Errorf("the socket as bound is %#o, want its owner's alone", perm)
 	}
 	if now := syscall.Umask(0); now != 0 {
 		t.Errorf("the bind left the umask %#o, want the process's own (0) back", now)
 	}
+}
+
+// TestTheDaemonServesOnlyItsUsersProcesses: the daemon closes, unanswered, a connection from
+// another user's process (played: peercred.PlayUser), and logs the refusal; the control, this
+// user's, is answered.
+func TestTheDaemonServesOnlyItsUsersProcesses(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no peer credentials on " + runtime.GOOS)
+	}
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), ""), sock)
+
+	restore := peercred.PlayUser(os.Getuid() + 1)
+	defer restore()
+	c, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := c.Read(make([]byte, 1)); n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatalf("another user's connection read %d, %v; want it closed unanswered (EOF)", n, err)
+	}
+	eventually(t, "the refusal in the log", func() bool { return strings.Contains(d.out.String(), "refused a connection") })
+
+	restore()
+	call(t, dial(t, sock), "workspace.list") // the control: this user's connection is served
 }

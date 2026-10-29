@@ -4,14 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // TestAgentsReachThePageThroughTheEditorSocket: an agent's call is refused until the user allows
@@ -246,4 +251,42 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 		}
 	}
 	<-done
+}
+
+// TestTheEditorSocketServesOnlyItsUsersProcesses: the editor socket closes, unanswered, a
+// connection from another user's process (played: peercred.PlayUser), as the daemon's does; the
+// control, this user's, is answered.
+func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no peer credentials on " + runtime.GOOS)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
+	r.connected(t)
+	path := onLoop(r, r.h.editorSocketPath)
+
+	restore := peercred.PlayUser(os.Getuid() + 1)
+	defer restore()
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := c.Read(make([]byte, 1)); n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatalf("another user's connection read %d, %v; want it closed unanswered (EOF)", n, err)
+	}
+
+	restore()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	var re *golibrpc.Error
+	if _, err := cli.Call(ctx, "editor.read", "nobody"); !errors.As(err, &re) {
+		t.Fatalf("this user's call: %v, want the socket's own answer (an RPC error: not an agent's token)", err)
+	}
 }

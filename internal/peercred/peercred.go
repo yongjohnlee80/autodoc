@@ -22,14 +22,32 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"syscall"
 )
 
 // ErrOtherUser is a peer that runs as another user than this process.
 var ErrOtherUser = errors.New("peercred: the other end of the socket is another user's process")
 
-// ourUID is the user both ends must run as; a variable so a test can play another user.
-var ourUID = os.Getuid
+// played is the uid a test plays (PlayUser), plus one; 0 while none is played.
+var played atomic.Int64
+
+// ourUID is the user both ends must run as: this process's, or the one a test plays.
+func ourUID() int {
+	if u := played.Load(); u != 0 {
+		return int(u - 1)
+	}
+	return os.Getuid()
+}
+
+// PlayUser makes this process expect uid, instead of its own, at the other end of its sockets and
+// as their folder's owner, until restore: every real peer is then another user's. It is a test's
+// seam, in any package, to show the daemon and its clients refusing another user's process; nothing
+// else calls it. A daemon or client running meanwhile reads the new uid at its next check.
+func PlayUser(uid int) (restore func()) {
+	played.Store(int64(uid) + 1)
+	return func() { played.Store(0) }
+}
 
 // Check refuses a unix connection whose peer runs as another user than this process. A connection
 // that is not a unix socket's is not checked: its peer has no user.
