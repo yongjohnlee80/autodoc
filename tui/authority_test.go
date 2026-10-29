@@ -94,10 +94,11 @@ func (g *gatedRig) browsed() []string {
 // not: the file is read after, never while the save is in flight.
 func (g *gatedRig) saved(t *testing.T, act func()) {
 	t.Helper()
-	before := onLoop(g.running, func() uint64 { return g.h.active.saves })
+	b := onLoop(g.running, func() *openBuffer { return g.h.active }) // the buffer saved, whatever is shown after
+	before := onLoop(g.running, func() uint64 { return b.saves })
 	act()
 	g.waitWithin(t, "the save settled", daemonWait, func() bool {
-		return onLoop(g.running, func() bool { return g.h.active.saves > before && !g.h.active.saving })
+		return onLoop(g.running, func() bool { return b.saves > before && !b.saving })
 	})
 }
 
