@@ -760,7 +760,20 @@ type lister struct {
 	asked struct {
 		sync.Mutex
 		version, under int
+		// atWalkEnd are the counts when the first reconcile's walk ended (its PathsUnder, which runs
+		// after the walk): that reconcile's own, whatever later ones ask
+		atWalkEnd [2]int
+		walked    bool
 	}
+}
+
+func (l *lister) PathsUnder(ctx context.Context, dir string) ([]string, error) {
+	l.asked.Lock()
+	if !l.asked.walked {
+		l.asked.walked, l.asked.atWalkEnd = true, [2]int{l.asked.version, l.asked.under}
+	}
+	l.asked.Unlock()
+	return l.model.PathsUnder(ctx, dir)
 }
 
 func (l *lister) Version(ctx context.Context, p string) (vfs.Version, bool, error) {
@@ -789,15 +802,17 @@ func (l *lister) VersionsUnder(_ context.Context, dir string) (map[string]vfs.Ve
 	return out, nil
 }
 
-func (l *lister) counts() (version, under int) {
+// firstWalk is how often the first reconcile asked Version and VersionsUnder, once its walk ended.
+func (l *lister) firstWalk() (version, under int, ok bool) {
 	l.asked.Lock()
 	defer l.asked.Unlock()
-	return l.asked.version, l.asked.under
+	return l.asked.atWalkEnd[0], l.asked.atWalkEnd[1], l.asked.walked
 }
 
 // TestAStartOverAStoreThatListsVersionsReadsThemOnce (AP-9): a store that lists the versions under
-// a directory is asked once for the reconcile's walk, never once a file; the walk still touches the
-// files whose version differs, and only those.
+// a directory is asked exactly once for the start's walk, and Version never; the walk still touches
+// the files whose version differs, and only those. The counts are the first reconcile's own, taken
+// when its walk ends, so neither a later reconcile nor a convergence before the walk ends counts.
 func TestAStartOverAStoreThatListsVersionsReadsThemOnce(t *testing.T) {
 	root, fsys := localRoot(t)
 	for i := range 20 {
@@ -815,9 +830,9 @@ func TestAStartOverAStoreThatListsVersionsReadsThemOnce(t *testing.T) {
 	go func() { done <- f.Run(ctx) }()
 	defer func() { cancel(); <-done }()
 	converges(t, m, fsys, "a start over a listing store")
-	version, under := l.counts()
-	if version != 0 || under < 1 {
-		t.Errorf("the start asked Version %d times and VersionsUnder %d; want 0 and at least 1", version, under)
+	eventually(t, "the start's walk ended", func() bool { _, _, ok := l.firstWalk(); return ok })
+	if version, under, _ := l.firstWalk(); version != 0 || under != 1 {
+		t.Errorf("the start's walk asked Version %d times and VersionsUnder %d; want 0 and 1", version, under)
 	}
 	m.mu.Lock()
 	touched := maps.Clone(m.touched)
