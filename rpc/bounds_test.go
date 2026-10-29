@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -102,4 +103,72 @@ func TestHandlersReachFilesThroughTheGuard(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestABoundedFileCallIsRoutedIntoItsWorkspace: under bounds, file.read of a path in a served root
+// runs on that workspace's files (Workspace.Files), indexed or not; a hidden file there, and a path
+// outside every root, are refused; the user's own read of the outside file answers.
+func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
+	base := t.TempDir()
+	root, outside := filepath.Join(base, "kb"), filepath.Join(base, "out.txt")
+	for p, s := range map[string]string{filepath.Join(root, "data.csv"): "a,b\n", filepath.Join(root, ".env"): "KEY=1\n", outside: "o\n"} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	disk, err := local.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer disk.Close()
+	slash, err := local.New("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer slash.Close()
+	g := fsbounds.NewGuard()
+	g.SetServed(func() []fsbounds.Root { return []fsbounds.Root{{Name: "kb", Dir: root}} })
+	guarded := g.Wrap(func() string { return "kb" }, root, disk)
+	ws := Static(WorkspaceInfo{Name: "kb", Root: root, Docs: docs.New(guarded, func(p string) bool { return strings.HasSuffix(p, ".md") }), Files: docs.New(guarded, nil)})
+	sock := shortSocket(t)
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := New(Fixed(ws), "v-test", WithListener(ln), WithFiles(docs.New(slash, nil)), WithGuard(g))
+	done := make(chan error, 1)
+	go func() { done <- srv.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	cli := (&rig{t: t, sock: sock}).dial(true)
+
+	read := map[string]any{"within": "*"}
+	res, err := cli.Call(context.Background(), "file.read", filepath.Join(root, "data.csv"), read)
+	if m, _ := res.(map[string]any); err != nil || string(asBytes(m["content"])) != "a,b\n" {
+		t.Errorf("a workspace's unindexed file, bounded: %v, %v", res, err)
+	}
+	var re *golibrpc.Error
+	for p, why := range map[string]string{filepath.Join(root, ".env"): "is hidden", outside: "outside the workspace"} {
+		_, err := cli.Call(context.Background(), "file.read", p, read)
+		if !errors.As(err, &re) || re.Code != golibrpc.CodeAccessDenied || !strings.Contains(re.Message, why) {
+			t.Errorf("%s, bounded: %v, want access denied (%s)", p, err, why)
+		}
+	}
+	if _, err := cli.Call(context.Background(), "file.read", outside); err != nil {
+		t.Errorf("the user's own read outside: %v", err)
+	}
+}
+
+// asBytes is a content field as the wire carries it: a string or bytes.
+func asBytes(v any) []byte {
+	switch c := v.(type) {
+	case []byte:
+		return c
+	case string:
+		return []byte(c)
+	}
+	return nil
 }

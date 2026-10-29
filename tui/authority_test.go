@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -360,5 +361,19 @@ func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
 	g.waitKept(t, "the workspace changed")
 	if got := g.d.read(t, "kb", "a.md"); got != "changed on disk\n" {
 		t.Errorf("an Overwrite answered after the switch wrote %q", got)
+	}
+}
+
+// TestACallWithoutAuthorityIsRefused: h.call refuses work whose authority is no one's, and a gated
+// one's call it cannot bound (the daemon's contracts not known), before anything is sent.
+func TestACallWithoutAuthorityIsRefused(t *testing.T) {
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	ctx := context.Background()
+	if _, err := r.h.call(withAuthority(ctx, authority{}), "doc.read", "kb", "a.md"); !errors.Is(err, errNoAuthority) {
+		t.Errorf("no one's work: %v, want errNoAuthority", err)
+	}
+	gated := authority{script: "pkg", ws: "kb"}
+	if _, err := r.h.call(withAuthority(ctx, gated), "doc.read", "kb", "a.md"); err == nil || !strings.Contains(err.Error(), "cannot carry its bounds") {
+		t.Errorf("a gated call with no contracts known: %v, want refused", err)
 	}
 }
