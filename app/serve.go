@@ -196,11 +196,8 @@ func (d *process) startWorkspaces() error {
 	cfg, b, db := d.e.Config, d.b, d.db
 	// a gated script never reaches the daemon's own: the store's folder, STATE, and its config and the
 	// folder beside it (lua/, plugins/ and the rest the TUI loads), whichever workspace holds them
-	own, err := absPaths(filepath.Dir(d.p.Store), d.p.StateDir, d.e.ConfigPath, filepath.Dir(d.e.ConfigPath))
-	if err != nil {
-		return err
-	}
-	if d.guard, err = fsbounds.NewGuard(own...); err != nil {
+	var err error
+	if d.guard, err = fsbounds.NewGuard(filepath.Dir(d.p.Store), d.p.StateDir, d.e.ConfigPath, filepath.Dir(d.e.ConfigPath)); err != nil {
 		return err
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(d.ctx)
@@ -428,18 +425,4 @@ func todoStores(m *todo.Manager) serving.TodoStores {
 		}
 		return reg, nil
 	}
-}
-
-// absPaths are paths made absolute against this process's folder: a --config given relative, and
-// the folders it names, protected as where they really are.
-func absPaths(paths ...string) ([]string, error) {
-	out := make([]string, len(paths))
-	for i, p := range paths {
-		a, err := filepath.Abs(p)
-		if err != nil {
-			return nil, fmt.Errorf("guarding %s: %w", p, err)
-		}
-		out[i] = a
-	}
-	return out, nil
 }

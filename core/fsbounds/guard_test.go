@@ -388,12 +388,14 @@ func mustGuard(t *testing.T, protected ...string) *Guard {
 	return g
 }
 
-// TestARelativeProtectedPathIsNeverDropped: a relative path given to the guard is an error, and a
-// call whose protect is relative is refused, so neither protects nothing in silence.
+// TestARelativeProtectedPathIsNeverDropped: a relative path given to the guard protects the folder
+// it names from the guarding process's folder, and a call whose protect is relative is refused, so
+// neither protects nothing in silence.
 func TestARelativeProtectedPathIsNeverDropped(t *testing.T) {
-	if _, err := NewGuard("cfg"); err == nil {
-		t.Error("a relative protected path was taken")
-	}
 	tr := newTree(t)
+	t.Chdir(filepath.Join(tr.root, "visible"))
+	tr.g = mustGuard(t, "cfg") // visible/cfg, as this process names it
+	tr.g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: tr.root}} })
+	refusedFor(t, "under a protected path given relative", tr.check("visible/cfg/lua/x.lua", writeKB, opWrite), whyOwn)
 	refusedFor(t, "a call protecting a relative folder", tr.check("notes/a.md", Bounds{Within: "kb", Protect: []string{"cfg"}}, opWrite), whyProtect)
 }
