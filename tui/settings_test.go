@@ -571,10 +571,18 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 }
 
 // The Relations drawer's relations for a workspace that is gone: the failure is said, not swallowed.
+// The load waits for the start to have settled the drawer. The drawer clears when the page is shown
+// (the untitled draft, after the workspace is entered) and again when the store's preferences
+// first apply the language (LanguageChanged composes it again), and a clear supersedes a read still
+// in flight, whose answer, the failure, is then rightly dropped as stale. Both can come after
+// "· kb" is on the status line.
 func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
+	r.s.WaitFor(t, "the page shown and the language applied", func(string) bool {
+		return onLoop(r, func() bool { return r.h.reg.pageShown && r.h.language != "" })
+	})
 	r.h.p.Post(func() { r.h.rel.load("gone", "a.md") })
 	r.waitNoticed(t, "links: no such workspace")
 }
