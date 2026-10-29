@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// FRONTMATTER — the workspace's schema, and the open file checked against it (ADR 0212 §5).
+// FRONTMATTER — a workspace's schema, and the open file checked against its own workspace's (ADR 0212 §5).
 //
 // The file is checked by the daemon's own validator (doc.validate), the one the index uses, so the
 // line over the page and the index never disagree. It is checked as it is typed, a moment after
@@ -68,7 +68,20 @@ func (h *Host) validateSoon(wait time.Duration) {
 	})
 }
 
-// validateNow sends the editor's text to doc.validate. Only Markdown has frontmatter.
+// checkedIn is the workspace whose schema checks the page: an open file's own workspace, which its
+// path is relative to, or the workspace in use for the draft. A buffer stays open, in its own
+// workspace, when another is entered (buffers.go), so the two differ: checked against the
+// workspace in use, a file from another one would be judged by a schema that does not describe it,
+// and at a path that is not its own. "" for a file outside every workspace, which is not checked.
+func (h *Host) checkedIn() string {
+	if h.file.open {
+		return h.file.ws
+	}
+	return h.ws
+}
+
+// validateNow sends the editor's text to doc.validate, in the workspace checkedIn names. Only
+// Markdown has frontmatter.
 func (h *Host) validateNow(tk Ticket) {
 	p := h.file.path
 	if !h.file.open {
@@ -79,11 +92,12 @@ func (h *Host) validateNow(tk Ticket) {
 			p = untitled + ".md"
 		}
 	}
-	if h.ws == "" || h.file.outside() || !h.resolver().Of(p).Traits().Frontmatter {
+	ws := h.checkedIn()
+	if ws == "" || !h.resolver().Of(p).Traits().Frontmatter {
 		h.showDiagnostics(nil)
 		return
 	}
-	ws, text := h.ws, h.page.Text
+	text := h.page.Text
 	do(h, func(ctx context.Context) answerOf[[]fmDiagnostic] {
 		res, err := h.call(ctx, "doc.validate", ws, p, text)
 		if err != nil {

@@ -5,7 +5,7 @@ Markdown documents in an engineering knowledge base carry structured metadata—
 AutoDoc (`core/schema`) solves metadata drift without turning your text editor into a rigid database form:
 
 - **Declarative YAML Schemas (`_schema/frontmatter.yaml`):** Supports both flat (`version: 1`) and discriminated polymorphic (`version: 2`) workspace schemas up to `256 KiB` and `256` declared fields (`core/schema/schema.go`).
-- **Non-Blocking Live Diagnostics:** Validation runs continuously as you type in the TUI/GUI editor and on every file change in the indexer. Problems appear in a live diagnostic banner above the page and in `index.status` (`diagnosed`), **never blocking a file save** or excluding a document's prose from search.
+- **Non-Blocking Live Diagnostics:** Validation runs continuously as you type in the TUI/GUI editor and on every file change in the indexer. Problems appear in a live diagnostic banner above the page and in `index.status` (`diagnosed`), **never blocking a file save** or excluding a document's prose from search. The editor checks a file against its own workspace's schema: a file left open from another workspace is never judged by the schema of the workspace in use.
 - **Automatic Search Facet Registration:** Every field declared in the workspace schema is automatically indexed as a typed search facet (`type:adr`, `verdict:approved`, `-status:superseded`).
 
 ![Schema version 2 inheritance hierarchy from BaseFrontmatter to discriminated document types](schema-v2-inheritance.mmd)
