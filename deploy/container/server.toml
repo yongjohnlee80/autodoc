@@ -19,9 +19,9 @@ listen = "0.0.0.0:8730"
 proxy  = true
 
 [[http.client]]
-name      = "lm-web"
-token_env = "LM_WEB_TOKEN"
-[http.client.grants.lm-catalog]
+name      = "web-app"
+token_env = "WEB_APP_TOKEN"
+[http.client.grants.music]
 label_id = ["*"]
 
 [[http.operator]]
@@ -33,7 +33,7 @@ tenants   = ["*"]
 metrics_interval = "1m"
 
 [[source]]
-tenant        = "lm-catalog"
+tenant        = "music"
 view          = "views/track.view"
 access        = ["label_id"]
 refresh       = "24h"

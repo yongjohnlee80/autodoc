@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/clock"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
@@ -38,8 +40,9 @@ const (
 )
 
 // opsAPI is the handler with health and status over two tenants, two search clients of music
-// (label A, label B), an operator of music and an operator of other; dbDown fails the database.
-func opsAPI(t *testing.T, dbDown *atomic.Bool) *httptest.Server {
+// (label A, label B), an operator of music and an operator of other; dbDown fails the database, and
+// now, when not nil, is the collector's clock (health reuses its ping for ops.PingFor).
+func opsAPI(t *testing.T, dbDown *atomic.Bool, now clock.Clock) *httptest.Server {
 	t.Helper()
 	state := func() ingest.State {
 		return ingest.State{Locked: true, LastPass: ingest.Outcome{At: time.Now(), Error: opcode.View}}
@@ -54,6 +57,7 @@ func opsAPI(t *testing.T, dbDown *atomic.Bool) *httptest.Server {
 			return time.Now(), nil
 		},
 		Version: "v-test",
+		Clock:   now,
 	})
 	clients := []Client{
 		{Name: "web-a", Token: sha256.Sum256([]byte(clientA)), Grants: map[string]map[string][]string{"music": {"label_id": {"A"}}}},
@@ -82,13 +86,19 @@ func get(t *testing.T, srv *httptest.Server, path, token string) reply {
 // a server without ops has no such endpoint.
 func TestHealthIsPublicAndMinimal(t *testing.T) {
 	var down atomic.Bool
-	srv := opsAPI(t, &down)
+	at := time.Now()
+	var mu sync.Mutex
+	now := func() time.Time { mu.Lock(); defer mu.Unlock(); return at }
+	srv := opsAPI(t, &down, now)
 	r := get(t, srv, HealthPath, "")
 	var h ops.Health
 	if err := json.Unmarshal(r.body, &h); err != nil || r.status != http.StatusOK || h.Status != ops.StatusOK {
 		t.Fatalf("health: %d %s", r.status, r.body)
 	}
 	down.Store(true)
+	mu.Lock()
+	at = at.Add(ops.PingFor) // the last ping is reused for PingFor: past it, the database is asked again
+	mu.Unlock()
 	r = get(t, srv, HealthPath, "")
 	if r.status != http.StatusServiceUnavailable || !strings.Contains(string(r.body), `"unavailable"`) {
 		t.Errorf("the database down: %d %s", r.status, r.body)
@@ -115,7 +125,7 @@ func TestHealthIsPublicAndMinimal(t *testing.T) {
 // Errors are codes. The mutants, named here: a client's token let into status; an operator seeing
 // every tenant.
 func TestStatusIsForOperatorsOnly(t *testing.T) {
-	srv := opsAPI(t, nil)
+	srv := opsAPI(t, nil, nil)
 	for _, tok := range []string{clientA, clientB} {
 		if r := get(t, srv, StatusPath, tok); r.status != http.StatusForbidden || r.code() != "forbidden" {
 			t.Errorf("a search client's token: %d %s", r.status, r.body)
@@ -159,7 +169,7 @@ func TestTheCountsAreTakenPerInterval(t *testing.T) {
 
 // /v1/status takes GET only (405 with Allow), and a server without ops has no status (404).
 func TestStatusTakesGetAndNeedsOps(t *testing.T) {
-	srv := opsAPI(t, nil)
+	srv := opsAPI(t, nil, nil)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+StatusPath, nil)
 	req.Header.Set("Authorization", "Bearer "+opsToken)
 	if r := do(t, req); r.status != http.StatusMethodNotAllowed || r.header.Get("Allow") != http.MethodGet {
