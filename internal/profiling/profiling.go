@@ -41,6 +41,10 @@ const (
 	CPU       = "cpu"
 )
 
+// ErrClosed is a Start after Close: the process is ending, and its owner has closed the profiler
+// for good.
+var ErrClosed = errors.New("profiling: the profiler is closed")
+
 // ErrSocketTooLong is a directory whose socket path is over the unix socket limit: name a shorter
 // one.
 var ErrSocketTooLong = errors.New("profiling: the directory's socket path is over the unix socket limit")
@@ -52,8 +56,9 @@ type Profiler struct {
 	mode   string
 	groups []string
 
-	mu sync.Mutex
-	m  *diag.Monitor
+	mu     sync.Mutex
+	m      *diag.Monitor
+	closed bool // Close ran: no Start after it, however late a queued one runs
 }
 
 // New is mode's profiler (ui, gui or serve: the default directory's name), its snapshots summing
@@ -63,10 +68,14 @@ func New(ctx context.Context, mode string, groups ...string) *Profiler {
 }
 
 // Start starts the monitor in dir, or in DefaultDir when dir is "", and answers its directory. A
-// monitor already running is kept, and its directory answered: there is one per process.
+// monitor already running is kept, and its directory answered: there is one per process. After
+// Close it is ErrClosed: a start queued before the process ended never outlives its owner.
 func (p *Profiler) Start(dir string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return "", ErrClosed
+	}
 	if p.m != nil {
 		return p.m.Dir(), nil
 	}
@@ -93,10 +102,15 @@ func (p *Profiler) Start(dir string) (string, error) {
 }
 
 // Stop ends the running monitor, its last sample and snapshot written; nothing when none runs. A
-// monitor that could not write its samples is the error.
+// monitor that could not write its samples is the error. A later Start starts another.
 func (p *Profiler) Stop() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.stop()
+}
+
+// stop is Stop under p.mu.
+func (p *Profiler) stop() error {
 	if p.m == nil {
 		return nil
 	}
@@ -159,5 +173,11 @@ func HoldsLabels(profile string) bool { return profile == CPU || profile == Goro
 
 var _ io.Closer = (*Profiler)(nil)
 
-// Close stops the monitor at the process's exit (Stop).
-func (p *Profiler) Close() error { return p.Stop() }
+// Close stops the monitor at the process's exit, for good: under the same lock as Start, so a
+// Start after it, however late a queued one runs, is ErrClosed and starts nothing.
+func (p *Profiler) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closed = true
+	return p.stop()
+}
