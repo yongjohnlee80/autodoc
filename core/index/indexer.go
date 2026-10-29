@@ -79,6 +79,9 @@ type options struct {
 	onCommit func(time.Duration)
 	// onWake, when set (tests only), is told each time the writer's own timer wakes it.
 	onWake func()
+	// onRebuild, when set (tests only), is told each time a publication reloads every document's
+	// codes rather than the changed ones'.
+	onRebuild func()
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
 	// one active, or, while another is active, the one filling to replace it. The model it replaces
 	// is offline while it fills: nothing embeds with it, so the server holds one model at a time,
@@ -909,19 +912,23 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		stale bool
 	}
 	var outcomes []outcome
-	var changed []int64 // the documents written: their codes may differ
+	var changed []int64           // the documents written: their codes may differ
+	var persisted map[string]bool // the touched paths whose job rows this commit writes
 	began := time.Now()
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		// the documents go through the writer port: the store's own batch, in this transaction
 		docs := storeWriter{s: s, tx: tx, now: now}.batch()
-		defer func() { changed = docs.changed }()
+		// not nil when none was written: publish reads nil as "rebuild every document's codes"
+		defer func() { changed = append([]int64{}, docs.changed...) }()
 		if _, err := s.bumpSeq(tx); err != nil {
 			return err
 		}
-		for p := range x.unpersisted {
+		persisted = map[string]bool{}
+		persist := func(p string) error {
+			persisted[p] = true
 			j := x.jobs[p]
 			if j == nil {
-				continue
+				return nil
 			}
 			reason := "touch"
 			if j.force {
@@ -930,9 +937,30 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			// a touch of a queued path moves its seq and reason, and keeps when it was enqueued
 			row := s.jobs(tx).Set(JobPath, p).Set(JobSeq, j.seq).Set(JobReason, reason).
 				Set(JobEnqueuedAt, now.Unix()).Set(JobAttempts, int64(0))
-			if err := dao.UpsertOnly(row, JobSeq, JobReason); err != nil {
+			return dao.UpsertOnly(row, JobSeq, JobReason)
+		}
+		// the batch's own jobs first, so a result's failure or completion below finds its row; then
+		// up to jobsPerCommit more, so a scan's thousands of touches are written over several
+		// commits, each one short, never in one transaction that holds the store's only writer
+		for _, p := range batch {
+			if x.unpersisted[p.path] && !persisted[p.path] {
+				if err := persist(p.path); err != nil {
+					return err
+				}
+			}
+		}
+		more := 0
+		for p := range x.unpersisted {
+			if more == jobsPerCommit {
+				break
+			}
+			if persisted[p] {
+				continue
+			}
+			if err := persist(p); err != nil {
 				return err
 			}
+			more++
 		}
 		for _, p := range batch {
 			j := x.jobs[p.path]
@@ -996,7 +1024,9 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			x.opts.OnEmbeddingWork()
 		}
 	}
-	clear(x.unpersisted)
+	for p := range persisted {
+		delete(x.unpersisted, p)
+	}
 	for _, o := range outcomes {
 		switch {
 		case !o.done:
@@ -1026,6 +1056,11 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	}
 	return nil
 }
+
+// jobsPerCommit is the most touched paths' job rows one commit writes beyond its batch's own: the
+// rest wait for the next commit, which the writer makes BatchDelay later while any wait (a
+// variable, so a test can take smaller steps).
+var jobsPerCommit = 2000
 
 func tooLarge(path string, limit int64) error {
 	return fmt.Errorf("index: %s is over %d bytes", path, limit)

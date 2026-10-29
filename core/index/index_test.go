@@ -38,6 +38,8 @@ type env struct {
 	// raw is the store file as SQLite alone, for the checks of rows the API does not show: tests
 	// only.
 	raw dao.DataConn
+	// hook, when set before open, observes every statement the indexer's store runs.
+	hook dao.Hook
 }
 
 func newEnv(t testing.TB, opts options) *env {
@@ -141,6 +143,9 @@ func (e *env) open(opts options) {
 		e.t.Cleanup(func() { _ = raw.Close() })
 	}
 	s := NewStore(db, e.ws)
+	if e.hook != nil {
+		s.sc = s.sc.WithHooks(e.hook)
+	}
 	if opts.BatchDelay == 0 {
 		opts.BatchDelay = 20 * time.Millisecond
 	}
