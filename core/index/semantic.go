@@ -583,6 +583,9 @@ func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 		var next *codeIndex
 		switch {
 		case cur == nil || cur.Model() != fp || changed == nil:
+			if x.opts.onRebuild != nil {
+				x.opts.onRebuild()
+			}
 			codes, err := s.loadCodes(tx, fp, nil)
 			if err != nil {
 				return err
