@@ -106,7 +106,7 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 	if v.Scope == module.ScopeLocalPeer {
 		h = s.local(v.Verb, lo, hi, call)
 	}
-	h = bounded(h, hi)
+	h = bounded(h, hi, v.Verb, v.Root)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		ctx = context.WithValue(ctx, sessionKey{}, req.Session)
 		return h(module.WithClient(ctx, clientOf(req.Session)), req)

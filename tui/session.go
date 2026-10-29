@@ -117,6 +117,9 @@ func (h *Host) call(ctx context.Context, method string, params ...any) (any, err
 			if params, err = h.boundedParams(a, method, params); err != nil {
 				return nil, err
 			}
+			if err := a.stillIn(); err != nil { // checked as it is sent: the TUI may have left since
+				return nil, err
+			}
 		}
 	}
 	return h.session.Call(ctx, method, params...)

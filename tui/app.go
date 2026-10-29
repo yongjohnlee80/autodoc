@@ -338,6 +338,9 @@ type Host struct {
 	cfgDir        string // the folder beside the config (lua/, plugins/, themes/): a gated call's protect (authority.go)
 	// invoking is a gated script's key or row running its line, for authorityNow; nil otherwise
 	invoking *authority
+	// wsLeft is closed when the TUI leaves the workspace in use (enter, or none served): work a
+	// gated script queued there is refused once it would run (authority.go)
+	wsLeft chan struct{}
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -442,6 +445,7 @@ func newHost(session *Session, opt Options) *Host {
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
+		wsLeft:          make(chan struct{}),
 		watches:         map[string]*diskWatch{},
 		diskFS:          localDisk,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
@@ -490,7 +494,11 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
+		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
 		h.cfgDir = filepath.Dir(opt.ConfigPath)
+		if abs, err := filepath.Abs(h.cfgDir); err == nil {
+			h.cfgDir = abs
+		}
 	}
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.cands = newCandidates(core{h})

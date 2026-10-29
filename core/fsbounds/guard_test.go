@@ -35,7 +35,7 @@ func newTree(t *testing.T) *tree {
 		mustWrite(t, filepath.Join(tr.root, p), s)
 	}
 	mustWrite(t, filepath.Join(tr.outside, "secret"), "s")
-	tr.g = NewGuard(tr.cfg)
+	tr.g = mustGuard(t, tr.cfg)
 	tr.g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: tr.root}} })
 	return tr
 }
@@ -170,7 +170,7 @@ func TestASecondNameIsRefused(t *testing.T) {
 func TestAMissingProtectedFolderIsReservedByName(t *testing.T) {
 	tr := newTree(t)
 	missing := filepath.Join(tr.root, "visible", "newcfg")
-	tr.g = NewGuard(missing)
+	tr.g = mustGuard(t, missing)
 	tr.g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: tr.root}} })
 	refusedFor(t, "the missing folder's script", tr.check("visible/newcfg/lua/x.lua", writeKB, opWrite), whyOwn)
 	refusedFor(t, "it in another case", tr.check("visible/NewCfg/lua/x.lua", writeKB, opWrite), whyOwn)
@@ -202,7 +202,7 @@ func TestTheInnermostRootAnchorsTheHiddenRule(t *testing.T) {
 // guard's own are.
 func TestTheCallsProtectedFoldersAreTheCallers(t *testing.T) {
 	tr := newTree(t)
-	tr.g = NewGuard()
+	tr.g = mustGuard(t)
 	tr.g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: tr.root}} })
 	if err := tr.check("visible/cfg/lua/x.lua", writeKB, opWrite); err != nil {
 		t.Fatalf("unprotected: %v", err)
@@ -377,4 +377,23 @@ type copying struct{ vfs.FS }
 
 func (copying) Copy(context.Context, string, string, ...vfs.WriteOption) (vfs.FileInfo, error) {
 	return vfs.FileInfo{}, nil
+}
+
+func mustGuard(t *testing.T, protected ...string) *Guard {
+	t.Helper()
+	g, err := NewGuard(protected...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// TestARelativeProtectedPathIsNeverDropped: a relative path given to the guard is an error, and a
+// call whose protect is relative is refused, so neither protects nothing in silence.
+func TestARelativeProtectedPathIsNeverDropped(t *testing.T) {
+	if _, err := NewGuard("cfg"); err == nil {
+		t.Error("a relative protected path was taken")
+	}
+	tr := newTree(t)
+	refusedFor(t, "a call protecting a relative folder", tr.check("notes/a.md", Bounds{Within: "kb", Protect: []string{"cfg"}}, opWrite), whyProtect)
 }

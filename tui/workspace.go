@@ -64,6 +64,7 @@ func (h *Host) loadWorkspaces() {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
 		if pick < 0 {
+			h.leaveWorkspace()
 			h.ws = ""
 			h.resetFiles()
 			h.setWhere(h.tr("autodoc.text.workspace.autodoc_no_workspace"))
@@ -147,6 +148,9 @@ func (h *Host) useWorkspace(i int) {
 func (h *Host) enter(name string) {
 	again := name == h.ws
 	h.epoch++
+	if !again {
+		h.leaveWorkspace()
+	}
 	h.ws, h.entered = name, true
 	h.resetFiles()
 	h.focusSent = time.Time{}
@@ -353,4 +357,11 @@ func (h *Host) noteTodoExcluded(list []wsInfo) {
 		h.todoNoted[key] = true
 		h.notify(h.trf("autodoc.notice.workspace.exclude_keeps_its_todo_tasks_out_of_the_index_it", w.name, strings.Join(w.todoExcluded, "; ")))
 	}
+}
+
+// leaveWorkspace says the workspace in use is left: what a gated script queued there, not sent yet,
+// is refused when it would run (authority.go), never sent to the one entered next.
+func (h *Host) leaveWorkspace() {
+	close(h.wsLeft)
+	h.wsLeft = make(chan struct{})
 }

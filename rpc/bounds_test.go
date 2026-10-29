@@ -37,7 +37,7 @@ func TestAnUndeclaredVerbIsBoundedToo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer disk.Close()
-	g := fsbounds.NewGuard()
+	g, _ := fsbounds.NewGuard()
 	g.SetServed(func() []fsbounds.Root { return []fsbounds.Root{{Name: "kb", Dir: root}} })
 	d := docs.New(g.Wrap(func() string { return "kb" }, root, disk), nil)
 	type peek struct {
@@ -129,7 +129,7 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer slash.Close()
-	g := fsbounds.NewGuard()
+	g, _ := fsbounds.NewGuard()
 	g.SetServed(func() []fsbounds.Root { return []fsbounds.Root{{Name: "kb", Dir: root}} })
 	guarded := g.Wrap(func() string { return "kb" }, root, disk)
 	ws := Static(WorkspaceInfo{Name: "kb", Root: root, Docs: docs.New(guarded, func(p string) bool { return strings.HasSuffix(p, ".md") }), Files: docs.New(guarded, nil)})

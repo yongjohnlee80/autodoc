@@ -24,6 +24,9 @@ type authority struct {
 	// verbs are the daemon's contracts as the loop had them when it began: a bounded call is padded
 	// to its verb's own params off the loop, from this snapshot
 	verbs map[string]luaVerb
+	// left is closed once the TUI leaves ws: a gated call checks it as it is sent, off the loop, with
+	// no read of loop-owned state
+	left <-chan struct{}
 }
 
 // userAuthority is the user's: the only authority the user's own input runs with.
@@ -33,6 +36,23 @@ func (a authority) gated() bool { return a.script != "" }
 
 // errNoAuthority is work that lost who it acts for: refused, never taken for the user's.
 var errNoAuthority = errors.New("tui: this work lost who it acts for, so it is refused")
+
+// errWorkspaceLeft is a gated script's work queued in a workspace the TUI has left since.
+var errWorkspaceLeft = errors.New("the workspace changed: a script's queued work there was dropped")
+
+// stillIn is nil while a's workspace is the one in use, errWorkspaceLeft once the TUI left it; any
+// goroutine may ask. A gated authority that never took the channel is refused.
+func (a authority) stillIn() error {
+	if a.left == nil {
+		return errWorkspaceLeft
+	}
+	select {
+	case <-a.left:
+		return errWorkspaceLeft
+	default:
+		return nil
+	}
+}
 
 // noAuthority reports work with the zero authority; tests make it panic (authority_test.go), so a
 // propagation forgotten is a red cell.
@@ -56,7 +76,7 @@ func (h *Host) authorityNow() authority {
 	}
 	if s := h.scripting; s != nil && s.eng != nil {
 		if name, grants, ok := s.eng.Caller(); ok {
-			return authority{script: name, grants: grants, ws: h.ws, verbs: s.verbs}
+			return authority{script: name, grants: grants, ws: h.ws, verbs: s.verbs, left: h.wsLeft}
 		}
 	}
 	return userAuthority()
@@ -66,6 +86,9 @@ func (h *Host) authorityNow() authority {
 func (h *Host) actingAs(a authority, fn func() error) error {
 	if a.verbs == nil && h.scripting != nil {
 		a.verbs = h.scripting.verbs
+	}
+	if a.left == nil {
+		a.left = h.wsLeft
 	}
 	prev := h.invoking
 	h.invoking = &a
