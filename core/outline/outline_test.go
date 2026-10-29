@@ -95,11 +95,12 @@ func TestTextHasOnlyItsTitle(t *testing.T) {
 // HeadingIDs follow GitHub's slugger (github-slugger's fixtures): a repeat takes the next ID not
 // already given out, so a heading that reads like a numbered repeat doesn't collide with one;
 // combining marks are kept, as in scripts written with them and in decomposed accents; numbers of
-// any script and connector punctuation are kept; an emoji is dropped.
+// any script and connector punctuation are kept; an emoji is dropped, so a heading of only emoji
+// has the empty ID and its repeat -1.
 func TestHeadingIDsFollowGitHubsSlugger(t *testing.T) {
-	src := "# Foo\n# Foo\n# Foo-1\n# Foo\n# नमस्ते\n# Café\n# Café\n# foo_bar baz\n# Ⅻ roman\n# 😄 emoji\n"
+	src := "# Foo\n# Foo\n# Foo-1\n# Foo\n# नमस्ते\n# Café\n# Café\n# foo_bar baz\n# Ⅻ roman\n# 😄 emoji\n# 😄\n# 😄\n"
 	got := HeadingIDs(kind.ParseMarkdown([]byte(src)).Root, []byte(src))
-	want := []string{"foo", "foo-1", "foo-1-1", "foo-2", "नमस्ते", "café", "café", "foo_bar-baz", "ⅻ-roman", "-emoji"}
+	want := []string{"foo", "foo-1", "foo-1-1", "foo-2", "नमस्ते", "café", "café", "foo_bar-baz", "ⅻ-roman", "-emoji", "", "-1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ids = %q\nwant  %q", got, want)
 	}

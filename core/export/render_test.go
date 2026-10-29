@@ -689,7 +689,7 @@ func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
 // spaces as '-'; the rest dropped; a repeat numbered -1, -2), so a link to #section written for
 // GitHub lands on its section in an exported page. The source spans the GUI's pane asks for stay.
 func TestHeadingsCarryGitHubAnchors(t *testing.T) {
-	source := []byte("---\ntitle: x\n---\n# Install\n\n## Install\n\n## Install\n\n## `go install` and mise!\n\n### What's new? (v0.3)\n\n## Café & Crème\n\n> ## Quoted\n\n## ![logo](l.png) Logo\n")
+	source := []byte("---\ntitle: x\n---\n# Install\n\n## Install\n\n## Install\n\n## `go install` and mise!\n\n### What's new? (v0.3)\n\n## Café & Crème\n\n> ## Quoted\n\n## ![logo](l.png) Logo\n\n## 😄\n\n## 😄\n")
 	want := []string{
 		`<h1 id="install">Install</h1>`,
 		`<h2 id="install-1">Install</h2>`,
@@ -699,6 +699,8 @@ func TestHeadingsCarryGitHubAnchors(t *testing.T) {
 		`<h2 id="café--crème">Café &amp; Crème</h2>`,
 		`<h2 id="quoted">Quoted</h2>`,
 		`<h2 id="logo">`,
+		"<h2>😄</h2>",         // the empty slug is no id
+		`<h2 id="-1">😄</h2>`, // its repeat is GitHub's -1
 	}
 	content, err := export.Render(source, export.HTML, "light")
 	if err != nil {

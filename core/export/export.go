@@ -472,7 +472,9 @@ func withIDs(body *bytes.Buffer, ids []string) {
 		out.Write(src[last:m[0]])
 		out.WriteString(`<h`)
 		out.Write(src[m[2]:m[3]])
-		out.WriteString(` id="` + stdhtml.EscapeString(ids[i]) + `"`)
+		if ids[i] != "" { // an empty id is no anchor; GitHub's link to such a heading is "#", the top
+			out.WriteString(` id="` + stdhtml.EscapeString(ids[i]) + `"`)
+		}
 		out.Write(src[m[4]:m[5]])
 		out.WriteByte('>')
 		last = m[1]
