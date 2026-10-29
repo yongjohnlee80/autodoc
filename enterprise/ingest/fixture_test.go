@@ -42,7 +42,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{t: t, ctx: context.Background(), dsn: pgtest.ScratchURL(t), schema: "search_" + randHex(t), tenant: "lm-catalog"}
+	f := &fixture{t: t, ctx: context.Background(), dsn: pgtest.ScratchURL(t), schema: "search_" + randHex(t), tenant: "music"}
 	f.business = f.open("business", "")
 	f.exec(`CREATE EXTENSION vector SCHEMA public`)
 	f.exec(`CREATE TABLE artist (id bigint PRIMARY KEY, name text NOT NULL, updated_at timestamptz NOT NULL)`)

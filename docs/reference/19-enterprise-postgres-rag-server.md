@@ -98,8 +98,8 @@ listen = "127.0.0.1:8730"
 
 [[http.client]]
 name         = "catalog-web"
-token_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-[http.client.grants.lm-catalog]
+token_sha256 = "<sha256 of your token>"   # printf %s "$TOKEN" | sha256sum
+[http.client.grants.music]
 label_id  = ["*"]
 territory = ["US", "GB", "JP"]
 
@@ -109,7 +109,7 @@ token_env = "AUTODOC_OPS_TOKEN"
 tenants   = ["*"]
 
 [[source]]
-tenant   = "lm-catalog"
+tenant   = "music"
 view     = "views/track.view"
 interval = "1m"
 refresh  = "24h"
@@ -126,7 +126,7 @@ curl -s http://127.0.0.1:8730/v1/search \
   -H "Authorization: Bearer $CATALOG_WEB_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "tenant": "lm-catalog",
+    "tenant": "music",
     "query": "midnight acoustic",
     "scope": {"label_id": ["label-17", "label-42"], "territory": ["US"]},
     "group": "document",
@@ -152,7 +152,7 @@ import (
 )
 
 func SearchTracks(ctx context.Context, searcher *search.Searcher, labelIDs []string, q string) (search.Response, error) {
-	return searcher.Query(ctx, "lm-catalog", q, search.Options{
+	return searcher.Query(ctx, "music", q, search.Options{
 		Scope: map[string][]string{
 			"label_id":  labelIDs,
 			"territory": {"US", "CA"},
@@ -165,7 +165,7 @@ func SearchTracks(ctx context.Context, searcher *search.Searcher, labelIDs []str
 
 ### Operator Telemetry (`/v1/status` and `/v1/health`)
 
-Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `GET /v1/status?tenant=lm-catalog`) to inspect per-tenant ingestion health, advisory lock ownership (`lock: "held"` vs. `"waiting"`), last cursor `(updated_at, id)`, semantic embedding progress (`ready_documents`, `pending_documents`, `semantic: "ready" | "backfilling" | "switching"`), and the count of quarantined rows in `rag_ingest_error`. Load balancers and Kubernetes probes can poll `GET /v1/health` (unauthenticated liveness check) to verify database pool reachability.
+Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `GET /v1/status?tenant=music`) to inspect per-tenant ingestion health, advisory lock ownership (`lock: "held"` vs. `"waiting"`), last cursor `(updated_at, id)`, semantic embedding progress (`ready_documents`, `pending_documents`, `semantic: "ready" | "backfilling" | "switching"`), and the count of quarantined rows in `rag_ingest_error`. Load balancers and Kubernetes probes can poll `GET /v1/health` (unauthenticated liveness check) to verify database pool reachability.
 
 ---
 

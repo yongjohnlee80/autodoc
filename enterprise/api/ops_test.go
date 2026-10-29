@@ -37,15 +37,15 @@ const (
 	markerError = "relation track_marker_xyz does not exist"
 )
 
-// opsAPI is the handler with health and status over two tenants, two search clients of lm-catalog
-// (label A, label B), an operator of lm-catalog and an operator of other; dbDown fails the database.
+// opsAPI is the handler with health and status over two tenants, two search clients of music
+// (label A, label B), an operator of music and an operator of other; dbDown fails the database.
 func opsAPI(t *testing.T, dbDown *atomic.Bool) *httptest.Server {
 	t.Helper()
 	state := func() ingest.State {
 		return ingest.State{Locked: true, LastPass: ingest.Outcome{At: time.Now(), Error: opcode.View}}
 	}
 	c := ops.New(ops.Options{
-		Tenants:  []ops.Tenant{{Name: "lm-catalog", Store: opsStore{docs: 7}, State: state}, {Name: "other", Store: opsStore{docs: 3}, State: state}},
+		Tenants:  []ops.Tenant{{Name: "music", Store: opsStore{docs: 7}, State: state}, {Name: "other", Store: opsStore{docs: 3}, State: state}},
 		Provider: func() embedder.Health { return embedder.Health{State: embedder.ProviderUp, Model: "m1"} },
 		Now: func(context.Context) (time.Time, error) {
 			if dbDown != nil && dbDown.Load() {
@@ -56,14 +56,14 @@ func opsAPI(t *testing.T, dbDown *atomic.Bool) *httptest.Server {
 		Version: "v-test",
 	})
 	clients := []Client{
-		{Name: "web-a", Token: sha256.Sum256([]byte(clientA)), Grants: map[string]map[string][]string{"lm-catalog": {"label_id": {"A"}}}},
-		{Name: "web-b", Token: sha256.Sum256([]byte(clientB)), Grants: map[string]map[string][]string{"lm-catalog": {"label_id": {"B"}}}},
+		{Name: "web-a", Token: sha256.Sum256([]byte(clientA)), Grants: map[string]map[string][]string{"music": {"label_id": {"A"}}}},
+		{Name: "web-b", Token: sha256.Sum256([]byte(clientB)), Grants: map[string]map[string][]string{"music": {"label_id": {"B"}}}},
 	}
 	operators := []Operator{
-		{Name: "ops", Token: sha256.Sum256([]byte(opsToken)), Tenants: []string{"lm-catalog"}},
+		{Name: "ops", Token: sha256.Sum256([]byte(opsToken)), Tenants: []string{"music"}},
 		{Name: "ops-other", Token: sha256.Sum256([]byte(otherOps)), Tenants: []string{"other"}},
 	}
-	srv := httptest.NewServer(New(clients, map[string]Searcher{"lm-catalog": &fake{}}, WithOps(c), WithOperators(operators)))
+	srv := httptest.NewServer(New(clients, map[string]Searcher{"music": &fake{}}, WithOps(c), WithOperators(operators)))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -93,7 +93,7 @@ func TestHealthIsPublicAndMinimal(t *testing.T) {
 	if r.status != http.StatusServiceUnavailable || !strings.Contains(string(r.body), `"unavailable"`) {
 		t.Errorf("the database down: %d %s", r.status, r.body)
 	}
-	for _, not := range []string{"lm-catalog", "m1", "v-test", "track_marker"} {
+	for _, not := range []string{"music", "m1", "v-test", "track_marker"} {
 		if strings.Contains(string(r.body), not) {
 			t.Errorf("health holds %q: %s", not, r.body)
 		}
@@ -124,7 +124,7 @@ func TestStatusIsForOperatorsOnly(t *testing.T) {
 	if r := get(t, srv, StatusPath, ""); r.status != http.StatusUnauthorized {
 		t.Errorf("no token: %d", r.status)
 	}
-	for tok, want := range map[string]string{opsToken: "lm-catalog", otherOps: "other"} {
+	for tok, want := range map[string]string{opsToken: "music", otherOps: "other"} {
 		r := get(t, srv, StatusPath, tok)
 		var s ops.Snapshot
 		if err := json.Unmarshal(r.body, &s); err != nil || r.status != http.StatusOK || len(s.Tenants) != 1 || s.Tenants[0].Tenant != want {

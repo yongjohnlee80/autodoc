@@ -56,7 +56,7 @@ import (
 // embed.NewOllama(ctx, base, key, model, nil) for provider = "ollama")
 pool, err := postgres.Open(ctx, dsn, pgstore.WithSchema("autodoc_search"))
 provider, err := embed.NewOpenAI(ctx, "https://embeddings.example.internal", key, "text-embedding-3-small", nil)
-catalog, err := search.Open(ctx, pool, "lm-catalog", search.QueryEmbedder(provider))
+catalog, err := search.Open(ctx, pool, "music", search.QueryEmbedder(provider))
 
 // per request: the caller's scope, from your own authorisation
 res, err := catalog.Search(ctx, search.Scope{"label_id": labelsOf(user)}, search.Request{
@@ -117,9 +117,9 @@ bearer token and grants: by tenant, the values of each access field it may ask f
 
 ```sh
 curl -s http://127.0.0.1:8730/v1/search \
-  -H "Authorization: Bearer $LM_WEB_TOKEN" \
+  -H "Authorization: Bearer $WEB_APP_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"tenant": "lm-catalog", "query": "love song", "scope": {"label_id": ["A"]}}'
+  -d '{"tenant": "music", "query": "love song", "scope": {"label_id": ["A"]}}'
 ```
 
 ### The request
@@ -139,7 +139,7 @@ The body is one JSON object of at most 64 KiB, with no other field.
 ### The answer
 
 ```json
-{"tenant": "lm-catalog", "mode_used": "hybrid", "semantic": "ready",
+{"tenant": "music", "mode_used": "hybrid", "semantic": "ready",
  "hits": [{"path": "track/42.md", "source_id": "42", "breadcrumb": "Love Song",
            "snippet": "a \u0002love\u0003 song", "generation": 3, "byte_start": 0, "byte_end": 97,
            "score": 0.031, "relevance": 0.87, "via": ["lexical", "semantic"]}]}
@@ -231,7 +231,7 @@ func Highlight(s string) template.HTML {
 
 ```go
 body, _ := json.Marshal(map[string]any{
-	"tenant": "lm-catalog", "query": q, "scope": map[string][]string{"label_id": labels},
+	"tenant": "music", "query": q, "scope": map[string][]string{"label_id": labels},
 })
 req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/search", bytes.NewReader(body))
 req.Header.Set("Authorization", "Bearer "+token)

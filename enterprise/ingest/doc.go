@@ -22,7 +22,7 @@
 // deletes the documents of rows gone, only after a scan that read every row. A row that fails
 // (a missing field, a render error) is quarantined and retried on every pass, never skipped.
 //
-//	in := ingest.New(store, "lm-catalog", src, business, locks, ingest.Options{Schema: "autodoc_search"})
+//	in := ingest.New(store, "music", src, business, locks, ingest.Options{Schema: "autodoc_search"})
 //	err := in.Run(ctx) // until ctx ends; ErrLockLost if the lock is lost
 //
 // A caller with its own schedule calls Acquire, then Pass and Refresh, then Release.

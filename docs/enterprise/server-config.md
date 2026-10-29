@@ -44,19 +44,19 @@ slots    = 4
 listen = "127.0.0.1:8730"
 
 [[http.client]]
-name         = "lm-web"
+name         = "web-app"
 token_sha256 = "<the 64 hex digits of the token's SHA-256>"
-[http.client.grants.lm-catalog]
+[http.client.grants.music]
 label_id = ["*"]
 
 [[http.client]]
-name      = "lm-reports"
-token_env = "LM_REPORTS_TOKEN"
-[http.client.grants.lm-catalog]
+name      = "reports-app"
+token_env = "REPORTS_APP_TOKEN"
+[http.client.grants.music]
 label_id = ["label-17", "label-42"]
 
 [[source]]
-tenant   = "lm-catalog"
+tenant   = "music"
 view     = "views/track.view"
 refresh  = "24h"
 interval = "1m"

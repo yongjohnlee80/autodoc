@@ -204,7 +204,7 @@ func (e *env) indexedAt(p string) {
 // indexing waits for cond while the indexer works. It fails when indexing makes no progress for
 // indexStall (the pending jobs, the documents and the chunks all unchanged), not after a fixed total:
 // a scan of many notes is CPU-bound work, several times slower under -race and on a loaded machine,
-// and a fixed total was a race against it (a 61-note scan took 3 s under -race on a quiet VM43 and
+// and a fixed total was a race against it (a 61-note scan took 3 s under -race on a quiet test machine and
 // failed eventually's 10 s under load). A scan that stalls still fails, on the stall's own clock, and
 // one that churns without ending fails at indexCap.
 func (e *env) indexing(what string, cond func() bool) {

@@ -48,7 +48,7 @@ func (s *store) Models(ctx context.Context) (string, string, error) {
 
 var dbNow = time.Date(2026, 10, 13, 9, 41, 7, 0, time.UTC)
 
-// fixture is a collector over one tenant, lm-catalog, its states and the database's clock all the
+// fixture is a collector over one tenant, music, its states and the database's clock all the
 // test's to set.
 type fixture struct {
 	st       *store
@@ -68,7 +68,7 @@ func newFixture() *fixture {
 	start := dbNow
 	f.clock.Store(&start)
 	f.c = New(Options{
-		Tenants:  []Tenant{{Name: "lm-catalog", Store: f.st, State: func() ingest.State { return *f.state.Load() }}},
+		Tenants:  []Tenant{{Name: "music", Store: f.st, State: func() ingest.State { return *f.state.Load() }}},
 		Provider: func() embedder.Health { return *f.provider.Load() },
 		Now: func(ctx context.Context) (time.Time, error) {
 			f.nows.Add(1)
@@ -89,10 +89,11 @@ func (f *fixture) advance(d time.Duration) {
 }
 
 // Health is ok with everything up; degraded with the provider down or a lock not held; unavailable
-// with the database failing or the server stopping. It pings the database on every call, so a
-// database lost between two calls shows on the second. Its body names no tenant, model, count or
-// version. The mutants, named here: health cached; a lock not held left ok.
-func TestHealthIsFreshAndMinimal(t *testing.T) {
+// with the database failing or the server stopping. It pings the database at most once in each
+// PingFor (anyone may ask, in a loop), so a database lost shows at the first ping after; the locks
+// and the provider are read every time. Its body names no tenant, model, count or version. The
+// mutants, named here: the ping not reused; the ping never renewed; a lock not held left ok.
+func TestHealthIsMinimalAndPingsAtMostOncePerSecond(t *testing.T) {
 	f := newFixture()
 	ctx := context.Background()
 	if h := f.c.Health(ctx); h.Status != StatusOK || h.Checks["database"] != CheckOK {
@@ -108,19 +109,27 @@ func TestHealthIsFreshAndMinimal(t *testing.T) {
 		t.Errorf("a lock waited for: %+v", h)
 	}
 	f.state.Store(&ingest.State{Locked: true})
-	before := f.nows.Load()
+	if n := f.nows.Load(); n != 1 {
+		t.Errorf("four health calls within PingFor pinged %d times, want 1", n)
+	}
+	f.advance(PingFor)
 	f.c.Health(ctx)
-	if f.nows.Load() != before+1 {
-		t.Errorf("health did not ping the database: %d pings", f.nows.Load()-before)
+	f.c.Health(ctx)
+	if n := f.nows.Load(); n != 2 {
+		t.Errorf("past PingFor, two calls pinged %d times in all, want 2", n)
 	}
 	lost := errors.New("connection refused")
 	f.dbErr.Store(&lost)
+	if h := f.c.Health(ctx); h.Status != StatusOK {
+		t.Errorf("the database lost within PingFor of the last ping: %+v, want the ping reused", h)
+	}
+	f.advance(PingFor)
 	h := f.c.Health(ctx)
 	if h.Status != StatusUnavailable || h.Checks["database"] != CheckFailing {
-		t.Errorf("the database lost since the last call: %+v", h)
+		t.Errorf("the database lost, at the next ping: %+v", h)
 	}
 	b, _ := json.Marshal(h)
-	for _, not := range []string{"lm-catalog", "m1", "v-test", "connection refused"} {
+	for _, not := range []string{"music", "m1", "v-test", "connection refused"} {
 		if strings.Contains(string(b), not) {
 			t.Errorf("health's body holds %q: %s", not, b)
 		}
@@ -250,7 +259,7 @@ func TestTheMetricsLines(t *testing.T) {
 	if want := "metrics scope=server provider=up provider_error= http_ok=118 http_4xx=3 http_5xx=0 http_max_ms=412"; lines[0] != want {
 		t.Errorf("the server line\n%s\nwant\n%s", lines[0], want)
 	}
-	if !strings.HasPrefix(lines[1], "metrics scope=tenant tenant=lm-catalog lock=held documents=10 ready=8 quarantined=1 semantic=partial cursor_lag_s=4") ||
+	if !strings.HasPrefix(lines[1], "metrics scope=tenant tenant=music lock=held documents=10 ready=8 quarantined=1 semantic=partial cursor_lag_s=4") ||
 		strings.Contains(lines[1], "http_") {
 		t.Errorf("the tenant line %s", lines[1])
 	}

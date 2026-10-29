@@ -9,7 +9,7 @@ import "github.com/yongjohnlee80/autodoc/enterprise/embedder"
 build := func(ctx context.Context) (embed.Provider, error) {
 	return embed.NewOpenAI(ctx, "https://embeddings.example.internal", key, "text-embedding-3-small", client)
 }
-w := embedder.New(build, []embedder.Tenant{{Name: "lm-catalog", Store: st, Confirm: in.Confirm}},
+w := embedder.New(build, []embedder.Tenant{{Name: "music", Store: st, Confirm: in.Confirm}},
 	embedder.WithSlots(4), embedder.WithLogger(log))
 go w.Run(ctx) // until ctx ends
 w.Wake()      // after an ingester commits (ingest.Options.Committed)

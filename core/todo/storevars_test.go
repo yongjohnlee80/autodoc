@@ -52,7 +52,7 @@ func otherMachine(t *testing.T, e *env) *todo.Manager {
 }
 
 // folderRoute is a project folder whose todos are the kb store's (todos.set_dir), with the
-// project's own AGENTS.md: LabelManager's layout, where the route bug was.
+// project's own AGENTS.md: a real project's layout, where the route bug was.
 func folderRoute(t *testing.T, e *env) todo.At {
 	t.Helper()
 	e.disk.WriteFile("/src/proj/AGENTS.md", []byte("# proj: an agent file, not a KB\n"))

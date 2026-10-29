@@ -156,7 +156,7 @@ type Source struct {
 
 // Error is one refusal: the field it is about and why.
 type Error struct {
-	Field  string // as the file spells it: postgres.dsn_env, source[1].interval, http.client[0].grants.lm-catalog
+	Field  string // as the file spells it: postgres.dsn_env, source[1].interval, http.client[0].grants.music
 	Reason string
 }
 
@@ -502,22 +502,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 			}
 			names[c.Name] = fmt.Sprintf("http.client[%d]", i)
 		}
-		switch {
-		case c.TokenSHA256 != "" && c.TokenEnv != "":
-			v.refuse(at("token_sha256"), "give token_sha256 or token_env, not both")
-		case c.TokenSHA256 == "" && c.TokenEnv == "":
-			v.refuse(at("token_sha256"), "required: token_sha256 (the token's SHA-256) or token_env (a variable holding the token)")
-		case c.TokenSHA256 != "":
-			// the value is never echoed: a token pasted here by mistake must not reach a log
-			if b, err := hex.DecodeString(c.TokenSHA256); err != nil || len(b) != 32 {
-				v.refuse(at("token_sha256"), "want the 64 hex digits of the token's SHA-256, never the token itself")
-			}
-		default:
-			if v.envSet(at("token_env"), c.TokenEnv) && len(os.Getenv(c.TokenEnv)) < MinTokenBytes {
-				v.warnings = append(v.warnings, fmt.Sprintf("%s: the token in %s is shorter than %d bytes: use a random token of at least 32 bytes (openssl rand -hex 32)",
-					at("token_env"), c.TokenEnv, MinTokenBytes))
-			}
-		}
+		v.token(at, c.TokenSHA256, c.TokenEnv)
 		if id := tokenIdentity(c.TokenSHA256, c.TokenEnv); id != "" {
 			tokens[id] = fmt.Sprintf("http.client[%d]", i)
 		}
@@ -584,8 +569,11 @@ func (v *validator) token(at func(string) string, sha, env string) {
 	case sha == "" && env == "":
 		v.refuse(at("token_sha256"), "required: token_sha256 (the token's SHA-256) or token_env (a variable holding the token)")
 	case sha != "":
+		// the value is never echoed: a token pasted here by mistake must not reach a log
 		if b, err := hex.DecodeString(sha); err != nil || len(b) != 32 {
 			v.refuse(at("token_sha256"), "want the 64 hex digits of the token's SHA-256, never the token itself")
+		} else if strings.EqualFold(sha, emptySHA256) {
+			v.refuse(at("token_sha256"), "is the SHA-256 of no token at all (an empty string): hash the real token (printf %%s \"$TOKEN\" | sha256sum)")
 		}
 	default:
 		if v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes {
@@ -594,6 +582,9 @@ func (v *validator) token(at func(string) string, sha, env string) {
 		}
 	}
 }
+
+// emptySHA256 is the SHA-256 of "": a token_sha256 copied from an example, or of a token never set.
+var emptySHA256 = func() string { sum := sha256.Sum256(nil); return hex.EncodeToString(sum[:]) }()
 
 // tokenIdentity is a token as the API compares it, its SHA-256 in hex, from either form; "" when
 // neither gives one. Two roles holding one token have the same identity.

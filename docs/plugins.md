@@ -216,7 +216,10 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   - `AUTODOC_PLUGIN_PROTOCOL` (the manifest's protocol);
   - `AUTODOC_PLUGIN_DIR`;
   - `AUTODOC_SOCKET`, the daemon's socket, for a plugin that uses AutoDoc's API as any client does
-    (`AGENTS.md`);
+    (`AGENTS.md`). **It is the whole daemon:** a plugin's process may call every verb, `file.read`
+    and `file.write` anywhere on your disk among them, and it runs as you. The Lua grants hold a
+    plugin's *Lua package* to the workspace; they do not hold its process. Install a plugin only
+    if you would run it as a program of your own;
   - `AUTODOC_PLUGIN_SURFACE_FD=3`, for a pixel surface's side channel, when the plugin has one
     (protocol 10, below).
 - **stdout is the protocol's.** Write anything else to stderr, which goes to the plugin's log.

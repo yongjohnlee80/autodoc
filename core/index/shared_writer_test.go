@@ -65,7 +65,7 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 	}
 	// The wait fails when indexing stops moving, not after a fixed total: 600 notes through one
 	// writer under -race is CPU-bound work, several times slower on a loaded machine, and a fixed
-	// 60 s was a race against it (VM43, load ~10: "not both indexed in 60 s"). It fails when neither
+	// 60 s was a race against it (a test machine at load ~10: "not both indexed in 60 s"). It fails when neither
 	// workspace's pending jobs, documents or chunks change for indexStall, and in any case at a cap
 	// inside go test's own -timeout, so the named failure comes before the runner's panic.
 	capped := start.Add(4 * time.Minute)

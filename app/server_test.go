@@ -160,7 +160,7 @@ model    = "` + model + `"
 key_env  = "AUTODOC_TEST_EMBED_KEY"
 
 [[source]]
-tenant   = "lm-catalog"
+tenant   = "music"
 view     = "track.view"
 interval = "1s"
 lag      = "0s"
@@ -206,7 +206,7 @@ func (f *serverFixture) documents() string {
 func (f *serverFixture) embedded(model string) bool {
 	s := f.schema
 	return f.scalar(`SELECT coalesce((
-		(SELECT active_model FROM `+s+`.rag_meta WHERE tenant = 'lm-catalog') = '`+model+`'
+		(SELECT active_model FROM `+s+`.rag_meta WHERE tenant = 'music') = '`+model+`'
 		AND (SELECT count(*) FROM `+s+`.rag_embedding WHERE model = '`+model+`') = (SELECT count(DISTINCT text_hash) FROM `+s+`.rag_chunk)
 		AND EXISTS (SELECT 1 FROM `+s+`.rag_document)
 		AND NOT EXISTS (SELECT 1 FROM `+s+`.rag_document WHERE NOT semantic_ready)), false)::text`) == "true"
@@ -216,7 +216,7 @@ func (f *serverFixture) embedded(model string) bool {
 // finished. A refresh commits its pages' documents first and moves the cursor only when it finishes,
 // in a transaction of its own, so documents written (or embedded) are no sign of it.
 func (f *serverFixture) cursorMoved() bool {
-	return f.scalar(`SELECT EXISTS (SELECT 1 FROM `+f.schema+`.rag_cursor WHERE tenant = 'lm-catalog' AND updated_at IS NOT NULL)::text`) == "true"
+	return f.scalar(`SELECT EXISTS (SELECT 1 FROM `+f.schema+`.rag_cursor WHERE tenant = 'music' AND updated_at IS NOT NULL)::text`) == "true"
 }
 
 // vectors is how many vectors the server stored under model.
@@ -422,7 +422,7 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	st, err := pgstore.New(store, "lm-catalog")
+	st, err := pgstore.New(store, "music")
 	if err != nil {
 		t.Fatal(err)
 	}

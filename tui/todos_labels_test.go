@@ -16,7 +16,7 @@ import (
 // store for its own folder.
 func TestStoreNamesDeriveFromTheirFolders(t *testing.T) {
 	for root, want := range map[string]string{
-		"/home/j/Source/LabelManager/.auto-agents/kb": "LabelManager",
+		"/home/j/Source/WebShop/.auto-agents/kb":      "WebShop",
 		"/home/j/.config/nvim/.auto-agents-config/kb": "nvim",
 		"/home/j/notes/kb/kb":                         "notes",
 		"/home/j/notes/kb":                            "notes",
@@ -40,7 +40,7 @@ func labelledStores(prefs map[string]any) *scriptedCore {
 	s := newScripted("")
 	s.answers["todos.stores"] = func([]any) (any, error) {
 		return []any{
-			map[string]any{"id": "S1", "path": "/src/LabelManager/.auto-agents/kb/.todo-list", "roots": []any{"/src/LabelManager/.auto-agents/kb"}, "claimed": true},
+			map[string]any{"id": "S1", "path": "/src/WebShop/.auto-agents/kb/.todo-list", "roots": []any{"/src/WebShop/.auto-agents/kb"}, "claimed": true},
 			map[string]any{"id": "S2", "path": "/home/j/.config/nvim/.auto-agents-config/kb/.todo-list", "roots": []any{"/home/j/.config/nvim/.auto-agents-config/kb"}},
 			map[string]any{"id": "S3", "path": "/home/j/html-archives/.todo-list", "roots": []any{"/home/j/html-archives"}},
 		}, nil
@@ -60,7 +60,7 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 	s := labelledStores(prefs)
 	v := newTodos(s)
 	v.list()
-	if got, want := storeLabels(v), []string{"LabelManager", "nvim", "html-archives"}; !slices.Equal(got, want) {
+	if got, want := storeLabels(v), []string{"WebShop", "nvim", "html-archives"}; !slices.Equal(got, want) {
 		t.Fatalf("the dropdown %q, want %q", got, want)
 	}
 	v.storeChosen(1)
@@ -129,7 +129,7 @@ func TestTodosListWithoutPreferences(t *testing.T) {
 	s.answers["preference.list"] = func([]any) (any, error) { return nil, fmt.Errorf("-32004 no preferences") }
 	v := newTodos(s)
 	v.list()
-	if got := storeLabels(v); len(got) != 3 || got[0] != "LabelManager" || len(s.failed) != 0 {
+	if got := storeLabels(v); len(got) != 3 || got[0] != "WebShop" || len(s.failed) != 0 {
 		t.Errorf("stores %q, failed %v", got, s.failed)
 	}
 }

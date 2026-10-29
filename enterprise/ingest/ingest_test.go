@@ -490,9 +490,9 @@ func TestRunLogsTheQuarantine(t *testing.T) {
 	// stopped before its lock pool closes, should the test fail: a pool waits for its pinned lock
 	t.Cleanup(func() { cancel(); <-done })
 	waitFor(t, 5*time.Second, "the quarantine in the log", func() bool {
-		return said("tenant lm-catalog: refresh read 2 rows: 1 written, 1 quarantined, 0 released, 0 deleted, 0 without an id; 1 in quarantine")
+		return said("tenant music: refresh read 2 rows: 1 written, 1 quarantined, 0 released, 0 deleted, 0 without an id; 1 in quarantine")
 	})
-	waitFor(t, 5*time.Second, "a pass's report", func() bool { return said("tenant lm-catalog: pass read 0 rows: 0 written, 1 quarantined") })
+	waitFor(t, 5*time.Second, "a pass's report", func() bool { return said("tenant music: pass read 0 rows: 0 written, 1 quarantined") })
 	cancel()
 }
 
@@ -533,7 +533,7 @@ func TestAFailedRefreshIsTriedAgainSoon(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- in.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
-	waitFor(t, 5*time.Second, "the failed refresh in the log", func() bool { return said("went away: tenant lm-catalog: refresh") })
+	waitFor(t, 5*time.Second, "the failed refresh in the log", func() bool { return said("went away: tenant music: refresh") })
 
 	broken.n.Store(1 << 62) // the source is back
 	reads := broken.calls.Load()

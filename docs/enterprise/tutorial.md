@@ -21,7 +21,8 @@ OpenAI-compatible endpoint works too (see [server-config](server-config.md)).
 
 ## 1. The database
 
-Save this as `docker-compose.yml`, and start it with `docker compose up -d`:
+Save this as `docker-compose.yml`. Choose the database's password first (it is read from the
+environment, never written in the file), then start it with `docker compose up -d`:
 
 ```yaml compose
 services:
@@ -29,17 +30,19 @@ services:
     image: pgvector/pgvector:pg18
     environment:
       POSTGRES_USER: catalog
-      POSTGRES_PASSWORD: catalog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?choose a password first: export POSTGRES_PASSWORD=...}
       POSTGRES_DB: catalog
-    ports: ["5432:5432"]
+    # this host only: nothing else needs the tutorial's database
+    ports: ["127.0.0.1:5432:5432"]
 ```
 
 The server reads its database URL and the web application's token from the environment, never from
 its configuration file:
 
 ```sh setup
-export AUTODOC_SERVER_DSN='postgres://catalog:catalog@localhost:5432/catalog?sslmode=disable'
-export LM_WEB_TOKEN=$(openssl rand -hex 32)
+export POSTGRES_PASSWORD=$(openssl rand -hex 16)   # before docker compose up
+export AUTODOC_SERVER_DSN="postgres://catalog:${POSTGRES_PASSWORD}@localhost:5432/catalog?sslmode=disable"
+export WEB_APP_TOKEN=$(openssl rand -hex 32)
 ```
 
 Now the catalog: artists, and tracks on two record labels, `A` and `B`. Every table a document is
@@ -122,21 +125,21 @@ model    = "nomic-embed-text"
 listen = "127.0.0.1:8730"
 
 [[http.client]]
-name      = "lm-web"
-token_env = "LM_WEB_TOKEN"
+name      = "web-app"
+token_env = "WEB_APP_TOKEN"
 
-[http.client.grants.lm-catalog]
+[http.client.grants.music]
 label_id = ["A"]
 
 [[source]]
-tenant   = "lm-catalog"
+tenant   = "music"
 view     = "views/track.view"
 access   = ["label_id"]
 interval = "5s"
 lag      = "0s"
 ```
 
-- **The `lm-web` client may search label `A` only.**
+- **The `web-app` client may search label `A` only.**
 - **`interval` and `lag` are short here,** so a change shows in seconds. In production, keep the
   default lag (1m): it waits out transactions still open in your database.
 
@@ -163,8 +166,8 @@ search can answer by meaning:
 ```sh tutorial
 for i in $(seq 60); do
   curl -s http://127.0.0.1:8730/v1/search \
-    -H "Authorization: Bearer $LM_WEB_TOKEN" -H 'Content-Type: application/json' \
-    -d '{"tenant": "lm-catalog", "query": "river", "scope": {"label_id": ["A"]}}' \
+    -H "Authorization: Bearer $WEB_APP_TOKEN" -H 'Content-Type: application/json' \
+    -d '{"tenant": "music", "query": "river", "scope": {"label_id": ["A"]}}' \
     | grep -q '"semantic":"ready"' && break
   sleep 1
 done
@@ -176,8 +179,8 @@ From curl, scoped to label `A`:
 
 ```sh tutorial
 curl -s http://127.0.0.1:8730/v1/search \
-  -H "Authorization: Bearer $LM_WEB_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"tenant": "lm-catalog", "query": "crimson river", "scope": {"label_id": ["A"]}}'
+  -H "Authorization: Bearer $WEB_APP_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"tenant": "music", "query": "crimson river", "scope": {"label_id": ["A"]}}'
 ```
 
 ```text expect
@@ -195,8 +198,8 @@ because the token isn't granted it:
 
 ```sh tutorial
 curl -s http://127.0.0.1:8730/v1/search \
-  -H "Authorization: Bearer $LM_WEB_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"tenant": "lm-catalog", "query": "ocean", "scope": {"label_id": ["B"]}}'
+  -H "Authorization: Bearer $WEB_APP_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"tenant": "music", "query": "ocean", "scope": {"label_id": ["B"]}}'
 ```
 
 ```text expect
@@ -220,12 +223,12 @@ import (
 
 func main() {
 	body, _ := json.Marshal(map[string]any{
-		"tenant": "lm-catalog",
+		"tenant": "music",
 		"query":  strings.Join(os.Args[1:], " "),
 		"scope":  map[string][]string{"label_id": {"A"}},
 	})
 	req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:8730/v1/search", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+os.Getenv("LM_WEB_TOKEN"))
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("WEB_APP_TOKEN"))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -276,14 +279,14 @@ between `\u0002` and `\u0003` ([highlighting](web-integration.md#highlighting)):
 ```sh tutorial
 for i in $(seq 60); do
   curl -s http://127.0.0.1:8730/v1/search \
-    -H "Authorization: Bearer $LM_WEB_TOKEN" -H 'Content-Type: application/json' \
-    -d '{"tenant": "lm-catalog", "query": "saffron", "mode": "lexical", "scope": {"label_id": ["A"]}}' \
+    -H "Authorization: Bearer $WEB_APP_TOKEN" -H 'Content-Type: application/json' \
+    -d '{"tenant": "music", "query": "saffron", "mode": "lexical", "scope": {"label_id": ["A"]}}' \
     | grep -q '"source_id":"2"' && break
   sleep 1
 done
 curl -s http://127.0.0.1:8730/v1/search \
-  -H "Authorization: Bearer $LM_WEB_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"tenant": "lm-catalog", "query": "saffron", "mode": "lexical", "scope": {"label_id": ["A"]}}'
+  -H "Authorization: Bearer $WEB_APP_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"tenant": "music", "query": "saffron", "mode": "lexical", "scope": {"label_id": ["A"]}}'
 ```
 
 ```text expect

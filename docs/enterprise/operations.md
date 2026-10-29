@@ -39,7 +39,7 @@ Per tenant, for **operators**. Status shows tenant-wide figures, which a search 
 [[http.operator]]
 name      = "ops"
 token_env = "AUTODOC_OPS_TOKEN"   # or token_sha256, as clients
-tenants   = ["lm-catalog"]        # or ["*"]
+tenants   = ["music"]        # or ["*"]
 ```
 
 - **An operator's token reads status for its tenants, and can't search** (401 on `/v1/search`).
@@ -54,7 +54,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 {"as_of": "2026-10-13T09:41:07Z",
  "server": {"version": "v0.1.40", "started": "2026-10-13T09:00:00Z",
             "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": ""}},
- "tenants": [{"tenant": "lm-catalog", "lock": "held",
+ "tenants": [{"tenant": "music", "lock": "held",
    "cursor": {"updated_at": "2026-10-13T09:41:03Z", "id": "8812", "lag_seconds": 4},
    "last_pass": {"at": "…", "read": 12, "written": 12, "quarantined": 0, "error": ""},
    "last_refresh": {"at": "…", "complete": true, "last_complete": "…", "error": ""},
@@ -95,7 +95,7 @@ Every `[log] metrics_interval` (1 minute by default; `0` turns them off), the se
 
 ```
 metrics scope=server provider=up provider_error= http_ok=118 http_4xx=3 http_5xx=0 http_max_ms=412
-metrics scope=tenant tenant=lm-catalog lock=held documents=120344 ready=120344 quarantined=0 semantic=ready cursor_lag_s=4 pass_error= refresh_error= error=
+metrics scope=tenant tenant=music lock=held documents=120344 ready=120344 quarantined=0 semantic=ready cursor_lag_s=4 pass_error= refresh_error= error=
 ```
 
 - **They're logfmt,** for your log pipeline to parse.
@@ -148,7 +148,7 @@ docker run -d --env-file .env -p 127.0.0.1:8730:8730 \
   autodoc-server
 ```
 
-[`deploy/container/compose.yml`](../../deploy/container/compose.yml) runs it beside PostgreSQL with pgvector (and Ollama, with `--profile ollama`), using [`deploy/server.toml`](../../deploy/server.toml) and `deploy/views/`.
+[`deploy/container/compose.yml`](../../deploy/container/compose.yml) runs it beside PostgreSQL with pgvector (and Ollama, with `--profile ollama`), using [`deploy/container/server.toml`](../../deploy/container/server.toml) and `deploy/views/`. Its `.env` holds `POSTGRES_PASSWORD` too, which the database is created with and `AUTODOC_SERVER_DSN` names. The systemd unit's [`deploy/server.toml`](../../deploy/server.toml) listens on `127.0.0.1` only; the container's copy differs in that one line, listening on the container's own network.
 
 **Publish the port on loopback only.** The example's `server.toml` sets `proxy = true`, so the API in the container is plain HTTP, and the bearer tokens cross the wire in clear text. Both the `docker run` above and the compose file publish `127.0.0.1:8730`.
 - Put your TLS-terminating proxy (Caddy, nginx, a load balancer's agent) on the same host, in front of it.

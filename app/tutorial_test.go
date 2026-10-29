@@ -148,7 +148,7 @@ func TestTheTutorialRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "AUTODOC_SERVER_DSN="+dsn,
-		"LM_WEB_TOKEN="+hex.EncodeToString(tok), "AUTODOC_TEST_EMBED_KEY="+embedKey)
+		"WEB_APP_TOKEN="+hex.EncodeToString(tok), "AUTODOC_TEST_EMBED_KEY="+embedKey)
 	sh := func(ctx context.Context, script string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, "sh", "-c", script)
 		cmd.Dir, cmd.Env = dir, env
