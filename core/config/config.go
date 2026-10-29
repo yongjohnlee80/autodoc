@@ -152,6 +152,13 @@ func (s Server) SocketPath() (string, error) {
 	return p, nil
 }
 
+// RuntimeDir is where a per-user socket goes (runtimeDir): the daemon's, and a profiling
+// monitor's when none is named.
+func RuntimeDir() (string, error) { return runtimeDir() }
+
+// MaxSocketPath is maxSocketPath, for a socket other than the daemon's (a profiling monitor's).
+const MaxSocketPath = maxSocketPath
+
 // runtimeDir is where the socket goes: $XDG_RUNTIME_DIR, then the per-user $TMPDIR on Darwin, then
 // the state directory.
 func runtimeDir() (string, error) {

@@ -50,6 +50,8 @@ var publicErrs = []module.PublicError{
 	{Err: errNoPreferences, Code: CodeUnsupported, Message: "this server keeps no preferences"},
 	{Err: errNoEmbeddings, Code: CodeUnsupported, Message: "this server keeps no embedding providers"},
 	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
+	{Err: errNoProfiler, Code: CodeUnsupported, Message: "this server keeps no profiler"},
+	{Err: errProfileRefused, Code: golibrpc.CodeInvalidParams, Message: "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)"},
 	{Err: store.ErrEventsExpired, Code: CodeCursorExpired, Message: "the event cursor is outside the retained log: take a snapshot and resume from the head"},
 	{Err: ErrNoSwitch, Code: golibrpc.CodeInvalidParams, Message: "no model switch is under way"},
 	{Err: ErrPulling, Code: CodeConflict, Message: "a model is being pulled: wait for it, or cancel it"},

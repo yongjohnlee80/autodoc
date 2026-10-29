@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/diag"
 
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
 )
 
 // --profile[=DIR]: a golib/diag memory monitor beside --ui, --gui or --serve. It samples the Go
@@ -64,12 +63,15 @@ func defaultProfileDir(mode string) string {
 	return filepath.Join(".", fmt.Sprintf("autodoc-profile-%s-%s", time.Now().Format("20060102-150405"), mode))
 }
 
-// profileRun is a --profile run's monitor, owned by the mode that started it.
-type profileRun struct{ m *diag.Monitor }
+// profileRun is a mode's profiler, owned by the mode: --profile starts its monitor at launch,
+// System › Profiling or sys.profile at any time after, and the mode closes it once its run has
+// ended, whichever started it.
+type profileRun struct{ p *profiling.Profiler }
 
-// startProfile starts the monitor --profile or AUTODOC_PROFILE asks for, and says where on
-// stderr; nil when neither asks.
+// startProfile is mode's profiler, its monitor started when --profile or AUTODOC_PROFILE asks (and
+// where said on stderr), else off until the menu or sys.profile starts it.
 func startProfile(ctx context.Context, f *profileFlag, mode string, stderr io.Writer) (*profileRun, error) {
+	run := &profileRun{p: profiling.New(ctx, mode, profileGroups...)}
 	dir := f.dir
 	switch {
 	case f.given && dir == "":
@@ -77,15 +79,15 @@ func startProfile(ctx context.Context, f *profileFlag, mode string, stderr io.Wr
 	case !f.given:
 		var ok bool
 		if dir, ok = diag.FromEnv(profileEnv); !ok {
-			return nil, nil
+			return run, nil
 		}
 	}
-	m, err := diag.Start(ctx, dir, diag.WithSocket(), diag.WithGroups(profileGroups...))
+	started, err := run.p.Start(dir)
 	if err != nil {
 		return nil, fmt.Errorf("--profile: %w", err)
 	}
-	fmt.Fprintf(stderr, "autodoc: profiling memory into %s (attach: autodoc --profile-fetch heap %s)\n", m.Dir(), m.Dir())
-	return &profileRun{m: m}, nil
+	fmt.Fprintf(stderr, "autodoc: profiling memory into %s (attach: autodoc --profile-fetch heap %s)\n", started, started)
+	return run, nil
 }
 
 // close stops the monitor once its mode has ended. A monitor that could not write its samples is
@@ -94,10 +96,7 @@ func (p *profileRun) close() error {
 	if p == nil {
 		return nil
 	}
-	if err := p.m.Close(); err != nil {
-		return fmt.Errorf("profile incomplete: %w", err)
-	}
-	return nil
+	return p.p.Close()
 }
 
 // owner is something a mode's run owns and closes once, after the run has ended: the --debug
@@ -141,25 +140,12 @@ func fetchProfile(ctx context.Context, profile, dir string, stdout io.Writer) er
 			return errors.New("--profile-fetch needs the monitor's directory: autodoc --profile-fetch heap DIR, or AUTODOC_PROFILE=DIR")
 		}
 	}
-	name, query := profile, profile
-	if profile == "cpu" {
-		name, query = "cpu", "profile?seconds=30"
-	}
-	path := filepath.Join(dir, fmt.Sprintf("fetched-%s-%s.pb.gz", name, time.Now().Format("20060102-150405")))
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	path, err := profiling.Fetch(ctx, profile, dir, time.Now())
 	if err != nil {
 		return fmt.Errorf("--profile-fetch: %w", err)
 	}
-	if err := diag.Fetch(ctx, filepath.Join(dir, "pprof.sock"), query, f); err != nil {
-		f.Close()
-		os.Remove(path)
-		return fmt.Errorf("--profile-fetch: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("--profile-fetch: %w", err)
-	}
 	fmt.Fprintf(stdout, "%s\n", path)
-	if strings.HasPrefix(query, "profile") || name == "goroutine" {
+	if profiling.HoldsLabels(profile) {
 		fmt.Fprintln(stdout, "autodoc: this profile can hold the program's pprof labels: share it as you would a log")
 	}
 	return nil

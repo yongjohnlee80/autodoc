@@ -53,7 +53,7 @@ func TestTheProfileFlagTakesAnOptionalValue(t *testing.T) {
 }
 
 // The flag starts a monitor in its directory, AUTODOC_PROFILE does when the flag is absent, the
-// flag wins over it, and neither starts none.
+// flag wins over it, and neither starts none (the profiler is there, off).
 func TestWhatStartsAProfile(t *testing.T) {
 	flagDir, envDir := shortProfileDir(t), shortProfileDir(t)
 	t.Setenv(profileEnv, envDir)
@@ -70,8 +70,8 @@ func TestWhatStartsAProfile(t *testing.T) {
 		if err != nil || p == nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if p.m.Dir() != c.want || !strings.Contains(stderr.String(), "profiling memory into "+c.want) {
-			t.Errorf("%s: dir %s, said %q; want %s", c.name, p.m.Dir(), stderr.String(), c.want)
+		if p.p.Dir() != c.want || !strings.Contains(stderr.String(), "profiling memory into "+c.want) {
+			t.Errorf("%s: dir %s, said %q; want %s", c.name, p.p.Dir(), stderr.String(), c.want)
 		}
 		if err := p.close(); err != nil {
 			t.Fatal(err)
@@ -81,8 +81,13 @@ func TestWhatStartsAProfile(t *testing.T) {
 		}
 	}
 	t.Setenv(profileEnv, "")
-	if p, err := startProfile(context.Background(), &profileFlag{}, "ui", io.Discard); p != nil || err != nil {
+	// neither asks: the mode still has its profiler, off, for the menu or sys.profile to start
+	p, err := startProfile(context.Background(), &profileFlag{}, "ui", io.Discard)
+	if err != nil || p == nil || p.p.Dir() != "" {
 		t.Fatalf("neither asked: %v, %v", p, err)
+	}
+	if err := p.close(); err != nil {
+		t.Fatalf("closing a profiler that never ran: %v", err)
 	}
 	var none *profileRun
 	if err := none.close(); err != nil {
@@ -198,5 +203,40 @@ func TestTheProfileModesThroughTheCommand(t *testing.T) {
 	stderr.Reset()
 	if code := run(context.Background(), []string{"--profile-fetch", "heap", shortProfileDir(t)}, Options{Version: "v-test"}, io.Discard, &stderr); code != 1 || !strings.Contains(stderr.String(), "--profile-fetch") {
 		t.Errorf("--profile-fetch with no monitor: exit %d, said %q", code, stderr.String())
+	}
+}
+
+// A runtime start (System › Profiling, sys.profile) beside --profile finds its monitor and keeps
+// it, one per process; the mode's close at exit stops it either way, its samples complete.
+func TestARuntimeStartBesideProfileKeepsOneMonitor(t *testing.T) {
+	dir := shortProfileDir(t)
+	p, err := startProfile(context.Background(), &profileFlag{given: true, dir: dir}, "gui", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := p.p.Start(""); err != nil || got != dir {
+		t.Errorf("a runtime start beside --profile: %q, %v; want --profile's %s", got, err, dir)
+	}
+	if err := p.close(); err != nil {
+		t.Fatal(err)
+	}
+	if p.p.Dir() != "" {
+		t.Error("the mode's close left the monitor running")
+	}
+
+	// started at runtime alone, the close at exit stops it the same way
+	run, err := startProfile(context.Background(), &profileFlag{}, "gui", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := shortProfileDir(t)
+	if _, err := run.p.Start(later); err != nil {
+		t.Fatal(err)
+	}
+	if err := finishRun(nil, run); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(later, "samples.jsonl")); err != nil || len(b) == 0 {
+		t.Errorf("a runtime monitor closed at exit wrote no samples: %v", err)
 	}
 }

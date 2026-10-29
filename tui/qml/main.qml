@@ -265,6 +265,15 @@ Window {
             MenuItem { text: qsTrId("autodoc.main.agent_profiles"); onTriggered: App.openAgentProfiles() }
             MenuItem { text: qsTrId("autodoc.main.set_up_an_agent"); onTriggered: App.openAgentSetup() }
             MenuSeparator {}
+            // the window's memory monitor and the daemon's, started and stopped at runtime (profiling.go)
+            Menu {
+                title: qsTrId("autodoc.main.profiling")
+                MenuItem { text: qsTrId("autodoc.main.profile_window"); checkable: true; checked: App.profilingWindow; onTriggered: App.toggleWindowProfiling() }
+                MenuItem { text: qsTrId("autodoc.main.profile_backend"); checkable: true; checked: App.profilingBackend; onTriggered: App.toggleBackendProfiling() }
+                MenuSeparator {}
+                MenuItem { text: qsTrId("autodoc.main.capture_cpu_profile"); onTriggered: App.captureCPUProfile() }
+                MenuItem { text: qsTrId("autodoc.main.open_profile_folder"); onTriggered: App.openProfileFolder() }
+            }
             MenuItem { text: qsTrId("autodoc.main.restart_backend"); onTriggered: App.startRestart() }
         }
         Menu {
@@ -914,6 +923,8 @@ Window {
         // one while the search is by words
         Text { text: App.semanticMark; color: App.semanticDot }
         Text { text: App.semanticLabel }
+        // a monitor running, the window's or the daemon's (profiling.go): a forgotten one is seen
+        Text { text: App.profilingMark }
     }
 
 

@@ -887,6 +887,38 @@
         <source>Ctrl+h/j/k/l move between panels while typing</source>
         <translation>Ctrl+h/j/k/l move between panels while typing</translation>
     </message>
+    <message id="autodoc.cmd.profiling.backend">
+        <source>profile the backend</source>
+        <translation>profile the backend</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.backend.help">
+        <source>profile the backend</source>
+        <translation>profile the backend</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu">
+        <source>capture a CPU profile</source>
+        <translation>capture a CPU profile</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu.help">
+        <source>capture a CPU profile</source>
+        <translation>capture a CPU profile</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder">
+        <source>open the profile folder</source>
+        <translation>open the profile folder</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder.help">
+        <source>open the profile folder</source>
+        <translation>open the profile folder</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window">
+        <source>profile the window</source>
+        <translation>profile the window</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window.help">
+        <source>profile the window</source>
+        <translation>profile the window</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>results: copy selection (the selected cells, or the cursor's, as TSV)</translation>
@@ -3333,6 +3365,10 @@ WHAT A KEY NEEDS
         <source>&amp;Buffers…</source>
         <translation>&amp;Buffers…</translation>
     </message>
+    <message id="autodoc.main.capture_cpu_profile">
+        <source>&amp;Capture CPU profile (30 s)</source>
+        <translation>&amp;Capture CPU profile (30 s)</translation>
+    </message>
     <message id="autodoc.main.clear_d">
         <source>Clear (&amp;d)</source>
         <translation>Clear (&amp;d)</translation>
@@ -3505,6 +3541,10 @@ WHAT A KEY NEEDS
         <source>Open in &amp;browser</source>
         <translation>Open in &amp;browser</translation>
     </message>
+    <message id="autodoc.main.open_profile_folder">
+        <source>Open pro&amp;file folder</source>
+        <translation>Open pro&amp;file folder</translation>
+    </message>
     <message id="autodoc.main.open_todos_spc_x">
         <source>&amp;Open todos…  (SPC x)</source>
         <translation>&amp;Open todos…  (SPC x)</translation>
@@ -3544,6 +3584,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.preview_option">
         <source>Preview o&amp;ption</source>
         <translation>Preview o&amp;ption</translation>
+    </message>
+    <message id="autodoc.main.profile_backend">
+        <source>&amp;Backend</source>
+        <translation>&amp;Backend</translation>
+    </message>
+    <message id="autodoc.main.profile_window">
+        <source>Wi&amp;ndow</source>
+        <translation>Wi&amp;ndow</translation>
+    </message>
+    <message id="autodoc.main.profiling">
+        <source>&amp;Profiling</source>
+        <translation>&amp;Profiling</translation>
     </message>
     <message id="autodoc.main.read_only_this_store_was_released">
         <source>read-only: this store was released (todos.release)</source>
@@ -4624,6 +4676,50 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.preview.zoom_is_at_its_smallest">
         <source>zoom is at its smallest</source>
         <translation>zoom is at its smallest</translation>
+    </message>
+    <message id="autodoc.notice.profiling.backend_refused">
+        <source>the backend's profiling did not change</source>
+        <translation>the backend's profiling did not change</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capture_failed">
+        <source>the CPU profile was not captured</source>
+        <translation>the CPU profile was not captured</translation>
+    </message>
+    <message id="autodoc.notice.profiling.captured">
+        <source>CPU profile written to %1 (go tool pprof reads it).</source>
+        <translation>CPU profile written to %1 (go tool pprof reads it).</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capturing">
+        <source>Capturing a %1-second CPU profile…</source>
+        <translation>Capturing a %1-second CPU profile…</translation>
+    </message>
+    <message id="autodoc.notice.profiling.none">
+        <source>this program has no profiler</source>
+        <translation>this program has no profiler</translation>
+    </message>
+    <message id="autodoc.notice.profiling.open_failed">
+        <source>the profile folder did not open</source>
+        <translation>the profile folder did not open</translation>
+    </message>
+    <message id="autodoc.notice.profiling.start_first">
+        <source>Start profiling the window or the backend first: System › Profiling.</source>
+        <translation>Start profiling the window or the backend first: System › Profiling.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.started">
+        <source>Profiling into %1. CPU and goroutine profiles can hold the program's pprof labels: share them as you would a log.</source>
+        <translation>Profiling into %1. CPU and goroutine profiles can hold the program's pprof labels: share them as you would a log.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.stopped">
+        <source>Profiling stopped. Its samples and heap profiles are in %1.</source>
+        <translation>Profiling stopped. Its samples and heap profiles are in %1.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_refused">
+        <source>the window's profiling did not start</source>
+        <translation>the window's profiling did not start</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_stopped">
+        <source>the window's profile is incomplete</source>
+        <translation>the window's profile is incomplete</translation>
     </message>
     <message id="autodoc.notice.progress.embedding">
         <source>embedding %1 %2</source>

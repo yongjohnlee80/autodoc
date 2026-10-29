@@ -167,6 +167,38 @@ platform → IME → TUI. **The file contains everything typed, passwords includ
 only where the flag says, never anywhere by default. How to record, and how a recording becomes
 the test that reproduces a bug on any machine, is in [docs/filing-input-and-ime-bugs.md](../filing-input-and-ime-bugs.md).
 
+### Profiling Memory and CPU (`--profile`, System › Profiling)
+
+A profile shows where a slow or growing session spends its memory and CPU. Start one at launch, or
+in the middle of a session that has already gone slow, without restarting it:
+
+```sh
+autodoc --gui --profile          # the window, profiled from launch into autodoc-profile-<date>-gui
+autodoc --serve --profile=DIR    # the daemon, into DIR
+autodoc --profile-fetch cpu DIR  # a 30-second CPU profile from a running monitor, into DIR
+```
+
+**System › Profiling** starts and stops the same monitors while the program runs:
+
+- **Window** profiles this window's process, and **Backend** the daemon (through `sys.profile`, a
+  local peer's alone). Each is checked while it runs, and the status line shows `◉ profiling`, so
+  a monitor left on is seen. A window launched with `--profile` shows **Window** checked.
+- **Capture CPU profile (30 s)** writes a CPU profile of whichever runs into its folder, and a
+  notice names the file. `go tool pprof <file>` reads it.
+- **Open profile folder** opens the last monitor's folder in the file manager.
+
+A monitor started from the menu writes to `autodoc-profile-<mode>-<pid>` in the runtime directory
+(`$XDG_RUNTIME_DIR`, else the per-user temporary directory on macOS, else the state directory), a
+path short enough for the monitor's socket. A process has one monitor: a start while one runs keeps
+it, and the program stops it at exit however it started.
+
+Each monitor samples the Go runtime's memory into `samples.jsonl`, writes a heap profile and the
+allocation sites holding the most each time the live heap grows, and serves its profiles on
+`pprof.sock`. Go samples allocations from the process's start, so heap profiles taken late still
+cover the whole session; a CPU profile covers only its own 30 seconds. Samples and heap profiles
+hold allocation stacks, never a document's text, but a CPU or goroutine profile can hold the
+program's pprof labels: **share those as you would a log**.
+
 ---
 
 ## 2.3 Registering and Configuring Workspaces
