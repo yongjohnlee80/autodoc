@@ -11,7 +11,7 @@ reads no file.
 | `Doc` | a document read for navigation |
 | `(*Doc).Headings()` | the headings in source order; none outside Markdown and a derived document's text |
 | `(*Doc).Crumbs(line, col)` | the breadcrumb at a 1-based line and a byte column: the headings above it, outermost first (Markdown), the key path (YAML), or the title (plain text, a registered chunker's file) |
-| `Heading` | `ID` (its GitHub-style slug, numbered when repeated, stable within one version), `Level` (1 to 6), `Text`, `Line` (1-based) and `Byte` (offset) |
+| `Heading` | `ID` (its GitHub-style slug, numbered when repeated, stable within one version; empty for a heading with nothing a slug keeps, as on GitHub), `Level` (1 to 6), `Text`, `Line` (1-based) and `Byte` (offset) |
 
 A `Doc` is not changed after `Read`, so it is safe for concurrent use. `Read` keeps `src` without
 copying it, so the caller must not change `src` while the `Doc` is in use; `Headings` returns the

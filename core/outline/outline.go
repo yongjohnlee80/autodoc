@@ -212,7 +212,7 @@ func plain(n *markdown.Node, src []byte) string {
 	return b.String()
 }
 
-// slug is a heading's anchor as GitHub writes it: lowercase; letters, combining marks, numbers,
+// slug is a heading's anchor as GitHub writes it (github-slugger): lowercase; letters, combining marks, numbers,
 // '-' and connector punctuation such as '_' kept; spaces as '-'; the rest dropped. Marks matter for
 // scripts written with them (नमस्ते keeps its virama) and for decomposed accents (e + U+0301).
 func slug(text string) string {
@@ -225,9 +225,8 @@ func slug(text string) string {
 			b.WriteByte('-')
 		}
 	}
-	if b.Len() == 0 {
-		return "section"
-	}
+	// a heading with nothing a slug keeps (only emoji or punctuation) has an empty slug, as on
+	// GitHub, and its repeats are -1, -2
 	return b.String()
 }
 
