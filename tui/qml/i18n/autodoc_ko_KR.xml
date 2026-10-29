@@ -3324,7 +3324,7 @@ WHAT A KEY NEEDS
         <translation>실제 크기(&amp;a)  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
+        <source>&amp;add</source>
         <translation>추가(&amp;a)</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
@@ -3344,7 +3344,7 @@ WHAT A KEY NEEDS
         <translation>패널 배치(&amp;r)…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
+        <source>&amp;Assign</source>
         <translation>할당(&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">

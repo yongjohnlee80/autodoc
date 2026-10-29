@@ -26,7 +26,7 @@ func TestTheGUITodosPanelActionRowCardAndStatusPicker(t *testing.T) {
 	r.s.WaitForText(t, "status: open")
 	r.s.WaitFor(t, "the task's action row, one line", func(sc string) bool {
 		for _, line := range strings.Split(sc, "\n") {
-			if strings.Contains(line, "Status…") && strings.Contains(line, "Assign") && strings.Contains(line, "Remove") && strings.Contains(line, "Add") {
+			if strings.Contains(line, "Status…") && strings.Contains(line, "Assign") && strings.Contains(line, "Remove") && strings.Contains(line, "add") {
 				return !strings.Contains(sc, "Status ▶")
 			}
 		}

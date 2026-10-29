@@ -3318,8 +3318,8 @@ WHAT A KEY NEEDS
         <translation>实际大小(&amp;A)  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
-        <translation>添加(&amp;A)</translation>
+        <source>&amp;add</source>
+        <translation>添加(&amp;a)</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
         <source>&amp;Add from a git URL…</source>
@@ -3338,7 +3338,7 @@ WHAT A KEY NEEDS
         <translation>排列面板(&amp;R)…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
+        <source>&amp;Assign</source>
         <translation>分配(&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">

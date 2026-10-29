@@ -3330,8 +3330,8 @@ O QUE UMA TECLA PRECISA
         <translation>T&amp;amanho real  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
-        <translation>&amp;Adicionar</translation>
+        <source>&amp;add</source>
+        <translation>&amp;adicionar</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
         <source>&amp;Add from a git URL…</source>
@@ -3350,8 +3350,8 @@ O QUE UMA TECLA PRECISA
         <translation>O&amp;rganizar painel…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
-        <translation>Atribuir (&amp;A)</translation>
+        <source>&amp;Assign</source>
+        <translation>&amp;Atribuir</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>
