@@ -268,7 +268,12 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		worked, err := s.ix.EmbedBatch(batchCtx, position)
 		stop()
 		cancel()
-		retryIn := s.ix.EmbedRetryIn()
+		// the time a refused text may be retried: only an empty, successful batch waits on it
+		// (finish), and finding it scans every refused text, so a productive batch doesn't ask
+		var retryIn time.Duration
+		if err == nil && !worked {
+			retryIn = s.ix.EmbedRetryIn()
+		}
 		q.mu.Lock()
 		q.finish(name, worked, err, retryIn)
 		q.mu.Unlock()
