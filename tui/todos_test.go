@@ -113,7 +113,7 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 	r.keys(t, key('a'), key('s'), key('d'), key('A'), key('M'))
 	time.Sleep(300 * time.Millisecond)
 	sc := r.s.String()
-	for _, absent := range []string{"[ Add ]", "[ Status… ]", "[ Remove (d) ]", "[ Assign (A) ]",
+	for _, absent := range []string{"[ add ]", "[ Status… ]", "[ Remove (d) ]", "[ Assign ]",
 		"new task", "statuses (", "remove the task?", "assign to an agent", "move the store"} {
 		if strings.Contains(sc, absent) {
 			t.Errorf("a read-only store shows %q:\n%s", absent, sc)
@@ -137,7 +137,7 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	before := onLoop(r, func() int { return len(r.h.noticeLog.items) })
 	r.leader(t, 'x')
-	r.s.WaitForText(t, "[ Add ]")
+	r.s.WaitForText(t, "[ add ]")
 	if strings.Contains(r.s.String(), "read-only") {
 		t.Fatalf("a fresh workspace's store is read-only:\n%s", r.s.String())
 	}
@@ -188,7 +188,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 	seedTodos(t, d, true)
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
-	r.s.WaitForText(t, "[ Add ]") // an empty tab: Add alone
+	r.s.WaitForText(t, "[ add ]") // an empty tab: Add alone
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "new task")
 	r.keys(t, decltest.Type("Ship the todos")...)
@@ -199,7 +199,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the prompt closed", func(sc string) bool { return !strings.Contains(sc, "new task") })
 	r.s.WaitForText(t, "status: open") // the cursor on the task added
-	r.s.WaitForText(t, "[ Status… ] [ Assign (A) ] [ Remove (d) ] [ Add ]")
+	r.s.WaitForText(t, "[ Status… ] [ Assign ] [ Remove (d) ] [ add ]")
 	for _, status := range []string{"in-progress", "deferred", "completed"} {
 		chooseStatusOf(t, r, status)
 		r.s.WaitFor(t, status, func(string) bool { return len(listedIn(t, d, status)) == 1 })
@@ -371,7 +371,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	var x, y int
 	r.s.WaitFor(t, "the task's action row", func(sc string) bool {
 		for i, line := range strings.Split(sc, "\n") {
-			if j := strings.Index(line, "[ Status… ] [ Assign (A) ] [ Remove (d) ] [ Add ]"); j >= 0 {
+			if j := strings.Index(line, "[ Status… ] [ Assign ] [ Remove (d) ] [ add ]"); j >= 0 {
 				x, y = len([]rune(line[:j])), i
 				return true
 			}
@@ -404,12 +404,11 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	}
 	lines := strings.Split(sc, "\n")
 	marks(y, lines[y], "Status…", "S")
-	// Assign's key is Shift+A, Add's is a: Assign says its key in parentheses, as Remove does, so
-	// one A is underlined per key
-	marks(y, lines[y], "Assign (", "")
-	marks(y, lines[y], "(A)", "A")
+	// Assign's key is Shift+A and Add's is a: Assign's capital A is underlined, and add is written
+	// lowercase so its underlined a reads as the lowercase key
+	marks(y, lines[y], "Assign", "A")
 	marks(y, lines[y], "Remove (d)", "d")
-	marks(y, lines[y], "Add ]", "A")
+	marks(y, lines[y], "add ]", "a")
 	for i, line := range lines {
 		if strings.Contains(line, "[ New ] [ Load ] [ Edit (L) ] [ Refresh ]") {
 			marks(i, line, "New", "N")

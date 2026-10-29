@@ -3302,8 +3302,8 @@ WHAT A KEY NEEDS
         <translation>&amp;Actual size  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
-        <translation>&amp;Add</translation>
+        <source>&amp;add</source>
+        <translation>&amp;add</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
         <source>&amp;Add from a git URL…</source>
@@ -3322,8 +3322,8 @@ WHAT A KEY NEEDS
         <translation>A&amp;rrange panel…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
-        <translation>Assign (&amp;A)</translation>
+        <source>&amp;Assign</source>
+        <translation>&amp;Assign</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>

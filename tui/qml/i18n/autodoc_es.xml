@@ -3299,8 +3299,8 @@ LO QUE NECESITA UNA TECLA
         <translation>T&amp;amaño real  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
-        <translation>&amp;Añadir</translation>
+        <source>&amp;add</source>
+        <translation>&amp;añadir</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
         <source>&amp;Add from a git URL…</source>
@@ -3319,8 +3319,8 @@ LO QUE NECESITA UNA TECLA
         <translation>O&amp;rganizar panel…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
-        <translation>Asignar (&amp;A)</translation>
+        <source>&amp;Assign</source>
+        <translation>&amp;Asignar</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>

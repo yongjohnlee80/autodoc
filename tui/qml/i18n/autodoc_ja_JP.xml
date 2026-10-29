@@ -3296,7 +3296,7 @@ WHAT A KEY NEEDS
         <translation>実際のサイズ(&amp;a)  (Ctrl+0)</translation>
     </message>
     <message id="autodoc.main.add">
-        <source>&amp;Add</source>
+        <source>&amp;add</source>
         <translation>追加(&amp;a)</translation>
     </message>
     <message id="autodoc.main.add_from_a_git_url">
@@ -3316,7 +3316,7 @@ WHAT A KEY NEEDS
         <translation>パネルを配置(&amp;r)…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>Assign (&amp;A)</source>
+        <source>&amp;Assign</source>
         <translation>割り当て(&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
