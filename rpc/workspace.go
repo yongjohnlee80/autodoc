@@ -235,7 +235,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "workspace.add", Effect: module.EffectSettings, Since: 2, Audience: user,
+		module.Rooted(module.Handle(module.Contract{Verb: "workspace.add", Effect: module.EffectSettings, Since: 2, Audience: user,
 			Result: "{name, root, state, …}", Errors: []int64{CodeConflict, CodeUnsupported},
 			Event: ev("workspace.added", "name", ""), Doc: "Adds a workspace and starts serving it; answers it as workspace.list does."},
 			func(ctx context.Context, p workspaceAdd) (*workspaceJSON, error) {
@@ -245,7 +245,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				out := listed(w)
 				return &out, nil
-			}),
+			})),
 		module.Handle(module.Contract{Verb: "workspace.rename", Effect: module.EffectSettings, Since: 2, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeConflict, CodeUnsupported}, Event: ev("workspace.renamed", "name", "to")},
 			func(ctx context.Context, p workspaceRename) (any, error) {
@@ -289,6 +289,9 @@ func (s *Server) workspaceVerbs() []module.Verb {
 			func(ctx context.Context, p workspaceSchema) (*schemaJSON, error) {
 				if s.setters.schema == nil {
 					return nil, errFixed
+				}
+				if err := s.boundedSchema(ctx, p.Workspace, p.Path); err != nil {
+					return nil, err
 				}
 				st, err := s.setters.schema.SetSchema(ctx, p.Workspace, p.Path)
 				if err != nil {

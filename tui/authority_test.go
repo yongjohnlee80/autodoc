@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // A gated script's work is bounded however it runs (ADR 1792004705 §4.2a.2–2c): its user-only
@@ -375,5 +376,41 @@ func TestACallWithoutAuthorityIsRefused(t *testing.T) {
 	gated := authority{script: "pkg", ws: "kb"}
 	if _, err := r.h.call(withAuthority(ctx, gated), "doc.read", "kb", "a.md"); err == nil || !strings.Contains(err.Error(), "cannot carry its bounds") {
 		t.Errorf("a gated call with no contracts known: %v, want refused", err)
+	}
+}
+
+// TestAGatedSaveHeldAcrossASwitchIsDropped: a gated save already in its worker when the TUI enters
+// another workspace is refused as it is sent, and the old workspace's file stays as it was.
+func TestAGatedSaveHeldAcrossASwitchIsDropped(t *testing.T) {
+	g := newGatedRig(t)
+	g.openByPicker(t, "a.md")
+	g.waitFile(t, "a.md")
+	held, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	free := func() { once.Do(func() { close(release) }) }
+	beforeSave = func() { close(held); <-release }
+	t.Cleanup(func() { free(); beforeSave = func() {} }) // a failing cell never leaves the worker held
+	g.mustRun(t, "saveit")
+	select {
+	case <-held:
+	case <-time.After(daemonWait):
+		t.Fatal("the save never reached its worker")
+	}
+	onLoop(g.running, func() bool { g.h.enter("kb2"); return true })
+	free()
+	g.waitKept(t, "the workspace changed")
+	if got := g.d.read(t, "kb", "a.md"); got != "kestrel\n" {
+		t.Errorf("the save held across the switch wrote %q", got)
+	}
+}
+
+// TestTheConfigFolderIsProtectedAbsolute: a TUI started with a relative config sends its config
+// folder absolute, as the daemon takes protect only absolute.
+func TestTheConfigFolderIsProtectedAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	r := runTUI(t, NewSession("unused", nil), Options{ConfigPath: filepath.Join("cfg", "config.toml")})
+	if got := onLoop(r, func() string { return r.h.cfgDir }); got != filepath.Join(dir, "cfg") {
+		t.Errorf("the config folder sent as %q, want %q", got, filepath.Join(dir, "cfg"))
 	}
 }

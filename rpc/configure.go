@@ -242,6 +242,11 @@ func (s *Server) configureVerb() module.Verb {
 			if s.setters.configure == nil {
 				return nil, errFixed
 			}
+			if c.SchemaPath != nil {
+				if err := s.boundedSchema(ctx, p.Workspace, *c.SchemaPath); err != nil {
+					return nil, err
+				}
+			}
 			return nil, s.setters.configure.Configure(ctx, p.Workspace, c)
 		})
 	v.Events = configureEvents

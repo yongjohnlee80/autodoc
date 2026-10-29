@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"path/filepath"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
@@ -48,12 +49,17 @@ func takeBounds(params []any, n int, proto int64) ([]any, *fsbounds.Bounds, erro
 }
 
 // bounded is h with a gated script's bounds taken off its params and put on its ctx, where every
-// workspace's files (fsbounds) and file.* read them.
-func bounded(h golibrpc.Handler, n int) golibrpc.Handler {
+// workspace's files (fsbounds) and file.* read them. A Root verb (one that adds a root or moves
+// where files are written) is refused to a bounded call: it would move the bounds themselves.
+func bounded(h golibrpc.Handler, n int, verb string, root bool) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		params, b, err := takeBounds(req.Params, n, sessionProtocol(req.Session))
 		if err != nil {
 			return nil, err
+		}
+		if b != nil && root {
+			return nil, &golibrpc.Error{Code: golibrpc.CodeAccessDenied,
+				Message: verb + " adds a root or moves where files are written: " + fsbounds.ErrRefused.Error()}
 		}
 		if b != nil {
 			r := *req
@@ -62,4 +68,31 @@ func bounded(h golibrpc.Handler, n int) golibrpc.Handler {
 		}
 		return h(ctx, req)
 	}
+}
+
+// boundedSchema refuses a gated script's schema path (workspace.set_schema, workspace.configure's
+// schema) that a bounded read of the workspace would not reach: the daemon reads that file itself,
+// for its fields and its errors, so it is held to what the script could read. "" (no schema) and
+// the user's call are not checked.
+func (s *Server) boundedSchema(ctx context.Context, ws, path string) error {
+	b, ok := fsbounds.From(ctx)
+	if !ok || path == "" {
+		return nil
+	}
+	w, found := s.workspaces.Get(ws)
+	if !found {
+		return errNoSuchWorkspace
+	}
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(w.Root(), filepath.FromSlash(path))
+	}
+	root, rel, err := s.guard.Locate(abs)
+	if err != nil {
+		return err
+	}
+	if root.Name != ws {
+		return fsbounds.Outside(path)
+	}
+	return s.guard.CheckRead(root, rel, b)
 }

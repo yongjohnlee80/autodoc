@@ -70,6 +70,7 @@ const (
 	whyFolder   = "is a folder: a script may move, copy or remove files, not folders"
 	whyDangling = "goes through a link that leads nowhere"
 	whyUnknown  = "cannot be resolved"
+	whyProtect  = "is checked against a protected folder that is not an absolute path"
 )
 
 func refuse(path, why string) error { return &Refusal{Path: path, Why: why} }

@@ -100,7 +100,11 @@ type Contract struct {
 	Result   string     `json:"result,omitempty"` // the result's shape, for people: "{tasks[], malformed[]}"
 	Errors   []int64    `json:"errors,omitempty"` // the public codes it may answer, beyond invalid params
 	Event    *EventSpec `json:"event,omitempty"`  // a success logs an event in sys.events; nil for none
-	Doc      string     `json:"doc,omitempty"`
+	// Root is a verb that adds a root or moves where files are written (a workspace, a todo store's
+	// directory): refused to a gated Lua script's call, whose bounds such a verb would move (ADR
+	// 1792004705 §4.2a.1; Johno's ruling 2026-10-30).
+	Root bool   `json:"-"`
+	Doc  string `json:"doc,omitempty"`
 }
 
 // Required is how many of the params a call must pass: those before the first optional one.
@@ -204,4 +208,10 @@ func (c Contract) Check() error {
 		}
 	}
 	return nil
+}
+
+// Rooted is v marked Root: a verb that adds a root or moves where files are written.
+func Rooted(v Verb) Verb {
+	v.Root = true
+	return v
 }

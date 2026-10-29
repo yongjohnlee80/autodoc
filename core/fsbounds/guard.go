@@ -2,6 +2,7 @@ package fsbounds
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -28,15 +29,17 @@ type Guard struct {
 }
 
 // NewGuard is a guard that never lets a bounded call reach protected (absolute paths, made or not)
-// or anything under them.
-func NewGuard(protected ...string) *Guard {
+// or anything under them. A relative path is an error, never dropped: the owning process makes its
+// paths absolute (filepath.Abs) before it guards them.
+func NewGuard(protected ...string) (*Guard, error) {
 	g := &Guard{}
 	for _, p := range protected {
-		if p != "" && filepath.IsAbs(p) {
-			g.protected = append(g.protected, filepath.Clean(p))
+		if !filepath.IsAbs(p) {
+			return nil, fmt.Errorf("fsbounds: a protected path must be absolute, not %q", p)
 		}
+		g.protected = append(g.protected, filepath.Clean(p))
 	}
-	return g
+	return g, nil
 }
 
 // SetServed tells the guard the workspaces served now: the innermost root holding a path anchors
@@ -87,6 +90,11 @@ func (g *Guard) check(ws Root, name string, b Bounds, o op) error {
 		return refuse(shown, whyOther)
 	case !o.write && b.Within != AnyWorkspace && b.Within != ws.Name:
 		return refuse(shown, whyOther)
+	}
+	for _, p := range b.Protect {
+		if !filepath.IsAbs(p) {
+			return refuse(shown, whyProtect) // the TUI makes its folder absolute: a relative one protects nothing
+		}
 	}
 	realRoot, tail, err := candidate(filepath.Clean(ws.Dir))
 	if err != nil || len(tail) > 0 {
@@ -201,8 +209,8 @@ func (g *Guard) ownPath(existing string, tail []string, extra []string) bool {
 			break
 		}
 	}
-	for _, p := range append(append([]string(nil), g.protected...), clean(extra)...) {
-		pe, ptail, err := candidate(p)
+	for _, p := range append(append([]string(nil), g.protected...), extra...) {
+		pe, ptail, err := candidate(filepath.Clean(p))
 		if err != nil {
 			return true // a protected path that does not resolve: fail closed
 		}
@@ -224,16 +232,6 @@ func (g *Guard) ownPath(existing string, tail []string, extra []string) bool {
 		}
 	}
 	return false
-}
-
-func clean(paths []string) []string {
-	var out []string
-	for _, p := range paths {
-		if p != "" && filepath.IsAbs(p) {
-			out = append(out, filepath.Clean(p))
-		}
-	}
-	return out
 }
 
 // foldedPrefix reports whether tail starts with prefix, each name compared NFC-normalised and

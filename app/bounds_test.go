@@ -286,3 +286,61 @@ func TestTheDaemonsOwnPathsAreRefused(t *testing.T) {
 		t.Errorf("the workspace's own file: %v", err)
 	}
 }
+
+// TestARelativeConfigIsProtectedWhereItIs: a daemon started with a relative --config protects the
+// folder it really names: a bounded write beside it is refused, never let through for the path
+// being relative.
+func TestARelativeConfigIsProtectedWhereItIs(t *testing.T) {
+	dir := short(t)
+	root := filepath.Join(dir, "kb")
+	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
+	sock := filepath.Join(dir, "a.sock")
+	made := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
+	body, err := os.ReadFile(made)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAt(t, filepath.Join(root, "conf", "config.toml"), string(body))
+	t.Chdir(root)
+	start(t, filepath.Join("conf", "config.toml"), sock)
+	f := &boundsFixture{t: t, root: root, sock: sock, cli: dial(t, sock), cfg: filepath.Join(dir, "elsewhere")}
+	_, err = f.try("file.write", filepath.Join(root, "conf", "lua", "x.md"), "x", "", f.bounds("kb"))
+	f.denied("a write beside a relative --config", err, "AutoDoc's own")
+	if f.file("conf/lua/x.md") != "" {
+		t.Errorf("the refused write landed")
+	}
+}
+
+// TestAScriptMovesNoRoot: a bounded call may not add a workspace or register or move a todo
+// store's root (the bounds would move with it: Johno's ruling 2026-10-30), nor point a schema at
+// a file a bounded read would not reach; the user's own workspace.add lands, and a schema in
+// .autodoc/ is taken.
+func TestAScriptMovesNoRoot(t *testing.T) {
+	f := newBoundsFixture(t)
+	for _, c := range []struct {
+		method string
+		params []any
+	}{
+		{"workspace.add", []any{"keys", filepath.Join(f.root, ".ssh")}},
+		{"todos.register", []any{filepath.Join(f.root, ".ssh")}},
+	} {
+		_, err := f.try(c.method, append(c.params, f.bounds("kb"))...)
+		f.denied(c.method, err, "adds a root or moves where files are written")
+	}
+	if _, err := f.try("file.read", filepath.Join(f.root, ".ssh", "id_x"), f.bounds("*")); err == nil {
+		t.Errorf("a refused workspace.add left .ssh readable")
+	}
+	for _, p := range []string{".ssh/id_x", filepath.Join(f.outside, "secret")} {
+		_, err := f.try("workspace.set_schema", "kb", p, f.bounds("kb"))
+		f.denied("a schema at "+p, err, "a script may not reach it")
+		_, err = f.try("workspace.configure", "kb", map[string]any{"schema": p}, f.bounds("kb"))
+		f.denied("configure's schema at "+p, err, "a script may not reach it")
+	}
+	if _, err := f.try("workspace.set_schema", "kb", ".autodoc/schema.yaml", f.bounds("kb")); err != nil {
+		t.Errorf("a schema in .autodoc/: %v", err)
+	}
+	writeAt(t, filepath.Join(f.outside, "w", "c.md"), "# C\n")
+	if _, err := f.try("workspace.add", "mine", filepath.Join(f.outside, "w")); err != nil {
+		t.Errorf("the user's own workspace.add: %v", err)
+	}
+}
