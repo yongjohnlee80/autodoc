@@ -88,6 +88,7 @@ func TestACommitThatWritesNoDocumentKeepsTheCodes(t *testing.T) {
 	e := newEnv(t, options{Provider: p, onRebuild: func() { rebuilds.Add(1) }})
 	e.put("a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	e.ready()
+	e.atHead() // the fill's own publications are done before the count is taken
 	before := rebuilds.Load()
 	e.fault.failOpen("c.md", errors.New("disk on fire"))
 	e.write("c.md", "# C\n\ngamma\n")
@@ -96,6 +97,7 @@ func TestACommitThatWritesNoDocumentKeepsTheCodes(t *testing.T) {
 		_, attempts, _ := e.job("c.md")
 		return attempts >= 1
 	})
+	e.atHead() // the failure's commit is published, not only written: its publication is what counts
 	if n := rebuilds.Load() - before; n != 0 {
 		t.Errorf("%d publications reloaded every document's codes after commits that wrote none", n)
 	}
