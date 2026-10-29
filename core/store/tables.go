@@ -233,6 +233,12 @@ func leftJoin(table, col, from, key string) dao.Expr {
 	return dao.LeftJoinOn(table, dao.On(dao.T(table, wsCol), dao.T(from, wsCol)), dao.On(dao.T(table, col), dao.T(from, key)))
 }
 
+func noMatchIn(table, col, from, key, eqCol string, eqVal any) dao.Predicate {
+	q := func(t, c string) string { return `"` + t + `"."` + c + `"` }
+	return dao.Raw(`NOT EXISTS (SELECT 1 FROM "`+table+`" WHERE `+q(table, wsCol)+` = `+q(from, wsCol)+
+		` AND `+q(table, eqCol)+` = ? AND `+q(table, col)+` = `+q(from, key)+`)`, eqVal)
+}
+
 // Model is an embedding model a workspace used.
 type Model struct {
 	WorkspaceID    int64

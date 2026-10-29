@@ -96,6 +96,13 @@ func InnerJoin(table, col, from, key string) dao.Expr { return innerJoin(table, 
 
 func LeftJoin(table, col, from, key string) dao.Expr { return leftJoin(table, col, from, key) }
 
+// NoMatchIn is the predicate of a row of from that table has no row for: none on the workspace
+// whose col equals from's key and whose eqCol is eqVal. It is a correlated NOT EXISTS, so table is
+// probed by its key for each row of from read and never read whole.
+func NoMatchIn(table, col, from, key, eqCol string, eqVal any) dao.Predicate {
+	return noMatchIn(table, col, from, key, eqCol, eqVal)
+}
+
 // NoText is the empty string as a column expression: what a COALESCE over a join that found no
 // row falls back to.
 var NoText = dao.SQL("''")
