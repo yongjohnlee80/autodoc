@@ -249,7 +249,9 @@ func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, boo
 // drawn as its link meanwhile (embedretry_gui.go).
 func (r *embedRenderer) retryUnread(lines []string, b guiwidget.Block, host guiwidget.DiagramHost) {
 	note, dest, ok := r.aloneAt(lines, b)
-	if ok && (decodesImage(dest) || export.IsMarkdownEmbed(dest)) {
+	// only a destination the exporter would read: a remote, absolute or escaping link is refused
+	// without a read, so nothing a retry waits for can change
+	if ok && ((decodesImage(dest) && export.IsImageEmbed(dest)) || export.IsMarkdownEmbed(dest)) {
 		r.retries.ask(host, b, note, dest)
 	}
 }

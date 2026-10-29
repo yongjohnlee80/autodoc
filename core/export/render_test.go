@@ -719,3 +719,17 @@ func TestHeadingsCarryGitHubAnchors(t *testing.T) {
 		t.Errorf("a heading with its source span lacks its id:\n%s", spans)
 	}
 }
+
+// IsImageEmbed follows EmbedImage's path rule: an image in the document's folder, never a URL, an
+// absolute path or one that climbs out, and only an image type.
+func TestIsImageEmbedFollowsTheReadRule(t *testing.T) {
+	for dest, want := range map[string]bool{
+		"a.png": true, "assets/b.jpg": true, "c.gif?v=1#x": true,
+		"https://example.com/a.png": false, "//example.com/a.png": false, "/abs/a.png": false,
+		"../out.png": false, "a.csv": false, "": false,
+	} {
+		if got := export.IsImageEmbed(dest); got != want {
+			t.Errorf("IsImageEmbed(%q) = %v, want %v", dest, got, want)
+		}
+	}
+}

@@ -140,3 +140,21 @@ func TestALaterFailedReadIsRetriedAfresh(t *testing.T) {
 		t.Fatal("the second rewrite: the embed was not drawn once its file was back; the first rewrite's retries were not forgotten")
 	}
 }
+
+// A link the exporter never reads, a URL, an absolute path or one that climbs out of the note's
+// folder, is laid out once and never retried: no file it could wait for will appear.
+func TestALinkTheExporterRefusesIsNeverRetried(t *testing.T) {
+	notes, _ := embedNote(t, nil)
+	delays := []time.Duration{20 * time.Millisecond, 20 * time.Millisecond, 20 * time.Millisecond}
+	for _, dest := range []string{"https://example.com/a.png", "/abs/a.png", "../out.png", "https://example.com/t.csv"} {
+		log := retryingNote(t, notes, nil, delays...)
+		_, onApp, paint := paintedEditor(t, log, "# Note\n\n![it]("+dest+")\n\nlast\n")
+		for range 40 { // about 400 ms: twice the delays' sum and more
+			onApp(paint)
+			time.Sleep(10 * time.Millisecond)
+		}
+		if laid, _ := log.at(2); laid != 1 {
+			t.Errorf("%s: laid out %d times, want once: the exporter refuses it without a read", dest, laid)
+		}
+	}
+}
