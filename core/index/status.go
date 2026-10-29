@@ -86,16 +86,14 @@ func (s *Store) statusSnap(ctx context.Context, fp string, between func()) (stat
 		if between != nil {
 			between()
 		}
-		if fp == "" {
-			n, err := alive(s.chunks(tx)).Count()
-			out.st.Chunks = int64(n)
-			return err
-		}
 		n, err := alive(s.chunks(tx)).Count()
 		if err != nil {
 			return err
 		}
 		out.st.Chunks = int64(n)
+		if fp == "" {
+			return nil
+		}
 		total, missing, err := s.textCoverage(tx, fp)
 		if err != nil {
 			return err
