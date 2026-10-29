@@ -533,31 +533,23 @@ func (s *Store) pendingUnrefused(tx *store.Tx, fp string, skip map[string]bool) 
 }
 
 // textCoverage is the distinct texts of the alive chunks, and how many of them each model fps
-// has no vector for, from one listing of the chunks.
+// has no vector for. Each is a COUNT(DISTINCT text_hash) in SQLite, the missing ones through the
+// same probe of the model's vectors by key as the fill's (noVector), so neither the chunks nor the
+// vectors are read into Go (AP-2).
 func (s *Store) textCoverage(tx *store.Tx, fps ...string) (total int64, missing []int64, err error) {
-	have := make([]map[string]bool, len(fps))
-	for i, fp := range fps {
-		if have[i], err = s.embeddedTexts(tx, fp); err != nil {
-			return 0, nil, err
-		}
-	}
-	rows, err := alive(s.chunks(tx)).Select(ChunkTextHash)
+	n, err := dao.CountDistinct(alive(s.chunks(tx)), ChunkTextHash)
 	if err != nil {
 		return 0, nil, err
 	}
-	texts := map[string]bool{}
-	for _, r := range rows {
-		texts[string(r.TextHash)] = true
-	}
 	missing = make([]int64, len(fps))
-	for h := range texts {
-		for i := range fps {
-			if !have[i][h] {
-				missing[i]++
-			}
+	for i, fp := range fps {
+		m, err := dao.CountDistinct(alive(s.chunks(tx)).WithPredicate(noVector(fp)), ChunkTextHash)
+		if err != nil {
+			return 0, nil, err
 		}
+		missing[i] = int64(m)
 	}
-	return int64(len(texts)), missing, nil
+	return int64(n), missing, nil
 }
 
 // publish swaps in the code snapshot of the commit just made: changed lists the documents whose

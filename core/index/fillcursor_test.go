@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/dao"
+
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -64,7 +66,8 @@ func TestTheFillResumesWhereItsLastBatchStopped(t *testing.T) {
 }
 
 // TestTheFillsChecksProbeTheModelsVectorsByKey: the statements that find texts with no vector (the
-// fill's batch, and the writer's check whether the target covers the workspace) are planned as a
+// fill's batch, the writer's check whether the target covers the workspace, and the status's count
+// of the texts a model lacks) are planned as a
 // lookup of embedding by key for each chunk, never a scan of the embedding table (no ANALYZE
 // statistics, as in every store).
 func TestTheFillsChecksProbeTheModelsVectorsByKey(t *testing.T) {
@@ -75,6 +78,12 @@ func TestTheFillsChecksProbeTheModelsVectorsByKey(t *testing.T) {
 		"unembedded": func(s *Store) error {
 			_, _, _, err := s.unembedded(ctx, "fp", nil, 0)
 			return err
+		},
+		"textCoverage": func(s *Store) error {
+			return s.read(ctx, func(tx *store.Tx) error {
+				_, _, err := s.textCoverage(tx, "fp")
+				return err
+			})
 		},
 		"pendingUnrefused": func(s *Store) error {
 			return s.read(ctx, func(tx *store.Tx) error {
@@ -88,10 +97,11 @@ func TestTheFillsChecksProbeTheModelsVectorsByKey(t *testing.T) {
 		if err := run(s); err != nil {
 			t.Fatal(name, err)
 		}
-		if len(capture.stmts) == 0 {
-			t.Fatalf("%s rendered no statement", name)
+		i := slices.IndexFunc(capture.stmts, func(q dao.QueryInfo) bool { return strings.Contains(q.SQL, "NOT EXISTS") })
+		if i < 0 {
+			t.Fatalf("%s rendered no statement that probes the vectors: %v", name, capture.stmts)
 		}
-		q := capture.stmts[0]
+		q := capture.stmts[i]
 		rows, err := e.raw.QueryContext(ctx, "EXPLAIN QUERY PLAN "+q.SQL, q.Args...)
 		if err != nil {
 			t.Fatal(name, err)

@@ -67,8 +67,8 @@ func (x *Indexer) statusSnapshot(ctx context.Context, fp string) (statusSnap, er
 	return snap, nil
 }
 
-// statusSnap computes a status in one read transaction. With a model, the alive chunks are listed
-// once, for their count and for the coverage. between, when set (tests only), runs after the counts
+// statusSnap computes a status in one read transaction. With a model, the alive chunks are counted,
+// and their texts and those the model has no vector for counted distinct (textCoverage). between, when set (tests only), runs after the counts
 // and before the coverage: a commit there is in no part of this snapshot.
 func (s *Store) statusSnap(ctx context.Context, fp string, between func()) (statusSnap, error) {
 	out := statusSnap{fp: fp}
@@ -91,26 +91,16 @@ func (s *Store) statusSnap(ctx context.Context, fp string, between func()) (stat
 			out.st.Chunks = int64(n)
 			return err
 		}
-		rows, err := alive(s.chunks(tx)).Select(ChunkTextHash)
+		n, err := alive(s.chunks(tx)).Count()
 		if err != nil {
 			return err
 		}
-		out.st.Chunks = int64(len(rows))
-		have, err := s.embeddedTexts(tx, fp)
+		out.st.Chunks = int64(n)
+		total, missing, err := s.textCoverage(tx, fp)
 		if err != nil {
 			return err
 		}
-		texts := make(map[string]bool, len(rows))
-		for _, r := range rows {
-			h := string(r.TextHash)
-			if !texts[h] {
-				texts[h] = true
-				if !have[h] {
-					out.missing++
-				}
-			}
-		}
-		out.texts = int64(len(texts))
+		out.texts, out.missing = total, missing[0]
 		out.unready, err = s.documents(tx).With(DocSemanticReady, int64(0)).Exists()
 		return err
 	})
