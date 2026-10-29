@@ -1927,6 +1927,7 @@
         "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)",
         "no model switch is under way",
         "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api",
+        "the base URL moves to another server: type the API key again, or remove it",
         "this build supplies its ranker",
         "a ranker's window is 10 to 100 candidates",
         "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model",

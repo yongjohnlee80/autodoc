@@ -62,6 +62,7 @@ var publicErrs = []module.PublicError{
 	{Err: store.ErrNoRanker, Code: CodeNotFound, Message: "no such ranker"},
 	{Err: store.ErrRankerTaken, Code: CodeConflict, Message: "another ranker has this name"},
 	{Err: store.ErrRankerInvalid, Code: golibrpc.CodeInvalidParams, Message: "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"},
+	{Err: store.ErrKeyForNewServer, Code: golibrpc.CodeInvalidParams, Message: "the base URL moves to another server: type the API key again, or remove it"},
 	{Err: ErrSuppliedRanker, Code: golibrpc.CodeInvalidParams, Message: "this build supplies its ranker"},
 	{Err: ErrWindow, Code: golibrpc.CodeInvalidParams, Message: ErrWindow.Error()},
 	// before the ranker's own errors: a ranked-or-nothing refusal wraps the ranker's reason too, and
