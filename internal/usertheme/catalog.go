@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/style"
 )
@@ -216,10 +217,15 @@ func (f checkedFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	return slices.Clone(f.c.entries), nil
 }
 
-// ExportStyle maps document RGB foreground/background to the nearest built-in RGB palette.
-// Terminal slots/defaults have no portable RGB values; those use mono. Ties keep built-in order.
+// ExportStyle is the export theme (core/export's palettes, which an HTML page and the preview are
+// drawn in) for theme name: its own when the exporter has one, else the export theme whose
+// document background and text are nearest name's. golib ships more themes than the exporter has
+// palettes for (nord), and a user theme has none, so each is drawn in the nearest one rather than
+// refused (Johno, 2026-10-29: a fallback, not a palette per theme). Terminal slots and defaults
+// have no portable RGB values; those use mono. Ties keep the export themes' order.
 func (c *Catalog) ExportStyle(name string) string {
-	if slices.Contains(themes.Names(), name) {
+	exportable := export.Themes()
+	if slices.Contains(exportable, name) {
 		return name
 	}
 	v, err := c.Values(name)
@@ -232,8 +238,11 @@ func (c *Catalog) ExportStyle(name string) string {
 		return "mono"
 	}
 	best, score := "light", int(^uint(0)>>1)
-	for _, n := range themes.Names() {
-		bv, _ := themes.Values(n)
+	for _, n := range exportable {
+		bv, err := themes.Values(n)
+		if err != nil {
+			continue
+		}
 		bb, ok := rgb(bv["document.base"])
 		bt, ok2 := rgb(bv["document.text"])
 		if !ok || !ok2 {
