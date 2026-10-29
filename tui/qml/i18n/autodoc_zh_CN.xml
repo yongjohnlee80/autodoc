@@ -3306,7 +3306,7 @@ WHAT A KEY NEEDS
         <translation>排列面板(&amp;R)…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>&amp;Assign</source>
+        <source>Assign (&amp;A)</source>
         <translation>分配(&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
