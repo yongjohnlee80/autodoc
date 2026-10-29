@@ -222,20 +222,20 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 33; the daemon serves sessions from protocol 12.
+Verbs at protocol 34; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
 | verb | params | result | since | audience | effect |
 | --- | --- | --- | --- | --- | --- |
-| `doc.outline` | `workspace` string, `path` string | `{version, headings: [{id, level, text, line, byte}]}` — A Markdown file's headings in order, with the version they were read at; other kinds have none. Codes: -32060, -32061, -32065. | 8 | agent | read |
-| `doc.read` | `workspace` string, `path` string | `{content, version}` — The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's. Codes: -32060, -32061, -32065. | 1 | agent | read |
-| `doc.read_raw` | `workspace` string, `path` string | `{content, version}` — doc.read on an HTML file's own bytes, where doc.read gives its derived text. Codes: -32060, -32061, -32065. | 19 | agent | read |
-| `doc.remove` | `workspace` string, `path` string, `version` string (the version read) | Codes: -32060, -32061, -32062, -32065. | 1 | for people's tools | write |
-| `doc.rename` | `workspace` string, `from` string, `to` string | Codes: -32060, -32061, -32062, -32065. | 1 | for people's tools | write |
+| `doc.outline` | `workspace` string, `path` string | `{version, headings: [{id, level, text, line, byte}]}` — A Markdown file's headings in order, with the version they were read at; other kinds have none. Codes: -32060, -32061, -32065, -32001. | 8 | agent | read |
+| `doc.read` | `workspace` string, `path` string | `{content, version}` — The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's. Codes: -32060, -32061, -32065, -32001. | 1 | agent | read |
+| `doc.read_raw` | `workspace` string, `path` string | `{content, version}` — doc.read on an HTML file's own bytes, where doc.read gives its derived text. Codes: -32060, -32061, -32065, -32001. | 19 | agent | read |
+| `doc.remove` | `workspace` string, `path` string, `version` string (the version read) | Codes: -32060, -32061, -32062, -32065, -32001. | 1 | for people's tools | write |
+| `doc.rename` | `workspace` string, `from` string, `to` string | Codes: -32060, -32061, -32062, -32065, -32001. | 1 | for people's tools | write |
 | `doc.validate` | `workspace` string, `path` string, `content` bytes (the text, saved or not) | `{diagnostics: [{field, line, rule, message}]}` — The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry. Codes: -32060. | 8 | agent | read |
-| `doc.write` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — Writes the file at version; a stale version is a conflict. Codes: -32060, -32061, -32062, -32066, -32065. | 1 | for people's tools | write |
-| `doc.write_raw` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — doc.write on an HTML file's own bytes, which doc.write refuses. Codes: -32060, -32061, -32062, -32066, -32065. | 19 | for people's tools | write |
+| `doc.write` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — Writes the file at version; a stale version is a conflict. Codes: -32060, -32061, -32062, -32066, -32065, -32001. | 1 | for people's tools | write |
+| `doc.write_raw` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — doc.write on an HTML file's own bytes, which doc.write refuses. Codes: -32060, -32061, -32062, -32066, -32065, -32001. | 19 | for people's tools | write |
 
 ### `embedding`
 
@@ -261,7 +261,7 @@ Verbs at protocol 33; the daemon serves sessions from protocol 12.
 
 | verb | params | result | since | audience | effect |
 | --- | --- | --- | --- | --- | --- |
-| `file.locate` | `path` string (absolute and clean) | `{workspace, path} \| nil` — The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Codes: -32001. | 17 | agent; unix socket only | read |
+| `file.locate` | `path` string (absolute and clean) | `{workspace, path} \| nil` — The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Under a gated script's bounds, the workspace that holds any file the script may read, indexed or not. Codes: -32001. | 17 | agent; unix socket only | read |
 | `file.read` | `path` string (absolute and clean) | `{content, version}` — A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params. Codes: -32001, -32061, -32065. | 17 | agent; unix socket only | read |
 | `file.read_raw` | `path` string (absolute and clean) | `{content, version}` — file.read on an HTML file's own bytes. Codes: -32001, -32061, -32065. | 19 | agent; unix socket only | read |
 | `file.write` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once. Codes: -32001, -32061, -32062, -32066, -32065. | 17 | for people's tools; unix socket only | write |

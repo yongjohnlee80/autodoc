@@ -106,7 +106,7 @@ func TestCatalogFilters(t *testing.T) {
 	for _, e := range one.Errors {
 		codes = append(codes, e.Code)
 	}
-	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
+	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
 		t.Errorf("doc.read: %v with codes %v", names(one), codes)
 	}
 	if none := s.Catalog(Protocol, "todos.*"); len(none.Verbs) != 0 || len(none.Errors) != 0 {

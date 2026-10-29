@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 33,
+  protocol = 34,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -205,7 +205,7 @@ return {
         { name = "path", type = "string" }
       },
       result = "{workspace, path} | nil",
-      doc = "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none.",
+      doc = "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Under a gated script's bounds, the workspace that holds any file the script may read, indexed or not.",
     },
     ["file.read"] = {
       since = 17, scope = "local-peer", audience = "agent",
