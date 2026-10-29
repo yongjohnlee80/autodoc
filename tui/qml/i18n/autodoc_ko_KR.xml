@@ -6329,6 +6329,10 @@ WHAT A KEY NEEDS
         <source>this terminal does not draw images (no kitty graphics)</source>
         <translation>이 터미널은 이미지를 그리지 않습니다 (kitty graphics 없음)</translation>
     </message>
+    <message id="autodoc.text.profiling.badge">
+        <source>◉ profiling</source>
+        <translation>◉ 프로파일링 중</translation>
+    </message>
     <message id="autodoc.text.progress.embedding_paused_by_workspace_setting">
         <source>embedding paused by workspace setting</source>
         <translation>워크스페이스 설정으로 임베딩 일시 중지됨</translation>

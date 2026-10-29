@@ -16,9 +16,6 @@ import (
 // toastProfiling is the CPU capture's toast.
 const toastProfiling = "profiling"
 
-// profilingMark is the status line's badge while a monitor runs.
-const profilingMark = "◉ profiling"
-
 type profilingFeature struct {
 	c    Core
 	prof *profiling.Profiler                 // the window's monitor; nil: this program has none
@@ -26,6 +23,8 @@ type profilingFeature struct {
 
 	window, backend string // the running monitors' directories; "" while off
 	lastDir         string // the folder Open profile folder opens: the last monitor's
+	windowBusy      bool   // the window's monitor is starting or stopping, off the loop
+	backendSeq      uint64 // sys.profile's answers: only the latest asked is applied (Ticket)
 }
 
 func newProfiling(c Core, prof *profiling.Profiler, open func(context.Context, string) error) *profilingFeature {
@@ -67,26 +66,29 @@ func (f *profilingFeature) Catalog() []Entry {
 
 // Connected asks the daemon whether its monitor runs: another client may have started it, and a
 // new daemon's is off.
-func (f *profilingFeature) Connected() {
+func (f *profilingFeature) Connected() { f.askBackend() }
+
+// LanguageChanged composes the badge in the new language.
+func (f *profilingFeature) LanguageChanged() { f.publish() }
+
+// askBackend asks the daemon whether its monitor runs, and shows its answer unless a newer
+// question was asked meanwhile (a toggle's): an old "off" never undoes a start. A daemon below
+// Protocol 32 answers nothing here; the item says why when it is used.
+func (f *profilingFeature) askBackend() {
+	t := f.c.Ticket(&f.backendSeq, TicketSession)
 	f.c.Go(func(ctx context.Context) any {
 		on, dir, err := backendProfile(ctx, f.c, "status")
-		if err != nil {
-			return nil // a daemon below Protocol 32: the item starts it and says why it cannot
-		}
-		if !on {
-			dir = ""
-		}
-		return dir
+		return backendAnswer{on: on, dir: dir, err: err}
 	}, func(v any) {
-		if dir, ok := v.(string); ok {
-			f.setBackend(dir)
+		if a := v.(backendAnswer); a.err == nil && t.Current() {
+			f.setBackend(a.dir)
 		}
 	})
 }
 
 func (f *profilingFeature) mark() string {
 	if f.window != "" || f.backend != "" {
-		return profilingMark
+		return f.c.Tr("autodoc.text.profiling.badge")
 	}
 	return ""
 }
@@ -105,56 +107,79 @@ func (f *profilingFeature) setBackend(dir string) {
 	f.publish()
 }
 
-// toggleWindow starts the window's monitor in its default folder, or stops it.
+// toggleWindow starts the window's monitor in its default folder, or stops it, off the loop (a
+// start writes its first sample and opens its socket; a stop waits for the sampler and writes the
+// last heap profile). A toggle while one is under way does nothing: the item shows the outcome.
 func (f *profilingFeature) toggleWindow() {
 	if f.prof == nil {
 		f.c.Notify(f.c.Tr("autodoc.notice.profiling.none"))
 		return
 	}
-	if f.window != "" {
-		dir := f.window
-		err := f.prof.Stop()
-		f.window = ""
-		f.publish()
-		if err != nil {
-			f.c.Failed(f.c.Tr("autodoc.notice.profiling.window_stopped"), err)
-			return
+	if f.windowBusy {
+		return
+	}
+	f.windowBusy = true
+	stopping, was := f.window != "", f.window
+	f.c.Go(func(context.Context) any {
+		if stopping {
+			return windowAnswer{err: f.prof.Stop()}
 		}
-		f.c.Notify(f.c.Trf("autodoc.notice.profiling.stopped", dir))
-		return
-	}
-	dir, err := f.prof.Start("")
-	if err != nil {
-		f.c.Failed(f.c.Tr("autodoc.notice.profiling.window_refused"), err)
-		return
-	}
-	f.window, f.lastDir = dir, dir
-	f.publish()
-	f.c.Notify(f.c.Trf("autodoc.notice.profiling.started", dir))
+		dir, err := f.prof.Start("")
+		return windowAnswer{dir: dir, err: err}
+	}, func(v any) {
+		f.windowBusy = false
+		a := v.(windowAnswer)
+		f.window = f.prof.Dir()
+		if f.window != "" {
+			f.lastDir = f.window
+		}
+		f.publish()
+		switch {
+		case stopping && a.err != nil:
+			f.c.Failed(f.c.Tr("autodoc.notice.profiling.window_stopped"), a.err)
+		case stopping:
+			f.c.Notify(f.c.Trf("autodoc.notice.profiling.stopped", was))
+		case a.err != nil:
+			f.c.Failed(f.c.Tr("autodoc.notice.profiling.window_refused"), a.err)
+		default:
+			f.c.Notify(f.c.Trf("autodoc.notice.profiling.started", a.dir))
+		}
+	})
 }
 
-// toggleBackend starts or stops the daemon's monitor through sys.profile.
+type windowAnswer struct {
+	dir string
+	err error
+}
+
+// toggleBackend starts or stops the daemon's monitor through sys.profile. Its answer wins over any
+// status asked before it (Ticket). A refusal is said, and the daemon asked again where its monitor
+// stands, since a stop that failed to write its last samples still stopped it.
 func (f *profilingFeature) toggleBackend() {
 	op := "start"
 	if f.backend != "" {
 		op = "stop"
 	}
 	was := f.backend
+	t := f.c.Ticket(&f.backendSeq, TicketSession)
 	f.c.Go(func(ctx context.Context) any {
 		on, dir, err := backendProfile(ctx, f.c, op)
 		return backendAnswer{on: on, dir: dir, err: err}
 	}, func(v any) {
+		if !t.Current() {
+			return
+		}
 		a := v.(backendAnswer)
 		if a.err != nil {
 			f.c.Failed(f.c.Tr("autodoc.notice.profiling.backend_refused"), a.err)
-			return
-		}
-		if !a.on {
-			f.setBackend("")
-			f.c.Notify(f.c.Trf("autodoc.notice.profiling.stopped", was))
+			f.askBackend()
 			return
 		}
 		f.setBackend(a.dir)
+		if !a.on {
+			f.c.Notify(f.c.Trf("autodoc.notice.profiling.stopped", was))
+			return
+		}
 		f.c.Notify(f.c.Trf("autodoc.notice.profiling.started", a.dir))
 	})
 }
