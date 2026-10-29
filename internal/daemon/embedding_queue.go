@@ -13,11 +13,21 @@ import (
 // focused workspace gets sixteen batches before one background turn; thus it
 // gets at least 16/17 of the device while an endlessly edited focused file
 // cannot starve the remaining workspaces.
+//
+// queuePoll is how long a workspace whose batch failed waits before it is tried
+// again. queueRecheck is how long one whose batch found no work waits when
+// nothing rouses it: new work announces itself (a commit's chunks, a focus, a
+// search, a policy change, a provider set up all rouse the workspace), and a
+// refused text's retry time shortens the wait to that time, so the recheck is
+// only a safety net for a rousing that was lost. Finding no work costs a scan
+// of the workspace's chunks, so a short recheck is an idle daemon's main cost:
+// at 5 s, eight workspaces of 40k sections kept a core 5-12% busy.
 const (
-	focusTTL   = 15 * time.Second
-	searchTTL  = 3 * time.Minute
-	queuePoll  = 5 * time.Second
-	focusBurst = 16
+	focusTTL     = 15 * time.Second
+	searchTTL    = 3 * time.Minute
+	queuePoll    = 5 * time.Second
+	queueRecheck = 10 * time.Minute
+	focusBurst   = 16
 )
 
 type embeddingQueue struct {
@@ -116,15 +126,39 @@ func (q *embeddingQueue) rouse(name string) {
 	}
 }
 
-// finish ends a batch of name: a batch with no work, or a failed one, idles name for queuePoll,
-// unless name was roused while it ran: work that arrived meanwhile (a commit's chunks) is taken at
-// once. Called with q.mu held.
-func (q *embeddingQueue) finish(name string, worked bool, err error) {
+// finish ends a batch of name. A failed batch idles name for queuePoll. A batch with no work idles
+// it until retryIn has passed, the time until a text the provider refused may be tried again (0:
+// none waits), and for at most queueRecheck: until then only a rousing brings it work. Neither
+// idles name when it was roused while the batch ran: work that arrived meanwhile (a commit's
+// chunks) is taken at once. Called with q.mu held.
+func (q *embeddingQueue) finish(name string, worked bool, err error, retryIn time.Duration) {
 	delete(q.running, name)
-	if (err != nil || !worked) && !q.woken[name] {
-		q.idle[name] = time.Now().Add(queuePoll)
+	if !q.woken[name] {
+		switch {
+		case err != nil:
+			q.idle[name] = time.Now().Add(queuePoll)
+		case !worked:
+			wait := queueRecheck
+			if retryIn > 0 {
+				wait = min(wait, retryIn)
+			}
+			q.idle[name] = time.Now().Add(wait)
+		}
 	}
 	delete(q.woken, name)
+}
+
+// nextIdleEnd is how long until the first idle mark among candidates ends, the time the queue must
+// choose again when nothing wakes it; queueRecheck when none is idle. Called with q.mu held.
+func (q *embeddingQueue) nextIdleEnd(candidates map[string]*served) time.Duration {
+	wait := queueRecheck
+	now := time.Now()
+	for name := range candidates {
+		if until, ok := q.idle[name]; ok {
+			wait = min(wait, max(until.Sub(now), 0))
+		}
+	}
+	return wait
 }
 
 func (q *embeddingQueue) start() {
@@ -199,10 +233,12 @@ func (q *embeddingQueue) queueState(name string) (state, behind string) {
 }
 
 func (q *embeddingQueue) run(ctx context.Context) {
-	// NOTE: new work signals wake at once. A workspace with no work is skipped for queuePoll
-	// (idle), and nothing announces that time passing: the tick chooses again then.
-	tick := time.NewTicker(queuePoll)
-	defer tick.Stop()
+	// NOTE: new work signals wake at once. An idle workspace is skipped until its idle mark ends
+	// (finish), and nothing announces that time passing: the timer, set to the first mark's end,
+	// chooses again then. An idle daemon's queue therefore sleeps until a rousing or the earliest
+	// due time, rather than waking on a fixed tick.
+	timer := time.NewTimer(queueRecheck)
+	defer timer.Stop()
 	for ctx.Err() == nil {
 		q.host.mu.Lock()
 		candidates := make(map[string]*served, len(q.host.served))
@@ -214,11 +250,15 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		q.host.mu.Unlock()
 		name, position := q.choose(candidates)
 		if name == "" {
+			q.mu.Lock()
+			wait := q.nextIdleEnd(candidates)
+			q.mu.Unlock()
+			timer.Reset(wait)
 			select {
 			case <-ctx.Done():
 				return
 			case <-q.wake:
-			case <-tick.C:
+			case <-timer.C:
 			}
 			continue
 		}
@@ -228,8 +268,9 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		worked, err := s.ix.EmbedBatch(batchCtx, position)
 		stop()
 		cancel()
+		retryIn := s.ix.EmbedRetryIn()
 		q.mu.Lock()
-		q.finish(name, worked, err)
+		q.finish(name, worked, err, retryIn)
 		q.mu.Unlock()
 		if err != nil && ctx.Err() == nil && s.ctx.Err() == nil {
 			logger.Warning(q.host.opts.Log, err, logger.Fields{"event": "embedding.queue.batch.failed", "workspace": name})

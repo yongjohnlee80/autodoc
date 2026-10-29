@@ -809,6 +809,10 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 		es.Semantic != SemanticPartial || len(es.RefusedTexts) != 1 || es.RefusedTexts[0].Path != "y.md" {
 		t.Errorf("status %+v", es)
 	}
+	// the daemon's queue leaves the workspace alone until the refusal may be retried
+	if wait := e.ix.EmbedRetryIn(); wait <= 0 || wait > refusedFor {
+		t.Errorf("EmbedRetryIn with one refused text: %v, want within (0, %v]", wait, refusedFor)
+	}
 	b.mu.Lock()
 	b.refuse = ""
 	b.mu.Unlock()
@@ -822,6 +826,9 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 	e.ready2("y.md")
 	if es := e.embStatus(); es.Refused != 0 || es.Pending != 0 {
 		t.Errorf("successful retry left refusal behind: %+v", es)
+	}
+	if wait := e.ix.EmbedRetryIn(); wait != 0 {
+		t.Errorf("EmbedRetryIn with no refusal left: %v, want 0", wait)
 	}
 }
 

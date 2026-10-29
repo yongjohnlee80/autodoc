@@ -410,8 +410,8 @@ func TestInFlightBatchStopsBeforeProviderReplacementOrWorkspaceRemoval(t *testin
 
 // A workspace roused while a batch of its own runs (its chunks committed, it was focused, searched
 // or its policy set) is chosen again as soon as that batch ends, even when the batch found no work:
-// the rousing outlives the batch. Without one, a batch with no work still idles the workspace for
-// queuePoll, so an idle workspace is not polled in a loop.
+// the rousing outlives the batch. Without one, a batch with no work still idles the workspace, so
+// an idle workspace is not polled in a loop.
 func TestARousingDuringABatchOutlivesItsEmptyAnswer(t *testing.T) {
 	for _, c := range []struct {
 		how   string
@@ -430,7 +430,7 @@ func TestARousingDuringABatchOutlivesItsEmptyAnswer(t *testing.T) {
 		}
 		c.rouse(q, "kb") // while kb's batch runs
 		q.mu.Lock()
-		q.finish("kb", false, nil) // the batch found no work: it ran before the commit
+		q.finish("kb", false, nil, 0) // the batch found no work: it ran before the commit
 		q.mu.Unlock()
 		if name, _ := q.choose(candidates); name != "kb" {
 			t.Errorf("%s while its batch ran, then an empty batch: chose %q, want kb at once", c.how, name)
@@ -442,10 +442,10 @@ func TestARousingDuringABatchOutlivesItsEmptyAnswer(t *testing.T) {
 	candidates := map[string]*served{"kb": {}}
 	q.choose(candidates)
 	q.mu.Lock()
-	q.finish("kb", false, nil)
+	q.finish("kb", false, nil, 0)
 	q.mu.Unlock()
 	if name, _ := q.choose(candidates); name != "" {
-		t.Errorf("an empty batch with no rousing: chose %q, want kb idle for queuePoll", name)
+		t.Errorf("an empty batch with no rousing: chose %q, want kb idle", name)
 	}
 	q.wakeWorkspace("kb") // roused after its batch: an ordinary wake, nothing kept for later
 	q.mu.Lock()
@@ -467,7 +467,7 @@ func TestARenameDuringARousedBatchLeavesNoFlag(t *testing.T) {
 	q.wakeWorkspace("kb") // its chunks committed while its batch ran
 	q.rename("kb", "notes")
 	q.mu.Lock()
-	q.finish("kb", false, nil) // the batch ends under the name it started with
+	q.finish("kb", false, nil, 0) // the batch ends under the name it started with
 	left := len(q.woken)
 	q.mu.Unlock()
 	if left != 0 {
@@ -475,5 +475,62 @@ func TestARenameDuringARousedBatchLeavesNoFlag(t *testing.T) {
 	}
 	if name, _ := q.choose(map[string]*served{"notes": {}}); name != "notes" {
 		t.Errorf("the renamed workspace: chose %q, want notes at once", name)
+	}
+}
+
+// A batch that found no work idles its workspace until something rouses it, not for a fixed poll:
+// each empty batch scans the workspace's chunks, so an idle daemon polling every workspace every few
+// seconds stays busy with nothing to do. A text the provider refused shortens the wait to its retry
+// time; a failed batch still waits only queuePoll; and the queue's timer ends with the first idle
+// mark, so a due workspace is chosen without a tick.
+func TestAnEmptyBatchIdlesItsWorkspaceUntilRoused(t *testing.T) {
+	m, _ := open(t)
+	q := m.queue
+	candidates := map[string]*served{"kb": {}}
+	idleFor := func(retryIn time.Duration, err error) time.Duration {
+		t.Helper()
+		if name, _ := q.choose(candidates); name != "kb" {
+			t.Fatalf("chose %q, want kb", name)
+		}
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		q.finish("kb", false, err, retryIn)
+		wait := time.Until(q.idle["kb"])
+		delete(q.idle, "kb")
+		return wait
+	}
+	if wait := idleFor(0, nil); wait < queueRecheck-time.Minute {
+		t.Errorf("no work, nothing refused: idle %v, want about queueRecheck (%v)", wait, queueRecheck)
+	}
+	if wait := idleFor(30*time.Second, nil); wait < 29*time.Second || wait > 30*time.Second {
+		t.Errorf("no work, a refusal due in 30s: idle %v, want 30s", wait)
+	}
+	if wait := idleFor(0, context.DeadlineExceeded); wait > queuePoll {
+		t.Errorf("a failed batch: idle %v, want at most queuePoll (%v)", wait, queuePoll)
+	}
+
+	q.choose(candidates)
+	q.mu.Lock()
+	q.finish("kb", false, nil, 0)
+	q.mu.Unlock()
+	if name, _ := q.choose(candidates); name != "" {
+		t.Fatalf("an idle workspace was chosen again at once: %q", name)
+	}
+	q.wakeWorkspace("kb") // its chunks committed
+	if name, _ := q.choose(candidates); name != "kb" {
+		t.Errorf("an idle workspace roused by a commit: chose %q, want kb at once", name)
+	}
+
+	q.mu.Lock()
+	q.idle["kb"] = time.Now().Add(40 * time.Second)
+	q.idle["notes"] = time.Now().Add(20 * time.Second)
+	wait := q.nextIdleEnd(map[string]*served{"kb": {}, "notes": {}})
+	none := q.nextIdleEnd(map[string]*served{"other": {}})
+	q.mu.Unlock()
+	if wait < 19*time.Second || wait > 20*time.Second {
+		t.Errorf("the queue's next wake with marks ending in 20s and 40s: %v, want 20s", wait)
+	}
+	if none != queueRecheck {
+		t.Errorf("the queue's next wake with no idle mark: %v, want queueRecheck", none)
 	}
 }
