@@ -13,6 +13,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/gui/record"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+
+	"github.com/yongjohnlee80/autodoc/core/config"
 )
 
 // A launch with a debug recorder holds the TUI's own trace in the recording: tui
@@ -33,7 +35,8 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 	var spawns atomic.Int32
 	spawn := func(configPath, stateDir string) (string, error) {
 		spawns.Add(1)
-		startDaemonOn(t, sock, map[string][]string{"kb": {"a.md", "a\n"}})
+		// the config's own store: a client bound to it believes only a daemon that serves it
+		startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{storeAt: filepath.Join(dir, "data", config.StoreName)})
 		return filepath.Join(stateDir, "serve.log"), nil
 	}
 	var buf bytes.Buffer
