@@ -248,8 +248,7 @@ func (p imagePicture) Paint(c gui.Canvas) {
 // decoded once per file and kept while the file is unchanged; false for a file that is not an image
 // the standard decoders read (PNG, JPEG, GIF).
 func (r *embedRenderer) image(note, dest string, width float32) (imagePicture, bool) {
-	ext := strings.ToLower(path.Ext(dest))
-	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" {
+	if !decodesImage(dest) {
 		return imagePicture{}, false
 	}
 	data, ok := export.EmbedImage(note, dest)
@@ -266,6 +265,12 @@ func (r *embedRenderer) image(note, dest string, width float32) (imagePicture, b
 	}
 	w := min(width, full.W)
 	return imagePicture{img: img, size: gui.Size{W: w, H: full.H * w / full.W}}, true
+}
+
+// decodesImage reports whether dest names an image the Rendered view decodes: a PNG, a JPEG or a GIF.
+func decodesImage(dest string) bool {
+	ext := strings.ToLower(path.Ext(dest))
+	return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif"
 }
 
 // decodedImages are the images drawn so far, by note and destination, each kept with the digest of
