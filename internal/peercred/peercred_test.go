@@ -12,17 +12,17 @@ import (
 	"time"
 )
 
-// playAnotherUser makes this process expect another uid than its own, so every real peer (this
-// test's own connections) is "another user's". The caller must stop every goroutine that reads it
-// before the test ends, for the restore.
-func playAnotherUser(t *testing.T) {
+// playAnotherUser makes this process expect another uid than its own (PlayUser), so every real peer
+// (this test's own connections) is "another user's", until the restore it answers with, or the
+// test's end.
+func playAnotherUser(t *testing.T) (restore func()) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("no peer credentials on " + runtime.GOOS)
 	}
-	other := os.Getuid() + 1
-	ourUID = func() int { return other }
-	t.Cleanup(func() { ourUID = os.Getuid })
+	restore = PlayUser(os.Getuid() + 1)
+	t.Cleanup(restore)
+	return restore
 }
 
 // socketIn listens on a unix socket in a fresh short directory.
@@ -67,7 +67,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 	accepted := make(chan net.Conn, 1)
 	ln := Listener(raw, func(err error) { refused <- err })
 
-	playAnotherUser(t)
+	restore := playAnotherUser(t)
 	wait := serve(ln, accepted)
 	c, err := net.Dial("unix", path)
 	if err != nil {
@@ -91,7 +91,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 	}
 	wait()
 
-	ourUID = os.Getuid // the control: this user's connection is handed on
+	restore() // the control: this user's connection is handed on
 	raw2, path2 := socketIn(t)
 	wait2 := serve(Listener(raw2, func(err error) { t.Errorf("this user's connection refused: %v", err) }), accepted)
 	defer wait2()

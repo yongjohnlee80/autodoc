@@ -49,13 +49,15 @@ func listen(path string) (net.Listener, error) {
 	return bindPrivate(path)
 }
 
-// bindPrivate binds the unix socket at path with the umask 0177 for the bind alone, so the socket
-// file is created 0600: with the process's own umask (often 0022 or 0002) it would be born 0755 or
-// 0775 and stay so until ownSocket's chmod, a window in which the group could connect.
-// NOTE: the umask is the process's, not the goroutine's: a file another goroutine creates during
-// the bind is created no wider than 0600, which fails safe.
+// bindPrivate binds the unix socket at path with the umask 0077 for the bind alone, so the socket
+// file is created with no group or other bits: with the process's own umask (often 0022 or 0002) it
+// would be born 0755 or 0775 and stay so until ownSocket's chmod, a window in which the group could
+// connect.
+// NOTE: the umask is the process's, not the goroutine's: a file or folder another goroutine creates
+// during the bind is its owner's alone, which fails safe; 0077 rather than 0177 leaves a folder its
+// x bit, so one made then stays usable.
 func bindPrivate(path string) (net.Listener, error) {
-	old := syscall.Umask(0o177)
+	old := syscall.Umask(0o077)
 	defer syscall.Umask(old)
 	return net.Listen("unix", path)
 }

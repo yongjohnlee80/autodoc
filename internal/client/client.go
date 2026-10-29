@@ -217,7 +217,8 @@ func (s *Session) heldBack(since time.Time) bool {
 // protocol. The generation moves as soon as Connect begins. While another process's restart
 // handoff stands (heldBack), it only dials, the probe window suspended, and connects as soon as
 // that restart's daemon answers; once the handoff ends, dies, lapses or reaches this Connect's
-// cap, a full window starts, with the spawn allowed. ctx ends it at any point.
+// cap, a full window starts, with the spawn allowed. ctx ends it at any point, and so does a socket
+// another user's process listens on (peercred.ErrOtherUser), at once.
 func (s *Session) Connect(ctx context.Context) error {
 	s.mu.Lock()
 	old := s.client
@@ -237,9 +238,12 @@ func (s *Session) Connect(ctx context.Context) error {
 	var cli *golibrpc.Client
 	for {
 		var err error
-		cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+		cli, err = s.dial(ctx)
 		if err == nil {
 			break
+		}
+		if errors.Is(err, peercred.ErrOtherUser) {
+			return err // another user's process holds the socket: no wait or spawn makes it this user's
 		}
 		switch {
 		case s.heldBack(heldSince):
@@ -315,7 +319,7 @@ func (s *Session) hello(ctx context.Context, cli *golibrpc.Client) (*golibrpc.Cl
 		if info.Protocol >= rpc.Protocol || info.Protocol < rpc.MinProtocol {
 			return nil, nil, &MismatchError{Client: rpc.Protocol, Server: info.Protocol, Version: info.Version}
 		}
-		if cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial)); err != nil {
+		if cli, err = s.dial(ctx); err != nil {
 			return nil, nil, err
 		}
 		if res, err = cli.Call(ctx, "sys.hello", s.helloInfo(info.Protocol)); err != nil {
@@ -349,8 +353,14 @@ func (s *Session) mismatch(ctx context.Context) error {
 	return &MismatchError{Client: rpc.Protocol, Server: info.Protocol, Version: info.Version}
 }
 
+// dial connects to the daemon's socket, refusing one another user's process listens on
+// (peercred.ErrOtherUser): every connection of the session's is dialled here.
+func (s *Session) dial(ctx context.Context) (*golibrpc.Client, error) {
+	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+}
+
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {
-	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	cli, err := s.dial(ctx)
 	if err != nil {
 		return OlderServer{}, err
 	}
@@ -388,7 +398,7 @@ func (s *Session) StopStale(ctx context.Context) error {
 	if old == nil {
 		return errors.New("tui: no older backend to stop")
 	}
-	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	cli, err := s.dial(ctx)
 	if err != nil {
 		return err
 	}

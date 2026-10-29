@@ -17,6 +17,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // THE EDITOR SOCKET (ADR 1792014854): the page's functions as tools for the agents this TUI starts.
@@ -92,7 +93,9 @@ func (h *Host) startEditorSocket(dir string) {
 		h.p.Post(func() { h.failed(h.tr("autodoc.notice.editorsocket.the_editor_socket_for_agents"), err) })
 		return
 	}
-	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
+	// another user's process is closed unanswered, as at the daemon's socket; the folder already
+	// keeps it out, so this is the second lock
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(peercred.Listener(ln, nil)))
 	for verb, handler := range h.editorVerbs() {
 		srv.Handle(verb, handler)
 	}
