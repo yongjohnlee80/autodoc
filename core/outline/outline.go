@@ -155,7 +155,10 @@ func HeadingIDs(root *markdown.Node, src []byte) []string {
 // eachHeading calls visit with each heading under root in document order, its ID and its text.
 // Frontmatter is not the file's text, and is skipped.
 func eachHeading(root *markdown.Node, src []byte, visit func(n *markdown.Node, id, text string)) {
-	seen := map[string]int{}
+	// occurrences is GitHub's slugger's: each ID given out, and for a repeated slug how many times
+	// it has been numbered. A repeat takes the next free "-N"; checking every ID given out, not
+	// only the slugs, keeps "Foo", "Foo", "Foo-1" from giving foo-1 twice (foo, foo-1, foo-1-1).
+	occurrences := map[string]int{}
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
 		for c := n.FirstChild; c != nil; c = c.Next {
@@ -164,13 +167,16 @@ func eachHeading(root *markdown.Node, src []byte, visit func(n *markdown.Node, i
 			}
 			if c.Kind == markdown.KindHeading {
 				text := strings.TrimSpace(plain(c, src))
-				id := slug(text)
-				if count := seen[id]; count > 0 {
-					seen[id]++
-					id = fmt.Sprintf("%s-%d", id, count)
-				} else {
-					seen[id] = 1
+				base := slug(text)
+				id := base
+				for {
+					if _, taken := occurrences[id]; !taken {
+						break
+					}
+					occurrences[base]++
+					id = fmt.Sprintf("%s-%d", base, occurrences[base])
 				}
+				occurrences[id] = 0
 				visit(c, id, text)
 				continue
 			}
@@ -206,13 +212,14 @@ func plain(n *markdown.Node, src []byte) string {
 	return b.String()
 }
 
-// slug is a heading's anchor as GitHub writes it: lowercase, letters, digits, '-' and '_' kept,
-// spaces as '-', the rest dropped.
+// slug is a heading's anchor as GitHub writes it: lowercase; letters, combining marks, numbers,
+// '-' and connector punctuation such as '_' kept; spaces as '-'; the rest dropped. Marks matter for
+// scripts written with them (नमस्ते keeps its virama) and for decomposed accents (e + U+0301).
 func slug(text string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(text) {
 		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_':
+		case unicode.IsLetter(r) || unicode.Is(unicode.M, r) || unicode.IsNumber(r) || r == '-' || unicode.Is(unicode.Pc, r):
 			b.WriteRune(r)
 		case r == ' ':
 			b.WriteByte('-')

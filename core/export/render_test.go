@@ -695,7 +695,7 @@ func TestHeadingsCarryGitHubAnchors(t *testing.T) {
 		`<h2 id="install-1">Install</h2>`,
 		`<h2 id="install-2">Install</h2>`,
 		`<h2 id="go-install-and-mise"><code>go install</code> and mise!</h2>`,
-		`<h3 id="whats-new-v03">What&#39;s new? (v0.3)</h3>`,
+		`<h3 id="whats-new-v03">What's new? (v0.3)</h3>`,
 		`<h2 id="café--crème">Café &amp; Crème</h2>`,
 		`<h2 id="quoted">Quoted</h2>`,
 		`<h2 id="logo">`,
