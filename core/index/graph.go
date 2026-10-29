@@ -216,9 +216,11 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 // documents reached (start first), and the links among them. Each step reads only its frontier's
 // links, through link_src and link_dst, in parts small enough for one IN list.
 func (s *Store) neighbourhood(tx *store.Tx, start int64, depth int, kinds []string) ([]int64, []*LinkRow, error) {
-	resolved := func() dao.DAO[*LinkRow, LinkField, int64] {
-		return kindsIn(s.linksOut(tx), kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`))
-	}
+	// NOTE: no "dst_doc IS NOT NULL" here. Without statistics, SQLite takes that predicate for a
+	// range on link_dst and walks the workspace's resolved links instead of seeking link_src; an
+	// unresolved link (a nil destination) is skipped in Go instead, and a dst_doc IN list never
+	// matches one.
+	links := func() dao.DAO[*LinkRow, LinkField, int64] { return kindsIn(s.linksOut(tx), kinds) }
 	reached := map[int64]bool{start: true}
 	ids := []int64{start}
 	frontier := []int64{start}
@@ -231,14 +233,16 @@ func (s *Store) neighbourhood(tx *store.Tx, start int64, depth int, kinds []stri
 			}
 		}
 		for part := range inParts(frontier) {
-			out, err := resolved().With(LinkSrc, part...).Select(LinkDst)
+			out, err := links().With(LinkSrc, part...).Select(LinkDst)
 			if err != nil {
 				return nil, nil, err
 			}
 			for _, l := range out {
-				visit(*l.DstDoc)
+				if l.DstDoc != nil {
+					visit(*l.DstDoc)
+				}
 			}
-			in, err := resolved().With(LinkDst, part...).Select(LinkSrc)
+			in, err := links().With(LinkDst, part...).Select(LinkSrc)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -249,19 +253,19 @@ func (s *Store) neighbourhood(tx *store.Tx, start int64, depth int, kinds []stri
 		ids = append(ids, next...)
 		frontier = next
 	}
-	var links []*LinkRow
+	var among []*LinkRow
 	for part := range inParts(ids) {
-		rows, err := resolved().With(LinkSrc, part...).Select(LinkSrc, LinkDst, LinkKind)
+		rows, err := links().With(LinkSrc, part...).Select(LinkSrc, LinkDst, LinkKind)
 		if err != nil {
 			return nil, nil, err
 		}
 		for _, l := range rows {
-			if reached[*l.DstDoc] {
-				links = append(links, l)
+			if l.DstDoc != nil && reached[*l.DstDoc] {
+				among = append(among, l)
 			}
 		}
 	}
-	return ids, links, nil
+	return ids, among, nil
 }
 
 // docsByID is the rows graph.map shows of the documents ids, in parts; every document when ids is
@@ -312,8 +316,9 @@ func (s *Store) tagsByDoc(tx *store.Tx, ids []int64) (map[int64][]string, error)
 // supersedes, by the resolved supersession links: a supersedes link's target, and a superseded_by
 // link's source.
 func (s *Store) superseded(tx *store.Tx, ids []int64) (map[int64]bool, error) {
+	// no "dst_doc IS NOT NULL" (see neighbourhood): an unresolved link is skipped below
 	supersession := func() dao.DAO[*LinkRow, LinkField, int64] {
-		return kindsIn(s.linksOut(tx), []string{"supersedes", "superseded_by"}).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`))
+		return kindsIn(s.linksOut(tx), []string{"supersedes", "superseded_by"})
 	}
 	var rows []*LinkRow
 	if ids == nil {
@@ -336,8 +341,8 @@ func (s *Store) superseded(tx *store.Tx, ids []int64) (map[int64]bool, error) {
 	}
 	out := map[int64]bool{}
 	for _, l := range rows {
-		if l.SrcDoc == *l.DstDoc {
-			continue // a document naming itself supersedes nothing
+		if l.DstDoc == nil || l.SrcDoc == *l.DstDoc {
+			continue // unresolved, or a document naming itself, which supersedes nothing
 		}
 		if l.Kind == "supersedes" {
 			out[*l.DstDoc] = true
