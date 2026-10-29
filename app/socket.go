@@ -23,7 +23,7 @@ type socketIdentity struct {
 // alone, for the caller to probe: an answer, and also a timeout or a permission denied, which a live
 // listener can give as well.
 func listen(path string) (net.Listener, error) {
-	ln, err := net.Listen("unix", path)
+	ln, err := bindPrivate(path)
 	if err == nil || !errors.Is(err, syscall.EADDRINUSE) {
 		return ln, err
 	}
@@ -46,11 +46,23 @@ func listen(path string) (net.Listener, error) {
 	if rerr := os.Remove(path); rerr != nil {
 		return nil, fmt.Errorf("stale socket %s: %w", path, rerr)
 	}
+	return bindPrivate(path)
+}
+
+// bindPrivate binds the unix socket at path with the umask 0177 for the bind alone, so the socket
+// file is created 0600: with the process's own umask (often 0022 or 0002) it would be born 0755 or
+// 0775 and stay so until ownSocket's chmod, a window in which the group could connect.
+// NOTE: the umask is the process's, not the goroutine's: a file another goroutine creates during
+// the bind is created no wider than 0600, which fails safe.
+func bindPrivate(path string) (net.Listener, error) {
+	old := syscall.Umask(0o177)
+	defer syscall.Umask(old)
 	return net.Listen("unix", path)
 }
 
 // ownSocket makes the bound socket 0600 (the file is the access control: no login locally), keeps
-// closing the listener from unlinking it by name, and takes its identity.
+// closing the listener from unlinking it by name, and takes its identity. The mode is a second
+// lock: the daemon also refuses a connection from another user (peercred.Listener).
 func ownSocket(ln net.Listener, path string) (socketIdentity, error) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		return socketIdentity{}, fmt.Errorf("chmod %s: %w", path, err)

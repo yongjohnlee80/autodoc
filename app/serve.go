@@ -29,6 +29,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -121,6 +122,9 @@ func (d *process) bind() error {
 	if err := d.e.MakeDataDir(); err != nil {
 		return err
 	}
+	if err := peercred.CheckDir(filepath.Dir(sock)); err != nil {
+		return fmt.Errorf("bind %s: %w", sock, err)
+	}
 	ln, err := listen(sock)
 	if errors.Is(err, syscall.EADDRINUSE) {
 		probeCtx, cancel := context.WithTimeout(d.ctx, 3*time.Second)
@@ -143,7 +147,7 @@ func (d *process) bind() error {
 		_ = ln.Close()
 		return err
 	}
-	d.ln = ln
+	d.ln = peercred.Listener(ln, func(err error) { logger.Warning(d.log, err, "refused a connection") })
 	d.stops.push(func() { removeIfStillOurs(sock, id) })
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // TestLoadResolvesAndMakesNothing: Load reads the default config where XDG_CONFIG_HOME puts it and
@@ -80,15 +81,21 @@ func TestMakeDirSaysWhichFailed(t *testing.T) {
 	}
 }
 
-// TestCheckStore: a daemon that says it serves another store is refused, naming both; one that
-// says nothing, or this store, is let through.
+// TestCheckStore: a daemon that says it serves another store is refused, naming both; one too old
+// to say (protocol 12) is let through; one whose protocol says its store_id and that says none is
+// refused, so a hello that leaves it out cannot skip the check.
 func TestCheckStore(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "autodoc.db")
-	if err := endpoint.CheckStore("/s", store, ""); err != nil {
+	if err := endpoint.CheckStore("/s", store, "", 12); err != nil {
 		t.Errorf("a daemon too old to say: %v", err)
 	}
+	for _, protocol := range []int64{13, rpc.Protocol} {
+		if err := endpoint.CheckStore("/s", store, "", protocol); !errors.Is(err, endpoint.ErrNoStoreID) {
+			t.Errorf("a protocol %d daemon that says no store: %v, want ErrNoStoreID", protocol, err)
+		}
+	}
 	var mm *endpoint.StoreMismatchError
-	if err := endpoint.CheckStore("/s", store, "another"); !errors.As(err, &mm) || mm.Served != "another" || mm.Addr != "/s" || mm.StorePath != store {
+	if err := endpoint.CheckStore("/s", store, "another", rpc.Protocol); !errors.As(err, &mm) || mm.Served != "another" || mm.Addr != "/s" || mm.StorePath != store {
 		t.Fatalf("another store's daemon: %v", err)
 	}
 	if mm.Error() == "" {

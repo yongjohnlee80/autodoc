@@ -1,0 +1,126 @@
+// Package peercred keeps the daemon's unix socket between processes of one user. The socket is
+// the daemon's only access control: no login, no token. Whoever connects can call every verb,
+// file.write anywhere on the user's disk among them. So both ends check who is at the other end:
+//
+//   - the daemon drops a connection whose peer runs as another user (Listener), and a client
+//     refuses a daemon that runs as another user (Dial), from the kernel's own record of the peer
+//     (SO_PEERCRED on Linux, LOCAL_PEERCRED on macOS), not from a file mode that a umask, a chmod
+//     race or a wider directory can open;
+//   - the daemon binds only in a directory no other user can write (CheckDir), where nobody can
+//     replace its socket, or put their own at its path first, for a client to dial.
+//
+// The default socket ($XDG_RUNTIME_DIR, or the 0700 state directory) passes every check; they bite
+// on a server.socket configured into a shared directory such as /tmp.
+//
+// Concurrency: every function is safe for concurrent use; a Listener is as safe as the listener it
+// wraps.
+package peercred
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"syscall"
+)
+
+// ErrOtherUser is a peer that runs as another user than this process.
+var ErrOtherUser = errors.New("peercred: the other end of the socket is another user's process")
+
+// ourUID is the user both ends must run as; a variable so a test can play another user.
+var ourUID = os.Getuid
+
+// Check refuses a unix connection whose peer runs as another user than this process. A connection
+// that is not a unix socket's is not checked: its peer has no user.
+func Check(c net.Conn) error {
+	uc, ok := c.(*net.UnixConn)
+	if !ok {
+		return nil
+	}
+	uid, err := peerUID(uc)
+	if errors.Is(err, errUnsupported) {
+		return nil // NOTE: no peer record on this platform: the socket's 0600 mode is the lock
+	}
+	if err != nil {
+		return fmt.Errorf("peercred: reading the peer's user: %w", err)
+	}
+	if uid != ourUID() {
+		return fmt.Errorf("%w (uid %d)", ErrOtherUser, uid)
+	}
+	return nil
+}
+
+// Dial connects to addr on network, refusing (and closing) a unix connection whose listener runs
+// as another user. Its signature is golib rpc's WithConnDialer's.
+func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	var d net.Dialer
+	c, err := d.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+	if err := Check(c); err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("dial %s: %w", addr, err)
+	}
+	return c, nil
+}
+
+// Listener is ln that drops, without a byte, each connection Check refuses; refused, when not nil,
+// is told why. Accept returns only the connections of this user's processes, and ln's own errors.
+func Listener(ln net.Listener, refused func(error)) net.Listener {
+	return &listener{Listener: ln, refused: refused}
+}
+
+type listener struct {
+	net.Listener
+	refused func(error)
+}
+
+func (l *listener) Accept() (net.Conn, error) {
+	for {
+		c, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		if err := Check(c); err != nil {
+			_ = c.Close()
+			if l.refused != nil {
+				l.refused(err)
+			}
+			continue
+		}
+		return c, nil
+	}
+}
+
+// UnsafeDirError is a socket directory another user could write in.
+type UnsafeDirError struct {
+	Dir, Why string
+}
+
+func (e *UnsafeDirError) Error() string {
+	return fmt.Sprintf("the socket's folder %s %s: another user could replace the socket there, or bind its own first; "+
+		"set server.socket in a folder only you can write (the default, $XDG_RUNTIME_DIR, is one)", e.Dir, e.Why)
+}
+
+// CheckDir refuses dir as a socket's folder unless it is a folder owned by this user (or by root),
+// that neither its group nor others can write. A sticky world-writable folder such as /tmp is
+// refused too: the sticky bit stops another user from removing the socket, not from binding at its
+// path before the daemon does.
+func CheckDir(dir string) error {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return &UnsafeDirError{Dir: dir, Why: "is not a folder"}
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != ourUID() && st.Uid != 0 {
+		return &UnsafeDirError{Dir: dir, Why: fmt.Sprintf("belongs to another user (uid %d)", st.Uid)}
+	}
+	if fi.Mode().Perm()&0o022 != 0 {
+		return &UnsafeDirError{Dir: dir, Why: fmt.Sprintf("can be written by its group or by others (mode %#o)", fi.Mode().Perm())}
+	}
+	return nil
+}

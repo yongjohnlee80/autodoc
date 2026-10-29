@@ -12,6 +12,8 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // runEditor is --editor <verb> [params]: one call to the page of the TUI that started this agent
@@ -27,7 +29,7 @@ func runEditor(ctx context.Context, verb, params string, env func(string) string
 	if err != nil {
 		return err
 	}
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
 	if err != nil {
 		return fmt.Errorf("--editor: the editor at %s does not answer: %w", sock, err)
 	}

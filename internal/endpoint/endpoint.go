@@ -7,6 +7,7 @@ package endpoint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,14 +173,26 @@ func Probe(ctx context.Context, addr, storePath string) (rpc.ProbeInfo, error) {
 	if err != nil {
 		return info, err
 	}
-	return info, CheckStore(addr, storePath, info.StoreID)
+	return info, CheckStore(addr, storePath, info.StoreID, info.Protocol)
 }
 
+// storeIDSince is the protocol from which every daemon says its store_id in its hello.
+const storeIDSince = 13
+
+// ErrNoStoreID is a daemon whose protocol says its store_id and whose hello leaves it out: it is
+// not a daemon of this build's that serves a store, and nothing it would answer can be trusted to
+// be this store's.
+var ErrNoStoreID = errors.New("the daemon does not say which store it serves")
+
 // CheckStore refuses a daemon at addr that says it serves the store served, when that is not the
-// store at storePath. A daemon too old to say its store_id ("") is let through: nothing can be
-// checked.
-func CheckStore(addr, storePath, served string) error {
+// store at storePath. protocol is the daemon's own (its hello's server_protocol, or its probe's
+// protocol). A daemon too old to say its store_id (protocol below 13) is let through: nothing can
+// be checked. A newer one that says none is refused (ErrNoStoreID).
+func CheckStore(addr, storePath, served string, protocol int64) error {
 	if served == "" {
+		if protocol >= storeIDSince {
+			return fmt.Errorf("%s: %w", addr, ErrNoStoreID)
+		}
 		return nil
 	}
 	wanted, _ := store.Identity(storePath)
