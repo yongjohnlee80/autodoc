@@ -28,16 +28,18 @@ type Guard struct {
 	served    func() []Root
 }
 
-// NewGuard is a guard that never lets a bounded call reach protected (absolute paths, made or not)
-// or anything under them. A relative path is an error, never dropped: the owning process makes its
-// paths absolute (filepath.Abs) before it guards them.
+// NewGuard is a guard that never lets a bounded call reach protected (paths, made or not) or
+// anything under them. It runs in the process that owns the paths: a relative one (a --config given
+// relative) is made absolute against this process's folder, never dropped; one that cannot be is an
+// error, and nothing is guarded.
 func NewGuard(protected ...string) (*Guard, error) {
 	g := &Guard{}
 	for _, p := range protected {
-		if !filepath.IsAbs(p) {
-			return nil, fmt.Errorf("fsbounds: a protected path must be absolute, not %q", p)
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return nil, fmt.Errorf("fsbounds: guarding %q: %w", p, err)
 		}
-		g.protected = append(g.protected, filepath.Clean(p))
+		g.protected = append(g.protected, abs)
 	}
 	return g, nil
 }
