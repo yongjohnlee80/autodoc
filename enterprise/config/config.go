@@ -572,7 +572,7 @@ func (v *validator) token(at func(string) string, sha, env string) {
 		// the value is never echoed: a token pasted here by mistake must not reach a log
 		if b, err := hex.DecodeString(sha); err != nil || len(b) != 32 {
 			v.refuse(at("token_sha256"), "want the 64 hex digits of the token's SHA-256, never the token itself")
-		} else if strings.EqualFold(sha, emptySHA256) {
+		} else if sha == emptySHA256 { // the hash is lower-cased as it loads: an upper-case one is caught too
 			v.refuse(at("token_sha256"), "is the SHA-256 of no token at all (an empty string): hash the real token (printf %%s \"$TOKEN\" | sha256sum)")
 		}
 	default:
