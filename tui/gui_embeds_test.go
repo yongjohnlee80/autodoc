@@ -516,6 +516,35 @@ func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
 	}
 }
 
+// A chart's notice is drawn on the UI loop, in a layout, so it never waits for a pooled measurer:
+// with as many measurers held at its scale as the pool keeps (golib's diagram workers, a note of
+// several charts laying out), the notice is still answered at once.
+func TestTheChartNoticeNeverWaitsForAMeasurer(t *testing.T) {
+	const held = 4 // what the pool lends per scale (golib gui's measurerMax): a fifth would wait here
+	var releases []func()
+	for range held {
+		_, release := gui.AcquireMeasurer(1.75)
+		releases = append(releases, release)
+	}
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
+	done := make(chan guiwidget.DiagramAnswer, 1)
+	go func() {
+		done <- chartNotice{}.Diagram(context.Background(), guiwidget.DiagramRequest{Lang: "vega-lite", Width: 400, Scale: 1.75}, func() {})
+	}()
+	select {
+	case a := <-done:
+		if a.State != guiwidget.Ready {
+			t.Errorf("the notice: %+v", a)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the notice waited for a measurer the diagram workers held")
+	}
+}
+
 // The notice says why in golib's words when golib gave a reason (the error it declined the chart
 // with), and the general notice when it gave none.
 func TestTheChartNoticeSaysGolibsReason(t *testing.T) {
