@@ -428,3 +428,26 @@ func TestASitesFailedMediaWriteEndsTheBuild(t *testing.T) {
 		t.Errorf("err %v, writes %v; want the write's error, and nothing written after it", err, calls)
 	}
 }
+
+// A link to another page's section, written as it works on GitHub, reaches that section on the
+// site: the link keeps its fragment and the heading carries the id.
+func TestASitesSectionLinksLandOnTheirSection(t *testing.T) {
+	docs := fixture(t, map[string]string{
+		"site.toml":       "title = \"Docs\"\n[[section]]\npath = \"guide\"\nurl = \"guide/\"\ntitle = \"Guide\"\n",
+		"guide/README.md": "# Guide\n\nSee [the second part](b.md#second-part-the-sequel) and [install](#install).\n\n## Install\n",
+		"guide/b.md":      "# B\n\n## Second part: the sequel\n",
+	})
+	pages := build(t, docs, export.SiteOptions{})
+	index, b := pages["guide/index.html"], pages["guide/b.html"]
+	for page, want := range map[string]string{
+		index: `href="b.html#second-part-the-sequel"`,
+		b:     `<h2 id="second-part-the-sequel">Second part: the sequel</h2>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("missing %s in\n%s", want, page)
+		}
+	}
+	if !strings.Contains(index, `href="#install"`) || !strings.Contains(index, `<h2 id="install">Install</h2>`) {
+		t.Errorf("a link to a section of the same page doesn't reach it:\n%s", index)
+	}
+}

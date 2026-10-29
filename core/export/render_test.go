@@ -30,7 +30,7 @@ func TestHTMLIsOfflineSafeAndThemed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, expected := range []string{"<!doctype html>", "color-scheme:" + theme, "Content-Security-Policy", "&lt;script&gt;", "<h1>Hello</h1>", "fmt.Println(1)"} {
+		for _, expected := range []string{"<!doctype html>", "color-scheme:" + theme, "Content-Security-Policy", "&lt;script&gt;", `<h1 id="hello">Hello</h1>`, "fmt.Println(1)"} {
 			if !bytes.Contains(content, []byte(expected)) {
 				t.Errorf("%s HTML lacks %q", theme, expected)
 			}
@@ -682,5 +682,38 @@ func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
 	}
 	if drawn := render(func([]byte, string) (string, error) { return "<svg></svg>", nil }); !strings.Contains(drawn, "div.chart svg{max-width:100%;height:auto}") || strings.Contains(drawn, "chart-error") {
 		t.Errorf("a page with a chart drawn lacks the charts' sizing:\n%s", drawn)
+	}
+}
+
+// Every heading carries the anchor GitHub gives it (lowercase; letters, digits, '-' and '_' kept;
+// spaces as '-'; the rest dropped; a repeat numbered -1, -2), so a link to #section written for
+// GitHub lands on its section in an exported page. The source spans the GUI's pane asks for stay.
+func TestHeadingsCarryGitHubAnchors(t *testing.T) {
+	source := []byte("---\ntitle: x\n---\n# Install\n\n## Install\n\n## Install\n\n## `go install` and mise!\n\n### What's new? (v0.3)\n\n## Café & Crème\n\n> ## Quoted\n\n## ![logo](l.png) Logo\n")
+	want := []string{
+		`<h1 id="install">Install</h1>`,
+		`<h2 id="install-1">Install</h2>`,
+		`<h2 id="install-2">Install</h2>`,
+		`<h2 id="go-install-and-mise"><code>go install</code> and mise!</h2>`,
+		`<h3 id="whats-new-v03">What&#39;s new? (v0.3)</h3>`,
+		`<h2 id="café--crème">Café &amp; Crème</h2>`,
+		`<h2 id="quoted">Quoted</h2>`,
+		`<h2 id="logo">`,
+	}
+	content, err := export.Render(source, export.HTML, "light")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range want {
+		if !bytes.Contains(content, []byte(w)) {
+			t.Errorf("missing %s in\n%s", w, content)
+		}
+	}
+	spans, err := export.RenderWith(source, export.HTML, "light", export.Options{SourceSpans: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`<h1 id="install" data-src="[0-9]+-[0-9]+">Install</h1>`).Match(spans) {
+		t.Errorf("a heading with its source span lacks its id:\n%s", spans)
 	}
 }

@@ -63,7 +63,7 @@ func TestPreviewHTMLUnderAGUIOpensThePane(t *testing.T) {
 	r, _ := runPane(t)
 	r.h.p.Post(r.h.previewHTML)
 	r.s.WaitFor(t, "the pane open on the page", func(string) bool {
-		return onLoop(r, r.h.htmlPaneShown) && strings.Contains(r.paneSource(), `<h1 data-src="0-9">Heading</h1>`)
+		return onLoop(r, r.h.htmlPaneShown) && strings.Contains(r.paneSource(), `<h1 id="heading" data-src="0-9">Heading</h1>`)
 	})
 	r.s.WaitForText(t, "┌ preview")
 

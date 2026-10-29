@@ -19,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/lab"
+	"github.com/yongjohnlee80/autodoc/core/outline"
 )
 
 // Format is what a Markdown source is rendered as.
@@ -206,6 +207,9 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		if !ok {
 			return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 		}
+		// each heading's anchor, as GitHub gives it, taken before the walk below changes any node,
+		// so a link to #section written for GitHub lands on the section in the page too
+		headingIDs := outline.HeadingIDs(document.Root, source)
 		base := options.Base
 		if base != "" {
 			var err error
@@ -283,6 +287,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
 			return nil, err
 		}
+		withIDs(&body, headingIDs)
 		rendered := drawn.place(strings.NewReplacer(resolved...).Replace(body.String()))
 		rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			diagrams = true
@@ -443,6 +448,37 @@ func escapeURL(s string) string {
 		}
 	}
 	return out.String()
+}
+
+// headingOpen is a heading's start tag as the renderer writes it, with or without its source span.
+var headingOpen = regexp.MustCompile(`<h([1-6])((?: data-src="[0-9]+-[0-9]+")?)>`)
+
+// withIDs gives the rendered headings their IDs, one per heading in document order. The renderer
+// writes every heading and escapes raw HTML, so its heading tags are the document's headings in the
+// same order; when the counts differ anyway, the body is left as it is rather than mislabelled.
+func withIDs(body *bytes.Buffer, ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	src := body.Bytes()
+	tags := headingOpen.FindAllSubmatchIndex(src, -1)
+	if len(tags) != len(ids) {
+		return
+	}
+	var out bytes.Buffer
+	out.Grow(len(src) + 16*len(ids))
+	last := 0
+	for i, m := range tags {
+		out.Write(src[last:m[0]])
+		out.WriteString(`<h`)
+		out.Write(src[m[2]:m[3]])
+		out.WriteString(` id="` + stdhtml.EscapeString(ids[i]) + `"`)
+		out.Write(src[m[4]:m[5]])
+		out.WriteByte('>')
+		last = m[1]
+	}
+	out.Write(src[last:])
+	*body = out
 }
 
 func forEach(node *markdown.Node, visit func(*markdown.Node)) {
