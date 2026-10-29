@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -15,16 +16,31 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// olderDaemon serves sock as an AutoDoc of protocol proto would for a restart: a probe hello is
-// answered whatever it declares, a declared one only at proto, and sys.shutdown only after it.
+// olderDaemon serves sock as an AutoDoc of protocol proto would for a restart, serving the store
+// at storePath (made here, as that daemon would have): a probe hello is answered whatever it
+// declares, with the store's id, a declared one only at proto, and sys.shutdown only after it.
 // declared reports the protocol a hello declared; stopped closes once it has shut down.
-func olderDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}, declared *atomic.Int64) {
+func olderDaemon(t *testing.T, sock, storePath string, proto int64) (stopped chan struct{}, declared *atomic.Int64) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(context.Background(), storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	storeID, err := store.Identity(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +50,7 @@ func olderDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{},
 	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
 	srv.Handle("sys.hello", func(_ context.Context, req *golibrpc.Request) (any, error) {
 		reply := map[string]any{"server": rpc.ServerName, "protocol": proto, "min_protocol": proto,
-			"version": fmt.Sprintf("v-p%d", proto), "pid": int64(4242)}
+			"version": fmt.Sprintf("v-p%d", proto), "pid": int64(4242), "store_id": storeID}
 		m, _ := req.Params[0].(map[string]any)
 		p, ok := m["protocol"]
 		if !ok {
@@ -94,7 +110,7 @@ func TestRestartReplacesAnOlderDaemon(t *testing.T) {
 	dir := short(t)
 	sock := filepath.Join(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
-	stopped, declared := olderDaemon(t, sock, rpc.Protocol-1)
+	stopped, declared := olderDaemon(t, sock, filepath.Join(dir, "data", config.StoreName), rpc.Protocol-1)
 	var spawns atomic.Int32
 	var fresh *daemon
 	var waitedOn int64
@@ -218,7 +234,7 @@ func TestRestartStartsNothingWhileTheOldDaemonLives(t *testing.T) {
 	dir := short(t)
 	sock := filepath.Join(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
-	olderDaemon(t, sock, rpc.Protocol-1)
+	olderDaemon(t, sock, filepath.Join(dir, "data", config.StoreName), rpc.Protocol-1)
 	r := restarter{
 		spawn:    func() (string, error) { t.Error("spawned while the old daemon lives"); return "", nil },
 		waitGone: func(context.Context, int64) bool { return false },

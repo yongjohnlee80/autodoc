@@ -86,6 +86,13 @@ All surfaces communicate with the daemon over a user-private Unix domain socket 
 2. **macOS only:** the per-user `$TMPDIR` → `$TMPDIR/autodoc.sock`.
 3. **Otherwise:** the default XDG state directory (`Server{}.StateDirPath()`) → `$XDG_STATE_HOME/autodoc/autodoc.sock` (else `~/.local/state/autodoc/autodoc.sock`; `server.state_dir` does not move the default socket).
 
+The socket is the daemon's only access control, so both ends check who is at the other end (`internal/peercred`):
+
+- The daemon binds only in a folder that is yours (or root's) and that neither its group nor others can write. A `server.socket` in a shared folder such as `/tmp` is refused, sticky bit or not: another user could bind that path first, and a client would talk to their process. Every default above passes.
+- The socket file is created `0600` by the bind itself, not narrowed by a `chmod` afterwards.
+- The daemon drops any connection from a process of another user, and AutoDoc's own clients (`--call`, the TUI and GUI, `--editor`) refuse a daemon run by another user. Both read the kernel's record of the peer (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on macOS), not the file's mode.
+- A client started for a store refuses a daemon whose hello leaves out `store_id` (every daemon from protocol 13 says it).
+
 The wire protocol uses **MessagePack-RPC** (`msgpack-RPC`), providing compact binary framing, sub-millisecond serialization overhead, and native compatibility with Neovim's built-in `vim.fn.sockconnect("pipe", ...)` and `vim.rpcrequest` APIs.
 
 ![Client Auto-Start and msgpack-RPC Handshake Sequence](client-rpc-flow.mmd)

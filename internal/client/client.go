@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -170,7 +171,8 @@ func (s *Session) checkStore(hello map[string]any) error {
 		return nil
 	}
 	served, _ := hello["store_id"].(string)
-	return endpoint.CheckStore(s.address(), s.storePath, served)
+	protocol, _ := hello["server_protocol"].(int64) // absent before protocol 13, with store_id
+	return endpoint.CheckStore(s.address(), s.storePath, served, protocol)
 }
 
 // UseHandoffs keeps restart handoffs in stateDir, the daemon's state directory: Connect waits on
@@ -235,7 +237,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	var cli *golibrpc.Client
 	for {
 		var err error
-		cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
 		if err == nil {
 			break
 		}
@@ -313,7 +315,7 @@ func (s *Session) hello(ctx context.Context, cli *golibrpc.Client) (*golibrpc.Cl
 		if info.Protocol >= rpc.Protocol || info.Protocol < rpc.MinProtocol {
 			return nil, nil, &MismatchError{Client: rpc.Protocol, Server: info.Protocol, Version: info.Version}
 		}
-		if cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix")); err != nil {
+		if cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial)); err != nil {
 			return nil, nil, err
 		}
 		if res, err = cli.Call(ctx, "sys.hello", s.helloInfo(info.Protocol)); err != nil {
@@ -348,7 +350,7 @@ func (s *Session) mismatch(ctx context.Context) error {
 }
 
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {
-	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
 	if err != nil {
 		return OlderServer{}, err
 	}
@@ -386,7 +388,7 @@ func (s *Session) StopStale(ctx context.Context) error {
 	if old == nil {
 		return errors.New("tui: no older backend to stop")
 	}
-	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
 	if err != nil {
 		return err
 	}
