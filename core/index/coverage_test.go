@@ -87,15 +87,16 @@ func (f failing) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
 	return nil
 }
 
-// TestAStatusWhoseCountFailsSaysSo: a status whose chunk count or coverage count fails returns that
-// failure, never a status with a count left at zero.
+// TestAStatusWhoseCountFailsSaysSo: a status whose change-log bounds, chunk count or coverage count
+// fails returns that failure, never a status with a value left at zero.
 func TestAStatusWhoseCountFailsSaysSo(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put("a.md", "# A\n\nalpha\n")
 	for _, c := range []struct{ name, match, fp string }{
+		{"the change log's bounds", `FROM "change"`, "fp"},
 		{"the chunk count, without a model", `SELECT COUNT(*) FROM "chunk"`, ""},
 		{"the chunk count, with a model", `SELECT COUNT(*) FROM "chunk"`, "fp"},
-		{"the coverage count", "COUNT(DISTINCT", "fp"},
+		{"the coverage count", `COUNT(DISTINCT "chunk"."text_hash")`, "fp"}, // not the diagnosed count, which counts distinct too
 	} {
 		s := &Store{db: e.db, sc: e.db.Workspace(e.ws).WithHooks(failing{match: c.match})}
 		if _, err := s.statusSnap(context.Background(), c.fp, nil); !errors.Is(err, errFailing) {
