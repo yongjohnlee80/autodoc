@@ -246,7 +246,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			if err != nil {
 				return failed(err, 1)
 			}
-			return serveExit(stderr, runServe(ctx, *configPath, stderr, b), prof)
+			return serveExit(stderr, runServe(ctx, *configPath, stderr, b, prof.p), prof)
 		}},
 		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
 			return serverMode(ctx, cfg, *check, *health, stdout, stderr, b.version, failed)

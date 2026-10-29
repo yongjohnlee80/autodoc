@@ -337,9 +337,10 @@ func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
 	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
-	fs = append(fs, newRegistryBrowse(h))        // Plugins › Browse the registry… (registrybrowse.go)
-	fs = append(fs, h.cands)                     // the installs' candidates, and Audit… (candidate.go)
-	fs = append(fs, h.relationViewFeatures()...) // the GUI's GlobeMap and Mindmap (relationmap.go)
+	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
+	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
+	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
+	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own

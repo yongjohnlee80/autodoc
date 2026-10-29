@@ -29,6 +29,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -42,7 +43,7 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // sys.shutdown. The subsystems start in serveSteps' order, and each pushes how to stop what it
 // started: they stop in reverse, the lease-info first and the socket last, whether serving ended or
 // a later step failed.
-func runServe(ctx context.Context, configPath string, out io.Writer, b build) error {
+func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
@@ -51,7 +52,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	if err != nil {
 		return err
 	}
-	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, log: logger.New(logger.WithWriter(out))}
+	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, prof: prof, log: logger.New(logger.WithWriter(out))}
 	defer d.stops.unwind()
 	for _, step := range serveSteps {
 		if err := step.start(d); err != nil {
@@ -67,6 +68,7 @@ type process struct {
 	ctx   context.Context
 	out   io.Writer
 	b     build
+	prof  *profiling.Profiler // the process's monitor (--profile, sys.profile); nil: none
 	e     *endpoint.Endpoints
 	p     endpoint.Paths
 	log   logger.Logger
@@ -238,7 +240,7 @@ func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files),
-		rpc.WithModules(d.mods...))
+		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}

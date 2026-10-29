@@ -887,6 +887,38 @@
         <source>Ctrl+h/j/k/l move between panels while typing</source>
         <translation>输入时也用 Ctrl+h/j/k/l 切换面板</translation>
     </message>
+    <message id="autodoc.cmd.profiling.backend">
+        <source>profile the backend</source>
+        <translation>分析后端性能</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.backend.help">
+        <source>profile the backend</source>
+        <translation>分析后端性能</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu">
+        <source>capture a CPU profile</source>
+        <translation>捕获 CPU 性能分析</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu.help">
+        <source>capture a CPU profile</source>
+        <translation>捕获 CPU 性能分析</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder">
+        <source>open the profile folder</source>
+        <translation>打开性能分析文件夹</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder.help">
+        <source>open the profile folder</source>
+        <translation>打开性能分析文件夹</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window">
+        <source>profile the window</source>
+        <translation>分析窗口性能</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window.help">
+        <source>profile the window</source>
+        <translation>分析窗口性能</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>结果：复制所选内容(所选单元格或光标所在单元格，TSV 格式)</translation>
@@ -3317,6 +3349,10 @@ WHAT A KEY NEEDS
         <source>&amp;Buffers…</source>
         <translation>缓冲区(&amp;B)…</translation>
     </message>
+    <message id="autodoc.main.capture_cpu_profile">
+        <source>&amp;Capture CPU profile (30 s)</source>
+        <translation>捕获 CPU 性能分析 (30 秒)(&amp;C)</translation>
+    </message>
     <message id="autodoc.main.clear_d">
         <source>Clear (&amp;d)</source>
         <translation>清除(&amp;D)</translation>
@@ -3489,6 +3525,10 @@ WHAT A KEY NEEDS
         <source>Open in &amp;browser</source>
         <translation>在浏览器中打开(&amp;B)</translation>
     </message>
+    <message id="autodoc.main.open_profile_folder">
+        <source>Open pro&amp;file folder</source>
+        <translation>打开性能分析文件夹(&amp;F)</translation>
+    </message>
     <message id="autodoc.main.open_todos_spc_x">
         <source>&amp;Open todos…  (SPC x)</source>
         <translation>打开待办(&amp;O)…  (SPC x)</translation>
@@ -3528,6 +3568,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.preview_option">
         <source>Preview o&amp;ption</source>
         <translation>预览选项(&amp;P)</translation>
+    </message>
+    <message id="autodoc.main.profile_backend">
+        <source>&amp;Backend</source>
+        <translation>后端(&amp;B)</translation>
+    </message>
+    <message id="autodoc.main.profile_window">
+        <source>Wi&amp;ndow</source>
+        <translation>窗口(&amp;N)</translation>
+    </message>
+    <message id="autodoc.main.profiling">
+        <source>&amp;Profiling</source>
+        <translation>性能分析(&amp;P)</translation>
     </message>
     <message id="autodoc.main.read_only_this_store_was_released">
         <source>read-only: this store was released (todos.release)</source>
@@ -4608,6 +4660,50 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.preview.zoom_is_at_its_smallest">
         <source>zoom is at its smallest</source>
         <translation>缩放已是最小</translation>
+    </message>
+    <message id="autodoc.notice.profiling.backend_refused">
+        <source>the backend's profiling did not change</source>
+        <translation>后端的性能分析未能更改</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capture_failed">
+        <source>the CPU profile was not captured</source>
+        <translation>未能捕获 CPU 性能分析</translation>
+    </message>
+    <message id="autodoc.notice.profiling.captured">
+        <source>CPU profile written to %1 (go tool pprof reads it).</source>
+        <translation>CPU 性能分析已写入 %1（可用 go tool pprof 读取）。</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capturing">
+        <source>Capturing a %1-second CPU profile…</source>
+        <translation>正在捕获 %1 秒的 CPU 性能分析…</translation>
+    </message>
+    <message id="autodoc.notice.profiling.none">
+        <source>this program has no profiler</source>
+        <translation>此程序没有性能分析器</translation>
+    </message>
+    <message id="autodoc.notice.profiling.open_failed">
+        <source>the profile folder did not open</source>
+        <translation>未能打开性能分析文件夹</translation>
+    </message>
+    <message id="autodoc.notice.profiling.start_first">
+        <source>Start profiling the window or the backend first: System › Profiling.</source>
+        <translation>请先启动窗口或后端的性能分析：系统 › 性能分析。</translation>
+    </message>
+    <message id="autodoc.notice.profiling.started">
+        <source>Profiling into %1. CPU and goroutine profiles can hold the program's pprof labels: share them as you would a log.</source>
+        <translation>正在将性能分析写入 %1。CPU 和 goroutine 性能分析可能包含程序的 pprof 标签：请像对待日志一样分享。</translation>
+    </message>
+    <message id="autodoc.notice.profiling.stopped">
+        <source>Profiling stopped. Its samples and heap profiles are in %1.</source>
+        <translation>性能分析已停止。其采样和堆性能分析位于 %1。</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_refused">
+        <source>the window's profiling did not start</source>
+        <translation>窗口的性能分析未能启动</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_stopped">
+        <source>the window's profile is incomplete</source>
+        <translation>窗口的性能分析不完整</translation>
     </message>
     <message id="autodoc.notice.progress.embedding">
         <source>embedding %1 %2</source>

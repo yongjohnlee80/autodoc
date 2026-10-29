@@ -91,6 +91,10 @@ configuration. `editor.commands` lists them with the rest.
 | `prefs.search_models` |  |  | search models |
 | `prefs.set_up_semantic_search` |  |  | set up semantic search |
 | `prefs.terminal_panel_keys` |  |  | Ctrl+h/j/k/l move between panels while typing |
+| `profiling.backend` |  |  | profile the backend |
+| `profiling.capture_cpu` |  |  | capture a CPU profile |
+| `profiling.open_folder` |  |  | open the profile folder |
+| `profiling.window` |  |  | profile the window |
 | `results.copy` |  |  | results: copy selection (the selected cells, or the cursor's, as TSV) |
 | `results.copy_csv` |  |  | results: copy selection as CSV (its fields as a header) |
 | `results.copy_json` |  |  | results: copy selection as JSON (an object per row) |

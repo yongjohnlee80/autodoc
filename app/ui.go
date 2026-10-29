@@ -41,6 +41,7 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 		o.DebugRecorder = rec
 		dbg = &debugRecording{f: f, rec: rec}
 	}
+	o.Profiler = prof.p
 	owned := []owner{dbg, prof}
 	if window {
 		return runGUI(ctx, o, owned)

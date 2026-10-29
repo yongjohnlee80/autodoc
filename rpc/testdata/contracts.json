@@ -1,5 +1,5 @@
 {
-  "protocol": 31,
+  "protocol": 32,
   "min_protocol": 12,
   "verbs": [
     {
@@ -1389,6 +1389,33 @@
       "doc": "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head."
     },
     {
+      "verb": "sys.profile",
+      "since": 32,
+      "scope": "local-peer",
+      "audience": "internal",
+      "effect": "settings",
+      "params": [
+        {
+          "name": "op",
+          "type": "string",
+          "doc": "start, stop or status"
+        },
+        {
+          "name": "dir",
+          "type": "string",
+          "optional": true,
+          "doc": "start's directory; absent, autodoc-profile-serve-\u003cpid\u003e in the runtime directory"
+        }
+      ],
+      "result": "{on, dir}",
+      "errors": [
+        -32001,
+        -32602,
+        -32065
+      ],
+      "doc": "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off."
+    },
+    {
       "verb": "sys.shutdown",
       "since": 1,
       "scope": "local-peer",
@@ -1817,6 +1844,7 @@
         "this server keeps no preferences",
         "this server keeps no embedding providers",
         "this server keeps no event log",
+        "this server keeps no profiler",
         "this server keeps no rankers",
         "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models",
         "this edition has no database settings",
@@ -1895,6 +1923,7 @@
         "embedding policy must be always, when opened, or never",
         "a preference needs a name",
         "this preference is set by its own verb: embedding.use, ranker.use or ranker.window",
+        "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)",
         "no model switch is under way",
         "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api",
         "this build supplies its ranker",

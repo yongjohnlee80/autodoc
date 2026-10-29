@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
 )
 
 // LaunchOptions is what a program running AutoDoc's TUI changes about how it starts: autodoc's own
@@ -68,6 +69,8 @@ type LaunchOptions struct {
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
 	DefaultCellFont string
+	// Profiler is the window's memory monitor, --profile's, for System › Profiling; nil: none.
+	Profiler *profiling.Profiler
 	// DebugRecorder, when set, records the TUI's own trace into it as stage "tui"
 	// records — the same recording a window build's backend writes its input path
 	// into, so one file reads platform → IME → tui in order. A window build also
@@ -159,6 +162,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		// a convenience for the next start: nothing depends on it being written
 		Remember:      func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
 		Installed:     installed,
+		Profiler:      o.Profiler,
 		Plugins:       plugins,
 		Registrations: o.Registrations,
 		AgentDir:      filepath.Join(stateDir, "agent"),

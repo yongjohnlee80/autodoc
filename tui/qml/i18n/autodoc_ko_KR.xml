@@ -887,6 +887,38 @@
         <source>Ctrl+h/j/k/l move between panels while typing</source>
         <translation>입력 중에도 Ctrl+h/j/k/l로 패널 이동</translation>
     </message>
+    <message id="autodoc.cmd.profiling.backend">
+        <source>profile the backend</source>
+        <translation>백엔드 프로파일링</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.backend.help">
+        <source>profile the backend</source>
+        <translation>백엔드 프로파일링</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu">
+        <source>capture a CPU profile</source>
+        <translation>CPU 프로파일 수집</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.capture_cpu.help">
+        <source>capture a CPU profile</source>
+        <translation>CPU 프로파일 수집</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder">
+        <source>open the profile folder</source>
+        <translation>프로파일 폴더 열기</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.open_folder.help">
+        <source>open the profile folder</source>
+        <translation>프로파일 폴더 열기</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window">
+        <source>profile the window</source>
+        <translation>창 프로파일링</translation>
+    </message>
+    <message id="autodoc.cmd.profiling.window.help">
+        <source>profile the window</source>
+        <translation>창 프로파일링</translation>
+    </message>
     <message id="autodoc.cmd.results.copy">
         <source>results: copy selection (the selected cells, or the cursor's, as TSV)</source>
         <translation>결과: 선택 복사 (선택한 셀, 또는 커서의 셀을 TSV로)</translation>
@@ -3323,6 +3355,10 @@ WHAT A KEY NEEDS
         <source>&amp;Buffers…</source>
         <translation>버퍼(&amp;b)…</translation>
     </message>
+    <message id="autodoc.main.capture_cpu_profile">
+        <source>&amp;Capture CPU profile (30 s)</source>
+        <translation>CPU 프로파일 수집 (30초)(&amp;c)</translation>
+    </message>
     <message id="autodoc.main.clear_d">
         <source>Clear (&amp;d)</source>
         <translation>지우기(&amp;d)</translation>
@@ -3495,6 +3531,10 @@ WHAT A KEY NEEDS
         <source>Open in &amp;browser</source>
         <translation>브라우저에서 열기(&amp;b)</translation>
     </message>
+    <message id="autodoc.main.open_profile_folder">
+        <source>Open pro&amp;file folder</source>
+        <translation>프로파일 폴더 열기(&amp;f)</translation>
+    </message>
     <message id="autodoc.main.open_todos_spc_x">
         <source>&amp;Open todos…  (SPC x)</source>
         <translation>할 일 열기(&amp;o)…  (SPC x)</translation>
@@ -3534,6 +3574,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.preview_option">
         <source>Preview o&amp;ption</source>
         <translation>미리 보기 옵션(&amp;p)</translation>
+    </message>
+    <message id="autodoc.main.profile_backend">
+        <source>&amp;Backend</source>
+        <translation>백엔드(&amp;b)</translation>
+    </message>
+    <message id="autodoc.main.profile_window">
+        <source>Wi&amp;ndow</source>
+        <translation>창(&amp;n)</translation>
+    </message>
+    <message id="autodoc.main.profiling">
+        <source>&amp;Profiling</source>
+        <translation>프로파일링(&amp;p)</translation>
     </message>
     <message id="autodoc.main.read_only_this_store_was_released">
         <source>read-only: this store was released (todos.release)</source>
@@ -4614,6 +4666,50 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.preview.zoom_is_at_its_smallest">
         <source>zoom is at its smallest</source>
         <translation>배율이 가장 작습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.backend_refused">
+        <source>the backend's profiling did not change</source>
+        <translation>백엔드 프로파일링을 바꾸지 못했습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capture_failed">
+        <source>the CPU profile was not captured</source>
+        <translation>CPU 프로파일을 수집하지 못했습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.captured">
+        <source>CPU profile written to %1 (go tool pprof reads it).</source>
+        <translation>CPU 프로파일을 %1에 썼습니다 (go tool pprof로 읽을 수 있습니다).</translation>
+    </message>
+    <message id="autodoc.notice.profiling.capturing">
+        <source>Capturing a %1-second CPU profile…</source>
+        <translation>%1초 동안의 CPU 프로파일을 수집하는 중…</translation>
+    </message>
+    <message id="autodoc.notice.profiling.none">
+        <source>this program has no profiler</source>
+        <translation>이 프로그램에는 프로파일러가 없습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.open_failed">
+        <source>the profile folder did not open</source>
+        <translation>프로파일 폴더를 열지 못했습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.start_first">
+        <source>Start profiling the window or the backend first: System › Profiling.</source>
+        <translation>먼저 창이나 백엔드 프로파일링을 시작하세요: 시스템 › 프로파일링.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.started">
+        <source>Profiling into %1. CPU and goroutine profiles can hold the program's pprof labels: share them as you would a log.</source>
+        <translation>%1에 프로파일을 기록하는 중입니다. CPU와 goroutine 프로파일에는 프로그램의 pprof 레이블이 들어 있을 수 있으니 로그처럼 다뤄서 공유하세요.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.stopped">
+        <source>Profiling stopped. Its samples and heap profiles are in %1.</source>
+        <translation>프로파일링을 멈췄습니다. 샘플과 힙 프로파일은 %1에 있습니다.</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_refused">
+        <source>the window's profiling did not start</source>
+        <translation>창 프로파일링을 시작하지 못했습니다</translation>
+    </message>
+    <message id="autodoc.notice.profiling.window_stopped">
+        <source>the window's profile is incomplete</source>
+        <translation>창의 프로파일이 완전하지 않습니다</translation>
     </message>
     <message id="autodoc.notice.progress.embedding">
         <source>embedding %1 %2</source>

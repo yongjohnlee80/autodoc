@@ -31,6 +31,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
 )
 
 // Protocol is the API's version. A client declares the one it was written for, which this build
@@ -103,7 +104,9 @@ import (
 // Protocol 31 is ADR 1793005098: the embedding setup's host.probe, embedding.catalog,
 // embedding.estimate, embedding.pull, embedding.pull_status and embedding.pull_cancel, which a
 // session below 31 sees as unknown methods.
-const Protocol int64 = 31
+// Protocol 32 is sys.profile: the daemon's memory monitor (--profile's) started, stopped or asked
+// about at runtime, for a local peer; a session below 32 sees an unknown method.
+const Protocol int64 = 32
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -253,6 +256,7 @@ type Preferences interface {
 type Server struct {
 	reg          registrations.Tables // the build's registrations, sys.capabilities reports them
 	files        *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
+	profiler     *profiling.Profiler  // the daemon's own monitor, for sys.profile (WithProfiler); nil: none
 	rpc          *golibrpc.Server
 	workspaces   Workspaces
 	preferences  Preferences
@@ -282,6 +286,7 @@ type options struct {
 	events      Events
 	reg         registrations.Tables
 	files       *docs.Docs
+	profiler    *profiling.Profiler
 	storeID     string
 	modules     []module.Module
 }
@@ -295,6 +300,9 @@ func WithListener(ln net.Listener) Option { return func(o *options) { o.listener
 // WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
 // that found this daemon through the store's lease-info can check it serves that store.
 func WithStoreID(id string) Option { return func(o *options) { o.storeID = id } }
+
+// WithProfiler lets sys.profile start and stop p, the daemon's own monitor (--profile's).
+func WithProfiler(p *profiling.Profiler) Option { return func(o *options) { o.profiler = p } }
 
 // WithLogger logs to l.
 func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } }
@@ -321,7 +329,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID, setters: settersOf(workspaces),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
@@ -467,6 +475,13 @@ var errNoSuchWorkspace = errors.New("rpc: no such workspace")
 var errNoPreferences = errors.New("rpc: this server keeps no preferences")
 
 var errNoEvents = errors.New("rpc: this server keeps no event log")
+
+// errNoProfiler answers sys.profile on a server given no profiler; errProfileRefused a monitor
+// that could not start (its reason is logged, never sent).
+var (
+	errNoProfiler     = errors.New("rpc: this server keeps no profiler")
+	errProfileRefused = errors.New("rpc: the monitor did not start")
+)
 
 // workspace resolves a verb's first parameter.
 func (s *Server) workspace(params []any) (Workspace, error) {

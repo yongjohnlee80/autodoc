@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -23,10 +24,28 @@ type (
 		Since int64 `param:"since" doc:"a cursor; -1 answers the head alone"`
 		Limit int   `param:"limit" doc:"1 to 500"`
 	}
+	sysProfile struct {
+		Op  string `param:"op" doc:"start, stop or status"`
+		Dir string `param:"dir,optional" doc:"start's directory; absent, autodoc-profile-serve-<pid> in the runtime directory"`
+	}
 	sysContracts struct {
 		Filter string `param:"filter,optional" doc:"\"\" or \"*\" for every verb, \"domain.*\" for a domain's, or a verb's name"`
 	}
 )
+
+// sys.profile's ops.
+const (
+	profileStart  = "start"
+	profileStop   = "stop"
+	profileStatus = "status"
+)
+
+// profileJSON is sys.profile's answer: whether the daemon's monitor runs, and its directory ("" when
+// it does not), where a local peer fetches its profiles from pprof.sock.
+type profileJSON struct {
+	On  bool   `json:"on"`
+	Dir string `json:"dir"`
+}
 
 // helloJSON is sys.hello's answer. client and events are a session's, when the hello opened one.
 type helloJSON struct {
@@ -117,6 +136,13 @@ func (s *Server) sysVerbs() []module.Verb {
 			func(context.Context, struct{}) (StatsJSON, error) {
 				return StatsOf(procstat.Read(), s.version, time.Now()), nil
 			}),
+		// sys.profile is the protocol's own: never bound to Lua, refused to a gated script's call, and
+		// for a peer on the unix socket alone, since a monitor writes files and serves its profiles on
+		// a socket of its own (Protocol 32).
+		module.Handle(module.Contract{Verb: "sys.profile", Effect: module.EffectSettings, Since: 32, Scope: module.ScopeLocalPeer, Audience: internal,
+			Result: "{on, dir}", Errors: []int64{golibrpc.CodeAccessDenied, golibrpc.CodeInvalidParams, CodeUnsupported},
+			Doc: "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off."},
+			s.profile),
 		module.Handle(module.Contract{Verb: "sys.contracts", Effect: module.EffectRead, Since: 20, Audience: agent,
 			Result: "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
 			Doc:    "These tables: the verbs this session may call, and the codes they may answer."},
@@ -190,4 +216,28 @@ func StatsOf(st procstat.Stats, version string, now time.Time) StatsJSON {
 		Uptime: now.Sub(st.Started).Seconds(), RSS: int64(st.RSS), PeakRSS: int64(st.PeakRSS),
 		CPUSeconds: st.CPUSeconds, GoMemory: int64(st.GoMemory), GoHeap: int64(st.GoHeap),
 		Goroutines: int64(st.Goroutines), CPUs: int64(st.CPUs)}
+}
+
+// profile answers sys.profile. A monitor already running is kept by start; stop when none runs is
+// no error.
+func (s *Server) profile(_ context.Context, p sysProfile) (profileJSON, error) {
+	if s.profiler == nil {
+		return profileJSON{}, errNoProfiler
+	}
+	switch p.Op {
+	case profileStart:
+		if _, err := s.profiler.Start(p.Dir); err != nil {
+			logger.Warning(s.log, err, "sys.profile: the monitor did not start")
+			return profileJSON{}, errProfileRefused
+		}
+	case profileStop:
+		if err := s.profiler.Stop(); err != nil {
+			logger.Warning(s.log, err, "sys.profile: the monitor's samples are incomplete")
+		}
+	case profileStatus:
+	default:
+		return profileJSON{}, invalid("sys.profile: op must be start, stop or status")
+	}
+	dir := s.profiler.Dir()
+	return profileJSON{On: dir != "", Dir: dir}, nil
 }

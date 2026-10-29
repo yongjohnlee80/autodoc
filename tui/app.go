@@ -49,6 +49,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
 )
@@ -215,11 +216,12 @@ type Host struct {
 	remember    func(name string)
 	installed   func() (string, error) // Options.Installed
 	browser     func(context.Context, string) error
-	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
-	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
-	renderedSet func(on bool) // stands in for the editor's SetRenderedEnabled in tests; nil: the editor's
-	relaid      func()        // stands in for the editor's Relayout in tests; nil: the editor's
-	noteFile    func(string)  // told the open note's file (Options.NoteFile); nil: none
+	profiler    *profiling.Profiler // the window's monitor (Options.Profiler)
+	nativeViews func() bool         // whether the backend draws native views (--gui); tests stand in for a GUI
+	docSwitch   func(on bool)       // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
+	renderedSet func(on bool)       // stands in for the editor's SetRenderedEnabled in tests; nil: the editor's
+	relaid      func()              // stands in for the editor's Relayout in tests; nil: the editor's
+	noteFile    func(string)        // told the open note's file (Options.NoteFile); nil: none
 	// browserOverride stands in for finding a headless browser in tests; nil: golib's HTMLRasterizer
 	browserOverride func() bool
 	paneMermaid     any              // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
@@ -367,6 +369,9 @@ type Options struct {
 	// Installed, when set, is the version of the autodoc a restart would start (the binary on
 	// disk, which an update replaces while the daemon runs).
 	Installed func() (string, error)
+	// Profiler is the window's memory monitor (--profile's), which System › Profiling starts and
+	// stops; nil: the menu says this program has none.
+	Profiler *profiling.Profiler
 	// Plugins is where the Plugins menu finds plugins (plugins.go); its zero value finds none.
 	Plugins Plugins
 	// Registrations are this binary's own (ADR 0216): a daemon reporting a strict subset of them is
@@ -431,7 +436,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		watches:         map[string]*diskWatch{},

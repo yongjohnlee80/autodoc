@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 31,
+  protocol = 32,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -492,6 +492,15 @@ return {
       },
       result = "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
       doc = "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head.",
+    },
+    ["sys.profile"] = {
+      since = 32, scope = "local-peer", audience = "internal",
+      params = {
+        { name = "op", type = "string" },
+        { name = "dir", type = "string", optional = true }
+      },
+      result = "{on, dir}",
+      doc = "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off.",
     },
     ["sys.shutdown"] = {
       since = 1, scope = "local-peer", audience = "internal",
