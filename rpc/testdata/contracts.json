@@ -1,5 +1,5 @@
 {
-  "protocol": 33,
+  "protocol": 34,
   "min_protocol": 12,
   "verbs": [
     {
@@ -22,7 +22,8 @@
       "errors": [
         -32060,
         -32061,
-        -32065
+        -32065,
+        -32001
       ],
       "doc": "A Markdown file's headings in order, with the version they were read at; other kinds have none."
     },
@@ -46,7 +47,8 @@
       "errors": [
         -32060,
         -32061,
-        -32065
+        -32065,
+        -32001
       ],
       "doc": "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."
     },
@@ -70,7 +72,8 @@
       "errors": [
         -32060,
         -32061,
-        -32065
+        -32065,
+        -32001
       ],
       "doc": "doc.read on an HTML file's own bytes, where doc.read gives its derived text."
     },
@@ -99,7 +102,8 @@
         -32060,
         -32061,
         -32062,
-        -32065
+        -32065,
+        -32001
       ]
     },
     {
@@ -126,7 +130,8 @@
         -32060,
         -32061,
         -32062,
-        -32065
+        -32065,
+        -32001
       ]
     },
     {
@@ -188,7 +193,8 @@
         -32061,
         -32062,
         -32066,
-        -32065
+        -32065,
+        -32001
       ],
       "doc": "Writes the file at version; a stale version is a conflict."
     },
@@ -224,7 +230,8 @@
         -32061,
         -32062,
         -32066,
-        -32065
+        -32065,
+        -32001
       ],
       "doc": "doc.write on an HTML file's own bytes, which doc.write refuses."
     },
@@ -585,7 +592,7 @@
       "errors": [
         -32001
       ],
-      "doc": "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none."
+      "doc": "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Under a gated script's bounds, the workspace that holds any file the script may read, indexed or not."
     },
     {
       "verb": "file.read",

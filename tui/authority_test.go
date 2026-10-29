@@ -126,8 +126,15 @@ func TestAGatedScriptsUserOnlyRunsAreRefused(t *testing.T) {
 		t.Errorf("the opener was handed %v", u)
 	}
 	g.mustRun(t, "lua autodoc.notify('PROBE-USER')") // the control: the probe is seen when it runs
-	g.s.WaitForText(t, "PROBE-USER")
-	if strings.Contains(g.s.String(), "PROBE-GATED") {
+	g.waitKept(t, "PROBE-USER")
+	if onLoop(g.running, func() bool {
+		for _, n := range g.h.noticeLog.items {
+			if strings.Contains(n.text, "PROBE-GATED") {
+				return true
+			}
+		}
+		return false
+	}) {
 		t.Errorf("a refused chunk ran")
 	}
 }
@@ -147,8 +154,8 @@ func TestAGatedScriptCannotWriteItsRights(t *testing.T) {
 		return strings.Contains(got, "[grants") && strings.Contains(got, "[profiles") && strings.Contains(got, "[theme")
 	})
 	got := g.editorText()
-	for _, want := range []string{"[grants lua.grants is the user's: a script may not write it]",
-		"[profiles tui.agent.profiles is the user's: a script may not write it]", "[theme nil]"} {
+	for _, want := range []string{"[grants lua.grants is the user's: a script may not write it",
+		"[profiles tui.agent.profiles is the user's: a script may not write it", "[theme nil]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the answers %q lack %q", got, want)
 		}
@@ -172,7 +179,7 @@ func TestAGatedOpenIsHeldToTheWorkspace(t *testing.T) {
 	for _, cmd := range []string{"openit", "openline"} {
 		g := newGatedRig(t) // its own: the refusal on screen is this command's
 		g.mustRun(t, cmd)
-		g.s.WaitForText(t, "a script may not open it")
+		g.waitKept(t, "a script may not open it")
 		if p := onLoop(g.running, func() string { return g.h.file.path }); p == g.probe {
 			t.Fatalf(":%s opened the probe", cmd)
 		}
@@ -182,7 +189,7 @@ func TestAGatedOpenIsHeldToTheWorkspace(t *testing.T) {
 	g.waitFile(t, "a.md")
 	g.page("[f](file://"+g.probe+") and [w](https://example.com/x)", 1, 2)
 	g.mustRun(t, "follow")
-	g.s.WaitForText(t, "a script may not open it")
+	g.waitKept(t, "a script may not open it")
 	if p := onLoop(g.running, func() string { return g.h.file.path }); p != "a.md" {
 		t.Errorf("the followed file: link opened %q", p)
 	}
@@ -205,7 +212,7 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 	g.waitFile(t, g.probe)
 
 	g.saved(t, func() { g.mustRun(t, "saveit") })
-	g.s.WaitForText(t, "a script may not reach it")
+	g.waitKept(t, "a script may not reach it")
 	g.probeIs(t, "orig\n")
 
 	g.saved(t, func() { onLoop(g.running, func() bool { g.h.luaFeature().luaKey("z"); return true }) })
@@ -247,7 +254,7 @@ func TestAGatedSaveLeftBehindIsDropped(t *testing.T) {
 		g.h.writeAs(a, g.h.active, "MOVED\n", g.h.file.version, nil)
 		return true
 	})
-	g.s.WaitForText(t, "the workspace changed")
+	g.waitKept(t, "the workspace changed")
 	if got := g.d.read(t, "kb", "a.md"); got != "kestrel\n" {
 		t.Errorf("a dropped save wrote %q", got)
 	}
