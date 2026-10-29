@@ -106,7 +106,13 @@ import (
 // session below 31 sees as unknown methods.
 // Protocol 32 is sys.profile: the daemon's memory monitor (--profile's) started, stopped or asked
 // about at runtime, for a local peer; a session below 32 sees an unknown method.
-const Protocol int64 = 32
+// Protocol 33 is todos.changes' optional scoped: a consumer that reads each assignment's scope and
+// delivers only its own says so; one that doesn't gets a scoped assignment without its assignee
+// (the change's to, a resync row's assignee). It is the one exception to "a result keeps its
+// meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
+// scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
+// every project. Without the assignee it delivers none; an unscoped assignment is as before.
+const Protocol int64 = 33
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

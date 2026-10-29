@@ -242,3 +242,67 @@ func TestEveryVerbAnswers(t *testing.T) {
 	call("todos.move_store", map[string]any{"root": root}, "/elsewhere/.todo-list")
 	call("todos.release", map[string]any{"root": root})
 }
+
+// TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee: todos.changes without scoped answers a
+// scoped assignment without its assignee, so a notifier that ignores scopes (one still running from
+// before an upgrade) can't deliver it in every project; an unscoped assignment keeps its assignee,
+// and a consumer that declares scoped gets every change as it is (protocol 33).
+func TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee(t *testing.T) {
+	e := claimed(t)
+	call := func(name string, params ...any) any {
+		t.Helper()
+		out, err := verb(t, e.m, name).Call(context.Background(), params)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return out
+	}
+	a := call("todos.add", "kb", map[string]any{"title": "scoped"}).(todo.Task)
+	b := call("todos.add", "kb", map[string]any{"title": "unscoped"}).(todo.Task)
+	call("todos.assign", "kb", a.ID, a.Rev, "agent:jarvis", "", "auto-agents:p1")
+	call("todos.assign", "kb", b.ID, b.Rev, "agent:gold-man")
+
+	assigns := func(page todo.ChangesPage) map[string]todo.Change {
+		out := map[string]todo.Change{}
+		for _, c := range page.Changes {
+			if c.Kind == todo.KindAssign {
+				out[c.ID] = c
+			}
+		}
+		return out
+	}
+	old := assigns(call("todos.changes", "kb", "old-notifier", int64(50)).(todo.ChangesPage))
+	if c := old[a.ID]; c.To != "" || c.Scope != "auto-agents:p1" {
+		t.Errorf("an undeclared reader got the scoped assign %+v: want no to, the scope kept", c)
+	}
+	if c := old[b.ID]; c.To != "agent:gold-man" {
+		t.Errorf("an undeclared reader got the unscoped assign %+v: want its to", c)
+	}
+	scoped := assigns(call("todos.changes", "kb", "scoped-notifier", int64(50), true).(todo.ChangesPage))
+	if c := scoped[a.ID]; c.To != "agent:jarvis" || c.Scope != "auto-agents:p1" {
+		t.Errorf("a reader that declares scoped got %+v: want the change as it is", c)
+	}
+}
+
+// TestForUnscopedReaderWithholdsOnlyScopedAssignees: a resync's rows lose a scoped assignee and keep
+// an unscoped one, other changes are untouched, and the page it was made from is not changed.
+func TestForUnscopedReaderWithholdsOnlyScopedAssignees(t *testing.T) {
+	page := todo.ChangesPage{
+		Changes: []todo.Change{
+			{Seq: 1, Kind: todo.KindAssign, To: "agent:x", Scope: "auto-agents:p1"},
+			{Seq: 2, Kind: todo.KindAssign, To: "agent:y"},
+			{Seq: 3, Kind: todo.KindStatus, To: "completed", Scope: "auto-agents:p1"},
+		},
+		Snapshot: []todo.SnapshotRow{{ID: "a", Assignee: "agent:x", Scope: "auto-agents:p1"}, {ID: "b", Assignee: "agent:y"}},
+	}
+	got := page.ForUnscopedReader()
+	if got.Changes[0].To != "" || got.Changes[1].To != "agent:y" || got.Changes[2].To != "completed" {
+		t.Errorf("changes %+v: only the scoped assign loses its to", got.Changes)
+	}
+	if got.Snapshot[0].Assignee != "" || got.Snapshot[1].Assignee != "agent:y" {
+		t.Errorf("snapshot %+v: only the scoped row loses its assignee", got.Snapshot)
+	}
+	if page.Changes[0].To != "agent:x" || page.Snapshot[0].Assignee != "agent:x" {
+		t.Error("the original page was changed")
+	}
+}

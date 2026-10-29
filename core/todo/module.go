@@ -122,6 +122,7 @@ type (
 		At       At     `param:"at"`
 		Consumer string `param:"consumer"`
 		Limit    int64  `param:"limit,optional" doc:"at most this many; 0 for the default"`
+		Scoped   bool   `param:"scoped,optional" doc:"the consumer reads each assignment's scope and delivers only its own; without it, a scoped assignment comes without its assignee (protocol 33)"`
 	}
 	ackParams struct {
 		At       At     `param:"at"`
@@ -263,7 +264,11 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(quiet("todos.changes", module.EffectRead, "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, scope?, hand?, at}], resync?, snapshot?, cursor}",
 			"A consumer's committed changes after its cursor, or a resync when it was away too long.", user),
 			func(ctx context.Context, p changesParams) (ChangesPage, error) {
-				return m.Changes(ctx, p.At, p.Consumer, int(p.Limit))
+				page, err := m.Changes(ctx, p.At, p.Consumer, int(p.Limit))
+				if err != nil || p.Scoped {
+					return page, err
+				}
+				return page.ForUnscopedReader(), nil
 			}),
 		module.Handle(quiet("todos.ack", module.EffectWrite, "nil", "Advances a consumer's cursor once it has handled the changes up to seq.", user, CodeNoTask),
 			func(ctx context.Context, p ackParams) (none, error) { return nil, m.Ack(ctx, p.At, p.Consumer, p.Seq) }),

@@ -1,6 +1,9 @@
 package todo
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Task is one task file, decoded. The frontmatter fields carry their YAML names; Path is the
 // file's place in the store and Rev the SHA-256 of its bytes, which every mutation must name.
@@ -147,6 +150,34 @@ type ChangesPage struct {
 	Snapshot []SnapshotRow `json:"snapshot,omitempty"`
 	Cursor   int64         `json:"cursor"`
 }
+
+// ForUnscopedReader is the page as a consumer that hasn't declared it reads scopes is answered
+// (todos.changes without scoped, protocol 33): every scoped assignment without its assignee, the
+// change's To and the snapshot row's Assignee. Such a consumer delivers an assignee it is given
+// whatever the scope (auto-core before v0.5.2, or a Neovim still running it after an upgrade), so a
+// scoped assignment, one made for a project, would be delivered by every Neovim with an agent of
+// that name. Without the assignee it delivers none; unscoped assignments are as they were.
+func (p ChangesPage) ForUnscopedReader() ChangesPage {
+	if slices.ContainsFunc(p.Changes, scopedAssign) {
+		p.Changes = slices.Clone(p.Changes)
+		for i, c := range p.Changes {
+			if scopedAssign(c) {
+				p.Changes[i].To = ""
+			}
+		}
+	}
+	if slices.ContainsFunc(p.Snapshot, func(r SnapshotRow) bool { return r.Scope != "" }) {
+		p.Snapshot = slices.Clone(p.Snapshot)
+		for i, r := range p.Snapshot {
+			if r.Scope != "" {
+				p.Snapshot[i].Assignee = ""
+			}
+		}
+	}
+	return p
+}
+
+func scopedAssign(c Change) bool { return c.Kind == KindAssign && c.Scope != "" }
 
 // Change kinds.
 const (

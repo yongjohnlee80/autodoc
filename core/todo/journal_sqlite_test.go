@@ -125,6 +125,7 @@ var sqliteSuites = []struct {
 	{"EachRootsClaimRewritesItsOwnLegacyRefs", TestEachRootsClaimRewritesItsOwnLegacyRefs},
 	{"TheFirstWriteKeepsTheBaseline", TestTheFirstWriteKeepsTheBaseline},
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
+	{"AReaderThatDoesntDeclareScopesGetsNoScopedAssignee", TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee},
 	{"EveryVerbAnswers", TestEveryVerbAnswers},
 	{"AClaimItCannotServeIsUndone", TestAClaimItCannotServeIsUndone},
 	{"AFailedClaimOfAReleasedStoreKeepsItReleased", TestAFailedClaimOfAReleasedStoreKeepsItReleased},
