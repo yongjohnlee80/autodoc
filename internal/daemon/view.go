@@ -31,6 +31,7 @@ func (v *view) Exclude() []string     { return v.s.exclude }
 func (v *view) Err() error            { return v.s.err }
 func (v *view) Index() *index.Indexer { return v.s.ix }
 func (v *view) Docs() *docs.Docs      { return v.s.docs }
+func (v *view) Files() *docs.Docs     { return v.s.files }
 
 func (v *view) Provider() rpc.ProviderChoice { return v.s.provider }
 

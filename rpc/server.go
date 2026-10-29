@@ -112,7 +112,12 @@ import (
 // meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
 // scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
 // every project. Without the assignee it delivers none; an unscoped assignment is as before.
-const Protocol int64 = 33
+// Protocol 34 is ADR 1792004705 §4.2a.1: a gated Lua script's bounds, {within, protect?}, one
+// parameter past any verb's own, which the TUI's gate sets on every call a gated script makes. The
+// daemon holds every file the call reaches to them (core/fsbounds): inside the workspace, none of it
+// hidden or AutoDoc's own, a write in within's workspace only. A session below 34 sends none, and
+// every call of any session without them is unbounded, as before.
+const Protocol int64 = 34
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -163,6 +168,7 @@ type WorkspaceInfo struct {
 	Err              error
 	Index            *index.Indexer
 	Docs             *docs.Docs
+	Files            *docs.Docs // every file of the root (Workspace.Files); nil: a bounded file.* finds none
 	Following        func() follow.Status
 	// Warming is what the workspace waits on before it answers fully — a provider being set up, a
 	// restart to take one — for index.status; nil or empty when it is ready.

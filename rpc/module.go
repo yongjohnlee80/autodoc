@@ -88,8 +88,9 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 
 // serve is a module verb's handler, on the wrappers rpc's own verbs use: verb checks the arity the
 // contract gives, resolves a ScopeWorkspace verb's workspace and maps what the module leaves
-// unmapped; local refuses a ScopeLocalPeer verb over TCP. The handler's ctx carries the session's
-// protocol and client token too. The result is the handler's own: chain carries it with
+// unmapped; local refuses a ScopeLocalPeer verb over TCP; bounded takes a gated script's bounds off
+// a call (ADR 1792004705 §4.2a.1). The handler's ctx carries the session's protocol, client token
+// and bounds too. The result is the handler's own: chain carries it with
 // module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
 	call := func(ctx context.Context, w Workspace, p []any) (any, error) {
@@ -105,6 +106,7 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 	if v.Scope == module.ScopeLocalPeer {
 		h = s.local(v.Verb, lo, hi, call)
 	}
+	h = bounded(h, hi)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		ctx = context.WithValue(ctx, sessionKey{}, req.Session)
 		return h(module.WithClient(ctx, clientOf(req.Session)), req)
