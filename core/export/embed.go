@@ -505,27 +505,33 @@ func OutputMarkdown(doc, p string, rows int) (string, bool) {
 	return fenced("text", string(data)), true
 }
 
+// imageEmbedPath is dest as a path in the document's folder when it names an image EmbedImage
+// reads: embedPath's rule (not a URL, an absolute path or one that climbs out) and an image type
+// (imageTypes). The one rule EmbedImage and IsImageEmbed share.
+func imageEmbedPath(dest string) (string, bool) {
+	p, ok := embedPath(dest)
+	if !ok {
+		return "", false
+	}
+	if _, image := imageTypes[strings.ToLower(path.Ext(p))]; !image {
+		return "", false
+	}
+	return p, true
+}
+
+// IsImageEmbed reports whether dest names an image EmbedImage reads (imageEmbedPath). Whether the
+// file is there and reads is EmbedImage's to answer.
+func IsImageEmbed(dest string) bool {
+	_, ok := imageEmbedPath(dest)
+	return ok
+}
+
 // EmbedImage is the bytes of the image dest names, found as the page finds an embed (beside doc, then
 // in its resources folder) and within the page's limit for one image, for the Rendered view to
 // draw. A file that is not an image (imageTypes), a URL, or one out of the folder is not.
-// IsImageEmbed reports whether dest names an image EmbedImage reads: a file in the document's
-// folder, by embedPath's rule (not a URL, an absolute path or one that climbs out), of an image
-// type. Whether the file is there and reads is EmbedImage's to answer.
-func IsImageEmbed(dest string) bool {
-	p, ok := embedPath(dest)
-	if !ok {
-		return false
-	}
-	_, image := imageTypes[strings.ToLower(path.Ext(p))]
-	return image
-}
-
 func EmbedImage(doc, dest string) ([]byte, bool) {
-	p, ok := embedPath(dest)
+	p, ok := imageEmbedPath(dest)
 	if !ok {
-		return nil, false
-	}
-	if _, image := imageTypes[strings.ToLower(path.Ext(p))]; !image {
 		return nil, false
 	}
 	e := newEmbedder(doc, tableFit{})
