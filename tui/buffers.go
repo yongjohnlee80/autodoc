@@ -36,8 +36,7 @@ type openBuffer struct {
 	luaRev, luaGen uint64
 	// restored is the kept copy this buffer's text came from (recovery.go); pendingRestore, a copy
 	// waiting for this buffer's load
-	restored       *recoveryKey
-	pendingRestore *recovered
+	restored *recoveryKey
 	// draft is an untitled draft's recovery id (ownRecovery), made when it is first kept; "" until
 	// then. Kept again, a restored draft's copy replaces the one it came from (keepRecovery)
 	draft string

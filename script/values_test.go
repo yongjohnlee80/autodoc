@@ -74,7 +74,7 @@ type stamp struct{ s string }
 
 func (n stamp) String() string { return "stamp " + n.s }
 
-type opaque struct{ ch chan int }
+type opaque struct{ _ chan int } // a value Lua cannot read
 
 // Go's values reach Lua as a script reads them; typed slices, maps and numbers too.
 func TestToLuaIsWhatAScriptReads(t *testing.T) {

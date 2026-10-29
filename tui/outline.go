@@ -6,7 +6,6 @@ import (
 	"path"
 	"strings"
 
-	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -38,20 +37,6 @@ func (h *Host) cursorMoved() {
 	h.followCursorInPane()
 	line, _ := h.core.Line()
 	h.reg.moved(line, h.cursorBytes())
-}
-
-// clusterBytes is how many bytes the first n characters (grapheme clusters) of line take: the
-// editor counts its column in characters.
-func clusterBytes(line string, n int) int {
-	b := 0
-	for c := range tuicore.Graphemes(line) {
-		if n == 0 {
-			break
-		}
-		b += len(c)
-		n--
-	}
-	return b
 }
 
 // outliner is Go › Outline and the breadcrumb: the page's outline, read at each pause, and the

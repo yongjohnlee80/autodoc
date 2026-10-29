@@ -37,14 +37,6 @@ func workspacePatterns(value any) []string {
 	return patterns
 }
 
-func patternArgs(patterns []string) []any {
-	args := make([]any, len(patterns))
-	for index, pattern := range patterns {
-		args[index] = pattern
-	}
-	return args
-}
-
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
 // else the first that is.
 func (h *Host) loadWorkspaces() {
@@ -279,13 +271,6 @@ func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, er
 			fn(a.w, a.more)
 		}
 	})
-}
-
-// withCurrentRow is withCurrent for the manager's row i.
-func (h *Host) withCurrentRow(i int, fn func(w wsInfo)) {
-	if w, ok := h.managerRow(i); ok {
-		h.withCurrent(w.name, nil, func(w wsInfo, _ any) { fn(w) })
-	}
 }
 
 func (h *Host) managerRow(i int) (wsInfo, bool) {

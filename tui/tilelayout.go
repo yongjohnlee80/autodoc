@@ -128,10 +128,6 @@ func (*tiles) Prefs() []PrefSpec {
 	return rows
 }
 
-// tiled reports whether the window id's Layout is Tiled: the user's choice, whether or not the
-// manager places it now (one released for want of room is still Tiled).
-func (t *tiles) tiled(id string) bool { return t.c.Prefs().Value(layoutKey(id)) == layoutTiled }
-
 // setLayout is Layout › Tiled or Float for the window id: its preference, live.
 func (t *tiles) setLayout(id string, tiled bool) {
 	v := layoutFloat

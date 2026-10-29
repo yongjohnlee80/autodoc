@@ -181,12 +181,9 @@ func menuLabelID(label string) string {
 
 // slugOf is s as an id's last part: its words, lower-case, joined by "_", at most 48 bytes.
 func slugOf(s string) string {
-	var words []string
-	for _, w := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
-	}) {
-		words = append(words, w)
-	}
+	})
 	out := strings.Join(words, "_")
 	if len(out) > 48 {
 		out = strings.Trim(out[:48], "_")

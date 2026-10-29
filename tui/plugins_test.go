@@ -1617,9 +1617,9 @@ func TestTheDocumentFeed(t *testing.T) {
 	r.s.WaitFor(t, "the burst typed", func(string) bool {
 		return onLoop(r, func() bool { return r.h.core.Value() == "héllo" && r.h.core.Mode().String() == "NORMAL" })
 	})
-	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.pageVersion }))))
+	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.pageVersion })))
 	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
-	got = docsIn(said(t, logs, "stats"))
+	got := docsIn(said(t, logs, "stats"))
 	if len(got) != 2 || !strings.Contains(got[1], `"héllo" at 1:5 large=false`) {
 		t.Fatalf("one document for the burst, the text typed and the cursor on o (column 5): %q", got)
 	}
@@ -1629,7 +1629,7 @@ func TestTheDocumentFeed(t *testing.T) {
 	}
 
 	r.keys(t, key('v'), key('h'), key('h')) // the selection: é, l, l — columns 2 to 4, its end after it
-	got = docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2)+` "héllo" at 1:3 sel 1:3-1:6`))
+	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2)+` "héllo" at 1:3 sel 1:3-1:6`)
 	r.keys(t, esc())
 
 	// over the link's limit, in lines as a note has them (one line of a megabyte lays out slowly)

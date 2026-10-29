@@ -721,10 +721,6 @@ func embedVec(text string) []float32 {
 	return searchtest.Embed(text)
 }
 
-func hashOf(text string) [32]byte {
-	return search.Chunk{Embed: text}.TextHash()
-}
-
 // Cell — Pending reaches past embedded chunks to the pending ones. Six embedded chunks come
 // before the unembedded one in (doc, ord) order, with limit 1: a scan that stopped at embedded
 // chunks would return nothing forever and the worker would never reach the pending text.

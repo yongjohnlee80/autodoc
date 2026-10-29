@@ -477,13 +477,13 @@ func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
 	lines := []string{"![Fruit](fruit.chart.json)", "", "![Other](other.chart.json)", "", "![Broken](broken.chart.json)"}
 	draw := func(ln int) guiwidget.BlockLayout {
 		host := &realHost{ready: make(chan struct{}, 1)}
-		_, bl := layOut(r, lines, ln, false, host)
+		layOut(r, lines, ln, false, host) // starts the chain: its first layout is the placeholder
 		select {
 		case <-host.ready:
-			_, bl = layOut(r, lines, ln, false, host)
 		case <-time.After(10 * time.Second):
 			t.Fatalf("line %d: the chain never called ready", ln)
 		}
+		_, bl := layOut(r, lines, ln, false, host)
 		return bl
 	}
 	bl := draw(0)

@@ -191,11 +191,11 @@ func TestABackgroundPanicReachesItsCaller(t *testing.T) {
 	// the shapes the callers answer in: answerOf, Core.Go's any, a struct with its own err (a file
 	// opening's, a workspace dialog's), and coreDo's typed struct (a plugin's clone or update)
 	type opened struct {
-		text string
-		err  error
+		_   string
+		err error
 	}
 	type cloned struct {
-		dir string
+		_   string
 		err error
 	}
 	got := make(chan any, 5)

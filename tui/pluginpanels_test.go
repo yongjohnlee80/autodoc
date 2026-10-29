@@ -382,7 +382,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, logs := cardTUI(t, dir, nil)
 	r.openPlugin("card")
-	top, left, right, bottom := waitFrame(t, r, "Card")
+	top, left, _, bottom := waitFrame(t, r, "Card")
 	w, h := openSize(t, logs, "card")
 
 	altDrag(t, r, tuicore.MouseLeft, left+3, top+2, -20, 3)
@@ -400,7 +400,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 		m, _ := d.db.Preferences(context.Background())
 		return m["tui."+cardPanelID("card")+".float"]
 	}()
-	top, left, right, bottom = waitFrame(t, r, "Card")
+	top, left, right, bottom := waitFrame(t, r, "Card")
 	// a right-edge panel resizes from its bottom-left corner: six columns wider to the left, two rows taller
 	altDrag(t, r, tuicore.MouseRight, left+1, bottom-1, -6, 2)
 	waitSaid(t, logs, "card", "resize "+strconv.Itoa(w+6)+"x"+strconv.Itoa(h+2))
