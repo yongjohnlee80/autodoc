@@ -261,15 +261,6 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
 var edges = []string{"left", "right", "top", "bottom"}
 
-func isEdge(s string) bool {
-	for _, e := range edges {
-		if e == s {
-			return true
-		}
-	}
-	return false
-}
-
 // prefsOf reads the store's preferences over the defaults; a value the TUI cannot use is the
 // default's.
 func prefsOf(m map[string]any) prefs { return prefsFor(m, false) }

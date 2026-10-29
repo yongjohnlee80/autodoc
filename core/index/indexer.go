@@ -1028,12 +1028,6 @@ func (x *Indexer) retryDelay(attempts int) time.Duration {
 	return min(d, x.opts.MaxRetryDelay)
 }
 
-type oldChunk struct {
-	id                            int64
-	hash                          []byte
-	title, breadcrumb, tags, body string
-}
-
 // upsertDoc writes a document's new generation (ADR 0204 §4.2): chunks whose hash is in the active
 // generation are reused in place (their position updated, no full-text write), new ones are
 // inserted under the new generation, and the rest die at it. The flip of active_gen is in the same

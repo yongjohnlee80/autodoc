@@ -21,9 +21,6 @@ type Plugins struct {
 	Socket string // the daemon's socket, told to a plugin as AUTODOC_SOCKET
 }
 
-// pluginName is a plugin's name: the manifest's rule.
-var pluginName = manifests.Name
-
 // pluginAnchors are where a dialog may sit, as a manifest names them (manifests.Placements).
 var pluginAnchors = map[string]widget.Anchor{
 	"center": widget.Center, "top": widget.Top, "bottom": widget.Bottom, "left": widget.Left,

@@ -117,13 +117,6 @@ func (f *fakeEmbeddings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// asked is how many times the endpoint embedded text.
-func (f *fakeEmbeddings) asked(text string) int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.texts[text]
-}
-
 func newServerFixture(t *testing.T, view string) *serverFixture {
 	t.Helper()
 	dsn := pgtest.ScratchURL(t)

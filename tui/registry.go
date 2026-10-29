@@ -191,15 +191,6 @@ func auditLine(trf func(string, ...any) string, e *regindex.IndexEntry, commit s
 	return trf("autodoc.text.registry.never_audited")
 }
 
-// auditHistory is an entry's newest audit as history, not a claim about any commit installed.
-func auditHistory(e regindex.IndexEntry) string {
-	if len(e.Audits) == 0 {
-		return "never audited"
-	}
-	a := e.Audits[0]
-	return "✓ audited by " + a.Model + ", " + a.Date + ", at " + regindex.Short(a.Commit)
-}
-
 // isRegistryName reports whether an install's argument names a registry entry rather than a repo:
 // a name holds no slash, backslash, colon or space, and every URL, path and scp-style address does.
 func isRegistryName(arg string) bool {

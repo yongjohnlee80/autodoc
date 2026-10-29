@@ -45,6 +45,9 @@ func TestTheStoresBatchCommitsWithItsTransaction(t *testing.T) {
 		defer func() { _ = b.Rollback() }() // does nothing either: the transaction commits
 		return b.Put(ctx, d)
 	})
+	if err != nil {
+		t.Fatalf("the committing transaction: %v", err)
+	}
 	if id, ok, err := s.Identity(ctx, "a.md"); err != nil || !ok || id != "i" {
 		t.Errorf("after the transaction committed: %q %v %v", id, ok, err)
 	}

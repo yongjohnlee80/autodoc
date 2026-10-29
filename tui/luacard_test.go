@@ -156,7 +156,7 @@ func TestACardsTicksAreOneOpeningsChain(t *testing.T) {
 func TestACardIsReplacedEndedAndClosed(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	held := holdCards(t, r)
+	holdCards(t, r) // the first engine's host: its timers held from the start
 	r.luaLoad(t, tickingCard+`
 autodoc.command{ name = "keep", run = function() first = autodoc.ui.card{ title = "first", text = "first text" } end }
 autodoc.command{ name = "stale", run = function() first:set("stale text") end }`)
@@ -179,7 +179,7 @@ autodoc.command{ name = "stale", run = function() first:set("stale text") end }`
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "the reload closed the card", func(string) bool { return !r.cardOpen() })
-	held = holdCards(t, r) // the new engine's host
+	held := holdCards(t, r) // the new engine's host
 
 	r.luaLoad(t, tickingCard)
 	if err := r.luaRun("tc 1000 close"); err != nil {

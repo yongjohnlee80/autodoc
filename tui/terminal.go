@@ -629,10 +629,6 @@ func (t *terminals) openTerminal() {
 	t.toggleTerminal()
 }
 
-// openTerminal keeps the editor command entry point while its catalog moves.
-// Startup and focus behavior belong to the terminals feature.
-func (h *Host) openTerminal() { h.terminals.openTerminal() }
-
 // termDir is where the shell starts: the workspace's folder when this machine has it as a folder
 // (a daemon may serve a root only it can see), else the user's home.
 func termDir(root string) string {

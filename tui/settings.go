@@ -347,10 +347,7 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 		return nil, fmt.Errorf("exclude: %w", err)
 	}
 	include, exclude = setFileTypes(include, exclude, opened, f)
-	var texts []string
-	for _, t := range strings.FieldsFunc(f.texts, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
-		texts = append(texts, t)
-	}
+	texts := strings.FieldsFunc(f.texts, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
 	if texts, err = kind.TextExtensions(texts); err != nil {
 		// as the daemon words it, without the package's prefix
 		return nil, errors.New(strings.TrimPrefix(err.Error(), "kind: "))
