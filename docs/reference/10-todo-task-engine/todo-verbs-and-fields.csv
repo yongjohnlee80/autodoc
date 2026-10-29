@@ -7,7 +7,7 @@ RPC Verb,todos.status,"at, id, rev, status -> task",Agent / UI Write,"Atomically
 RPC Verb,todos.assign,"at, id, rev, assignee, reason? -> task",Agent / UI Write,"Sets assignee; promotes open -> in-progress in the same write (D1); records assign op in todo_change for consumers"
 RPC Verb,todos.remove,"at, id, rev -> nil",Agent / UI Write,"3-phase delete via .trash/<seq>-<file> -> staged -> unlink; preserves audit entry in todo_change"
 RPC Verb,todos.refresh,"at -> {scanned, moved, archived, errors_set, rewritten, malformed}",Agent / UI Write,"Reconciles misplaced bucket files, validates adr/review/blocked into errors[], and auto-archives completed tasks > 28 days"
-RPC Verb,todos.changes,"at, consumer, limit? -> {changes[] | resync, snapshot, cursor}",User Tool Read,"Pulls committed journal entries after consumer's acked_seq, or triggers full snapshot resync if > 90 days idle"
+RPC Verb,todos.changes,"at, consumer, limit?, scoped? -> {changes[] | resync, snapshot, cursor}",User Tool Read,"Pulls committed journal entries after consumer's acked_seq, or triggers full snapshot resync if > 90 days idle; without scoped, a scoped assignment comes without its assignee"
 RPC Verb,todos.ack,"at, consumer, seq -> nil",User Tool Write,"Advances durable consumer cursor in todo_consumer once external notifications are delivered"
 RPC Verb,todos.resolve,"at -> {store_id, store, root, override?, writable, claimed}",Agent / UI Read,"Resolves workspace name or {root} map to canonical .todo-list directory and ownership state"
 RPC Verb,todos.scaffold,"at -> {store_id, store, scaffolded}",Agent / UI Write,"Creates .todo-list/ bucket hierarchy and writes .autodoc-owner marker for a claimed store"

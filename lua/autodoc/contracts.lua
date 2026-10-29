@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 32,
+  protocol = 33,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -551,7 +551,8 @@ return {
       params = {
         { name = "at", type = "workspace | {root}" },
         { name = "consumer", type = "string" },
-        { name = "limit", type = "int", optional = true }
+        { name = "limit", type = "int", optional = true },
+        { name = "scoped", type = "bool", optional = true }
       },
       result = "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, scope?, hand?, at}], resync?, snapshot?, cursor}",
       doc = "A consumer's committed changes after its cursor, or a resync when it was away too long.",

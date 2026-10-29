@@ -218,6 +218,14 @@ autodoc --call todos.changes '["kb", "notifier", 50]'
 autodoc --call todos.ack '["kb", "notifier", 148]'
 ```
 
+An assignment can carry its assigner's **scope**, an opaque string such as the project it was made in (`todos.assign`'s optional last parameter). AutoDoc keeps it and never reads it. A consumer that delivers assignments, such as a notifier in each editor, should deliver only its own scope's. It says it does by passing `scoped`:
+
+```sh
+autodoc --call todos.changes '["kb", "notifier", 50, true]'
+```
+
+A consumer that doesn't pass `scoped` is answered every scoped assignment **without its assignee** (the change's `to`, and a resync row's `assignee`), so a reader that ignores scopes can't deliver one in every project that has an agent of that name. An assignment with no scope keeps its assignee. (Protocol 33.)
+
 Journal rows are retained for at least 30 days and are pruned only after every active consumer has acknowledged them. If a consumer stays silent for more than 90 days, it is automatically unregistered and receives a full `resync` snapshot the next time it calls `todos.changes`.
 
 ![Complete Reference of todos.* RPC Verbs and .todo-list/ Frontmatter Fields](todo-verbs-and-fields.csv)
