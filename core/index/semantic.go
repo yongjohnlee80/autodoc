@@ -801,6 +801,33 @@ func (m *semantic) embedSome(ctx context.Context, p embed.Provider, fp string, d
 	return nil
 }
 
+// EmbedRetryIn is how long until the first text the provider refused under the model being filled
+// may be tried again; 0 when none waits (or the indexer has no provider). Until then, and until a
+// commit brings new chunks, a batch that found no work finds none again: the daemon's queue leaves
+// the workspace alone that long instead of scanning it on a fixed poll.
+func (x *Indexer) EmbedRetryIn() time.Duration {
+	m := x.sem
+	if m == nil {
+		return 0
+	}
+	fp := m.target.Model().Fingerprint()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now.Now()
+	var first time.Duration
+	for k, entry := range m.refused {
+		if f, _, ok := strings.Cut(k, "\x00"); !ok || f != fp {
+			continue
+		}
+		// a retry time already passed is due now: the smallest wait that still counts as one
+		wait := max(entry.retryAt.Sub(now), time.Millisecond)
+		if first == 0 || wait < first {
+			first = wait
+		}
+	}
+	return first
+}
+
 // skip is the texts of model fp set aside now, as text hashes.
 func (m *semantic) skip(fp string) map[string]bool {
 	m.mu.Lock()

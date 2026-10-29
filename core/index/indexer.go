@@ -77,6 +77,8 @@ type options struct {
 	betweenStatusReads func()
 	// onCommit, when set (tests only), is told how long each batch's transaction held the writer.
 	onCommit func(time.Duration)
+	// onWake, when set (tests only), is told each time the writer's own timer wakes it.
+	onWake func()
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
 	// one active, or, while another is active, the one filling to replace it. The model it replaces
 	// is offline while it fills: nothing embeds with it, so the server holds one model at a time,
@@ -436,24 +438,31 @@ func (x *Indexer) loadJobs(ctx context.Context) error {
 
 // writer is the one goroutine that writes the store. It batches touches and results, dispatches
 // jobs to the workers, and garbage-collects when idle.
+//
+// Between events it sleeps on one timer, set to the first of the times no event announces: the
+// open batch's age reaching BatchDelay, the first delayed job's retry time, and the garbage
+// collection's due time. An idle workspace with nothing due sleeps until an event: no heartbeat
+// wakes it (a daemon serves many workspaces, and each one's writer polling every BatchDelay/2 was
+// a steady cost with nothing to do).
 func (x *Indexer) writer(ctx context.Context) error {
 	var batch []*prepared
 	var ready []workItem
 	var first time.Time
 	gcDue := time.Now().Add(x.opts.BatchDelay)
-	// NOTE: a heartbeat for the times no event announces: a batch's age (BatchDelay), the garbage
-	// collection's due time, and a job's retry time. It wakes the writer every BatchDelay/2 even
-	// when idle.
-	// TODO: a timer set to the earliest of those times, reset as they change, would wake the
-	// writer only when one is due.
-	ticker := time.NewTicker(x.opts.BatchDelay / 2)
-	defer ticker.Stop()
+	timer := time.NewTimer(time.Hour)
+	timer.Stop()
+	defer timer.Stop()
 	for {
 		ready = x.dispatchable(ready)
 		var out chan workItem
 		var next workItem
 		if len(ready) > 0 {
 			out, next = x.work, ready[0]
+		}
+		var due <-chan time.Time
+		if wait, ok := x.writerWait(len(batch) > 0 || len(x.unpersisted) > 0, len(ready) > 0, first, gcDue); ok {
+			timer.Reset(wait)
+			due = timer.C
 		}
 		select {
 		case <-ctx.Done():
@@ -482,8 +491,15 @@ func (x *Indexer) writer(ctx context.Context) error {
 			continue
 		case o := <-x.ops:
 			o.done <- x.runOp(ctx, o.ctx, o.fn)
+			// an op may leave dead chunks or orphaned vectors behind: collect them when next idle
+			if soon := time.Now().Add(x.opts.BatchDelay); soon.Before(gcDue) {
+				gcDue = soon
+			}
 			continue
-		case <-ticker.C:
+		case <-due:
+			if x.opts.onWake != nil {
+				x.opts.onWake()
+			}
 		}
 		pending := len(batch) > 0 || len(x.unpersisted) > 0
 		if pending && (len(batch) >= x.opts.BatchSize || time.Since(first) >= x.opts.BatchDelay) {
@@ -503,17 +519,59 @@ func (x *Indexer) writer(ctx context.Context) error {
 				}
 			}
 			batch, first = batch[:0], time.Time{}
+			if len(x.unpersisted) > 0 {
+				first = time.Now() // a failed commit's touches are tried again after BatchDelay, not in a loop
+			}
 			gcDue = time.Now().Add(x.opts.BatchDelay)
 			continue
 		}
-		if !pending && len(ready) == 0 && !x.opts.noGC && time.Now().After(gcDue) {
-			if more, err := x.gc(ctx); err == nil && more {
+		if !pending && len(ready) == 0 && !x.opts.noGC && !time.Now().Before(gcDue) {
+			more, err := x.gc(ctx)
+			switch {
+			case err == nil && more:
 				gcDue = time.Now() // keep going while there is garbage and nothing else to do
-			} else {
+			case err == nil:
+				// NOTE: nothing left to collect. Only a commit or an op makes more (each sets gcDue
+				// again), and the change log's age-based pruning can wait: look again in gcIdle.
+				gcDue = time.Now().Add(gcIdle)
+			default:
 				gcDue = time.Now().Add(5 * x.opts.BatchDelay)
 			}
 		}
 	}
+}
+
+// gcIdle is how long the writer of a workspace that has nothing to collect waits before it looks
+// again with nothing committed in between: only the change log's rows, pruned by age, can become
+// garbage without a commit.
+const gcIdle = time.Hour
+
+// writerWait is how long the writer may sleep before one of its own times is due, and false when
+// none is: the open batch's age reaching BatchDelay (pending), the first delayed job's retry time,
+// and, when nothing is pending or waiting for a worker, the garbage collection's due time.
+func (x *Indexer) writerWait(pending, dispatching bool, first, gcDue time.Time) (time.Duration, bool) {
+	var at time.Time
+	set := false
+	earliest := func(t time.Time) {
+		if !set || t.Before(at) {
+			at, set = t, true
+		}
+	}
+	if pending {
+		earliest(first.Add(x.opts.BatchDelay))
+	}
+	for _, p := range x.delayed {
+		if j := x.jobs[p]; j != nil {
+			earliest(j.notUntil)
+		}
+	}
+	if !pending && !dispatching && !x.opts.noGC {
+		earliest(gcDue)
+	}
+	if !set {
+		return 0, false
+	}
+	return max(time.Until(at), 0), true
 }
 
 // takeTouches turns the touched paths into jobs, each with a new seq. A path whose worker is still
