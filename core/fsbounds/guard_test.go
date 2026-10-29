@@ -235,16 +235,22 @@ func TestEveryMethodIsChecked(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer disk.Close()
-	fsys := tr.g.Wrap(func() string { return "kb" }, tr.root, disk)
 	b := With(context.Background(), writeKB)
 	user := context.Background()
-	calls := methodCalls(fsys)
-	for name, call := range calls {
-		refusedFor(t, name+" of a hidden name", call(b, ".bashrc", "notes/z.md"), whyHidden)
-		refusedFor(t, name+" to a hidden name", call(b, "notes/a.md", ".ssh/new"), whyHidden)
+	// golib's local driver has no Copier: a driver with one is wrapped too, so Copy is checked
+	for _, driver := range []vfs.FS{disk, copying{disk}} {
+		fsys := tr.g.Wrap(func() string { return "kb" }, tr.root, driver)
+		calls := methodCalls(fsys)
+		for name, call := range calls {
+			refusedFor(t, name+" of a hidden name", call(b, ".bashrc", "notes/z.md"), whyHidden)
+			refusedFor(t, name+" to a hidden name", call(b, "notes/a.md", ".ssh/new"), whyHidden)
+		}
+		if err := calls["Stat"](user, ".bashrc", ""); err != nil {
+			t.Errorf("the user's Stat: %v", err)
+		}
 	}
-	if err := calls["Stat"](user, ".bashrc", ""); err != nil {
-		t.Errorf("the user's Stat: %v", err)
+	if _, ok := tr.g.Wrap(func() string { return "kb" }, tr.root, copying{disk}).(vfs.Copier); !ok {
+		t.Fatal("a driver with a Copier lost it")
 	}
 	var none *Guard
 	nfs := none.Wrap(func() string { return "kb" }, tr.root, disk)
@@ -364,4 +370,11 @@ func TestWrapKeepsTheDriversCapabilities(t *testing.T) {
 			t.Errorf("mask %05b: has %v %v %v %v %v", mask, hasCW, hasEC, hasNR, hasCP, hasWA)
 		}
 	}
+}
+
+// copying is a driver with a Copier, which copies nothing: what matters is whether Copy is reached.
+type copying struct{ vfs.FS }
+
+func (copying) Copy(context.Context, string, string, ...vfs.WriteOption) (vfs.FileInfo, error) {
+	return vfs.FileInfo{}, nil
 }
