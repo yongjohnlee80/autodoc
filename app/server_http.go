@@ -64,13 +64,7 @@ func (s *server) startHTTP() error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{
-		Handler:           h,
-		ReadHeaderTimeout: headerTimeout,
-		IdleTimeout:       idleTimeout,
-		// a request's context is not the server's: a stop drains it rather than cancelling it
-		BaseContext: func(net.Listener) context.Context { return context.Background() },
-	}
+	srv := newHTTPServer(h)
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
@@ -182,4 +176,20 @@ func (s *server) httpCounts() ops.HTTPCounts {
 		return h.TakeCounts()
 	}
 	return ops.HTTPCounts{}
+}
+
+// maxHeaderBytes is how much of a request's header the API reads: a token and a few fields, far
+// under net/http's 1 MiB default, which anyone could make every request cost.
+const maxHeaderBytes = 16 << 10
+
+// newHTTPServer is the API's http.Server over h.
+func newHTTPServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: headerTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+		// a request's context is not the server's: a stop drains it rather than cancelling it
+		BaseContext: func(net.Listener) context.Context { return context.Background() },
+	}
 }

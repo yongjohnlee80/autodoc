@@ -32,7 +32,7 @@
 // tenant's ingester (ingest.Ingester.Confirm): the tenant's writer lock is this process's. It
 // confirms before each of its writes, so a second server waiting for a tenant never touches it.
 //
-//	w := embedder.New(build, []embedder.Tenant{{Name: "lm-catalog", Store: st, Confirm: in.Confirm}},
+//	w := embedder.New(build, []embedder.Tenant{{Name: "music", Store: st, Confirm: in.Confirm}},
 //		embedder.WithSlots(4), embedder.WithLogger(log))
 //	go w.Run(ctx) // until ctx ends
 //	w.Wake()      // after an ingester commits

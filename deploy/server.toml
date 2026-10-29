@@ -1,4 +1,4 @@
-# An example server.toml for the deployment examples (deploy/systemd, deploy/container).
+# An example server.toml for the systemd unit (deploy/systemd); deploy/container has its own.
 # Every secret is read from the environment: put them in the unit's EnvironmentFile, or the
 # container's environment, never in this file. docs/enterprise/server-config.md has every field.
 
@@ -12,15 +12,16 @@ base_url = "http://ollama:11434"
 model    = "nomic-embed-text"
 
 [http]
-# On every address, in a container: the proxy in front terminates TLS (docs/enterprise/operations.md).
-# Outside a container, keep 127.0.0.1, or give tls_cert and tls_key.
-listen = "0.0.0.0:8730"
+# This host's loopback only, for the systemd unit: a TLS-terminating proxy on this host is in front
+# (proxy = true). Listening anywhere else needs tls_cert and tls_key (docs/enterprise/operations.md).
+# The container's copy (deploy/container/server.toml) differs in this one line.
+listen = "127.0.0.1:8730"
 proxy  = true
 
 [[http.client]]
-name      = "lm-web"
-token_env = "LM_WEB_TOKEN"
-[http.client.grants.lm-catalog]
+name      = "web-app"
+token_env = "WEB_APP_TOKEN"
+[http.client.grants.music]
 label_id = ["*"]
 
 [[http.operator]]
@@ -32,7 +33,7 @@ tenants   = ["*"]
 metrics_interval = "1m"
 
 [[source]]
-tenant        = "lm-catalog"
+tenant        = "music"
 view          = "views/track.view"
 access        = ["label_id"]
 refresh       = "24h"

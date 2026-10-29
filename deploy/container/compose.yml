@@ -3,15 +3,15 @@
 #   docker compose -f deploy/container/compose.yml up -d --build
 #   docker compose -f deploy/container/compose.yml --profile ollama up -d   # with a local model
 #
-# The secrets come from .env next to this file (AUTODOC_SERVER_DSN, LM_WEB_TOKEN, AUTODOC_OPS_TOKEN),
-# never from server.toml.
+# The secrets come from .env next to this file (POSTGRES_PASSWORD, AUTODOC_SERVER_DSN with that
+# password in it, WEB_APP_TOKEN, AUTODOC_OPS_TOKEN), never from server.toml or this file.
 
 services:
   db:
     image: pgvector/pgvector:pg18
     environment:
       POSTGRES_USER: catalog
-      POSTGRES_PASSWORD: catalog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: catalog
     volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     env_file: .env
     volumes:
-      - ../server.toml:/etc/autodoc/server.toml:ro
+      - ./server.toml:/etc/autodoc/server.toml:ro
       - ../views:/etc/autodoc/views:ro
     # loopback only: the API is plain HTTP here (proxy = true). Put your TLS-terminating proxy on
     # this host in front of it; never publish 8730 on every interface.

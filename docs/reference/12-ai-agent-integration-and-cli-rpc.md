@@ -68,6 +68,8 @@ autodoc --call doc.validate '["kb", "adrs/1792200100-my-decision.md", "---\ntype
 
 ### Configuring Claude Code, Gemini CLI / Antigravity, Codex, and Aider
 
+**An agent acts as you.** One AutoDoc starts gets `AUTODOC_SOCKET` and the `autodoc` CLI on its PATH, so it can call every verb of the daemon, `file.write` anywhere on your disk among them, and it runs commands of its own. AutoDoc's Lua grants do not apply to it. Start only an agent you would let act for you.
+
 When AutoDoc spawns an embedded agent tab (`tui/agentinstances.go`), it automatically sets `$AUTODOC_WORKSPACE` and writes a workspace agent guide pointing to `AGENTS.md` and `KB_OPERATIONS.md`. For external agent sessions launched in standalone terminals or Neovim (`auto-agents`), add two rules to your project's `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`:
 
 1. Export `AUTODOC_WORKSPACE="<workspace-name>"` (or resolve it via `autodoc --call workspace.list '[]'`).

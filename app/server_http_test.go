@@ -32,10 +32,10 @@ const httpBlock = `
 listen = "127.0.0.1:0"
 
 [[http.client]]
-name      = "lm-web"
+name      = "web-app"
 token_env = "AUTODOC_TEST_HTTP_TOKEN"
 
-[http.client.grants.lm-catalog]
+[http.client.grants.music]
 label_id = ["A"]
 `
 
@@ -100,7 +100,7 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 		return res.StatusCode, out
 	}
 
-	status, got := post(`{"tenant": "lm-catalog", "query": "kestrel", "scope": {"label_id": ["A"]}}`)
+	status, got := post(`{"tenant": "music", "query": "kestrel", "scope": {"label_id": ["A"]}}`)
 	if status != http.StatusOK || len(got.Hits) == 0 || got.Hits[0].Path != "track/1.md" || got.Hits[0].SourceID != "1" || got.Semantic != "ready" {
 		t.Fatalf("kestrel within A: %d %+v", status, got)
 	}
@@ -109,10 +109,10 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 			t.Errorf("within A, the hit %s", h.Path)
 		}
 	}
-	if status, out := post(`{"tenant": "lm-catalog", "query": "heron", "mode": "lexical", "scope": {"label_id": ["A"]}}`); status != http.StatusOK || len(out.Hits) != 0 {
+	if status, out := post(`{"tenant": "music", "query": "heron", "mode": "lexical", "scope": {"label_id": ["A"]}}`); status != http.StatusOK || len(out.Hits) != 0 {
 		t.Errorf("heron (a B track) within A: %d %+v", status, out)
 	}
-	if status, out := post(`{"tenant": "lm-catalog", "query": "heron", "scope": {"label_id": ["B"]}}`); status != http.StatusForbidden || out.Error.Code != "scope_forbidden" {
+	if status, out := post(`{"tenant": "music", "query": "heron", "scope": {"label_id": ["B"]}}`); status != http.StatusForbidden || out.Error.Code != "scope_forbidden" {
 		t.Errorf("label B, not granted: %d %+v", status, out)
 	}
 
@@ -130,7 +130,7 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { pool.Close() })
-	sr, err := search.Open(f.ctx, pool, "lm-catalog", search.QueryEmbedder(p))
+	sr, err := search.Open(f.ctx, pool, "music", search.QueryEmbedder(p))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 	f.emb.mu.Unlock()
 	answered := make(chan int, 1)
 	go func() {
-		status, _ := post(`{"tenant": "lm-catalog", "query": "hold this query", "scope": {"label_id": ["A"]}}`)
+		status, _ := post(`{"tenant": "music", "query": "hold this query", "scope": {"label_id": ["A"]}}`)
 		answered <- status
 	}()
 	<-held
@@ -227,7 +227,7 @@ func TestTheServerReportsItsHealthAndStatus(t *testing.T) {
 [[http.operator]]
 name      = "ops"
 token_env = "AUTODOC_TEST_OPS_TOKEN"
-tenants   = ["lm-catalog"]
+tenants   = ["music"]
 
 [log]
 metrics_interval = "10s"
@@ -297,7 +297,7 @@ metrics_interval = "10s"
 	if err := json.Unmarshal([]byte(body), &snap); err != nil || status != http.StatusOK || len(snap.Tenants) != 1 {
 		t.Fatalf("status: %d %s", status, body)
 	}
-	if ts := snap.Tenants[0]; ts.Tenant != "lm-catalog" || ts.Lock != "held" || ts.Documents.Total != 2 || ts.Documents.Ready != 2 ||
+	if ts := snap.Tenants[0]; ts.Tenant != "music" || ts.Lock != "held" || ts.Documents.Total != 2 || ts.Documents.Ready != 2 ||
 		ts.Models.Semantic != "ready" || ts.Cursor.LagSeconds == nil {
 		t.Errorf("the tenant's status: %+v", ts)
 	}
@@ -319,7 +319,7 @@ metrics_interval = "10s"
 
 	f.waitFor("the metrics lines", func() bool {
 		log := stderr.String()
-		return strings.Contains(log, "metrics scope=server provider=up") && strings.Contains(log, "metrics scope=tenant tenant=lm-catalog lock=held documents=2")
+		return strings.Contains(log, "metrics scope=server provider=up") && strings.Contains(log, "metrics scope=tenant tenant=music lock=held documents=2")
 	})
 	cancel()
 	if code := exitOf(t, done, stderr); code != 0 {

@@ -47,7 +47,7 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 
 // ready waits for the connection and the workspace's files, which a hidden status line cannot say.
 // It is the daemon's work (a dial, the hello, a listing), so it waits on daemonWait, not on a frame's
-// clock: under -race on a loaded VM43 it outran decltest's WaitTimeout.
+// clock: under -race on a loaded test machine it outran decltest's WaitTimeout.
 func (r *running) ready(t *testing.T) {
 	t.Helper()
 	r.waitWithin(t, "connected, the notes listed, the store's preferences in", daemonWait, func() bool {

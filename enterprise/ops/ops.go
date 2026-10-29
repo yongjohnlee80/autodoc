@@ -30,6 +30,9 @@ import (
 const (
 	Deadline = 2 * time.Second
 	CacheFor = 10 * time.Second
+	// PingFor is how long health reuses its database ping: anyone may ask for health, so a caller
+	// asking in a loop costs the database at most one ping in each PingFor.
+	PingFor = time.Second
 )
 
 // Store is what the collector reads of a tenant's index: *pgstore.Store.
@@ -68,6 +71,13 @@ type Collector struct {
 	mu       sync.Mutex
 	cached   *Snapshot
 	cachedAt time.Time
+
+	// the last database ping health made, reused for PingFor; pingMu is held while one is out, so
+	// callers within it wait for that one ping
+	pingMu  sync.Mutex
+	pinged  bool
+	pingAt  time.Time
+	pingErr error
 }
 
 // New is a Collector over o.
@@ -104,15 +114,13 @@ type Health struct {
 	Checks map[string]string `json:"checks"`
 }
 
-// Health is the server's health now, never cached: the database pinged (within Deadline), every
-// tenant's lock, the provider. The database failing, or the server stopping, is unavailable; a lock
-// another server holds, or a provider down, is degraded (searches still answer, by words or for the
-// other tenants).
+// Health is the server's health now: the database's ping (within Deadline, and reused for PingFor),
+// every tenant's lock and the provider, read every time. The database failing, or the server
+// stopping, is unavailable; a lock another server holds, or a provider down, is degraded (searches
+// still answer, by words or for the other tenants).
 func (c *Collector) Health(ctx context.Context) Health {
 	h := Health{Status: StatusOK, Checks: map[string]string{"database": CheckOK, "tenants": CheckOK, "embedding": CheckOK}}
-	pctx, cancel := context.WithTimeout(ctx, Deadline)
-	_, err := c.o.Now(pctx)
-	cancel()
+	err := c.ping(ctx)
 	if err != nil {
 		h.Checks["database"] = CheckFailing
 	}
@@ -131,6 +139,21 @@ func (c *Collector) Health(ctx context.Context) Health {
 		h.Status = StatusDegraded
 	}
 	return h
+}
+
+// ping is the database's answer to health's ping: the last one, while it is younger than PingFor.
+func (c *Collector) ping(ctx context.Context) error {
+	c.pingMu.Lock()
+	defer c.pingMu.Unlock()
+	now := c.o.Clock.Now()
+	if c.pinged && now.Sub(c.pingAt) < PingFor {
+		return c.pingErr
+	}
+	pctx, cancel := context.WithTimeout(ctx, Deadline)
+	_, err := c.o.Now(pctx)
+	cancel()
+	c.pinged, c.pingAt, c.pingErr = true, now, err
+	return err
 }
 
 // Snapshot is GET /v1/status's answer, every tenant's: an operator's request is filtered to its

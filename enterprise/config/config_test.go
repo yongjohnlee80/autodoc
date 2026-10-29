@@ -37,19 +37,19 @@ slots    = 4
 listen = "127.0.0.1:8730"
 
 [[http.client]]
-name         = "lm-web"
+name         = "web-app"
 token_sha256 = "` + hashOf("a long random token, as openssl rand -hex 32 makes") + `"
-[http.client.grants.lm-catalog]
+[http.client.grants.music]
 label_id = ["*"]
 
 [[http.client]]
-name      = "lm-admin"
+name      = "admin-app"
 token_env = "TEST_ADMIN_TOKEN"
-[http.client.grants.lm-catalog]
+[http.client.grants.music]
 label_id = ["A", "B"]
 
 [[source]]
-tenant   = "lm-catalog"
+tenant   = "music"
 view     = "views/track.view"
 refresh  = "24h"
 interval = "1m"
@@ -87,11 +87,11 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 		t.Errorf("the key read from key_env: %q; with none named: %q", s.Embedding.Key(), (config.Embedding{}).Key())
 	}
 	if s.HTTP == nil || s.HTTP.Listen != "127.0.0.1:8730" || len(s.HTTP.Clients) != 2 ||
-		!slices.Equal(s.HTTP.Clients[1].Grants["lm-catalog"]["label_id"], []string{"A", "B"}) {
+		!slices.Equal(s.HTTP.Clients[1].Grants["music"]["label_id"], []string{"A", "B"}) {
 		t.Errorf("HTTP %+v", s.HTTP)
 	}
 	src := s.Sources[0]
-	if src.Tenant != "lm-catalog" || !strings.HasSuffix(src.View, "/views/track.view") || !filepath.IsAbs(src.View) ||
+	if src.Tenant != "music" || !strings.HasSuffix(src.View, "/views/track.view") || !filepath.IsAbs(src.View) ||
 		src.Refresh != 24*time.Hour || src.Interval != time.Minute || src.Lag != 2*time.Minute || !slices.Equal(src.Access, []string{"label_id"}) {
 		t.Errorf("Source %+v", src)
 	}
@@ -141,7 +141,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		}
 		return strings.Replace(good, old, new, 1)
 	}
-	lmWebGrant := "[http.client.grants.lm-catalog]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"lm-admin\""
+	lmWebGrant := "[http.client.grants.music]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"admin-app\""
 	for _, c := range []struct {
 		name, src, field, says string
 	}{
@@ -167,26 +167,28 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"half tls", sub(`listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\ntls_cert = \"c.pem\""), "http.tls_cert", "go together"},
 		{"tls missing", sub(`listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\ntls_cert = \"c.pem\"\ntls_key = \"k.pem\""), "http.tls_cert", "cannot be read"},
 		{"no client", strings.Split(good, "[[http.client]]")[0] + "[[source]]" + strings.SplitN(good, "[[source]]", 2)[1], "http.client", "at least one"},
-		{"duplicate name", sub(`name      = "lm-admin"`, `name = "lm-web"`), "http.client[1] (lm-web).name", "names are unique"},
-		{"no name", sub(`name      = "lm-admin"`, ``), "http.client[1].name", "required"},
-		{"both tokens", sub(`token_env = "TEST_ADMIN_TOKEN"`, "token_env = \"TEST_ADMIN_TOKEN\"\ntoken_sha256 = \""+hashOf("x")+"\""), "http.client[1] (lm-admin).token_sha256", "not both"},
-		{"neither token", sub(`token_env = "TEST_ADMIN_TOKEN"`, ``), "http.client[1] (lm-admin).token_sha256", "required"},
-		{"a token as its hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), "a-plain-bearer-token"), "http.client[0] (lm-web).token_sha256", "never the token itself"},
-		{"a short hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.Repeat("ab", 16)), "http.client[0] (lm-web).token_sha256", "64 hex digits"},
-		{"token unset", sub(`token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_UNSET_TOKEN"`), "http.client[1] (lm-admin).token_env", "TEST_UNSET_TOKEN is not set"},
-		{"unknown tenant", sub(lmWebGrant, strings.Replace(lmWebGrant, "grants.lm-catalog", "grants.lm-other", 1)), "http.client[0] (lm-web).grants.lm-other", "not a configured source's tenant"},
-		{"missing grant", sub(`label_id = ["A", "B"]`, `region = ["ca"]`), "http.client[1] (lm-admin).grants.lm-catalog.label_id", "every access field of a granted tenant needs a grant"},
-		{"a field not an access field", sub(`label_id = ["A", "B"]`, "label_id = [\"A\"]\nregion = [\"ca\"]"), "http.client[1] (lm-admin).grants.lm-catalog.region", "not one of the tenant's access fields"},
-		{"star and a value", sub(`label_id = ["A", "B"]`, `label_id = ["*", "A"]`), "http.client[1] (lm-admin).grants.lm-catalog.label_id", `"*" stands alone`},
-		{"empty grant", sub(`label_id = ["A", "B"]`, `label_id = []`), "http.client[1] (lm-admin).grants.lm-catalog.label_id", "empty"},
-		{"empty value", sub(`label_id = ["A", "B"]`, `label_id = ["A", " "]`), "http.client[1] (lm-admin).grants.lm-catalog.label_id", "an empty value"},
-		{"repeated value", sub(`label_id = ["A", "B"]`, `label_id = ["A", "A"]`), "http.client[1] (lm-admin).grants.lm-catalog.label_id", "granted twice"},
-		{"no grants", sub("[http.client.grants.lm-catalog]\nlabel_id = [\"A\", \"B\"]", ""), "http.client[1] (lm-admin).grants", "required"},
+		{"duplicate name", sub(`name      = "admin-app"`, `name = "web-app"`), "http.client[1] (web-app).name", "names are unique"},
+		{"no name", sub(`name      = "admin-app"`, ``), "http.client[1].name", "required"},
+		{"both tokens", sub(`token_env = "TEST_ADMIN_TOKEN"`, "token_env = \"TEST_ADMIN_TOKEN\"\ntoken_sha256 = \""+hashOf("x")+"\""), "http.client[1] (admin-app).token_sha256", "not both"},
+		{"neither token", sub(`token_env = "TEST_ADMIN_TOKEN"`, ``), "http.client[1] (admin-app).token_sha256", "required"},
+		{"a token as its hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), "a-plain-bearer-token"), "http.client[0] (web-app).token_sha256", "never the token itself"},
+		{"the hash of no token", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), hashOf("")), "http.client[0] (web-app).token_sha256", "no token at all"},
+		{"the hash of no token, upper case", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.ToUpper(hashOf(""))), "http.client[0] (web-app).token_sha256", "no token at all"},
+		{"a short hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.Repeat("ab", 16)), "http.client[0] (web-app).token_sha256", "64 hex digits"},
+		{"token unset", sub(`token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_UNSET_TOKEN"`), "http.client[1] (admin-app).token_env", "TEST_UNSET_TOKEN is not set"},
+		{"unknown tenant", sub(lmWebGrant, strings.Replace(lmWebGrant, "grants.music", "grants.other-music", 1)), "http.client[0] (web-app).grants.other-music", "not a configured source's tenant"},
+		{"missing grant", sub(`label_id = ["A", "B"]`, `region = ["ca"]`), "http.client[1] (admin-app).grants.music.label_id", "every access field of a granted tenant needs a grant"},
+		{"a field not an access field", sub(`label_id = ["A", "B"]`, "label_id = [\"A\"]\nregion = [\"ca\"]"), "http.client[1] (admin-app).grants.music.region", "not one of the tenant's access fields"},
+		{"star and a value", sub(`label_id = ["A", "B"]`, `label_id = ["*", "A"]`), "http.client[1] (admin-app).grants.music.label_id", `"*" stands alone`},
+		{"empty grant", sub(`label_id = ["A", "B"]`, `label_id = []`), "http.client[1] (admin-app).grants.music.label_id", "empty"},
+		{"empty value", sub(`label_id = ["A", "B"]`, `label_id = ["A", " "]`), "http.client[1] (admin-app).grants.music.label_id", "an empty value"},
+		{"repeated value", sub(`label_id = ["A", "B"]`, `label_id = ["A", "A"]`), "http.client[1] (admin-app).grants.music.label_id", "granted twice"},
+		{"no grants", sub("[http.client.grants.music]\nlabel_id = [\"A\", \"B\"]", ""), "http.client[1] (admin-app).grants", "required"},
 		// sources
 		{"no source", strings.SplitN(good, "[[source]]", 2)[0], "source", "at least one"},
-		{"no tenant", sub(`tenant   = "lm-catalog"`, ``), "source[0].tenant", "required"},
-		{"bad tenant", sub(`tenant   = "lm-catalog"`, `tenant = "lm catalog"`), "source[0].tenant", "letters, digits"},
-		{"duplicate tenant", good + "[[source]]\ntenant = \"lm-catalog\"\nview = \"v.view\"\naccess = [\"x\"]\n", "source[1].tenant", "a tenant of its own"},
+		{"no tenant", sub(`tenant   = "music"`, ``), "source[0].tenant", "required"},
+		{"bad tenant", sub(`tenant   = "music"`, `tenant = "lm catalog"`), "source[0].tenant", "letters, digits"},
+		{"duplicate tenant", good + "[[source]]\ntenant = \"music\"\nview = \"v.view\"\naccess = [\"x\"]\n", "source[1].tenant", "a tenant of its own"},
 		{"no view", sub(`view     = "views/track.view"`, ``), "source[0].view", "required"},
 		{"interval", sub(`interval = "1m"`, `interval = "10ms"`), "source[0].interval", "want at least 1s"},
 		{"refresh", sub(`refresh  = "24h"`, `refresh = "30s"`), "source[0].refresh", "at least the interval"},

@@ -18,11 +18,11 @@ func withOperator(block string) string {
 // no operator, the ingester's own refresh retry, metrics every minute.
 func TestAnOperatorAndTheOperationsFieldsLoad(t *testing.T) {
 	t.Setenv("TEST_OPS_TOKEN", strings.Repeat("o", 64))
-	s, err := load(t, withOperator("[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"lm-catalog\"]\n"))
+	s, err := load(t, withOperator("[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"music\"]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.HTTP.Operators) != 1 || s.HTTP.Operators[0].Name != "ops" || !slices.Equal(s.HTTP.Operators[0].Tenants, []string{"lm-catalog"}) {
+	if len(s.HTTP.Operators) != 1 || s.HTTP.Operators[0].Name != "ops" || !slices.Equal(s.HTTP.Operators[0].Tenants, []string{"music"}) {
 		t.Errorf("operators %+v", s.HTTP.Operators)
 	}
 	if s.HTTP.Proxy || s.Sources[0].RefreshRetry != 0 || s.Log.MetricsInterval != config.DefaultMetricsInterval {
@@ -45,18 +45,18 @@ func TestAnOperatorAndTheOperationsFieldsLoad(t *testing.T) {
 func TestEveryOperationsRefusalNamesItsField(t *testing.T) {
 	t.Setenv("TEST_OPS_TOKEN", strings.Repeat("o", 64))
 	op := func(body string) string { return withOperator("[[http.operator]]\n" + body + "\n") }
-	adminToken := strings.Repeat("x", 64) // the good file's lm-admin token, through TEST_ADMIN_TOKEN
+	adminToken := strings.Repeat("x", 64) // the good file's admin-app token, through TEST_ADMIN_TOKEN
 	for _, c := range []struct {
 		name, src, field, says string
 	}{
 		{"no name", op(`token_env = "TEST_OPS_TOKEN"` + "\n" + `tenants = ["*"]`), "http.operator[0].name", "required"},
-		{"a client's name", op("name = \"lm-web\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]"), "http.operator[0] (lm-web).name", "unique across clients and operators"},
+		{"a client's name", op("name = \"web-app\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]"), "http.operator[0] (web-app).name", "unique across clients and operators"},
 		{"both tokens", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntoken_sha256 = \"" + hashOf("x") + "\"\ntenants = [\"*\"]"), "http.operator[0] (ops).token_sha256", "not both"},
 		{"no token", op("name = \"ops\"\ntenants = [\"*\"]"), "http.operator[0] (ops).token_sha256", "required"},
 		{"no tenants", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\""), "http.operator[0] (ops).tenants", "required"},
 		{"unknown tenant", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"nobody\"]"), "http.operator[0] (ops).tenants", "not a configured source's tenant"},
-		{"a tenant twice", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"lm-catalog\", \"lm-catalog\"]"), "http.operator[0] (ops).tenants", "named twice"},
-		{"* with others", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\", \"lm-catalog\"]"), "http.operator[0] (ops).tenants", "stands alone"},
+		{"a tenant twice", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"music\", \"music\"]"), "http.operator[0] (ops).tenants", "named twice"},
+		{"* with others", op("name = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\", \"music\"]"), "http.operator[0] (ops).tenants", "stands alone"},
 		{"a client's token by hash", op("name = \"ops\"\ntoken_sha256 = \"" + hashOf(adminToken) + "\"\ntenants = [\"*\"]"), "http.operator[0] (ops).token_sha256", "http.client[1] holds the same token"},
 		{"a client's token by env", op("name = \"ops\"\ntoken_env = \"TEST_ADMIN_TOKEN\"\ntenants = [\"*\"]"), "http.operator[0] (ops).token_sha256", "one token, one role"},
 		{"proxy with tls", strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\nproxy = true\ntls_cert = \"c.pem\"\ntls_key = \"k.pem\"", 1), "http.proxy", "contradict"},

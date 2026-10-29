@@ -2,7 +2,7 @@
 #
 #   install -m 0755 autodoc /usr/local/bin/autodoc
 #   install -d -m 0750 /etc/autodoc && install -m 0640 server.toml /etc/autodoc/   (+ views/)
-#   install -m 0600 server.env /etc/autodoc/server.env      # AUTODOC_SERVER_DSN=…, LM_WEB_TOKEN=…
+#   install -m 0600 server.env /etc/autodoc/server.env      # AUTODOC_SERVER_DSN=…, WEB_APP_TOKEN=…
 #   cp autodoc-server.service /etc/systemd/system/ && systemctl enable --now autodoc-server
 
 [Unit]

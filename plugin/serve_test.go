@@ -75,7 +75,7 @@ func (hs *host) served(t *testing.T) error {
 
 // servedWhile is served for a Handler still working through a long queue: it fails only when count,
 // the calls the Handler has taken, stands still for 5 s, not after 5 s in all. 3000 keys at 200 µs
-// each on one CPU took 3.3 s under -race on a quiet VM43 and outran served's fixed 5 s under load;
+// each on one CPU took 3.3 s under -race on a quiet test machine and outran served's fixed 5 s under load;
 // a Serve that hangs still fails, on the stall's own clock.
 func (hs *host) servedWhile(t *testing.T, count func() int) error {
 	t.Helper()

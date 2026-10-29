@@ -91,12 +91,12 @@ func api(t *testing.T, catalog Searcher, opts ...Option) (*httptest.Server, *Han
 	log := &syncBuffer{}
 	clients := []Client{
 		{Name: "someone-else", Token: sha256.Sum256([]byte("another-token-that-is-also-long-enough-xx")), Grants: map[string]map[string][]string{"secret": {"label_id": {"*"}}}},
-		{Name: "lm-web", Token: sha256.Sum256([]byte(token)), Grants: map[string]map[string][]string{
-			"lm-catalog": {"label_id": {"A", "B"}},
-			"any":        {"label_id": {"*"}},
+		{Name: "web-app", Token: sha256.Sum256([]byte(token)), Grants: map[string]map[string][]string{
+			"music": {"label_id": {"A", "B"}},
+			"any":   {"label_id": {"*"}},
 		}},
 	}
-	tenants := map[string]Searcher{"lm-catalog": catalog, "any": catalog, "secret": catalog}
+	tenants := map[string]Searcher{"music": catalog, "any": catalog, "secret": catalog}
 	h := New(clients, tenants, append([]Option{WithLogger(logger.New(logger.WithWriter(log)))}, opts...)...)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
@@ -146,7 +146,7 @@ func do(t *testing.T, req *http.Request) reply {
 var client = &http.Client{Timeout: 10 * time.Second}
 
 const bearer = "Bearer " + token
-const valid = `{"tenant": "lm-catalog", "query": "love song", "scope": {"label_id": ["A"]}}`
+const valid = `{"tenant": "music", "query": "love song", "scope": {"label_id": ["A"]}}`
 
 // A request without a valid bearer token is 401, with WWW-Authenticate, before its body is read: a
 // missing header, another scheme, a wrong token, and a valid token's prefix; with the token, the
@@ -195,16 +195,16 @@ func TestOnlyPostToThePathIsAnswered(t *testing.T) {
 func TestTheBodyIsOneBoundedSearchRequest(t *testing.T) {
 	f := &fake{}
 	srv, _, _ := api(t, f)
-	big := `{"tenant": "lm-catalog", "query": "` + strings.Repeat("a", MaxBody) + `"}`
+	big := `{"tenant": "music", "query": "` + strings.Repeat("a", MaxBody) + `"}`
 	for name, c := range map[string]struct {
 		ctype, body string
 		status      int
 	}{
 		"text":           {"text/plain", valid, http.StatusUnsupportedMediaType},
 		"too large":      {"application/json", big, http.StatusRequestEntityTooLarge},
-		"an unknown key": {"application/json", `{"tenant": "lm-catalog", "scope": {"label_id": ["A"]}, "access": {}}`, http.StatusBadRequest},
+		"an unknown key": {"application/json", `{"tenant": "music", "scope": {"label_id": ["A"]}, "access": {}}`, http.StatusBadRequest},
 		"two values":     {"application/json", valid + valid, http.StatusBadRequest},
-		"a long query":   {"application/json", `{"tenant": "lm-catalog", "query": "` + strings.Repeat("a", MaxQuery+1) + `"}`, http.StatusBadRequest},
+		"a long query":   {"application/json", `{"tenant": "music", "query": "` + strings.Repeat("a", MaxQuery+1) + `"}`, http.StatusBadRequest},
 	} {
 		if r := post(t, srv, bearer, c.ctype, c.body); r.status != c.status {
 			t.Errorf("%s: %d %s, want %d", name, r.status, r.code(), c.status)
@@ -232,12 +232,12 @@ func TestTheTenantAndTheScopeAreTheTokens(t *testing.T) {
 	if nobody.status != secret.status || !bytes.Equal(nobody.body, bytes.ReplaceAll(secret.body, []byte("secret"), []byte("nobody"))) {
 		t.Errorf("a tenant that does not exist answers otherwise: %d %s / %s", nobody.status, nobody.body, secret.body)
 	}
-	if r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "x", "scope": {"label_id": ["A", "C"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
+	if r := post(t, srv, bearer, "application/json", `{"tenant": "music", "query": "x", "scope": {"label_id": ["A", "C"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
 		t.Errorf("a value not granted: %d %s", r.status, r.code())
 	}
 	// a field the token has no grant for (an access field the policy gained since the grants were
 	// written, say) is refused before the search, whatever the policy says
-	if r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "x", "scope": {"label_id": ["A"], "team": ["t1"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
+	if r := post(t, srv, bearer, "application/json", `{"tenant": "music", "query": "x", "scope": {"label_id": ["A"], "team": ["t1"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
 		t.Errorf("a field not granted: %d %s", r.status, r.code())
 	}
 	if r := post(t, srv, bearer, "application/json", `{"tenant": "any", "query": "x", "scope": {"label_id": ["Z"], "team": ["t1"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
@@ -295,7 +295,7 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	}}
 	f := &fake{res: res}
 	srv, _, _ := api(t, f)
-	r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "love song", "mode": "lexical", "limit": 5, "group": "document",
+	r := post(t, srv, bearer, "application/json", `{"tenant": "music", "query": "love song", "mode": "lexical", "limit": 5, "group": "document",
 		"scope": {"label_id": ["A", "B"]}, "filter": {"tags": ["single"], "paths": ["track/"]}}`)
 	if r.status != http.StatusOK {
 		t.Fatalf("%d %s", r.status, r.body)
@@ -304,7 +304,7 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	if err := json.Unmarshal(r.body, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := response{Tenant: "lm-catalog", ModeUsed: "hybrid", Semantic: "ready", Hits: []hit{{Path: "track/42.md", Breadcrumb: "Love Song",
+	want := response{Tenant: "music", ModeUsed: "hybrid", Semantic: "ready", Hits: []hit{{Path: "track/42.md", Breadcrumb: "Love Song",
 		Snippet: "a \x02love\x03 song", Generation: 3, ByteStart: 1, ByteEnd: 9, Score: 0.031, Relevance: 0.87, Via: []string{"lexical", "semantic"}, SourceID: "42"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the answer:\n%+v\nwant\n%+v", got, want)
@@ -320,7 +320,7 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 // query's text, for an answered request and a refused one alike.
 func TestNeitherTheTokenNorTheQueryIsLogged(t *testing.T) {
 	srv, _, log := api(t, &fake{})
-	post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "a private matter", "scope": {"label_id": ["A"]}}`)
+	post(t, srv, bearer, "application/json", `{"tenant": "music", "query": "a private matter", "scope": {"label_id": ["A"]}}`)
 	post(t, srv, "Bearer "+token+"x", "application/json", valid)
 	post(t, srv, bearer, "application/json", `{"tenant": "secret", "query": "a private matter", "scope": {"label_id": ["A"]}}`)
 	got := log.String()
@@ -329,7 +329,7 @@ func TestNeitherTheTokenNorTheQueryIsLogged(t *testing.T) {
 			t.Errorf("the log holds %q:\n%s", secret, got)
 		}
 	}
-	for _, said := range []string{"client lm-web, tenant lm-catalog: 200", "client -, tenant -: 401", "403 forbidden", "a query of 16 bytes"} {
+	for _, said := range []string{"client web-app, tenant music: 200", "client -, tenant -: 401", "403 forbidden", "a query of 16 bytes"} {
 		if !strings.Contains(got, said) {
 			t.Errorf("the log does not say %q:\n%s", said, got)
 		}
@@ -372,8 +372,8 @@ func TestARequestKeepsToItsBudget(t *testing.T) {
 // is the server's, which Shutdown cancels (a 503 instead of the answer).
 func TestStoppingDrainsTheRequestsInFlight(t *testing.T) {
 	f := &fake{hold: make(chan struct{})}
-	h := New([]Client{{Name: "lm-web", Token: sha256.Sum256([]byte(token)), Grants: map[string]map[string][]string{"lm-catalog": {"label_id": {"A"}}}}},
-		map[string]Searcher{"lm-catalog": f})
+	h := New([]Client{{Name: "web-app", Token: sha256.Sum256([]byte(token)), Grants: map[string]map[string][]string{"music": {"label_id": {"A"}}}}},
+		map[string]Searcher{"music": f})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

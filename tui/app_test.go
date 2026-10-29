@@ -1002,10 +1002,10 @@ func TestProgressText(t *testing.T) {
 		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "paused"}}, "embedding paused by workspace setting"},
 		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, target: qwen, targetPending: 5, queueState: "paused"}}, "embedding paused by workspace setting"},
 		// each names the workspace it is for; waiting, the workspace the queue is processing
-		{progress{ws: "MonstercatKB", docs: 3, pending: 7}, "indexing MonstercatKB ███░░░░░░░ 3/10"},
-		{progress{ws: "MonstercatKB", docs: 10, emb: embedProgress{on: true, texts: 20, pending: 4}}, "embedding MonstercatKB - ████████░░ 16/20"},
-		{progress{ws: "MonstercatKB", docs: 10, spin: 1, emb: embedProgress{on: true, texts: 40, target: qwen, targetPending: 30}}, "switching MonstercatKB to qwen3-embedding:4b \\ ██░░░░░░░░ 10/40"},
-		{progress{ws: "MonstercatKB", docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "waiting", waitingFor: "GlobalKB"}}, "embedding GlobalKB · MonstercatKB waits"},
+		{progress{ws: "TeamKB", docs: 3, pending: 7}, "indexing TeamKB ███░░░░░░░ 3/10"},
+		{progress{ws: "TeamKB", docs: 10, emb: embedProgress{on: true, texts: 20, pending: 4}}, "embedding TeamKB - ████████░░ 16/20"},
+		{progress{ws: "TeamKB", docs: 10, spin: 1, emb: embedProgress{on: true, texts: 40, target: qwen, targetPending: 30}}, "switching TeamKB to qwen3-embedding:4b \\ ██░░░░░░░░ 10/40"},
+		{progress{ws: "TeamKB", docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "waiting", waitingFor: "GlobalKB"}}, "embedding GlobalKB · TeamKB waits"},
 	} {
 		if got := progressText(inEnglish{}, c.p); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.p, got, c.want)

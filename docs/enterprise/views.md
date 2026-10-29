@@ -44,7 +44,7 @@ And its source in `server.toml`:
 
 ```toml
 [[source]]
-tenant = "lm-catalog"
+tenant = "music"
 view   = "views/track.view"
 access = ["label_id"]
 ```
@@ -195,7 +195,7 @@ decide the order. If no two rows read share a timestamp, the id order can't be e
 
 ```text
 $ autodoc --server --check server.toml
-source[0] lm-catalog: /etc/autodoc/views/track.view: order confirmed over 2000 rows (the first 2000) in 4 pages: 37 tied rows, 3 page boundaries resumed
+source[0] music: /etc/autodoc/views/track.view: order confirmed over 2000 rows (the first 2000) in 4 pages: 37 tied rows, 3 page boundaries resumed
 /etc/autodoc/server.toml: ok
 ```
 

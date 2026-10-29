@@ -91,7 +91,7 @@ func (s *todoStore) labelKey() string { return todoLabelPref + cmp.Or(s.sid, s.p
 
 // storeName is a store's derived name: its project's folder. A KB folder (kb, alone or in
 // .auto-agents or .auto-agents-config) is named for the project that holds it, the first folder
-// above it that is none of those: …/LabelManager/.auto-agents/kb is LabelManager.
+// above it that is none of those: …/WebShop/.auto-agents/kb is WebShop.
 func storeName(root string) string {
 	dir := filepath.Clean(root)
 	if filepath.Base(dir) != "kb" {
