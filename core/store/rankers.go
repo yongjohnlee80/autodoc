@@ -34,8 +34,8 @@ var (
 	ErrRankerInvalid = errs.Sentinel(errs.ErrInvalidArgument, "store: a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api")
 )
 
-// RankerSpec is a ranker as a client writes it. Key nil keeps the key the store holds; a pointer
-// to "" removes it. A tei ranker's model is the server's: Model is kept "" for it.
+// RankerSpec is a ranker as a client writes it. Key nil keeps the key the store holds, while
+// BaseURL stays on its server (LendKey); a pointer to "" removes it. A tei ranker's model is the server's: Model is kept "" for it.
 type RankerSpec struct {
 	Name, Kind, BaseURL, Model string
 	Key                        *string
@@ -115,7 +115,7 @@ func (s *Store) UpdateRanker(ctx context.Context, name string, sp RankerSpec) er
 		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {
-		_, err := s.rankers().update(tx, name, sp.Name, rankerColumns(sp), sp.Key)
+		_, err := s.rankers().update(tx, name, sp.Name, sp.BaseURL, rankerColumns(sp), sp.Key)
 		return err
 	})
 }

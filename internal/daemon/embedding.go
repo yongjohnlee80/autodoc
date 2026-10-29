@@ -381,11 +381,13 @@ func (e *Embedding) checkContext(ctx context.Context, sp *store.ProviderSpec, st
 	if sp.Key != nil {
 		key = *sp.Key
 	} else if stored != "" {
-		_, k, err := e.db.ProviderWithKey(ctx, stored)
+		info, k, err := e.db.ProviderWithKey(ctx, stored)
 		if err != nil {
 			return err
 		}
-		key = k
+		if key, err = store.LendKey(info.BaseURL, k, sp.BaseURL, nil); err != nil {
+			return err
+		}
 	}
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -435,12 +437,13 @@ func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSp
 		e.overridesChanged(name)
 		return nil
 	}
-	old, key, err := e.db.ProviderWithKey(ctx, name)
+	old, stored, err := e.db.ProviderWithKey(ctx, name)
 	if err != nil {
 		return err
 	}
-	if sp.Key != nil {
-		key = *sp.Key
+	key, err := store.LendKey(old.BaseURL, stored, sp.BaseURL, sp.Key)
+	if err != nil {
+		return err
 	}
 	p, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model, Context: sp.ContextWindow()}, key)
 	if err != nil {
@@ -492,7 +495,9 @@ func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
 
 // Models are what a provider offers: a stored one's, by name (its key opened here); those of one
 // not yet stored, by its kind, base URL and key; or a stored one's as an edit would make it, by its
-// name and the edit's kind and base URL, the stored key used unless the edit has one.
+// name and the edit's kind and base URL, the stored key used unless the edit has one. The stored
+// key is lent only to its own server (store.LendKey): an edit to another one without a key typed
+// is refused before anything is asked.
 func (e *Embedding) Models(ctx context.Context, name string, sp store.ProviderSpec) ([]string, error) {
 	kind, base, key := sp.Kind, sp.BaseURL, ""
 	if sp.Key != nil {
@@ -506,8 +511,8 @@ func (e *Embedding) Models(ctx context.Context, name string, sp store.ProviderSp
 		if sp.Kind == "" {
 			kind, base = info.Kind, info.BaseURL
 		}
-		if sp.Key == nil {
-			key = k
+		if key, err = store.LendKey(info.BaseURL, k, base, sp.Key); err != nil {
+			return nil, err
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
@@ -529,8 +534,8 @@ func (e *Embedding) ModelContext(ctx context.Context, stored string, sp store.Pr
 		if sp.Kind == "" {
 			sp.Kind, sp.BaseURL = info.Kind, info.BaseURL
 		}
-		if sp.Key == nil {
-			key = k
+		if key, err = store.LendKey(info.BaseURL, k, sp.BaseURL, sp.Key); err != nil {
+			return 0, err
 		}
 	}
 	if sp.Kind != store.KindOllama && sp.Kind != store.KindOllamaCloud {

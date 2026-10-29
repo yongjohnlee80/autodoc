@@ -125,7 +125,7 @@ type (
 	}
 	providerUpdate struct {
 		Name     string    `param:"name"`
-		Provider optionMap `param:"provider" doc:"{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"`
+		Provider optionMap `param:"provider" doc:"{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one while base_url stays on its server (another server needs the key again), \"\" removes it"`
 	}
 	providerModels struct {
 		Provider any       `param:"provider" doc:"a stored provider's name, or an unsaved one's spec"`

@@ -31,6 +31,7 @@ type metered[R any, F ~string] struct {
 	none, taken error
 	id          func(R) int64
 	key         func(R) []byte
+	baseURL     func(R) string
 }
 
 // col is the column every metered table names alike.
@@ -59,13 +60,20 @@ func (m metered[R, F]) add(tx *Tx, set meteredSetter[R, F], key *string) (int64,
 	return id, m.setKey(tx, id, key)
 }
 
-// update rewrites the row named name with set's columns (its name among them: to) and its key;
-// the preference naming it follows the rename. It returns the row's id.
-func (m metered[R, F]) update(tx *Tx, name, to string, set meteredSetter[R, F], key *string) (int64, error) {
-	id, err := m.idOf(tx, name)
+// update rewrites the row named name with set's columns (its name among them: to, its base URL:
+// base) and its key; the preference naming it follows the rename. It returns the row's id. A row
+// that keeps its stored key (key nil) keeps it only on the same server: moved to another, the key
+// must be typed again (ErrKeyForNewServer), so a rewrite of the base URL cannot redirect a key it
+// never saw.
+func (m metered[R, F]) update(tx *Tx, name, to, base string, set meteredSetter[R, F], key *string) (int64, error) {
+	r, err := m.byName(tx, name)
 	if err != nil {
 		return 0, err
 	}
+	if err := keyMayStay(m.baseURL(r), base, len(m.key(r)) > 0, key); err != nil {
+		return 0, err
+	}
+	id := m.id(r)
 	if err := set(m.on(tx).With(m.col("id"), id)).Set(m.col("updated_at"), tx.now.Now().Unix()).Update(); err != nil {
 		return 0, m.isTaken(err)
 	}
@@ -193,7 +201,8 @@ func (s *Store) providers() metered[*Provider, ProviderField] {
 		pref:    PrefProvider,
 		purpose: "autodoc:embedding_provider.api_key:",
 		none:    ErrNoProvider, taken: ErrProviderTaken,
-		id: func(p *Provider) int64 { return p.ID }, key: func(p *Provider) []byte { return p.APIKey }}
+		id: func(p *Provider) int64 { return p.ID }, key: func(p *Provider) []byte { return p.APIKey },
+		baseURL: func(p *Provider) string { return p.BaseURL }}
 }
 
 // rankers is the rankers' repository.
@@ -204,5 +213,6 @@ func (s *Store) rankers() metered[*Ranker, RankerField] {
 		pref:    PrefRanker,
 		purpose: "autodoc:ranker.api_key:",
 		none:    ErrNoRanker, taken: ErrRankerTaken,
-		id: func(r *Ranker) int64 { return r.ID }, key: func(r *Ranker) []byte { return r.APIKey }}
+		id: func(r *Ranker) int64 { return r.ID }, key: func(r *Ranker) []byte { return r.APIKey },
+		baseURL: func(r *Ranker) string { return r.BaseURL }}
 }

@@ -58,8 +58,8 @@ func (e *ContextMaximumError) Error() string {
 	return fmt.Sprintf("context window exceeds this model's maximum of %d tokens", e.Maximum)
 }
 
-// ProviderSpec is a provider as a client writes it. Key nil keeps the key the store holds; a
-// pointer to "" removes it. Context 0 is DefaultContext.
+// ProviderSpec is a provider as a client writes it. Key nil keeps the key the store holds, while
+// BaseURL stays on its server (LendKey); a pointer to "" removes it. Context 0 is DefaultContext.
 type ProviderSpec struct {
 	Name, Kind, BaseURL, Model string
 	Context                    int
@@ -159,7 +159,7 @@ func (s *Store) UpdateProvider(ctx context.Context, name string, sp ProviderSpec
 		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {
-		id, err := s.providers().update(tx, name, sp.Name, providerColumns(sp), sp.Key)
+		id, err := s.providers().update(tx, name, sp.Name, sp.BaseURL, providerColumns(sp), sp.Key)
 		if err != nil {
 			return err
 		}

@@ -287,12 +287,13 @@ func (r *Ranking) UpdateRanker(ctx context.Context, name string, sp store.Ranker
 	if err := sp.Check(); err != nil {
 		return err
 	}
-	old, key, err := r.db.RankerWithKey(ctx, name)
+	old, stored, err := r.db.RankerWithKey(ctx, name)
 	if err != nil {
 		return err
 	}
-	if sp.Key != nil {
-		key = *sp.Key
+	key, err := store.LendKey(old.BaseURL, stored, sp.BaseURL, sp.Key)
+	if err != nil {
+		return err
 	}
 	live, err := r.build(ctx, store.RankerInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model}, key)
 	if err != nil {
@@ -363,7 +364,8 @@ func (r *Ranking) Supplied() (string, bool) {
 
 // Models are what a ranker serves: a stored one's, by name; one not yet stored, by its kind, base
 // URL and key; or a stored one as an edit would make it, by its name and the edit's kind and base
-// URL, the stored key used unless the edit has one. A TEI server names its one model; a rerank-API
+// URL, the stored key used unless the edit has one, and only on its own server (store.LendKey).
+// A TEI server names its one model; a rerank-API
 // endpoint names none, so its model is typed.
 func (r *Ranking) Models(ctx context.Context, name string, sp store.RankerSpec) ([]string, error) {
 	kind, base, key := sp.Kind, sp.BaseURL, ""
@@ -378,8 +380,8 @@ func (r *Ranking) Models(ctx context.Context, name string, sp store.RankerSpec) 
 		if sp.Kind == "" {
 			kind, base = info.Kind, info.BaseURL
 		}
-		if sp.Key == nil {
-			key = k
+		if key, err = store.LendKey(info.BaseURL, k, base, sp.Key); err != nil {
+			return nil, err
 		}
 	}
 	if kind != store.KindTEI {
