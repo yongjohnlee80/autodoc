@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -128,6 +129,10 @@ func wireErr(err error) error {
 	var re *golibrpc.Error
 	if errors.As(err, &re) {
 		return re
+	}
+	var refused *fsbounds.Refusal
+	if errors.As(err, &refused) { // a gated script's call past its bounds (ADR 1792004705 §4.2a.1)
+		return &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: refused.Error()}
 	}
 	var maxErr *store.ContextMaximumError
 	if errors.As(err, &maxErr) {
