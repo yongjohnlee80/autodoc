@@ -180,11 +180,15 @@ func eachHeading(root *markdown.Node, src []byte, visit func(n *markdown.Node, i
 	walk(root)
 }
 
-// plain is a node's text, its inline markup dropped.
+// plain is a node's text, its inline markup dropped. An image's alt text is not shown text, so
+// it is left out, as GitHub leaves it out of a heading's anchor.
 func plain(n *markdown.Node, src []byte) string {
 	var b bytes.Buffer
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
+		if n.Kind == markdown.KindImage {
+			return
+		}
 		if n.FirstChild == nil {
 			switch n.Kind {
 			case markdown.KindText, markdown.KindCodeSpan:
