@@ -24,6 +24,7 @@ type profilingFeature struct {
 	window, backend string // the running monitors' directories; "" while off
 	lastDir         string // the folder Open profile folder opens: the last monitor's
 	windowBusy      bool   // the window's monitor is starting or stopping, off the loop
+	backendBusy     bool   // a sys.profile start or stop is under way
 	backendSeq      uint64 // sys.profile's answers: only the latest asked is applied (Ticket)
 }
 
@@ -152,10 +153,14 @@ type windowAnswer struct {
 	err error
 }
 
-// toggleBackend starts or stops the daemon's monitor through sys.profile. Its answer wins over any
-// status asked before it (Ticket). A refusal is said, and the daemon asked again where its monitor
+// toggleBackend starts or stops the daemon's monitor through sys.profile, one toggle at a time.
+// Its answer wins over any status asked before it (Ticket). A refusal is said, and the daemon asked again where its monitor
 // stands, since a stop that failed to write its last samples still stopped it.
 func (f *profilingFeature) toggleBackend() {
+	if f.backendBusy {
+		return // one toggle at a time: the next reads where this one left the monitor
+	}
+	f.backendBusy = true
 	op := "start"
 	if f.backend != "" {
 		op = "stop"
@@ -166,6 +171,7 @@ func (f *profilingFeature) toggleBackend() {
 		on, dir, err := backendProfile(ctx, f.c, op)
 		return backendAnswer{on: on, dir: dir, err: err}
 	}, func(v any) {
+		f.backendBusy = false
 		if !t.Current() {
 			return
 		}

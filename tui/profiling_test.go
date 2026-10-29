@@ -221,3 +221,23 @@ func TestARefusedBackendStopAsksAgain(t *testing.T) {
 		t.Errorf("a refused stop: failed %v, state %v, calls %v", c.failed, c.set, c.calls)
 	}
 }
+
+// A second Backend toggle while one is under way does nothing: two quick clicks never send two
+// starts, and the item shows where the first left the monitor.
+func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
+	c := newScripted("kb")
+	c.deferred = true
+	c.answers["sys.profile"] = func(params []any) (any, error) {
+		return map[string]any{"on": params[0] == "start", "dir": "/run/user/1/p"}, nil
+	}
+	f := newProfiling(c, nil, nil)
+	f.toggleBackend()
+	f.toggleBackend()
+	if len(c.pending) != 1 || !slices.Equal(c.calls, []string{"sys.profile[start ]"}) {
+		t.Fatalf("two quick toggles: %d pending, calls %v; want one start", len(c.pending), c.calls)
+	}
+	c.deliver(0)
+	if c.set["App.profilingBackend"] != true || f.backendBusy {
+		t.Errorf("after the start: state %v, busy %v", c.set, f.backendBusy)
+	}
+}
