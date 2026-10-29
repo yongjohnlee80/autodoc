@@ -10,6 +10,8 @@ import (
 	"testing/fstest"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
+
+	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
 func TestCatalogAndExportMapping(t *testing.T) {
@@ -31,7 +33,8 @@ func TestCatalogAndExportMapping(t *testing.T) {
 		t.Fatalf("names: %v labels: %v", c.Names(), c.Labels())
 	}
 	for _, base := range themes.Names() {
-		want := base
+		// a copy is drawn as its base is: the base's export theme, or mono without RGB colours
+		want := c.ExportStyle(base)
 		v, _ := themes.Values(base)
 		_, bg := rgb(v["document.base"])
 		_, fg := rgb(v["document.text"])
@@ -58,5 +61,26 @@ func TestCatalogAndExportMapping(t *testing.T) {
 	}
 	if _, err := fs.ReadFile(c.Files(), "copy_sepia.qml"); err == nil {
 		t.Fatal("unchecked bytes reached module loader")
+	}
+}
+
+// Every theme, shipped or a user's, is drawn in an export theme the exporter has: its own when the
+// exporter has one, else the nearest. golib ships themes the exporter has no palette for (nord), and
+// the HTML preview of one used to be refused.
+func TestEveryThemeHasAnExportThemeThatRenders(t *testing.T) {
+	c := Open(t.TempDir())
+	exportable := export.Themes()
+	for _, name := range themes.Names() {
+		got := c.ExportStyle(name)
+		if !slices.Contains(exportable, got) {
+			t.Errorf("%s maps to %q, which the exporter has no palette for (it has %v)", name, got, exportable)
+			continue
+		}
+		if slices.Contains(exportable, name) && got != name {
+			t.Errorf("%s has its own export palette but maps to %s", name, got)
+		}
+		if _, err := export.Render([]byte("# Title\n\ntext\n"), export.HTML, got); err != nil {
+			t.Errorf("%s (as %s) doesn't render: %v", name, got, err)
+		}
 	}
 }
