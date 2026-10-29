@@ -36,7 +36,7 @@ repository's Security tab, which reaches the maintainer privately.
 
 ## Setting up
 
-You need Go 1.26.9 (the version in `go.mod`) and `make`.
+You need Go 1.26.10 (the version in `go.mod`) and `make`.
 
 ```sh
 git clone https://github.com/yongjohnlee80/autodoc && cd autodoc
