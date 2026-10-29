@@ -135,8 +135,26 @@ func lineOf(lines []int, off int) int {
 
 // headings walks the file's heading nodes; frontmatter is not the file's text, and is skipped.
 func headings(src []byte, lines []int) []Heading {
-	doc := kind.ParseMarkdown(src)
 	var out []Heading
+	eachHeading(kind.ParseMarkdown(src).Root, src, func(n *markdown.Node, id, text string) {
+		out = append(out, Heading{ID: id, Level: n.Level(), Text: text, Line: lineOf(lines, n.Span.Start), Byte: n.Span.Start})
+	})
+	return out
+}
+
+// HeadingIDs is the ID of each heading under root, a document parsed from src, in document order:
+// the slug GitHub gives the heading, numbered when an earlier heading has it. They are the IDs a
+// Doc's Headings carry, so a page drawn from the document can give its headings the anchors a
+// link written for GitHub expects.
+func HeadingIDs(root *markdown.Node, src []byte) []string {
+	var out []string
+	eachHeading(root, src, func(_ *markdown.Node, id, _ string) { out = append(out, id) })
+	return out
+}
+
+// eachHeading calls visit with each heading under root in document order, its ID and its text.
+// Frontmatter is not the file's text, and is skipped.
+func eachHeading(root *markdown.Node, src []byte, visit func(n *markdown.Node, id, text string)) {
 	seen := map[string]int{}
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
@@ -153,14 +171,13 @@ func headings(src []byte, lines []int) []Heading {
 				} else {
 					seen[id] = 1
 				}
-				out = append(out, Heading{ID: id, Level: c.Level(), Text: text, Line: lineOf(lines, c.Span.Start), Byte: c.Span.Start})
+				visit(c, id, text)
 				continue
 			}
 			walk(c)
 		}
 	}
-	walk(doc.Root)
-	return out
+	walk(root)
 }
 
 // plain is a node's text, its inline markup dropped.

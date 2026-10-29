@@ -18,7 +18,7 @@ func TestExportMainWritesChosenDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(destination)
-	if err != nil || !strings.Contains(string(content), "<h1>Heading</h1>") {
+	if err != nil || !strings.Contains(string(content), `<h1 id="heading">Heading</h1>`) {
 		t.Fatalf("HTML export = %q, %v", content, err)
 	}
 	if err := exportMain(sourcePath, "text", sourcePath, "light", ""); err == nil {

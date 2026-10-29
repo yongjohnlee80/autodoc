@@ -32,7 +32,7 @@ func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 			t.Fatalf("preview path = %q", path)
 		}
 		content, err := os.ReadFile(path)
-		if err != nil || !strings.Contains(string(content), "<h1>Unsaved heading</h1>") || !strings.Contains(string(content), "color-scheme:dark") {
+		if err != nil || !strings.Contains(string(content), `<h1 id="unsaved-heading">Unsaved heading</h1>`) || !strings.Contains(string(content), "color-scheme:dark") {
 			t.Fatalf("preview = %q, %v", content, err)
 		}
 		if want := `href="file://` + filepath.ToSlash(root) + `/other.md#s"`; !strings.Contains(string(content), want) {
