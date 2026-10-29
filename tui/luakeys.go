@@ -201,7 +201,7 @@ func (s *scripting) luaMenuFn(L *lua.LState) int {
 	r.owner = by.script
 	r.run = func() {
 		if by.allowed(s) {
-			s.runLuaLine(line)
+			s.runLuaLine(by, line)
 		}
 	}
 	s.rows.add(r)
@@ -263,7 +263,7 @@ func (s *scripting) luaKey(letter string) {
 		if k.letter == letter {
 			s.c.Close("luaKeys")
 			if k.by.allowed(s) {
-				s.runLuaLine(k.line)
+				s.runLuaLine(k.by, k.line)
 			}
 			return
 		}
@@ -286,17 +286,29 @@ func (s *scripting) chord(kc widget.KeyChord) bool {
 		return false
 	}
 	if ch.by.allowed(s) {
-		s.runLuaLine(ch.line)
+		s.runLuaLine(ch.by, ch.line)
 	}
 	return true // the script's key all the same: it does nothing else while refused
 }
 
-// runLuaLine runs a key's or a row's command line as ':' does; its error is a notification.
-func (s *scripting) runLuaLine(line string) {
+// runLuaLine runs a key's or a row's command line as ':' does, as by acts: a gated script's key or
+// row runs as that script, its paths bounded and its user-only entries refused (ADR 1792004705
+// §4.2a.2c), however long ago it was bound. Its error is a notification.
+func (s *scripting) runLuaLine(by luaBinder, line string) {
 	if s.line == nil {
 		return
 	}
-	if err := s.line(line); err != nil {
+	run := func() error { return s.line(line) }
+	var err error
+	switch {
+	case by.script == "":
+		err = run() // an ungated script's: the user's own
+	case s.as == nil:
+		err = errNoAuthority // a gated binder with no host to act as it: refused, never run as the user
+	default:
+		err = s.as(authority{script: by.script, grants: by.grants, ws: s.c.Workspace()}, run)
+	}
+	if err != nil {
 		s.c.Notify(line + ": " + err.Error())
 	}
 }

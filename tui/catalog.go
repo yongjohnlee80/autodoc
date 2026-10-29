@@ -66,6 +66,13 @@ type Entry struct {
 	// running it is the entry's key, as F1 lists it.
 	Twin string
 	Run  func(Invocation) error // on the UI loop
+	// UserOnly is an entry that runs code, launches a path, fetches and writes without asking, or
+	// changes what scripts may do: the user's to run, refused to a gated script however it gets
+	// there (autodoc.run, ed:run, its key or row). ADR 1792004705 §4.2a.2.
+	UserOnly bool
+	// Path is an entry that opens or saves a path a gated script names: it holds a gated run to the
+	// workspace itself, through the daemon's bounds (§4.2a.2b).
+	Path bool
 	// Complete is what ':' Tab offers for its arguments (golib's Command.Complete); nil for none
 	Complete func(widget.CompleteContext) []string
 }
@@ -120,6 +127,8 @@ type catalog struct {
 	tr func(id, english string) string
 	// changed hears every add and remove: F1 is made from the catalog
 	changed func()
+	// who is who a run beginning now acts for (Host.authorityNow); nil runs everything as the user's
+	who func() authority
 }
 
 func newCatalog() *catalog {
@@ -336,6 +345,9 @@ func (c *catalog) sync(affected map[string]bool) {
 			}
 			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
 				Run: func(x widget.CommandContext) error {
+					if err := c.userOnly(e); err != nil {
+						return err
+					}
 					return e.Run(Invocation{Name: x.Name, Args: x.Args, Line: x.Line, Bang: x.Bang, Core: x.Core})
 				}})
 			c.synced[id] = own
@@ -354,5 +366,17 @@ func (c *catalog) run(id string, args []string) error {
 		return fmt.Errorf("%w: %s", errUnknownCommand, id)
 	}
 	defer renamePanic(id) // a panic says which command it came out of (crash.go)
+	if err := c.userOnly(e); err != nil {
+		return err
+	}
 	return e.Run(Invocation{Args: args, Line: strings.Join(args, " "), Core: c.core})
+}
+
+// userOnly refuses a UserOnly entry to a run that a gated script's invocation makes: the one place
+// every route to an entry (':', a key, autodoc.run, a plugin's host.call) goes through.
+func (c *catalog) userOnly(e *Entry) error {
+	if !e.UserOnly || c.who == nil || !c.who().gated() {
+		return nil
+	}
+	return fmt.Errorf("%s is the user's to run: a script may not", e.ID)
 }

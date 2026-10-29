@@ -5367,13 +5367,17 @@ WHAT A KEY NEEDS
         <source>change AutoDoc's settings: workspaces, models, preferences</source>
         <translation>AutoDoc の設定を変更: ワークスペース、モデル、各種設定</translation>
     </message>
+    <message id="autodoc.question.luagate.create_edit_rename_and_remove_the_files_of_this">
+        <source>create, edit, rename and remove the files of this workspace, except hidden ones, and its tasks</source>
+        <translation>このワークスペースのファイル（隠しファイルを除く）とタスクの作成、編集、名前変更、削除</translation>
+    </message>
     <message id="autodoc.question.luagate.let_use">
         <source>let %1 use %2?</source>
         <translation>%1 に %2 の使用を許可しますか?</translation>
     </message>
-    <message id="autodoc.question.luagate.list_the_agents_and_type_into_them">
-        <source>list the agents and type into them</source>
-        <translation>エージェントを一覧し、入力を送る</translation>
+    <message id="autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can">
+        <source>list the agents and send them text: an agent can run commands on your computer</source>
+        <translation>エージェントを一覧し、テキストを送る：エージェントはこのコンピューターでコマンドを実行できる</translation>
     </message>
     <message id="autodoc.question.luagate.not_now">
         <source>&amp;Not now</source>
@@ -5387,9 +5391,9 @@ WHAT A KEY NEEDS
         <source>read and write the clipboard</source>
         <translation>クリップボードの読み書き</translation>
     </message>
-    <message id="autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f">
-        <source>read the workspace's documents, search them and follow their links</source>
-        <translation>ワークスペースのドキュメントを読み、検索し、リンクをたどる</translation>
+    <message id="autodoc.question.luagate.read_the_files_in_your_workspaces_except_hidden">
+        <source>read the files in your workspaces, except hidden ones, search them and follow their links</source>
+        <translation>ワークスペースのファイル（隠しファイルを除く）を読み、検索し、リンクをたどる</translation>
     </message>
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
@@ -5402,10 +5406,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luagate.the_plugin_s_lua_package">
         <source>the plugin %1's Lua package</source>
         <translation>プラグイン %1 の Lua パッケージ</translation>
-    </message>
-    <message id="autodoc.question.luagate.write_rename_and_remove_documents_and_tasks">
-        <source>write, rename and remove documents and tasks</source>
-        <translation>ドキュメントとタスクの書き込み、名前変更、削除</translation>
     </message>
     <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
         <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>

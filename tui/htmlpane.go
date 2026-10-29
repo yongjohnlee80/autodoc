@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -167,14 +168,24 @@ func (h *Host) followCursorInPane() {
 // htmlLink is a link clicked in the pane: a web or mail address goes to the system browser; a
 // file: URL, or a path relative to the note (a wikilink's page, a Markdown link), opens in the
 // editor, a workspace's file as that workspace's.
-func (h *Host) htmlLink(href string) {
+func (h *Host) htmlLink(href string) { h.htmlLinkAs(h.authorityNow(), href) }
+
+// htmlLinkAs is htmlLink as a acts. A gated script's link goes to the browser only as a web or mail
+// address: any other scheme the desktop's opener would launch (an app, a script) is the user's to
+// follow, as file.open_default_app is; a file opens within its bounds (ADR 1792004705 §4.2a.2b).
+func (h *Host) htmlLinkAs(a authority, href string) {
 	u, err := url.Parse(strings.TrimSpace(href))
 	if err != nil || href == "" {
 		return
 	}
-	switch strings.ToLower(u.Scheme) {
+	scheme := strings.ToLower(u.Scheme)
+	if a.gated() && scheme != "" && scheme != "file" && scheme != "http" && scheme != "https" && scheme != "mailto" {
+		h.notify(fmt.Sprintf("%s is the user's to follow: a script may not", href))
+		return
+	}
+	switch scheme {
 	case "file":
-		h.openAbsolute(filepath.FromSlash(u.Path))
+		h.openAbsoluteAs(a, filepath.FromSlash(u.Path))
 		return
 	case "":
 	default:
@@ -200,5 +211,5 @@ func (h *Host) htmlLink(href string) {
 	if filepath.Ext(p) == "" {
 		p += ".md" // a wikilink names its page without the extension
 	}
-	h.openAbsolute(p)
+	h.openAbsoluteAs(a, p)
 }

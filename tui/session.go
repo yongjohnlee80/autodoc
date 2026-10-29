@@ -108,6 +108,17 @@ func (h *Host) watch() {
 
 // call calls the daemon from a worker, with the connection there is now.
 func (h *Host) call(ctx context.Context, method string, params ...any) (any, error) {
+	if a, ok := authorityOf(ctx); ok { // work a gated script started carries its bounds (authority.go)
+		if err := a.check(method); err != nil {
+			return nil, err
+		}
+		if a.gated() {
+			var err error
+			if params, err = h.boundedParams(a, method, params); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return h.session.Call(ctx, method, params...)
 }
 

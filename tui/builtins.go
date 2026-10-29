@@ -14,6 +14,12 @@ func builtin(id, title, twin string, fn func()) Entry {
 	return Entry{ID: id, Title: title, Help: title, Twin: twin, Run: func(Invocation) error { fn(); return nil }}
 }
 
+// userOnly is e, the user's to run (Entry.UserOnly).
+func userOnly(e Entry) Entry { e.UserOnly = true; return e }
+
+// pathEntry is e, which opens or saves a path (Entry.Path).
+func pathEntry(e Entry) Entry { e.Path = true; return e }
+
 // Catalog is the host's own user commands.
 func (l legacy) Catalog() []Entry { return l.h.builtinEntries() }
 
@@ -31,13 +37,13 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
 		{ID: "file.open_path", Title: "open a file by its path", Verb: "open", Aliases: []string{"e", "edit"}, Args: "<path>",
 			Help: "open a file by its path, as File › Open any file does once it is chosen: on the command line absolute, ~/… or relative to the workspace in use; from Lua, a key or a plugin, absolute",
-			Run:  h.runOpenPath},
-		builtin("file.save", "save", "App.save()", h.save),
+			Run:  h.runOpenPath, Path: true},
+		pathEntry(builtin("file.save", "save", "App.save()", h.save)),
 		builtin("file.reload", "reload from disk", "App.reload()", h.reload),
 		builtin("file.preview_html", "preview HTML", "App.previewHTML()", h.previewHTML),
 		builtin("file.preview_diagram", "view the diagram", "App.previewDiagram()", h.previewDiagram),
-		builtin("file.open_default_app", "open with the default app", "App.openWithDefaultApp()", h.openWithDefaultApp),
-		builtin("file.follow_link", "go to the link under the cursor", "App.followLink()", h.followLink),
+		userOnly(builtin("file.open_default_app", "open with the default app", "App.openWithDefaultApp()", h.openWithDefaultApp)),
+		pathEntry(builtin("file.follow_link", "go to the link under the cursor", "App.followLink()", h.followLink)),
 		builtin("file.back", "back", "App.goBack()", h.goBack),
 		builtin("app.quit", "quit", "App.quit()", h.quit),
 		builtin("app.command_line", "the command line", "App.openCommandLine()", h.openCommandLine),
@@ -51,7 +57,7 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("panel.reset_layout", "reset the panel layout", "App.resetPanelLayout()", h.resetPanelLayout),
 		builtin("workspace.switch", "switch workspace", "App.pickWorkspace()", h.pickWorkspace),
 		builtin("workspace.manage", "manage workspaces", "App.manageWorkspaces()", h.manageWorkspaces),
-		{ID: "kbtype.apply", Title: "apply a KB type to this workspace", Args: "<name or git URL>",
+		{ID: "kbtype.apply", Title: "apply a KB type to this workspace", Args: "<name or git URL>", UserOnly: true,
 			Help: "create a KB type's folders and files in the open workspace, keeping every file already there: autovim.kb, zettelkasten.kb, para.kb, slipbox.kb, or a type's git URL",
 			Run:  h.kbTypeApply},
 		// View and the editor
