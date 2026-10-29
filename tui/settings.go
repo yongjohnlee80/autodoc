@@ -903,7 +903,8 @@ func (h *Host) renameWorkspaceRow(name, to string) {
 }
 
 // saved follows a configure: the workspace in use keeps being used under a new name, a new schema
-// checks the open file, and the manager and the explorer are listed again.
+// checks the open file when it is that file's own workspace's, and the manager and the explorer
+// are listed again.
 func (h *Host) saved(name string, c map[string]any) {
 	to := name
 	if n, ok := c["name"].(string); ok {
@@ -920,7 +921,7 @@ func (h *Host) saved(name string, c map[string]any) {
 	}
 	h.notify(h.trf("autodoc.notice.settings.saved", to, changed(core{h}, c)))
 	h.loadWorkspaces()
-	if _, ok := c["schema"]; ok && to == h.ws {
+	if _, ok := c["schema"]; ok && to == h.checkedIn() {
 		h.validateSoon(validateDelay)
 	}
 }

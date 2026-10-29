@@ -172,7 +172,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 		default:
 			if id, ok := workspaceChanges[e.kind]; ok { // the list is read again
 				notice, relist = h.trf(id, e.workspace, by), true
-				recheck = recheck || (e.kind == "workspace.schema" && e.workspace == h.ws)
+				recheck = recheck || (e.kind == "workspace.schema" && e.workspace == h.checkedIn())
 			} else if id, ok := backendChanges[e.kind]; ok {
 				notice = h.trf(id, by)
 				reranked = reranked || strings.HasPrefix(e.kind, "ranker.")
