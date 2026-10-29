@@ -449,6 +449,8 @@ func (x *Indexer) writer(ctx context.Context) error {
 	var ready []workItem
 	var first time.Time
 	gcDue := time.Now().Add(x.opts.BatchDelay)
+	// NOTE: the times no event announces (a batch's age, a job's retry time, the collection's due
+	// time) are waited on with this one timer, set to the first of them each turn (writerWait).
 	timer := time.NewTimer(time.Hour)
 	timer.Stop()
 	defer timer.Stop()
