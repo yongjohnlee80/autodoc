@@ -3348,8 +3348,8 @@ WHAT A KEY NEEDS
         <translation>パネルを配置(&amp;r)…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>&amp;Assign</source>
-        <translation>割り当て(&amp;a)</translation>
+        <source>Assign (&amp;A)</source>
+        <translation>割り当て(&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>

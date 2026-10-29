@@ -3351,8 +3351,8 @@ LO QUE NECESITA UNA TECLA
         <translation>O&amp;rganizar panel…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>&amp;Assign</source>
-        <translation>&amp;Asignar</translation>
+        <source>Assign (&amp;A)</source>
+        <translation>Asignar (&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>

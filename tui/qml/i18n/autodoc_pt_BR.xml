@@ -3350,8 +3350,8 @@ O QUE UMA TECLA PRECISA
         <translation>O&amp;rganizar painel…</translation>
     </message>
     <message id="autodoc.main.assign">
-        <source>&amp;Assign</source>
-        <translation>&amp;Atribuir</translation>
+        <source>Assign (&amp;A)</source>
+        <translation>Atribuir (&amp;A)</translation>
     </message>
     <message id="autodoc.main.browse_the_registry">
         <source>&amp;Browse the registry…</source>
