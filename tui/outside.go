@@ -8,6 +8,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -23,9 +24,10 @@ import (
 // of this one are not its to open.
 var errRemote = &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "local files only: this AutoDoc is remote"}
 
-// localOnly is err, or errRemote when the daemon refused a file.* verb to this peer.
+// localOnly is err, or errRemote when the daemon refused a file.* verb to this peer. A gated
+// script's call refused past its bounds is access denied too, and says so itself: it is kept.
 func localOnly(err error) error {
-	if code(err) == golibrpc.CodeAccessDenied {
+	if code(err) == golibrpc.CodeAccessDenied && !strings.HasSuffix(wireMessage(err), fsbounds.ErrRefused.Error()) {
 		return errRemote
 	}
 	return err
