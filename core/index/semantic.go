@@ -944,8 +944,7 @@ func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool,
 // noVector is the predicate of a chunk whose text has no vector under model fp: a probe of
 // embedding_workspace_model_text for each chunk read.
 func noVector(fp string) dao.Predicate {
-	return dao.Raw(`NOT EXISTS (SELECT 1 FROM "embedding" WHERE "embedding"."workspace_id" = "chunk"."workspace_id"`+
-		` AND "embedding"."model_fp" = ? AND "embedding"."text_hash" = "chunk"."text_hash")`, fp)
+	return store.NoMatchIn("embedding", "text_hash", "chunk", "text_hash", "model_fp", fp)
 }
 
 // The states of a workspace's models (ModelInfo.State).
