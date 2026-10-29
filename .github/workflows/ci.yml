@@ -1,5 +1,6 @@
 # The Go gate: gofmt, vet, build, the race-enabled tests twice, a static
-# cross-build, and on a pull request the coverage policy (golib covercheck).
+# cross-build, govulncheck, and on a pull request the coverage policy (golib covercheck).
+# Every action is pinned by its commit, the version it was tagged as beside it.
 name: ci
 
 on:
@@ -34,9 +35,8 @@ jobs:
     env:
       PGURL: postgres://autodoc:autodoc@localhost:5432/autodoc?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -114,8 +114,8 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -123,7 +123,7 @@ jobs:
         run: bash tests/run-tui-shard.sh "${{ matrix.shard }}" 8 > "$RUNNER_TEMP/tui-tests.jsonl"
       - name: test timings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tui-race-${{ matrix.shard }}-${{ github.run_id }}
           path: ${{ runner.temp }}/tui-tests.jsonl
@@ -139,8 +139,8 @@ jobs:
       # with a compatibility check.
       AUTO_CORE_SHA: "9ea026c"  # v0.3.1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: install neovim
@@ -169,9 +169,8 @@ jobs:
     name: macOS (cgo)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -198,8 +197,8 @@ jobs:
     # Linux jobs stay on ubuntu-latest and would show a new image's change first.
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -214,17 +213,43 @@ jobs:
       # -tags gui,novulkan and leave that backend uncompiled.
       - name: make build-gui
         run: make build-gui VULKAN=1 && ./bin/autodoc --version
+      # every package, with the GUI built in: a package the GUI build changes is vetted as it ships
       - name: vet with the GUI
-        run: go vet -tags gui ./app/ ./cmd/... ./tui/
+        run: go vet -tags gui ./...
       # The TUI's GUI-only cells (the title bar's buffer tabs, the GUI editor's keys): no other job
       # builds tui/ with the gui tag, so they ran nowhere and main stayed green while two failed.
       # They need no display (decltest's backend), and run without -race to keep this job short.
       - name: the TUI's GUI cells
         run: go test -tags gui -count=1 -timeout 20m ./tui/
       # The export's GUI cells: the chart hook draws a chart as SVG (ADR 1792395460). Named, since
-      # app's other cells start the GUI, which needs a display.
+      # app's other cells start the GUI, which needs a display. Few and quick, so with -race.
       - name: the export's GUI cells
-        run: go test -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|AnExportedChartGolibCannotDrawSaysWhy|CheckDiagramSaysWhatGolibDraws|TheDiagramReferenceIsGolibs|ExportASite|ExportThroughTheCommandLine' ./app/
+        run: go test -race -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|AnExportedChartGolibCannotDrawSaysWhy|CheckDiagramSaysWhatGolibDraws|TheDiagramReferenceIsGolibs|ExportASite|ExportThroughTheCommandLine' ./app/
+
+  # govulncheck: the vulnerabilities the code reaches, in what each build links, under go.mod's
+  # toolchain (the release builds with it): the default build, the server's and the GUI's. golang.org/x/vuln
+  # at a pinned version, through go run, so its source is checked against the module checksum database.
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: the window system's libraries (the GUI build's cgo)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev
+      - name: govulncheck
+        env:
+          GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.9.0
+        run: |
+          go run "$GOVULNCHECK" ./...
+          go run "$GOVULNCHECK" -tags server ./...
+          go run "$GOVULNCHECK" -tags gui ./...
 
   coverage:
     name: coverage policy
@@ -253,12 +278,12 @@ jobs:
       HEAD_SHA: ${{ github.sha }}
       PGURL: postgres://autodoc:autodoc@localhost:5432/autodoc?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -326,7 +351,7 @@ jobs:
 
       - name: upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report-${{ github.run_id }}
           path: ${{ runner.temp }}/coverage-report.md
@@ -353,13 +378,13 @@ jobs:
     steps:
       - name: download coverage report
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: coverage-report-${{ github.run_id }}
           path: ${{ runner.temp }}/coverage-report
 
       - name: create or update PR comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           COVERAGE_REPORT_PATH: ${{ runner.temp }}/coverage-report/coverage-report.md
           COVERAGE_JOB_RESULT: ${{ needs.coverage.result }}
