@@ -321,7 +321,7 @@ func TestAScriptMovesNoRoot(t *testing.T) {
 		method string
 		params []any
 	}{
-		{"workspace.add", []any{"keys", filepath.Join(f.root, ".ssh")}},
+		{"workspace.add", []any{"keys", filepath.Join(f.root, ".ssh"), nil, nil}}, // padded to its params, as the gate pads
 		{"todos.register", []any{filepath.Join(f.root, ".ssh")}},
 	} {
 		_, err := f.try(c.method, append(c.params, f.bounds("kb"))...)
