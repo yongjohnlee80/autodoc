@@ -39,6 +39,7 @@ When you register a cloud provider (`ollama-cloud`, `openai`, or `rerank-api`) w
 - If `autodoc.db.key` has permissions wider than `0600`, the daemon refuses to open keys (`-32068 rpc.provider_refused: "the store's keyslot file is readable by others: make it 0600"`).
 - Subsequent `embedding.providers` or `ranker.list` calls return `"has_key": true` without ever echoing the secret back over RPC or into the UI.
 - Updating a provider with an omitted `key` preserves the existing sealed key; passing `"key": ""` erases it.
+- A kept key is sent only to the server it was typed for. An edit that moves `base_url` to another server (another scheme, host or port) with `key` omitted is refused (`store: the base URL moves to another server: type the API key again, or remove it`), and so is listing that server's models or reading its context window with the stored key; nothing is sent to it. Otherwise anyone allowed to edit the settings, a Lua package granted `settings` among them, could point a provider at their own server and read the key from the next call. Another path on the same server keeps the key.
 
 ---
 

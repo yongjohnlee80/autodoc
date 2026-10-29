@@ -1166,7 +1166,7 @@ function M.new(profile)
         end },
       { key = "key", secret = true,
         prompt = function(a)
-          if existing and existing.has_key then return "API key (empty keeps the stored one): " end
+          if existing and existing.has_key then return "API key (empty keeps the stored one on the same server): " end
           return a.kind.key_required and "API key (required): " or "API key (if the endpoint takes one): "
         end,
         skip = function(a) return not a.kind.key end,
@@ -1210,7 +1210,7 @@ function M.new(profile)
         skip = function(a) return not a.kind.model end,
         validate = function(v) if v == "" then return "autodoc: a Rerank API reranker needs a model" end end },
       { key = "key", secret = true,
-        prompt = function() return (existing and existing.has_key) and "API key (empty keeps the stored one): " or "API key (if the server takes one): " end },
+        prompt = function() return (existing and existing.has_key) and "API key (empty keeps the stored one on the same server): " or "API key (if the server takes one): " end },
     }, function(a)
       if not a then return end
       local spec = { name = a.name, kind = a.kind.kind, base_url = a.base_url, model = a.kind.model and a.model or "" }

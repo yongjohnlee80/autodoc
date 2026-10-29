@@ -508,7 +508,7 @@
         {
           "name": "provider",
           "type": "map",
-          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
+          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one while base_url stays on its server (another server needs the key again), \"\" removes it"
         }
       ],
       "errors": [
@@ -1201,7 +1201,7 @@
         {
           "name": "ranker",
           "type": "map",
-          "doc": "{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"
+          "doc": "{name, kind, base_url, model, key?}: an absent key keeps the stored one while base_url stays on its server (another server needs the key again), \"\" removes it"
         }
       ],
       "errors": [

@@ -80,7 +80,7 @@ type (
 	}
 	rankerUpdate struct {
 		Name   string    `param:"name"`
-		Ranker optionMap `param:"ranker" doc:"{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"`
+		Ranker optionMap `param:"ranker" doc:"{name, kind, base_url, model, key?}: an absent key keeps the stored one while base_url stays on its server (another server needs the key again), \"\" removes it"`
 	}
 	rankerUse struct {
 		Name string `param:"name" doc:"\"\" for none"`
