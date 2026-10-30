@@ -286,7 +286,7 @@ func TestWriteIsRefusedAfterClose(t *testing.T) {
 	}
 }
 
-// Lector r2: a Close inside the held batch (from the held hook) and a Ctrl+D among the held keys
+// A Close inside the held batch (from the held hook) and a Ctrl+D among the held keys
 // stop the batch there: no request for the keys after, no output after.
 func TestCloseInsideTheHeldBatch(t *testing.T) {
 	for _, viaEOF := range []bool{false, true} {

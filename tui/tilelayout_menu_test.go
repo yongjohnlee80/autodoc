@@ -253,7 +253,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 	wantEdgeChecked("top")
 }
 
-// TestAnEdgeChosenTilesThePanelAsItIsNow (Zen, #16 r1): :layout terminal open on the tiled
+// TestAnEdgeChosenTilesThePanelAsItIsNow: :layout terminal open on the tiled
 // terminal, its Tiled › showing, the store floats it (as another TUI's choice, read back by a
 // reload). Right then docks it at the right and tiles it: the Layout as it is when chosen, not as
 // it was when the menu was built.

@@ -50,7 +50,7 @@ func heardLines(path string) []string {
 	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 }
 
-// The CLIs are offered in Johno's order, absent ones left out; none found is empty. Nothing runs.
+// The CLIs are offered in their fixed order, absent ones left out; none found is empty. Nothing runs.
 func TestDetectAgentCLIsKeepsTheOrder(t *testing.T) {
 	on := func(names ...string) func(string) (string, error) {
 		return func(c string) (string, error) {

@@ -142,7 +142,7 @@ func TestARenderedNoteDrawsItsEmbeds(t *testing.T) {
 	}
 }
 
-// A CSV value is shown as the file has it (Lector #174 r1 F2): emphasis, code, a link, an image,
+// A CSV value is shown as the file has it: emphasis, code, a link, an image,
 // an entity, a pipe and a backslash are its own characters, not Markdown.
 func TestAnEmbeddedTableShowsItsValuesLiterally(t *testing.T) {
 	value := "literal **strong** and `code`, [l](u) ![i](p) &amp; a|b c\\d"
@@ -158,7 +158,7 @@ func TestAnEmbeddedTableShowsItsValuesLiterally(t *testing.T) {
 	}
 }
 
-// An image alone in its paragraph is drawn as the page draws it (Lector #174 r1 F3): beside a
+// An image alone in its paragraph is drawn as the page draws it: beside a
 // heading with no blank line, with a destination in balanced parentheses, with a title. One that
 // shares its line or its paragraph, a missing file, an image, and any with no note open are left
 // to golib.
@@ -215,7 +215,7 @@ func TestAParagraphHoldingAnEmbedIsOneBlock(t *testing.T) {
 	}
 }
 
-// Only the note editor draws embeds (Lector #174 r1 F1): main.qml's document Editor declares
+// Only the note editor draws embeds: main.qml's document Editor declares
 // NoteRenderer, and the search preview, which shows other files, keeps golib's MarkdownRenderer, so
 // the window's note renderer is made for the note editor alone.
 func TestOnlyTheNoteEditorDrawsEmbeds(t *testing.T) {
@@ -324,7 +324,7 @@ func paintedEditor(t *testing.T, r guiwidget.Renderer, text string) (editor *gui
 	return editor, onApp, paint
 }
 
-// An edit to the line after an embed lays the embed out again (Lector #174 r1 F4), both ways: text
+// An edit to the line after an embed lays the embed out again, both ways: text
 // typed on the blank line under it joins it to a paragraph, and it is drawn as its source; that
 // text deleted, it is alone again, and drawn as its file. On golib's own editor, painted natively.
 func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
@@ -353,7 +353,7 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 	})
 }
 
-// An embed by reference (![data][file]) stays as written in the Rendered view (Lector #175 r1 A2):
+// An embed by reference (![data][file]) stays as written in the Rendered view:
 // its destination is its definition's, which may be anywhere in the note, and the editor keeps a
 // line's layout while the lines around it are unchanged. The page still draws it.
 func TestAnEmbedByReferenceStaysAsWritten(t *testing.T) {
@@ -370,7 +370,7 @@ func TestAnEmbedByReferenceStaysAsWritten(t *testing.T) {
 	}
 }
 
-// Finding a note's embeds costs what its length does (Lector #175 r1 A1): Blocks on five times the
+// Finding a note's embeds costs what its length does: Blocks on five times the
 // paragraphs holding an image allocates about five times as much, not twenty-five.
 func TestBlocksScaleWithTheNote(t *testing.T) {
 	notes, _ := embedNote(t, nil)

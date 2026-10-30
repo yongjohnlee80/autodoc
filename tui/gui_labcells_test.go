@@ -187,9 +187,9 @@ func (h *forwardHost) Diagram(d guiwidget.Diagrammer, _ guiwidget.Block, req gui
 	return d.Diagram(context.Background(), req, func() {})
 }
 
-// Every diagram and chart a cell's run left is drawn under its fence, each in its output's place
-// (Lector #264 r0): the host is asked once for the cell, its one request per block, and the fence, a
-// cell, asks for none of its own.
+// Every diagram and chart a cell's run left is drawn under its fence, each in its output's place:
+// the host is asked once for the cell, its one request per block, and the fence, a cell, asks for
+// none of its own.
 func TestEveryDiagramOfACellIsDrawn(t *testing.T) {
 	key := lab.CellKey("python", "print(1)")
 	out := "plan.lab/out/" + key + "/"

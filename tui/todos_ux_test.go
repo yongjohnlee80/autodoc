@@ -10,7 +10,7 @@ import (
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
-// todos_ux_test.go: the todos panel as Johno asked for it after v0.1.41-rc1: it opens large, the
+// todos_ux_test.go: the todos panel as it now works: it opens large, the
 // user's size kept; its status line says only what needs the user; and a released store takes
 // no key as an error.
 

@@ -372,7 +372,7 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 }
 
 // On a screen too small for an image the Mermaid preview falls back to the source, saying why,
-// rather than staying a blank image area (Lector's review of #30, finding 1).
+// rather than staying a blank image area.
 func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
 	if _, ok := widget.HTMLRasterizer(); !ok {
 		t.Skip("no headless browser: image mode is never entered")

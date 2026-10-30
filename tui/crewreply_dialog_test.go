@@ -7,7 +7,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
-// TestANewRequestDoesNotKeepAnotherRequestsAnswer (Lector's #100 r0 F1 repro, on the real dialog):
+// TestANewRequestDoesNotKeepAnotherRequestsAnswer (on the real dialog):
 // an answer typed for request A, then cancelled, is not in the text area when request B opens.
 func TestANewRequestDoesNotKeepAnotherRequestsAnswer(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})

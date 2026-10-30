@@ -320,7 +320,7 @@ func TestParseV2FieldsAreTheUnion(t *testing.T) {
 	}
 }
 
-// An alias of a type is that type (Lector, #16 r0): a memo, memo an alias of note, is checked
+// An alias of a type is that type: a memo, memo an alias of note, is checked
 // against note's own fields, its required one and its enum, and faceted note.
 func TestADiscriminatorAliasIsItsType(t *testing.T) {
 	s := mustParse(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, required: true, enum: [note], aliases: {memo: note}}\n"+

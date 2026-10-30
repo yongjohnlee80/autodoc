@@ -221,7 +221,7 @@ func (f checkedFS) ReadDir(name string) ([]fs.DirEntry, error) {
 // drawn in) for theme name: its own when the exporter has one, else the export theme whose
 // document background and text are nearest name's. golib ships more themes than the exporter has
 // palettes for (nord), and a user theme has none, so each is drawn in the nearest one rather than
-// refused (Johno, 2026-10-29: a fallback, not a palette per theme). Terminal slots and defaults
+// refused (a fallback, not a palette per theme). Terminal slots and defaults
 // have no portable RGB values; those use mono. Ties keep the export themes' order.
 func (c *Catalog) ExportStyle(name string) string {
 	exportable := export.Themes()

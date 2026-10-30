@@ -123,7 +123,7 @@ func TestTheEditTabOffersOnlyTheDaemonsTypes(t *testing.T) {
 }
 
 // TestTheEditTabOffersTheDaemonsDocuments: an every-build daemon (golib's code chunkers and
-// Documents) shows the Documents row, and no longer lists the formats it does not read (Johno, 2026-10-19).
+// Documents) shows the Documents row, and no longer lists the formats it does not read.
 func TestTheEditTabOffersTheDaemonsDocuments(t *testing.T) {
 	chunkers, err := registrations.Builtin(nil)
 	if err != nil {

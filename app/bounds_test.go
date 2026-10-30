@@ -313,7 +313,7 @@ func TestARelativeConfigIsProtectedWhereItIs(t *testing.T) {
 }
 
 // TestAScriptMovesNoRoot: a bounded call may not add a workspace or register or move a todo
-// store's root (the bounds would move with it: Johno's ruling 2026-10-30), nor point a schema at
+// store's root (the bounds would move with it), nor point a schema at
 // a file a bounded read would not reach; the user's own workspace.add lands, and a schema in
 // .autodoc/ is taken.
 func TestAScriptMovesNoRoot(t *testing.T) {

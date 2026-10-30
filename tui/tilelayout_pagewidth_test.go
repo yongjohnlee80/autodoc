@@ -28,7 +28,7 @@ func TestTheAgentTiledBesideThePageTakesWhatThePageLeaves(t *testing.T) {
 	})
 }
 
-// Johno's click-back: the explorer floats at the left with the keyboard, and a click on the page,
+// The click back: the explorer floats at the left with the keyboard, and a click on the page,
 // tiled and centred at its width, takes the keyboard there and raises it over the explorer. A click
 // back on the explorer, left of the page, takes the keyboard back: the page's tile is the page's
 // width, so nothing of the page lies under the click, though the page is above.

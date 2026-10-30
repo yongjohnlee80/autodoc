@@ -17,7 +17,7 @@ import (
 // a new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was
 // opened for, each asking about unsaved changes as the TUI's do. A tab is never wider than
 // bufferTabWidth cells: a longer name is cut in its middle (bufferTabLabel), and a tab never
-// changes width as tabs open and close or the window resizes (Johno: consistent, not re-fitted each
+// changes width as tabs open and close or the window resizes (consistent, not re-fitted each
 // time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
 // and →. The TUI has no title bar: its editor has no strip (bufferStrip is nil there), and :b and
 // the Buffers picker switch instead.

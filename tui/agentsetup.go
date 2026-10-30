@@ -18,7 +18,7 @@ import (
 // card fills in.
 type agentCLI struct{ command, name string }
 
-// agentCLIs are the CLIs the setup offers, in the order Johno set: the first one found is the default.
+// agentCLIs are the CLIs the setup offers, in a fixed order: the first one found is the default.
 var agentCLIs = []agentCLI{{"claude", "Claude"}, {"codex", "Codex"}, {"grok", "Grok"}, {"agy", "Antigravity"}}
 
 // detectAgentCLIs is those of agentCLIs that look finds on PATH, in order. Nothing is run.

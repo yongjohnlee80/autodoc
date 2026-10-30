@@ -23,7 +23,7 @@ func ownCore(t *testing.T, text string) *widget.EditorCore {
 	return core
 }
 
-// :table 3 4 is the table Johno's lazyvim plugin made (Column<c>, Item<c>.<r>), with a five-dash
+// :table 3 4 is the table a lazyvim plugin made (Column<c>, Item<c>.<r>), with a five-dash
 // delimiter row.
 func TestTableMakesTheMarkdownTable(t *testing.T) {
 	core := ownCore(t, "")
