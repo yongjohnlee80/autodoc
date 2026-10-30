@@ -518,6 +518,15 @@ autodoc --contracts 'todos.*'                                       # every todo
 
 Never edit the daemon's store (`autodoc.db`), its lease, or a `.todo-list`'s `.autodoc-owner`.
 
+## AutoDoc's own guidance, with no daemon
+
+The binary carries its guidance, so it can be read on any install, the Neovim plugin or not:
+
+- `autodoc --kb-operations` prints `KB_OPERATIONS.md`, how an agent searches, reads and writes a KB,
+  as a KB's scaffold writes it (stamped with this build's version).
+- `autodoc --tutorial` lists the tutorial's pages; `autodoc --tutorial 6` prints page 6 (the search
+  models).
+
 ## User themes (agent authoring)
 
 Run `autodoc --theme-reference` for the installed format, every required colour role and a complete
