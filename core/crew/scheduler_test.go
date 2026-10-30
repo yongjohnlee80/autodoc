@@ -440,6 +440,9 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 	time.Sleep(300 * time.Millisecond) // a cell's own window, measuring how often Run tries
 	fs.mu.Lock()
 	tries := fs.writes - base - 1 // the sweeps refused after the recovery
+	fs.mu.Unlock()
+	still := r.wake(s.Session) // read while the store still refuses: nothing may have moved yet
+	fs.mu.Lock()
 	fs.failFrom = 0
 	fs.mu.Unlock()
 	if tries < 3 {
@@ -448,8 +451,8 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 	if tries > 40 { // 300 ms at a 20 ms retry is about 15; a spin on the overdue deadline is thousands
 		t.Fatalf("%d refused sweeps in 300 ms: Run spun on the overdue deadline", tries)
 	}
-	if got := r.wake(s.Session); got.State != crew.WakeAwaiting {
-		t.Fatalf("the wait moved while every sweep was refused: %+v", got)
+	if still.State != crew.WakeAwaiting {
+		t.Fatalf("the wait moved while every sweep was refused: %+v", still)
 	}
 	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
 }
