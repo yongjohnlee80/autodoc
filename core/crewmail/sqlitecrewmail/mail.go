@@ -30,7 +30,8 @@ const (
 	cDoneAt        col = "done_at"
 	cWhy           col = "why"
 
-	bySeq sort = "seq"
+	bySeq  sort = "seq"
+	byDone sort = "done_at"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -76,7 +77,8 @@ func newMailTables(c dao.DataConn) *mailTables {
 			dao.Table[*mail.Delivery, col, sort, string]("mail_delivery"),
 			dao.Fields[*mail.Delivery, col, sort, string](dfs),
 			dao.SortMap[*mail.Delivery, col, sort, string](map[sort]string{
-				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`}),
+				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
+				byDone: `"mail_delivery"."done_at"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
 	}

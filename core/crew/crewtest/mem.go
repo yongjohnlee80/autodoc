@@ -32,10 +32,18 @@ type memState struct {
 	ends     map[string]crew.Endpoint
 	attn     map[string]crew.Attention
 	inbox    []InboxChange
+	inboxAt  []int64 // each journal row's time; its seq is its index + 1 (Mem never prunes)
 }
 
 // InboxChange is one row of the human feed's journal, as Mem keeps it.
 type InboxChange struct{ Kind, Ref string }
+
+// InboxRow is a journal row with its seq and time, as the inbox module reads it.
+type InboxRow struct {
+	Seq       int64
+	Kind, Ref string
+	At        int64
+}
 
 // NewMem is an empty store whose transactions read the time from now.
 func NewMem(now func() time.Time) *Mem {
@@ -49,7 +57,8 @@ func NewMem(now func() time.Time) *Mem {
 func (s memState) clone() memState {
 	return memState{hosts: maps.Clone(s.hosts), scopes: maps.Clone(s.scopes),
 		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions), wakes: maps.Clone(s.wakes),
-		ends: maps.Clone(s.ends), attn: maps.Clone(s.attn), inbox: slices.Clone(s.inbox)}
+		ends: maps.Clone(s.ends), attn: maps.Clone(s.attn), inbox: slices.Clone(s.inbox),
+		inboxAt: slices.Clone(s.inboxAt)}
 }
 
 // SetSignals sets what a committed write tells (crew.Signals), as the engine's adapter does.
@@ -229,8 +238,38 @@ func (t *memTx) PutAttention(a crew.Attention) error {
 
 func (t *memTx) AddInboxChange(kind, ref string) error {
 	t.st.inbox = append(t.st.inbox, InboxChange{kind, ref})
+	t.st.inboxAt = append(t.st.inboxAt, t.now.UnixNano())
 	t.feed = true
 	return nil
+}
+
+// InboxRows is the journal's rows after seq, at most limit (0: all), for the inbox module's Mem.
+func (t *memTx) InboxRows(after int64, limit int) []InboxRow {
+	var out []InboxRow
+	for i := max(after, 0); i < int64(len(t.st.inbox)) && (limit <= 0 || len(out) < limit); i++ {
+		out = append(out, InboxRow{Seq: i + 1, Kind: t.st.inbox[i].Kind, Ref: t.st.inbox[i].Ref, At: t.st.inboxAt[i]})
+	}
+	return out
+}
+
+// InboxBounds is the journal's oldest and newest seq: 0, 0 when it never had a row.
+func (t *memTx) InboxBounds() (int64, int64) {
+	if len(t.st.inbox) == 0 {
+		return 0, 0
+	}
+	return 1, int64(len(t.st.inbox))
+}
+
+// Raised is every attention row not cleared, by session.
+func (t *memTx) Raised() ([]crew.Attention, error) {
+	var out []crew.Attention
+	for _, a := range t.st.attn {
+		if a.Cleared == nil {
+			out = append(out, a)
+		}
+	}
+	slices.SortFunc(out, func(a, b crew.Attention) int { return strings.Compare(a.Session, b.Session) })
+	return out, nil
 }
 
 // Inbox is the human feed's journal so far, in order.

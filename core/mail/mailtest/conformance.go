@@ -68,6 +68,10 @@ func Run(t *testing.T, h Harness) {
 // write that rolls back raises none.
 type guard struct{ crew *crew.Manager }
 
+// Guard is the rig's crew port, for another module's suite over the same tables: a session's
+// credential is its id, and wakes are crew's own.
+func Guard() mail.Crew { return &guard{crew: crew.New(nil)} }
+
 func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
 	id, _, _ := strings.Cut(credential, ".") // the rig's credentials are the session ids
 	s, ok, err := tx.Session(id)
