@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // The module's limits (§4.6).
@@ -24,6 +26,7 @@ type Manager struct {
 	store Store
 	crew  Crew
 	newID func() string
+	polls *crew.LongPolls // the connections' long-polls (mail.wait's cap); nil caps nothing
 }
 
 // Option configures a Manager.
@@ -31,6 +34,10 @@ type Option func(*Manager)
 
 // WithIDs sets how message, delivery and lease ids are made (tests make them predictable).
 func WithIDs(f func() string) Option { return func(m *Manager) { m.newID = f } }
+
+// WithLongPolls sets the daemon's long-poll limiter, which mail.wait enters: the same one the other
+// modules' long-polls share.
+func WithLongPolls(l *crew.LongPolls) Option { return func(m *Manager) { m.polls = l } }
 
 // New is the mail module over store, guarded by crew. A nil store builds a Manager that only
 // answers Name, Verbs and Errors, as --contracts needs.
