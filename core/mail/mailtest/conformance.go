@@ -116,7 +116,7 @@ func (r *rig) profile(id, scope, codename, session string) {
 		if session == "" {
 			return nil
 		}
-		return tx.PutSession(crew.Session{ID: session, Profile: id, Host: scope})
+		return tx.PutSession(crew.Session{ID: session, Profile: id, Host: scope, Instance: session})
 	})
 }
 
@@ -412,7 +412,7 @@ func testMergedProfilesForwardToTheirSurvivor(t *testing.T, h Harness) {
 	}
 	merge("p-c9", "p-gold")
 	r.write(func(tx mail.Tx) error {
-		return tx.PutSession(crew.Session{ID: "s-c0", Profile: "p-c0", Host: "autovim:old"})
+		return tx.PutSession(crew.Session{ID: "s-c0", Profile: "p-c0", Host: "autovim:old", Instance: "s-c0"})
 	})
 	q := r.send("s-c0", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k1"})
 	gd := r.receive("s-gold").Items[0].Delivery
@@ -436,7 +436,7 @@ func testMergedProfilesForwardToTheirSurvivor(t *testing.T, h Harness) {
 	// within the limit it reaches the survivor
 	merge("p-short", "p-gold")
 	r.write(func(tx mail.Tx) error {
-		return tx.PutSession(crew.Session{ID: "s-short", Profile: "p-short", Host: "autovim:old"})
+		return tx.PutSession(crew.Session{ID: "s-short", Profile: "p-short", Host: "autovim:old", Instance: "s-short"})
 	})
 	q2 := r.send("s-short", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k2"})
 	var gd2 mail.Delivery // the first reply's recipient_gone notice is gold's mail too
