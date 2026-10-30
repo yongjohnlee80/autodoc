@@ -180,6 +180,12 @@ func resolveAddress(tx Tx, scope, to string) (address, error) {
 	if !ok || p.ID == DaemonProfile || name == "" {
 		return address{}, fmt.Errorf("%w: %s", ErrNoRecipient, to)
 	}
+	// a profile of a scope that is gone receives nothing again: the sender hears so now
+	if gone, err := scopeGone(tx, p.Scope); err != nil {
+		return address{}, err
+	} else if gone {
+		return address{}, fmt.Errorf("%w: %s's scope has ended", ErrNoRecipient, to)
+	}
 	return address{profile: p.ID}, nil
 }
 
