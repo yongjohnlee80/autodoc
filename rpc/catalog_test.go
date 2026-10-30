@@ -41,8 +41,8 @@ func TestContractsAreGolden(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("the contracts differ from %s: review the change, bump Protocol if a client sees it, and rewrite it with -update", golden)
 	}
-	if Protocol != 37 || MinProtocol != 12 {
-		t.Errorf("protocol %d to %d: the golden file is protocol 37's, served from 12", MinProtocol, Protocol)
+	if Protocol != 38 || MinProtocol != 12 {
+		t.Errorf("protocol %d to %d: the golden file is protocol 38's, served from 12", MinProtocol, Protocol)
 	}
 }
 
