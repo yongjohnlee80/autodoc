@@ -2,6 +2,7 @@ package inbox
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -102,16 +103,35 @@ func stampOf(ns *int64) string {
 	return stamp(*ns)
 }
 
+func toWireItem(it Item) wireItem {
+	m, d := it.Message, it.Delivery
+	return wireItem{Message: m.ID, Kind: m.Kind, From: it.Codename, Scope: it.Scope,
+		Session: m.SenderSession, Subject: m.Subject, Body: m.Body, ReplyTo: m.ReplyTo, State: m.State,
+		Created: stamp(m.Created), Expires: stampOf(m.Expires), Delivery: d.ID, Seq: d.Seq, Status: d.State,
+		Why: d.Why}
+}
+
 func toWireItems(items []Item) []wireItem {
 	out := make([]wireItem, 0, len(items))
 	for _, it := range items {
-		m, d := it.Message, it.Delivery
-		out = append(out, wireItem{Message: m.ID, Kind: m.Kind, From: it.Codename, Scope: it.Scope,
-			Session: m.SenderSession, Subject: m.Subject, Body: m.Body, ReplyTo: m.ReplyTo, State: m.State,
-			Created: stamp(m.Created), Expires: stampOf(m.Expires), Delivery: d.ID, Seq: d.Seq, Status: d.State,
-			Why: d.Why})
+		out = append(out, toWireItem(it))
 	}
 	return out
+}
+
+func toWireAttention(a Attention) wireAttention {
+	return wireAttention{Session: a.Session, Codename: a.Codename, Scope: a.Scope, Owner: a.Owner, Kind: a.Kind,
+		Text: a.Text, Raised: stamp(a.Raised)}
+}
+
+// wireSize is an entry's size as the wire carries it, every field included: its JSON encoding,
+// an upper bound on its msgpack (JSON's quotes, escapes and decimal numbers are never shorter).
+func wireSize(entry any) int {
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return pageBytes + 1 // can't happen for these structs; never let it pass as small
+	}
+	return len(b)
 }
 
 func toWireWatched(w Watched) watchResult {
@@ -122,8 +142,7 @@ func toWireWatched(w Watched) watchResult {
 	if s := w.Snapshot; s != nil {
 		snap := wireSnapshot{Items: toWireItems(s.Items), Attention: make([]wireAttention, 0, len(s.Attention)), Next: s.Next}
 		for _, a := range s.Attention {
-			snap.Attention = append(snap.Attention, wireAttention{Session: a.Session, Codename: a.Codename,
-				Scope: a.Scope, Owner: a.Owner, Kind: a.Kind, Text: a.Text, Raised: stamp(a.Raised)})
+			snap.Attention = append(snap.Attention, toWireAttention(a))
 		}
 		out.Snapshot = &snap
 	}

@@ -276,7 +276,8 @@ func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 // inbox.watch answers a first page and then each next page within the limit.
 func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 	d := newCrewDaemon(t)
-	c, err := readSessionContext(filepath.Join(d.agent("gold", "agent-1", "store-1"), crewContextFile))
+	// the sender has the longest codename crew accepts, which every one of its items carries
+	c, err := readSessionContext(filepath.Join(d.agent(strings.Repeat("g", crew.MaxName), "agent-1", "store-1"), crewContextFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,6 +320,9 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 			t.Fatalf("inbox.watch, page %d: %v", pages+1, err)
 		}
 		pages++
+		if b, err := json.Marshal(jsonOf(res)); err != nil || len(b) >= rpc.MaxMessage {
+			t.Fatalf("page %d encodes to %d bytes (%v): past the transport's %d", pages, len(b), err, rpc.MaxMessage)
+		}
 		m, _ := jsonOf(res).(map[string]any)
 		snap, _ := m["snapshot"].(map[string]any)
 		items, _ := snap["items"].([]any)

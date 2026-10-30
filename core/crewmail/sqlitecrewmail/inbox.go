@@ -64,8 +64,10 @@ func (t *Tx) ChangeBounds() (int64, int64, error) {
 	return first[0].Seq, last[0].Seq, nil
 }
 
-func (t *Tx) Raised() ([]crew.Attention, error) {
-	rows, err := t.t.attn.On(t.tx).WithPredicate(dao.IsNull(`"crew_attention"."cleared"`)).OrderBy(dao.Asc(byID)).Select()
+func (t *Tx) Raised(after string, limit int) ([]crew.Attention, error) {
+	q := t.t.attn.On(t.tx).WithPredicate(dao.IsNull(`"crew_attention"."cleared"`)).
+		WithPredicate(dao.Gt(`"crew_attention"."session"`, after)).OrderBy(dao.Asc(byID))
+	rows, err := limited(q, limit).Select()
 	if err != nil {
 		return nil, err
 	}
