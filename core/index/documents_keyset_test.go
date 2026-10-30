@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/dao"
+
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -337,6 +339,51 @@ func TestDocumentsSeekByKey(t *testing.T) {
 	}
 	if n := len(capture.stmts); n > 2*(len(ps)/5+1)+2 {
 		t.Errorf("a full listing at limit 5 ran %d statements", n)
+	}
+}
+
+// pageRows sums the rows the page statements (document, ordered) return, as dao reports them after
+// each one runs.
+type pageRows struct {
+	dao.NopHook
+	rows, pages int
+}
+
+func (c *pageRows) AfterExec(_ context.Context, q *dao.QueryInfo, out dao.Outcome) error {
+	if q.Table == "document" && strings.Contains(q.SQL, "ORDER BY") {
+		c.rows += out.Rows
+		c.pages++
+	}
+	return nil
+}
+
+// TestAListingReadsEachDocumentOnce (§5.3, §4's cost): a whole listing materialises O(N + pages ×
+// window) rows, a window a read: limit+1 a page without missing, missingWindow with it. Rows, not
+// statements: a page that read every document after its cursor would keep the plan, the order and
+// the statement count, and still be quadratic.
+func TestAListingReadsEachDocumentOnce(t *testing.T) {
+	was := missingWindow
+	missingWindow = 4
+	t.Cleanup(func() { missingWindow = was })
+	e, ps, _ := keysetEnv(t, 36)
+	n := len(ps)
+	for _, o := range []DocumentsOpts{
+		{Sort: SortUpdated, Limit: 2},
+		{Sort: SortPath, Limit: 3},
+		{Sort: SortIndexed, Limit: 2, Tags: []string{"kb"}},
+		{Sort: SortPath, Limit: 2, Missing: []string{"abstract"}},
+	} {
+		counter := &pageRows{}
+		s := &Store{db: e.db, sc: e.db.Workspace(e.ws).WithHooks(counter)}
+		got := traverse(t, s, o)
+		window := o.Limit + 1
+		if len(o.Missing) > 0 {
+			window = missingWindow
+		}
+		if budget := n + counter.pages*window; counter.rows > budget || len(got) == 0 {
+			t.Errorf("%+v: %d documents listed in %d reads of %d rows; the budget is %d (N %d + reads × window %d)",
+				o, len(got), counter.pages, counter.rows, budget, n, window)
+		}
 	}
 }
 
