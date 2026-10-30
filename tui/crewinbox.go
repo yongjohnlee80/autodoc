@@ -126,9 +126,33 @@ func (x *crewInbox) watch(gen uint64, page string) {
 	})
 }
 
-// snapshotParts gathers a snapshot's pages until its last.
+// snapshotParts gathers a snapshot's pages until its last, each entry cut to what its toast says:
+// a page's bodies are never kept across the pages.
 type snapshotParts struct {
-	items, attention []any
+	items     []crewItem
+	attention []crewAttention
+}
+
+// crewItem is an open request or report, as its toast says it.
+type crewItem struct{ id, kind, from, subject, session string }
+
+// crewAttention is a raised attention, as its toast says it.
+type crewAttention struct{ session, codename, kind, text string }
+
+// add cuts snap's entries to their toasts' fields and keeps them: requests and reports only.
+func (p *snapshotParts) add(snap map[string]any) {
+	for _, it := range asList(snap["items"]) {
+		m := asMap(it)
+		if k := str(m, "kind"); k == "request" || k == "message" {
+			p.items = append(p.items, crewItem{id: str(m, "message"), kind: k, from: str(m, "from"), subject: str(m, "subject"),
+				session: str(m, "session")})
+		}
+	}
+	for _, a := range asList(snap["attention"]) {
+		m := asMap(a)
+		p.attention = append(p.attention, crewAttention{session: str(m, "session"), codename: str(m, "codename"),
+			kind: str(m, "kind"), text: str(m, "text")})
+	}
 }
 
 // answered applies one watch's answer to a watch at cursor asked, and asks the next. A snapshot's
@@ -141,8 +165,7 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 			x.parts = snapshotParts{}
 			x.cursor = num(m, "cursor")
 		}
-		x.parts.items = append(x.parts.items, asList(snap["items"])...)
-		x.parts.attention = append(x.parts.attention, asList(snap["attention"])...)
+		x.parts.add(snap)
 		if next := str(snap, "next"); next != "" {
 			x.watch(gen, next) // the snapshot's next part, at its first page's cursor
 			return
@@ -177,25 +200,21 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 func (x *crewInbox) show(p snapshotParts) {
 	now, reports := map[string]crewOpen{}, map[string]bool{}
 	for _, it := range p.items {
-		m := asMap(it)
-		id, from, subject := str(m, "message"), str(m, "from"), str(m, "subject")
-		switch str(m, "kind") {
+		switch it.kind {
 		case "request":
-			now["crew:"+id] = crewOpen{text: fmt.Sprintf("%s asks: %s", from, subject), session: str(m, "session"),
-				done: fmt.Sprintf("%s's request is closed: %s", from, subject)}
+			now["crew:"+it.id] = crewOpen{text: fmt.Sprintf("%s asks: %s", it.from, it.subject), session: it.session,
+				done: fmt.Sprintf("%s's request is closed: %s", it.from, it.subject)}
 		case "message":
-			reports[id] = true
-			if !x.reports[id] {
-				x.c.Notify(fmt.Sprintf("%s reports: %s", from, subject))
+			reports[it.id] = true
+			if !x.reports[it.id] {
+				x.c.Notify(fmt.Sprintf("%s reports: %s", it.from, it.subject))
 			}
 		}
 	}
 	x.reports = reports // one read, so out of the set, is never back: forgotten
 	for _, a := range p.attention {
-		m := asMap(a)
-		session := str(m, "session")
-		now["crew-attention:"+session] = crewOpen{text: fmt.Sprintf("%s waits on you (%s): %s", str(m, "codename"), str(m, "kind"), str(m, "text")),
-			session: session, done: fmt.Sprintf("%s no longer waits on you", str(m, "codename"))}
+		now["crew-attention:"+a.session] = crewOpen{text: fmt.Sprintf("%s waits on you (%s): %s", a.codename, a.kind, a.text),
+			session: a.session, done: fmt.Sprintf("%s no longer waits on you", a.codename)}
 	}
 	for id, o := range x.open {
 		if _, still := now[id]; !still {
