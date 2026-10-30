@@ -23,19 +23,15 @@ type Mem struct {
 	st   state
 }
 
-// Change is one row of the human feed's journal.
-type Change struct{ Kind, Ref string }
-
 type state struct {
 	messages   map[string]mail.Message
 	deliveries map[string]mail.Delivery
 	nextSeq    map[string]int64
-	changes    []Change
 }
 
 func (s state) clone() state {
 	return state{messages: maps.Clone(s.messages), deliveries: maps.Clone(s.deliveries),
-		nextSeq: maps.Clone(s.nextSeq), changes: slices.Clone(s.changes)}
+		nextSeq: maps.Clone(s.nextSeq)}
 }
 
 // NewMem is an empty store whose transactions read the time from now.
@@ -78,12 +74,8 @@ func (s crewStore) Read(ctx context.Context, fn func(crew.Tx) error) error {
 	return s.m.Read(ctx, func(tx mail.Tx) error { return fn(tx) })
 }
 
-// Changes is the feed's journal so far.
-func (m *Mem) Changes() []Change {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return slices.Clone(m.st.changes)
-}
+// Changes is the human feed's journal so far, crew's and mail's rows alike.
+func (m *Mem) Changes() []crewtest.InboxChange { return m.crew.Inbox() }
 
 // Deliveries is every delivery of message, by recipient seq.
 func (m *Mem) Deliveries() []mail.Delivery {
@@ -182,11 +174,6 @@ func (t *memTx) Expiring(now int64, limit int) ([]mail.Delivery, error) {
 		msg := t.st.messages[d.Message]
 		return unhandled(d) && msg.Expires != nil && *msg.Expires <= now
 	}, limit), nil
-}
-
-func (t *memTx) AddInboxChange(kind, ref string) error {
-	t.st.changes = append(t.st.changes, Change{Kind: kind, Ref: ref})
-	return nil
 }
 
 func unhandled(d mail.Delivery) bool { return d.State == mail.Queued || d.State == mail.Leased }

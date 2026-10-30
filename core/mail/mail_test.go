@@ -200,7 +200,7 @@ func TestASendsAddresses(t *testing.T) {
 	if want := "p-user/ p-gold/s-gold p-zen/ p-gold/"; strings.Join(got, " ") != want {
 		t.Fatalf("the deliveries: %v, want %s", got, want)
 	}
-	if ch := r.mem.Changes(); len(ch) != 1 || ch[0] != (mailtest.Change{Kind: mail.ChangeReport, Ref: sent.Message.ID}) {
+	if ch := r.mem.Changes(); len(ch) != 1 || ch[0] != (crewtest.InboxChange{Kind: mail.ChangeReport, Ref: sent.Message.ID}) {
 		t.Fatalf("the human's feed: %+v", ch)
 	}
 	for _, to := range []string{"nobody", "autodoc@global", "session:s-gone", "gold@nowhere"} {
@@ -292,7 +292,7 @@ func TestAnExpiredMessageEnds(t *testing.T) {
 		t.Fatalf("the sender's events: %v", ev)
 	}
 	ch := r.mem.Changes()
-	if last := ch[len(ch)-1]; last != (mailtest.Change{Kind: mail.ChangeExpired, Ref: toUser.Message.ID}) {
+	if last := ch[len(ch)-1]; last != (crewtest.InboxChange{Kind: mail.ChangeExpired, Ref: toUser.Message.ID}) {
 		t.Fatalf("the feed: %+v", ch)
 	}
 }
@@ -497,13 +497,25 @@ func TestAdoptionNormalizesOrMergesEveryUnhandledDelivery(t *testing.T) {
 	}
 }
 
-// Discard fails every unhandled delivery of the profile, each sender told.
+// Discard fails every unhandled delivery of the profile, each sender told; UnhandledCount counts
+// queued and leased ones alike.
 func TestDiscardFailsEveryUnhandledDelivery(t *testing.T) {
 	r := newRig(t)
 	a := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "a", Key: "k1"})
 	b := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k2"})
 	r.receive("s-gold")
+	count := func() int {
+		var n int
+		r.write(func(tx mail.Tx) error { var err error; n, err = r.m.UnhandledCount(tx, "p-gold"); return err })
+		return n
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("unhandled before the discard: %d, want 2 (both leased)", n)
+	}
 	r.write(func(tx mail.Tx) error { return r.m.DiscardDeliveries(tx, "p-gold") })
+	if n := count(); n != 0 {
+		t.Fatalf("unhandled after the discard: %d", n)
+	}
 	for _, s := range []mail.Sent{a, b} {
 		if d := r.delivery(s.Deliveries[0].ID); d.State != mail.Failed || d.Why != mail.WhyDiscarded || d.Lease != "" {
 			t.Fatalf("after discard: %+v", d)
