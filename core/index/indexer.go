@@ -1243,9 +1243,12 @@ func (s *Store) upsertDoc(tx *store.Tx, p Doc, now time.Time) (int64, error) {
 	if p.Meta.FrontmatterErr != "" {
 		fmErr = p.Meta.FrontmatterErr
 	}
+	// its sort keys (ADR 1793312720 D2) in the same write, so a stored key is never behind its document
+	updS, updNs, indexed := docKeysOf(&p.Meta.FrontmatterJSON, now.Unix())
 	if err := s.documents(tx).With(DocID, docID).Set(DocVersion, string(p.Version)).Set(DocActiveGen, next).
 		Set(DocTitle, title).Set(DocFrontmatterJSON, fmJSON).Set(DocFrontmatterError, fmErr).
-		Set(DocIndexer, p.Indexer).Set(DocIndexedAt, now.Unix()).Update(); err != nil {
+		Set(DocIndexer, p.Indexer).Set(DocIndexedAt, now.Unix()).
+		Set(DocKUpdS, updS).Set(DocKUpdNs, updNs).Set(DocKIndexed, indexed).Update(); err != nil {
 		return 0, err
 	}
 	if err := s.logChange(tx, p.Path, "upsert", next, now.Unix()); err != nil {

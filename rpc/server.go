@@ -118,7 +118,13 @@ import (
 // daemon holds every file the call reaches to them (core/fsbounds): inside the workspace, none of it
 // hidden or AutoDoc's own, a write in within's workspace only. A session below 34 sends none, and
 // every call of any session without them is unbounded, as before.
-const Protocol int64 = 34
+// Protocol 35 is ADR 1793312720: index.documents orders and filters in the store and pages by a
+// key, so its next is an opaque cursor (a string; "" when no more follow) and after takes it back.
+// It is the second exception to "a result keeps its meaning", for every session alike and Johno's
+// ruling (Q1, 2026-10-30): the integer offset is retired at once, not kept for a protocol window,
+// so a session that declared an older protocol gets the cursor too, and a non-zero integer after is
+// refused saying what replaced it. Every known client echoes next without reading it.
+const Protocol int64 = 35
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
