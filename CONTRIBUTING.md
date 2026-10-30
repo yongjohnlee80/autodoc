@@ -106,14 +106,14 @@ update alongside its code: the help, all six language catalogs, the reference bo
 
 ## Sending a change
 
-1. **Fork** the repository and create a branch from `main`, named for the change
+1. **Fork** the repository and create a branch from `canary`, named for the change
    (`fix/find-chip-overlap`, `feat/layout-menu`).
 2. **Keep it focused.** One pull request per change. Inside it, one commit per concern: a refactor,
    a fix and a feature are separate commits. See [CONVENTIONS.md §11](CONVENTIONS.md#11-commits) for
    the commit message form.
 3. **Add a test that fails without your change**, and check that it does.
 4. **Run the checks** above.
-5. **Open the pull request** against `main`. Describe:
+5. **Open the pull request** against `canary`. Describe:
    - what changes for the user, and why;
    - how you tested it;
    - anything a reviewer should look at closely.
@@ -122,7 +122,10 @@ update alongside its code: the help, all six language catalogs, the reference bo
 
 ### What CI checks
 
-Every pull request runs:
+Pull requests merge into `canary`, and `canary` merges into `main` when a milestone is done. CI runs
+on each merge into `canary` and on the milestone pull request into `main`, not on a pull request
+into `canary`: run the checks above before you push, and a maintainer runs the full set before
+merging. CI runs:
 
 - `gofmt`, `go vet` (untagged, `-tags server`, `-tags gui`) and the builds;
 - the tests under `-race`, twice, against a pgvector service;
@@ -132,12 +135,12 @@ Every pull request runs:
 - on macOS, the builds with and without the GUI for both architectures, and the core and RPC tests
   under `-race` (FSEvents through cgo);
 - the untagged build reaching no server code, and no private module in the dependency graph;
-- **the coverage policy**: changed code at least 70% covered, and no file and no total dropping more
-  than 1 point. The report is in the job's summary. A pull request from a branch of this repository
-  also gets it as a comment; one from a fork does not, since its token is read-only.
+- on the milestone pull request, **the coverage policy**: changed code at least 70% covered, and no
+  file and no total dropping more than 1 point. The report is in the job's summary, and on the pull
+  request as a comment.
 
-A pull request is merged once CI is green and a maintainer has approved it. Review comments are
-answered with new commits on the same branch.
+A pull request is merged once a maintainer has approved it and the full checks pass. Review
+comments are answered with new commits on the same branch.
 
 ### Review
 
