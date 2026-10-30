@@ -405,3 +405,127 @@ func TestTheStartCheckTriggers(t *testing.T) {
 		}
 	}
 }
+
+// TestALiveCheckReadsTheKeyAfresh (Lector #101 r0 F1): a check on an open store reads the key file
+// as it is now, never the key the store keeps in memory: a key replaced, cut short or exposed since
+// is reported, and the key put back passes again.
+func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	s := openAt(t, path)
+	if _, err := s.AddProvider(ctx, ProviderSpec{Name: "work", Kind: KindOpenAI, BaseURL: "https://api.example", Model: "m", Key: strp("sk-1")}); err != nil {
+		t.Fatal(err)
+	}
+	good, err := os.ReadFile(path + ".key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := make([]byte, keySize)
+	_, _ = rand.Read(other)
+	for name, c := range map[string]struct {
+		key  []byte
+		mode os.FileMode
+		want string
+	}{
+		"replaced":  {other, 0o600, "does not open"},
+		"cut short": {good[:5], 0o600, "5 bytes"},
+		"exposed":   {good, 0o644, "readable by others"},
+	} {
+		if err := os.WriteFile(path+".key", c.key, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path+".key", c.mode); err != nil {
+			t.Fatal(err)
+		}
+		if r, err := s.Check(ctx); err != nil || len(r.Secrets) != 1 || !strings.Contains(r.Secrets[0], c.want) {
+			t.Errorf("the key %s: %+v, %v; want %q", name, r.Secrets, err, c.want)
+		}
+	}
+	if err := os.WriteFile(path+".key", good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path+".key", 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := s.Check(ctx); err != nil || !r.OK() {
+		t.Fatalf("the key put back: %+v, %v; want it sound", r, err)
+	}
+}
+
+// TestACheckLeavesACrashedStoresLogAsItWas (Lector #101 r0 F2): checking a store a crash left with
+// its write-ahead log opens it read-only, so neither the store nor its log is written, before or at
+// Close: the log is never checkpointed or removed.
+func TestACheckLeavesACrashedStoresLogAsItWas(t *testing.T) {
+	ctx := context.Background()
+	live := filepath.Join(t.TempDir(), "autodoc.db")
+	s := openAt(t, live)
+	if _, err := s.AddWorkspace(ctx, "kb", "/kb", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	crashed := filepath.Join(t.TempDir(), "autodoc.db")
+	before := map[string][]byte{}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		b, err := os.ReadFile(live + suffix)
+		if err != nil {
+			if suffix == "-shm" {
+				continue
+			}
+			t.Fatalf("the live store's %q: %v", suffix, err)
+		}
+		if err := os.WriteFile(crashed+suffix, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		before[suffix] = b
+	}
+	if len(before["-wal"]) == 0 {
+		t.Fatal("precondition: the live store's write-ahead log is empty")
+	}
+	c, err := OpenForCheck(ctx, crashed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, err := c.Check(ctx); err != nil || !r.OK() {
+		t.Fatalf("Check of the crashed copy: %+v, %v", r, err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"", "-wal"} {
+		after, err := os.ReadFile(crashed + suffix)
+		if err != nil || !bytes.Equal(after, before[suffix]) {
+			t.Errorf("the crashed store's %q after the check: %v, %d bytes (was %d); want it as it was", suffix, err, len(after), len(before[suffix]))
+		}
+	}
+}
+
+// TestASealedConnectionIsListedNotFailed (Lector #101 r0 F3, Jarvis's (A)): a connection whose DSN
+// does not open with the store's key is listed, marked sealed, to be entered again; it never fails
+// the workspace's listing, and every other connection lists as it is.
+func TestASealedConnectionIsListedNotFailed(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	s := openAt(t, path)
+	var ids []int64
+	for _, name := range []string{"kb", "kb2"} {
+		w, err := s.AddWorkspace(ctx, name, "/"+name, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Configure(ctx, w.ID, Changes{Source: &ConnectionSpec{Engine: EngineSQLite, DSN: "/data/" + name + ".db"}}); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, w.ID)
+	}
+	raw := s.raw(t)
+	if _, err := raw.ExecContext(ctx, "UPDATE workspace_connection SET dsn = randomblob(48) WHERE workspace_id = ?", ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Connections(ctx, ids[0])
+	if err != nil || len(got) != 1 || !got[0].Sealed || got[0].Engine != EngineSQLite || got[0].Role != RoleSource || got[0].Database != "" {
+		t.Fatalf("the sealed connection: %+v, %v; want it listed sealed", got, err)
+	}
+	other, err := s.Connections(ctx, ids[1])
+	if err != nil || len(other) != 1 || other[0].Sealed || other[0].Database != "/data/kb2.db" {
+		t.Fatalf("the other workspace's connection: %+v, %v; want it as it is", other, err)
+	}
+}

@@ -166,6 +166,16 @@ func (d *process) bind() error {
 // a var, so a cell can make a store's check run past it.
 var startCheckWait = store.StartCheckWait
 
+// damageEventWait bounds the store.damaged event's write (verifyStore); appendDamageEvent writes it.
+// Both vars, so a cell can hold the writer.
+var (
+	damageEventWait   = 2 * time.Second
+	appendDamageEvent = func(ctx context.Context, db *store.Store, e store.Event) error {
+		_, err := db.AppendEvent(ctx, e)
+		return err
+	}
+)
+
 // openStore opens the store, taking its lease, and applies its schema scripts.
 func (d *process) openStore() error {
 	storePath := d.p.Store
@@ -437,10 +447,14 @@ func (d *process) verifyStore() {
 		if err := d.db.MarkDamaged(r); err != nil {
 			logger.Warning(d.log, err, "the store's damage was not marked for the next start")
 		}
-		if _, err := d.db.AppendEvent(context.WithoutCancel(ctx), store.Event{Kind: "store.damaged", Detail: dmg.Error()}); err != nil {
+		d.srv.RequestShutdown() // first: the event below is best effort, and never holds the stop
+		// NOTE: the event's write waits on the store's one writer, which may be held: it gets
+		// damageEventWait, then the daemon stops without it (the log and the mark say it all)
+		ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), damageEventWait)
+		defer cancel()
+		if err := appendDamageEvent(ectx, d.db, store.Event{Kind: "store.damaged", Detail: dmg.Error()}); err != nil {
 			logger.Warning(d.log, err, "the store.damaged event was not recorded")
 		}
-		d.srv.RequestShutdown()
 	}()
 	d.stops.push(func() { cancel(); <-done })
 }

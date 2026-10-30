@@ -53,8 +53,10 @@ func runCheckStore(ctx context.Context, configPath string, out io.Writer) error 
 		return err
 	default:
 		res.CheckReport, err = db.Check(ctx)
-		if err == nil && res.CheckReport.OK() && db.Marked() {
-			// a whole check found the store sound: the damage mark that refuses its starts goes
+		if err == nil && len(res.Integrity) == 0 && len(res.ForeignKeys) == 0 && db.Marked() {
+			// the whole check found the file sound: the damage mark that refuses its starts goes.
+			// Secrets the key does not open are not damage to the file; they are still reported
+			// (and the exit is still a problem), and are entered again once the daemon serves.
 			err = db.ClearDamaged()
 			res.MarkCleared = err == nil
 		}

@@ -6885,6 +6885,10 @@ The last connect failed:
         <source>schema %1</source>
         <translation>架构 %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>已用另一把密钥封存：请重新输入</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown 切换标签页 · “保存”一次性提交所有更改；若被拒绝则不做任何更改</translation>

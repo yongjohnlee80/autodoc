@@ -110,7 +110,8 @@ func (s *Store) QuickCheck(ctx context.Context) (CheckReport, error) {
 //     makes it a false positive, which costs only the whole check);
 //   - the store is marked damaged (<store>.damaged, MarkDamaged): a background check found damage.
 //     Every start refuses a marked store, with what its own check found or else the mark's report;
-//     only a whole check that finds it sound (autodoc --check-store, after a restore) clears the mark.
+//     only a whole check that finds its file sound (autodoc --check-store, after a restore) clears
+//     the mark. The mark is for the file: secrets the key does not open never keep it.
 
 // StartCheckWait is how long the start's quick_check may take before the rest is left to the daemon.
 const StartCheckWait = time.Second
@@ -167,8 +168,9 @@ func (s *Store) Marked() bool {
 	return err == nil
 }
 
-// ClearDamaged removes the damage mark: for a store a whole check (Check) has just found sound, and
-// for nothing else. A store with no mark is no error.
+// ClearDamaged removes the damage mark: for a store whose file a whole check (Check) has just found
+// sound (no integrity or foreign-key problem; unopened secrets are not damage to the file), and for
+// nothing else. A store with no mark is no error.
 func (s *Store) ClearDamaged() error {
 	if err := os.Remove(s.path + damagedSuffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -302,33 +304,48 @@ func (s *Store) secretsCheck(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	var found []string
-	if ok, err := s.keys.present(); err != nil {
+	key, problem, err := readKeyForCheck(s.keys.path)
+	if err != nil {
 		return nil, err
-	} else if !ok {
+	}
+	if problem != "" {
 		for _, x := range all {
-			found = append(found, fmt.Sprintf("%s: the store's key %s is missing, so it cannot be opened", x.what, s.keys.path))
+			found = append(found, fmt.Sprintf("%s: %s, so it cannot be opened", x.what, problem))
 		}
 		return found, nil
 	}
+	gcm, err := aeadOf(key)
+	if err != nil {
+		return nil, err
+	}
 	for _, x := range all {
-		if _, err := s.keys.open(x.secret, x.aad); err != nil {
-			if !errors.Is(err, ErrSealed) {
-				return nil, err // the key itself is unreadable (exposed, the wrong size): said once, as the error
-			}
+		if _, err := openSealed(gcm, x.secret, x.aad); err != nil {
 			found = append(found, fmt.Sprintf("%s: %s", x.what, strings.TrimPrefix(err.Error(), "store: ")))
 		}
 	}
 	return found, nil
 }
 
-// present reports whether the key file is there, without making one.
-func (k *keyslot) present() (bool, error) {
-	_, err := os.Stat(k.path)
+// readKeyForCheck reads the store's key file afresh for a check, never the key the store keeps in
+// memory (a file replaced, cut short or exposed since is what a check must see) and never making
+// one: a missing, exposed or wrong-sized key is the problem it names, and only a failure to read the
+// file at all is an error.
+func readKeyForCheck(path string) (key []byte, problem string, err error) {
+	fi, err := os.Stat(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return false, nil
+		return nil, fmt.Sprintf("the store's key %s is missing", path), nil
 	case err != nil:
-		return false, err
+		return nil, "", err
+	case fi.Mode().Perm()&0o077 != 0:
+		return nil, fmt.Sprintf("the store's key %s is readable by others (%v): make it 0600", path, fi.Mode().Perm()), nil
 	}
-	return true, nil
+	key, err = os.ReadFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(key) != keySize {
+		return nil, fmt.Sprintf("the store's key %s is %d bytes, not %d", path, len(key), keySize), nil
+	}
+	return key, "", nil
 }

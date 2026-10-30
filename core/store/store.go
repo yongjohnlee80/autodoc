@@ -132,7 +132,10 @@ func OpenForCheck(ctx context.Context, path string) (*Store, error) {
 		_, err := c.ExecContext(ctx, "PRAGMA query_only=1")
 		return err
 	}
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)"
+	// mode=ro: SQLite opens the file read-only and never creates it, and a read-only connection's
+	// close never checkpoints the write-ahead log or removes it, so a crashed store's committed
+	// log is left as it was found (query_only alone stops statements, not that)
+	dsn := "file:" + path + "?mode=ro&_pragma=busy_timeout(5000)"
 	w, err := sqlite.OpenHooked(ctx, "store-check-w:"+path, dsn, readOnly, sqlite.MaxOpenConns(1))
 	if err != nil {
 		_ = lease.Close()
