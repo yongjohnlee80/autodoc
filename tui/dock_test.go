@@ -220,3 +220,26 @@ func TestTheEditorsIconHidesThePanelsAndShowsThemAgain(t *testing.T) {
 		t.Fatal("after a panel closed in between, the editor's icon brought back a panel it had hidden before")
 	}
 }
+
+// TestNoPanelIsHiddenInTheDock: an id the registry has no panel for (a card's panel removed while
+// its icon still flashed, a stale caller) is never hidden in the dock, whether or not the host
+// still holds it open, and its icon is never lit, even mid-flash. The host is not attached: what
+// answers is the missing panel alone, never a look at a layout.
+func TestNoPanelIsHiddenInTheDock(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	t.Cleanup(h.cancel)
+	if h.panelSpec("nope") != nil {
+		t.Fatal("the registry has a panel nope")
+	}
+	if h.hiddenInDock("nope") {
+		t.Error("a closed id of no panel is hidden in the dock")
+	}
+	h.panelOpen["nope"] = true // held open: only the missing panel can answer, not panelHidden
+	if h.hiddenInDock("nope") {
+		t.Error("an open id of no panel is hidden in the dock")
+	}
+	h.dockFlash = map[string]*dockFlash{"nope": {step: 0}} // at a lit step
+	if h.dockFlashLit("nope") {
+		t.Error("the icon of no panel is lit mid-flash")
+	}
+}

@@ -284,3 +284,72 @@ func TestASurfaceCloseWaitsForItsAcks(t *testing.T) {
 		t.Fatal("Close returned before its ack's send ended")
 	}
 }
+
+// sendBuffers sends generation gen's n memory buffers from host, and waits for the surface's reader
+// to have taken them: its poke, the one a fresh surface's wake channel carries.
+func sendBuffers(t *testing.T, host *SurfaceConn, s *Surface, gen, n int) {
+	t.Helper()
+	var specs []SurfaceBufferSpec
+	var fds []int
+	for i := range n {
+		fd := memfd(t)
+		if err := unix.Ftruncate(fd, 4096); err != nil {
+			t.Fatal(err)
+		}
+		specs = append(specs, SurfaceBufferSpec{ID: 100*gen + 2*(i+1), Kind: "memory", Format: "rgba8", W: 1, H: 1, Pitch: 4, Size: 4096})
+		fds = append(fds, fd)
+	}
+	if err := host.Send(BuffersMsg(gen, specs), fds...); err != nil {
+		t.Fatal(err)
+	}
+	for _, fd := range fds {
+		unix.Close(fd)
+	}
+	select {
+	case <-s.wake:
+	// NOTE: a bound on a failing run alone: the reader pokes once it has stored or installed them.
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the reader never took generation %d's buffers", gen)
+	}
+}
+
+// A generation installs whichever of its halves comes second. Its buffers before its
+// plugin.surface: they wait pending, and the plugin.surface installs them itself, at once (no
+// reader in between): current, none pending, each free. Its plugin.surface first: the buffers
+// install as the reader takes them, never pending.
+func TestAGenerationInstallsWhicheverHalfComesSecond(t *testing.T) {
+	host, plug := pair(t)
+	s := surfaceOn(t, plug)
+	sendBuffers(t, host, s, 1, 2)
+	s.mu.Lock()
+	cur, pending := s.cur, len(s.pending[1])
+	s.mu.Unlock()
+	if cur != 0 || pending != 2 {
+		t.Fatalf("buffers before their plugin.surface: current %d, %d pending; want 0, 2 pending", cur, pending)
+	}
+	s.setInfo(SurfaceInfo{Gen: 1, W: 1, H: 1, Scale: 1})
+	s.mu.Lock()
+	cur, stillPending, free := s.cur, s.pending[1] != nil, len(s.free)
+	s.mu.Unlock()
+	if cur != 1 || stillPending || free != 2 {
+		t.Fatalf("the plugin.surface after its buffers: current %d, pending %v, %d free; want 1, none, 2", cur, stillPending, free)
+	}
+	// NOTE: a bound on a failing run alone: generation 1's buffers are free, so Buffer answers at once.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	drawn, err := s.Buffer(ctx)
+	if err != nil || drawn.Gen != 1 || (drawn.ID != 102 && drawn.ID != 104) {
+		t.Fatalf("Buffer: %+v, %v; want one of generation 1's", drawn, err)
+	}
+
+	s.setInfo(SurfaceInfo{Gen: 2, W: 1, H: 1, Scale: 1})
+	<-s.wake // setInfo's own poke, so the next is the reader's
+	sendBuffers(t, host, s, 2, 1)
+	s.mu.Lock()
+	cur, pending = s.cur, len(s.pending)
+	s.mu.Unlock()
+	if cur != 2 || pending != 0 {
+		t.Fatalf("buffers after their plugin.surface: current %d, %d pending; want 2, none", cur, pending)
+	}
+	s.Present(drawn, image.Rectangle{}, 0) // its generation ended while drawn: its mapping goes here
+}
