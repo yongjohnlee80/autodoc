@@ -241,12 +241,12 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 }
 
 // TestTheGuideNamesOnlyRealCommands: every `autodoc crew|mail …` the agent guide tells a CLI to run
-// is one of the commands, so an agent following it never meets "no command". The two waker steps
-// phase 3 brings with its wakers are named here as pending, positively: a third would fail.
+// is one of the commands, with the flag it names, so an agent following it never meets "no command".
+// agy's bridge, which phase 3 brings with agy's waker, is named here as pending, positively: another
+// would fail.
 func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 	pending := map[string]bool{
-		"crew endpoint --codex-thread": true, // Codex's waker (phase 3) gives the thread's server
-		"crew bridge":                  true, // agy's bridge (phase 3)
+		"crew bridge": true, // agy's bridge (phase 3)
 	}
 	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z]+)( --[a-z-]+)?")
 	m := crew.New(nil)
@@ -258,8 +258,19 @@ func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 			if pending[withFlag] || pending[name] {
 				continue
 			}
-			if _, ok := crewCommands[name]; !ok {
+			c, ok := crewCommands[name]
+			if !ok {
 				t.Errorf("%s's guide names `autodoc %s`, which is no command", kind, withFlag)
+				continue
+			}
+			if f := strings.TrimPrefix(strings.TrimSpace(hit[2]), "--"); f != "" {
+				fs := flag.NewFlagSet(name, flag.ContinueOnError)
+				if c.flags != nil {
+					c.flags(fs)
+				}
+				if fs.Lookup(f) == nil {
+					t.Errorf("%s's guide names `autodoc %s`, whose flag --%s %s doesn't define", kind, withFlag, f, name)
+				}
 			}
 		}
 	}

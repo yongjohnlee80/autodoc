@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // The endpoint kinds and their locators (§4.7). A locator names only the CLI's own channel on
@@ -70,12 +71,28 @@ func ClaudeSocketDirs(uid int) []string {
 	return []string{"/run/user/" + u + "/cc-socks", "/tmp/cc-socks-" + u}
 }
 
+// CodexSocketDirs are the folders Codex's app-server binds its sockets in, for user uid.
+func CodexSocketDirs(uid int) []string { return []string{"/tmp/codex-daemon-" + strconv.Itoa(uid)} }
+
+// threadOK reports whether t can name a Codex session as one argv value: a waker passes it as
+// --thread=<t>, and a leading '-' or a control character has no place in a session id or name.
+func threadOK(t string) bool {
+	if t == "" || len(t) > MaxIdent || strings.HasPrefix(t, "-") {
+		return false
+	}
+	for _, r := range t {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // checkLocator validates a locator of kind for the daemon's user uid, in its canonical JSON.
 func checkLocator(kind, locator string, uid int) (string, error) {
 	bad := func(why string) (string, error) {
 		return "", fmt.Errorf("%w: %s locator: %s", ErrBadEndpoint, kind, why)
 	}
-	u := strconv.Itoa(uid)
 	var v any
 	switch kind {
 	case "claude":
@@ -98,11 +115,11 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 		if err := strictJSON(locator, &l); err != nil {
 			return bad(err.Error())
 		}
-		if !under(l.Server, "/tmp/codex-daemon-"+u) {
+		if !under(l.Server, CodexSocketDirs(uid)...) {
 			return bad("the app-server socket is not under /tmp/codex-daemon-<uid>/")
 		}
-		if l.Thread == "" {
-			return bad("thread is required")
+		if !threadOK(l.Thread) {
+			return bad("thread is not a session id or name: required, at most 256 bytes, no leading '-', no control characters")
 		}
 		v = l
 	case "agy":
