@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -273,20 +274,166 @@ func fillAgentCommand(command string, ws wsInfo) string {
 // shellQuote is s as one shell word.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): its
-// program's name, after any VAR=value assignments the command starts with; "agent" when none.
+// agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): the name of
+// the program its first simple command runs, its words read as the shell reads them, past any
+// NAME=value assignments and the wrappers env, exec, command, nohup and mise exec|x … --; "agent"
+// when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
 func agentKind(command string) string {
-	for _, f := range strings.Fields(command) {
-		if strings.Contains(f, "=") && !strings.HasPrefix(f, "=") && !strings.ContainsAny(f, "/'\"") {
-			continue // an environment assignment before the program
+	w := shellWords(command)
+	for len(w) > 0 {
+		f := w[0].text
+		switch {
+		case w[0].assignment():
+			w = w[1:]
+		case f == "exec" || f == "command" || f == "nohup":
+			w = skipOptions(w[1:], "-a")
+		case filepath.Base(f) == "env":
+			w = skipEnvOptions(w[1:])
+		case filepath.Base(f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
+			i := slices.IndexFunc(w, func(x shellWord) bool { return x.text == "--" })
+			if i < 0 {
+				return "mise" // its tools run their own default program: none of them guessed
+			}
+			w = w[i+1:]
+		default:
+			if name := filepath.Base(f); name != "" && name != "." && name != "/" {
+				return name
+			}
+			return "agent"
 		}
-		name := filepath.Base(strings.Trim(f, `'"`))
-		if name == "" || name == "." || name == "/" {
-			break
-		}
-		return name
 	}
 	return "agent"
+}
+
+// skipOptions is w past its leading options and a "--"; an option in valued takes the next word.
+func skipOptions(w []shellWord, valued ...string) []shellWord {
+	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
+		f := w[0].text
+		w = w[1:]
+		if f == "--" {
+			break
+		}
+		if slices.Contains(valued, f) && len(w) > 0 {
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// skipEnvOptions is w, env's arguments, past its options: -S's string is split into the words it
+// runs, as env splits it.
+func skipEnvOptions(w []shellWord) []shellWord {
+	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
+		f := w[0].text
+		switch {
+		case f == "--":
+			return w[1:]
+		case f == "-S" || f == "--split-string":
+			if len(w) < 2 {
+				return nil
+			}
+			return append(shellWords(w[1].text), w[2:]...)
+		case strings.HasPrefix(f, "--split-string="):
+			return append(shellWords(strings.TrimPrefix(f, "--split-string=")), w[1:]...)
+		case strings.HasPrefix(f, "-S"):
+			return append(shellWords(f[2:]), w[1:]...)
+		case f == "-u" || f == "-C" || f == "--unset" || f == "--chdir":
+			if len(w) < 2 {
+				return nil
+			}
+			w = w[2:]
+		default: // -i, -0, -v, -, -uNAME, -CDIR, --unset=NAME, --chdir=DIR, …
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// shellWord is one word of a command as the shell splits it, its quotes and escapes removed; bare
+// is how many of its leading bytes stood unquoted.
+type shellWord struct {
+	text string
+	bare int
+}
+
+// assignment reports whether the word is a NAME=value assignment: its NAME= unquoted, as the shell
+// requires, whatever quoting its value has.
+func (w shellWord) assignment() bool {
+	i := strings.IndexByte(w.text, '=')
+	if i <= 0 || i >= w.bare {
+		return false
+	}
+	for j, c := range w.text[:i] {
+		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || j > 0 && c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// shellWords splits command into words as a POSIX shell does before expanding them: blanks between
+// words, '…' literal, "…" with \ escaping $ ` " \ and a newline, and \ outside quotes escaping the
+// next byte. Expansions are left as written, and an unterminated quote runs to the end; nothing is
+// evaluated.
+func shellWords(command string) []shellWord {
+	var out []shellWord
+	var b strings.Builder
+	in, bare := false, -1
+	quoted := func() { // a quote or an escape: the word's bare prefix ends here
+		in = true
+		if bare < 0 {
+			bare = b.Len()
+		}
+	}
+	end := func() {
+		if !in {
+			return
+		}
+		if bare < 0 {
+			bare = b.Len()
+		}
+		out = append(out, shellWord{text: b.String(), bare: bare})
+		b.Reset()
+		in, bare = false, -1
+	}
+	for i := 0; i < len(command); i++ {
+		switch c := command[i]; c {
+		case ' ', '\t', '\n':
+			end()
+		case '\'':
+			quoted()
+			j := strings.IndexByte(command[i+1:], '\'')
+			if j < 0 {
+				j = len(command) - i - 1
+			}
+			b.WriteString(command[i+1 : i+1+j])
+			i += j + 1
+		case '"':
+			quoted()
+			for i++; i < len(command) && command[i] != '"'; i++ {
+				if command[i] == '\\' && i+1 < len(command) && strings.IndexByte("$`\"\\\n", command[i+1]) >= 0 {
+					i++
+					if command[i] == '\n' {
+						continue
+					}
+				}
+				b.WriteByte(command[i])
+			}
+		case '\\':
+			quoted()
+			if i+1 < len(command) {
+				i++
+				if command[i] != '\n' {
+					b.WriteByte(command[i])
+				}
+			}
+		default:
+			in = true
+			b.WriteByte(c)
+		}
+	}
+	end()
+	return out
 }
 
 // agentArgv is how the terminal runs command: env, dropping the identity another agent host gave
