@@ -138,7 +138,10 @@ import (
 // and which any other kind refuses. A session below 38 sends none, and its crew.endpoint is as before.
 // Protocol 39 is AM-4's sys.check: the store's whole check, run by the daemon that serves it, so
 // --check-store never stops a window.
-const Protocol int64 = 39
+// Protocol 40 is ADR 1793271500's OpenCode waker: crew.endpoint's opencode locator is the AutoDoc
+// plugin's socket, its opencode process and the session ({socket, pid, start, session}); the shape
+// before it, without the socket, is refused. No client registered one before.
+const Protocol int64 = 40
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

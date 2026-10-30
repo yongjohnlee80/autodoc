@@ -71,9 +71,15 @@ func (w *ClaudeWaker) Wake(ctx context.Context, ep Endpoint, notice string) erro
 	return nil
 }
 
-// bound checks that c's other end is the session's process: the daemon's user, the registered pid,
-// and still the process that pid named at registration.
+// bound checks that c's other end is the session's process (boundTo).
 func (w *ClaudeWaker) bound(c net.Conn, l claudeLocator) error {
+	return boundTo(c, l.Start, "claude's inbox socket")
+}
+
+// boundTo checks that the other end of c, a unix socket, is the process start names: the daemon's
+// user, and the pid start names, still the process it named at registration. A socket a dead
+// process left, or one its pid's later holder binds, is refused alike.
+func boundTo(c net.Conn, start, what string) error {
 	if err := peercred.Check(c); err != nil {
 		return err
 	}
@@ -85,10 +91,10 @@ func (w *ClaudeWaker) bound(c net.Conn, l claudeLocator) error {
 	if err != nil {
 		return err
 	}
-	// the reference names the pid too (registration made Start the pid's): one comparison refuses
+	// the reference names the pid too (registration made start the pid's): one comparison refuses
 	// another process and a later one at the same pid alike
-	if ref != l.Start {
-		return fmt.Errorf("crew: claude's inbox socket is held by process %s, not the session's %s", ref, l.Start)
+	if ref != start {
+		return fmt.Errorf("crew: %s is held by process %s, not the session's %s", what, ref, start)
 	}
 	return nil
 }
