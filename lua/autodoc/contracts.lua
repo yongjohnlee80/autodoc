@@ -14,7 +14,7 @@ return {
         { name = "epoch", type = "int" }
       },
       result = "{}",
-      doc = "Fence an orphan scope and move its mail here (§4.3).",
+      doc = "Fence an orphan scope and move its mail here.",
     },
     ["crew.attention"] = {
       since = 37, scope = "global", audience = "agent",
@@ -25,7 +25,7 @@ return {
         { name = "text", type = "string", optional = true }
       },
       result = "{}",
-      doc = "Raise or clear: the session waits on the user (§4.8).",
+      doc = "Raise or clear: the session waits on the user.",
     },
     ["crew.claim"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -35,7 +35,7 @@ return {
         { name = "proc", type = "string", optional = true }
       },
       result = "{epoch}",
-      doc = "Claim or reattach a scope with the process's run token (§4.3). Idempotent.",
+      doc = "Claim or reattach a scope with the process's run token. Idempotent.",
     },
     ["crew.discard"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -57,7 +57,7 @@ return {
         { name = "secret", type = "string", optional = true }
       },
       result = "{generation}",
-      doc = "How to wake the calling session (§4.7).",
+      doc = "How to wake the calling session.",
     },
     ["crew.exit"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -77,7 +77,7 @@ return {
         { name = "kind", type = "string" }
       },
       result = "{markdown, protocol}",
-      doc = "The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide.",
+      doc = "The crew and mail procedure for a CLI kind, for a host's agent guide.",
     },
     ["crew.list"] = {
       since = 37, scope = "global", audience = "agent",
@@ -89,7 +89,7 @@ return {
       since = 37, scope = "local-peer", audience = "user",
       params = {},
       result = "[{scope, profiles, unread}]",
-      doc = "AutoDoc scopes with a free holder and unhandled mail (§4.3).",
+      doc = "AutoDoc scopes with a free holder and unhandled mail.",
     },
     ["crew.register"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -155,7 +155,7 @@ return {
         { name = "store", type = "string", optional = true }
       },
       result = "{codename, scope, profile, session, store}",
-      doc = "Who the credential belongs to (§4.5).",
+      doc = "Who the credential belongs to.",
     },
     ["doc.outline"] = {
       since = 8, scope = "workspace", audience = "agent",
@@ -1148,7 +1148,7 @@ return {
         { name = "workspace", type = "string" }
       },
       result = "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
-      doc = "A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with.",
+      doc = "A workspace's variables: the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with.",
     },
   },
   errors = {
