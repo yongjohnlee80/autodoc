@@ -126,11 +126,12 @@ func TestTheBridgeRegistersOnceAndTicksReadOnly(t *testing.T) {
 }
 
 // TestTheBridgeRegistersAgainForANewDaemon: a daemon of another instance (a restart, which forgets
-// the token) is registered with again; a daemon that does not answer is tried again, not left.
+// the token) is registered with again, whether a look saw it down between or not; a daemon that does
+// not answer is tried again, not left.
 func TestTheBridgeRegistersAgainForANewDaemon(t *testing.T) {
 	t.Parallel()
 	f := newFakeBridge()
-	if err := runFor(t, f, 4, func(i int) {
+	if err := runFor(t, f, 6, func(i int) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		switch i {
@@ -138,12 +139,14 @@ func TestTheBridgeRegistersAgainForANewDaemon(t *testing.T) {
 			f.instErr = errors.New("connection refused")
 		case 2:
 			f.instErr, f.inst = nil, "instance-2"
+		case 4:
+			f.inst = "instance-3"
 		}
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if n := f.count("crew.endpoint"); n != 2 {
-		t.Errorf("%d registrations, want one at the start and one for the new daemon", n)
+	if n := f.count("crew.endpoint"); n != 3 {
+		t.Errorf("%d registrations, want one at the start and one for each new daemon", n)
 	}
 }
 
