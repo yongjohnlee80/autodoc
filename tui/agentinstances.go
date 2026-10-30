@@ -41,6 +41,7 @@ var agentIncarnation atomic.Uint64
 
 type agentInstance struct {
 	profile          agentProfile
+	dir              string // the folder its tab's process runs in (agentFolder)
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -230,7 +231,11 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if instance != nil && instance.profile.Command != p.Command {
 		return nil, fmt.Errorf("close the old agent tab before starting its edited command: %w", ErrAgentStale)
 	}
-	dir, err := a.writeAgentGuide(ws)
+	if instance != nil && instance.dir != a.agentFolder(ws, p.Codename) {
+		// the window's crew scope changed since the tab was made: its process would start in the old one's folder
+		return nil, fmt.Errorf("close the old agent tab before starting it under this window's crew scope: %w", ErrAgentStale)
+	}
+	dir, err := a.writeAgentGuide(ws, p.Codename)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +244,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	if instance == nil {
-		instance = &agentInstance{profile: p, workspace: ws, owner: panel}
+		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
 			Exited: func(code int) { a.instanceExited(instance, code) }})
 		if err != nil {
