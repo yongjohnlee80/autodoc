@@ -52,6 +52,7 @@ var publicErrs = []module.PublicError{
 	{Err: errNoPreferences, Code: CodeUnsupported, Message: "this server keeps no preferences"},
 	{Err: errNoEmbeddings, Code: CodeUnsupported, Message: "this server keeps no embedding providers"},
 	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
+	{Err: errNoCheck, Code: CodeUnsupported, Message: "this server's store has no check here: a PostgreSQL store is checked by its database server"},
 	{Err: errNoProfiler, Code: CodeUnsupported, Message: "this server keeps no profiler"},
 	{Err: errProfileIncomplete, Code: golibrpc.CodeInternal, Message: "the monitor stopped, but its last samples could not be written: the daemon's log says why"},
 	{Err: errProfileRefused, Code: golibrpc.CodeInvalidParams, Message: "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)"},

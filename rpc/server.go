@@ -131,7 +131,9 @@ import (
 // Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
 // their verbs' Since is set), after 34 above, and the 35 and 36 that AP-5 and AP-6 claim. A
 // session below 37 sees their verbs as unknown methods.
-const Protocol int64 = 37
+// Protocol 38 is the agy waker's (#96). Protocol 39 is AM-4's sys.check: the store's whole check,
+// run by the daemon that serves it, so --check-store never stops a window.
+const Protocol int64 = 39
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -291,6 +293,7 @@ type Server struct {
 	setup        embeddingSetup // the embeddings', when they set a model up (embedsetup.go)
 	rankers      Rankers
 	events       Events
+	checker      StoreChecker // the store's whole check, for sys.check (WithStoreCheck); nil: none
 	log          logger.Logger
 	version      string
 	instance     string
@@ -311,6 +314,7 @@ type options struct {
 	embeddings  Embeddings
 	rankers     Rankers
 	events      Events
+	checker     StoreChecker
 	reg         registrations.Tables
 	files       *docs.Docs
 	guard       *fsbounds.Guard
@@ -324,6 +328,15 @@ type Option func(*options)
 
 // WithListener serves on ln (the daemon's unix socket).
 func WithListener(ln net.Listener) Option { return func(o *options) { o.listener = ln } }
+
+// StoreChecker is the store's whole check (store.Store.Check), which sys.check answers.
+type StoreChecker interface {
+	Check(ctx context.Context) (store.CheckReport, error)
+}
+
+// WithStoreCheck lets sys.check run the store's whole check (AM-4); without it, sys.check is
+// unsupported (a store that is not SQLite's).
+func WithStoreCheck(c StoreChecker) Option { return func(o *options) { o.checker = c } }
 
 // WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
 // that found this daemon through the store's lease-info can check it serves that store.
@@ -356,7 +369,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	}
 	var id [8]byte
 	_, _ = rand.Read(id[:])
-	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
+	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, checker: o.checker, log: o.log,
 		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
@@ -503,6 +516,10 @@ var errNoSuchWorkspace = errors.New("rpc: no such workspace")
 var errNoPreferences = errors.New("rpc: this server keeps no preferences")
 
 var errNoEvents = errors.New("rpc: this server keeps no event log")
+
+// errNoCheck is sys.check on a server with no store check (WithStoreCheck): a store that is not
+// SQLite's, whose integrity is its database server's own.
+var errNoCheck = errors.New("rpc: this server's store has no check here; a PostgreSQL store is checked by its server")
 
 // errNoProfiler answers sys.profile on a server given no profiler; errProfileRefused a monitor
 // that could not start, and errProfileIncomplete a stop that could not write its last samples

@@ -180,6 +180,10 @@ func (d *process) openStore() error {
 			db, err = openAfterPredecessor(d.ctx, storePath)
 		}
 	}
+	if errors.Is(err, store.ErrDamaged) {
+		// not served: writing on a damaged store spreads the damage (AM-4)
+		return fmt.Errorf("%w; this daemon does not serve it. `autodoc --check-store` reports it whole, and docs/ops/backup-and-restore.md says how to restore it from a backup", err)
+	}
 	if err != nil {
 		return err
 	}
@@ -385,7 +389,7 @@ func (d *process) openFiles() error {
 // the lease-info beside the store: the lease and the socket are both this process's now.
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
-	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
+	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
 		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
