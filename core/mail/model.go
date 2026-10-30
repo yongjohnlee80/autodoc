@@ -114,8 +114,7 @@ type Tx interface {
 	// Expiring is the queued or leased deliveries whose message expires at or before now.
 	Expiring(now int64, limit int) ([]Delivery, error)
 
-	// AddInboxChange appends to the human feed's journal (inbox_change).
-	AddInboxChange(kind, ref string) error
+	// AddInboxChange (the human feed's journal) comes with crew.Tx.
 }
 
 // Store runs transactions over the crew and mail tables, each one atomic.
