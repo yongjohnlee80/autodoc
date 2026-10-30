@@ -12,7 +12,7 @@ import (
 )
 
 // docsListed is index.documents' paths, in order, with its more and next.
-func docsListed(t *testing.T, cli *golibrpc.Client, opts map[string]any) ([]string, bool, int64, []any) {
+func docsListed(t *testing.T, cli *golibrpc.Client, opts map[string]any) ([]string, bool, string, []any) {
 	t.Helper()
 	res := call(t, cli, "index.documents", "kb", opts).(map[string]any)
 	var paths []string
@@ -20,7 +20,7 @@ func docsListed(t *testing.T, cli *golibrpc.Client, opts map[string]any) ([]stri
 	for _, d := range docs {
 		paths = append(paths, d.(map[string]any)["path"].(string))
 	}
-	return paths, res["more"].(bool), res["next"].(int64), docs
+	return paths, res["more"].(bool), res["next"].(string), docs
 }
 
 // TestIndexDocumentsListsByUpdatedWithFrontmatter: the documents and their frontmatter, most recently
@@ -41,8 +41,8 @@ func TestIndexDocumentsListsByUpdatedWithFrontmatter(t *testing.T) {
 	})
 
 	paths, more, next, docs := docsListed(t, cli, nil)
-	if !reflect.DeepEqual(paths, []string{"adrs/new.md", "notes/mid.md", "adrs/old.md"}) || more || next != 3 {
-		t.Errorf("by updated: %v more %v next %d", paths, more, next)
+	if !reflect.DeepEqual(paths, []string{"adrs/new.md", "notes/mid.md", "adrs/old.md"}) || more || next != "" {
+		t.Errorf("by updated: %v more %v next %q", paths, more, next)
 	}
 	first := docs[0].(map[string]any)
 	if first["title"] != "New" || first["updated"] != "2026-10-05" {
@@ -70,12 +70,57 @@ func TestIndexDocumentsListsByUpdatedWithFrontmatter(t *testing.T) {
 	if !reflect.DeepEqual(page, []string{"adrs/new.md", "notes/mid.md"}) || !more || !reflect.DeepEqual(rest, []string{"adrs/old.md"}) || more2 {
 		t.Errorf("paging: %v more %v, then %v more %v", page, more, rest, more2)
 	}
+	if !strings.HasPrefix(next, "c1.") {
+		t.Errorf("a page with more answered next %q, want an opaque cursor", next)
+	}
+	// a cursor is good for its own listing only: another sort, other filters
+	for _, bad := range []map[string]any{{"limit": int64(2), "after": next, "sort": "path"},
+		{"limit": int64(2), "after": next, "tags": []any{"kb"}}} {
+		_, err := cli.Call(context.Background(), "index.documents", "kb", bad)
+		var re *golibrpc.Error
+		if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "opts.after is not a cursor of this listing") {
+			t.Errorf("index.documents %v: %v, want invalid params naming the cursor", bad, err)
+		}
+	}
 	for _, bad := range []map[string]any{{"sort": "size"}, {"order": "path"}} {
 		_, err := cli.Call(context.Background(), "index.documents", "kb", bad)
 		var re *golibrpc.Error
 		if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams {
 			t.Errorf("index.documents %v: %v, want invalid params", bad, err)
 		}
+	}
+}
+
+// TestAnOlderSessionGetsTheCursor: from protocol 35, index.documents' next is an opaque cursor for
+// every session, whatever protocol it declared (ADR 1793312720 D3, Johno's Q1: the offset is
+// retired at once), and a session that declared 33 gets a string next and has its integer after
+// refused, the refusal saying what replaced it. 0 still starts the listing.
+func TestAnOlderSessionGetsTheCursor(t *testing.T) {
+	r := serve(t)
+	writer := r.dial(true)
+	for _, p := range []string{"a.md", "b.md", "c.md"} {
+		call(t, writer, "doc.write", "kb", p, []byte("# "+p+"\n"), "")
+	}
+	cli, _, err := helloAs(r, 33, "a-protocol-33-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the three documents indexed", func() bool {
+		p, _, _, _ := docsListed(t, cli, map[string]any{"sort": "path"})
+		return len(p) == 3
+	})
+	first, more, next, _ := docsListed(t, cli, map[string]any{"sort": "path", "limit": int64(2), "after": int64(0)})
+	if !reflect.DeepEqual(first, []string{"a.md", "b.md"}) || !more || !strings.HasPrefix(next, "c1.") {
+		t.Fatalf("a protocol-33 session's first page: %v more %v next %q, want a string cursor", first, more, next)
+	}
+	rest, more, next, _ := docsListed(t, cli, map[string]any{"sort": "path", "limit": int64(2), "after": next})
+	if !reflect.DeepEqual(rest, []string{"c.md"}) || more || next != "" {
+		t.Errorf("its second page: %v more %v next %q", rest, more, next)
+	}
+	_, err = cli.Call(context.Background(), "index.documents", "kb", map[string]any{"sort": "path", "after": int64(2)})
+	var re *golibrpc.Error
+	if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "an integer offset is no longer accepted") {
+		t.Errorf("a protocol-33 session's integer after: %v, want invalid params saying the offset is retired", err)
 	}
 }
 
@@ -166,14 +211,14 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 		t.Fatalf("nil opts: %v", err)
 	}
 	o, err = documentsOpts(atNow, map[string]any{
-		"sort": "path", "after": int64(2), "limit": int64(5),
+		"sort": "path", "after": "c1.cursor", "limit": int64(5),
 		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"}, "diagnosed": true,
 		"facets": map[string]any{"status": "accepted", "type": []any{"adr", "note"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := index.DocumentsOpts{Sort: "path", After: 2, Limit: 5, Fields: []string{"status"}, Tags: []string{"adr"},
+	want := index.DocumentsOpts{Sort: "path", After: "c1.cursor", Limit: 5, Fields: []string{"status"}, Tags: []string{"adr"},
 		Paths: []string{"adrs/"}, Missing: []string{"abstract"}, Diagnosed: true,
 		Facets: map[string][]string{"status": {"accepted"}, "type": {"adr", "note"}}}
 	if !reflect.DeepEqual(o, want) {
@@ -194,7 +239,9 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 	}{
 		{"sort", "opts must be a map"},
 		{map[string]any{"sort": int64(1)}, "opts.sort must be a string"},
-		{map[string]any{"after": int64(-1)}, "opts.after must be a non-negative integer"},
+		{map[string]any{"after": int64(-1)}, "opts.after is the previous page's next, an opaque cursor, since protocol 35"},
+		{map[string]any{"after": int64(2)}, "an integer offset is no longer accepted"},
+		{map[string]any{"after": true}, "opts.after is the previous page's next"},
 		{map[string]any{"limit": "5"}, "opts.limit must be a non-negative integer"},
 		{map[string]any{"fields": "status"}, "opts.fields must be a list of strings"},
 		{map[string]any{"tags": []any{int64(1)}}, "opts.tags must be a list of strings"},
