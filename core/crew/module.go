@@ -2,6 +2,7 @@ package crew
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
@@ -60,6 +61,23 @@ type (
 		Credential string `param:"credential" doc:"the session context's \"<session id>.<secret>\""`
 		Store      string `param:"store,optional" doc:"the store id the session context names"`
 	}
+	adoptParams struct {
+		From  string `param:"from" doc:"the orphan scope (crew.orphans)"`
+		To    string `param:"to" doc:"the caller's own scope"`
+		Run   string `param:"run"`
+		Epoch int64  `param:"epoch" doc:"the caller's epoch for to"`
+	}
+	endpointParams struct {
+		Credential string `param:"credential"`
+		Kind       string `param:"kind" doc:"claude, codex, agy or opencode: the session's own"`
+		Locator    string `param:"locator" doc:"JSON, kind-specific; never a secret"`
+	}
+	attentionParams struct {
+		Credential string `param:"credential"`
+		Op         string `param:"op" doc:"raise or clear"`
+		Kind       string `param:"kind,optional" doc:"for raise: permission or blocked"`
+		Text       string `param:"text,optional" doc:"for raise: what the session waits on"`
+	}
 	exitParams struct {
 		Scope   string `param:"scope"`
 		Run     string `param:"run"`
@@ -68,6 +86,11 @@ type (
 		Why     string `param:"why,optional" doc:"exit (the default) or start_failed"`
 	}
 )
+
+// generationResult is crew.endpoint's answer.
+type generationResult struct {
+	Generation int64 `json:"generation"`
+}
 
 // epochResult is crew.claim's and crew.takeover's answer.
 type epochResult struct {
@@ -115,6 +138,37 @@ func (m *Manager) Verbs() []module.Verb {
 			Errors: []int64{CodeBadCredential, CodeContextMismatch, CodeStaleEpoch}, Doc: "Who the credential belongs to (§4.5)."},
 			func(ctx context.Context, p whoamiParams) (Identity, error) {
 				return m.Whoami(ctx, p.Credential, p.Store)
+			}),
+		module.Handle(module.Contract{Verb: "crew.orphans", Since: protocol, Scope: module.ScopeLocalPeer,
+			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "[{scope, profiles, unread}]",
+			Doc: "AutoDoc scopes with a free holder and unhandled mail (§4.3)."},
+			func(ctx context.Context, _ struct{}) ([]Orphan, error) { return m.Orphans(ctx) }),
+		module.Handle(host("crew.adopt", "{}", "Fence an orphan scope and move its mail here (§4.3).", CodeScopeBusy, CodeStaleEpoch),
+			func(ctx context.Context, p adoptParams) (struct{}, error) {
+				return struct{}{}, m.Adopt(ctx, p.From, p.To, p.Run, p.Epoch)
+			}),
+		module.Handle(host("crew.discard", "{}", "Fence an orphan scope and fail its mail, telling senders.", CodeScopeBusy, CodeStaleEpoch),
+			func(ctx context.Context, p adoptParams) (struct{}, error) {
+				return struct{}{}, m.Discard(ctx, p.From, p.To, p.Run, p.Epoch)
+			}),
+		module.Handle(module.Contract{Verb: "crew.endpoint", Since: protocol, Audience: module.AudienceAgent,
+			Effect: module.EffectWrite, Result: "{generation}", Errors: []int64{CodeBadCredential, CodeBadEndpoint, CodeStaleEpoch},
+			Doc: "How to wake the calling session (§4.7)."},
+			func(ctx context.Context, p endpointParams) (generationResult, error) {
+				g, err := m.SetEndpoint(ctx, p.Credential, p.Kind, p.Locator)
+				return generationResult{g}, err
+			}),
+		module.Handle(module.Contract{Verb: "crew.attention", Since: protocol, Audience: module.AudienceAgent,
+			Effect: module.EffectWrite, Result: "{}", Errors: []int64{CodeBadCredential, CodeStaleEpoch},
+			Doc: "Raise or clear: the session waits on the user (§4.8)."},
+			func(ctx context.Context, p attentionParams) (struct{}, error) {
+				switch p.Op {
+				case "raise":
+					return struct{}{}, m.RaiseAttention(ctx, p.Credential, p.Kind, p.Text)
+				case "clear":
+					return struct{}{}, m.ClearAttention(ctx, p.Credential)
+				}
+				return struct{}{}, fmt.Errorf("%w: attention op %q, want raise or clear", ErrInvalid, p.Op)
 			}),
 		module.Handle(module.Contract{Verb: "crew.list", Since: protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable}]", Doc: "The addressbook."},
