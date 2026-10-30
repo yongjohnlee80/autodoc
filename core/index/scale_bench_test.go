@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // BenchmarkSemanticScale measures the semantic path at scale (the 2026-10-28 audit's AP-3 and
@@ -15,8 +16,8 @@ import (
 //   - OneFile: a query whose path filter admits one document, the most restrictive case: the
 //     fetches (SQL round trips) it makes are reported as fetches/op.
 //   - Publish: the writer's publish after a vector commit that changed 64 documents.
-//   - Stale: a query whose snapshot is a commit behind (one taken between a commit and its
-//     publish), as every query racing the writer is.
+//   - Stale: a query whose snapshot is a commit behind, its commit published a millisecond into
+//     it, as a query racing the writer sees: fallbacks/op is how often it scanned SQL instead.
 func BenchmarkSemanticScale(b *testing.B) {
 	n := 10000
 	if v, err := strconv.Atoi(os.Getenv("AUTODOC_BENCH_DOCS")); err == nil && v > 0 {
@@ -63,13 +64,13 @@ func BenchmarkSemanticScale(b *testing.B) {
 			b.StopTimer()
 			cur := m.snap.Load()
 			m.snap.Store(cur.Next(cur.Watermark()-1, nil, nil)) // a snapshot one commit behind
+			// the writer publishes the query's own commit a millisecond into it, as a query racing
+			// the writer sees
+			go func() { time.Sleep(time.Millisecond); m.snap.Store(cur); m.published() }()
 			b.StartTimer()
 			if _, err := e.ix.Search(ctx, "storage vector snapshot", QueryOpts{Mode: ModeSemantic}); err != nil {
 				b.Fatal(err)
 			}
-			b.StopTimer()
-			m.snap.Store(cur)
-			b.StartTimer()
 		}
 		b.ReportMetric(float64(m.fallbackScans.Load()-fallbacks)/float64(b.N), "fallbacks/op")
 	})
