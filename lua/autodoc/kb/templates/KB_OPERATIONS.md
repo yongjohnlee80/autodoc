@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 4
+revision: 5
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
@@ -34,7 +34,7 @@ session:
 |---|---|
 | `semantic` and `rerank` performed | AutoDoc search, `limit 3` (§1). The best case. |
 | `semantic` performed, `rerank` skipped | AutoDoc search, `limit 10`: without the reranker the answer often sits below the top 3. |
-| `semantic` skipped (no embedding model, a model switching, the query not embedded) | The words-only ladder (§1, then §7). Keep AutoDoc for listings, facets and relations (§2, §3, §5), which need no model. |
+| `semantic` skipped (no embedding model, a model switching, the query not embedded) | The words-only ladder (§1, then §7). Keep AutoDoc for listings, facets and relations (§2, §3, §5), which need no model. A miss proves nothing (§8). To set a model up, see §9. |
 | no answer (daemon down, workspace not ready) | `rg` (§7). |
 
 Why, measured 2026-10-06 on two KBs with AutoDoc 0.1.17 (method and numbers:
@@ -82,7 +82,9 @@ autodoc --call search.query '["'"$AUTODOC_WORKSPACE"'", "<words>", {"limit": 3}]
   Reading ranges instead of whole files is where most of the saving comes from: a median 2.6k tokens
   for a whole KB file, against about 220 for a hit's range.
 - No good hit? Search again with other words (the document's likely vocabulary) before concluding
-  the KB has nothing.
+  the KB has nothing. Without semantic search, one query is never enough to conclude that (§8).
+- Leave out `paths` when you can't say which folder holds the answer. Procedures live in
+  `playbooks/` and incidents and lessons in `synthesis/`, not only in `conventions/` and `adrs/`.
 - Search before writing, so you extend a document instead of duplicating it.
 - **The words-only ladder** (`"stages": ["lexical"]`, or any search on a machine without a model):
   1. Pass two or three distinctive terms (`"--delete-branch stacked"`), never a sentence. Every word
@@ -187,3 +189,61 @@ The answer's `stages.skipped` names each stage that didn't run and why (no model
 the query not embedded, no ranker). A search with `semantic` skipped matched by words only: a miss
 there doesn't mean the KB has nothing on the subject. Retry with two or three distinctive terms, or
 switch to grep (§0, §7), before concluding that.
+
+**Until `semantic` is `ready`, a miss is not evidence of absence.** A words-only search needs every
+word of the query in one section. One word the document doesn't use (an RPC field, a name you
+coined) hides it, and the answer looks exactly like a KB with nothing on the subject. So:
+
+- Never conclude "the KB has nothing on this" from one words-only query. Run two or three phrasings
+  with the jargon dropped, then grep (§7), across `playbooks/` and `synthesis/` as well.
+- If you still find nothing, say so plainly in your work: the KB can't be searched by meaning
+  yet, so the answer may be there.
+- Be most careful when the missing model is the subject. Setting up a search model is when the
+  KB's earlier notes on it are hardest to find.
+
+## 9. Setting up the search models
+
+Set models up only when the user asks: the `embedding.*` and `ranker.*` verbs change their settings.
+Take the steps from AutoDoc's documentation, not from memory, because the details change between
+releases:
+
+- **The latest:** Reference chapter 6,
+  https://yongjohnlee80.github.io/autodoc/reference/06-configuring-embeddings-and-rerankers.html.
+  Fetch it when you can.
+- **This version's:** the same chapter at `docs/reference/06-configuring-embeddings-and-rerankers.md`
+  in AutoDoc's plugin or source checkout.
+
+**The embedding model** (meaning, `semantic`): with Ollama running, **Search models › Embedding
+Models › Set up…** probes the machine, recommends a model, downloads it and applies it. Agents
+have the same steps as verbs: `host.probe`, `embedding.catalog`, `embedding.estimate`,
+`embedding.pull`, then `embedding.add` and `embedding.use`.
+
+**The reranker** (`rerank`), on HuggingFace TEI:
+
+- **With AutoDoc's plugin or source checkout,** run `shell/tei/tei-rerank.sh up`. It chooses the GPU
+  or the CPU and the image tag, serves on `http://127.0.0.1:18080`, and waits until TEI answers.
+  Prefer it to a `docker run` of your own.
+- **Without it,** run TEI yourself (chapter 6 has the compose file), with the tag the rules below
+  choose.
+
+These rules hold whichever way TEI runs:
+
+1. **A TEI GPU image is built for one compute capability, and refuses every other.** There is no
+   fallback. Read the GPU's capability with
+   `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` and take its tag from chapter 6's
+   table (12.0 is `120-<version>`). **The bare version tag (`:1.9`) is not generic: it is the A100
+   build (8.0) only**, and it fails on every RTX card. With no NVIDIA GPU, use `cpu-<version>`.
+2. **`Runtime compute cap X is not compatible with compile time compute cap Y` means the wrong
+   image, never unsupported hardware.** X is the GPU and Y is the image. Change the tag.
+3. **To learn whether a tag exists, ask for that tag:**
+   `docker manifest inspect ghcr.io/huggingface/text-embeddings-inference:<tag>`. Don't search the
+   tag list: the registry returns it in alphabetical pages, so a page without the tag proves nothing.
+4. **Register it** with `ranker.add` as kind `"tei"`, base URL `http://127.0.0.1:18080` and model
+   `""` (TEI's `/info` names its model), then `ranker.use`.
+5. **Check it through AutoDoc, not by calling TEI.** `search.query`'s answer should show
+   `rank.state` `ready`, `rerank` in `stages.performed` and a `rank_score` on each hit, and
+   `ranker.log` should show outcome `ok`.
+6. **On a GPU, leave `ranker.window` at its default of 40.** TEI's `/info` reports
+   `max_client_batch_size` 32, and a direct `POST /rerank` of 33 texts or more fails with HTTP 422.
+   AutoDoc sends the window in batches no larger than that limit, so its 40 succeed against the
+   same server. Change the window only when `ranker.log` shows failed calls.
