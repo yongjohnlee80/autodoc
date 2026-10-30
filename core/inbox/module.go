@@ -17,6 +17,7 @@ type (
 	watchParams struct {
 		Cursor  int64 `param:"cursor" doc:"the last answer's cursor; 0 for a snapshot"`
 		Timeout int64 `param:"timeout,optional" doc:"milliseconds to wait for a change, at most 25000"`
+		Page    int64 `param:"page,optional" doc:"a snapshot's next: the rest of that snapshot, answered at once, its cursor echoed"`
 	}
 	listParams struct {
 		Filter string `param:"filter,optional" doc:"\"\" for the history, or undeliverable"`
@@ -73,6 +74,7 @@ type (
 	wireSnapshot struct {
 		Items     []wireItem      `json:"items"`
 		Attention []wireAttention `json:"attention"`
+		Next      int64           `json:"next"` // not 0: more open items; watch again with page = next
 	}
 	watchResult struct {
 		Cursor   int64         `json:"cursor"`
@@ -118,7 +120,7 @@ func toWireWatched(w Watched) watchResult {
 		out.Changes = append(out.Changes, wireChange{Seq: c.Seq, Kind: c.Kind, Ref: c.Ref, At: stamp(c.At)})
 	}
 	if s := w.Snapshot; s != nil {
-		snap := wireSnapshot{Items: toWireItems(s.Items), Attention: make([]wireAttention, 0, len(s.Attention))}
+		snap := wireSnapshot{Items: toWireItems(s.Items), Attention: make([]wireAttention, 0, len(s.Attention)), Next: s.Next}
 		for _, a := range s.Attention {
 			snap.Attention = append(snap.Attention, wireAttention{Session: a.Session, Codename: a.Codename,
 				Scope: a.Scope, Owner: a.Owner, Kind: a.Kind, Text: a.Text, Raised: stamp(a.Raised)})
@@ -138,10 +140,10 @@ func (m *Manager) Verbs() []module.Verb {
 			Effect: effect, Result: result, Errors: codes, Doc: doc}
 	}
 	return []module.Verb{
-		module.Handle(user("inbox.watch", module.EffectRead, "{cursor, snapshot?, changes[]}",
-			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained. Never leases."),
+		module.Handle(user("inbox.watch", module.EffectRead, "{cursor, snapshot?{items, attention, next}, changes[]}",
+			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, at most 500 items a page (page = next for the rest). Never leases."),
 			func(ctx context.Context, p watchParams) (watchResult, error) {
-				w, err := m.Watch(ctx, p.Cursor, time.Duration(p.Timeout)*time.Millisecond)
+				w, err := m.Watch(ctx, p.Cursor, time.Duration(p.Timeout)*time.Millisecond, p.Page)
 				return toWireWatched(w), err
 			}),
 		module.Handle(user("inbox.list", module.EffectRead, "{items[]}",
