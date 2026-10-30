@@ -189,6 +189,10 @@ func (d *process) openStore() error {
 	return nil
 }
 
+// newGuard is fsbounds.NewGuard, a var so a cell can make it fail as a folder that cannot be
+// resolved would.
+var newGuard = fsbounds.NewGuard
+
 // startWorkspaces starts the ranker and the embedding provider, then every workspace in the store.
 // They stop in reverse: the workspaces, their context, then the provider's and the ranker's last
 // calls are written before the store closes.
@@ -197,7 +201,7 @@ func (d *process) startWorkspaces() error {
 	// a gated script never reaches the daemon's own: the store's folder, STATE, and its config and the
 	// folder beside it (lua/, plugins/ and the rest the TUI loads), whichever workspace holds them
 	var err error
-	if d.guard, err = fsbounds.NewGuard(filepath.Dir(d.p.Store), d.p.StateDir, d.e.ConfigPath, filepath.Dir(d.e.ConfigPath)); err != nil {
+	if d.guard, err = newGuard(filepath.Dir(d.p.Store), d.p.StateDir, d.e.ConfigPath, filepath.Dir(d.e.ConfigPath)); err != nil {
 		return err
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(d.ctx)
