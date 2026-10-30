@@ -297,10 +297,10 @@ func (t *memTx) items(ds []mail.Delivery) []mail.Item {
 	return out
 }
 
-func (t *memTx) OpenToUser(user string, limit int) ([]mail.Item, error) {
+func (t *memTx) OpenToUser(user string, after int64, limit int) ([]mail.Item, error) {
 	return t.items(t.where(func(d mail.Delivery) bool {
 		msg := t.st.messages[d.Message]
-		return d.Recipient == user && msg.State == mail.MessageOpen && msg.Kind != mail.KindEvent
+		return d.Recipient == user && d.Seq > after && msg.State == mail.MessageOpen && msg.Kind != mail.KindEvent
 	}, limit)), nil
 }
 

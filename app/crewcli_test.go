@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,8 +18,11 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -136,7 +142,7 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 	if code, _, errOut := d.as(gold, "", "mail", "send", "user", "--kind", "request", "--subject", "Decision: ship?", "--body", "now or later"); code != 0 {
 		t.Fatalf("mail send user: exit %d, %s", code, errOut)
 	}
-	w, err := d.deps.inbox.Watch(d.ctx, 0, 0)
+	w, err := d.deps.inbox.Watch(d.ctx, 0, 0, 0)
 	if err != nil || w.Snapshot == nil || len(w.Snapshot.Items) != 1 || w.Snapshot.Items[0].Codename != "gold" {
 		t.Fatalf("the human's snapshot: %+v, %v; want gold's request", w, err)
 	}
@@ -199,8 +205,8 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 	if sendKey([]string{"a"}, "", "s", "b", 0) == sendKey([]string{"a"}, "", "sb", "", 0) {
 		t.Error("two sends whose fields shift across a boundary have one key")
 	}
-	for ttl, want := range map[time.Duration]int64{0: 0, -time.Second: 0, time.Nanosecond: 1, 500 * time.Millisecond: 1,
-		time.Second: 1, 1500 * time.Millisecond: 2, time.Hour: 3600} {
+	for ttl, want := range map[time.Duration]int64{0: 0, time.Nanosecond: 1, 500 * time.Millisecond: 1,
+		time.Second: 1, 1500 * time.Millisecond: 2, time.Hour: 3600, math.MaxInt64: math.MaxInt64/int64(time.Second) + 1} {
 		if got := ttlSeconds(ttl); got != want {
 			t.Errorf("ttlSeconds(%v) = %d, want %d: a positive ttl never rounds to 0, which means never", ttl, got, want)
 		}
@@ -212,6 +218,16 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 	}
 	if _, params, _, err := crewCommands["mail send"].call(sessionContext{Credential: "c"}, sendFS, []string{"gold"}, nil); err != nil || params[6] != int64(1) {
 		t.Fatalf("mail send --ttl 500ms: params %v, %v; want ttl 1 second", params, err)
+	}
+	for _, neg := range []string{"-1s", "-500ms"} {
+		negFS := flag.NewFlagSet("t", flag.ContinueOnError)
+		crewCommands["mail send"].flags(negFS)
+		if err := negFS.Parse([]string{"--ttl", neg, "--body", "b"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, params, _, err := crewCommands["mail send"].call(sessionContext{Credential: "c"}, negFS, []string{"gold"}, nil); err == nil {
+			t.Errorf("mail send --ttl %s: params %v, want it refused, not sent as never", neg, params)
+		}
 	}
 	if sendKey([]string{"a"}, "", "s", "b", time.Hour) == sendKey([]string{"a"}, "", "s", "b", 0) {
 		t.Error("a ttl changes nothing in the key")
@@ -251,4 +267,65 @@ func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 			t.Errorf("the guides never name `autodoc %s`: this check reads them wrong", want)
 		}
 	}
+}
+
+// TestASnapshotPastTheMessageLimitPagesThroughRPC: the human has 70 open requests of mail's
+// largest body, 4.5 MB together, past the transport's 4 MiB message. A window that connects
+// through the daemon's socket, as every window does, still reads all of them: inbox.watch answers a
+// first page and then each next page within the limit.
+func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
+	d := newCrewDaemon(t)
+	c, err := readSessionContext(filepath.Join(d.agent("gold", "agent-1", "store-1"), crewContextFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Repeat("x", mail.MaxBody)
+	for i := range 70 {
+		if _, err := d.deps.mail.Send(d.ctx, c.Credential, mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+			Subject: fmt.Sprintf("big%02d", i), Body: body, Key: fmt.Sprintf("big%02d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	if _, err := cli.Call(d.ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName}); err != nil {
+		t.Fatal(err)
+	}
+	seen, pages := map[string]bool{}, 0
+	res, err := cli.Call(d.ctx, "inbox.watch", int64(0), int64(0))
+	for {
+		if err != nil {
+			t.Fatalf("inbox.watch, page %d: %v", pages+1, err)
+		}
+		pages++
+		m, _ := jsonOf(res).(map[string]any)
+		snap, _ := m["snapshot"].(map[string]any)
+		items, _ := snap["items"].([]any)
+		for _, it := range items {
+			id, _ := it.(map[string]any)["message"].(string)
+			seen[id] = true
+		}
+		next := asInt64(snap["next"])
+		if next == 0 {
+			break
+		}
+		res, err = cli.Call(d.ctx, "inbox.watch", m["cursor"], int64(0), next)
+	}
+	if len(seen) != 70 || pages < 3 {
+		t.Fatalf("%d of 70 open requests reached the window, in %d pages; want all, in several", len(seen), pages)
+	}
+}
+
+// asInt64 is a decoded msgpack integer of any width as an int64.
+func asInt64(v any) int64 {
+	switch r := reflect.ValueOf(v); {
+	case r.CanInt():
+		return r.Int()
+	case r.CanUint():
+		return int64(r.Uint())
+	}
+	return 0
 }
