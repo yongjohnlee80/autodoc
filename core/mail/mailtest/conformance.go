@@ -960,6 +960,10 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{merged.Items[0].From}, Body: "reply", Key: "k4"}); err != nil {
 		t.Fatalf("a reply to the advertised address: %v", err)
 	}
+	// handled: acked, so the clock below redelivers nothing of it alongside the notices
+	if err := r.m.Ack(r.ctx, "s-jarvis", merged.Items[0].Delivery.ID, merged.Items[0].Delivery.Lease); err != nil {
+		t.Fatal(err)
+	}
 	// a delivery that ends unhandled makes a notice from the daemon
 	r.clock.Advance(mail.LeaseFor + time.Second)
 	for range mail.MaxAttempts {
