@@ -535,6 +535,25 @@ func TestAReceiveIsBoundedAndAPreviewLeasesNothing(t *testing.T) {
 	}
 }
 
+// HasEligible sees a queued, unbound, unexpired delivery only.
+func TestHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T) {
+	r := newRig(t)
+	has := func() bool {
+		var ok bool
+		r.write(func(tx mail.Tx) error { var err error; ok, err = r.m.HasEligible(tx, "p-gold"); return err })
+		return ok
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"session:s-gold"}, Body: "b", Key: "k1"})
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k2", TTL: time.Minute})
+	if !has() {
+		t.Fatal("an unbound queued delivery is not eligible")
+	}
+	r.clock.Advance(time.Minute)
+	if has() {
+		t.Fatal("a bound delivery, or one past its expiry, is eligible for a new session")
+	}
+}
+
 // A crew effect on a transaction that is not mail's is an error, never a panic.
 func TestTheEffectsRefuseAnotherTransaction(t *testing.T) {
 	r := newRig(t)
