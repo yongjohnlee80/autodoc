@@ -483,3 +483,22 @@ func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
 		t.Fatalf("its program after the panel's start: %v, spawned %v, %v", err, spawned, args)
 	}
 }
+
+// TestAnAgentHereIsRaisedWhateverItsTab: a crew toast's click finds this window's agent by its
+// session even when its tab can't be selected (that failure is kept), so it is never said to be in
+// another window; a session no agent here has is not found.
+func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil || !instance.running {
+		t.Fatalf("start: %v", err)
+	}
+	c.panel.selectErr = errors.New("the panel is not mounted")
+	if !a.raiseSession(instance.session.ID) {
+		t.Fatal("this window's agent, its tab unselectable, was taken for another window's")
+	}
+	if a.raiseSession("elsewhere") {
+		t.Fatal("a session no agent here has was found")
+	}
+}

@@ -151,7 +151,8 @@ type Host struct {
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals *terminals
 	agents    *agents
-	crew      *crewHost // the window's crew scope (crewhost.go)
+	crew      *crewHost  // the window's crew scope (crewhost.go)
+	crewInbox *crewInbox // the human's crew inbox in this window (crewinbox.go)
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
@@ -495,6 +496,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
+	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
