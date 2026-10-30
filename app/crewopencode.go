@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -93,6 +94,17 @@ func writeOpenCodePlugin(dir string) (string, error) {
 	return path, os.Rename(tmp, path)
 }
 
+// pluginURL is the file URL of the plugin at path: absolute, and escaped, so a folder whose name
+// holds '#', '?', '%', a space or any non-ASCII names the very file (a URL's '#' starts a fragment
+// and '%' an escape).
+func pluginURL(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String(), nil
+}
+
 // opencodeConfigContent is $OPENCODE_CONFIG_CONTENT with the plugin at path in its plugin list:
 // existing, a value already set (the user's, or another tool's), kept whole and its list extended,
 // never replaced. OpenCode merges it over the user's own configuration.
@@ -105,7 +117,10 @@ func opencodeConfigContent(existing, path string) (string, error) {
 			return "", fmt.Errorf("$OPENCODE_CONFIG_CONTENT is set and is not a JSON object: %v", err)
 		}
 	}
-	url := "file://" + path
+	u, err := pluginURL(path)
+	if err != nil {
+		return "", err
+	}
 	var list []any
 	switch p := cfg["plugin"].(type) {
 	case nil:
@@ -114,8 +129,8 @@ func opencodeConfigContent(existing, path string) (string, error) {
 	default:
 		return "", errors.New("$OPENCODE_CONFIG_CONTENT's plugin is not a list")
 	}
-	if !slices.Contains(list, any(url)) {
-		list = append(list, url)
+	if !slices.Contains(list, any(u)) {
+		list = append(list, u)
 	}
 	cfg["plugin"] = list
 	var b bytes.Buffer
@@ -152,6 +167,11 @@ func crewPluginMain(args []string, getenv func(string) string, stdout, stderr io
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}
+	}
+	d, err := filepath.Abs(d) // the path printed, and the URL, name the folder written, wherever it was given from
+	if err != nil {
+		fmt.Fprintln(stderr, "autodoc:", err)
+		return 1
 	}
 	path, err := writeOpenCodePlugin(d)
 	if err != nil {

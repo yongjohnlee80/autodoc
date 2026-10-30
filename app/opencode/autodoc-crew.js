@@ -42,13 +42,27 @@ const socketDir = () => {
   return dir;
 };
 
-export const AutodocCrew = async ({ client }) => {
+// REGISTER_MS bounds one registration attempt, the session check and the CLI's run together: a
+// daemon that takes the connection and never answers must not hold registration forever.
+const REGISTER_MS = 15000;
+
+// aborted rejects once signal aborts, so an await on something that ignores signal still ends.
+const aborted = (signal) =>
+  new Promise((_, reject) => {
+    if (signal.aborted) return reject(new Error("aborted"));
+    signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+  });
+
+export const AutodocCrew = async ({ client }, options = {}) => {
   if (!process.env.AUTODOC_CREW_CONTEXT) return {};
   const holder = Number(process.env.AUTODOC_CREW_WAKER);
   if (holder && holder !== process.pid && alive(holder)) return {}; // started under the session's own opencode
   process.env.AUTODOC_CREW_WAKER = String(process.pid);
+  const registerMs = Number(options.registerMs) || REGISTER_MS;
   const log = (level, message) =>
-    client.app.log({ body: { service: "autodoc-crew", level, message } }).catch(() => {});
+    Promise.resolve()
+      .then(() => client.app.log({ body: { service: "autodoc-crew", level, message } }))
+      .catch(() => {});
   const dir = socketDir();
   if (!dir) {
     log("error", "no socket folder only this user can reach: AutoDoc can't wake this session");
@@ -58,8 +72,15 @@ export const AutodocCrew = async ({ client }) => {
   try {
     unlinkSync(path); // this pid's own, left by a process that held it before: never another's
   } catch {}
-  let session = null; // the session registered with AutoDoc
-  let registering = null;
+  // Registration is one owned lifecycle: one worker at a time, always toward the latest top-level
+  // session the agent chats in (desired), so the last endpoint written is the latest's and session
+  // (the one the plugin wakes) is published only for it. Each attempt is bounded, owns its child,
+  // and is cancelled by dispose; after a failure, the session's next message tries again.
+  let session = null; // the session registered with AutoDoc, the one a wake may name
+  let desired = null; // the latest top-level session asked for
+  let worker = null; // the running registration, if any
+  let attemptAbort = null; // cancels the running attempt
+  let disposed = false;
   const reply = (s, answer) => {
     s.write(JSON.stringify(answer) + "\n");
     s.end();
@@ -104,31 +125,75 @@ export const AutodocCrew = async ({ client }) => {
     } catch {}
   };
   process.on("exit", remove);
-  const register = async (id) => {
-    const info = await client.session.get({ path: { id } }).catch(() => null);
-    if (!info?.data || info.data.parentID) return; // a subagent's session is not the agent's
-    const p = Bun.spawn(["autodoc", "crew", "endpoint", "--opencode", id], {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-    const why = (await new Response(p.stderr).text()).trim();
-    if ((await p.exited) === 0) session = id;
-    else log("warn", `registering the session with AutoDoc failed: ${why.slice(0, 300)}`);
+  // attempt registers id, within registerMs: "ok", "child" (a subagent's session, never the
+  // agent's), or "failed". The child it starts is its own: killed at the bound or on dispose, and
+  // waited for, so none outlives the attempt.
+  const attempt = async (id) => {
+    const ac = new AbortController();
+    attemptAbort = ac;
+    const timer = setTimeout(() => ac.abort(), registerMs);
+    let p = null;
+    try {
+      const get = client.session.get({ path: { id }, signal: ac.signal });
+      get.catch(() => {}); // one that loses the race to the bound rejects later, unheard
+      const info = await Promise.race([get, aborted(ac.signal)]);
+      if (!info?.data) return "failed";
+      if (info.data.parentID) return "child";
+      p = Bun.spawn(["autodoc", "crew", "endpoint", "--opencode", id], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+      ac.signal.addEventListener("abort", () => p.kill(), { once: true });
+      if (ac.signal.aborted) p.kill();
+      const [why, code] = await Promise.all([new Response(p.stderr).text().catch(() => ""), p.exited]);
+      if (code === 0 && !ac.signal.aborted) return "ok";
+      log("warn", `registering the session with AutoDoc failed: ${ac.signal.aborted ? "no answer in time" : why.trim().slice(0, 300)}`);
+      return "failed";
+    } catch (e) {
+      if (p) {
+        p.kill();
+        await p.exited.catch(() => {});
+      }
+      log("warn", `registering the session with AutoDoc failed: ${ac.signal.aborted ? "no answer in time" : String(e).slice(0, 300)}`);
+      return "failed";
+    } finally {
+      clearTimeout(timer);
+      if (attemptAbort === ac) attemptAbort = null;
+    }
+  };
+  const run = async () => {
+    while (!disposed && desired && desired !== session) {
+      const target = desired;
+      const r = await attempt(target);
+      if (disposed) return;
+      if (r === "ok" && desired === target) session = target; // published for the latest alone
+      if (r === "child" && desired === target) desired = session;
+      if (r === "failed" && desired === target) return; // its next message tries again
+    }
+  };
+  const want = (id) => {
+    desired = id;
+    if (!worker)
+      worker = run()
+        .catch((e) => log("warn", `registration stopped: ${String(e).slice(0, 300)}`))
+        .finally(() => {
+          worker = null;
+        });
   };
   return {
     "chat.message": async (input) => {
       const id = input.sessionID;
-      if (!id || id === session || id === registering) return;
-      registering = id; // in the background: the message never waits on AutoDoc
-      register(id).finally(() => {
-        if (registering === id) registering = null;
-      });
+      if (disposed || !id || id === session || (worker && id === desired)) return; // coalesced into the running one
+      want(id); // in the background: the message never waits on AutoDoc
     },
     "shell.env": async (_input, output) => {
       output.env.AUTODOC_CREW_WAKER = String(process.pid);
     },
     dispose: async () => {
+      disposed = true;
+      attemptAbort?.abort();
+      await worker;
       server.stop(true);
       remove();
     },
