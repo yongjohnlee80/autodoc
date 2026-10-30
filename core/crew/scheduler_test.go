@@ -516,3 +516,25 @@ func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
 		t.Fatalf("tifa's row: %+v, want idle, pending, never failed (watch-only)", tw)
 	}
 }
+
+// A waker found after the scheduler started (AddWaker) serves its kind from the next look: the
+// kind's sessions, watch-only until then, are reserved and woken; nil adds nothing.
+func TestAWakerAddedLaterServesItsKind(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 1, Kind: "late"})
+	})
+	r.look()
+	if r.w.count() != 0 {
+		t.Fatalf("%d calls before a waker for its kind: want none (watch-only)", r.w.count())
+	}
+	r.s.AddWaker("late", nil)
+	r.look()
+	late := &fakeWaker{}
+	r.s.AddWaker("late", late)
+	r.look()
+	if late.count() != 1 || r.w.count() != 0 {
+		t.Fatalf("after AddWaker: %d calls on the late waker, %d on the other; want 1 and 0", late.count(), r.w.count())
+	}
+}
