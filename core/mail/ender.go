@@ -119,6 +119,30 @@ func (m *Manager) normalize(tx Tx, d Delivery, to string) error {
 	return tx.PutDelivery(d)
 }
 
+// HasEligible reports whether profile has a delivery a new session of it may receive now: queued,
+// unbound, and its message not past its expiry. crew.register seeds the session's wake with it (§4.4).
+func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	ds, err := tx.Eligible(profile, "", expireBatch)
+	if err != nil {
+		return false, err
+	}
+	now := tx.Now().UnixNano()
+	for _, d := range ds {
+		msg, ok, err := tx.Message(d.Message)
+		if err != nil {
+			return false, err
+		}
+		if ok && d.Session == "" && (msg.Expires == nil || *msg.Expires > now) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // DiscardDeliveries fails every unhandled delivery of profile (discarded), each sender told, in
 // crew.discard's write (§4.3).
 func (m *Manager) DiscardDeliveries(ctx crew.Tx, profile string) error {
