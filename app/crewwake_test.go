@@ -2,10 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -482,11 +486,81 @@ func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
 	}
 }
 
-// TestServeWakesClaudeSessions: serve's scheduler has a waker for Claude Code's sessions (phase 3),
-// so its loop runs and a Claude session with an endpoint is woken; any other kind stays watch-only.
+// TestServeWakesClaudeSessions: the scheduler serve starts, with serve's own wakers (crewWakers),
+// wakes a Claude session through its inbox socket, bound to its process, and leaves a session whose
+// kind has no waker alone. The socket is a stand-in the test serves in Claude's socket folder, so
+// the test process is its peer and the binding (pid, process reference) is real.
 func TestServeWakesClaudeSessions(t *testing.T) {
-	w := crewWakers()
-	if _, ok := w["claude"].(*crew.ClaudeWaker); !ok || len(w) != 1 {
-		t.Fatalf("serve's wakers: %v, want Claude's alone", w)
+	if runtime.GOOS != "linux" {
+		t.Skip("Claude's waker binds through Linux's /proc")
+	}
+	r := newWakeRig(t)
+	_, jarvis := r.agent("jarvis")
+	gold, goldCred := r.agent("gold")
+	// gold's endpoint: a socket this test holds, in /tmp/cc-socks-<uid> (made 0700 if absent)
+	dir := crew.ClaudeSocketDirs(os.Getuid())[1]
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(dir) })
+	}
+	sock := filepath.Join(dir, fmt.Sprintf("autodoc-test-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	lines := make(chan string, 4)
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			b, _ := io.ReadAll(c)
+			_ = c.Close()
+			lines <- string(b)
+		}
+	}()
+	self, err := crew.ProcRef(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := json.Marshal(map[string]any{"socket": sock, "pid": os.Getpid(), "start": self, "session": "c-gold"})
+	if _, err := r.deps.crew.SetEndpoint(r.ctx, goldCred, "claude", string(loc)); err != nil {
+		t.Fatal(err)
+	}
+	// lector: a Codex session with an endpoint, in the same daemon; serve has no Codex waker yet
+	r.n++
+	secret := strings.Repeat("s", 32) + "lector"
+	reg, err := r.deps.crew.Register(r.ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: r.epoch,
+		Codename: "lector", Kind: "codex", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lector := reg.Session
+	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(lector, secret), "codex",
+		fmt.Sprintf(`{"server":"/tmp/codex-daemon-%d/x.sock","thread":"t-1"}`, os.Getuid())); err != nil {
+		t.Fatal(err)
+	}
+	r.start(crewWakers())
+	r.send(jarvis, "gold", "for gold")
+	r.send(jarvis, "lector", "for lector")
+	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"` + crew.WakeNotice + `"}}` + "\n"
+	select {
+	case line := <-lines:
+		if line != want {
+			t.Fatalf("gold's socket read %q, want the notice line %q", line, want)
+		}
+	// NOTE: a bound on a failing run only: a wake that never comes fails here rather than hanging.
+	case <-time.After(10 * time.Second):
+		t.Fatal("no wake reached gold's inbox socket: serve's scheduler did not wake a Claude session")
+	}
+	r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeAwaiting && w.Failures == 0 })
+	r.deps.crew.Poke()
+	time.Sleep(200 * time.Millisecond) // a cell's own window: any look that would take lector has run
+	if w := r.wake(lector); w.AttemptGen != 0 || w.DaemonRun != "" || w.Failures != 0 || w.State != crew.WakeIdle {
+		t.Fatalf("lector, of a kind serve has no waker for, was attempted: %+v; want never reserved, never failed", w)
 	}
 }
