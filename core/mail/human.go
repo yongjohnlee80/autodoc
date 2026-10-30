@@ -51,6 +51,14 @@ func (m *Manager) EnsureReserved(ctx context.Context) error {
 	})
 }
 
+// expireFirst makes the time-driven changes real in a write of their own, before a human operation's
+// write. That write runs expire again, for an expiry racing it, but a refusal rolls it back: an
+// answer refused because the request expired would otherwise leave the request open, unjournaled,
+// and its sender untold, until some other write expired it.
+func (m *Manager) expireFirst(ctx context.Context) error {
+	return m.store.Write(ctx, func(tx Tx) error { return m.expire(tx) })
+}
+
 // userProfile is the human's profile id.
 func userProfile(tx Tx) (string, error) {
 	p, ok, err := tx.ActiveProfile(GlobalScope, UserCodename)
@@ -120,6 +128,9 @@ func (m *Manager) Answer(ctx context.Context, message, body, key string) (Messag
 	case key == "":
 		return Message{}, fmt.Errorf("%w: an empty key", ErrInvalid)
 	}
+	if err := m.expireFirst(ctx); err != nil {
+		return Message{}, err
+	}
 	var out Message
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
@@ -175,6 +186,9 @@ func answerDigest(message, body string) []byte {
 // Dismiss is inbox.dismiss: the human declines request message, and its sender is told, in one
 // write (§4.8). A second dismiss of a dismissed request is a replay, and answers ok.
 func (m *Manager) Dismiss(ctx context.Context, message string) error {
+	if err := m.expireFirst(ctx); err != nil {
+		return err
+	}
 	return m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
 			return err
@@ -209,6 +223,9 @@ func (m *Manager) Dismiss(ctx context.Context, message string) error {
 // Read is inbox.ack: the human has read report message (§4.8). A request is answered or
 // dismissed, never acked; a second ack is a replay, and answers ok.
 func (m *Manager) Read(ctx context.Context, message string) error {
+	if err := m.expireFirst(ctx); err != nil {
+		return err
+	}
 	return m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
 			return err
