@@ -587,6 +587,32 @@ func TestAListingCrossesTheBackfill(t *testing.T) {
 	}
 }
 
+// TestABackfillBatchKeysOnlyTheUnkeyed (§5.7): one backfill batch keys at most keyBatch documents,
+// all of them ones that had no keys, so the count without keys falls by exactly what it keyed; a
+// batch over documents all keyed keys none. The documents keyed already come first in the table, so
+// a batch that read them too would spend itself on them. It runs single batches only: a backfill
+// whose gate is gone never ends.
+func TestABackfillBatchKeysOnlyTheUnkeyed(t *testing.T) {
+	was := keyBatch
+	keyBatch = 2
+	t.Cleanup(func() { keyBatch = was })
+	e := newEnv(t, options{})
+	for i := range 8 {
+		e.put(fmt.Sprintf("d%d.md", i), "# d") // one at a time: ids in this order
+	}
+	e.exec("UPDATE document SET k_upd_s = NULL, k_upd_ns = NULL, k_indexed = NULL WHERE path IN ('d5.md', 'd6.md', 'd7.md')")
+	for _, want := range []int{2, 1, 0} {
+		before := e.unset()
+		n, err := e.store.backfillKeysOnce(context.Background(), e.store.storeWrite)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != want || e.unset() != before-n {
+			t.Fatalf("a batch keyed %d (want %d): %d without keys before, %d after", n, want, before, e.unset())
+		}
+	}
+}
+
 // TestTheWriterKeysWhatItWrites: a document written from 000027 on has its keys from its own write,
 // so the listing needs no backfill for it: the SQL path serves it at once.
 func TestTheWriterKeysWhatItWrites(t *testing.T) {
