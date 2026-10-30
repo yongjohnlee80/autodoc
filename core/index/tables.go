@@ -17,8 +17,11 @@ type noSort string
 
 const (
 	byPath noSort = "path"
-	bySeq  noSort = "seq"
-	byKey  noSort = "key"
+	// index.documents' orders, by their stored ascending keys (ADR 1793312720 D1)
+	byUpdatedKey noSort = "updated_key"
+	byIndexedKey noSort = "indexed_key"
+	bySeq        noSort = "seq"
+	byKey        noSort = "key"
 )
 
 // Document is one indexed file.
@@ -32,6 +35,8 @@ type Document struct {
 	FrontmatterError *string
 	Indexer          string
 	IndexedAt        int64
+	// the sort keys index.documents orders by (ADR 1793312720 D2, docKey); nil until written
+	KUpdS, KUpdNs, KIndexed *int64
 }
 
 // DocumentField names a document column.
@@ -49,6 +54,9 @@ const (
 	DocFrontmatterError DocumentField = "frontmatter_error"
 	DocIndexer          DocumentField = "indexer"
 	DocIndexedAt        DocumentField = "indexed_at"
+	DocKUpdS            DocumentField = "k_upd_s"
+	DocKUpdNs           DocumentField = "k_upd_ns"
+	DocKIndexed         DocumentField = "k_indexed"
 )
 
 // Chunk is one section of a document, alive in [GenFrom, GenTo).
@@ -371,8 +379,13 @@ func newIndexTables(c dao.DataConn) *indexTables {
 				DocFrontmatterError: store.Col("document", DocFrontmatterError, func(d *Document) any { return &d.FrontmatterError }),
 				DocIndexer:          store.Col("document", DocIndexer, func(d *Document) any { return &d.Indexer }),
 				DocIndexedAt:        store.Col("document", DocIndexedAt, func(d *Document) any { return &d.IndexedAt }),
+				DocKUpdS:            store.Col("document", DocKUpdS, func(d *Document) any { return &d.KUpdS }),
+				DocKUpdNs:           store.Col("document", DocKUpdNs, func(d *Document) any { return &d.KUpdNs }),
+				DocKIndexed:         store.Col("document", DocKIndexed, func(d *Document) any { return &d.KIndexed }),
 			}),
-			dao.SortMap[*Document, DocumentField, noSort, int64](map[noSort]string{byPath: `"document"."path"`})),
+			dao.SortMap[*Document, DocumentField, noSort, int64](map[noSort]string{byPath: `"document"."path"`,
+				byUpdatedKey: `"document"."k_upd_s", "document"."k_upd_ns", "document"."path"`,
+				byIndexedKey: `"document"."k_indexed", "document"."path"`})),
 		chunks: dao.New[*Chunk, ChunkField, ChunkSort, int64](c,
 			dao.Table[*Chunk, ChunkField, ChunkSort, int64]("chunk"),
 			dao.ID[*Chunk, ChunkField, ChunkSort, int64](ChunkID),
