@@ -5,15 +5,15 @@ index.list ["kb", "", int(10)]
 index.changes ["kb", int(0), int(10)]
   {changes: [{generation: <int>, op: "upsert", path: "plan.md"}, {generation: <int>, op: "upsert", path: "target.md"}], cursor: <int>, more: <bool>}
 index.documents ["kb"]
-  {docs: [{fields: {tags: ["kb"], type: "adr", updated: "2026-10-05"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}, {fields: {updated: "2026-01-01"}, generation: <int>, indexed_at: <int>, path: "target.md", title: "Target", updated: "2026-01-01"}], more: <bool>, next: <int>}
+  {docs: [{fields: {tags: ["kb"], type: "adr", updated: "2026-10-05"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}, {fields: {updated: "2026-01-01"}, generation: <int>, indexed_at: <int>, path: "target.md", title: "Target", updated: "2026-01-01"}], more: <bool>, next: <str>}
 index.documents ["kb", {diagnosed: bool(false), fields: ["type", "tags"], limit: int(1), sort: "path"}]
-  {docs: [{fields: {tags: ["kb"], type: "adr"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}], more: <bool>, next: <int>}
+  {docs: [{fields: {tags: ["kb"], type: "adr"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}], more: <bool>, next: <str>}
 index.documents ["kb", {diagnosed: bool(true)}]
-  {docs: [], more: <bool>, next: <int>}
+  {docs: [], more: <bool>, next: <str>}
 index.documents ["kb", {sort: "size"}]
   error -32602 "index.documents: opts.sort is updated, path or indexed"
 index.documents ["kb", {after: int(-1)}]
-  error -32602 "index.documents: opts.after must be a non-negative integer"
+  error -32602 "index.documents: opts.after is the previous page's next, an opaque cursor, since protocol 35: an integer offset is no longer accepted; start with no after, 0 or \"\", then pass each next back unread"
 index.reindex ["kb", "plan.md"]
   nil
 index.models ["kb"]
