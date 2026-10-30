@@ -118,8 +118,8 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 
 - `sort` is `updated` (newest first), `path` or `indexed`.
 - `missing` lists files that lack a field: the gaps to fill.
-- `facets`, `tags` and `paths` narrow it as they narrow a search. Page with `after` (the previous
-  answer's `next`).
+- `facets`, `tags` and `paths` narrow it as they narrow a search. Page with `after`: the previous
+  answer's `next`, an opaque cursor. Pass it back unread, with the same sort and filters.
 
 ## 4. History
 
@@ -158,7 +158,8 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 - **Find the documents the schema diagnoses:**
   `autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"diagnosed": true, "limit": 500}]'`.
   Each listed document carries its `diagnostics`. Narrow the list with `"paths": ["<folder>"]`, and
-  page through it with `"after": <next>`. `index.status`'s `diagnosed` is the count.
+  page through it with `"after": <next>` (pass `next` back unread). `index.status`'s `diagnosed` is
+  the count.
 - `ABOUT.md` in each folder (`_ABOUT.md` in `_templates/` and `_schema/`) says what goes there, how
   files are named and which `type` they carry.
   "Where does X go" is a search: `"<X>" type:about`.

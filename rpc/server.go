@@ -112,7 +112,13 @@ import (
 // meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
 // scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
 // every project. Without the assignee it delivers none; an unscoped assignment is as before.
-const Protocol int64 = 33
+// Protocol 35 is ADR 1793312720: index.documents orders and filters in the store and pages by a
+// key, so its next is an opaque cursor (a string; "" when no more follow) and after takes it back.
+// It is the second exception to "a result keeps its meaning", for every session alike and Johno's
+// ruling (Q1, 2026-10-30): the integer offset is retired at once, not kept for a protocol window,
+// so a session that declared an older protocol gets the cursor too, and a non-zero integer after is
+// refused saying what replaced it. Every known client echoes next without reading it.
+const Protocol int64 = 35
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

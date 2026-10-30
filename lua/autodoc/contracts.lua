@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 33,
+  protocol = 35,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -327,7 +327,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}",
-      doc = "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100.",
+      doc = "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100. From protocol 35, next is an opaque cursor (a string, \"\" when none follow) for every session, whatever protocol it declared: pass it back as after unread. A cursor from another sort or other filters, or an integer offset, is invalid params.",
     },
     ["index.list"] = {
       since = 1, scope = "workspace", audience = "agent",
