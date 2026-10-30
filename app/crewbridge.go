@@ -24,6 +24,11 @@ import (
 // bridgeEvery is how often a bridge looks at its session, its daemon and its language server.
 const bridgeEvery = 30 * time.Second
 
+// bridgeLook bounds one look, all it calls included: a daemon or language server that takes a
+// connection and never answers must not hold the bridge, so the next look (another daemon, the
+// session's end) still comes. Within bridgeEvery, so one look is over before the next is due.
+const bridgeLook = 20 * time.Second
+
 // bridgeRefusals is how many looks in a row the language server must refuse a connection before
 // the bridge takes it as gone: one refusal may be a restart in progress.
 const bridgeRefusals = 3
@@ -39,6 +44,7 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs.SetOutput(stderr)
 	agy := fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
 	foreground := fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
+	session := fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -52,7 +58,7 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 		return 1
 	}
 	envFile := os.Getenv("AUTODOC_CREW_CONTEXT")
-	c, err := findSessionContext(envFile, cwd)
+	c, err := pinnedContext(envFile, cwd, *session)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
@@ -64,7 +70,13 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	dir := bridgeDir(envFile, cwd)
 	if !*foreground {
-		pid, logPath, err := detachBridge(dir, c.Session, args)
+		exe, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(stderr, "autodoc:", err)
+			return 1
+		}
+		argv, env := bridgeChild(exe, contextFile(envFile, cwd, c), c.Session, os.Environ())
+		pid, logPath, err := detachBridge(dir, c.Session, argv, env)
 		if err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
@@ -91,12 +103,50 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	return 0
 }
 
+// pinnedContext is the session context as findSessionContext finds it, refused when session is
+// set and the context is another's: the detached bridge is told the session it was started for,
+// and never takes up a replacement found in its place.
+func pinnedContext(envFile, cwd, session string) (sessionContext, error) {
+	c, err := findSessionContext(envFile, cwd)
+	if err != nil {
+		return sessionContext{}, err
+	}
+	if session != "" && c.Session != session {
+		return sessionContext{}, fmt.Errorf("the session context is %s's, not %s's, which this bridge was started for: stopping", c.Session, session)
+	}
+	return c, nil
+}
+
+// contextFile is the file c was read from: the one $AUTODOC_CREW_CONTEXT names (envFile), else the
+// working directory's, named by its session.
+func contextFile(envFile, cwd string, c sessionContext) string {
+	if envFile != "" {
+		return envFile
+	}
+	return crew.ContextPath(cwd, c.Session)
+}
+
+// bridgeChild is the detached bridge's command line and environment: this executable run again in
+// the foreground, pinned to the context the parent read (path, as $AUTODOC_CREW_CONTEXT, so it
+// reads that file or none, never one found anew in the working directory) and to its session. The
+// token stays in the environment, inherited, never in an argument.
+func bridgeChild(exe, path, session string, environ []string) (argv, env []string) {
+	argv = []string{exe, "crew", "bridge", "--agy", "--foreground", "--session", session}
+	for _, kv := range environ {
+		if !strings.HasPrefix(kv, "AUTODOC_CREW_CONTEXT=") {
+			env = append(env, kv)
+		}
+	}
+	return argv, append(env, "AUTODOC_CREW_CONTEXT="+path)
+}
+
 // agyBridge is one session's bridge: its context, as read when it started, and its language server.
 type agyBridge struct {
 	c       sessionContext
 	locator string // {"address", "conversation"}, the address a loopback IP
 	token   string
 	addr    string
+	bound   time.Duration // a look's bound (bridgeLook)
 
 	call     func(ctx context.Context, method string, params ...any) (any, error)
 	instance func(ctx context.Context) (string, error) // the daemon's instance
@@ -121,7 +171,7 @@ func newAgyBridge(c sessionContext, getenv func(string) string) (*agyBridge, err
 	if err != nil {
 		return nil, err
 	}
-	b := &agyBridge{c: c, locator: string(loc), token: token, addr: ip}
+	b := &agyBridge{c: c, locator: string(loc), token: token, addr: ip, bound: bridgeLook}
 	b.call = func(ctx context.Context, method string, params ...any) (any, error) {
 		return crewCall(ctx, c, method, params)
 	}
@@ -165,15 +215,18 @@ func loopbackAddress(addr string) (string, error) {
 // generation and resets the session's wake state, so a tick never makes one), and checks the
 // language server (a connection, then GetConversationMetadata). It ends when the session's credential is
 // refused (the session ended, or its folder now holds another's), when the language server refuses
-// bridgeRefusals looks in a row, or with ctx. A daemon it cannot reach is tried again at the next.
+// bridgeRefusals looks in a row, or with ctx. Each look is bounded (b.bound): a daemon it cannot
+// reach, or one that does not answer in time, is tried again at the next.
 func (b *agyBridge) run(ctx context.Context, tick <-chan time.Time, log io.Writer) error {
 	registered, refusals := "", 0
 	look := func() error {
+		ctx, cancel := context.WithTimeout(ctx, b.bound)
+		defer cancel()
 		inst, err := b.instance(ctx)
 		switch {
 		case err != nil:
+			// the registration stands: a restarted daemon is another instance, seen at the next look
 			fmt.Fprintln(log, "autodoc: the daemon is not answering; trying again:", err)
-			registered = ""
 		case inst != registered:
 			if _, err := b.call(ctx, "crew.endpoint", b.c.Credential, "agy", b.locator, b.token); err != nil {
 				if ended(err) {
