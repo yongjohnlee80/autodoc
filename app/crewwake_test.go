@@ -445,3 +445,38 @@ func TestCrewWaitAnswersTheHostsReadySessions(t *testing.T) {
 		t.Fatalf("crew.wait under another epoch: %v, want ErrStaleEpoch", err)
 	}
 }
+
+// TestCrewWaitHearsMailBoundToTheSession: mail sent to session:<id> is the session's alone, and
+// crew.wait answers for it, as the session's mail.wait does, and again once a lease of it lapses.
+// The host waits on its sessions, not on what a new session of the codename would get.
+func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
+	r := newWakeRig(t)
+	r.start(nil)
+	_, jarvis := r.agent("jarvis")
+	gold, goldCred := r.agent("gold")
+	got := make(chan crew.Waited, 1)
+	go func() {
+		w, err := r.deps.crew.Wait(r.ctx, "autodoc:aaaa", "run-a", r.epoch, []string{gold}, 5*time.Second)
+		if err != nil {
+			t.Error(err)
+		}
+		got <- w
+	}()
+	time.Sleep(50 * time.Millisecond) // the wait is registered and found nothing
+	if _, err := r.deps.mail.Send(r.ctx, jarvis, mail.Send{To: []string{"session:" + gold}, Body: "for this session", Key: "bound"}); err != nil {
+		t.Fatal(err)
+	}
+	if w := <-got; len(w.Ready) != 1 || w.Ready[0].Session != gold {
+		t.Fatalf("crew.wait after a send to session:%s: %+v, want gold ready, not a timeout", gold, w)
+	}
+	if rec, err := r.deps.mail.Receive(r.ctx, goldCred); err != nil || len(rec.Items) != 1 {
+		t.Fatalf("gold's receive: %+v, %v", rec, err)
+	} // leased, and never acked
+	if w, err := r.deps.crew.Wait(r.ctx, "autodoc:aaaa", "run-a", r.epoch, []string{gold}, 50*time.Millisecond); err != nil || !w.TimedOut {
+		t.Fatalf("crew.wait while the bound delivery is leased: %+v, %v; want timed out", w, err)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	if w, err := r.deps.crew.Wait(r.ctx, "autodoc:aaaa", "run-a", r.epoch, []string{gold}, time.Second); err != nil || len(w.Ready) != 1 {
+		t.Fatalf("crew.wait after the bound lease lapsed: %+v, %v; want gold ready", w, err)
+	}
+}
