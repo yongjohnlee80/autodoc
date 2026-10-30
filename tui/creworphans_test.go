@@ -13,6 +13,14 @@ func orphan(scope string, unread int, profiles ...any) map[string]any {
 	return map[string]any{"scope": scope, "profiles": profiles, "unread": int64(unread)}
 }
 
+// shown is the question the card shows, "" when none is open.
+func (w *crewWindow) shown() string {
+	if w.card == nil || !w.card.pending {
+		return ""
+	}
+	return w.card.current.Title + ": " + w.card.current.Text
+}
+
 // TestTheOrphansAreOfferedOnceAtTheFirstClaim (§4.3, Q2 b): once the window holds its scope, each
 // orphan scope is offered in turn: Adopt moves its mail here (crew.adopt from it to the window's
 // scope, with the run and epoch), Keep does nothing, Discard fails it (crew.discard); each answer
@@ -23,29 +31,79 @@ func TestTheOrphansAreOfferedOnceAtTheFirstClaim(t *testing.T) {
 	h := newCrewHost(w, t.TempDir())
 	h.Connected()
 	scope, epoch, _ := h.held()
-	if len(w.questions) != 1 || !strings.Contains(w.questions[0].Text, "3 unhandled message(s) wait for gold, jarvis") ||
-		w.questions[0].Yes != "&Adopt" || w.questions[0].No != "&Keep" || w.questions[0].Other != "&Discard" {
-		t.Fatalf("questions %+v; want the first orphan offered, Adopt, Keep or Discard", w.questions)
+	if q := w.card.current; !strings.Contains(w.shown(), "3 unhandled message(s) wait for gold, jarvis") ||
+		q.Yes != "&Adopt" || q.No != "&Keep" || q.Other != "&Discard" {
+		t.Fatalf("the card shows %q (%+v); want the first orphan offered, Adopt, Keep or Discard", w.shown(), q)
 	}
-	w.questions[0].OnYes()
+	w.card.accepted()
+	w.card.closed()
 	if len(w.d.settled) != 1 || !slices.Equal(w.d.settled[0], []any{"crew.adopt", "autodoc:dead1", scope, h.run, epoch}) {
-		t.Fatalf("the adopt %v; want dead1's mail moved to %s", w.d.settled, scope)
+		t.Fatalf("the adopt %d calls; want dead1's mail moved to %s", len(w.d.settled), scope)
 	}
-	if len(w.questions) != 2 || !strings.Contains(w.notices[len(w.notices)-1], "Adopted 3") {
-		t.Fatalf("after the adopt: %d questions, notices %v", len(w.questions), w.notices)
+	if !strings.Contains(w.notices[len(w.notices)-1], "Adopted 3") || !strings.Contains(w.shown(), "autodoc:dead2") {
+		t.Fatalf("after the adopt: notices %v, the card shows %q", w.notices, w.shown())
 	}
-	w.questions[1].OnCancel() // Keep
-	if len(w.d.settled) != 1 || len(w.questions) != 3 {
-		t.Fatalf("Keep: settled %v, %d questions; want nothing settled and the next offered", w.d.settled, len(w.questions))
+	w.card.rejected() // Keep
+	w.card.closed()
+	if len(w.d.settled) != 1 || !strings.Contains(w.shown(), "autodoc:dead3") {
+		t.Fatalf("Keep: %d settled, the card shows %q; want nothing settled and the next offered", len(w.d.settled), w.shown())
 	}
-	w.questions[2].OnOther()
-	if len(w.d.settled) != 2 || w.d.settled[1][0] != "crew.discard" || w.d.settled[1][1] != "autodoc:dead3" {
-		t.Fatalf("the discard %v", w.d.settled)
+	w.card.otherChosen()
+	w.card.closed()
+	if len(w.d.settled) != 2 || w.d.settled[1][0] != "crew.discard" || w.d.settled[1][1] != "autodoc:dead3" || w.shown() != "" {
+		t.Fatalf("the discard: %d settled, the card shows %q", len(w.d.settled), w.shown())
 	}
 	asked := slices.Index(w.calls, "crew.orphans")
 	h.Connected() // a reconnect
-	if slices.Index(w.calls[asked+1:], "crew.orphans") >= 0 || len(w.questions) != 3 {
+	if slices.Index(w.calls[asked+1:], "crew.orphans") >= 0 || w.shown() != "" {
 		t.Fatalf("a reconnect offered the orphans again: calls %v", w.calls)
+	}
+}
+
+// TestAnOfferWaitsForTheUsersQuestion (Lector #97 r0): orphans listed while the user answers another
+// question wait for it; it is never displaced.
+func TestAnOfferWaitsForTheUsersQuestion(t *testing.T) {
+	w := &crewWindow{d: newCrewDaemonForHost(), card: newAsker(newScripted("kb"))}
+	w.d.orphans = []any{orphan("autodoc:dead1", 1, "gold")}
+	yes, cancelled := 0, 0
+	w.card.ask(Question{Title: "remove the provider?", OnYes: func() { yes++ }, OnCancel: func() { cancelled++ }})
+	h := newCrewHost(w, t.TempDir())
+	h.Connected() // its orphans arrive while the user's question is open
+	if !strings.HasPrefix(w.shown(), "remove the provider?") || cancelled != 0 {
+		t.Fatalf("the card shows %q, the user's question cancelled %d times; want it left open", w.shown(), cancelled)
+	}
+	w.card.accepted()
+	w.card.closed()
+	if yes != 1 || !strings.Contains(w.shown(), "autodoc:dead1") {
+		t.Fatalf("after the user's answer: yes %d, the card shows %q; want the orphan offered then", yes, w.shown())
+	}
+}
+
+// TestAQuestionOverAnOfferPutsItBack (Lector #97 r0): a question asked while orphan A is offered and
+// B waits is shown and survives; A is not answered (nothing settled, no Keep run), and A and then B
+// are offered again once the question is answered.
+func TestAQuestionOverAnOfferPutsItBack(t *testing.T) {
+	w := &crewWindow{d: newCrewDaemonForHost()}
+	w.d.orphans = []any{orphan("autodoc:deadA", 1, "gold"), orphan("autodoc:deadB", 1, "lector")}
+	h := newCrewHost(w, t.TempDir())
+	h.Connected()
+	if !strings.Contains(w.shown(), "autodoc:deadA") {
+		t.Fatalf("the card shows %q, want A", w.shown())
+	}
+	yes, cancelled := 0, 0
+	w.card.ask(Question{Title: "save the page?", OnYes: func() { yes++ }, OnCancel: func() { cancelled++ }})
+	if !strings.HasPrefix(w.shown(), "save the page?") || len(w.d.settled) != 0 {
+		t.Fatalf("the card shows %q, %d settled; want the user's question, A untouched", w.shown(), len(w.d.settled))
+	}
+	w.card.accepted()
+	w.card.closed()
+	if yes != 1 || cancelled != 0 || !strings.Contains(w.shown(), "autodoc:deadA") {
+		t.Fatalf("after the user's answer: yes %d cancelled %d, the card shows %q; want A offered again", yes, cancelled, w.shown())
+	}
+	w.card.rejected() // Keep A
+	w.card.closed()
+	if !strings.Contains(w.shown(), "autodoc:deadB") || len(w.d.settled) != 0 {
+		t.Fatalf("after A: the card shows %q, %d settled; want B, nothing settled", w.shown(), len(w.d.settled))
 	}
 }
 
@@ -68,8 +126,8 @@ func TestTheWindowsOwnScopeIsNoOrphan(t *testing.T) {
 	if scope, _, _ := h.held(); scope != own {
 		t.Fatalf("the window claimed %s, want its predecessor's %s", scope, own)
 	}
-	if len(w.questions) != 0 {
-		t.Fatalf("the window's own scope was offered: %+v", w.questions)
+	if w.shown() != "" {
+		t.Fatalf("the window's own scope was offered: %q", w.shown())
 	}
 }
 
@@ -81,8 +139,9 @@ func TestAnOrphanNotSettledSaysSoAndGoesOn(t *testing.T) {
 	w.d.settleErr = errors.New("the store is unavailable")
 	h := newCrewHost(w, t.TempDir())
 	h.Connected()
-	w.questions[0].OnYes()
-	if !strings.Contains(w.notices[len(w.notices)-1], "was not settled") || len(w.questions) != 2 {
-		t.Fatalf("notices %v, %d questions; want the failure said and the next offered", w.notices, len(w.questions))
+	w.card.accepted()
+	w.card.closed()
+	if !strings.Contains(w.notices[len(w.notices)-1], "was not settled") || !strings.Contains(w.shown(), "autodoc:dead2") {
+		t.Fatalf("notices %v, the card shows %q; want the failure said and the next offered", w.notices, w.shown())
 	}
 }

@@ -103,8 +103,7 @@ type crewWindow struct {
 	store   string   // the store the daemon serves, "store-1" when unset
 	socket  string   // the daemon's address, "/run/test/d.sock" when unset
 	calls   []string // the verbs called, in order
-	// questions is each question asked, in order
-	questions []Question
+	card    *asker   // the question card, made at the first question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -146,7 +145,15 @@ func (w *crewWindow) release() {
 }
 func (w *crewWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
 func (w *crewWindow) Notify(msg string)                { w.notices = append(w.notices, msg) }
-func (w *crewWindow) Ask(q Question) Asked             { w.questions = append(w.questions, q); return Asked{} }
+
+// AskWhenFree asks on a real question card (asker), as the window's: its replacement and its
+// reentrancy are the card's own.
+func (w *crewWindow) AskWhenFree(q Question) {
+	if w.card == nil {
+		w.card = newAsker(newScripted("kb"))
+	}
+	w.card.askWhenFree(q)
+}
 func (w *crewWindow) DaemonAddress() string {
 	if w.socket != "" {
 		return w.socket
