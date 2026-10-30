@@ -98,7 +98,7 @@ refused() {
   local line="$1" runtime cap tag
   compose --profile gpu down
   runtime="$(printf '%s' "$line" | sed -n 's/^Runtime compute cap \([0-9]*\) .*/\1/p')"
-  cap="${runtime%?}.${runtime: -1}"
+  cap="$(printf '%s' "$runtime" | sed 's/\(.\)$/.\1/')" # 120 is 12.0, 89 is 8.9
   tag="$(cap_tag "$cap")"
   echo "tei-rerank: TEI refused the image: $line" >&2
   echo "  The image tag is wrong for the GPU TEI ran on (compute capability $cap); the GPU is" >&2
