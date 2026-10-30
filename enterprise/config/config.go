@@ -70,6 +70,9 @@ type Postgres struct {
 	DSNEnv string
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
+	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
+	// ann_scan_mem_multiplier), pgstore's defaults for any not set.
+	ANN pgstore.ANNConfig
 }
 
 // DSN is the connection string, read from the environment when called. It is a secret: never log
@@ -205,6 +208,10 @@ type file struct {
 		DSNEnv    string `toml:"dsn_env"`
 		DSNSealed string `toml:"dsn_sealed"`
 		Schema    string `toml:"schema"`
+		// the approximate search (pgstore.ANNConfig); nil is the default
+		ANNThreshold         *int     `toml:"ann_threshold"`
+		ANNMaxScanTuples     *int     `toml:"ann_max_scan_tuples"`
+		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
 	} `toml:"postgres"`
 	Embedding *struct {
 		Provider string `toml:"provider"`
@@ -344,6 +351,25 @@ func (v *validator) postgres(f file) Postgres {
 	}
 	if err := pgstore.CheckSchema(p.Schema); err != nil {
 		v.refuse("postgres.schema", "%q is not a plain schema name: lowercase letters, digits and _, not starting with a digit or pg_, at most 63", p.Schema)
+	}
+	p.ANN = pgstore.DefaultANNConfig()
+	if n := f.Postgres.ANNThreshold; n != nil {
+		if *n < 1 {
+			v.refuse("postgres.ann_threshold", "%d: at least 1 embedding of a model before its searches go through its index", *n)
+		}
+		p.ANN.Threshold = *n
+	}
+	if n := f.Postgres.ANNMaxScanTuples; n != nil {
+		if *n < 1 || *n > 2147483647 {
+			v.refuse("postgres.ann_max_scan_tuples", "%d: 1 to 2147483647 (pgvector's hnsw.max_scan_tuples)", *n)
+		}
+		p.ANN.MaxScanTuples = *n
+	}
+	if x := f.Postgres.ANNScanMemMultiplier; x != nil {
+		if *x < 1 || *x > 1000 {
+			v.refuse("postgres.ann_scan_mem_multiplier", "%v: 1 to 1000 (pgvector's hnsw.scan_mem_multiplier)", *x)
+		}
+		p.ANN.ScanMemMultiplier = *x
 	}
 	return p
 }

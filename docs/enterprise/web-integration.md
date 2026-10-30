@@ -156,6 +156,15 @@ The body is one JSON object of at most 64 KiB, with no other field.
   key (older records may have an empty id).
 - **`via`** says which ways found the hit: `lexical`, `semantic`, or `facet` for a filter-only list.
 - **`relevance`** is 0 to 1, comparable across queries; **`score`** orders hits within one answer.
+- **Approximate by meaning, above a size.** Once a tenant has `ann_threshold` embeddings of its
+  model (50,000 by default) and the model's index is built, the semantic part of a search is
+  approximate.
+  - The nearest candidates come through an HNSW index, then they're ordered by their exact
+    distance.
+  - A true neighbour can occasionally be missed, and hits at an equal distance are ordered within
+    the returned set.
+  - Below the threshold, and whenever the candidates come back short, it is exact. The operator's
+    status says which (`models.search`).
 
 ### Errors
 

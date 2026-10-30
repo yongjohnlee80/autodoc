@@ -4,6 +4,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -81,6 +83,8 @@ type server struct {
 	// worker is the embedding worker once it has started, which an ingester's commit wakes; nil
 	// before, when a commit has nothing to wake (the worker's first round reads what it wrote).
 	worker atomic.Pointer[embedder.Worker]
+	// ann is the approximate semantic search every tenant's store shares, and its builder
+	ann *pgstore.ANN
 	// ops tells an operator the server's health and status, and logs the metrics lines; api is the
 	// HTTP API once it serves, whose counts the metrics lines take
 	ops     *ops.Collector
@@ -97,6 +101,7 @@ var serverSteps = []struct {
 }{
 	{"postgres", (*server).openPostgres},
 	{"schema", (*server).migrate},
+	{"ann", (*server).startANN},
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
 	{"embedder", (*server).startEmbedder},
@@ -135,11 +140,42 @@ func (s *server) migrate() error {
 	return redact(pgstore.Migrate(s.ctx, s.store), s.cfg.Postgres.DSN())
 }
 
+// annTick is how often the ANN builder looks for an index to build, recover or retire.
+const annTick = 30 * time.Second
+
+// startANN makes the approximate search every tenant's store shares, and runs its builder until
+// the server stops: the per-model HNSW indexes, one built at a time across every server on the
+// database. A builder's error is logged and retried at the next tick; searches stay exact
+// meanwhile.
+func (s *server) startANN() error {
+	var run [8]byte
+	if _, err := rand.Read(run[:]); err != nil {
+		return err
+	}
+	s.ann = pgstore.NewANN(s.store, s.cfg.Postgres.ANN, hex.EncodeToString(run[:]))
+	ctx, cancel := context.WithCancel(s.ctx)
+	done := make(chan struct{})
+	s.stops.push(func() {
+		cancel()
+		<-done
+	})
+	go func() {
+		defer close(done)
+		s.ann.Run(ctx, annTick, func(err error) { logger.Warning(s.log, err, "ann: the index builder") })
+	}()
+	return nil
+}
+
+// tenantStore is tenant's store on the server's pool, with its approximate search.
+func (s *server) tenantStore(tenant string) (*pgstore.Store, error) {
+	return pgstore.New(s.store, tenant, pgstore.WithANN(s.ann))
+}
+
 // setPolicies records each tenant's access policy from the configuration: the fields every search
 // of the tenant must be scoped by, and the view it is indexed from.
 func (s *server) setPolicies() error {
 	for i, src := range s.cfg.Sources {
-		st, err := pgstore.New(s.store, src.Tenant)
+		st, err := s.tenantStore(src.Tenant)
 		if err != nil {
 			return err
 		}
@@ -160,7 +196,7 @@ func (s *server) startIngesters() error {
 		wg.Wait()
 	})
 	for i, src := range s.cfg.Sources {
-		st, err := pgstore.New(s.store, src.Tenant)
+		st, err := s.tenantStore(src.Tenant)
 		if err != nil {
 			return err
 		}
@@ -184,7 +220,7 @@ func (s *server) startIngesters() error {
 func (s *server) startEmbedder() error {
 	tenants := make([]embedder.Tenant, len(s.ingesters))
 	for i, in := range s.ingesters {
-		st, err := pgstore.New(s.store, in.Tenant())
+		st, err := s.tenantStore(in.Tenant())
 		if err != nil {
 			return err
 		}

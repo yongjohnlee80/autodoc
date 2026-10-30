@@ -60,8 +60,9 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
    "last_refresh": {"at": "…", "complete": true, "last_complete": "…", "error": ""},
    "quarantine": 0,
    "documents": {"total": 120344, "ready": 120344},
-   "models": {"active": "openai|…", "target": "", "semantic": "ready"},
-   "error": ""}]}
+   "models": {"active": "openai|…", "target": "", "semantic": "ready", "search": "ann"},
+   "error": ""}],
+ "ann": [{"model": "openai|text-embedding-3-small||1536", "mode": "ann", "underfill": 3}]}
 ```
 
 | Field | What it tells you |
@@ -72,6 +73,8 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | `quarantine` | rows that failed to render and wait to be fixed in your data (the log names them) |
 | `documents` | the tenant's documents, and how many can be found by meaning |
 | `models.semantic` | `ready`, `partial` (embedding), `switching` (a model change filling; searches answer by words), or `off` |
+| `models.search`, `models.search_reason` | how the tenant's searches by meaning run: `exact` (below `ann_threshold` embeddings, or a model with no index; the reason says which), `ann` (approximate, through the model's HNSW index), `ann-building` (the index is being built; exact meanwhile), or `ann-failed` (exact; the reason is the build's error) |
+| `ann` | each embedding model's index: its `mode`, the `reason` when it failed, and `underfill`, how many approximate searches came back short (a selective filter, or a scan that hit `ann_max_scan_tuples`) and were answered exactly instead, since the server started. A failed index is retried with a growing wait, up to 5 times, then left for you: fix the cause, and clear the model's row in `rag_ann_index` to retry. |
 
 **`error` is a code, never an error's text,** which stays in the log:
 
