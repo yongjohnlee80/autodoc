@@ -237,6 +237,6 @@ other.
 
 ## 8. Testing gates
 
-The checks to run before pushing, and what CI runs (on each merge into `canary` and on the milestone
+The checks to run before pushing, and what CI runs (on each merge into `canary` and on the release
 pull request into `main`), are in [CONTRIBUTING.md](../CONTRIBUTING.md#running-the-checks).
 Never `go test -tags gui ./app/`: it opens a window.
