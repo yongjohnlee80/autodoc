@@ -67,7 +67,7 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 		return 0, err
 	}
 	var epoch int64
-	err := m.store.Write(ctx, func(tx Tx) error {
+	err := m.write(ctx, func(tx Tx, after *afterCommit) error {
 		now := tx.Now()
 		sc, scoped, err := tx.Scope(scope)
 		if err != nil {
@@ -97,7 +97,7 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 		if force {
 			why = EndedTakeover
 		}
-		if err := m.endScopeSessions(tx, scope, why); err != nil {
+		if err := m.endScopeSessions(tx, after, scope, why); err != nil {
 			return err
 		}
 		epoch = h.Epoch + 1
@@ -109,11 +109,11 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 // Release gives scope back on a clean exit (§4.3): its sessions end ('exit'), and the incarnation
 // is cleared, so this run can never reattach. The next claim takes a new epoch.
 func (m *Manager) Release(ctx context.Context, scope, run string, epoch int64) error {
-	return m.store.Write(ctx, func(tx Tx) error {
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
 			return err
 		}
-		if err := m.endScopeSessions(tx, scope, EndedExit); err != nil {
+		if err := m.endScopeSessions(tx, after, scope, EndedExit); err != nil {
 			return err
 		}
 		h, _, err := tx.Host(scope)
@@ -125,14 +125,14 @@ func (m *Manager) Release(ctx context.Context, scope, run string, epoch int64) e
 	})
 }
 
-// endScopeSessions ends every live session of scope, for why, in tx.
-func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
+// endScopeSessions ends every live session of scope, for why, in tx (after: endSession).
+func (m *Manager) endScopeSessions(tx Tx, after *afterCommit, scope, why string) error {
 	live, err := tx.LiveSessionsOfScope(scope)
 	if err != nil {
 		return err
 	}
 	for _, s := range live {
-		if err := m.endSession(tx, s, why); err != nil {
+		if err := m.endSession(tx, after, s, why); err != nil {
 			return err
 		}
 	}
@@ -141,8 +141,9 @@ func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
 
 // endSession ends s in tx and applies what follows from it, in the same transaction: its
 // endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left
-// to announce), and the mail module's effect on its deliveries (SessionEnder).
-func (m *Manager) endSession(tx Tx, s Session, why string) error {
+// to announce), and the mail module's effect on its deliveries (SessionEnder). Its endpoint's secret
+// is forgotten once tx has committed (after), never before: an end that rolls back keeps it.
+func (m *Manager) endSession(tx Tx, after *afterCommit, s Session, why string) error {
 	at := tx.Now().UnixNano()
 	s.Ended, s.EndedWhy = &at, why
 	if err := tx.PutSession(s); err != nil {
@@ -151,7 +152,7 @@ func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	if err := tx.DeleteEndpoint(s.ID); err != nil {
 		return err
 	}
-	m.forgetSecret(s.ID)
+	after.ended = append(after.ended, s.ID)
 	if err := clearAttention(tx, s.ID); err != nil {
 		return err
 	}

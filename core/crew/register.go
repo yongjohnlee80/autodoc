@@ -183,7 +183,7 @@ func (m *Manager) Exit(ctx context.Context, scope, run string, epoch int64, sess
 	if why != EndedExit && why != EndedStartFailed {
 		return fmt.Errorf("%w: exit reason %q", ErrInvalid, why)
 	}
-	return m.store.Write(ctx, func(tx Tx) error {
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
 			return err
 		}
@@ -197,6 +197,6 @@ func (m *Manager) Exit(ctx context.Context, scope, run string, epoch int64, sess
 		if s.Ended != nil {
 			return nil
 		}
-		return m.endSession(tx, s, why)
+		return m.endSession(tx, after, s, why)
 	})
 }
