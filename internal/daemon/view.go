@@ -25,6 +25,7 @@ var _ rpc.Workspace = (*view)(nil)
 func (v *view) opened() bool { return v.s.ix != nil }
 
 func (v *view) Name() string          { return v.name }
+func (v *view) ID() int64             { return v.s.id }
 func (v *view) Root() string          { return v.s.root }
 func (v *view) Include() []string     { return v.s.include }
 func (v *view) Exclude() []string     { return v.s.exclude }
