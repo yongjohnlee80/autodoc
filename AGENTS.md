@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 38; the daemon serves sessions from protocol 12.
+Verbs at protocol 39; the daemon serves sessions from protocol 12.
 
 ### `crew`
 
@@ -232,7 +232,7 @@ Verbs at protocol 38; the daemon serves sessions from protocol 12.
 | `crew.attention` | `credential` string, `op` string (raise or clear), `kind`? string (for raise: permission or blocked), `text`? string (for raise: what the session waits on) | `{}` — Raise or clear: the session waits on the user (§4.8). Codes: -32094, -32091. | 37 | agent | write |
 | `crew.claim` | `scope` string (autovim:<project>, nvim:<key> or autodoc:<id>), `run` string (the host process's run token, held in memory only), `proc`? string (<boot id>:<pid ns>:<pid>:<start time>; "" when unknown) | `{epoch}` — Claim or reattach a scope with the process's run token (§4.3). Idempotent. Codes: -32090. | 37 | for people's tools; unix socket only | write |
 | `crew.discard` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and fail its mail, telling senders. Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
-| `crew.endpoint` | `credential` string, `kind` string (claude, codex, agy or opencode: the session's own), `locator` string (JSON, kind-specific; never a secret), `secret`? string (agy only: its language server's token, held in memory for this endpoint, never stored (protocol 38)) | `{generation}` — How to wake the calling session (§4.7). Codes: -32094, -32096, -32091. | 37 | agent | write |
+| `crew.endpoint` | `credential` string, `kind` string (claude, codex, agy or opencode: the session's own), `locator` string (JSON, kind-specific; never a secret. opencode's is the AutoDoc plugin's socket, its process and the session (protocol 39)), `secret`? string (agy only: its language server's token, held in memory for this endpoint, never stored (protocol 38)) | `{generation}` — How to wake the calling session (§4.7). Codes: -32094, -32096, -32091. | 37 | agent | write |
 | `crew.exit` | `scope` string, `run` string, `epoch` int, `session` string, `why`? string (exit (the default) or start_failed) | `{}` — A session ended; its bound deliveries fail (session_ended). Codes: -32091, -32094. | 37 | for people's tools; unix socket only | write |
 | `crew.guide` | `kind` string (the CLI: claude, codex, agy, opencode …) | `{markdown, protocol}` — The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide. | 37 | for people's tools; unix socket only | read |
 | `crew.list` | — | `[{codename, scope, kind, presence, reachable}]` — The addressbook. | 37 | agent | read |
