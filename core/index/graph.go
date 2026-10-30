@@ -290,7 +290,7 @@ func (s *Store) MapPage(ctx context.Context, o MapPageOpts) (MapPage, error) {
 	err := s.read(ctx, func(tx *store.Tx) error {
 		d := s.documents(tx)
 		if after != "" {
-			d = d.WithPredicate(dao.Raw(`"document"."path" > ?`, after))
+			d = d.WithPredicate(store.RowAfter([]string{`"document"."path"`}, after))
 		}
 		docs, err := d.OrderBy(dao.Asc(byPath)).Limit(uint64(o.Limit+1)).Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
 		if err != nil {
