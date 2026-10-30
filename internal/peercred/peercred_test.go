@@ -175,3 +175,32 @@ func TestCheckDir(t *testing.T) {
 		t.Errorf("another user's folder: %v, want an UnsafeDirError", err)
 	}
 }
+
+// PeerPID names the process at the other end, from each end of a unix connection (here this test's
+// own process at both), and refuses a connection that is not a unix socket's rather than pass.
+func TestPeerPIDNamesTheProcessAtTheOtherEnd(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no peer process record on " + runtime.GOOS)
+	}
+	ln, path := socketIn(t)
+	accepted := make(chan net.Conn, 1)
+	defer serve(ln, accepted)()
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	server := <-accepted
+	defer server.Close()
+	for end, conn := range map[string]net.Conn{"client": c, "server": server} {
+		if pid, err := PeerPID(conn); err != nil || pid != os.Getpid() {
+			t.Errorf("PeerPID at the %s's end: %d, %v; want this process, %d", end, pid, err, os.Getpid())
+		}
+	}
+	a, b := net.Pipe()
+	defer a.Close()
+	defer b.Close()
+	if _, err := PeerPID(a); err == nil {
+		t.Error("PeerPID of a pipe answered a process, rather than refusing")
+	}
+}
