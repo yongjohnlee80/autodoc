@@ -357,11 +357,15 @@ func agentWrapper(bin, config string) string {
 
 // agentDir is the folder the agent works in for a workspace: AutoDoc's, never the workspace's.
 func (h *agents) agentFolder(ws wsInfo) string {
-	base := h.agentDir
-	if base == "" {
-		base = filepath.Join(os.TempDir(), "autodoc-agent")
+	return filepath.Join(agentBase(h.agentDir), safeName(ws.name))
+}
+
+// agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir.
+func agentBase(dir string) string {
+	if dir == "" {
+		return filepath.Join(os.TempDir(), "autodoc-agent")
 	}
-	return filepath.Join(base, safeName(ws.name))
+	return dir
 }
 
 // safeName is a workspace's name as a folder's.
