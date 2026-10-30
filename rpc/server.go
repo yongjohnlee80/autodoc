@@ -118,7 +118,10 @@ import (
 // daemon holds every file the call reaches to them (core/fsbounds): inside the workspace, none of it
 // hidden or AutoDoc's own, a write in within's workspace only. A session below 34 sends none, and
 // every call of any session without them is unbounded, as before.
-const Protocol int64 = 34
+// Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
+// their verbs' Since is set), after 34 above, and the 35 and 36 that AP-5 and AP-6 claim. A
+// session below 37 sees their verbs as unknown methods.
+const Protocol int64 = 37
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
