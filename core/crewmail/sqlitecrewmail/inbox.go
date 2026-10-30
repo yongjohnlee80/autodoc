@@ -85,8 +85,9 @@ var (
 		dao.Eq(`"mail_message"."kind"`, mail.KindEvent))
 )
 
-func (t *Tx) OpenToUser(user string, limit int) ([]mail.Item, error) {
-	q := t.m.deliveries.On(t.tx).With(cRecipient, user).WithPredicate(openNonEvent).OrderBy(dao.Asc(bySeq))
+func (t *Tx) OpenToUser(user string, after int64, limit int) ([]mail.Item, error) {
+	q := t.m.deliveries.On(t.tx).With(cRecipient, user).WithPredicate(openNonEvent).
+		WithPredicate(dao.Gt(`"mail_delivery"."seq"`, after)).OrderBy(dao.Asc(bySeq))
 	return t.items(deliveries(limited(q, limit).Select()))
 }
 

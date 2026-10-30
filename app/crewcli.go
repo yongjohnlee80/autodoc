@@ -183,6 +183,9 @@ var crewCommands = map[string]crewCommand{
 			}
 			kind, subject := strFlag(fs, "kind"), strFlag(fs, "subject")
 			ttl := fs.Lookup("ttl").Value.(flag.Getter).Get().(time.Duration)
+			if ttl < 0 {
+				return "", nil, nil, fmt.Errorf("--ttl %v is negative: give how long until it expires, or 0 for never", ttl)
+			}
 			key := strFlag(fs, "key")
 			if key == "" {
 				key = sendKey(args, kind, subject, body, ttl)
@@ -228,13 +231,15 @@ func intFlag(fs *flag.FlagSet, name string) int {
 	return fs.Lookup(name).Value.(flag.Getter).Get().(int)
 }
 
-// ttlSeconds is a --ttl as mail.send's whole seconds, rounded up: a sub-second ttl is one second,
-// never 0, which would mean the message never expires.
+// ttlSeconds is a non-negative --ttl as mail.send's whole seconds, rounded up: a sub-second ttl
+// is one second, never 0, which would mean the message never expires. A negative one is refused
+// before it gets here.
 func ttlSeconds(ttl time.Duration) int64 {
-	if ttl <= 0 {
-		return 0
+	q, r := ttl/time.Second, ttl%time.Second
+	if r > 0 {
+		q++ // no overflow: q is at most MaxInt64/1e9
 	}
-	return int64((ttl + time.Second - 1) / time.Second)
+	return int64(q)
 }
 
 // sendKey is a send's default idempotency key: its content's digest, so the same command run

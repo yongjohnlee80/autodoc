@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func Run(t *testing.T, h Harness) {
 	}{
 		{"AWatchSnapshotsThenFollowsTheJournal", testAWatchSnapshotsThenFollowsTheJournal},
 		{"AWatchWakesOnACommitAndARollbackTellsNothing", testAWatchWakesOnACommitAndARollbackTellsNothing},
-		{"ASnapshotShowsEveryOpenItem", testASnapshotShowsEveryOpenItem},
+		{"ASnapshotPagesEveryOpenItem", testASnapshotPagesEveryOpenItem},
 		{"AReplyWinsOnceAndReplaysExactly", testAReplyWinsOnceAndReplaysExactly},
 		{"AReplyRacingExpiryGetsOneOutcome", testAReplyRacingExpiryGetsOneOutcome},
 		{"ADismissTellsTheSender", testADismissTellsTheSender},
@@ -122,7 +123,7 @@ func (r *rig) ask(session, kind, subject string, ttl time.Duration) mail.Message
 
 func (r *rig) watch(cursor int64, wait time.Duration) inbox.Watched {
 	r.t.Helper()
-	w, err := r.in.Watch(r.ctx, cursor, wait)
+	w, err := r.in.Watch(r.ctx, cursor, wait, 0)
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -204,22 +205,103 @@ func testAWatchSnapshotsThenFollowsTheJournal(t *testing.T, h Harness) {
 	}
 }
 
-// A snapshot shows every open request and unread report, however many: its cursor moves past all
-// of their journal rows, so one it left out would reach no window until something changed it.
-func testASnapshotShowsEveryOpenItem(t *testing.T, h Harness) {
-	r := newRig(t, h)
-	const n = 520 // past any page a store might be tempted to cut it to
-	for i := range n {
-		r.ask("s-jarvis", mail.KindRequest, fmt.Sprintf("q%03d", i), 0)
-	}
-	w := r.watch(0, 0)
-	if w.Snapshot == nil || len(w.Snapshot.Items) != n || w.Cursor != n {
-		got := -1
-		if w.Snapshot != nil {
-			got = len(w.Snapshot.Items)
+// A snapshot is bounded and lossless: a page carries at most 500 items and no more text than an
+// answer may, its Next pages in the rest at once with the cursor echoed, and the changes after
+// that cursor bring what changed between pages. Paged by count (520 short requests), by bytes
+// (70 requests of mail's largest body, 4.5 MB together, past the transport's 4 MiB message), and
+// with an answer and a new request between pages, every open item reaches the window.
+func testASnapshotPagesEveryOpenItem(t *testing.T, h Harness) {
+	type page struct{ n, bytes int }
+	all := func(r *rig) (map[string]bool, []page, int64) {
+		t.Helper()
+		got, pages := map[string]bool{}, []page(nil)
+		w := r.watch(0, 0)
+		cursor := w.Cursor
+		for {
+			if w.Snapshot == nil {
+				t.Fatalf("a snapshot page: %+v", w)
+			}
+			size := 0
+			for _, it := range w.Snapshot.Items {
+				got[it.Message.ID] = true
+				size += len(it.Message.Subject) + len(it.Message.Body)
+			}
+			pages = append(pages, page{len(w.Snapshot.Items), size})
+			if w.Snapshot.Next == 0 {
+				return got, pages, cursor
+			}
+			next, err := r.in.Watch(r.ctx, cursor, 0, w.Snapshot.Next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.Cursor != cursor || len(next.Changes) != 0 {
+				t.Fatalf("a continuation page: cursor %d, %d changes; want the snapshot's cursor %d echoed, no changes", next.Cursor, len(next.Changes), cursor)
+			}
+			w = next
 		}
-		t.Fatalf("a snapshot of %d open requests: %d items at cursor %d, want all %d at cursor %d", n, got, w.Cursor, n, n)
 	}
+	t.Run("by count", func(t *testing.T) {
+		r := newRig(t, h)
+		for i := range 520 {
+			r.ask("s-jarvis", mail.KindRequest, fmt.Sprintf("q%03d", i), 0)
+		}
+		got, pages, cursor := all(r)
+		if len(got) != 520 || len(pages) != 2 || pages[0].n != 500 || pages[1].n != 20 || cursor != 520 {
+			t.Fatalf("520 open requests: %d reached in pages %v at cursor %d; want all, as 500 then 20, at 520", len(got), pages, cursor)
+		}
+	})
+	t.Run("by bytes", func(t *testing.T) {
+		r := newRig(t, h)
+		body := strings.Repeat("x", mail.MaxBody)
+		for i := range 70 {
+			if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+				Subject: fmt.Sprintf("big%02d", i), Body: body, Key: fmt.Sprintf("big%02d", i)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, pages, _ := all(r)
+		if len(got) != 70 || len(pages) < 3 {
+			t.Fatalf("70 requests of 64 KiB: %d reached in pages %v; want all, over several pages", len(got), pages)
+		}
+		for _, p := range pages {
+			if p.bytes > 2<<20 {
+				t.Fatalf("a page of %d bytes of text: past the 2 MiB a page may carry, pages %v", p.bytes, pages)
+			}
+		}
+	})
+	t.Run("with changes between pages", func(t *testing.T) {
+		r := newRig(t, h)
+		var first mail.Message
+		for i := range 510 {
+			m := r.ask("s-jarvis", mail.KindRequest, fmt.Sprintf("q%03d", i), 0)
+			if i == 0 {
+				first = m
+			}
+		}
+		w := r.watch(0, 0)
+		if w.Snapshot == nil || w.Snapshot.Next == 0 {
+			t.Fatalf("the first page: %+v", w)
+		}
+		if _, err := r.in.Reply(r.ctx, first.ID, "yes", "r1"); err != nil { // answered after page one showed it
+			t.Fatal(err)
+		}
+		late := r.ask("s-gold", mail.KindRequest, "late", 0) // sent between the pages
+		rest, err := r.in.Watch(r.ctx, w.Cursor, 0, w.Snapshot.Next)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]bool{}
+		for _, it := range rest.Snapshot.Items {
+			seen[it.Message.ID] = true
+		}
+		if !seen[late.ID] || len(rest.Snapshot.Items) != 11 {
+			t.Fatalf("page two: %d items, late request in it %v; want the 10 left and the late one", len(rest.Snapshot.Items), seen[late.ID])
+		}
+		after := r.watch(w.Cursor, 0)
+		if !slices.Equal(kinds(after.Changes), []string{"answered:" + first.ID, "request:" + late.ID}) {
+			t.Fatalf("the changes after the first page's cursor: %v; want the answer and the late request", kinds(after.Changes))
+		}
+	})
 }
 
 // A watch waiting at its cursor returns as soon as a write commits a change, without polling; a
@@ -246,7 +328,7 @@ func testAWatchWakesOnACommitAndARollbackTellsNothing(t *testing.T, h Harness) {
 	at := r.watch(0, 0).Cursor // a snapshot's cursor: whenever the watch below starts, it follows from here
 	got := make(chan inbox.Watched, 1)
 	go func() {
-		w, err := r.in.Watch(r.ctx, at, inbox.MaxWait)
+		w, err := r.in.Watch(r.ctx, at, inbox.MaxWait, 0)
 		if err != nil {
 			t.Error(err)
 		}
