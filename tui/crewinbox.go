@@ -42,9 +42,13 @@ type crewOpen struct {
 
 // crewInbox is the window's view of the human's inbox. Its fields are the loop's.
 type crewInbox struct {
-	c       crewInboxCore
-	raise   func(session string) bool // raises this window's agent of session; false when it isn't here
-	gen     uint64                    // bumped by each connection: an earlier connection's loop stops
+	c     crewInboxCore
+	raise func(session string) bool // raises this window's agent of session; false when it isn't here
+	gen   uint64                    // bumped by each connection: an earlier connection's loop stops
+	// genCtx is the connection's: cancelled by the next connection or the window's stop, so an
+	// earlier connection's watch, in flight or not yet sent, holds no long-poll on the new one
+	genCtx  context.Context
+	stopGen context.CancelFunc
 	cursor  int64
 	open    map[string]crewOpen // the toasts shown, by toast id
 	reports map[string]bool     // the open reports a passing toast has announced, by message
@@ -60,11 +64,23 @@ func (*crewInbox) State() map[string]any        { return map[string]any{} }
 func (*crewInbox) Commands() map[string]Command { return map[string]Command{} }
 
 // Connected starts the window's watch on each connection, from a snapshot: what changed while it
-// was away is in it.
+// was away is in it. The earlier connection's watch is cancelled, and its snapshot's pages read so
+// far dropped.
 func (x *crewInbox) Connected() {
+	x.endGen()
 	x.gen++
-	x.cursor = 0
+	x.genCtx, x.stopGen = context.WithCancel(context.Background())
+	x.cursor, x.parts = 0, snapshotParts{}
 	x.watch(x.gen, "")
+}
+
+// Stopped cancels the watch: the window is closing.
+func (x *crewInbox) Stopped() { x.endGen() }
+
+func (x *crewInbox) endGen() {
+	if x.stopGen != nil {
+		x.stopGen()
+	}
 }
 
 // watchAnswer is one inbox.watch's answer, or why there is none.
@@ -76,8 +92,14 @@ type watchAnswer struct {
 // watch asks the daemon for what changed after the cursor, or for a snapshot (cursor 0, or page,
 // the snapshot's next part), and goes on from its answer while gen is the connection's.
 func (x *crewInbox) watch(gen uint64, page string) {
-	cursor := x.cursor
+	cursor, genCtx := x.cursor, x.genCtx
 	x.c.Go(func(ctx context.Context) any {
+		if genCtx.Err() != nil {
+			return watchAnswer{err: genCtx.Err()} // a newer connection's loop runs: nothing is sent
+		}
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer context.AfterFunc(genCtx, cancel)()
 		v, err := x.c.Call(ctx, "inbox.watch", cursor, crewInboxWait.Milliseconds(), page)
 		m, _ := v.(map[string]any)
 		return watchAnswer{m, err}
@@ -100,7 +122,7 @@ func (x *crewInbox) watch(gen uint64, page string) {
 			})
 			return
 		}
-		x.answered(gen, page, r.m)
+		x.answered(gen, cursor, page, r.m)
 	})
 }
 
@@ -109,23 +131,29 @@ type snapshotParts struct {
 	items, attention []any
 }
 
-// answered applies one watch's answer and asks the next.
-func (x *crewInbox) answered(gen uint64, page string, m map[string]any) {
+// answered applies one watch's answer to a watch at cursor asked, and asks the next. A snapshot's
+// cursor is its first page's, the journal's high-water then; a next page echoes the cursor it was
+// asked at, so the pages are asked at that one and it is kept through them. A watch at cursor 0
+// answered with no snapshot found the journal empty: nothing is open.
+func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]any) {
 	if snap, ok := m["snapshot"].(map[string]any); ok {
 		if page == "" {
 			x.parts = snapshotParts{}
+			x.cursor = num(m, "cursor")
 		}
 		x.parts.items = append(x.parts.items, asList(snap["items"])...)
 		x.parts.attention = append(x.parts.attention, asList(snap["attention"])...)
 		if next := str(snap, "next"); next != "" {
-			x.watch(gen, next) // the snapshot's next part, at the same cursor
+			x.watch(gen, next) // the snapshot's next part, at its first page's cursor
 			return
 		}
-		x.cursor = num(m, "cursor")
 		x.show(x.parts)
 		x.parts = snapshotParts{}
 		x.watch(gen, "")
 		return
+	}
+	if asked == 0 && page == "" {
+		x.show(snapshotParts{}) // an empty journal: what was shown, from before, is closed
 	}
 	x.cursor = num(m, "cursor")
 	again := false
