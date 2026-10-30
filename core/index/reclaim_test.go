@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
 
@@ -395,4 +396,81 @@ func (l *lockedLog) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b.String()
+}
+
+// TestAReclaimSaysItsVacuumFailing: a reclaim whose writes all committed, the model's vectors and
+// row gone, but whose incremental vacuum then fails (its context ended after the last write)
+// answers that failure, with what it removed.
+func TestAReclaimSaysItsVacuumFailing(t *testing.T) {
+	e := newEnv(t, options{})
+	e.seedModel(e.ws, "old|v", 3, 0, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	writes := 0
+	endingAfterTheRow := func(wctx context.Context, fn func(context.Context, *store.Tx) error) error {
+		writes++
+		err := e.store.storeWrite(wctx, fn)
+		if writes == 2 { // the vectors in one batch, then the row: the vacuum is next
+			cancel()
+		}
+		return err
+	}
+	r, err := e.store.reclaim(ctx, "old|v", endingAfterTheRow)
+	if writes != 2 {
+		t.Fatalf("%d writes, want 2: the vectors, then the row", writes)
+	}
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "incremental_vacuum") {
+		t.Fatalf("the vacuum failing: %v, want its error", err)
+	}
+	if r.Vectors != 3 || !r.Gone {
+		t.Errorf("the vacuum failing: %+v, want the 3 vectors and the row said removed", r)
+	}
+	if n, row := e.vectorsOf("old|v"); n != 0 || row {
+		t.Errorf("after the reclaim: %d vectors, row %v; want both gone (the writes committed)", n, row)
+	}
+}
+
+// TestTheReclaimerLogsAFailureOnlyWhileItRuns: a queued reclaim the writer refuses is logged as
+// failed while the reclaimer's context is alive; one refused once that context has ended (the
+// daemon stopping) is not, and the reclaimer returns. The writer here is the cell: it answers each
+// reclaim's op, so the order is the cell's own.
+func TestTheReclaimerLogsAFailureOnlyWhileItRuns(t *testing.T) {
+	e := newEnv(t, options{})
+	log := &lockedLog{}
+	x := newIndexer(e.store, e.fsys, options{Logger: logger.New(logger.WithWriter(log))}) // never run: the cell writes
+	x.reclaims <- "first|x"
+	x.reclaims <- "second|x"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); x.reclaimer(ctx) }()
+	refused := errors.New("the writer refused")
+	next := func(what string) op {
+		t.Helper()
+		select {
+		case o := <-x.ops:
+			return o
+		// NOTE: a bound on a failing run alone: the reclaimer sends each reclaim's first op at once.
+		case <-time.After(10 * time.Second):
+			t.Fatalf("the reclaimer never asked the writer for %s", what)
+			return op{}
+		}
+	}
+	next("first|x's batch").done <- refused
+	o := next("second|x's batch") // the reclaimer is sequential: first|x's failure is logged by now
+	cancel()
+	o.done <- refused
+	select {
+	case <-done:
+	// NOTE: a bound on a failing run alone: the reclaimer returns once its context has ended.
+	case <-time.After(10 * time.Second):
+		t.Fatal("the reclaimer did not return once its context ended")
+	}
+	s := log.String()
+	if strings.Count(s, "model.reclaim.failed") != 1 || !strings.Contains(s, "first|x") {
+		t.Errorf("want first|x's failure logged once:\n%s", s)
+	}
+	if strings.Contains(s, "second|x") {
+		t.Errorf("a reclaim refused after the context ended was logged:\n%s", s)
+	}
 }

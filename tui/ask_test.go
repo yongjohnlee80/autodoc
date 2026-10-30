@@ -289,3 +289,26 @@ func TestAQuestionAskedWhenFreeWaitsAndYields(t *testing.T) {
 		t.Fatalf("callbacks %v, want %v", got, want)
 	}
 }
+
+// TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce: once the host has stopped, a question
+// asked to wait for a free card is neither shown nor kept waiting: its OnCancel runs at once, and
+// once only, and its OnYes never; one without an OnCancel is dropped as quietly.
+func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
+	s := newScripted("kb")
+	a := newAsker(s)
+	a.Stopped()
+	cancel := 0
+	a.askWhenFree(Question{Title: "late", OnCancel: func() { cancel++ }, OnYes: func() { t.Error("a stopped host's question accepted") }})
+	if cancel != 1 {
+		t.Fatalf("asked when free of a stopped host: cancelled %d times, want once at once", cancel)
+	}
+	a.askWhenFree(Question{Title: "quiet"}) // no OnCancel: nothing to run, nothing to panic on
+	a.accepted()
+	a.Stopped()
+	if _, set := s.set["App.askTitle"]; set || len(s.opened) != 0 || a.pending || len(a.waiting) != 0 {
+		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.opened, a.pending, len(a.waiting))
+	}
+	if cancel != 1 {
+		t.Fatalf("the stopped host's question cancelled %d times, want once", cancel)
+	}
+}
