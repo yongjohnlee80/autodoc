@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -28,8 +30,14 @@ type Registered struct {
 }
 
 // argsDigest is the digest of a registration's immutable arguments: a replay must match them.
+// Each field is length-prefixed, so no two argument tuples encode alike, whatever bytes they hold.
 func argsDigest(r Registration) []byte {
-	return sha(r.Codename + "\x00" + r.Kind + "\x00" + r.Workspace)
+	h := sha256.New()
+	for _, f := range []string{r.Codename, r.Kind, r.Workspace} {
+		_ = binary.Write(h, binary.BigEndian, uint64(len(f)))
+		h.Write([]byte(f))
+	}
+	return h.Sum(nil)
 }
 
 // newID is a fresh random id: 16 bytes, hex.
@@ -60,8 +68,9 @@ func checkRegistration(r Registration) error {
 //   - a session for (scope, epoch, instance) exists: a replay, answered with the same session, only
 //     if its secret and immutable arguments match and it has not ended; else ErrInstanceReused;
 //   - otherwise the scope's active profile for the codename is found or made; a live session of
-//     it is ErrCodenameBusy; the new session is recorded with its wake row, pending_gen seeded
-//     when the profile already has mail it may receive.
+//     it is ErrCodenameBusy; a profile found takes the new session's kind, since the codename may
+//     come back under another CLI; the new session is recorded with its wake row, pending_gen
+//     seeded when the profile already has mail it may receive.
 //
 // A new epoch is a new namespace for instances: a crash successor's agent-1 never meets the old
 // one's (§R22). The host keeps the secret and writes the session context only after this succeeds.
@@ -104,6 +113,12 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 			return err
 		} else if live {
 			return ErrCodenameBusy
+		}
+		if p.Kind != r.Kind {
+			p.Kind = r.Kind
+			if err := tx.PutProfile(p); err != nil {
+				return err
+			}
 		}
 		id, err := newID()
 		if err != nil {
