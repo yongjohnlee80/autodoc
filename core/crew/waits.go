@@ -62,6 +62,21 @@ func (l *LongPolls) Enter(conn any) (leave func(), err error) {
 	}, nil
 }
 
+// Held is how many long-polls are in flight, over every connection: what a status, or a test
+// waiting for its calls to be admitted, reads.
+func (l *LongPolls) Held() int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, c := range l.held {
+		n += c
+	}
+	return n
+}
+
 // Watch is a channel that hears every change a long-poll may be waiting for: the scheduler's pokes,
 // which every committed write that changed a wake row sends (Signals.Wake). Register it before
 // checking, so a change committed in between still signals; stop unregisters it. Before the
