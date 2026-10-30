@@ -13,7 +13,9 @@ import (
 // unhandled mail. Once this window holds its own scope, it asks the daemon for such scopes
 // (crew.orphans) and offers each, one at a time: Adopt moves its mail under this window's agents
 // (crew.adopt), Discard fails it and tells each sender (crew.discard), Keep leaves it for its window
-// or a later one. It is asked once a run, at the first claim, never on a reconnect.
+// or a later one. It is asked once a run, at the first claim, never on a reconnect. An offer waits
+// for the question card to be free (askWhenFree): it never displaces a question the user is
+// answering, and one that displaces it puts it back to wait.
 
 // crewOrphan is one orphan scope, as the offer says it.
 type crewOrphan struct {
@@ -56,37 +58,32 @@ func (h *crewHost) offerOrphans() {
 			}
 			return
 		}
-		h.offerNext(orphans)
+		for _, o := range orphans {
+			h.offer(o)
+		}
 	})
 }
 
-// offerNext offers orphans[0], then the rest once it is answered.
-func (h *crewHost) offerNext(orphans []crewOrphan) {
-	if len(orphans) == 0 {
-		return
-	}
-	o, rest := orphans[0], orphans[1:]
-	next := func() { h.offerNext(rest) }
-	h.c.Ask(Question{
+// offer offers o once the card is free.
+func (h *crewHost) offer(o crewOrphan) {
+	h.c.AskWhenFree(Question{
 		Title: "Mail for a window that is gone",
 		Text: fmt.Sprintf("%d unhandled message(s) wait for %s, agents of a window that is gone (%s). "+
 			"Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; "+
 			"Keep leaves them for that window, or a later one.", o.unread, strings.Join(o.profiles, ", "), o.scope),
-		Yes:      "&Adopt",
-		No:       "&Keep",
-		Other:    "&Discard",
-		OnYes:    func() { h.settleOrphan(o, "crew.adopt", next) },
-		OnOther:  func() { h.settleOrphan(o, "crew.discard", next) },
-		OnCancel: next,
+		Yes:     "&Adopt",
+		No:      "&Keep",
+		Other:   "&Discard",
+		OnYes:   func() { h.settleOrphan(o, "crew.adopt") },
+		OnOther: func() { h.settleOrphan(o, "crew.discard") },
+		// Keep: no OnCancel, nothing done
 	})
 }
 
-// settleOrphan adopts or discards o (verb) under the scope the window holds, says how it went, and
-// then offers the next.
-func (h *crewHost) settleOrphan(o crewOrphan, verb string, next func()) {
+// settleOrphan adopts or discards o (verb) under the scope the window holds, and says how it went.
+func (h *crewHost) settleOrphan(o crewOrphan, verb string) {
 	scope, epoch, ok := h.held()
 	if !ok {
-		next()
 		return
 	}
 	h.c.Go(func(ctx context.Context) any {
@@ -102,6 +99,5 @@ func (h *crewHost) settleOrphan(o crewOrphan, verb string, next func()) {
 		default:
 			h.c.Notify(fmt.Sprintf("Discarded %d message(s) for %s; each sender is told.", o.unread, strings.Join(o.profiles, ", ")))
 		}
-		next()
 	})
 }
