@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"reflect"
@@ -206,5 +207,40 @@ func TestARootedMapSeeksItsFrontiersLinks(t *testing.T) {
 	}
 	if len(seen) != 2 {
 		t.Errorf("the rooted map's link statements sought %v; want both a source and a destination seek", seen)
+	}
+}
+
+// failingSQL fails every statement whose SQL holds match, with errGraphRead.
+type failingSQL struct {
+	dao.NopHook
+	match string
+}
+
+var errGraphRead = errors.New("the store failed")
+
+func (f failingSQL) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
+	if strings.Contains(q.SQL, f.match) {
+		return errGraphRead
+	}
+	return nil
+}
+
+// TestARootedMapWhoseReadFailsSaysSo: a rooted map whose frontier, link, document, tag or
+// supersession read fails returns that failure, never a neighbourhood with a part missing.
+func TestARootedMapWhoseReadFailsSaysSo(t *testing.T) {
+	e := newEnv(t, options{})
+	e.put("a.md", "---\ntags: [x]\nsupersedes: [b.md]\n---\n[[b]]\n", "b.md", "[[c]]", "c.md", "end")
+	for _, c := range []struct{ name, match string }{
+		{"the frontier's outgoing links", `SELECT "link"."dst_doc" FROM "link"`},
+		{"the frontier's incoming links", `SELECT "link"."src_doc" FROM "link"`},
+		{"the links among the reached", `SELECT "link"."src_doc", "link"."dst_doc", "link"."kind" FROM "link"`},
+		{"the documents reached", `"document"."id" IN (`},
+		{"the supersession links", `"link"."kind" IN (`},
+		{"the tags", `FROM "doc_tag"`},
+	} {
+		s := &Store{db: e.db, sc: e.db.Workspace(e.ws).WithHooks(failingSQL{match: c.match})}
+		if _, err := s.Map(context.Background(), MapOpts{Root: "a.md", Depth: 2}); !errors.Is(err, errGraphRead) {
+			t.Errorf("%s failed: the map said %v, want the failure", c.name, err)
+		}
 	}
 }
