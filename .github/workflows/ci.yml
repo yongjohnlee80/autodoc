@@ -137,7 +137,7 @@ jobs:
     env:
       # auto-core's release the suites were verified against; bump deliberately, with the suites
       # run at the new pin.
-      AUTO_CORE_SHA: "e1bef96"  # v0.5.2
+      AUTO_CORE_SHA: "6f25b11"  # v0.5.2 (the commit, refs/tags/v0.5.2^{})
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
