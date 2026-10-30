@@ -558,6 +558,77 @@ func Run(t *testing.T, h Harness) {
 			}
 		}
 	})
+
+	t.Run("list: presence and reachability", func(t *testing.T) {
+		clock, enders := NewClock(), &Enders{}
+		store := h.New(t, clock.Now)
+		started := clock.Now()
+		m := crew.New(store, crew.WithSessionEnder(enders), crew.WithUID(1000), crew.WithStarted(started))
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rv, rj := reg(e, "vision", "agent-2"), reg(e, "jarvis", "agent-1")
+		vision, err := m.Register(ctx, rv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		jarvis, err := m.Register(ctx, rj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.SetEndpoint(ctx, crew.Credential(jarvis.Session, rj.Secret), "claude",
+			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"1","session":"c"}`); err != nil {
+			t.Fatal(err)
+		}
+		list := func() []crew.Entry {
+			t.Helper()
+			l, err := m.List(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return l
+		}
+		want := []crew.Entry{
+			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true},
+			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false},
+		}
+		if got := list(); !slices.Equal(got, want) {
+			t.Fatalf("list: %+v\nwant %+v", got, want)
+		}
+		clock.Advance(60 * time.Second) // the daemon is 60 s old; renew, then let the host lapse
+		if err := m.Renew(ctx, scope, "run-a", e); err != nil {
+			t.Fatal(err)
+		}
+		clock.Advance(91 * time.Second)
+		if got := list(); got[0].Presence != crew.PresenceOffline {
+			t.Fatalf("a lapsed host's agent: %s, want offline", got[0].Presence)
+		}
+		young := crew.New(store, crew.WithSessionEnder(enders), crew.WithStarted(clock.Now().Add(-10*time.Second)))
+		if got, err := young.List(ctx); err != nil || got[0].Presence != crew.PresenceReconnecting {
+			t.Fatalf("a lapsed host on a daemon 10 s old: %+v, %v; want reconnecting", got, err)
+		}
+		if err := store.Write(ctx, func(tx crew.Tx) error {
+			w, _, err := tx.Wake(jarvis.Session)
+			if err != nil {
+				return err
+			}
+			w.Failures = 5
+			return tx.PutWake(w)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got := list(); got[0].Reachable {
+			t.Fatal("an agent after 5 failed wakes still reads reachable")
+		}
+		clock.Advance(-91 * time.Second) // the host back within its lease, to exit cleanly
+		if err := m.Exit(ctx, scope, "run-a", e, vision.Session, crew.EndedExit); err != nil {
+			t.Fatal(err)
+		}
+		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable {
+			t.Fatalf("an exited agent: %+v, want ended and unreachable", got[1])
+		}
+	})
 }
 
 // wakeOf is session's wake row.

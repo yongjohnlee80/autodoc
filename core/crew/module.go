@@ -116,6 +116,9 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p whoamiParams) (Identity, error) {
 				return m.Whoami(ctx, p.Credential, p.Store)
 			}),
+		module.Handle(module.Contract{Verb: "crew.list", Since: protocol, Audience: module.AudienceAgent,
+			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable}]", Doc: "The addressbook."},
+			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),
 		module.Handle(host("crew.exit", "{}",
 			"A session ended; its bound deliveries fail (session_ended).", CodeStaleEpoch, CodeBadCredential),
 			func(ctx context.Context, p exitParams) (struct{}, error) {
