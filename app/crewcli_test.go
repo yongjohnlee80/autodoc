@@ -199,6 +199,20 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 	if sendKey([]string{"a"}, "", "s", "b", 0) == sendKey([]string{"a"}, "", "sb", "", 0) {
 		t.Error("two sends whose fields shift across a boundary have one key")
 	}
+	for ttl, want := range map[time.Duration]int64{0: 0, -time.Second: 0, time.Nanosecond: 1, 500 * time.Millisecond: 1,
+		time.Second: 1, 1500 * time.Millisecond: 2, time.Hour: 3600} {
+		if got := ttlSeconds(ttl); got != want {
+			t.Errorf("ttlSeconds(%v) = %d, want %d: a positive ttl never rounds to 0, which means never", ttl, got, want)
+		}
+	}
+	sendFS := flag.NewFlagSet("t", flag.ContinueOnError)
+	crewCommands["mail send"].flags(sendFS)
+	if err := sendFS.Parse([]string{"--ttl", "500ms", "--body", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, params, _, err := crewCommands["mail send"].call(sessionContext{Credential: "c"}, sendFS, []string{"gold"}, nil); err != nil || params[6] != int64(1) {
+		t.Fatalf("mail send --ttl 500ms: params %v, %v; want ttl 1 second", params, err)
+	}
 	if sendKey([]string{"a"}, "", "s", "b", time.Hour) == sendKey([]string{"a"}, "", "s", "b", 0) {
 		t.Error("a ttl changes nothing in the key")
 	}

@@ -170,7 +170,7 @@ var crewCommands = map[string]crewCommand{
 		flags: func(fs *flag.FlagSet) {
 			bodyFlags(fs)
 			fs.String("kind", "", "message (the default) or request")
-			fs.Duration("ttl", 0, "how long until it expires (0 never)")
+			fs.Duration("ttl", 0, "how long until it expires, rounded up to whole seconds (0 never)")
 			fs.String("key", "", "the idempotency key (default: the content's digest, so an exact repeat is one send)")
 		},
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
@@ -191,7 +191,7 @@ var crewCommands = map[string]crewCommand{
 			for i, a := range args {
 				to[i] = a
 			}
-			return "mail.send", []any{c.Credential, to, body, key, kind, subject, int64(ttl / time.Second)}, nil, nil
+			return "mail.send", []any{c.Credential, to, body, key, kind, subject, ttlSeconds(ttl)}, nil, nil
 		}},
 }
 
@@ -226,6 +226,15 @@ func strFlag(fs *flag.FlagSet, name string) string { return fs.Lookup(name).Valu
 
 func intFlag(fs *flag.FlagSet, name string) int {
 	return fs.Lookup(name).Value.(flag.Getter).Get().(int)
+}
+
+// ttlSeconds is a --ttl as mail.send's whole seconds, rounded up: a sub-second ttl is one second,
+// never 0, which would mean the message never expires.
+func ttlSeconds(ttl time.Duration) int64 {
+	if ttl <= 0 {
+		return 0
+	}
+	return int64((ttl + time.Second - 1) / time.Second)
 }
 
 // sendKey is a send's default idempotency key: its content's digest, so the same command run
