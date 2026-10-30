@@ -343,6 +343,14 @@
         <source>yes</source>
         <translation>是</translation>
     </message>
+    <message id="autodoc.cmd.agent.bell">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>当代理向你提问或等待你时响铃</translation>
+    </message>
+    <message id="autodoc.cmd.agent.bell.help">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>当代理向你提问或等待你时响铃</translation>
+    </message>
     <message id="autodoc.cmd.agent.setup">
         <source>set up an agent</source>
         <translation>设置智能体</translation>
@@ -1914,6 +1922,26 @@
     <message id="autodoc.dialog.registryBrowse.the_registry_plugins_and_lua_packages">
         <source>the registry: plugins and Lua packages</source>
         <translation>注册中心：插件和 Lua 包</translation>
+    </message>
+    <message id="autodoc.dialog.reply.cancel">
+        <source>&amp;Cancel</source>
+        <translation>取消(&amp;C)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.dismiss">
+        <source>&amp;Dismiss</source>
+        <translation>驳回(&amp;D)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.send">
+        <source>&amp;Send</source>
+        <translation>发送(&amp;S)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.tab_reaches_the_buttons">
+        <source>Enter breaks the line; Tab reaches the buttons.</source>
+        <translation>Enter 换行；Tab 移到按钮。</translation>
+    </message>
+    <message id="autodoc.dialog.reply.your_answer">
+        <source>Your answer</source>
+        <translation>你的回答</translation>
     </message>
     <message id="autodoc.dialog.searchPicker.lexical">
         <source>Lexical</source>

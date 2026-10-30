@@ -115,6 +115,8 @@ type prefs struct {
 	// termPanelKeys: Ctrl+h/j/k/l move between panels from a terminal's or agent's input mode too,
 	// kept from their programs (terminal.go); on by default
 	termPanelKeys bool
+	// agentBell: a crew agent's decision request or permission prompt rings (crewbell.go)
+	agentBell bool
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string

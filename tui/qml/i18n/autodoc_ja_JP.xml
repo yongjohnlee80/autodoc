@@ -343,6 +343,14 @@
         <source>yes</source>
         <translation>はい</translation>
     </message>
+    <message id="autodoc.cmd.agent.bell">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>エージェントが尋ねたり待っていたりするときにベルを鳴らす</translation>
+    </message>
+    <message id="autodoc.cmd.agent.bell.help">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>エージェントが尋ねたり待っていたりするときにベルを鳴らす</translation>
+    </message>
     <message id="autodoc.cmd.agent.setup">
         <source>set up an agent</source>
         <translation>エージェントを設定</translation>
@@ -1914,6 +1922,26 @@
     <message id="autodoc.dialog.registryBrowse.the_registry_plugins_and_lua_packages">
         <source>the registry: plugins and Lua packages</source>
         <translation>レジストリ: プラグインと Lua パッケージ</translation>
+    </message>
+    <message id="autodoc.dialog.reply.cancel">
+        <source>&amp;Cancel</source>
+        <translation>キャンセル(&amp;c)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.dismiss">
+        <source>&amp;Dismiss</source>
+        <translation>却下(&amp;d)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.send">
+        <source>&amp;Send</source>
+        <translation>送信(&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.tab_reaches_the_buttons">
+        <source>Enter breaks the line; Tab reaches the buttons.</source>
+        <translation>Enter で改行、Tab でボタンへ移動します。</translation>
+    </message>
+    <message id="autodoc.dialog.reply.your_answer">
+        <source>Your answer</source>
+        <translation>あなたの回答</translation>
     </message>
     <message id="autodoc.dialog.searchPicker.lexical">
         <source>Lexical</source>

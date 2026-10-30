@@ -343,6 +343,14 @@
         <source>yes</source>
         <translation>sim</translation>
     </message>
+    <message id="autodoc.cmd.agent.bell">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>tocar um sino quando um agente perguntar ou esperar por você</translation>
+    </message>
+    <message id="autodoc.cmd.agent.bell.help">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>tocar um sino quando um agente perguntar ou esperar por você</translation>
+    </message>
     <message id="autodoc.cmd.agent.setup">
         <source>set up an agent</source>
         <translation>configurar um agente</translation>
@@ -1914,6 +1922,26 @@
     <message id="autodoc.dialog.registryBrowse.the_registry_plugins_and_lua_packages">
         <source>the registry: plugins and Lua packages</source>
         <translation>o registro: plugins e pacotes Lua</translation>
+    </message>
+    <message id="autodoc.dialog.reply.cancel">
+        <source>&amp;Cancel</source>
+        <translation>&amp;Cancelar</translation>
+    </message>
+    <message id="autodoc.dialog.reply.dismiss">
+        <source>&amp;Dismiss</source>
+        <translation>&amp;Dispensar</translation>
+    </message>
+    <message id="autodoc.dialog.reply.send">
+        <source>&amp;Send</source>
+        <translation>Enviar (&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.tab_reaches_the_buttons">
+        <source>Enter breaks the line; Tab reaches the buttons.</source>
+        <translation>Enter quebra a linha; Tab chega aos botões.</translation>
+    </message>
+    <message id="autodoc.dialog.reply.your_answer">
+        <source>Your answer</source>
+        <translation>Sua resposta</translation>
     </message>
     <message id="autodoc.dialog.searchPicker.lexical">
         <source>Lexical</source>

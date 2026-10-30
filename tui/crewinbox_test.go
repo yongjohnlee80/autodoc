@@ -3,11 +3,15 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 )
 
 // inboxWindow is a window's crewInboxCore over a scripted daemon: each inbox.watch takes the next
@@ -26,17 +30,34 @@ type inboxWindow struct {
 	ended  map[string]string // the ended toasts' last messages, by id
 	raised []string          // the sessions raise was asked for
 	here   map[string]bool   // the sessions whose agents are this window's
+	set    map[string]any    // the state set
+	prefs  prefs             // the preferences, as SetPref leaves them
+	bells  int               // the rings
+	opened []string          // the dialogs opened, in order
+	closed []string          // the dialogs closed, in order
+	// verbs is each other verb called, its name then its params; verbAnswers the answers they take,
+	// by verb, in order (an error, or nil for success); none left is success
+	verbs       [][]any
+	verbAnswers map[string][]error
 }
 
 func newInboxWindow() *inboxWindow {
-	return &inboxWindow{shown: map[string]string{}, clicks: map[string]func(){}, ended: map[string]string{}, here: map[string]bool{}}
+	return &inboxWindow{shown: map[string]string{}, clicks: map[string]func(){}, ended: map[string]string{}, here: map[string]bool{},
+		set: map[string]any{}, verbAnswers: map[string][]error{}}
 }
 
 // Call answers inbox.watch from the script. A next page's answer echoes the cursor it was asked
 // at, as the daemon's does (inbox.Manager.snapshotPage), whatever the script says.
 func (w *inboxWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
 	if verb != "inbox.watch" {
-		return nil, errors.New("no verb " + verb)
+		w.verbs = append(w.verbs, append([]any{verb}, p...))
+		if as := w.verbAnswers[verb]; len(as) > 0 {
+			w.verbAnswers[verb] = as[1:]
+			if as[0] != nil {
+				return nil, as[0]
+			}
+		}
+		return map[string]any{}, nil
 	}
 	w.calls = append(w.calls, p)
 	if w.block != nil {
@@ -73,6 +94,16 @@ func (w *inboxWindow) NotifyOngoingClick(id, msg string, onClick func()) {
 	w.shown[id], w.clicks[id] = msg, onClick
 }
 func (w *inboxWindow) NotifyDone(id, msg string) { delete(w.shown, id); w.ended[id] = msg }
+func (w *inboxWindow) Set(key string, v any)     { w.set[key] = v }
+func (w *inboxWindow) Prefs() prefs              { return w.prefs }
+func (w *inboxWindow) Bell()                     { w.bells++ }
+func (w *inboxWindow) SetPref(name, value string) {
+	if name == prefAgentBell {
+		w.prefs.agentBell = value == "true"
+	}
+}
+func (w *inboxWindow) Open(id string)  { w.opened = append(w.opened, id) }
+func (w *inboxWindow) Close(id string) { w.closed = append(w.closed, id) }
 func (w *inboxWindow) raise(session string) bool {
 	w.raised = append(w.raised, session)
 	return w.here[session]
@@ -102,7 +133,8 @@ func changes(cursor int64, kinds ...string) map[string]any {
 }
 
 func request(id, from, subject, session string) map[string]any {
-	return map[string]any{"message": id, "kind": "request", "from": from, "subject": subject, "session": session, "state": "open"}
+	return map[string]any{"message": id, "kind": "request", "from": from, "subject": subject, "session": session, "state": "open",
+		"body": "the body of " + subject}
 }
 
 func report(id, from, subject string) map[string]any {
@@ -170,24 +202,31 @@ func TestASnapshotIsReadToItsLastPage(t *testing.T) {
 	}
 }
 
-// TestAClickAndAFocusRaiseTheAgent: a toast's click raises the agent when it is this window's, and
-// says where to answer when it isn't; a focus change raises the agent it names.
-func TestAClickAndAFocusRaiseTheAgent(t *testing.T) {
+// TestAnAttentionClickShowsItsAgent: an attention's click raises its agent when it is this
+// window's, and else asks the window that shows it to (inbox.focus), saying so; a focus change
+// raises the agent it names.
+func TestAnAttentionClickShowsItsAgent(t *testing.T) {
 	w := newInboxWindow()
 	w.here["s1"] = true
-	w.answers = []any{
-		snapshot(3, "", []any{request("r1", "gold", "here", "s1"), request("r2", "jarvis", "elsewhere", "s2")}, nil),
-		changes(4, "focus"),
-	}
+	here := map[string]any{"session": "s1", "codename": "gold", "kind": "permission", "text": "edit?"}
+	elsewhere := map[string]any{"session": "s2", "codename": "jarvis", "kind": "permission", "text": "run?"}
+	w.answers = []any{snapshot(3, "", nil, []any{here, elsewhere}), changes(4, "focus")}
 	x := newCrewInbox(w, w.raise)
 	x.Connected()
 	w.step(t)
-	w.clicks["crew:r1"]()
-	w.clicks["crew:r2"]()
-	if len(w.raised) != 2 || len(w.notes) != 1 || !strings.Contains(w.notes[0], "another window") {
-		t.Fatalf("clicks: raised %v, notes %v; want both asked, one saying the agent is elsewhere", w.raised, w.notes)
+	w.clicks["crew-attention:s1"]()
+	w.clicks["crew-attention:s2"]()
+	if !slices.Equal(w.raised, []string{"s1", "s2"}) || len(w.pending) != 2 {
+		t.Fatalf("clicks: raised %v, %d in flight; want both asked here, one focus call for s2", w.raised, len(w.pending))
 	}
-	w.step(t)
+	w.step(t) // the next watch
+	w.step(t) // the focus call
+	if len(w.verbs) != 1 || w.verbs[0][0] != "inbox.focus" || w.verbs[0][1] != "s2" {
+		t.Fatalf("calls %v; want inbox.focus for s2 alone", w.verbs)
+	}
+	if len(w.notes) != 1 || !strings.Contains(w.notes[0], "another window") {
+		t.Fatalf("notes %v; want one saying jarvis's window shows it", w.notes)
+	}
 	if w.raised[len(w.raised)-1] != "s1" {
 		t.Fatalf("a focus change raised %v, want s1", w.raised)
 	}
@@ -327,5 +366,204 @@ func TestAnEmptyJournalClosesWhatWasShown(t *testing.T) {
 	w.step(t)
 	if len(w.shown) != 0 || w.ended["crew:r1"] == "" {
 		t.Fatalf("after an empty journal: shown %v, ended %v; want the old request's toast ended", w.shown, w.ended)
+	}
+}
+
+// openOn shows a snapshot holding request r1 (gold's) and clicks its toast: the reply dialog opens
+// on it.
+func openOn(t *testing.T) (*inboxWindow, *crewInbox) {
+	t.Helper()
+	w := newInboxWindow()
+	w.answers = []any{snapshot(1, "", []any{request("r1", "gold", "which db?", "s1")}, nil)}
+	x := newCrewInbox(w, w.raise)
+	x.Connected()
+	w.step(t)
+	w.clicks["crew:r1"]()
+	if !slices.Equal(w.opened, []string{crewReplyDialog}) || w.set["App.replyTitle"] != "gold asks: which db?" ||
+		w.set["App.replyText"] != "the body of which db?" {
+		t.Fatalf("the click: opened %v, state %v; want the reply dialog on gold's request", w.opened, w.set)
+	}
+	return w, x
+}
+
+// TestARequestsClickOpensItsReply (§4.8): a request's toast opens the reply dialog on it, wherever
+// its agent runs; Send is inbox.reply with the request, the body and a key of the two, and says
+// it was sent.
+func TestARequestsClickOpensItsReply(t *testing.T) {
+	w, x := openOn(t)
+	x.replySend("postgres")
+	w.step(t) // the next watch
+	w.step(t) // the reply
+	want := []any{"inbox.reply", "r1", "postgres", replyKey("r1", "postgres")}
+	if len(w.verbs) != 1 || !slices.Equal(w.verbs[0], want) {
+		t.Fatalf("calls %v, want %v", w.verbs, want)
+	}
+	if len(w.notes) != 1 || !strings.Contains(w.notes[0], "Replied to gold") {
+		t.Fatalf("notes %v", w.notes)
+	}
+	if replyKey("r1", "postgres") == replyKey("r1", "postgres ") || replyKey("r1", "x") == replyKey("r2", "x") {
+		t.Fatal("a key does not follow its request and body")
+	}
+}
+
+// TestALostReplyIsSentAgainAsTheSame: a reply whose answer was lost is kept as the request's draft;
+// the dialog opens on it again, and sending it again sends the same key, which the daemon answers
+// as the first reply.
+func TestALostReplyIsSentAgainAsTheSame(t *testing.T) {
+	w, x := openOn(t)
+	w.verbAnswers["inbox.reply"] = []error{io.ErrUnexpectedEOF}
+	x.replySend("postgres")
+	w.step(t)
+	w.step(t)
+	if len(w.notes) != 1 || !strings.Contains(w.notes[0], "was not sent") {
+		t.Fatalf("notes %v", w.notes)
+	}
+	w.clicks["crew:r1"]()
+	if w.set["App.replyDraft"] != "postgres" {
+		t.Fatalf("the dialog opened again on %q, want the unsent reply", w.set["App.replyDraft"])
+	}
+	x.replySend("postgres")
+	w.step(t)
+	if len(w.verbs) != 2 || w.verbs[1][3] != w.verbs[0][3] {
+		t.Fatalf("calls %v; want the same key sent again", w.verbs)
+	}
+	if len(x.drafts) != 0 {
+		t.Fatalf("drafts %v after the reply was sent", x.drafts)
+	}
+}
+
+// TestAReplyToAClosedRequestIsNotKept: a request answered, dismissed or expired first is said so,
+// and its reply not kept as a draft; Dismiss is inbox.dismiss.
+func TestAReplyToAClosedRequestIsNotKept(t *testing.T) {
+	w, x := openOn(t)
+	w.verbAnswers["inbox.reply"] = []error{&golibrpc.Error{Code: inbox.CodeAlreadyAnswered, Message: "answered"}}
+	x.replySend("postgres")
+	w.step(t)
+	w.step(t)
+	if len(w.notes) != 1 || !strings.Contains(w.notes[0], "already answered") || len(x.drafts) != 0 {
+		t.Fatalf("notes %v, drafts %v", w.notes, x.drafts)
+	}
+	w.clicks["crew:r1"]()
+	x.replyDismiss()
+	w.step(t)
+	if len(w.verbs) != 2 || !slices.Equal(w.verbs[1], []any{"inbox.dismiss", "r1"}) {
+		t.Fatalf("calls %v, want the dismiss", w.verbs)
+	}
+}
+
+// TestTheReplyClosesWithItsRequest: the dialog open on a request that leaves the open set (answered
+// in another window) closes and says so, and its draft goes.
+func TestTheReplyClosesWithItsRequest(t *testing.T) {
+	w, x := openOn(t)
+	x.drafts["r1"] = "half a reply"
+	w.answers = append(w.answers, changes(2, "answered"), snapshot(2, "", nil, nil))
+	w.step(t) // the change
+	w.step(t) // the snapshot again
+	if !slices.Equal(w.closed, []string{crewReplyDialog}) || x.replying != "" || len(x.drafts) != 0 {
+		t.Fatalf("closed %v, replying %q, drafts %v; want the dialog closed and the draft gone", w.closed, x.replying, x.drafts)
+	}
+	if len(w.notes) != 1 || !strings.Contains(w.notes[0], "was answered") {
+		t.Fatalf("notes %v", w.notes)
+	}
+}
+
+// TestTheBellRingsOnceForWhatOpens (§4.8): with the bell on, a request or a permission prompt newly
+// open rings, one ring for all that open at once and none within 10 s of the last; a report, a
+// blocked agent, or what was already open rings nothing; with it off, nothing rings.
+func TestTheBellRingsOnceForWhatOpens(t *testing.T) {
+	w := newInboxWindow()
+	w.prefs.agentBell = true
+	permission := map[string]any{"session": "s9", "codename": "tifa", "kind": "permission", "text": "edit?"}
+	blocked := map[string]any{"session": "s8", "codename": "aerith", "kind": "blocked", "text": "stuck"}
+	r1, r2, r3 := request("r1", "gold", "one", "s1"), request("r2", "gold", "two", "s1"), request("r3", "gold", "three", "s1")
+	w.answers = []any{
+		snapshot(1, "", []any{r1, report("m1", "lector", "done")}, []any{permission}),
+		changes(2, "request"), snapshot(2, "", []any{r1, r2}, []any{permission}),
+		changes(3, "request"), snapshot(3, "", []any{r1, r2, r3}, []any{permission}),
+		changes(4, "attention"), snapshot(4, "", []any{r1, r2, r3}, []any{permission, blocked}),
+	}
+	x := newCrewInbox(w, w.raise)
+	at := time.Unix(1_000_000, 0)
+	x.now = func() time.Time { return at }
+	x.Connected()
+	w.step(t)
+	if w.bells != 1 {
+		t.Fatalf("a request, a permission and a report opening at once rang %d times, want once", w.bells)
+	}
+	at = at.Add(5 * time.Second)
+	w.step(t)
+	w.step(t)
+	if w.bells != 1 {
+		t.Fatalf("a request 5 s after the last ring rang: %d rings", w.bells)
+	}
+	at = at.Add(6 * time.Second)
+	w.step(t)
+	w.step(t)
+	if w.bells != 2 {
+		t.Fatalf("a request 11 s after the last ring: %d rings, want 2", w.bells)
+	}
+	at = at.Add(time.Minute)
+	w.step(t)
+	w.step(t)
+	if w.bells != 2 {
+		t.Fatalf("a blocked agent alone, nothing else new, rang: %d rings", w.bells)
+	}
+
+	off := newInboxWindow()
+	off.answers = []any{snapshot(1, "", []any{r1}, []any{permission})}
+	q := newCrewInbox(off, off.raise)
+	q.Connected()
+	off.step(t)
+	if off.bells != 0 {
+		t.Fatalf("the bell off rang %d times", off.bells)
+	}
+}
+
+// TestTheAgentBellToggles: :agent-bell turns the bell on, then off, and says which.
+func TestTheAgentBellToggles(t *testing.T) {
+	w := newInboxWindow()
+	x := newCrewInbox(w, w.raise)
+	cmds := x.Catalog()
+	if len(cmds) != 1 || cmds[0].Verb != "agent-bell" {
+		t.Fatalf("the catalog %+v, want :agent-bell", cmds)
+	}
+	_ = cmds[0].Run(Invocation{})
+	if !w.prefs.agentBell || len(w.notes) != 1 || !strings.Contains(w.notes[0], "is on") {
+		t.Fatalf("after one toggle: on %v, notes %v", w.prefs.agentBell, w.notes)
+	}
+	_ = cmds[0].Run(Invocation{})
+	if w.prefs.agentBell || !strings.Contains(w.notes[1], "is off") {
+		t.Fatalf("after two toggles: on %v, notes %v", w.prefs.agentBell, w.notes)
+	}
+}
+
+// TestTheBellPlayerFallsBack: the window's sound is canberra-gtk-play's by the sound's name, else
+// pw-play's or paplay's on the sound's file when it is there, else none.
+func TestTheBellPlayerFallsBack(t *testing.T) {
+	has := func(names ...string) func(string) (string, error) {
+		return func(n string) (string, error) {
+			if slices.Contains(names, n) {
+				return "/usr/bin/" + n, nil
+			}
+			return "", errors.New("not found")
+		}
+	}
+	yes, no := func(string) bool { return true }, func(string) bool { return false }
+	for name, c := range map[string]struct {
+		look   func(string) (string, error)
+		exists func(string) bool
+		want   string
+	}{
+		"canberra first":         {has("canberra-gtk-play", "pw-play", "paplay"), yes, "/usr/bin/canberra-gtk-play"},
+		"pw-play next":           {has("pw-play", "paplay"), yes, "/usr/bin/pw-play"},
+		"paplay last":            {has("paplay"), yes, "/usr/bin/paplay"},
+		"no sound file":          {has("pw-play", "paplay"), no, ""},
+		"canberra without files": {has("canberra-gtk-play"), no, "/usr/bin/canberra-gtk-play"},
+		"none":                   {has(), yes, ""},
+	} {
+		path, args, ok := bellPlayer(c.look, c.exists)
+		if path != c.want || ok != (c.want != "") {
+			t.Errorf("%s: %q %v %v, want %q", name, path, args, ok, c.want)
+		}
 	}
 }

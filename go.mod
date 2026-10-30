@@ -5,8 +5,8 @@ go 1.26.10
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.16
-	github.com/yongjohnlee80/golib/gui v0.3.8
+	github.com/yongjohnlee80/golib v0.8.18
+	github.com/yongjohnlee80/golib/gui v0.3.10
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.48.0
