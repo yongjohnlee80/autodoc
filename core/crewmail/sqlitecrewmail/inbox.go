@@ -8,6 +8,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // The inbox module's reads (inbox.Tx), over the same tables: the feed's journal, the human's
@@ -76,12 +77,12 @@ func (t *Tx) Raised() ([]crew.Attention, error) {
 }
 
 // openNonEvent is a delivery whose message is open and not a generated notice; aNotice, one whose
-// message is a generated notice.
+// message is a generated notice. Each is a correlated probe of the message by id (store.Correlated).
 var (
-	openNonEvent = dao.Raw(`EXISTS (SELECT 1 FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message"`+
-		` AND "mail_message"."state" = ? AND "mail_message"."kind" <> ?)`, mail.MessageOpen, mail.KindEvent)
-	aNotice = dao.Raw(`EXISTS (SELECT 1 FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message"`+
-		` AND "mail_message"."kind" = ?)`, mail.KindEvent)
+	openNonEvent = store.Correlated(false, "mail_message", "id", "mail_delivery", "message",
+		dao.Eq(`"mail_message"."state"`, mail.MessageOpen), dao.NotIn(`"mail_message"."kind"`, []any{mail.KindEvent}))
+	aNotice = store.Correlated(false, "mail_message", "id", "mail_delivery", "message",
+		dao.Eq(`"mail_message"."kind"`, mail.KindEvent))
 )
 
 func (t *Tx) OpenToUser(user string, limit int) ([]mail.Item, error) {
