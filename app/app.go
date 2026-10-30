@@ -152,6 +152,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
+	fs.Bool("kb-operations", false, "print the KB operations manual (KB_OPERATIONS.md) this build carries, as a KB's scaffold writes it, with no UI or daemon")
+	fs.Bool("tutorial", false, "print the tutorial page whose number is after the flags (autodoc --tutorial 6), or, with none, the list of its pages; in English, with no UI or daemon")
 	fs.Bool("check-theme", false, "validate the Theme file after the flags; report every problem, without a UI or daemon")
 	fs.Bool("check-kbtype", false, "validate the KB type repository in the directory after the flags (kbtype.toml and tree/, ADR 1792349867) and list what it creates, without a UI or daemon")
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
@@ -189,6 +191,13 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	}
 	modes := []mode{
 		{flag: "theme-reference", run: func(string) int { themeReference(stdout); return 0 }},
+		{flag: "kb-operations", run: func(string) int { kbOperations(stdout, b.version); return 0 }},
+		{flag: "tutorial", arg: true, run: func(page string) int {
+			if err := tutorial(stdout, page); err != nil {
+				return failed(err, 2)
+			}
+			return 0
+		}},
 		{flag: "check-theme", arg: true, run: func(file string) int {
 			if err := checkTheme(file, stdout); err != nil {
 				return failed(err, 1)
