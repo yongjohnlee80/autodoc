@@ -894,3 +894,34 @@ func (c *closeHost) RestoreKeyboardHome() error {
 	c.restored = append(c.restored, "home")
 	return nil
 }
+
+// The GlobeMap reads a map of several pages whole (ADR 1793321612 D3, §5.7): at two documents a
+// page, seven documents whose relations cross pages both ways (a's to g on the last page, g's and
+// e's back to earlier ones) lay out with every document and every link, the counts the one-reply
+// map has, in the panel's title.
+func TestTheGlobeMapReadsEveryPage(t *testing.T) {
+	was := globeMapPage
+	globeMapPage = 2
+	t.Cleanup(func() { globeMapPage = was })
+	rel := func(to string) string { return "---\nrelated: [" + to + "]\n---\nx\n" }
+	d := startDaemon(t, map[string][]string{"kb": {
+		"a.md", rel("g.md"), "b.md", rel("c.md"), "c.md", rel("f.md"), "d.md", "plain\n",
+		"e.md", rel("b.md"), "f.md", rel("d.md"), "g.md", rel("a.md"),
+	}})
+	r := windowed(t, d)
+	r.waitListed(t, 7)
+	var g *globeMap
+	onLoop(r, func() bool {
+		for _, f := range r.h.relationViews {
+			if f, ok := f.(*globeMap); ok {
+				g = f
+			}
+		}
+		core{r.h}.TogglePanel(globeMapPanelID)
+		return true
+	})
+	r.s.WaitForText(t, "kb · 7 documents, 6 links · relations")
+	if c := onLoop(r, func() [2]int { return g.counts }); c != [2]int{7, 6} {
+		t.Errorf("the GlobeMap counts %v, want 7 documents and 6 links", c)
+	}
+}

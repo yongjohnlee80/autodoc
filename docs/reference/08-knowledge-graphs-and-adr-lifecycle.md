@@ -180,6 +180,22 @@ Example `graph.neighborhood` output:
 
 When `kinds` is passed in `options`, `core/index/graph.go:50-61` pushes the `IN (...)` predicate directly into the SQLite query before constructing the `golib/graph` walk—ensuring a 2-hop neighborhood filtered to `["supersedes", "amends"]` never traverses an unrelated prose `wikilink` on the first hop.
 
+### The Whole Map, a Page at a Time (`graph.map`)
+
+`graph.map` without a `root` answers the whole workspace: every document (path, title, type, whether another supersedes it, its tags) and every resolved link among them. In one reply that fails once the map passes the transport's 4 MiB message limit, so from **protocol 36** an unrooted map comes a page at a time:
+
+- `opts.limit` documents a page (500 by default, at most 2,000), in path order, after `opts.after`: the previous page's `next`, an opaque cursor.
+- Each page carries the links **whose source is on it**, to any document. A link to a document of a later page names a node you haven't had yet: keep it until the map ends, then drop any whose document never came (removed while the map paged). Each link comes once.
+- `next` is `""` on the last page. A cursor is good only for the `kinds` it came from; another is invalid params.
+- A session that declared a protocol below 36 still gets the whole map in one reply, as before. A rooted map is always one reply.
+
+```sh
+autodoc --call graph.map '["kb", {"kinds": ["supersedes", "superseded_by"], "limit": 1000}]'
+autodoc --call graph.map '["kb", {"kinds": ["supersedes", "superseded_by"], "limit": 1000, "after": "<next>"}]'
+```
+
+The GUI's GlobeMap reads every page before it lays the map out; its title counts the documents read so far.
+
 ---
 
 ## 5. Superseded ADR Demotion (`demote_superseded`) and Graph Hygiene (`graph.unresolved`)
