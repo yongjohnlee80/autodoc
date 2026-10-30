@@ -190,10 +190,19 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	}
 	modes := []mode{
 		{flag: "theme-reference", run: func(string) int { themeReference(stdout); return 0 }},
-		{flag: "kb-operations", run: func(string) int { kbOperations(stdout, b.version); return 0 }},
+		{flag: "kb-operations", run: func(string) int {
+			if err := kbOperations(stdout, b.version); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
 		{flag: "tutorial", arg: true, run: func(page string) int {
 			if err := tutorial(stdout, page); err != nil {
-				return failed(err, 2)
+				code := 1
+				if errors.Is(err, errNoPage) {
+					code = 2
+				}
+				return failed(err, code)
 			}
 			return 0
 		}},
