@@ -216,9 +216,10 @@ func (m *Manager) ownerOf(rec StoreRecord) string {
 	return m.containing(rec.Path)
 }
 
-// owner is the root of the workspace the store id belongs to: ownerOf's. A store recorded before ADR
-// 1792132105, or outside every workspace then, has its containing workspace recorded now, so a
-// workspace added later never takes it.
+// owner is the root of the workspace the store id belongs to: ownerOf's. A store recorded before
+// stores belonged to their workspace (docs/decisions/todos.md#which-workspace-a-store-belongs-to),
+// or outside every workspace then, has its containing workspace recorded now, so a workspace added
+// later never takes it.
 func (m *Manager) owner(ctx context.Context, id string) (string, error) {
 	st, err := m.j.Settings(ctx)
 	if err != nil {

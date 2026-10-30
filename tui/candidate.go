@@ -56,8 +56,9 @@ func (c *candidate) toastID() string {
 	return "audit:" + c.key() + ":" + c.commit[:min(12, len(c.commit))]
 }
 
-// auditNote is the card's sentence about Audit…, above its buttons (rationale §R3), in English: the
-// audit task file's, as the agent reads it. A card shows it in the UI's language.
+// auditNote is the card's sentence about Audit…, above its buttons
+// (docs/decisions/plugins.md#audits-are-per-commit-and-advisory), in English: the audit task
+// file's, as the agent reads it. A card shows it in the UI's language.
 const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop the agent from running " +
 	"code or changing files: pick an agent you trust, and watch its tab."
 

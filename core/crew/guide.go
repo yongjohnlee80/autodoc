@@ -5,18 +5,20 @@ import (
 	"strings"
 )
 
-// Guide is the crew and mail part of an agent's guide (crew.guide, §4.11): both hosts insert
-// it, AutoDoc through writeAgentGuide and auto-agents through its instruction block. Protocol is the
-// protocol it describes, so a host can tell a stale guide.
+// Guide is the crew and mail part of an agent's guide (crew.guide,
+// docs/decisions/crew.md#the-agent-guide-and-commands): both hosts insert it, AutoDoc through
+// writeAgentGuide and auto-agents through its instruction block. Protocol is the protocol it
+// describes, so a host can tell a stale guide.
 type Guide struct {
 	Markdown string `json:"markdown"`
 	Protocol int64  `json:"protocol"`
 }
 
-// endpointSteps are each CLI's step 3, registering how it's woken (§4.7). Claude's SessionStart hook
-// and OpenCode's plugin register on their own; Codex registers its thread; agy runs a bridge from its
-// shell (only its tool shells carry its language server's address and token), which detaches,
-// registers, and registers again whenever the daemon restarts.
+// endpointSteps are each CLI's step 3, registering how it's woken
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). Claude's SessionStart hook and OpenCode's
+// plugin register on their own; Codex registers its thread; agy runs a bridge from its shell (only
+// its tool shells carry its language server's address and token), which detaches, registers, and
+// registers again whenever the daemon restarts.
 var endpointSteps = map[string]string{
 	"claude":   "Claude Code registers on its own, from its `SessionStart` hook. Nothing to run.",
 	"codex":    "Run once: `autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"`.",

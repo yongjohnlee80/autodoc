@@ -8,7 +8,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The module's limits (§4.6).
+// The module's limits (docs/decisions/crew.md#durable-mail).
 const (
 	MaxBody     = 64 << 10         // a body past it is ErrTooLarge
 	MaxSubject  = 4 << 10          // a subject past it is refused: it travels in the human's feed

@@ -8,10 +8,10 @@ import (
 )
 
 // WakeNotice is the only text any waker sends: constant, with no subject, no sender, nothing a peer
-// wrote (§4.7, rationale §R15).
+// wrote (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
 
-// The scheduler's bounds (§4.7).
+// The scheduler's bounds (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 const (
 	wakePermits    = 4                // calls out at once, whatever the sessions
 	wakeCallLimit  = 10 * time.Second // one waker call's deadline
@@ -20,7 +20,8 @@ const (
 )
 
 // ChangeReachability is the human feed's change when a session stops (or starts again) being
-// reachable by its waker (§4.7, §4.8): its ref is the session.
+// reachable by its waker (docs/decisions/crew.md#wakers-and-the-wake-scheduler,
+// docs/decisions/crew.md#the-human-inbox): its ref is the session.
 const ChangeReachability = "reachability"
 
 // failed counts one more consecutive failure of w and backs it off from now; the failure that
@@ -47,8 +48,9 @@ const (
 // ErrWakeUnknown is a waker's call whose outcome it can't tell: classified OutcomeUnknown.
 var ErrWakeUnknown = errors.New("crew: the wake's outcome is unknown")
 
-// Waker sends the notice through one CLI's own channel (§4.7): argv or a socket write, never a
-// shell string. Phase 3 brings one per CLI kind.
+// Waker sends the notice through one CLI's own channel
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): argv or a socket write, never a shell
+// string. Phase 3 brings one per CLI kind.
 type Waker interface {
 	Wake(ctx context.Context, ep Endpoint, notice string) error
 }
@@ -84,9 +86,10 @@ func (m *Manager) expire(tx Tx) error {
 	return m.ender.Expire(tx)
 }
 
-// RecoverRun is a daemon start's recovery (§4.7): every in_flight row an earlier run left has no
-// worker any more, so it goes idle with next_at = now, to be retried at once (a duplicate notice
-// names no mail). Then mail's expiry runs, so Due finds the start's work.
+// RecoverRun is a daemon start's recovery (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+// every in_flight row an earlier run left has no worker any more, so it goes idle with next_at =
+// now, to be retried at once (a duplicate notice names no mail). Then mail's expiry runs, so Due
+// finds the start's work.
 func (m *Manager) RecoverRun(ctx context.Context, run string) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		ws, err := tx.WakesInFlight()
@@ -139,10 +142,11 @@ func (m *Manager) sweep(ctx context.Context, kinds []string) ([]string, error) {
 }
 
 // Reserve takes session's idle → in_flight step as a compare-and-set, after mail's expiry, in one
-// write (§4.7): the row must still be due, its session live under its host's epoch, and an
-// endpoint registered of one of kinds (those the caller has wakers for: a session whose endpoint
-// no waker serves is watch-only, reached by crew.wait and the inbox, never reserved and never
-// failed). It answers the attempt's token and the endpoint it is for.
+// write (docs/decisions/crew.md#wakers-and-the-wake-scheduler): the row must still be due, its
+// session live under its host's epoch, and an endpoint registered of one of kinds (those the caller
+// has wakers for: a session whose endpoint no waker serves is watch-only, reached by crew.wait and
+// the inbox, never reserved and never failed). It answers the attempt's token and the endpoint it
+// is for.
 func (m *Manager) Reserve(ctx context.Context, session, run string, kinds []string) (string, Endpoint, bool, error) {
 	var tok string
 	var ep Endpoint
@@ -167,7 +171,7 @@ func (m *Manager) Reserve(ctx context.Context, session, run string, kinds []stri
 		}
 		e, has, err := tx.Endpoint(session)
 		if err != nil || !has {
-			return err // no endpoint: the host shows ✉ n instead (§4.7)
+			return err // no endpoint: the host shows ✉ n instead (docs/decisions/crew.md#wakers-and-the-wake-scheduler)
 		}
 		if !slices.Contains(kinds, e.Kind) {
 			return nil // no waker for its kind: watch-only
@@ -216,9 +220,10 @@ func (m *Manager) Abandon(ctx context.Context, session, token string) error {
 	})
 }
 
-// Outcome records an attempt's outcome, only while its token holds (§4.7's table): if the session
-// received meanwhile, the row is done; an accepted or unknown notice waits for a receive, at most
-// wakeUnanswered; a failure backs off. A late outcome, after a reset, matches nothing.
+// Outcome records an attempt's outcome, only while its token holds
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): if the session received meanwhile, the
+// row is done; an accepted or unknown notice waits for a receive, at most wakeUnanswered; a failure
+// backs off. A late outcome, after a reset, matches nothing.
 func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		w, found, err := tx.Wake(session)
@@ -242,9 +247,10 @@ func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome)
 	})
 }
 
-// Received is mail.receive's half of the wake (§4.7), in the receive's own write: the session has
-// seen everything pending, so announced_gen catches up, failures reset, and the deadline goes, so
-// new mail is reservable at once. An awaiting row is done; an in_flight one is left to its call,
+// Received is mail.receive's half of the wake
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler), in the receive's own write: the session
+// has seen everything pending, so announced_gen catches up, failures reset, and the deadline goes,
+// so new mail is reservable at once. An awaiting row is done; an in_flight one is left to its call,
 // whose outcome then finds announced_gen past its attempt.
 func (m *Manager) Received(tx Tx, session string) error {
 	w, found, err := tx.Wake(session)

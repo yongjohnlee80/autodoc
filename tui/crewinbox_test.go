@@ -155,9 +155,10 @@ func report(id, from, subject string) map[string]any {
 	return map[string]any{"message": id, "kind": "message", "from": from, "subject": subject, "state": "open"}
 }
 
-// TestTheToastsFollowTheOpenSet (§4.8): a snapshot's open request and raised attention show as
-// ongoing toasts and a report as one passing toast; a change that alters the set reads the snapshot
-// again, and a request no longer open ends its toast, the report never announced twice.
+// TestTheToastsFollowTheOpenSet (docs/decisions/crew.md#the-human-inbox): a snapshot's open request
+// and raised attention show as ongoing toasts and a report as one passing toast; a change that
+// alters the set reads the snapshot again, and a request no longer open ends its toast, the report
+// never announced twice.
 func TestTheToastsFollowTheOpenSet(t *testing.T) {
 	w := newInboxWindow()
 	attention := map[string]any{"session": "s9", "codename": "tifa", "kind": "permission", "text": "edit main.go?"}
@@ -400,9 +401,9 @@ func openOn(t *testing.T) (*inboxWindow, *crewInbox) {
 	return w, x
 }
 
-// TestARequestsClickOpensItsReply (§4.8): a request's toast opens the reply dialog on it, wherever
-// its agent runs; Send is inbox.reply with the request, the body and a key of the two, and says
-// it was sent.
+// TestARequestsClickOpensItsReply (docs/decisions/crew.md#the-human-inbox): a request's toast opens
+// the reply dialog on it, wherever its agent runs; Send is inbox.reply with the request, the body
+// and a key of the two, and says it was sent.
 func TestARequestsClickOpensItsReply(t *testing.T) {
 	w, x := openOn(t)
 	x.replySend("postgres")
@@ -481,9 +482,10 @@ func TestTheReplyClosesWithItsRequest(t *testing.T) {
 	}
 }
 
-// TestTheBellRingsOnceForWhatOpens (§4.8): with the bell on, a request or a permission prompt newly
-// open rings, one ring for all that open at once and none within 10 s of the last; a report, a
-// blocked agent, or what was already open rings nothing; with it off, nothing rings.
+// TestTheBellRingsOnceForWhatOpens (docs/decisions/crew.md#the-human-inbox): with the bell on, a
+// request or a permission prompt newly open rings, one ring for all that open at once and none
+// within 10 s of the last; a report, a blocked agent, or what was already open rings nothing; with
+// it off, nothing rings.
 func TestTheBellRingsOnceForWhatOpens(t *testing.T) {
 	w := newInboxWindow()
 	w.prefs.agentBell = true

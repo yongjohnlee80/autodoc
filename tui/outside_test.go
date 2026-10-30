@@ -96,7 +96,8 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 }
 
 // TestOpenFileInAWorkspacesRootOpensItThere: a file a workspace indexes opens as that workspace's,
-// entering it when it is not the one in use (§5.4).
+// entering it when it is not the one in use
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 	r, kb, notes, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
@@ -110,7 +111,7 @@ func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 
 // TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent: switching workspace keeps
 // it; the plugin feed sends workspace "" and its absolute path; Recent files lists it as in no
-// workspace and opens it again (§5.6).
+// workspace and opens it again (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
@@ -137,8 +138,8 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 }
 
 // TestNewFileInAnyFolder: Ctrl+N's save dialog creates a file in a folder that does not exist yet,
-// outside every workspace (".md" added); one named in a workspace's root is that workspace's
-// file; one that exists is left as it is (§5.2).
+// outside every workspace (".md" added); one named in a workspace's root is that workspace's file;
+// one that exists is left as it is (docs/decisions/editor.md#files-outside-every-workspace).
 func TestNewFileInAnyFolder(t *testing.T) {
 	r, kb, _, abs := runOutside(t)
 	fresh := filepath.Join(filepath.Dir(abs), "fresh", "idea")

@@ -17,11 +17,13 @@ import (
 // hook (a shell or two between them).
 const claudeAncestors = 8
 
-// claudeLocator is the calling Claude Code session's endpoint (§4.7), for `crew endpoint --claude`,
-// which its SessionStart hook runs: the inbox socket, the process holding it, that process's
-// reference, and the session's id. The session id is the hook's input (session_id, on stdin), else
-// $CLAUDE_CODE_SESSION_ID. The socket is $CLAUDE_CODE_MESSAGING_SOCKET when the hook has it (its pid
-// is the file's name), else the first ancestor of this process with a socket in Claude's folders.
+// claudeLocator is the calling Claude Code session's endpoint
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler), for `crew endpoint --claude`, which its
+// SessionStart hook runs: the inbox socket, the process holding it, that process's reference, and
+// the session's id. The session id is the hook's input (session_id, on stdin), else
+// $CLAUDE_CODE_SESSION_ID. The socket is $CLAUDE_CODE_MESSAGING_SOCKET when the hook has it (its
+// pid is the file's name), else the first ancestor of this process with a socket in Claude's
+// folders.
 func claudeLocator(stdin io.Reader, getenv func(string) string, uid int) (string, error) {
 	session := getenv("CLAUDE_CODE_SESSION_ID")
 	if stdin != nil {

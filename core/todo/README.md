@@ -69,8 +69,8 @@ tried again a day later.
 
 ## Variables
 
-A ref's `$NAME/…` resolves with the variables of the workspace (the KB) the store belongs to (ADR
-1792132105), the same from every route to the store, and the index resolves every other document of
+A ref's `$NAME/…` resolves with the variables of the workspace (the KB) the store belongs to
+([the decision](../../docs/decisions/todos.md#variables-belong-to-the-workspace)), the same from every route to the store, and the index resolves every other document of
 the workspace with the same ones (`EffectiveVars`, `AllEffectiveVars`).
 
 - **A store's workspace** is recorded when the store is: the deepest workspace containing it, kept

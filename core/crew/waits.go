@@ -23,9 +23,9 @@ const CodeLongPollsBusy int64 = -32064
 // ErrLongPollsBusy is a long-poll refused because its connection already holds MaxLongPolls.
 var ErrLongPollsBusy = errs.Sentinel(errs.ErrPrecondition, "crew: the connection holds its long-polls already")
 
-// MaxLongPolls is the long-polls one connection may hold at once (§4.6): a host holds crew.wait
-// and inbox.watch, an agent one mail.wait. A third is refused, so normal calls always keep the
-// connection's handler slots.
+// MaxLongPolls is the long-polls one connection may hold at once
+// (docs/decisions/crew.md#durable-mail): a host holds crew.wait and inbox.watch, an agent one
+// mail.wait. A third is refused, so normal calls always keep the connection's handler slots.
 const MaxLongPolls = 2
 
 // LongPolls counts each connection's long-polls in flight, across the modules that serve them,
@@ -110,12 +110,12 @@ type Waited struct {
 	TimedOut bool
 }
 
-// Wait is crew.wait (§4.4): one long-poll for a host's tier-3 sessions, answering as soon as any of
-// sessions (the host's own, live under epoch) has mail it may receive, unbound or bound to it, or at
-// wait (at most MaxWait). Each check is one write, which guards the host, runs mail's expiry and
-// reads each session's eligibility; between checks it holds no transaction, and it checks again
-// only when the wake signal fires or mail's next deadline passes (a lapsing lease makes mail
-// eligible again).
+// Wait is crew.wait (docs/decisions/crew.md#sessions-and-the-guard): one long-poll for a host's
+// tier-3 sessions, answering as soon as any of sessions (the host's own, live under epoch) has mail
+// it may receive, unbound or bound to it, or at wait (at most MaxWait). Each check is one write,
+// which guards the host, runs mail's expiry and reads each session's eligibility; between checks it
+// holds no transaction, and it checks again only when the wake signal fires or mail's next deadline
+// passes (a lapsing lease makes mail eligible again).
 func (m *Manager) Wait(ctx context.Context, scope, run string, epoch int64, sessions []string, wait time.Duration) (Waited, error) {
 	wait = min(max(wait, 0), MaxWait)
 	heard, stop := m.Watch() // before the check: a change committed in between is heard

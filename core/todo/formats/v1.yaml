@@ -1,5 +1,5 @@
-# Todo format v1: schema v1, the format a task file has always had, without automation, which ADR
-# 1791532020 removed. A task's `version:` picks this file. core/schema
+# Todo format v1: schema v1, the format a task file has always had, without automation, since removed
+# (docs/decisions/todos.md#a-versioned-format-without-automation). A task's `version:` picks this file. core/schema
 # checks fields, types, enums and required; core/todo's v1 rules check what a schema cannot say:
 # the timestamps' shape, which status carries which timestamp, and a file-safe id.
 version: 1

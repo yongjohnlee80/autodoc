@@ -227,10 +227,11 @@ func (pl *plugins) pluginCardKey(k string) {
 }
 
 // bindPluginLetter is the chooser's *: k becomes the plugin's letter, and Backspace removes it. A
-// letter another plugin has moves to this one, and the chooser says so (rationale §R2): every other
-// plugin the preferences give it loses it, so the preferences name one plugin per letter. One of the
-// chooser's own letters, or a key that is no letter or digit, is refused, saying why. It returns
-// what the chooser says.
+// letter another plugin has moves to this one, and the chooser says so
+// (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): every other plugin the
+// preferences give it loses it, so the preferences name one plugin per letter. One of the chooser's
+// own letters, or a key that is no letter or digit, is refused, saying why. It returns what the
+// chooser says.
 func (pl *plugins) bindPluginLetter(key, k string) string {
 	title := pl.pluginTitle(key)
 	switch {

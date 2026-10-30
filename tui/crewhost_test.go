@@ -188,9 +188,10 @@ func listedScopes(t *testing.T, dir string) []string {
 	return out
 }
 
-// TestAWindowHoldsOneScopeAcrossReconnects (§4.3): the first connection claims a new scope and lists
-// it; every later one reattaches with the same run token, the same scope and epoch; renewals keep the
-// lease; a second window, its own run token, gets a scope of its own.
+// TestAWindowHoldsOneScopeAcrossReconnects (docs/decisions/crew.md#scopes-and-fenced-ownership):
+// the first connection claims a new scope and lists it; every later one reattaches with the same
+// run token, the same scope and epoch; renewals keep the lease; a second window, its own run token,
+// gets a scope of its own.
 func TestAWindowHoldsOneScopeAcrossReconnects(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	w := &crewWindow{d: d}
@@ -220,9 +221,10 @@ func TestAWindowHoldsOneScopeAcrossReconnects(t *testing.T) {
 	}
 }
 
-// TestACrashedWindowsScopeComesBack (§4.3): a window that ends without releasing keeps its scope
-// until its lease lapses; then the next window claims it back, the oldest listed first, at the next
-// epoch, before it would make a new one. A clean quit releases the scope at once.
+// TestACrashedWindowsScopeComesBack (docs/decisions/crew.md#scopes-and-fenced-ownership): a window
+// that ends without releasing keeps its scope until its lease lapses; then the next window claims
+// it back, the oldest listed first, at the next epoch, before it would make a new one. A clean quit
+// releases the scope at once.
 func TestACrashedWindowsScopeComesBack(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	crashed := newCrewHost(&crewWindow{d: d}, dir)

@@ -1,5 +1,6 @@
 // Package inboxtest is the inbox module's conformance suite: every engine's adapter runs it, so the
-// human feed (docs/decisions/crew.md#the-human-inbox) and §5 case 7 hold the same way on each.
+// human feed (docs/decisions/crew.md#the-human-inbox) and the guarantees in
+// docs/decisions/crew.md#what-the-crew-guarantees hold the same way on each.
 package inboxtest
 
 import (
@@ -388,10 +389,10 @@ func testAWatchWakesOnACommitAndARollbackTellsNothing(t *testing.T, h Harness) {
 	}
 }
 
-// §5 case 7: an exact replay of a reply after a lost answer returns the same response, even once
-// the request is answered; the same key with another body, or for another request, is
-// key_reused; a second reply or a dismiss loses, told it was answered; the requester gets one
-// response, and the human's delivery reaches retention.
+// Per docs/decisions/crew.md#what-the-crew-guarantees: an exact replay of a reply after a lost
+// answer returns the same response, even once the request is answered; the same key with another
+// body, or for another request, is key_reused; a second reply or a dismiss loses, told it was
+// answered; the requester gets one response, and the human's delivery reaches retention.
 func testAReplyWinsOnceAndReplaysExactly(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	q := r.ask("s-jarvis", mail.KindRequest, "decide", 0)
@@ -442,11 +443,11 @@ func testAReplyWinsOnceAndReplaysExactly(t *testing.T, h Harness) {
 	}
 }
 
-// §5 case 7: a reply racing the request's expiry gets one committed outcome. Past the deadline,
-// each of the human's operations is refused, and the refusal itself leaves the expiry real: the
-// request ends expired and journaled (every window's toast ends), with no answer, and a snapshot no
-// longer shows it. Each operation is checked on its own message, so one's expiry can't stand in for
-// another's.
+// Per docs/decisions/crew.md#what-the-crew-guarantees: a reply racing the request's expiry gets one
+// committed outcome. Past the deadline, each of the human's operations is refused, and the refusal
+// itself leaves the expiry real: the request ends expired and journaled (every window's toast
+// ends), with no answer, and a snapshot no longer shows it. Each operation is checked on its own
+// message, so one's expiry can't stand in for another's.
 func testAReplyRacingExpiryGetsOneOutcome(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	last := func() string {

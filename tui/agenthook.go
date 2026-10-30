@@ -108,9 +108,10 @@ func withoutCommand(g any, command string) any {
 	return group
 }
 
-// endpointCommand is the SessionStart hook that registers a Claude session's endpoint (§4.7), run
-// by dir's own autodoc: what it prints (the endpoint's generation) is not for the agent's context,
-// which a SessionStart hook's output joins; a failure still says why, on stderr.
+// endpointCommand is the SessionStart hook that registers a Claude session's endpoint
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler), run by dir's own autodoc: what it prints
+// (the endpoint's generation) is not for the agent's context, which a SessionStart hook's output
+// joins; a failure still says why, on stderr.
 func endpointCommand(dir string) string {
 	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew endpoint --claude >/dev/null"
 }

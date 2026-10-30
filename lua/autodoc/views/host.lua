@@ -58,7 +58,8 @@ local providers = {}
 local mounted = nil
 local token_seq = 0
 
----err builds the ApiError shape the public surface reports (§3.6).
+---err builds the ApiError shape the public surface reports
+---(docs/decisions/neovim.md#hosts-register-with-the-drawer).
 ---@return autodoc.ApiError
 local function err(code, message, cause)
   return { code = code, message = message, cause = cause }
@@ -109,10 +110,10 @@ local function is_available(p)
   return res == true
 end
 
----valid_mount is the §3.3 predicate: the winid a host returns must be a
----live window actually displaying this view's buffer. Nil, invalid, or
----somebody else's buffer are all failures — a host that mounts the
----wrong buffer is otherwise indistinguishable from one that succeeded.
+---valid_mount is the predicate in docs/decisions/neovim.md#hosts-register-with-the-drawer: the
+---winid a host returns must be a live window actually displaying this view's buffer. Nil, invalid,
+---or somebody else's buffer are all failures — a host that mounts the wrong buffer is otherwise
+---indistinguishable from one that succeeded.
 ---@return boolean
 local function valid_mount(winid, view)
   if type(winid) ~= "number" then

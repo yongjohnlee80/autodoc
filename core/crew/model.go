@@ -52,7 +52,8 @@ type (
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
 	}
 
-	// Endpoint is how a session is woken (§4.7): its CLI's channel, never a secret.
+	// Endpoint is how a session is woken (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+	// its CLI's channel, never a secret.
 	Endpoint struct {
 		Session    string
 		Generation int64  // raised by every crew.endpoint
@@ -61,7 +62,8 @@ type (
 		Registered int64
 	}
 
-	// Attention is a session waiting on the user: a permission prompt, or blocked (§4.8).
+	// Attention is a session waiting on the user: a permission prompt, or blocked
+	// (docs/decisions/crew.md#the-human-inbox).
 	Attention struct {
 		Session string
 		Owner   string // the host whose terminal shows the prompt
@@ -71,8 +73,9 @@ type (
 		Cleared *int64
 	}
 
-	// Wake is a session's row of the wake scheduler's state machine (§4.7). The crew module
-	// raises PendingGen; the scheduler owns the rest.
+	// Wake is a session's row of the wake scheduler's state machine
+	// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). The crew module raises PendingGen;
+	// the scheduler owns the rest.
 	Wake struct {
 		Session      string
 		PendingGen   int64 // raised whenever a delivery becomes eligible for the session
@@ -86,8 +89,9 @@ type (
 	}
 )
 
-// A wake row's states (§4.7): no attempt out; an attempt's call out; a notice accepted (or
-// sent with an unknown outcome) and the session not yet received.
+// A wake row's states (docs/decisions/crew.md#wakers-and-the-wake-scheduler): no attempt out; an
+// attempt's call out; a notice accepted (or sent with an unknown outcome) and the session not yet
+// received.
 const (
 	WakeIdle     = "idle"
 	WakeInFlight = "in_flight"
@@ -111,8 +115,9 @@ const (
 )
 
 // Tx is one write (or read) transaction over the crew tables: the module's state machines run on
-// it, and every engine implements it. Every guard runs on the verb's own Tx (§4.4), so a takeover
-// that commits between a verb's first check and its write fails the verb.
+// it, and every engine implements it. Every guard runs on the verb's own Tx
+// (docs/decisions/crew.md#sessions-and-the-guard), so a takeover that commits between a verb's
+// first check and its write fails the verb.
 type Tx interface {
 	// Now is the transaction's clock.
 	Now() time.Time
@@ -163,8 +168,8 @@ type Tx interface {
 	Attention(session string) (Attention, bool, error)
 	PutAttention(Attention) error
 
-	// AddInboxChange journals one change of the human's feed (inbox_change, §4.8), in the same
-	// transaction as the change itself.
+	// AddInboxChange journals one change of the human's feed (inbox_change,
+	// docs/decisions/crew.md#the-human-inbox), in the same transaction as the change itself.
 	AddInboxChange(kind, ref string) error
 }
 

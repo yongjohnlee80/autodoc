@@ -72,7 +72,8 @@ type Entry struct {
 	// docs/decisions/contract.md#user-only-commands.
 	UserOnly bool
 	// Path is an entry that opens or saves a path a gated script names: it holds a gated run to the
-	// workspace itself, through the daemon's bounds (§4.2a.2b).
+	// workspace itself, through the daemon's bounds
+	// (docs/decisions/contract.md#path-commands-run-within-the-workspace).
 	Path bool
 	// Complete is what ':' Tab offers for its arguments (golib's Command.Complete); nil for none
 	Complete func(widget.CompleteContext) []string

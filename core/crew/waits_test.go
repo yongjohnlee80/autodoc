@@ -7,9 +7,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// TestAConnectionHoldsTwoLongPolls (§4.6): a connection's third long-poll is refused until one of
-// its two ends; a leave is idempotent; another connection is counted apart; a caller with no
-// connection identity, or a nil limiter, is never refused.
+// TestAConnectionHoldsTwoLongPolls (docs/decisions/crew.md#durable-mail): a connection's third
+// long-poll is refused until one of its two ends; a leave is idempotent; another connection is
+// counted apart; a caller with no connection identity, or a nil limiter, is never refused.
 func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	l := crew.NewLongPolls()
 	a1, err1 := l.Enter("tui#a")

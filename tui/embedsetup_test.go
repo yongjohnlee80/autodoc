@@ -145,7 +145,7 @@ func TestAnEarlierChecksAnswerIsDropped(t *testing.T) {
 	}
 }
 
-// What Use makes of each workspace, ADR §4.4's table.
+// What Use makes of each workspace (docs/decisions/search.md#the-setup-dialog).
 func TestTheSetupsTargetFollowsTheTable(t *testing.T) {
 	for _, c := range []struct {
 		row         setupRow
