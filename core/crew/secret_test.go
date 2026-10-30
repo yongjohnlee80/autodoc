@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -118,6 +119,169 @@ func TestAnEndedSessionsSecretIsForgotten(t *testing.T) {
 	for g := gen; g <= gen+1; g++ {
 		if _, ok := m.EndpointSecret(session, g); ok {
 			t.Errorf("a late registration left a secret for generation %d", g)
+		}
+	}
+}
+
+// gatedStore is a store whose writes the cell steers: fail rolls the next ones back after their
+// change (an error the commit itself might give), and hold keeps the next write, once committed,
+// from returning until it is closed (committed is closed then), so another write overtakes it.
+type gatedStore struct {
+	*crewtest.Mem
+	mu        sync.Mutex
+	fail      bool
+	hold      chan struct{}
+	committed chan struct{}
+}
+
+func (s *gatedStore) Write(ctx context.Context, fn func(crew.Tx) error) error {
+	s.mu.Lock()
+	fail, hold, committed := s.fail, s.hold, s.committed
+	s.hold, s.committed = nil, nil
+	s.mu.Unlock()
+	err := s.Mem.Write(ctx, func(tx crew.Tx) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		if fail {
+			return errors.New("the commit failed")
+		}
+		return nil
+	})
+	if hold != nil {
+		close(committed)
+		<-hold
+	}
+	return err
+}
+
+// holdNext makes s's next write wait, committed, until release is called.
+func (s *gatedStore) holdNext() (committed <-chan struct{}, release func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hold, s.committed = make(chan struct{}), make(chan struct{})
+	h := s.hold
+	return s.committed, func() { close(h) }
+}
+
+// gatedAgy is agySession on a gatedStore, with an endpoint registered with tok-one.
+func gatedAgy(t *testing.T) (*gatedStore, *crew.Manager, string, string, int64, int64) {
+	t.Helper()
+	ctx := context.Background()
+	st := &gatedStore{Mem: crewtest.NewMem(crewtest.NewClock().Now)}
+	m := crew.New(st, crew.WithUID(1000))
+	e, err := m.Claim(ctx, "autodoc:aaaa", "run-a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := strings.Repeat("s", 32) + "tifa"
+	got, err := m.Register(ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: e, Codename: "tifa",
+		Kind: "agy", Workspace: "w", Instance: "agent-1", Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred := crew.Credential(got.Session, secret)
+	gen, err := m.SetEndpointWith(ctx, cred, "agy", agyLoc, "tok-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st, m, got.Session, cred, e, gen
+}
+
+// TestAWriteThatRollsBackKeepsTheLiveSecret: a write that fails to commit changes no secret: an
+// endpoint replacement, a session's exit and its scope's release that roll back each leave the
+// stored generation and the live session with the secret they had.
+func TestAWriteThatRollsBackKeepsTheLiveSecret(t *testing.T) {
+	t.Parallel()
+	for name, write := range map[string]func(m *crew.Manager, session, cred string, epoch int64) error{
+		"an endpoint replaced": func(m *crew.Manager, _, cred string, _ int64) error {
+			_, err := m.SetEndpointWith(context.Background(), cred, "agy", agyLoc, "tok-two")
+			return err
+		},
+		"the session's exit": func(m *crew.Manager, session, _ string, epoch int64) error {
+			return m.Exit(context.Background(), "autodoc:aaaa", "run-a", epoch, session, crew.EndedExit)
+		},
+		"its scope's release": func(m *crew.Manager, _, _ string, epoch int64) error {
+			return m.Release(context.Background(), "autodoc:aaaa", "run-a", epoch)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			st, m, session, cred, epoch, gen := gatedAgy(t)
+			st.fail = true
+			if err := write(m, session, cred, epoch); err == nil {
+				t.Fatal("the write committed")
+			}
+			if err := st.Read(context.Background(), func(tx crew.Tx) error {
+				e, ok, err := tx.Endpoint(session)
+				if err != nil || !ok || e.Generation != gen {
+					t.Fatalf("the stored endpoint after the rollback: %+v %v %v, want generation %d", e, ok, err, gen)
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if got, ok := m.EndpointSecret(session, gen); !ok || got != "tok-one" {
+				t.Errorf("generation %d's secret after the rollback: %q %v, want tok-one", gen, got, ok)
+			}
+		})
+	}
+}
+
+// TestAnOvertakenRegistrationLeavesTheNewerSecret: secrets are held after their writes commit, in
+// no set order. A registration that commits and is overtaken (a later one commits, and its secret
+// is held, before the first's is) leaves the later generation's secret, not its own.
+func TestAnOvertakenRegistrationLeavesTheNewerSecret(t *testing.T) {
+	t.Parallel()
+	st, m, session, cred, _, g1 := gatedAgy(t)
+	committed, release := st.holdNext()
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.SetEndpointWith(context.Background(), cred, "agy", agyLoc, "tok-two")
+		done <- err
+	}()
+	<-committed
+	g3, err := m.SetEndpointWith(context.Background(), cred, "agy", agyLoc, "tok-three")
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := m.EndpointSecret(session, g3); !ok || got != "tok-three" {
+		t.Errorf("the newest generation %d's secret: %q %v, want tok-three", g3, got, ok)
+	}
+	for g := g1; g < g3; g++ {
+		if got, ok := m.EndpointSecret(session, g); ok {
+			t.Errorf("generation %d's secret %q still reads", g, got)
+		}
+	}
+}
+
+// TestARegistrationHeldPastTheEndLeavesNoSecret: a registration that commits before its session's
+// end, and whose secret would be held after the end is, leaves none: the ended session holds no
+// secret again.
+func TestARegistrationHeldPastTheEndLeavesNoSecret(t *testing.T) {
+	t.Parallel()
+	st, m, session, cred, epoch, g1 := gatedAgy(t)
+	committed, release := st.holdNext()
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.SetEndpointWith(context.Background(), cred, "agy", agyLoc, "tok-two")
+		done <- err
+	}()
+	<-committed
+	if err := m.Exit(context.Background(), "autodoc:aaaa", "run-a", epoch, session, crew.EndedExit); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	for g := g1; g <= g1+1; g++ {
+		if got, ok := m.EndpointSecret(session, g); ok {
+			t.Errorf("the ended session's generation %d holds %q", g, got)
 		}
 	}
 }

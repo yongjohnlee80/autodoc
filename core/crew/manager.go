@@ -1,6 +1,7 @@
 package crew
 
 import (
+	"context"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -19,55 +20,97 @@ type Manager struct {
 	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
 
 	// secrets are the endpoint secrets a waker needs and the store never holds (an agy session's
-	// language-server token, §4.7), by session, each for the endpoint generation it came with: a
-	// daemon restart forgets them all, and the session's bridge registers again.
+	// language-server token, §4.7), by session, each for the endpoint generation it came with; ended
+	// is the sessions that have ended, whose secrets are never held again. Both change only after the
+	// write that warrants it has committed (write): a write that rolls back changes neither. A daemon
+	// restart forgets them all, and each session's bridge registers again.
 	secretsMu sync.Mutex
 	secrets   map[string]endpointSecret
-}
-
-// forgetSecret drops session's endpoint secret, whatever its generation: the session has ended
-// (endSession, in its write). An end that rolls back loses the secret of a session still live: its
-// wakes fail, safely, until its bridge registers again.
-func (m *Manager) forgetSecret(session string) {
-	m.secretsMu.Lock()
-	defer m.secretsMu.Unlock()
-	delete(m.secrets, session)
+	ended     map[string]bool
 }
 
 // endpointSecret is a session's endpoint secret and the generation it belongs to.
 type endpointSecret struct {
 	generation int64
-	value      string
+	value      string // "": that generation was registered with none
 }
 
 // EndpointSecret is the secret registered with session's endpoint generation gen, if that is still
-// the one registered: never an older endpoint's.
+// the one registered: never an older endpoint's, nor an ended session's.
 func (m *Manager) EndpointSecret(session string, gen int64) (string, bool) {
 	m.secretsMu.Lock()
 	defer m.secretsMu.Unlock()
 	s, ok := m.secrets[session]
-	if !ok || s.generation != gen {
+	if !ok || s.generation != gen || s.value == "" {
 		return "", false
 	}
 	return s.value, true
 }
 
-// keepSecret holds secret for session's endpoint generation gen, called in the write that stores
-// that generation: writes are one at a time, so secrets are kept in the generations' own order, and
-// an empty secret drops the session's. A write that rolls back after it leaves a secret for a
-// generation never stored, which no wake reads (it reads the stored generation's) and the next
-// registration replaces.
-func (m *Manager) keepSecret(session string, gen int64, secret string) {
+// afterCommit is what a write changes in the manager's memory once the store has committed it, so
+// memory follows the store and never leads it.
+type afterCommit struct {
+	secrets []endpointPublish // endpoint generations stored, with their secrets
+	ended   []string          // sessions ended
+}
+
+// endpointPublish is one stored endpoint generation's secret, for afterCommit.
+type endpointPublish struct {
+	session    string
+	generation int64
+	secret     string
+}
+
+// write is m.store.Write with what fn leaves in after applied once the write has committed, and
+// nothing applied if it has not (a write the store runs again starts with after empty).
+func (m *Manager) write(ctx context.Context, fn func(tx Tx, after *afterCommit) error) error {
+	var after afterCommit
+	if err := m.store.Write(ctx, func(tx Tx) error {
+		after = afterCommit{}
+		return fn(tx, &after)
+	}); err != nil {
+		return err
+	}
+	if len(after.secrets) == 0 && len(after.ended) == 0 {
+		return nil
+	}
 	m.secretsMu.Lock()
 	defer m.secretsMu.Unlock()
-	if secret == "" {
-		delete(m.secrets, session)
+	for _, p := range after.secrets {
+		m.publishSecret(p)
+	}
+	for _, id := range after.ended {
+		m.forgetSecret(id)
+	}
+	return nil
+}
+
+// publishSecret holds p's secret for its generation, with m.secretsMu held. Writes commit one at a
+// time, but what each leaves for afterwards is applied in no set order: a generation older than the
+// one held is a write overtaken (it changes nothing), and an ended session never holds a secret
+// again, whatever was committed before its end and applied after.
+func (m *Manager) publishSecret(p endpointPublish) {
+	if m.ended[p.session] {
+		return
+	}
+	if cur, ok := m.secrets[p.session]; ok && cur.generation >= p.generation {
 		return
 	}
 	if m.secrets == nil {
 		m.secrets = map[string]endpointSecret{}
 	}
-	m.secrets[session] = endpointSecret{generation: gen, value: secret}
+	m.secrets[p.session] = endpointSecret{generation: p.generation, value: p.secret}
+}
+
+// forgetSecret drops an ended session's secret, with m.secretsMu held, and keeps it ended: a
+// session id is never used again, so its mark is all that holds back a registration committed
+// before the end and applied after it.
+func (m *Manager) forgetSecret(session string) {
+	delete(m.secrets, session)
+	if m.ended == nil {
+		m.ended = map[string]bool{}
+	}
+	m.ended[session] = true
 }
 
 // SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write
