@@ -32,6 +32,36 @@ type Sent struct {
 type Item struct {
 	Delivery Delivery
 	Message  Message
+	From     string // the sender as the receiver would address a reply: see fromAddress
+}
+
+// fromAddress is sender as an address the receiver (in scope) can send to: the bare codename in the
+// same scope; codename@project in another AutoVim scope; codename@<scope id> otherwise; "user" for
+// the human; "autodoc" for the daemon's notices. A profile no longer on record is its id.
+func fromAddress(tx Tx, scope, sender string) (string, error) {
+	if sender == DaemonProfile {
+		return "autodoc", nil
+	}
+	p, ok, err := tx.Profile(sender)
+	if err != nil || !ok {
+		return sender, err
+	}
+	switch {
+	case p.Scope == GlobalScope && p.Codename == UserCodename:
+		return UserCodename, nil
+	case p.Scope == scope:
+		return p.Codename, nil
+	}
+	if project, ok := strings.CutPrefix(p.Scope, "autovim:"); ok {
+		return p.Codename + "@" + project, nil
+	}
+	return p.Codename + "@" + p.Scope, nil
+}
+
+// receiverScope is the scope of s's profile, against which fromAddress shortens a sender.
+func receiverScope(tx Tx, s crew.Session) (string, error) {
+	p, _, err := tx.Profile(s.Profile)
+	return p.Scope, err
 }
 
 // Send stores a message and its deliveries in one write, from credential's session (§4.6). A key the sender
@@ -219,6 +249,10 @@ func (m *Manager) Receive(ctx context.Context, credential string) (Received, err
 		}
 		now := tx.Now()
 		until := now.Add(LeaseFor).UnixNano()
+		scope, err := receiverScope(tx, s)
+		if err != nil {
+			return err
+		}
 		for _, d := range ds {
 			msg, ok, err := tx.Message(d.Message)
 			if err != nil {
@@ -235,7 +269,11 @@ func (m *Manager) Receive(ctx context.Context, credential string) (Received, err
 			if err := tx.PutDelivery(d); err != nil {
 				return err
 			}
-			out.Items = append(out.Items, Item{Delivery: d, Message: msg})
+			from, err := fromAddress(tx, scope, msg.Sender)
+			if err != nil {
+				return err
+			}
+			out.Items = append(out.Items, Item{Delivery: d, Message: msg, From: from})
 		}
 		return nil
 	})
@@ -412,6 +450,10 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 		if err != nil {
 			return err
 		}
+		scope, err := receiverScope(tx, s)
+		if err != nil {
+			return err
+		}
 		for _, d := range ds {
 			msg, ok, err := tx.Message(d.Message)
 			if err != nil {
@@ -422,7 +464,11 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 			}
 			out.Unread++
 			if len(out.Items) < limit {
-				out.Items = append(out.Items, Item{Delivery: d, Message: msg})
+				from, err := fromAddress(tx, scope, msg.Sender)
+				if err != nil {
+					return err
+				}
+				out.Items = append(out.Items, Item{Delivery: d, Message: msg, From: from})
 			}
 		}
 		return nil
