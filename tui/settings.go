@@ -42,6 +42,7 @@ var (
 type connInfo struct {
 	engine, host, database, user, schema string
 	hasPassword                          bool
+	sealed                               bool // its DSN does not open with the store's key: enter it again
 }
 
 func readConnInfo(v any) *connInfo {
@@ -50,8 +51,9 @@ func readConnInfo(v any) *connInfo {
 		return nil
 	}
 	pw, _ := m["has_password"].(bool)
+	sealed, _ := m["sealed"].(bool)
 	return &connInfo{engine: str(m, "engine"), host: str(m, "host"), database: str(m, "database"), user: str(m, "user"),
-		schema: str(m, "schema"), hasPassword: pw}
+		schema: str(m, "schema"), hasPassword: pw, sealed: sealed}
 }
 
 // where is the connection in one line: the engine, then user@host/database, its schema, and
@@ -62,6 +64,9 @@ func (c *connInfo) where(t wording) string {
 	}
 	var b strings.Builder
 	b.WriteString(c.engine)
+	if c.sealed {
+		return c.engine + " · " + t.Tr("autodoc.text.settings.conn_sealed")
+	}
 	if c.engine == store.EngineSQLite {
 		b.WriteString(" · " + c.database)
 	} else {

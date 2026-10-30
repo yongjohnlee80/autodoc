@@ -46,8 +46,18 @@ readable:
 - each embedding provider's and ranker's API key must be typed again.
 
 `autodoc --check-store` lists every secret the key does not open, by what it
-is. The daemon makes a new key the first time it seals a secret, so set the
-secrets again after a restore without the key; the old ones stay unreadable.
+is (the workspace and its connection's role, the provider or the ranker), and
+exits 1 while any is left. The daemon still starts: workspace settings list
+such a connection as "sealed under another key: enter it again", and the rest
+as they are. To re-enter them:
+
+- a connection: in the workspace's settings, enter its DSN again (the source
+  database's, or the destination's), or with `workspace.configure`;
+- an embedding provider or a ranker: System › Search models… (`SPC s`), type
+  its API key again.
+
+The daemon makes a new key the first time it seals a secret; the old secrets
+stay unreadable until each is entered again.
 
 ## Restoring
 
@@ -58,14 +68,20 @@ secrets again after a restore without the key; the old ones stay unreadable.
    `autodoc.db.damaged` where it is, if it is there: the check below clears it.
 3. Copy the backup in as `autodoc.db`, and the key as `autodoc.db.key`, mode
    `0600` (a key others can read is refused).
-4. Check it: `autodoc --check-store` (below). Found sound, it also clears
-   the damage mark (`autodoc.db.damaged`), which refuses every start until then.
+4. Check it: `autodoc --check-store` (below). With the file found sound, it also
+   clears the damage mark (`autodoc.db.damaged`), which refuses every start
+   until then, even when secrets it lists still need entering again.
 5. Start AutoDoc. The index is the backup's: files changed since are indexed
    again as the daemon finds them.
 
-A backup from an older AutoDoc is brought up to date when the daemon opens it
-(its schema scripts, [schema-scripts.md](schema-scripts.md)). A backup from a
-newer AutoDoc is refused by an older one.
+A backup from an older AutoDoc is brought up to date when the daemon opens it:
+its schema scripts ([schema-scripts.md](schema-scripts.md)) run after the store
+is checked whole, never on a damaged one. A backup from a newer AutoDoc is
+refused by an older one (`ErrDowngrade`): restore it with the AutoDoc it came
+from, or a newer one. `--check-store` on a store older than the binary checks
+its file whole, but its tables may predate the columns the secrets check reads:
+it then reports that the sealed secrets were not checked, and says why; start
+the daemon once (which brings the schema up to date), then check again.
 
 ## Checking the store
 
@@ -115,9 +131,11 @@ When the background check finds damage, the daemon writes `autodoc.db.damaged`
 beside the store: the check's report, as JSON (mode `0600`). It is written only
 then. From then on every start refuses the store, with that report, even when
 the start's own quick check finds nothing: a quick check is not enough to clear
-it. Only `autodoc --check-store` clears it, when its whole check (integrity,
-foreign keys and secrets) finds the store sound, typically after you restore it
-from a backup. Delete the file yourself only if you are sure the store is sound.
+it. Only `autodoc --check-store` clears it, when its whole check finds the file
+sound (`integrity_check` and `foreign_key_check` pass), typically after you
+restore it from a backup. Secrets the key does not open do not keep the mark:
+they are not damage to the file, and are entered again once the daemon serves
+(above). Delete the file yourself only if you are sure the store is sound.
 
 A store that fails the check is not served, since writing on a damaged store
 can spread the damage. The daemon says so and names `--check-store` and this

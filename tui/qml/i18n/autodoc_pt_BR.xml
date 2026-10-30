@@ -6897,6 +6897,10 @@ A última conexão falhou:
         <source>schema %1</source>
         <translation>esquema %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>selada com outra chave: informe-a de novo</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown trocam de aba · Salvar envia todas as alterações de uma vez; uma recusa não muda nada</translation>
