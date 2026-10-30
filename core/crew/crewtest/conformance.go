@@ -122,6 +122,78 @@ func Run(t *testing.T, h Harness) {
 	}
 	const scope, proc = "autovim:plugins", "" // proc "": unknown, so the lease alone decides
 
+	t.Run("the wake queries", func(t *testing.T) {
+		_, store, clock, _ := setup(t)
+		now := clock.Now().UnixNano()
+		at := func(d time.Duration) *int64 { v := now + int64(d); return &v }
+		ended := now
+		rows := []struct {
+			w        crew.Wake
+			ended    bool
+			endpoint bool
+		}{
+			{crew.Wake{Session: "s1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // due
+			{crew.Wake{Session: "s2", PendingGen: 1, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // nothing pending
+			{crew.Wake{Session: "s3", PendingGen: 2, State: crew.WakeIdle, NextAt: at(10 * time.Second)}, false, true},             // backing off
+			{crew.Wake{Session: "s4", PendingGen: 2, State: crew.WakeIdle}, true, true},                                            // ended
+			{crew.Wake{Session: "s5", PendingGen: 2, State: crew.WakeIdle}, false, false},                                          // no endpoint
+			{crew.Wake{Session: "s6", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(-time.Second)}, false, true}, // timed out
+			{crew.Wake{Session: "s7", PendingGen: 1, State: crew.WakeInFlight, Token: "t"}, false, true},                           // a call out
+			{crew.Wake{Session: "s8", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(time.Minute)}, false, true},  // waiting
+		}
+		if err := store.Write(ctx, func(tx crew.Tx) error {
+			for _, r := range rows {
+				s := crew.Session{ID: r.w.Session, Profile: "p-" + r.w.Session, Host: scope, Instance: r.w.Session,
+					SecretHash: []byte("h"), ArgsDigest: []byte("d")}
+				if r.ended {
+					s.Ended, s.EndedWhy = &ended, crew.EndedExit
+				}
+				if err := tx.PutSession(s); err != nil {
+					return err
+				}
+				if r.endpoint {
+					if err := tx.PutEndpoint(crew.Endpoint{Session: r.w.Session, Generation: 1, Kind: "fake"}); err != nil {
+						return err
+					}
+				}
+				if err := tx.PutWake(r.w); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		ids := func(ws []crew.Wake) string {
+			var out []string
+			for _, w := range ws {
+				out = append(out, w.Session)
+			}
+			return strings.Join(out, ",")
+		}
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			due, err := tx.WakesDue(now, 64)
+			if err != nil || ids(due) != "s1" {
+				t.Errorf("WakesDue: %s %v, want s1 (not ended s4, not endpoint-less s5)", ids(due), err)
+			}
+			if out, err := tx.WakesTimedOut(now, 64); err != nil || ids(out) != "s6" {
+				t.Errorf("WakesTimedOut: %s %v, want s6", ids(out), err)
+			}
+			if out, err := tx.WakesInFlight(); err != nil || ids(out) != "s7" {
+				t.Errorf("WakesInFlight: %s %v, want s7", ids(out), err)
+			}
+			if next, ok, err := tx.NextWakeAt(); err != nil || !ok || next != *at(-time.Second) {
+				t.Errorf("NextWakeAt: %d %v %v, want s6's deadline", next, ok, err)
+			}
+			if _, err := tx.WakesDue(now, 0); err == nil {
+				t.Error("WakesDue with limit 0 answered, rather than refusing")
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("claim, reattach, busy, and a lapsed lease", func(t *testing.T) {
 		m, _, clock, _ := setup(t)
 		e1, err := m.Claim(ctx, scope, "run-a", proc)
@@ -575,7 +647,7 @@ func Run(t *testing.T, h Harness) {
 				return err
 			}
 			next := tx.Now().Add(30 * time.Second).UnixNano()
-			w.State, w.Token, w.Failures, w.NextAt = "awaiting_receive", "tok", 2, &next
+			w.State, w.Token, w.Failures, w.NextAt = crew.WakeAwaiting, "tok", 2, &next
 			return tx.PutWake(w)
 		}); err != nil {
 			t.Fatal(err)

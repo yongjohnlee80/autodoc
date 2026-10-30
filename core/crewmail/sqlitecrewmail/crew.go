@@ -1,6 +1,7 @@
 package sqlitecrewmail
 
 import (
+	"errors"
 	"github.com/yongjohnlee80/golib/dao"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -312,14 +313,27 @@ func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
 	return out, nil
 }
 
+// errLimit is a limited read asked for no rows: dao would emit LIMIT 0 and answer nothing.
+var errLimit = errors.New("sqlitecrewmail: a limit must be > 0")
+
+// wakeLiveReachable is a wake row whose session is live and has an endpoint.
+var wakeLiveReachable = dao.Raw(`EXISTS (SELECT 1 FROM "crew_session" WHERE "crew_session"."id" = "crew_wake"."session"` +
+	` AND "crew_session"."ended" IS NULL) AND EXISTS (SELECT 1 FROM "crew_endpoint" WHERE "crew_endpoint"."session" = "crew_wake"."session")`)
+
 func (t *Tx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
-	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).
+	if limit <= 0 {
+		return nil, errLimit
+	}
+	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).WithPredicate(wakeLiveReachable).
 		WithPredicate(dao.Raw(`"crew_wake"."pending_gen" > "crew_wake"."announced_gen"`)).
 		WithPredicate(dao.Raw(`("crew_wake"."next_at" IS NULL OR "crew_wake"."next_at" <= ?)`, now)).
 		OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
 }
 
 func (t *Tx) WakesTimedOut(now int64, limit int) ([]crew.Wake, error) {
+	if limit <= 0 {
+		return nil, errLimit
+	}
 	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeAwaiting).
 		WithPredicate(dao.Lte(`"crew_wake"."next_at"`, now)).OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
 }
