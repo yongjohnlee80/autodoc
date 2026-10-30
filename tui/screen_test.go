@@ -791,11 +791,18 @@ func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() {
+	updated := func() {
 		r.h.showProgress(1, 0, embedProgress{on: true, model: "ollama|embedder|sha256:a|4", target: "ollama|embedder|sha256:b|4",
 			semantic: "switching", texts: 2, targetPending: 1}, 1)
+	}
+	// the daemon's own progress poll (every second) answers that no switch is under way and ends the
+	// toast; one landing before a frame drew the update hid it (canary CI, c1732c3). The update is
+	// put again at each look, so the poll can't hide it for good: what the cell asserts is the text an
+	// updated model shows, not a race against the poll.
+	r.s.WaitFor(t, "the toast an updated model shows", func(screen string) bool {
+		r.h.p.Post(updated)
+		return strings.Contains(screen, "embedder was updated")
 	})
-	r.s.WaitForText(t, "embedder was updated")
 }
 
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
