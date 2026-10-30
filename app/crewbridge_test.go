@@ -81,23 +81,48 @@ func (f *fakeBridge) count(method string) int {
 }
 
 // runFor runs f's bridge for ticks looks after its first, and answers its error, or nil when it was
-// still running.
+// still running. Each look is held at its first call (the daemon's instance) until the one before
+// it has ended and between has run (between(i): after look i, before look i+1), so each look sees
+// exactly the state the cell set for it; the last look runs to its end before the bridge is stopped.
 func runFor(t *testing.T, f *fakeBridge, ticks int, between func(i int)) error {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tick := make(chan time.Time)
+	step := make(chan struct{})
+	instance := f.instance
+	f.instance = func(c context.Context) (string, error) {
+		select {
+		case <-step:
+		case <-c.Done():
+			return "", c.Err()
+		}
+		return instance(c)
+	}
 	done := make(chan error, 1)
 	go func() { done <- f.run(ctx, tick, &bytes.Buffer{}) }()
-	for i := 0; i < ticks; i++ {
-		if between != nil {
-			between(i)
+	for i := 0; i <= ticks; i++ {
+		if i > 0 {
+			// taken only once look i-1 has ended: look i starts, and waits on step
+			select {
+			case tick <- time.Now():
+			case err := <-done:
+				return err
+			}
+			if between != nil {
+				between(i - 1)
+			}
 		}
 		select {
-		case tick <- time.Now():
+		case step <- struct{}{}:
 		case err := <-done:
 			return err
 		}
+	}
+	select { // taken once the last look has ended; the look it starts ends with ctx
+	case tick <- time.Now():
+	case err := <-done:
+		return err
 	}
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
@@ -287,7 +312,7 @@ func unanswered(ctx context.Context) error {
 func TestABridgeLookThatGetsNoAnswerEnds(t *testing.T) {
 	t.Parallel()
 	f := newFakeBridge()
-	f.bound = 20 * time.Millisecond
+	f.bound = 200 * time.Millisecond
 	var instHang bool
 	var hostsDeadlines int
 	f.hosts = func(ctx context.Context) error {
