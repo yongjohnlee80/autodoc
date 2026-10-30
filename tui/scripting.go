@@ -57,11 +57,10 @@ type scripting struct {
 	// engine's keys; rows the menu rows, scripts' and plugins' (menurows.go), and menuRows the
 	// Plugins menu's model of those it shows (luakeys.go)
 	line func(string) error
-	// who is who the invocation beginning now acts for (Host.authorityNow); bounds a gated one's
-	// bounds for a call (Host.bounds). Both are the host's, set with line (scripts.go).
+	// who is who the invocation beginning now acts for (Host.authorityNow), and as runs fn as a's
+	// invocation (Host.actingAs): the host's, set with line (scripts.go)
 	who      func() authority
-	bounds   func(a authority, read bool) map[string]any
-	as       func(a authority, fn func() error) error // runs fn as a's invocation (Host.actingAs)
+	as       func(a authority, fn func() error) error
 	ui       luaUI
 	rows     menuRows
 	menuRows *tuidecl.ListModel
@@ -444,8 +443,9 @@ func (s *scripting) authority() authority {
 // call sends verb to the daemon off the loop, as a acts, and gives cb the answer on it. Without the
 // contracts yet (a script run before the first connect has answered), it fetches them first: a verb
 // is refused by its contract's audience before it is ever sent. A gated script's call is refused a
-// preference that holds rights or commands (AS-2b), and carries its bounds past the verb's own
-// params (ADR 1792004705 §4.2a.1), which the daemon holds every file it reaches to.
+// preference that holds rights or commands (AS-2b), and goes out with its authority on the ctx, so
+// the one send path (Host.call) gives it its bounds and checks its workspace is still the one in
+// use (ADR 1792004705 §4.2a.1, 2c).
 func (s *scripting) call(a authority, verb string, params []any, cb *lua.LFunction) {
 	known := s.verbs
 	if a.gated() {
@@ -473,7 +473,10 @@ func (s *scripting) call(a authority, verb string, params []any, cb *lua.LFuncti
 			if !ok {
 				return luaAnswer{err: fmt.Errorf("%s: the daemon does not say its parameters, so a script's call cannot carry its bounds", verb)}
 			}
-			params = v.bounded(params, s.bounds(a, v.effect == "read"))
+			// the send path bounds it, and refuses it once the TUI has left its workspace (h.call):
+			// one path for a script's own calls and for the work it starts
+			a.verbs = verbs
+			ctx = withAuthority(ctx, a)
 		}
 		res, err := s.c.Call(ctx, verb, params...)
 		return luaAnswer{res: res, err: err}

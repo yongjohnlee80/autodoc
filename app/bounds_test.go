@@ -344,3 +344,17 @@ func TestAScriptMovesNoRoot(t *testing.T) {
 		t.Errorf("the user's own workspace.add: %v", err)
 	}
 }
+
+// TestABoundedSchemaIsCheckedAsItIsLoaded: a schema path in "~/" is the home folder's to the
+// schema holder, so a bounded set_schema or configure is checked as that names it: a schema in the
+// home folder, outside every served root, is refused however it is spelled.
+func TestABoundedSchemaIsCheckedAsItIsLoaded(t *testing.T) {
+	home := short(t)
+	t.Setenv("HOME", home)
+	writeAt(t, filepath.Join(home, "s.yaml"), "version: 1\nfields:\n  title: {type: string}\n")
+	f := newBoundsFixture(t)
+	_, err := f.try("workspace.set_schema", "kb", "~/s.yaml", f.bounds("kb"))
+	f.denied("set_schema of ~/s.yaml", err, "a script may not reach it")
+	_, err = f.try("workspace.configure", "kb", map[string]any{"schema": "~/s.yaml"}, f.bounds("kb"))
+	f.denied("configure's schema ~/s.yaml", err, "a script may not reach it")
+}

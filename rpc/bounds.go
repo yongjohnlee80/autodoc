@@ -2,11 +2,11 @@ package rpc
 
 import (
 	"context"
-	"path/filepath"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
 // BoundsProtocol is the protocol a gated script's bounds arrive in (ADR 1792004705 §4.2a.1): one
@@ -83,10 +83,8 @@ func (s *Server) boundedSchema(ctx context.Context, ws, path string) error {
 	if !found {
 		return errNoSuchWorkspace
 	}
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(w.Root(), filepath.FromSlash(path))
-	}
+	// the schema holder's own rule ("~/" the home folder), so the file checked is the file it loads
+	abs := schema.ResolvePath(w.Root(), path)
 	root, rel, err := s.guard.Locate(abs)
 	if err != nil {
 		return err
