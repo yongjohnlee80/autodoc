@@ -19,7 +19,9 @@ func (c *lazyCrew) Authenticate(tx crew.Tx, credential string) (crew.Session, er
 	return c.m.Authenticate(tx, credential)
 }
 
-func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error { return c.m.RaisePending(tx, profile) }
+func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
+	return c.m.RaisePending(tx, profile)
+}
 
 // The real crew.Adopt over mail's real effects, on one store (Zen's #62 r0 F3): a profile of the
 // adopted scope sent itself and its namesake in the adopting scope a message, and the namesake's
