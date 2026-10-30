@@ -3,6 +3,7 @@ package crew
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -107,8 +108,9 @@ func (m *Manager) RecoverRun(ctx context.Context, run string) error {
 }
 
 // sweep ends the unanswered waits that timed out (awaiting_receive → idle, a failure, backoff),
-// after mail's expiry, in one write; it answers the sessions now due.
-func (m *Manager) sweep(ctx context.Context) ([]string, error) {
+// after mail's expiry, in one write; it answers the sessions now due whose endpoint is of one of
+// kinds, the kinds there are wakers for.
+func (m *Manager) sweep(ctx context.Context, kinds []string) ([]string, error) {
 	var due []string
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
@@ -127,7 +129,7 @@ func (m *Manager) sweep(ctx context.Context) ([]string, error) {
 				return err
 			}
 		}
-		ws, err := tx.WakesDue(now.UnixNano(), wakeLookBatch)
+		ws, err := tx.WakesDue(now.UnixNano(), kinds, wakeLookBatch)
 		for _, w := range ws {
 			due = append(due, w.Session)
 		}
@@ -138,8 +140,10 @@ func (m *Manager) sweep(ctx context.Context) ([]string, error) {
 
 // Reserve takes session's idle → in_flight step as a compare-and-set, after mail's expiry, in one
 // write (§4.7): the row must still be due, its session live under its host's epoch, and an
-// endpoint registered. It answers the attempt's token and the endpoint it is for.
-func (m *Manager) Reserve(ctx context.Context, session, run string) (string, Endpoint, bool, error) {
+// endpoint registered of one of kinds (those the caller has wakers for: a session whose endpoint
+// no waker serves is watch-only, reached by crew.wait and the inbox, never reserved and never
+// failed). It answers the attempt's token and the endpoint it is for.
+func (m *Manager) Reserve(ctx context.Context, session, run string, kinds []string) (string, Endpoint, bool, error) {
 	var tok string
 	var ep Endpoint
 	var ok bool
@@ -164,6 +168,9 @@ func (m *Manager) Reserve(ctx context.Context, session, run string) (string, End
 		e, has, err := tx.Endpoint(session)
 		if err != nil || !has {
 			return err // no endpoint: the host shows ✉ n instead (§4.7)
+		}
+		if !slices.Contains(kinds, e.Kind) {
+			return nil // no waker for its kind: watch-only
 		}
 		if tok, err = newID(); err != nil {
 			return err
@@ -257,12 +264,12 @@ func (m *Manager) Received(tx Tx, session string) error {
 }
 
 // nextAt is when the scheduler must look again by time alone: the earliest wake deadline or mail
-// deadline; false when nothing is waiting on a clock.
-func (m *Manager) nextAt(ctx context.Context) (time.Time, bool, error) {
+// deadline (of a row due by kinds, as sweep reads them); false when nothing is waiting on a clock.
+func (m *Manager) nextAt(ctx context.Context, kinds []string) (time.Time, bool, error) {
 	var at int64
 	var has bool
 	err := m.store.Read(ctx, func(tx Tx) error {
-		w, ok, err := tx.NextWakeAt()
+		w, ok, err := tx.NextWakeAt(kinds)
 		if err != nil {
 			return err
 		}
