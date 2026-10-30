@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// leaseTTL is how long a host's ownership lasts unrenewed (§4.3); hosts renew every 30 s.
+// leaseTTL is how long a host's ownership lasts unrenewed
+// (docs/decisions/crew.md#scopes-and-fenced-ownership); hosts renew every 30 s.
 const leaseTTL = 90 * time.Second
 
 // free reports whether h's owner may be replaced at now: it released the scope, its lease lapsed,
@@ -45,7 +46,7 @@ func checkClaim(scope, run string) error {
 }
 
 // Claim claims scope for run's process, or reattaches it when that process already holds it
-// (§4.3). One write:
+// (docs/decisions/crew.md#scopes-and-fenced-ownership). One write:
 //   - the holder is this run and proc: a reattach, the same epoch (a daemon reconnect, or a retry
 //     of a claim whose answer was lost);
 //   - the holder is free: a claim, epoch + 1; every live session of the scope ends ('reclaim');
@@ -57,7 +58,8 @@ func (m *Manager) Claim(ctx context.Context, scope, run, proc string) (int64, er
 }
 
 // Takeover claims scope as Claim does, but from a holder that is not free, after the user agreed
-// (§4.3): the old owner is fenced by the new epoch, and its sessions end ('takeover').
+// (docs/decisions/crew.md#scopes-and-fenced-ownership): the old owner is fenced by the new epoch,
+// and its sessions end ('takeover').
 func (m *Manager) Takeover(ctx context.Context, scope, run, proc string) (int64, error) {
 	return m.claim(ctx, scope, run, proc, true)
 }
@@ -106,8 +108,9 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 	return epoch, err
 }
 
-// Release gives scope back on a clean exit (§4.3): its sessions end ('exit'), and the incarnation
-// is cleared, so this run can never reattach. The next claim takes a new epoch.
+// Release gives scope back on a clean exit (docs/decisions/crew.md#scopes-and-fenced-ownership):
+// its sessions end ('exit'), and the incarnation is cleared, so this run can never reattach. The
+// next claim takes a new epoch.
 func (m *Manager) Release(ctx context.Context, scope, run string, epoch int64) error {
 	return m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {

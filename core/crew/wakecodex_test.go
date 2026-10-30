@@ -39,11 +39,12 @@ func codexEndpoint(t *testing.T, server, thread string) crew.Endpoint {
 	return crew.Endpoint{Session: "s1", Generation: 1, Kind: "codex", Locator: string(b)}
 }
 
-// TestTheCodexWakerQueuesOnTheUsersOwnServer (§5 case 11): a wake runs codex queue, as argv with
+// TestTheCodexWakerQueuesOnTheUsersOwnServer
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a wake runs codex queue, as argv with
 // each value in --flag=value form, against a socket of the daemon's user in a folder only it can
-// enter. A server that is not a socket, is a link to one, lies in a folder others can enter, or lies
-// outside Codex's folders is refused without running codex. A failing codex fails the wake; one
-// killed at the deadline is unknown, since the queue may have taken the notice.
+// enter. A server that is not a socket, is a link to one, lies in a folder others can enter, or
+// lies outside Codex's folders is refused without running codex. A failing codex fails the wake;
+// one killed at the deadline is unknown, since the queue may have taken the notice.
 func TestTheCodexWakerQueuesOnTheUsersOwnServer(t *testing.T) {
 	ctx := context.Background()
 	root, err := os.MkdirTemp("", "cx")

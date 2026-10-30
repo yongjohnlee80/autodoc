@@ -11,7 +11,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
-// The feed's limits (§4.8).
+// The feed's limits (docs/decisions/crew.md#the-human-inbox).
 const (
 	MaxWait     = crew.MaxWait // the longest inbox.watch waits
 	changesMax  = 256          // changes one watch returns; the next takes the rest
@@ -114,11 +114,12 @@ type Watched struct {
 	Changes  []Change
 }
 
-// Watch is inbox.watch (§4.8): the changes after cursor, waiting up to wait for one; or, for
-// cursor 0, a cursor older than the oldest retained change, or one past the newest (another
-// store's), a snapshot with the cursor taken in the same read, so the two agree. It never leases.
-// A journal that never had a row has nothing to show, so cursor 0 on it waits like any other:
-// otherwise its snapshot's cursor, 0 again, would answer every next watch at once.
+// Watch is inbox.watch (docs/decisions/crew.md#the-human-inbox): the changes after cursor, waiting
+// up to wait for one; or, for cursor 0, a cursor older than the oldest retained change, or one past
+// the newest (another store's), a snapshot with the cursor taken in the same read, so the two
+// agree. It never leases. A journal that never had a row has nothing to show, so cursor 0 on it
+// waits like any other: otherwise its snapshot's cursor, 0 again, would answer every next watch at
+// once.
 //
 // A snapshot is bounded and lossless: each page carries the raised attention and then the open
 // items, within one budget of entries and bytes (snapshotFrom), and Next when more remain. The
@@ -315,9 +316,10 @@ type Focused struct {
 	Owner   string
 }
 
-// Focus is inbox.focus (§4.8): it resolves session's CURRENT owner at call time (its live
-// session's host, or the owner of the attention it raised), never a toast's stale field, and
-// journals a focus change that owner raises the agent for. An ended session is ErrNotFound.
+// Focus is inbox.focus (docs/decisions/crew.md#the-human-inbox): it resolves session's CURRENT
+// owner at call time (its live session's host, or the owner of the attention it raised), never a
+// toast's stale field, and journals a focus change that owner raises the agent for. An ended
+// session is ErrNotFound.
 func (m *Manager) Focus(ctx context.Context, session string) (Focused, error) {
 	var out Focused
 	err := m.store.Write(ctx, func(tx Tx) error {

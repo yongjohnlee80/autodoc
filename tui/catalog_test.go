@@ -110,7 +110,8 @@ func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	}
 }
 
-// TestTheCatalogsNamespacesAreOwned (§5.10): lua.* is Lua's alone, plugin.<name>.* that plugin's.
+// TestTheCatalogsNamespacesAreOwned (docs/decisions/plugins.md#one-command-catalog): lua.* is Lua's
+// alone, plugin.<name>.* that plugin's.
 func TestTheCatalogsNamespacesAreOwned(t *testing.T) {
 	c := newCatalog()
 	for want, e := range map[string]Entry{
@@ -135,9 +136,9 @@ func TestTheCatalogsNamespacesAreOwned(t *testing.T) {
 	}
 }
 
-// TestARefusedEntryLeavesNothingBehind (§5.10): an alias collision refuses the whole entry, its id
-// and verb included; a Lua entry replacing its own id that is refused keeps the one it would have
-// replaced.
+// TestARefusedEntryLeavesNothingBehind (docs/decisions/plugins.md#one-command-catalog): an alias
+// collision refuses the whole entry, its id and verb included; a Lua entry replacing its own id
+// that is refused keeps the one it would have replaced.
 func TestARefusedEntryLeavesNothingBehind(t *testing.T) {
 	c := newCatalog()
 	core := widget.NewEditorCore()

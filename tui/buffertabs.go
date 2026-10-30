@@ -10,17 +10,17 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE BUFFER TABS — the open buffers on the GUI editor's title bar (golib's Editor.Tabs, ADR
-// 1792076688 §4.7): a tab for each buffer, in opening order, the shown one active. A press shows a
-// buffer, and a press on its × closes it (asking first over unsaved changes); + makes a new, empty
-// one. A tab's menu (≡, a right press) has New buffer, Open file in a
-// new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was opened
-// for, each asking about unsaved changes as the TUI's do. A tab is never wider than bufferTabWidth
-// cells: a longer name is cut in its middle (bufferTabLabel), and a tab never changes width as tabs
-// open and close or the window resizes (Johno: consistent, not re-fitted each time). The strip has
-// the bar's room up to Raw | Rendered; tabs that do not fit scroll between ← and →. The TUI has no title
-// bar: its editor has no strip (bufferStrip is nil there), and :b and the Buffers picker switch
-// instead.
+// THE BUFFER TABS — the open buffers on the GUI editor's title bar (golib's Editor.Tabs,
+// docs/decisions/editor.md#switching-buffers): a tab for each buffer, in opening order, the shown
+// one active. A press shows a buffer, and a press on its × closes it (asking first over unsaved
+// changes); + makes a new, empty one. A tab's menu (≡, a right press) has New buffer, Open file in
+// a new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was
+// opened for, each asking about unsaved changes as the TUI's do. A tab is never wider than
+// bufferTabWidth cells: a longer name is cut in its middle (bufferTabLabel), and a tab never
+// changes width as tabs open and close or the window resizes (Johno: consistent, not re-fitted each
+// time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
+// and →. The TUI has no title bar: its editor has no strip (bufferStrip is nil there), and :b and
+// the Buffers picker switch instead.
 
 // bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
 // its middle there, the same however many tabs are open; its menu's Go to › has the name whole.

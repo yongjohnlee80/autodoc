@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// A session's credential is "<session id>.<secret>" (§4.5): the session context file carries it,
-// and the daemon keeps only the secret's hash.
+// A session's credential is "<session id>.<secret>" (docs/decisions/crew.md#the-session-context):
+// the session context file carries it, and the daemon keeps only the secret's hash.
 
 // Credential is the credential for session id with secret, as a host writes it into the context.
 func Credential(session, secret string) string { return session + "." + secret }
@@ -46,9 +46,10 @@ type Identity struct {
 	Store    string `json:"store"`
 }
 
-// Whoami is the identity credential belongs to (§4.5). store is the store id the caller's session
-// context names: a context written for another daemon's store is ErrContextMismatch, so an
-// inherited context can't act against the wrong daemon. "" skips that check.
+// Whoami is the identity credential belongs to (docs/decisions/crew.md#the-session-context). store
+// is the store id the caller's session context names: a context written for another daemon's store
+// is ErrContextMismatch, so an inherited context can't act against the wrong daemon. "" skips that
+// check.
 func (m *Manager) Whoami(ctx context.Context, credential, store string) (Identity, error) {
 	if store != "" && m.storeID != "" && store != m.storeID {
 		return Identity{}, fmt.Errorf("%w: the context is for store %q, this daemon's is %q", ErrContextMismatch, store, m.storeID)

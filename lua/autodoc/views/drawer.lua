@@ -36,12 +36,13 @@
 ---**Instances, not a singleton.** `new(profile)` returns a view with its own buffer, rows, tree
 ---and timer, and the host registry is its only constructor and disposer (docs/decisions/neovim.md#hosts-register-with-the-drawer).
 ---
----**Live without push (§4.1, §6).** The daemon never pushes. While the drawer is VISIBLE a timer
----pulls `sys.events` every POLL_MS (from the hello's `events` cursor) to refresh the sections a
----configuration change touched, `index.changes(ws, cursor)` for every EXPANDED KB to apply adds,
----edits, renames (a delete and an upsert) and removes to its document tree, and `index.status` for
----the progress text. A CursorExpired change feed re-lists through `index.documents`. A hidden
----drawer pulls nothing: the tick checks visibility first and stops its timer.
+---**Live without push (docs/decisions/neovim.md#the-kb-drawer).** The daemon never pushes. While
+---the drawer is VISIBLE a timer pulls `sys.events` every POLL_MS (from the hello's `events` cursor)
+---to refresh the sections a configuration change touched, `index.changes(ws, cursor)` for every
+---EXPANDED KB to apply adds, edits, renames (a delete and an upsert) and removes to its document
+---tree, and `index.status` for the progress text. A CursorExpired change feed re-lists through
+---`index.documents`. A hidden drawer pulls nothing: the tick checks visibility first and stops its
+---timer.
 ---
 ---**Staleness.** Every reply is guarded twice: `session.request` drops a reply from an epoch that
 ---ended, and a per-node request sequence drops a reply that a newer request for the same node

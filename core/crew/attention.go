@@ -9,7 +9,8 @@ import (
 // session waits on is shown in every window's snapshot, which pages within the transport's message.
 const MaxAttentionText = 64 << 10
 
-// Attention kinds, and the inbox_change kinds raising and clearing one journal (§4.8).
+// Attention kinds, and the inbox_change kinds raising and clearing one journal
+// (docs/decisions/crew.md#the-human-inbox).
 const (
 	AttentionPermission = "permission"
 	AttentionBlocked    = "blocked"
@@ -18,9 +19,10 @@ const (
 	inboxCleared   = "cleared"
 )
 
-// RaiseAttention marks the calling session as waiting on the user (crew.attention raise, §4.8):
-// a permission prompt the CLI's adapter saw, or blocked. The host that shows the prompt is the
-// session's own. Every window's toast comes from the inbox_change it journals, in the same write.
+// RaiseAttention marks the calling session as waiting on the user (crew.attention raise,
+// docs/decisions/crew.md#the-human-inbox): a permission prompt the CLI's adapter saw, or blocked.
+// The host that shows the prompt is the session's own. Every window's toast comes from the
+// inbox_change it journals, in the same write.
 func (m *Manager) RaiseAttention(ctx context.Context, credential, kind, text string) error {
 	if kind != AttentionPermission && kind != AttentionBlocked {
 		return fmt.Errorf("%w: attention kind %q", ErrInvalid, kind)

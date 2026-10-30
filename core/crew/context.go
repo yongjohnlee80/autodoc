@@ -9,10 +9,11 @@ import (
 	"strings"
 )
 
-// ContextDir is the folder of an agent folder's session contexts (§4.5): one file per session,
-// named by the session's id, so a host removing its ended session's file never touches another
-// session's, a replacement's written into the same agent folder by another host at any moment.
-// $AUTODOC_CREW_CONTEXT names the agent's own file.
+// ContextDir is the folder of an agent folder's session contexts
+// (docs/decisions/crew.md#the-session-context): one file per session, named by the session's id, so
+// a host removing its ended session's file never touches another session's, a replacement's written
+// into the same agent folder by another host at any moment. $AUTODOC_CREW_CONTEXT names the agent's
+// own file.
 const ContextDir = ".autodoc-crew"
 
 // Context is a session's context, written by its host (the AutoDoc window, Neovim) before the agent

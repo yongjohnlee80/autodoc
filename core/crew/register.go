@@ -11,7 +11,8 @@ import (
 	"strings"
 )
 
-// Registration is what crew.register records for one agent process (§4.4).
+// Registration is what crew.register records for one agent process
+// (docs/decisions/crew.md#sessions-and-the-guard).
 type Registration struct {
 	Scope     string
 	Run       string
@@ -75,7 +76,8 @@ func checkRegistration(r Registration) error {
 	return nil
 }
 
-// Register starts a session for (r.Scope, r.Codename) under the host's epoch (§4.4). One write:
+// Register starts a session for (r.Scope, r.Codename) under the host's epoch
+// (docs/decisions/crew.md#sessions-and-the-guard). One write:
 //   - guardHost: the host still owns the scope at r.Epoch;
 //   - a session for (scope, epoch, instance) exists: a replay, answered with the same session, only
 //     if its secret and immutable arguments match and it has not ended; else ErrInstanceReused;
@@ -85,7 +87,8 @@ func checkRegistration(r Registration) error {
 //     seeded when the profile already has mail it may receive.
 //
 // A new epoch is a new namespace for instances: a crash successor's agent-1 never meets the old
-// one's (§R22). The host keeps the secret and writes the session context only after this succeeds.
+// one's (docs/decisions/crew.md#sessions-and-the-guard). The host keeps the secret and writes the
+// session context only after this succeeds.
 func (m *Manager) Register(ctx context.Context, r Registration) (Registered, error) {
 	if err := checkRegistration(r); err != nil {
 		return Registered{}, err
@@ -160,8 +163,8 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 	return out, err
 }
 
-// Renew keeps the host's ownership of scope: its lease runs another 90 s (§4.4). Hosts renew
-// every 30 s.
+// Renew keeps the host's ownership of scope: its lease runs another 90 s
+// (docs/decisions/crew.md#sessions-and-the-guard). Hosts renew every 30 s.
 func (m *Manager) Renew(ctx context.Context, scope, run string, epoch int64) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
@@ -177,8 +180,8 @@ func (m *Manager) Renew(ctx context.Context, scope, run string, epoch int64) err
 }
 
 // Exit ends session, which the host started under its epoch: why is EndedExit, or
-// EndedStartFailed for a spawn that failed after its registration (§4.4). Ending an ended session
-// again is no error.
+// EndedStartFailed for a spawn that failed after its registration
+// (docs/decisions/crew.md#sessions-and-the-guard). Ending an ended session again is no error.
 func (m *Manager) Exit(ctx context.Context, scope, run string, epoch int64, session, why string) error {
 	if why != EndedExit && why != EndedStartFailed {
 		return fmt.Errorf("%w: exit reason %q", ErrInvalid, why)

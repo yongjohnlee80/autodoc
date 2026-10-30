@@ -11,13 +11,14 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
-// ClaudeWaker wakes a Claude Code session through its inbox socket (§4.7, rationale §R15): the
-// documented cross-session messaging channel, one JSON line per message. An idle session starts a
-// turn; a busy one reads it at its next tool round, its draft left alone. Before every wake the
-// socket is bound to the session's own process: its path lies in Claude's socket folders for the
-// daemon's user, and the process at the other end (the kernel's record, not the path) is the
-// registered pid, still the same process (its reference). A wrong or vanished holder fails the wake,
-// and the session's next SessionStart registers its new socket.
+// ClaudeWaker wakes a Claude Code session through its inbox socket
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): the documented cross-session messaging
+// channel, one JSON line per message. An idle session starts a turn; a busy one reads it at its
+// next tool round, its draft left alone. Before every wake the socket is bound to the session's own
+// process: its path lies in Claude's socket folders for the daemon's user, and the process at the
+// other end (the kernel's record, not the path) is the registered pid, still the same process (its
+// reference). A wrong or vanished holder fails the wake, and the session's next SessionStart
+// registers its new socket.
 type ClaudeWaker struct {
 	roots []string // the socket folders a locator must lie in
 }

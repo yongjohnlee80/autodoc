@@ -15,8 +15,12 @@ import (
 // the code relies on is described in docs/decisions/, and the code points there
 // (docs/decisions/<page>.md#<decision>), never at a record a reader can't open.
 
-// adrID is a decision record's number, as the code once cited them.
-var adrID = regexp.MustCompile(`ADR[- ]?([0-9]{4,})`)
+// adrID is a decision record's number, as the code once cited them; adrIDSplit is one whose number
+// a line break separated from "ADR", the comment marker of the next line between them.
+var (
+	adrID      = regexp.MustCompile(`ADR[- ]?([0-9]{4,})`)
+	adrIDSplit = regexp.MustCompile(`ADR[- ]?[ \t]*\n[ \t]*(?://+|-{2,3}|#+|\*|;+)?[ \t]*([0-9]{4,})`)
+)
 
 // releasedScripts are the schema scripts released with record numbers in their comments, and how
 // many each holds. A released script is immutable (sql/deployments' TestReleasedScriptsAreUnchanged
@@ -165,6 +169,14 @@ func TestNoFileCitesAPrivateDecisionRecord(t *testing.T) {
 				}
 				t.Errorf("%s:%d: %q cites a decision record: describe the decision in docs/decisions/ and point there", path, i+1, m[0])
 			}
+		}
+		for _, m := range adrIDSplit.FindAllSubmatchIndex(b, -1) {
+			id := string(b[m[2]:m[3]])
+			if ids, ok := examples[path]; ok && slices.Contains(ids, id) {
+				continue
+			}
+			line := 1 + bytes.Count(b[:m[0]], []byte("\n"))
+			t.Errorf("%s:%d: \"ADR\" and %s across a line break cite a decision record: describe the decision in docs/decisions/ and point there", path, line, id)
 		}
 	})
 	for path, want := range releasedScripts {

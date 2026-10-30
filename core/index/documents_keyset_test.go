@@ -191,9 +191,10 @@ func keysetFilters(file string) map[string]DocumentsOpts {
 	}
 }
 
-// TestDocumentsMatchTheOracle (§5.1, §5.2): every sort crossed with every filter combination, paged
-// to the end at limits 1, 2, 7 and 500, lists exactly the oracle's documents, in its order, with
-// the same entries: on the SQL path, and on the Go fallback while no document has keys.
+// TestDocumentsMatchTheOracle (docs/decisions/search.md#document-listing-in-the-store): every sort
+// crossed with every filter combination, paged to the end at limits 1, 2, 7 and 500, lists exactly
+// the oracle's documents, in its order, with the same entries: on the SQL path, and on the Go
+// fallback while no document has keys.
 func TestDocumentsMatchTheOracle(t *testing.T) {
 	e, ps, _ := keysetEnv(t, 36)
 	file := ps[3] // under a/b/c/
@@ -240,9 +241,9 @@ func entryPaths(es []DocumentEntry) []string {
 	return out
 }
 
-// TestTiesAtPageBoundaries (§5.2): at limit 1, documents with an equal indexed_at, or an equal
-// updated instant, each appear once, in path order within the tie, and the ties sit in their
-// order's place: newest first.
+// TestTiesAtPageBoundaries (docs/decisions/search.md#document-listing-in-the-store): at limit 1,
+// documents with an equal indexed_at, or an equal updated instant, each appear once, in path order
+// within the tie, and the ties sit in their order's place: newest first.
 func TestTiesAtPageBoundaries(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put("z.md", "# z", "m.md", "# m", "a.md", "# a", "q.md", "# q",
@@ -265,10 +266,10 @@ func TestTiesAtPageBoundaries(t *testing.T) {
 	}
 }
 
-// TestDocumentsSeekByKey (§5.3): under no ANALYZE statistics, as in every store, each page's
-// statement carries the row-value key predicate and no OFFSET, and is planned as a search of the
-// order's index (a range on its key), with no sort of its own; each filter's EXISTS is a keyed
-// search of its table, never a scan.
+// TestDocumentsSeekByKey (docs/decisions/search.md#document-listing-in-the-store): under no ANALYZE
+// statistics, as in every store, each page's statement carries the row-value key predicate and no
+// OFFSET, and is planned as a search of the order's index (a range on its key), with no sort of its
+// own; each filter's EXISTS is a keyed search of its table, never a scan.
 func TestDocumentsSeekByKey(t *testing.T) {
 	e, ps, _ := keysetEnv(t, 36)
 	capture := &sqlCapture{}
@@ -357,10 +358,10 @@ func (c *pageRows) AfterExec(_ context.Context, q *dao.QueryInfo, out dao.Outcom
 	return out.Err // the hook contract: AfterExec passes the statement's error on
 }
 
-// TestAListingReadsEachDocumentOnce (§5.3, §4's cost): a whole listing materialises O(N + pages ×
-// window) rows, a window a read: limit+1 a page without missing, missingWindow with it. Rows, not
-// statements: a page that read every document after its cursor would keep the plan, the order and
-// the statement count, and still be quadratic.
+// TestAListingReadsEachDocumentOnce (docs/decisions/search.md#document-listing-in-the-store): a
+// whole listing materialises O(N + pages × window) rows, a window a read: limit+1 a page without
+// missing, missingWindow with it. Rows, not statements: a page that read every document after its
+// cursor would keep the plan, the order and the statement count, and still be quadratic.
 func TestAListingReadsEachDocumentOnce(t *testing.T) {
 	was := missingWindow
 	missingWindow = 4
@@ -411,9 +412,10 @@ func (e *env) plan(q string, args ...any) string {
 	return strings.Join(out, "\n")
 }
 
-// TestMissingLooksAheadAcrossWindows (§5.4): documents that lack the field are separated by more
-// than one fetch window of documents that have it, and the last window holds none: each page is full
-// when it can be, more is right, and each next resumes with no repeat or skip.
+// TestMissingLooksAheadAcrossWindows (docs/decisions/search.md#document-listing-in-the-store):
+// documents that lack the field are separated by more than one fetch window of documents that have
+// it, and the last window holds none: each page is full when it can be, more is right, and each
+// next resumes with no repeat or skip.
 func TestMissingLooksAheadAcrossWindows(t *testing.T) {
 	was := missingWindow
 	missingWindow = 3
@@ -443,8 +445,9 @@ func TestMissingLooksAheadAcrossWindows(t *testing.T) {
 	}
 }
 
-// TestACursorIsForItsOwnListing (§5.5): a cursor from another sort, from other filters, or not a
-// cursor at all is refused (ErrBadCursor, invalid params on the wire); "" starts the listing.
+// TestACursorIsForItsOwnListing (docs/decisions/search.md#cursors-not-offsets): a cursor from
+// another sort, from other filters, or not a cursor at all is refused (ErrBadCursor, invalid params
+// on the wire); "" starts the listing.
 func TestACursorIsForItsOwnListing(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put("a.md", "---\ntags: [x]\n---\n# a", "b.md", "---\ntags: [x]\n---\n# b", "c.md", "# c")
@@ -478,8 +481,9 @@ func TestACursorIsForItsOwnListing(t *testing.T) {
 	}
 }
 
-// TestPagingIsStable (§5.6): between two pages, documents are added and removed before the cursor;
-// of the documents that stayed, none is skipped or repeated.
+// TestPagingIsStable (docs/decisions/search.md#cursors-not-offsets): between two pages, documents
+// are added and removed before the cursor; of the documents that stayed, none is skipped or
+// repeated.
 func TestPagingIsStable(t *testing.T) {
 	e := newEnv(t, options{})
 	var pc []string
@@ -517,11 +521,12 @@ func TestPagingIsStable(t *testing.T) {
 	}
 }
 
-// TestAListingCrossesTheBackfill (§5.7): a traversal begins while no document has keys (the Go
-// fallback), and its next is carried across partial backfill batches, a restart mid-backfill, a
-// document updated during the backfill (one already listed, its key unmoved) and the backfill's
-// end, into the SQL path. The traversal is the oracle's. The backfill keys at most its batch a
-// commit, resumes by its gate, and gives every document the key docKeys gives it.
+// TestAListingCrossesTheBackfill (docs/decisions/search.md#stored-sort-keys): a traversal begins
+// while no document has keys (the Go fallback), and its next is carried across partial backfill
+// batches, a restart mid-backfill, a document updated during the backfill (one already listed, its
+// key unmoved) and the backfill's end, into the SQL path. The traversal is the oracle's. The
+// backfill keys at most its batch a commit, resumes by its gate, and gives every document the key
+// docKeys gives it.
 func TestAListingCrossesTheBackfill(t *testing.T) {
 	was := keyBatch
 	keyBatch = 5
@@ -591,11 +596,11 @@ func TestAListingCrossesTheBackfill(t *testing.T) {
 	}
 }
 
-// TestABackfillBatchKeysOnlyTheUnkeyed (§5.7): one backfill batch keys at most keyBatch documents,
-// all of them ones that had no keys, so the count without keys falls by exactly what it keyed; a
-// batch over documents all keyed keys none. The documents keyed already come first in the table, so
-// a batch that read them too would spend itself on them. It runs single batches only: a backfill
-// whose gate is gone never ends.
+// TestABackfillBatchKeysOnlyTheUnkeyed (docs/decisions/search.md#stored-sort-keys): one backfill
+// batch keys at most keyBatch documents, all of them ones that had no keys, so the count without
+// keys falls by exactly what it keyed; a batch over documents all keyed keys none. The documents
+// keyed already come first in the table, so a batch that read them too would spend itself on them.
+// It runs single batches only: a backfill whose gate is gone never ends.
 func TestABackfillBatchKeysOnlyTheUnkeyed(t *testing.T) {
 	was := keyBatch
 	keyBatch = 2
