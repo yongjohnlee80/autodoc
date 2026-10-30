@@ -4,6 +4,7 @@ package crewtest
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -198,13 +199,25 @@ func (t *memTx) wakesWhere(keep func(crew.Wake) bool, limit int) []crew.Wake {
 	return out
 }
 
+// errLimit is a limited read asked for no rows: a caller's bug, as SQLite's LIMIT 0 would hide.
+var errLimit = errors.New("crewtest: a limit must be > 0")
+
 func (t *memTx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
+	if limit <= 0 {
+		return nil, errLimit
+	}
 	return t.wakesWhere(func(w crew.Wake) bool {
-		return w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen && (w.NextAt == nil || *w.NextAt <= now)
+		s, live := t.st.sessions[w.Session]
+		_, reachable := t.st.ends[w.Session]
+		return w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen && (w.NextAt == nil || *w.NextAt <= now) &&
+			live && s.Ended == nil && reachable
 	}, limit), nil
 }
 
 func (t *memTx) WakesTimedOut(now int64, limit int) ([]crew.Wake, error) {
+	if limit <= 0 {
+		return nil, errLimit
+	}
 	return t.wakesWhere(func(w crew.Wake) bool {
 		return w.State == crew.WakeAwaiting && w.NextAt != nil && *w.NextAt <= now
 	}, limit), nil

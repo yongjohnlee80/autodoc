@@ -138,9 +138,11 @@ type Tx interface {
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
 	// WakesDue is the idle rows with pending_gen past announced_gen whose next_at is unset or at or
-	// before now: the sessions a wake may be reserved for.
+	// before now, of a live session with an endpoint: the sessions a wake may be reserved for. An
+	// ended session's row, or an endpoint-less one's, is never due, so such rows can't crowd out
+	// the live ones under the limit. limit must be > 0, here and in every limited read.
 	WakesDue(now int64, limit int) ([]Wake, error)
-	// WakesTimedOut is the awaiting_receive rows whose next_at is at or before now.
+	// WakesTimedOut is the awaiting_receive rows whose next_at is at or before now (limit > 0).
 	WakesTimedOut(now int64, limit int) ([]Wake, error)
 	// WakesInFlight is every in_flight row, for a daemon start's recovery.
 	WakesInFlight() ([]Wake, error)
