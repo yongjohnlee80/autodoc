@@ -78,6 +78,9 @@ type (
 		Kind       string `param:"kind,optional" doc:"for raise: permission or blocked"`
 		Text       string `param:"text,optional" doc:"for raise: what the session waits on"`
 	}
+	guideParams struct {
+		Kind string `param:"kind" doc:"the CLI: claude, codex, agy, opencode …"`
+	}
 	exitParams struct {
 		Scope   string `param:"scope"`
 		Run     string `param:"run"`
@@ -170,6 +173,10 @@ func (m *Manager) Verbs() []module.Verb {
 				}
 				return struct{}{}, fmt.Errorf("%w: attention op %q, want raise or clear", ErrInvalid, p.Op)
 			}),
+		module.Handle(module.Contract{Verb: "crew.guide", Since: protocol, Scope: module.ScopeLocalPeer,
+			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "{markdown, protocol}",
+			Doc: "The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide."},
+			func(_ context.Context, p guideParams) (Guide, error) { return m.GuideFor(p.Kind), nil }),
 		module.Handle(module.Contract{Verb: "crew.list", Since: protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable}]", Doc: "The addressbook."},
 			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),
