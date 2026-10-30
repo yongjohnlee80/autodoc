@@ -3,8 +3,10 @@ package crewtest
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -139,11 +141,16 @@ func Run(t *testing.T, h Harness) {
 
 	t.Run("a reattach needs the same process", func(t *testing.T) {
 		m, _, _, _ := setup(t)
-		if _, err := m.Claim(ctx, scope, "run-a", "boot:4026531836:100:5000"); err != nil {
+		live, err := crew.ProcRef(os.Getpid()) // this test's own process: alive, so its lease alone isn't the answer
+		if err != nil {
+			t.Skipf("no process references here: %v", err)
+		}
+		if _, err := m.Claim(ctx, scope, "run-a", live); err != nil {
 			t.Fatal(err)
 		}
 		// the same run token from another process tuple is not a reattach, and the holder is live
-		if _, err := m.Claim(ctx, scope, "run-a", "boot:4026531836:101:5000"); !errors.Is(err, crew.ErrScopeBusy) {
+		other := strings.Replace(live, ":"+strconv.Itoa(os.Getpid())+":", ":"+strconv.Itoa(os.Getpid()+1)+":", 1)
+		if _, err := m.Claim(ctx, scope, "run-a", other); !errors.Is(err, crew.ErrScopeBusy) {
 			t.Fatalf("the run token from another process: %v, want ErrScopeBusy", err)
 		}
 	})
@@ -315,12 +322,13 @@ func Run(t *testing.T, h Harness) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		clock.Advance(91 * time.Second) // the host crashed; its successor claims
-		e2, err := m.Claim(ctx, scope, "run-a", proc)
-		if err != nil {
-			t.Fatal(err)
+		clock.Advance(91 * time.Second) // the host crashed; its successor, a new process, claims
+		e2, err := m.Claim(ctx, scope, "run-a2", proc)
+		if err != nil || e2 != e1+1 {
+			t.Fatalf("the successor's claim: epoch %d, %v; want %d", e2, err, e1+1)
 		}
 		r := reg(e2, "jarvis", "agent-1") // the successor's own agent-1
+		r.Run = "run-a2"
 		r.Secret = strings.Repeat("n", 40)
 		second, err := m.Register(ctx, r)
 		if err != nil || second.Session == first.Session {
