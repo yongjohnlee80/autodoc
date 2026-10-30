@@ -15,11 +15,14 @@ import (
 // the code relies on is described in docs/decisions/, and the code points there
 // (docs/decisions/<page>.md#<decision>), never at a record a reader can't open.
 
-// adrID is a decision record's number, as the code once cited them; adrIDSplit is one whose number
+// adrID is a decision record's number, as the code once cited them, in any case (a lower-case
+// "adr" before the number in a file name too); adrPath is a record's file in an adrs/ folder named
+// by a long number (a sample's is four digits); adrIDSplit is one whose number
 // a line break separated from "ADR", the comment marker of the next line between them.
 var (
-	adrID      = regexp.MustCompile(`ADR[- ]?([0-9]{4,})`)
-	adrIDSplit = regexp.MustCompile(`ADR[- ]?[ \t]*\n[ \t]*(?://+|-{2,3}|#+|\*|;+)?[ \t]*([0-9]{4,})`)
+	adrID      = regexp.MustCompile(`(?i)\bADR[-_ ]?([0-9]{4,})`)
+	adrPath    = regexp.MustCompile(`(?i)\badrs/([0-9]{6,})`)
+	adrIDSplit = regexp.MustCompile(`(?i)\bADR[-_ ]?[ \t]*\n[ \t]*(?://+|-{2,3}|#+|\*|;+)?[ \t]*([0-9]{4,})`)
 )
 
 // releasedScripts are the schema scripts released with record numbers in their comments, and how
@@ -105,7 +108,9 @@ var releasedScripts = map[string]int{
 var examples = map[string][]string{
 	"AGENTS.md": {"0007"},
 	"docs/reference/05-hybrid-search-pipeline.md":                                         {"0007"},
+	"core/index/relations_test.go":                                                        {"0021"},
 	"core/todo/worktree_test.go":                                                          {"0158"},
+	"docs/reference/12-ai-agent-integration-and-cli-rpc.md":                               {"1792200100"},
 	"docs/reference/07-frontmatter-schemas-and-validation.md":                             {"0220"},
 	"docs/reference/08-knowledge-graphs-and-adr-lifecycle.md":                             {"0001", "0009", "0014"},
 	"docs/reference/08-knowledge-graphs-and-adr-lifecycle/adr-supersession-lifecycle.mmd": {"0001", "0009", "0014"},
@@ -169,6 +174,13 @@ func TestNoFileCitesAPrivateDecisionRecord(t *testing.T) {
 				}
 				t.Errorf("%s:%d: %q cites a decision record: describe the decision in docs/decisions/ and point there", path, i+1, m[0])
 			}
+		}
+		for _, m := range adrPath.FindAllSubmatchIndex(b, -1) {
+			if ids, ok := examples[path]; ok && slices.Contains(ids, string(b[m[2]:m[3]])) {
+				continue
+			}
+			line := 1 + bytes.Count(b[:m[0]], []byte("\n"))
+			t.Errorf("%s:%d: %q names a decision record's file: use a sample", path, line, b[m[0]:m[1]])
 		}
 		for _, m := range adrIDSplit.FindAllSubmatchIndex(b, -1) {
 			id := string(b[m[2]:m[3]])

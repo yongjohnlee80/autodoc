@@ -59,9 +59,9 @@ tags:
   - autodoc
   - storage
 adr:
-  - $KB_ROOT/adrs/1791532020-autodoc-owns-the-todo-system.md
+  - $KB_ROOT/adrs/0012-todo-ownership.md
 review:
-  - $KB_ROOT/reviews/lector/2026-10-11-autodoc-todo-ownership-adr1791532020-r7-review.md
+  - $KB_ROOT/reviews/2026-10-11-todo-ownership-review.md
 blocked:
   - 2026-10-11-autodoc-module-convention-foundation
 ---
@@ -196,7 +196,7 @@ autodoc --call todos.update '[
   "kb",
   "2026-10-17-implement-sqlite-todo-journal",
   "a94f8c2e1b0d...",
-  {"priority": "high", "adr": ["/home/me/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
+  {"priority": "high", "adr": ["/home/me/kb/adrs/0012-todo-ownership.md"]}
 ]'
 
 # 4. Transition status to completed (moves file to completed/ and stamps completed_at)
