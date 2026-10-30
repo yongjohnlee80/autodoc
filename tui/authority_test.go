@@ -43,6 +43,9 @@ autodoc.command{ name = "peek", run = function(ed)
 end }
 autodoc.command{ name = "closeit", run = function(ed) say(ed, autodoc.run("buffer.close")) end }
 autodoc.command{ name = "touch", run = function(ed) ed:insert("EDITED") end }
+autodoc.command{ name = "direct", run = function(ed)
+  autodoc.doc.write("kb", "a.md", "DIRECT\n", "", function(_, e) ed:insert("[direct " .. tostring(e) .. "]") end)
+end }
 autodoc.command{ name = "bind", run = function(ed)
   autodoc.map{ mode = "leader", keys = "z", command = "w", title = "save" }
   autodoc.menu{ where = "plugins", title = "save it", command = "w" }
@@ -388,8 +391,8 @@ func TestAGatedSaveHeldAcrossASwitchIsDropped(t *testing.T) {
 	held, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	free := func() { once.Do(func() { close(release) }) }
-	beforeSave = func() { close(held); <-release }
-	t.Cleanup(func() { free(); beforeSave = func() {} }) // a failing cell never leaves the worker held
+	beforeSend = func() { close(held); <-release }
+	t.Cleanup(func() { free(); beforeSend = func() {} }) // a failing cell never leaves the worker held
 	g.mustRun(t, "saveit")
 	select {
 	case <-held:
@@ -412,5 +415,32 @@ func TestTheConfigFolderIsProtectedAbsolute(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{ConfigPath: filepath.Join("cfg", "config.toml")})
 	if got := onLoop(r, func() string { return r.h.cfgDir }); got != filepath.Join(dir, "cfg") {
 		t.Errorf("the config folder sent as %q, want %q", got, filepath.Join(dir, "cfg"))
+	}
+}
+
+// TestAGatedScriptsOwnCallHeldAcrossASwitchIsRefused: a gated script's own daemon call (here
+// autodoc.doc.write), already in its worker when the TUI enters another workspace, is refused as it
+// is sent, through the same send path as the work it starts; the old workspace's file stays.
+func TestAGatedScriptsOwnCallHeldAcrossASwitchIsRefused(t *testing.T) {
+	g := newGatedRig(t)
+	held, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	free := func() { once.Do(func() { close(release) }) }
+	beforeSend = func() { close(held); <-release }
+	t.Cleanup(func() { free(); beforeSend = func() {} })
+	g.mustRun(t, "direct")
+	select {
+	case <-held:
+	case <-time.After(daemonWait):
+		t.Fatal("the call never reached its worker")
+	}
+	onLoop(g.running, func() bool { g.h.enter("kb2"); return true })
+	free()
+	g.s.WaitFor(t, "the call's answer", func(string) bool { return strings.Contains(g.editorText(), "[direct ") })
+	if got := g.editorText(); !strings.Contains(got, "the workspace changed") {
+		t.Errorf("the held call answered %q, want it refused", got)
+	}
+	if got := g.d.read(t, "kb", "a.md"); got != "kestrel\n" {
+		t.Errorf("the held call wrote %q", got)
 	}
 }

@@ -529,7 +529,7 @@ func (c core) OpenFile(abs string)           { c.h.openAbsolute(abs) }
 func (c core) Failed(what string, err error) { c.h.failed(what, err) }
 func (c core) Focus(id string)               { c.h.keep(c.h.p.Call(id, "forceActiveFocus")) }
 func (c core) Call(ctx context.Context, verb string, params ...any) (any, error) {
-	return c.h.session.Call(ctx, verb, params...)
+	return c.h.call(ctx, verb, params...) // the one send path: a gated authority on ctx is bounded there
 }
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
 func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }

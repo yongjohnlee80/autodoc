@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -69,18 +67,7 @@ func (h *schemaHolder) status() rpc.SchemaStatus {
 	return st
 }
 
-func (h *schemaHolder) resolved() string {
-	p := h.path
-	if strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(home, p[2:])
-		}
-	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(h.root, p)
-	}
-	return filepath.Clean(p)
-}
+func (h *schemaHolder) resolved() string { return schema.ResolvePath(h.root, h.path) }
 
 // setPath points the holder at a new file ("" for none) and reads it at once. A path with no
 // valid schema yet still records it; the previous schema stays active until the file is valid,

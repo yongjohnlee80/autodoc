@@ -797,7 +797,6 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	h.say(h.trf("autodoc.notice.files.saving", p))
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
-		beforeSave()
 		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
 		if err == nil {
 			return answer{version: str(asMap(res), "version")}
@@ -1113,7 +1112,3 @@ func (h *Host) createEmpty(name string) {
 // Stay. Every way out comes here: File › Exit, Ctrl+Q, SPC Q, the command line's q, the too-small
 // screen's Quit and the GUI window's close button (WithQuit).
 func (h *Host) quit() { h.guardAll(h.askBefore("quit"), h.p.Quit) }
-
-// beforeSave runs in a save's worker before it sends the write: a cell holds a save there, while
-// the workspace changes under it. Nothing in the program sets it.
-var beforeSave = func() {}
