@@ -76,6 +76,9 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `dsn_env` | (required) | The name of the environment variable holding the PostgreSQL connection string (a URL or `key=value` form). | missing; not a variable name; the variable is not set or is empty |
 | `dsn_sealed` | | A DSN sealed with AutoDoc's keyslot. | always, for now: the keyslot keeps its key beside a local store, which the server doesn't have. Use `dsn_env`. |
 | `schema` | `autodoc_search` | The schema the index lives in. | not a plain identifier: lowercase letters, digits and `_`, not starting with a digit or `pg_`, at most 63 bytes |
+| `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
+| `ann_max_scan_tuples` | `40000` | The most index tuples one approximate search scans (pgvector's `hnsw.max_scan_tuples`). | outside 1 to 2147483647 |
+| `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
 
 The server opens three connection pools on the DSN:
 
@@ -83,6 +86,18 @@ The server opens three connection pools on the DSN:
   installed in `public`);
 - the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`;
 - one pinned connection per source, which holds that tenant's writer lock.
+
+**Approximate semantic search.** The server builds one HNSW index per embedding model, in the
+background, one index at a time across every server on the database.
+- Until a model's index is ready, and while a tenant has fewer than `ann_threshold` embeddings of
+  it, semantic search is exact.
+- Above the threshold it is approximate. The nearest candidates come through the index, are then
+  ordered exactly, and ties are ordered within the returned set.
+- A search whose candidates come back short (a selective filter, or a scan that hit
+  `ann_max_scan_tuples`) is answered exactly instead, and counted as an underfill.
+- A model of more than 4,000 dimensions has no index and stays exact.
+- The status reports each model's mode: `exact`, `ann`, `ann-building` or `ann-failed` (with the
+  reason).
 
 ## `[embedding]`: the enterprise's embedding model (required)
 

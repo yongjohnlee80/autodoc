@@ -42,14 +42,27 @@ type Store struct {
 	tenant string
 	rw     schemas // writes: every transaction READ COMMITTED
 	ro     schemas // views: every transaction REPEATABLE READ, READ ONLY
+	ann    *ANN    // the server's approximate search (WithANN); nil is exact only
 }
 
+// Option configures a Store at New.
+type Option func(*Store)
+
+// WithANN gives the Store the server's approximate search: Semantic goes through a model's HNSW
+// index when it is ready and the tenant is past the threshold, and SetModels records the models'
+// indexes as wanted. a must be on the Store's connection.
+func WithANN(a *ANN) Option { return func(s *Store) { s.ann = a } }
+
 // New is tenant's store on conn. It does no I/O: Migrate prepares the database.
-func New(conn dao.DataConn, tenant string) (*Store, error) {
+func New(conn dao.DataConn, tenant string, opts ...Option) (*Store, error) {
 	if tenant == "" {
 		return nil, ErrNoTenant
 	}
-	return &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}, nil
+	s := &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
+	for _, o := range opts {
+		o(s)
+	}
+	return s, nil
 }
 
 // snapshotConn is a connection whose transactions are REPEATABLE READ and READ ONLY: dao's
@@ -621,6 +634,13 @@ func (s *Store) SetModels(ctx context.Context, active, target string) error {
 	err := s.rw.meta.DAO(dao.WithQueryContext(ctx)).Set(mTenant, s.tenant).Set(mActive, active).Set(mTarget, target).Upsert()
 	if err != nil {
 		return fmt.Errorf("pgstore: set models: %w", err)
+	}
+	if s.ann != nil {
+		for _, m := range []string{active, target} {
+			if err := s.ann.Want(ctx, m); err != nil {
+				return fmt.Errorf("pgstore: set models: the model's index: %w", err)
+			}
+		}
 	}
 	return nil
 }
