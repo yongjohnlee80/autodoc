@@ -44,6 +44,12 @@ const (
 // now, when not nil, is the collector's clock (health reuses its ping for ops.PingFor).
 func opsAPI(t *testing.T, dbDown *atomic.Bool, now clock.Clock) *httptest.Server {
 	t.Helper()
+	return opsAPIWith(t, dbDown, now)
+}
+
+// opsAPIWith is opsAPI with more options (WithMetrics).
+func opsAPIWith(t *testing.T, dbDown *atomic.Bool, now clock.Clock, extra ...Option) *httptest.Server {
+	t.Helper()
 	state := func() ingest.State {
 		return ingest.State{Locked: true, LastPass: ingest.Outcome{At: time.Now(), Error: opcode.View}}
 	}
@@ -67,7 +73,8 @@ func opsAPI(t *testing.T, dbDown *atomic.Bool, now clock.Clock) *httptest.Server
 		{Name: "ops", Token: sha256.Sum256([]byte(opsToken)), Tenants: []string{"music"}},
 		{Name: "ops-other", Token: sha256.Sum256([]byte(otherOps)), Tenants: []string{"other"}},
 	}
-	srv := httptest.NewServer(New(clients, map[string]Searcher{"music": &fake{}}, WithOps(c), WithOperators(operators)))
+	opts := append([]Option{WithOps(c), WithOperators(operators)}, extra...)
+	srv := httptest.NewServer(New(clients, map[string]Searcher{"music": &fake{}}, opts...))
 	t.Cleanup(srv.Close)
 	return srv
 }

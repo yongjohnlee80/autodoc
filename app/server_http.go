@@ -59,7 +59,8 @@ func (s *server) startHTTP() error {
 		}
 		tenants[src.Tenant] = sr
 	}
-	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators))
+	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
+		api.WithMetrics(s.cfg.Metrics.Enabled))
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
 		return err

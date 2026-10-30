@@ -197,7 +197,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"no access", sub(`access   = ["label_id"]`, ``), "source[0].access", "required"},
 		{"access twice", sub(`access   = ["label_id"]`, `access = ["label_id", "label_id"]`), "source[0].access", "named twice"},
 		{"access with =", sub(`access   = ["label_id"]`, `access = ["label=id"]`), "source[0].access", "not an access field name"},
-		{"unknown", good + "\n[metrics]\nport = 9\n", "metrics", "unknown field"},
+		{"unknown", good + "\n[telemetry]\nport = 9\n", "telemetry", "unknown field"}, // [metrics] is a known table
 		{"not toml", good + "\n[[source]\n", "(file)", "line"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
