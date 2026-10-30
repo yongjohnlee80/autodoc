@@ -20,10 +20,14 @@ import (
 	"github.com/yongjohnlee80/golib/search/rank"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -217,7 +221,8 @@ func (d *process) startWorkspaces() error {
 		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard})
 	// the modules, the todo system first among them, before any workspace starts: a workspace's
 	// index reads the todo stores, so its first pass indexes their tasks graph-only (ADR 1792015212)
-	d.deps = &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log, onStores: d.ws.TodoStoresChanged}
+	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
+		onStores: d.ws.TodoStoresChanged}
 	d.mods = modules(d.deps)
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
@@ -226,6 +231,12 @@ func (d *process) startWorkspaces() error {
 	d.stops.push(d.emb.Wait)
 	d.stops.push(stopWorkspaces)
 	d.stops.push(d.ws.StopAll)
+	// the reserved profiles the crew's mail needs (the daemon's, which sends every notice, and the
+	// human's), made once; then the wake scheduler, which phase 1d starts here
+	if err := d.deps.mail.EnsureReserved(d.ctx); err != nil {
+		return err
+	}
+	d.startWakes()
 	if err := d.ws.OpenAll(); err != nil {
 		return err
 	}
@@ -237,6 +248,11 @@ func (d *process) startWorkspaces() error {
 	}
 	return nil
 }
+
+// startWakes starts the wake scheduler and sets d.deps.wake to its poke. Phase 1d (the scheduler,
+// ADR 1793271500 §4.7) fills it in; until then a due wake row waits, and its agent sees its mail
+// at its next receive.
+func (d *process) startWakes() {}
 
 // openFiles opens a local peer's files outside every workspace (ADR 1791430651): the whole disk,
 // every file.
@@ -287,11 +303,19 @@ func (d *process) refreshTodos(m *todo.Manager) {
 // (--contracts), which never touch them.
 type moduleDeps struct {
 	store      *store.Store
+	storeID    string // the store's identity, which a session context names (crew.whoami)
 	workspaces rpc.Workspaces
 	journal    todo.Journal // the todos' change log, in the store
 	log        logger.Logger
 
 	todos *todo.Manager // the todo system modules built, for its daily refresh
+	// the crew, its mail and the human's inbox (ADR 1793271500), on one store
+	crew  *crew.Manager
+	mail  *mail.Manager
+	inbox *inbox.Manager
+	// wake is the wake scheduler's poke, told after every write that leaves a wake row due
+	// (crew.Signals.Wake). nil until the scheduler runs (phase 1d): rows wait for its first look.
+	wake func()
 	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
 	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
 	onStores func()
@@ -301,7 +325,7 @@ type moduleDeps struct {
 // --contracts and AGENTS.md's tables list them.
 func modules(d *moduleDeps) []module.Module {
 	if d == nil {
-		return []module.Module{todo.New(nil, nil, nil)}
+		return []module.Module{todo.New(nil, nil, nil), crew.New(nil), mail.New(nil, nil), inbox.New(nil, nil, nil)}
 	}
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
 	if d.onStores != nil {
@@ -311,7 +335,39 @@ func modules(d *moduleDeps) []module.Module {
 		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (ADR 1792015069 §2.2)
 	}
 	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal, opts...)
-	return []module.Module{d.todos}
+	crewModules(d)
+	return []module.Module{d.todos, d.crew, d.mail, d.inbox}
+}
+
+// crewModules builds the crew, mail and inbox modules on one store (ADR 1793271500 §4.1): every
+// transaction is crew's, mail's and the inbox's at once, so a verb's guard, crew's change and
+// mail's effect commit together. Mail authenticates through crew, and crew ends a session's mail
+// through mail (its SessionEnder), so mail's port to crew is set once crew exists. A committed
+// write tells the human feed's waiters and the wake scheduler (crew.Signals).
+func crewModules(d *moduleDeps) {
+	feed := inbox.NewFeed()
+	wake := func() {
+		if d.wake != nil {
+			d.wake()
+		}
+	}
+	st := sqlitecrewmail.New(d.store, sqlitecrewmail.WithSignals(crew.Signals{Feed: feed.Notify, Wake: wake}))
+	port := &crewPort{}
+	d.mail = mail.New(st.Mail(), port)
+	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID))
+	port.m = d.crew
+	d.inbox = inbox.New(st.Inbox(), d.mail, feed)
+}
+
+// crewPort is mail's port to crew, set once crew is built: the two depend on each other.
+type crewPort struct{ m *crew.Manager }
+
+func (p *crewPort) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
+	return p.m.Authenticate(tx, credential)
+}
+
+func (p *crewPort) RaisePending(tx crew.Tx, profile string) error {
+	return p.m.RaisePending(tx, profile)
 }
 
 // todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
