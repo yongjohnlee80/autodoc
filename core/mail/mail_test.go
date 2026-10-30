@@ -623,6 +623,27 @@ func TestHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T) {
 	}
 }
 
+// A preview reads: expire doesn't run in it, so eligibility itself must leave expired mail out
+// before the count's bound. More expired deliveries than a preview counts, then live ones behind
+// them: the preview counts the live ones and lists them first.
+func TestAPreviewSeesLiveMailBehindExpiredMail(t *testing.T) {
+	r := newRig(t)
+	for i := range 1001 {
+		r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "old", Key: fmt.Sprint("x", i), TTL: time.Minute})
+	}
+	r.clock.Advance(time.Minute)
+	for i := range 2 {
+		r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "live", Key: fmt.Sprint("live", i)})
+	}
+	in, err := r.m.Preview(r.ctx, "s-gold", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Unread != 2 || len(in.Items) != 2 || in.Items[0].Message.Body != "live" {
+		t.Fatalf("the preview behind 1001 expired deliveries: unread %d, %d items", in.Unread, len(in.Items))
+	}
+}
+
 // A crew effect on a transaction that is not mail's is an error, never a panic.
 func TestTheEffectsRefuseAnotherTransaction(t *testing.T) {
 	r := newRig(t)

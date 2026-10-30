@@ -180,9 +180,11 @@ func (t *memTx) DeliveriesOf(message string) ([]mail.Delivery, error) {
 	return t.where(func(d mail.Delivery) bool { return d.Message == message }, 0), nil
 }
 
-func (t *memTx) Eligible(recipient, session string, limit int) ([]mail.Delivery, error) {
+func (t *memTx) Eligible(recipient, session string, now int64, limit int) ([]mail.Delivery, error) {
 	return t.where(func(d mail.Delivery) bool {
-		return d.Recipient == recipient && d.State == mail.Queued && (d.Session == "" || d.Session == session)
+		msg := t.st.messages[d.Message]
+		return d.Recipient == recipient && d.State == mail.Queued && (d.Session == "" || d.Session == session) &&
+			(msg.Expires == nil || *msg.Expires > now)
 	}, limit), nil
 }
 

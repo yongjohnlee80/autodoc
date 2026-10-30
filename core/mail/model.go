@@ -103,8 +103,10 @@ type Tx interface {
 	PutDelivery(Delivery) error
 	// DeliveriesOf is every delivery of message.
 	DeliveriesOf(message string) ([]Delivery, error)
-	// Eligible is recipient's queued deliveries for session (unbound, or bound to it), in seq order.
-	Eligible(recipient, session string, limit int) ([]Delivery, error)
+	// Eligible is recipient's queued deliveries for session (unbound, or bound to it) whose message
+	// has not expired by now, in seq order: the store applies both before the limit, so no prefix
+	// of expired mail can hide a live delivery behind it (eligible(now), §4.2).
+	Eligible(recipient, session string, now int64, limit int) ([]Delivery, error)
 	// Unhandled is every queued or leased delivery of recipient, in seq order.
 	Unhandled(recipient string) ([]Delivery, error)
 	// BoundTo is every queued or leased delivery bound to session.

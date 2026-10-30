@@ -133,7 +133,7 @@ func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	if err := m.expire(tx); err != nil {
 		return false, err
 	}
-	ds, err := tx.Eligible(profile, "", 1)
+	ds, err := tx.Eligible(profile, "", tx.Now().UnixNano(), 1)
 	return len(ds) > 0, err
 }
 
