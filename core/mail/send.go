@@ -34,16 +34,16 @@ type Item struct {
 	Message  Message
 }
 
-// Send stores a message and its deliveries in one write, from session (§4.6). A key the sender
+// Send stores a message and its deliveries in one write, from credential's session (§4.6). A key the sender
 // already used answers that send while its message is retained, when the content is the same, and
 // ErrKeyReused when it is not.
-func (m *Manager) Send(ctx context.Context, session string, p Send) (Sent, error) {
+func (m *Manager) Send(ctx context.Context, credential string, p Send) (Sent, error) {
 	if err := checkSend(p); err != nil {
 		return Sent{}, err
 	}
 	var out Sent
 	err := m.store.Write(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
@@ -182,12 +182,12 @@ type Received struct {
 	More  bool
 }
 
-// Receive leases session's next eligible deliveries, at most ReceiveMax, in seq order, each for
+// Receive leases the credential's session's next eligible deliveries, at most ReceiveMax, in seq order, each for
 // LeaseFor (§4.6). More is true while eligible mail remains: the guide drains until it is false.
-func (m *Manager) Receive(ctx context.Context, session string) (Received, error) {
+func (m *Manager) Receive(ctx context.Context, credential string) (Received, error) {
 	var out Received
 	err := m.store.Write(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
@@ -240,9 +240,9 @@ func owned(tx Tx, s crew.Session, id string) (Delivery, error) {
 }
 
 // Renew extends a lease the caller holds by LeaseFor from now; it does not count as an attempt.
-func (m *Manager) Renew(ctx context.Context, session, delivery, lease string) error {
+func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string) error {
 	return m.store.Write(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
@@ -264,9 +264,9 @@ func (m *Manager) Renew(ctx context.Context, session, delivery, lease string) er
 
 // Ack is done with a delivery under its lease. Replaying an ack of the same lease answers ok;
 // another lease, or one that lapsed, is ErrLeaseLost.
-func (m *Manager) Ack(ctx context.Context, session, delivery, lease string) error {
+func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) error {
 	return m.store.Write(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
@@ -305,7 +305,7 @@ type Reply struct {
 // Reply acks a request's delivery under its lease and sends its response, in one write (§4.6). A
 // replier's response to a request is one: a retry with the same content answers it, even after
 // the lease is gone, and other content is ErrKeyReused.
-func (m *Manager) Reply(ctx context.Context, session, delivery, lease string, p Reply) (Message, error) {
+func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string, p Reply) (Message, error) {
 	switch {
 	case len(p.Body) > MaxBody:
 		return Message{}, fmt.Errorf("%w: %d bytes, at most %d", ErrTooLarge, len(p.Body), MaxBody)
@@ -314,7 +314,7 @@ func (m *Manager) Reply(ctx context.Context, session, delivery, lease string, p 
 	}
 	var out Message
 	err := m.store.Write(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
@@ -375,19 +375,19 @@ func replyDigest(delivery string, p Reply) []byte {
 // previewMax bounds a preview's count: past it the count says "at least".
 const previewMax = 1000
 
-// Inbox is a preview of session's eligible mail: never leased.
+// Inbox is a preview of a session's eligible mail: never leased.
 type Inbox struct {
 	Unread int // at most previewMax
 	Items  []Item
 }
 
-// Preview is session's eligible mail, the first limit of it with its messages, leasing nothing
+// Preview is the credential's session's eligible mail, the first limit of it with its messages, leasing nothing
 // (mail.inbox). A delivery whose message expired, though expire has not yet run, is left out.
-func (m *Manager) Preview(ctx context.Context, session string, limit int) (Inbox, error) {
+func (m *Manager) Preview(ctx context.Context, credential string, limit int) (Inbox, error) {
 	limit = min(max(limit, 0), previewMax)
 	var out Inbox
 	err := m.store.Read(ctx, func(tx Tx) error {
-		s, err := m.crew.GuardSession(tx, session)
+		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
 		}
