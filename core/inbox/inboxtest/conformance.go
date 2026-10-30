@@ -38,6 +38,7 @@ func Run(t *testing.T, h Harness) {
 	}{
 		{"AWatchSnapshotsThenFollowsTheJournal", testAWatchSnapshotsThenFollowsTheJournal},
 		{"AWatchWakesOnACommitAndARollbackTellsNothing", testAWatchWakesOnACommitAndARollbackTellsNothing},
+		{"ASnapshotShowsEveryOpenItem", testASnapshotShowsEveryOpenItem},
 		{"AReplyWinsOnceAndReplaysExactly", testAReplyWinsOnceAndReplaysExactly},
 		{"AReplyRacingExpiryGetsOneOutcome", testAReplyRacingExpiryGetsOneOutcome},
 		{"ADismissTellsTheSender", testADismissTellsTheSender},
@@ -200,6 +201,24 @@ func testAWatchSnapshotsThenFollowsTheJournal(t *testing.T, h Harness) {
 	}
 	if rep.Kind != mail.KindMessage {
 		t.Fatalf("a report's kind: %q", rep.Kind)
+	}
+}
+
+// A snapshot shows every open request and unread report, however many: its cursor moves past all
+// of their journal rows, so one it left out would reach no window until something changed it.
+func testASnapshotShowsEveryOpenItem(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	const n = 520 // past any page a store might be tempted to cut it to
+	for i := range n {
+		r.ask("s-jarvis", mail.KindRequest, fmt.Sprintf("q%03d", i), 0)
+	}
+	w := r.watch(0, 0)
+	if w.Snapshot == nil || len(w.Snapshot.Items) != n || w.Cursor != n {
+		got := -1
+		if w.Snapshot != nil {
+			got = len(w.Snapshot.Items)
+		}
+		t.Fatalf("a snapshot of %d open requests: %d items at cursor %d, want all %d at cursor %d", n, got, w.Cursor, n, n)
 	}
 }
 

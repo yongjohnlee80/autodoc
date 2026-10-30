@@ -11,10 +11,9 @@ import (
 
 // The feed's limits (§4.8).
 const (
-	MaxWait     = 25 * time.Second // the longest inbox.watch waits
-	changesMax  = 256              // changes one watch returns; the next takes the rest
-	snapshotMax = 500              // open items one snapshot shows
-	listMax     = 200              // items one list returns
+	MaxWait    = 25 * time.Second // the longest inbox.watch waits
+	changesMax = 256              // changes one watch returns; the next takes the rest
+	listMax    = 200              // items one list returns
 )
 
 // List filters.
@@ -141,7 +140,7 @@ func snapshot(tx Tx) (Snapshot, error) {
 	}
 	snap := Snapshot{Items: []Item{}, Attention: []Attention{}}
 	if ok {
-		open, err := tx.OpenToUser(user.ID, snapshotMax)
+		open, err := tx.OpenToUser(user.ID, 0) // every one: the cursor moves past them all (§4.8)
 		if err != nil {
 			return Snapshot{}, err
 		}
