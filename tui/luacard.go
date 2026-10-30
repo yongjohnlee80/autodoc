@@ -28,7 +28,7 @@ import (
 // runs every `every` ms (at least cardEveryMin) while the panel is open. A chain of ticks belongs to
 // one opening of the panel, not to the card: cardEpoch moves at every Opened, Closed and end, and a
 // timer armed in an older epoch fires, finds it gone, and schedules nothing. So a close and a reopen
-// before the old timer fires never leave two chains (Lector r0 R1).
+// before the old timer fires never leave two chains.
 
 const (
 	luaCardPanel = "luaCard"
@@ -82,7 +82,7 @@ func (s *scripting) luaCard(L *lua.LState) int {
 	tick, _ := spec.RawGetString("tick").(*lua.LFunction)
 	every := cardEvery(spec.RawGetString("every"))
 	if tick == nil || every == 0 {
-		tick, every = nil, 0 // no every, no tick: a chain needs an interval (Lector PR r0 R2)
+		tick, every = nil, 0 // no every, no tick: a chain needs an interval
 	}
 	h := s.cardHost()
 	if h == nil {

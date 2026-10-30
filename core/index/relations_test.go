@@ -32,7 +32,7 @@ func TestRelationsBecomeTypedLinks(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put("adrs/0019-old.md", adr19, "adrs/a.md", "a", "y.md", "y",
 		"x.md", "---\nsupersedes: 0019\namends:\n  - adrs/a.md §2\nrelated: [[y]]\n"+
-			"sources:\n  - https://example.com/x\n  - \"Johno 2026-10-06 (chat): keep it simple\"\n---\nSee [[y]].\n")
+			"sources:\n  - https://example.com/x\n  - \"a note 2026-10-06 (chat): keep it simple\"\n---\nSee [[y]].\n")
 	eq(t, "x.md's links", e.kinds("x.md"), []string{
 		"wikilink [[y]] -> y.md",
 		"supersedes 0019 -> adrs/0019-old.md",

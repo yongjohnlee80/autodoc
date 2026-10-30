@@ -362,7 +362,7 @@ func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 
 // TestSeveralQuickZoomsAreJudgedByTheWindowDrawn: several Ctrl+= before the window has drawn any of
 // them all judge by the grid it still has, drawn at 100%, so the step that would leave it under 80
-// columns is refused (Lector's #79 r2: 130 columns, 175% is 74). And a frame drawn between two of
+// columns is refused (130 columns, 175% is 74). And a frame drawn between two of
 // them is drawn at the latest told, which the next step judges by.
 func TestSeveralQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
@@ -387,7 +387,7 @@ func TestSeveralQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 
 // TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts: a frame loads the fonts at 125%, the zoom goes
 // to 150%, and the frame publishes its 125% grid after; that grid is judged by 125%, its own, so 175%
-// (74 columns of 130) is refused (Lector's #79 r3).
+// (74 columns of 130) is refused.
 func TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts(t *testing.T) {
 	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
 	d, r := runWindowTUI(t, nil, fonts)

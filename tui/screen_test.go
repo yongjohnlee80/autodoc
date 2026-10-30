@@ -152,7 +152,7 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 
 // TestAMenuTitleIsClickedUnderTheToasts: a click on a menu bar title opens its menu while the
 // toasts are up. The toasts are an always-shown float over the whole screen, and its empty layer
-// took every click (Johno: "the autodoc mouse button on the menu not working anymore"); golib's
+// took every click, the menu bar's among them; golib's
 // hit-testing now lets the pointer through a non-modal float wherever its content is not.
 func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
@@ -245,7 +245,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 // TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer, on its Explorer and its
 // Links tab, over the page, from the edge its preference names, and the page's text moves only by the menu bar's
 // row: the dock lists the drawer, so the auto-hidden bar shows, and pushes the page down one row
-// (Johno's choice, 2026-10-19, docs/decisions/editor.md#the-dock-of-open-widgets); SPC e again
+// (docs/decisions/editor.md#the-dock-of-open-widgets); SPC e again
 // closes it, and the page is back. A side panel takes the middle 85% of the rows, one at the top or
 // bottom the middle 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
@@ -615,8 +615,7 @@ func TestTheProviderForm(t *testing.T) {
 }
 
 // A provider coming into use is a new embedding model: the picker's query and hits answered by
-// words alone are cleared, the field emptied, and the clearing said (Johno, 2026-10-02: "When the
-// embedding model changes, it should clear the search query, and start afresh").
+// words alone are cleared, the field emptied, and the clearing said, so the search starts afresh.
 func TestAModelChangeClearsTheSearch(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})

@@ -171,7 +171,7 @@ func TestCheckStoreClearsTheMarkOfASoundStore(t *testing.T) {
 	start(t, cfg, sock)
 }
 
-// TestAStoreWhoseSecretsDoNotOpenIsServed (Lector #101 r0 F3, Jarvis's (A)): a sound store marked
+// TestAStoreWhoseSecretsDoNotOpenIsServed: a sound store marked
 // damaged, restored without its key, has a connection whose DSN does not open. --check-store reports
 // that secret (a problem) but clears the mark, since the file is sound; the daemon serves the store,
 // and lists that connection as sealed and the others as they are.
@@ -233,7 +233,7 @@ func TestAStoreWhoseSecretsDoNotOpenIsServed(t *testing.T) {
 	}
 }
 
-// TestADamageEventThatCannotBeWrittenNeverHoldsTheStop (Lector #101 r0 F4): damage found after the
+// TestADamageEventThatCannotBeWrittenNeverHoldsTheStop: damage found after the
 // start stops the daemon even when the store.damaged event cannot be written (its one writer held):
 // the event's write is bounded, and asked only after the stop.
 func TestADamageEventThatCannotBeWrittenNeverHoldsTheStop(t *testing.T) {

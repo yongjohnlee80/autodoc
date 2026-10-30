@@ -961,8 +961,7 @@ func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
 
 // TestAPluginOutlivesGarbageCollection: a plugin that collects garbage keeps its pipes. The SDK
 // once re-opened fd 1 and left the original os.Stdout unreferenced, so its finalizer closed the
-// pipe at the next GC and the plugin ended some seconds in, cleanly and without a word (Johno:
-// "exiting in around 10 seconds for no reason").
+// pipe at the next GC and the plugin ended some seconds in, cleanly and without a word.
 func TestAPluginOutlivesGarbageCollection(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "gc", "gc", 30, 6)

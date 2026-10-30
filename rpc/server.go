@@ -129,7 +129,7 @@ import (
 // Protocol 33 is todos.changes' optional scoped: a consumer that reads each assignment's scope and
 // delivers only its own says so; one that doesn't gets a scoped assignment without its assignee
 // (the change's to, a resync row's assignee). It is the one exception to "a result keeps its
-// meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
+// meaning", for every session alike: a notifier that predates the
 // scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
 // every project. Without the assignee it delivers none; an unscoped assignment is as before.
 // Protocol 34 (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): a gated Lua
@@ -142,14 +142,14 @@ import (
 // (docs/decisions/search.md#document-listing-in-the-store): index.documents orders and filters in
 // the store and pages by a key, so its next is an opaque cursor (a string; "" when no more follow)
 // and after takes it back. It is the second exception to "a result keeps its meaning", for every
-// session alike and Johno's ruling (Q1, 2026-10-30): the integer offset is retired at once, not
+// session alike: the integer offset is retired at once, not
 // kept for a protocol window, so a session that declared an older protocol gets the cursor too, and
 // a non-zero integer after is refused saying what replaced it. Every known client echoes next
 // without reading it.
 // Protocol 36 is unrooted maps in pages (docs/decisions/search.md#unrooted-maps-in-pages): a
 // graph.map without a root comes a page at a time (opts.after and opts.limit, and next), each page
 // with the links whose source is on it, since the whole map in one reply fails past the transport's
-// message limit. Unlike 35, a session below 36 keeps the one reply (Johno's ruling, Q2), and is
+// message limit. Unlike 35, a session below 36 keeps the one reply, and is
 // refused after and limit.
 // Protocol 37 is the crew (docs/decisions/crew.md#the-crew-registry-and-durable-mail): the crew,
 // mail and inbox modules (crew.Protocol, the one place their verbs' Since is set), after 34 above,

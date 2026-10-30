@@ -584,7 +584,7 @@ func TestTheBellPlayerFallsBack(t *testing.T) {
 	}
 }
 
-// TestEachOpeningSetsTheAnswerAfresh (Lector #100 r0 F1): the reply's text area is set at each
+// TestEachOpeningSetsTheAnswerAfresh: the reply's text area is set at each
 // opening, to that request's draft or empty, so what was typed for one request is never sent for
 // another.
 func TestEachOpeningSetsTheAnswerAfresh(t *testing.T) {
@@ -600,7 +600,7 @@ func TestEachOpeningSetsTheAnswerAfresh(t *testing.T) {
 	}
 }
 
-// TestALateFailureNeverBringsADraftBack (Lector #100 r0 F2): a send that fails after its request has
+// TestALateFailureNeverBringsADraftBack: a send that fails after its request has
 // closed keeps no draft, and an earlier send failing after a later one never overwrites the later
 // one's draft.
 func TestALateFailureNeverBringsADraftBack(t *testing.T) {
@@ -630,7 +630,7 @@ func TestALateFailureNeverBringsADraftBack(t *testing.T) {
 	})
 }
 
-// TestAWaitThatBecomesAPermissionRings (Lector #100 r0 F3): an agent shown as blocked that then waits
+// TestAWaitThatBecomesAPermissionRings: an agent shown as blocked that then waits
 // on a permission prompt (the same session, its attention raised again) rings.
 func TestAWaitThatBecomesAPermissionRings(t *testing.T) {
 	w := newInboxWindow()

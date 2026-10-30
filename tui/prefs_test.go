@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// TestTheMenuBarAndTheStatusLineShowByDefault (v0.3.3, Johno: "the menu and the status bar shown
-// as default for new apps"): with nothing stored, in the terminal and the GUI, the menu bar does not
-// hide and the status line shows; a stored choice of either still wins.
+// TestTheMenuBarAndTheStatusLineShowByDefault (v0.3.3): with nothing stored, in the terminal and
+// the GUI, the menu bar does not hide and the status line shows; a stored choice of either still
+// wins.
 func TestTheMenuBarAndTheStatusLineShowByDefault(t *testing.T) {
 	for _, gui := range []bool{false, true} {
 		if p := defaultPrefsFor(gui); p.menuHidden || !p.statusOn {

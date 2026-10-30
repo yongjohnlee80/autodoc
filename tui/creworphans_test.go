@@ -61,7 +61,7 @@ func TestTheOrphansAreOfferedOnceAtTheFirstClaim(t *testing.T) {
 	}
 }
 
-// TestAnOfferWaitsForTheUsersQuestion (Lector #97 r0): orphans listed while the user answers another
+// TestAnOfferWaitsForTheUsersQuestion: orphans listed while the user answers another
 // question wait for it; it is never displaced.
 func TestAnOfferWaitsForTheUsersQuestion(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost(), card: newAsker(newScripted("kb"))}
@@ -80,7 +80,7 @@ func TestAnOfferWaitsForTheUsersQuestion(t *testing.T) {
 	}
 }
 
-// TestAQuestionOverAnOfferPutsItBack (Lector #97 r0): a question asked while orphan A is offered and
+// TestAQuestionOverAnOfferPutsItBack: a question asked while orphan A is offered and
 // B waits is shown and survives; A is not answered (nothing settled, no Keep run), and A and then B
 // are offered again once the question is answered.
 func TestAQuestionOverAnOfferPutsItBack(t *testing.T) {

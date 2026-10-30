@@ -35,7 +35,7 @@ var builtinKBTypes = []kbTypeChoice{
 	{"slipbox.kb", "Slip-box", "https://github.com/yongjohnlee80/slipbox.kb"},
 }
 
-// noneNote is what None says, in Johno's words for a coding repo (the dialog task): the English of
+// noneNote is what None says, worded for a location that may be a coding repo: the English of
 // noneNoteText, which says it in the UI's language.
 const noneNote = "Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option."
 
@@ -209,7 +209,7 @@ func (h *Host) dropKBType() {
 
 // kbResume is a partial add's unfinished type: the workspace it added and the type as staged. The
 // dialog reopened on that workspace finishes the files, create-only, before its Save configures,
-// so a retry never adds again and never writes into another workspace (Zen #240 r0 R2).
+// so a retry never adds again and never writes into another workspace.
 type kbResume struct {
 	ws string
 	s  *stagedKBType

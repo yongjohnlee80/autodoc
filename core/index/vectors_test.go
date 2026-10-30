@@ -623,7 +623,7 @@ func TestDoAwaitsAnOpItsWriterTook(t *testing.T) {
 	}
 }
 
-// TestACallersCancelReachesItsOp (Lector #58 r1): the writer runs an op under a context the caller's
+// TestACallersCancelReachesItsOp: the writer runs an op under a context the caller's
 // end cancels too, so a claimed op stops when its caller goes, and do returns once the writer has
 // answered: an op waiting in its own callback, and one whose transaction waits for the store's one
 // write connection, which another write holds (another workspace's writer, a store-level sweep).

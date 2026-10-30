@@ -3,7 +3,7 @@
 # Every action is pinned by its commit, the version it was tagged as beside it.
 name: ci
 
-# Pull requests merge into canary and run no CI (each has its VM43 gate and review); CI runs on
+# Pull requests merge into canary and run no CI (each has its own gate and review); CI runs on
 # each merge into canary, and on the milestone pull request that merges canary into main.
 on:
   push:
