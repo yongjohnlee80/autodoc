@@ -5,6 +5,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -88,7 +89,7 @@ func (st *Store) Mail() mail.Store { return mailStore{st} }
 type mailStore struct{ st *Store }
 
 func (m mailStore) Write(ctx context.Context, fn func(mail.Tx) error) error {
-	return m.st.s.Write(ctx, func(tx *store.Tx) error { return fn(m.st.tx(tx)) })
+	return m.st.Write(ctx, func(tx crew.Tx) error { return fn(tx.(*Tx)) })
 }
 
 func (m mailStore) Read(ctx context.Context, fn func(mail.Tx) error) error {
