@@ -179,7 +179,7 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 		return 0, err
 	}
 	var gen int64
-	err = m.store.Write(ctx, func(tx Tx) error {
+	err = m.write(ctx, func(tx Tx, after *afterCommit) error {
 		s, err := m.Authenticate(tx, credential)
 		if err != nil {
 			return err
@@ -211,9 +211,11 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 		if err := tx.PutWake(w); err != nil {
 			return err
 		}
-		// published in the write, as its last step: writes are one at a time, so a session's end
-		// (endSession, which forgets it in its own) can only follow this, never be overtaken by it
-		m.keepSecret(s.ID, gen, secret)
+		// held once this write has committed (after): only an agy endpoint has one, and its
+		// generation, even without one, replaces an older generation's
+		if kind == "agy" {
+			after.secrets = append(after.secrets, endpointPublish{session: s.ID, generation: gen, secret: secret})
+		}
 		return nil
 	})
 	return gen, err
