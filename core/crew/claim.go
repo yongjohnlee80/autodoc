@@ -151,6 +151,7 @@ func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	if err := tx.DeleteEndpoint(s.ID); err != nil {
 		return err
 	}
+	m.forgetSecret(s.ID)
 	if err := clearAttention(tx, s.ID); err != nil {
 		return err
 	}

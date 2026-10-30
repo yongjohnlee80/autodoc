@@ -256,16 +256,17 @@ func (d *process) startWorkspaces() error {
 // startWakes starts the wake scheduler (ADR 1793271500 §4.7) for this daemon run, its stop pushed
 // onto the daemon's.
 func (d *process) startWakes() {
-	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(), d.log)
+	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(d.deps.crew), d.log)
 	d.stops.push(stop)
 	d.stops.push(addLateWakers(d.ctx, s, d.log))
 }
 
-// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's.
-// Phase 3 brings them one CLI at a time; a session whose kind has none is watch-only, reached by
-// crew.wait and the inbox. A waker that depends on what is installed is a late one (lateWakers).
-func crewWakers() map[string]crew.Waker {
-	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
+// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's,
+// and agy's, which reads each endpoint's token from m (held in memory, never stored). Phase 3 brings
+// them one CLI at a time; a session whose kind has none is watch-only, reached by crew.wait and the
+// inbox. A waker that depends on what is installed is a late one (lateWakers).
+func crewWakers(m *crew.Manager) map[string]crew.Waker {
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid()), "agy": crew.NewAgyWaker(m.EndpointSecret)}
 }
 
 // lateWakers find the wakers that depend on what is installed, each by probing its CLI: Codex's,

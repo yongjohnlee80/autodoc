@@ -131,7 +131,10 @@ import (
 // Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
 // their verbs' Since is set), after 34 above, and the 35 and 36 that AP-5 and AP-6 claim. A
 // session below 37 sees their verbs as unknown methods.
-const Protocol int64 = 37
+// Protocol 38 is ADR 1793271500 §4.7's agy waker: crew.endpoint's optional secret, an agy session's
+// language-server token, which the daemon holds in memory alone for that endpoint (never stored),
+// and which any other kind refuses. A session below 38 sends none, and its crew.endpoint is as before.
+const Protocol int64 = 38
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

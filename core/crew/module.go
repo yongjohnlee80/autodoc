@@ -75,6 +75,7 @@ type (
 		Credential string `param:"credential"`
 		Kind       string `param:"kind" doc:"claude, codex, agy or opencode: the session's own"`
 		Locator    string `param:"locator" doc:"JSON, kind-specific; never a secret"`
+		Secret     string `param:"secret,optional" doc:"agy only: its language server's token, held in memory for this endpoint, never stored (protocol 38)"`
 	}
 	waitParams struct {
 		Scope    string   `param:"scope"`
@@ -181,7 +182,7 @@ func (m *Manager) Verbs() []module.Verb {
 			Effect: module.EffectWrite, Result: "{generation}", Errors: []int64{CodeBadCredential, CodeBadEndpoint, CodeStaleEpoch},
 			Doc: "How to wake the calling session (§4.7)."},
 			func(ctx context.Context, p endpointParams) (generationResult, error) {
-				g, err := m.SetEndpoint(ctx, p.Credential, p.Kind, p.Locator)
+				g, err := m.SetEndpointWith(ctx, p.Credential, p.Kind, p.Locator, p.Secret)
 				return generationResult{g}, err
 			}),
 		module.Handle(module.Contract{Verb: "crew.wait", Since: Protocol, Scope: module.ScopeLocalPeer,
