@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -29,6 +28,8 @@ type crewInboxCore interface {
 	Go(fn func(context.Context) any, then func(any))
 	After(d time.Duration, fn func())
 	Notify(msg string)
+	Tr(id string) string
+	Trf(id string, args ...any) string
 	NotifyOngoingClick(id, msg string, onClick func())
 	NotifyDone(id, msg string)
 	Set(key string, v any)
@@ -229,20 +230,20 @@ func (x *crewInbox) show(p snapshotParts) {
 		case "request":
 			requests[it.id] = crewRequest{id: it.id, from: it.from, subject: it.subject, body: it.body}
 			id := it.id
-			now["crew:"+it.id] = crewOpen{text: fmt.Sprintf("%s asks: %s", it.from, it.subject), rings: true, click: func() { x.openReply(id) },
-				done: fmt.Sprintf("%s's request is closed: %s", it.from, it.subject)}
+			now["crew:"+it.id] = crewOpen{text: x.c.Trf("autodoc.crew.asks", it.from, it.subject), rings: true, click: func() { x.openReply(id) },
+				done: x.c.Trf("autodoc.crew.request_closed", it.from, it.subject)}
 		case "message":
 			reports[it.id] = true
 			if !x.reports[it.id] {
-				x.c.Notify(fmt.Sprintf("%s reports: %s", it.from, it.subject))
+				x.c.Notify(x.c.Trf("autodoc.crew.reports", it.from, it.subject))
 			}
 		}
 	}
 	x.reports = reports // one read, so out of the set, is never back: forgotten
 	for _, a := range p.attention {
 		session, codename := a.session, a.codename
-		now["crew-attention:"+session] = crewOpen{text: fmt.Sprintf("%s waits on you (%s): %s", codename, a.kind, a.text), rings: a.kind == "permission",
-			click: func() { x.raiseAttention(session, codename) }, done: fmt.Sprintf("%s no longer waits on you", codename)}
+		now["crew-attention:"+session] = crewOpen{text: x.waitText(a), rings: a.kind == "permission",
+			click: func() { x.raiseAttention(session, codename) }, done: x.c.Trf("autodoc.crew.no_longer_waits", codename)}
 	}
 	x.requests = requests
 	for id := range x.drafts {
@@ -253,7 +254,7 @@ func (x *crewInbox) show(p snapshotParts) {
 	if _, open := requests[x.replying]; x.replying != "" && !open {
 		x.replying = ""
 		x.c.Close(crewReplyDialog)
-		x.c.Notify("The request you were answering was answered, dismissed or expired.")
+		x.c.Notify(x.c.Tr("autodoc.crew.answering_closed"))
 	}
 	for id, o := range x.open {
 		if _, still := now[id]; !still {
@@ -274,4 +275,16 @@ func (x *crewInbox) show(p snapshotParts) {
 	if fresh {
 		x.ring() // one ring for all that opened at once
 	}
+}
+
+// waitText is an attention's toast: a permission prompt's and a blocked agent's in their own words,
+// any other kind as the daemon names it.
+func (x *crewInbox) waitText(a crewAttention) string {
+	switch a.kind {
+	case "permission":
+		return x.c.Trf("autodoc.crew.waits_permission", a.codename, a.text)
+	case "blocked":
+		return x.c.Trf("autodoc.crew.waits_blocked", a.codename, a.text)
+	}
+	return x.c.Trf("autodoc.crew.waits", a.codename, a.kind, a.text)
 }

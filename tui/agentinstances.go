@@ -302,20 +302,20 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 				}
 			}
 			if err != nil {
-				a.c.Notify(fmt.Sprintf("%s did not start: its crew session was not registered: %s", p.Name, wireMessage(err)))
+				a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
 				a.listAgents()
 				return
 			}
 			if err := a.start(panel, instance); err != nil {
 				instance.context = ""
 				a.crew.exit(s, crew.EndedStartFailed)
-				a.c.Notify(fmt.Sprintf("%s did not start: %s", p.Name, err.Error()))
+				a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 				a.listAgents()
 				return
 			}
 			instance.session = s // it runs: its exit ends the session, whatever showing it does
 			if err := a.showStarted(instance); err != nil {
-				a.c.Notify(fmt.Sprintf("%s started, but its tab could not be shown: %s", p.Name, err.Error()))
+				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
 			}
 		})
 		a.listAgents()

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 )
@@ -56,11 +55,11 @@ func replyKey(message, body string) string {
 func (x *crewInbox) openReply(id string) {
 	r, ok := x.requests[id]
 	if !ok {
-		x.c.Notify("That request is closed.")
+		x.c.Notify(x.c.Tr("autodoc.crew.request_gone"))
 		return
 	}
 	x.replying = id
-	x.c.Set("App.replyTitle", fmt.Sprintf("%s asks: %s", r.from, r.subject))
+	x.c.Set("App.replyTitle", x.c.Trf("autodoc.crew.asks", r.from, r.subject))
 	x.c.Set("App.replyText", r.body)
 	// the text area is set at each opening, never through a binding: an empty draft after an empty
 	// draft would change nothing, and the text typed for another request would stay in it
@@ -98,17 +97,17 @@ func (x *crewInbox) replySend(body string) {
 		switch {
 		case v == nil:
 			delete(x.drafts, id)
-			x.c.Notify(fmt.Sprintf("Replied to %s.", r.from))
+			x.c.Notify(x.c.Trf("autodoc.crew.replied", r.from))
 		case x.answeredElsewhere(err):
 			delete(x.drafts, id)
-			x.c.Notify(fmt.Sprintf("%s's request was already answered, dismissed or expired: your reply was not sent.", r.from))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_too_late", r.from))
 		case !open:
-			x.c.Notify(fmt.Sprintf("Your reply to %s was not sent (%s), and the request has closed meanwhile.", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_closed_meanwhile", r.from, wireMessage(err)))
 		case !latest:
-			x.c.Notify(fmt.Sprintf("An earlier reply to %s was not sent: %s.", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_earlier_failed", r.from, wireMessage(err)))
 		default:
 			x.drafts[id] = body // the dialog opens on it again
-			x.c.Notify(fmt.Sprintf("Your reply to %s was not sent: %s. Open the request again to send it.", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_failed", r.from, wireMessage(err)))
 		}
 	})
 }
@@ -131,9 +130,9 @@ func (x *crewInbox) replyDismiss() {
 			delete(x.drafts, id)
 		case x.answeredElsewhere(err):
 			delete(x.drafts, id)
-			x.c.Notify(fmt.Sprintf("%s's request was already answered, dismissed or expired.", r.from))
+			x.c.Notify(x.c.Trf("autodoc.crew.dismiss_too_late", r.from))
 		default:
-			x.c.Notify(fmt.Sprintf("%s's request was not dismissed: %s.", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.dismiss_failed", r.from, wireMessage(err)))
 		}
 	})
 }
@@ -159,9 +158,9 @@ func (x *crewInbox) raiseAttention(session, codename string) {
 		return err
 	}, func(v any) {
 		if err, _ := v.(error); v != nil {
-			x.c.Notify(fmt.Sprintf("%s could not be shown: %s.", codename, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.not_shown", codename, wireMessage(err)))
 			return
 		}
-		x.c.Notify(fmt.Sprintf("%s runs in another window: that window shows it.", codename))
+		x.c.Notify(x.c.Trf("autodoc.crew.other_window", codename))
 	})
 }

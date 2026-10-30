@@ -40,10 +40,10 @@ func (x *crewInbox) toggleBell() {
 	on := !x.c.Prefs().agentBell
 	x.c.SetPref(prefAgentBell, strconv.FormatBool(on))
 	if on {
-		x.c.Notify("The agent bell is on: a request or a permission prompt rings, at most once every 10 s.")
+		x.c.Notify(x.c.Tr("autodoc.crew.bell_on"))
 		return
 	}
-	x.c.Notify("The agent bell is off.")
+	x.c.Notify(x.c.Tr("autodoc.crew.bell_off"))
 }
 
 // ring rings the bell, while it is on and the last ring is crewBellEvery past.
