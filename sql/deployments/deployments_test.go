@@ -792,3 +792,31 @@ func columnsOf(t *testing.T, db dao.DataConn, q, table string) map[string]bool {
 	}
 	return out
 }
+
+// 000026 creates the crew registry, mail and the inbox (ADR 1793271500 §4.2): a send is a message
+// and its deliveries, an alias is unique among a scope's active profiles only, and a recipient's
+// sequence high-water stands apart from its deliveries. The revert drops every table.
+func TestTheCrewMailInboxScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO crew_profile(id, scope, codename, created) VALUES ('p1', 'autodoc:w', 'gold', 1)")
+	exec(t, db, "INSERT INTO crew_profile(id, scope, codename, status, merged_into, created) VALUES ('p0', 'autodoc:w', 'gold', 'merged', 'p1', 1)")
+	if _, err := db.ExecContext(context.Background(), "INSERT INTO crew_profile(id, scope, codename, created) VALUES ('p2', 'autodoc:w', 'gold', 1)"); err == nil {
+		t.Fatal("two active profiles share one alias in a scope")
+	}
+	exec(t, db, "INSERT INTO mail_message(id, sender, idem_key, digest, kind, body, created) VALUES ('m1', 'p1', 'k1', x'00', 'message', 'hi', 1)")
+	if _, err := db.ExecContext(context.Background(), "INSERT INTO mail_message(id, sender, idem_key, digest, kind, body, created) VALUES ('m2', 'p1', 'k1', x'00', 'message', 'again', 1)"); err == nil {
+		t.Fatal("one sender's idempotency key made two messages")
+	}
+	exec(t, db, "INSERT INTO mail_recipient(profile, next_seq) VALUES ('p1', 1)")
+	exec(t, db, "INSERT INTO mail_delivery(id, message, recipient, seq, state) VALUES ('d1', 'm1', 'p1', 1, 'queued')")
+	if _, err := db.ExecContext(context.Background(), "INSERT INTO mail_delivery(id, message, recipient, seq, state) VALUES ('d2', 'm1', 'p1', 2, 'queued')"); err == nil {
+		t.Fatal("one message was delivered twice to one recipient")
+	}
+	revertDownTo(t, db, 26)
+	for _, table := range []string{"crew_host", "crew_scope", "crew_profile", "crew_session", "crew_endpoint", "crew_wake",
+		"crew_attention", "mail_message", "mail_recipient", "mail_delivery", "inbox_change"} {
+		if _, err := first(db, "SELECT count(*) FROM "+table); err == nil {
+			t.Errorf("the revert left %s", table)
+		}
+	}
+}

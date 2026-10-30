@@ -106,6 +106,17 @@ A new workspace-owned table follows the same rule.
 | `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
 | `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
 | `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017); the cursor of the resync it was last answered (000018) | `(store, name)` |
+| `crew_host` | a host (an AutoDoc window or a Neovim project) holding its scope at an ownership epoch, with its run token's hash (000026, ADR 1793271500) | `id` |
+| `crew_scope` | a scope agents live in: an AutoVim project, an AutoDoc window, or global; live, adopting or gone (000026) | `id` |
+| `crew_profile` | an agent's identity in a scope, (scope, codename); "user" is the human; active or merged into another (000026) | `id`, `(scope, codename)` while active |
+| `crew_session` | one process of a profile, registered by its host under an epoch, with its secret's hash (000026) | `id`, `(host, epoch, instance)` |
+| `crew_endpoint` | how a session is woken: its CLI's channel and locator, never a secret (000026) | `session` |
+| `crew_wake` | a session's wake scheduler state: pending and announced generations, the attempt in flight, failures, the next deadline (000026) | `session` |
+| `crew_attention` | a permission prompt or block an agent's adapter reported, shown to the human (000026) | `session` |
+| `mail_message` | a message, sent by an authenticated profile; idempotent by (sender, idem_key) (000026) | `id`, `(sender, idem_key)` |
+| `mail_recipient` | a recipient's delivery sequence high-water, never reused (000026) | `profile` |
+| `mail_delivery` | one delivery of a message to one recipient: queued, leased, acked, failed, expired or merged (000026) | `id`, `(recipient, seq)`, `(message, recipient)` |
+| `inbox_change` | the human feed's journal: requests, reports and their answers, attention, as every window reads them (000026) | `seq` |
 
 Each script says, in its comments, what every table and column is for.
 
