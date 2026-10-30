@@ -4,15 +4,19 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"net"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -200,5 +204,103 @@ func TestCrewEndpointOpenCodeNeedsItsOwnContext(t *testing.T) {
 	if _, _, _, err := crewCommands["crew endpoint"].call(sessionContext{Credential: "c"}, fs, fs.Args(), nil); err == nil ||
 		!strings.Contains(err.Error(), "AUTODOC_CREW_CONTEXT") {
 		t.Errorf("--opencode with no $AUTODOC_CREW_CONTEXT: %v, want refused", err)
+	}
+}
+
+// bunFor is the Bun the plugin's executable controls run on ($AUTODOC_TEST_BUN, else bun on PATH):
+// the runtime opencode embeds. With none, the cell is skipped, unless $AUTODOC_TEST_BUN_REQUIRED
+// says the gate has one, when its absence fails loudly.
+func bunFor(t *testing.T) string {
+	t.Helper()
+	if b := os.Getenv("AUTODOC_TEST_BUN"); b != "" {
+		return b
+	}
+	if b, err := exec.LookPath("bun"); err == nil {
+		return b
+	}
+	if os.Getenv("AUTODOC_TEST_BUN_REQUIRED") != "" {
+		t.Fatal("AUTODOC_TEST_BUN_REQUIRED is set and no bun was found ($AUTODOC_TEST_BUN, PATH)")
+	}
+	t.Skip("no bun ($AUTODOC_TEST_BUN, PATH): the plugin's executable controls need the runtime opencode embeds")
+	return ""
+}
+
+// TestThePluginsBunControls runs the plugin's executable controls (opencode/autodoc-crew.test.js)
+// on Bun: its registration (the latest session wins in either completion order, one run at a time;
+// a stalled check or CLI cut at its bound, its child killed, and retried; a failed spawn contained;
+// dispose cancelling and draining one in flight), and its socket (the fixed notice alone, the
+// refusals, the modes).
+func TestThePluginsBunControls(t *testing.T) {
+	bun := bunFor(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bun, "test", "./opencode/autodoc-crew.test.js")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("bun test: %v\n%s", err, out)
+	}
+	t.Logf("%s", out)
+}
+
+// TestThePluginURLNamesTheFile: the plugin's URL is absolute and escaped, so it names the very
+// file wherever it is: a folder holding '#', '%', '?', a space or non-ASCII, and a relative --dir
+// (made absolute against the working directory) all read back as their own path.
+func TestThePluginURLNamesTheFile(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"team#1", "50%41", "a?b=c", "with space", "ünïcödé", "%", "plain"} {
+		p := filepath.Join(base, name, opencodePluginName)
+		u, err := pluginURL(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := url.Parse(u)
+		if err != nil || back.Scheme != "file" || back.Host != "" || back.Path != p || back.RawQuery != "" || back.Fragment != "" {
+			t.Errorf("%q: %s reads back as %+v %v, want the path %s", name, u, back, err, p)
+		}
+	}
+	t.Chdir(base)
+	if u, err := pluginURL(filepath.Join("rel", opencodePluginName)); err != nil || u != (&url.URL{Scheme: "file", Path: filepath.Join(base, "rel", opencodePluginName)}).String() {
+		t.Errorf("a relative path's URL: %s %v, want it absolute", u, err)
+	}
+	var out, errOut bytes.Buffer
+	if code := crewPluginMain([]string{"--opencode", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 ||
+		strings.TrimSpace(out.String()) != filepath.Join(base, "rel dir", opencodePluginName) {
+		t.Errorf("a relative --dir prints %q (exit %d), want the absolute path", out.String(), code)
+	}
+	out.Reset()
+	if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 {
+		t.Fatalf("a relative --dir: exit %d %s", code, errOut.String())
+	}
+	want := (&url.URL{Scheme: "file", Path: filepath.Join(base, "rel dir", opencodePluginName)}).String()
+	if got := strings.TrimSpace(out.String()); got != `OPENCODE_CONFIG_CONTENT={"plugin":["`+want+`"]}` {
+		t.Errorf("a relative --dir: %s, want the absolute %s", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(base, "rel dir", opencodePluginName)); err != nil {
+		t.Errorf("a relative --dir: the plugin is not where its URL says: %v", err)
+	}
+}
+
+// TestThePluginLoadsFromItsURL: Bun, opencode's runtime, imports the plugin through the URL
+// `crew plugin --print-env` gives, for a folder whose name a bare "file://"+path would misname.
+func TestThePluginLoadsFromItsURL(t *testing.T) {
+	bun := bunFor(t)
+	for _, name := range []string{"team#1 50%41 a?b ünï", "plain"} {
+		dir := filepath.Join(t.TempDir(), name)
+		var out, errOut bytes.Buffer
+		if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 {
+			t.Fatalf("%q: exit %d %s", name, code, errOut.String())
+		}
+		var cfg struct{ Plugin []string }
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(out.String()), "OPENCODE_CONFIG_CONTENT=")), &cfg); err != nil || len(cfg.Plugin) != 1 {
+			t.Fatalf("%q: %s %v", name, out.String(), err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		cmd := exec.CommandContext(ctx, bun, "-e", `const m = await import(process.env.AUTODOC_PLUGIN_URL); if (typeof m.AutodocCrew !== "function") { console.error("no AutodocCrew"); process.exit(3) }`)
+		cmd.Env = append(os.Environ(), "AUTODOC_PLUGIN_URL="+cfg.Plugin[0])
+		b, err := cmd.CombinedOutput()
+		cancel()
+		if err != nil {
+			t.Errorf("%q: bun could not load %s: %v\n%s", name, cfg.Plugin[0], err, b)
+		}
 	}
 }
