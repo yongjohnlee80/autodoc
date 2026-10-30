@@ -24,6 +24,11 @@ type crewDaemon struct {
 	failing string // a scope whose claims fail as a store failure would
 	none    bool   // a daemon before crew: every crew verb is unknown
 	refuse  error  // what crew.register answers instead of registering, when set
+	// orphans is what crew.orphans answers; settled each crew.adopt and crew.discard, its verb then
+	// its params; settleErr what they answer, when set
+	orphans   []any
+	settled   [][]any
+	settleErr error
 }
 
 func newCrewDaemonForHost() *crewDaemon {
@@ -57,6 +62,11 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 			return nil, crewWire(err)
 		}
 		return map[string]any{"session": reg.Session, "profile": reg.Profile}, nil
+	case "crew.orphans":
+		return d.orphans, nil
+	case "crew.adopt", "crew.discard":
+		d.settled = append(d.settled, append([]any{verb}, p...))
+		return map[string]any{}, d.settleErr
 	case "crew.exit":
 		err = d.m.Exit(ctx, p[0].(string), p[1].(string), p[2].(int64), p[3].(string), p[4].(string))
 	default:
@@ -93,6 +103,8 @@ type crewWindow struct {
 	store   string   // the store the daemon serves, "store-1" when unset
 	socket  string   // the daemon's address, "/run/test/d.sock" when unset
 	calls   []string // the verbs called, in order
+	// questions is each question asked, in order
+	questions []Question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -134,6 +146,7 @@ func (w *crewWindow) release() {
 }
 func (w *crewWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
 func (w *crewWindow) Notify(msg string)                { w.notices = append(w.notices, msg) }
+func (w *crewWindow) Ask(q Question) Asked             { w.questions = append(w.questions, q); return Asked{} }
 func (w *crewWindow) DaemonAddress() string {
 	if w.socket != "" {
 		return w.socket
