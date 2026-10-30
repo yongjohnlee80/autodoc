@@ -118,9 +118,10 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
-	"crew endpoint": {usage: "--claude | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it)",
+	"crew endpoint": {usage: "--claude | --codex-thread ID | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID)",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
+			fs.String("codex-thread", "", "this Codex session's thread ($CODEX_THREAD_ID), on the app-server its TUI is attached to")
 		},
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
 			if fs.Lookup("claude").Value.(flag.Getter).Get().(bool) {
@@ -138,8 +139,18 @@ var crewCommands = map[string]crewCommand{
 				}
 				return "crew.endpoint", []any{c.Credential, "claude", loc}, nil, nil
 			}
+			if thread := strFlag(fs, "codex-thread"); thread != "" {
+				if len(args) != 0 {
+					return "", nil, nil, errors.New("crew endpoint --codex-thread takes no arguments")
+				}
+				loc, err := codexLocator(thread, os.Getenv)
+				if err != nil {
+					return "", nil, nil, err
+				}
+				return "crew.endpoint", []any{c.Credential, "codex", loc}, nil, nil
+			}
 			if len(args) != 2 {
-				return "", nil, nil, errors.New("crew endpoint takes --claude, or a kind and a locator")
+				return "", nil, nil, errors.New("crew endpoint takes --claude, --codex-thread ID, or a kind and a locator")
 			}
 			return "crew.endpoint", []any{c.Credential, args[0], args[1]}, nil, nil
 		}},

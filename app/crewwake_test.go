@@ -488,7 +488,7 @@ func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
 
 // TestServeWakesClaudeSessions: the scheduler serve starts, with serve's own wakers (crewWakers),
 // wakes a Claude session through its inbox socket, bound to its process, and leaves a session whose
-// kind has no waker alone. The socket is a stand-in the test serves in Claude's socket folder, so
+// kind has no waker (agy) alone. The socket is a stand-in the test serves in Claude's socket folder, so
 // the test process is its peer and the binding (pid, process reference) is real.
 func TestServeWakesClaudeSessions(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -531,22 +531,22 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	if _, err := r.deps.crew.SetEndpoint(r.ctx, goldCred, "claude", string(loc)); err != nil {
 		t.Fatal(err)
 	}
-	// lector: a Codex session with an endpoint, in the same daemon; serve has no Codex waker yet
+	// tifa: an Antigravity session with an endpoint, in the same daemon; serve has no agy waker
 	r.n++
-	secret := strings.Repeat("s", 32) + "lector"
+	secret := strings.Repeat("s", 32) + "tifa"
 	reg, err := r.deps.crew.Register(r.ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: r.epoch,
-		Codename: "lector", Kind: "codex", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
+		Codename: "tifa", Kind: "agy", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
-	lector := reg.Session
-	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(lector, secret), "codex",
-		fmt.Sprintf(`{"server":"/tmp/codex-daemon-%d/x.sock","thread":"t-1"}`, os.Getuid())); err != nil {
+	tifa := reg.Session
+	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(tifa, secret), "agy",
+		`{"address":"127.0.0.1:4000","conversation":"c-1"}`); err != nil {
 		t.Fatal(err)
 	}
 	r.start(crewWakers())
 	r.send(jarvis, "gold", "for gold")
-	r.send(jarvis, "lector", "for lector")
+	r.send(jarvis, "tifa", "for tifa")
 	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"` + crew.WakeNotice + `"}}` + "\n"
 	select {
 	case line := <-lines:
@@ -559,8 +559,8 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	}
 	r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeAwaiting && w.Failures == 0 })
 	r.deps.crew.Poke()
-	time.Sleep(200 * time.Millisecond) // a cell's own window: any look that would take lector has run
-	if w := r.wake(lector); w.AttemptGen != 0 || w.DaemonRun != "" || w.Failures != 0 || w.State != crew.WakeIdle {
-		t.Fatalf("lector, of a kind serve has no waker for, was attempted: %+v; want never reserved, never failed", w)
+	time.Sleep(200 * time.Millisecond) // a cell's own window: any look that would take tifa has run
+	if w := r.wake(tifa); w.AttemptGen != 0 || w.DaemonRun != "" || w.Failures != 0 || w.State != crew.WakeIdle {
+		t.Fatalf("tifa, of a kind serve has no waker for, was attempted: %+v; want never reserved, never failed", w)
 	}
 }

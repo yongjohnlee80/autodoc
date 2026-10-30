@@ -17,3 +17,6 @@ func CheckLocator(kind, locator string, uid int) (string, error) {
 
 // Classify exposes how a waker's error is classified.
 func Classify(err error) Outcome { return classify(err) }
+
+// SetRoots points the Codex waker at a test's own socket folders.
+func (w *CodexWaker) SetRoots(roots ...string) { w.roots = roots }
