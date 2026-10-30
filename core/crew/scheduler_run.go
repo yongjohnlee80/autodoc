@@ -3,6 +3,7 @@ package crew
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"time"
 )
@@ -11,22 +12,40 @@ import (
 // backed off like any other.
 var errNoWaker = errors.New("crew: no waker for the endpoint's kind")
 
+// wakeRetry is how soon a look that met a store error, or left an end unrecorded, looks again.
+const wakeRetry = 5 * time.Second
+
 // Scheduler is the wake scheduler (§4.7): one loop, woken by pokes (a send, an expiry, an endpoint,
-// a reattach) and by a timer on the earliest deadline, reserving attempts for due sessions under
-// wakePermits permits. A permit is held by an attempt's goroutine until its call returns: resetting
-// a row never frees one.
+// a reattach), by a timer on the earliest deadline, and by a retry timer after a store error,
+// reserving attempts for due sessions under wakePermits permits. A permit is held by an attempt's
+// goroutine until its call returns: resetting a row never frees one.
 type Scheduler struct {
 	m       *Manager
 	run     string
 	wakers  map[string]Waker
 	clock   func() time.Time
 	report  func(error)
+	retry   time.Duration
 	permits chan struct{}
 	poke    chan struct{}
 	wg      sync.WaitGroup
 
 	mu       sync.Mutex
 	watchers map[chan struct{}]struct{}
+
+	// owed are the ends (an outcome, or an abandon) a call came to that the store refused to
+	// record: kept here, token-fenced, and written again at each look until the store takes them.
+	// Without it, one refused write would leave the row in_flight with no deadline, and nothing in
+	// this run would look at it again.
+	omu  sync.Mutex
+	owed map[string]owedEnd
+}
+
+// owedEnd is one attempt's unrecorded end.
+type owedEnd struct {
+	token   string
+	outcome Outcome
+	abandon bool
 }
 
 // SchedulerOption configures a Scheduler.
@@ -40,11 +59,15 @@ func WithWakeErrors(report func(error)) SchedulerOption {
 	return func(s *Scheduler) { s.report = report }
 }
 
+// WithWakeRetry sets how soon a look that met a store error looks again (tests shorten it).
+func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) { s.retry = d } }
+
 // NewScheduler is the wake scheduler for this daemon run (a fresh random id made once at start),
 // calling the wakers by endpoint kind.
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
-	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {},
-		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1), watchers: map[chan struct{}]struct{}{}}
+	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
+		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
+		watchers: map[chan struct{}]struct{}{}, owed: map[string]owedEnd{}}
 	for _, o := range opts {
 		o(s)
 	}
@@ -83,25 +106,40 @@ func (s *Scheduler) Watch() (ch <-chan struct{}, stop func()) {
 }
 
 // Run recovers the earlier run's attempts, then loops until ctx ends, and waits for its attempts.
+// A recovery that fails is retried after the retry wait, never given up on.
 func (s *Scheduler) Run(ctx context.Context) error {
-	if err := s.m.RecoverRun(ctx, s.run); err != nil {
-		return err
+	for {
+		err := s.m.RecoverRun(ctx, s.run)
+		if err == nil {
+			break
+		}
+		s.report(err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(s.retry):
+		}
 	}
 	defer s.wg.Wait()
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	for {
-		s.Look(ctx)
+		again := s.look(ctx)
 		if !timer.Stop() {
 			select {
 			case <-timer.C:
 			default:
 			}
 		}
-		if at, has, err := s.m.nextAt(ctx); err != nil {
+		wait, armed := s.retry, again // a store error, or an end still owed: look again soon
+		if at, ok, err := s.m.nextAt(ctx); err != nil {
 			s.report(err)
-		} else if has {
-			timer.Reset(max(at.Sub(s.clock()), 0))
+			armed = true
+		} else if ok && (!armed || at.Sub(s.clock()) < wait) {
+			wait, armed = max(at.Sub(s.clock()), 0), true
+		}
+		if armed {
+			timer.Reset(wait)
 		}
 		select {
 		case <-ctx.Done():
@@ -112,24 +150,31 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
-// Look ends the timed-out waits, then reserves an attempt for each due session while permits last,
-// and starts each one's call. It returns once they are started; Wait waits for their calls.
-func (s *Scheduler) Look(ctx context.Context) {
+// Look writes the ends still owed, ends the timed-out waits, then reserves an attempt for each due
+// session while permits last, and starts each one's call. It returns once they are started; Wait
+// waits for their calls.
+func (s *Scheduler) Look(ctx context.Context) { s.look(ctx) }
+
+// look is Look, answering whether it must look again soon: it met a store error, or an end is
+// still owed.
+func (s *Scheduler) look(ctx context.Context) bool {
+	again := s.payOwed(ctx)
 	due, err := s.m.sweep(ctx)
 	if err != nil {
 		s.report(err)
-		return
+		return true
 	}
 	for _, session := range due {
 		select {
 		case s.permits <- struct{}{}:
 		default:
-			return // none free: a returning call pokes the loop
+			return again // none free: a returning call pokes the loop
 		}
 		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run)
 		if err != nil || !ok {
 			if err != nil {
 				s.report(err)
+				again = true
 			}
 			<-s.permits
 			continue
@@ -137,10 +182,46 @@ func (s *Scheduler) Look(ctx context.Context) {
 		s.wg.Add(1)
 		go s.attempt(ctx, session, tok, ep)
 	}
+	return again
 }
 
 // Wait waits for every started attempt's call to return.
 func (s *Scheduler) Wait() { s.wg.Wait() }
+
+// owe keeps an end the store refused, to be written again at the next look.
+func (s *Scheduler) owe(session string, e owedEnd) {
+	s.omu.Lock()
+	s.owed[session] = e
+	s.omu.Unlock()
+}
+
+// payOwed writes each owed end again, token-fenced (a row reset since then takes nothing), and
+// answers whether any is still owed.
+func (s *Scheduler) payOwed(ctx context.Context) bool {
+	s.omu.Lock()
+	owed := maps.Clone(s.owed)
+	s.omu.Unlock()
+	left := false
+	for session, e := range owed {
+		var err error
+		if e.abandon {
+			err = s.m.Abandon(ctx, session, e.token)
+		} else {
+			err = s.m.Outcome(ctx, session, e.token, e.outcome)
+		}
+		if err != nil {
+			s.report(err)
+			left = true
+			continue
+		}
+		s.omu.Lock()
+		if s.owed[session] == e {
+			delete(s.owed, session)
+		}
+		s.omu.Unlock()
+	}
+	return left
+}
 
 func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoint) {
 	defer func() { <-s.permits; s.wg.Done(); s.Poke() }() // the permit returns only when this call does
@@ -151,6 +232,7 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 		}
 		if err := s.m.Abandon(ctx, session, tok); err != nil {
 			s.report(err)
+			s.owe(session, owedEnd{token: tok, abandon: true})
 		}
 		return
 	}
@@ -160,7 +242,9 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 		werr = w.Wake(cctx, ep, WakeNotice)
 		cancel()
 	}
-	if err := s.m.Outcome(ctx, session, tok, classify(werr)); err != nil {
+	o := classify(werr)
+	if err := s.m.Outcome(ctx, session, tok, o); err != nil {
 		s.report(err)
+		s.owe(session, owedEnd{token: tok, outcome: o})
 	}
 }
