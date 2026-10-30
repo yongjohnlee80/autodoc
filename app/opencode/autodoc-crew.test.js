@@ -144,17 +144,32 @@ test("the latest of two sessions is registered, whichever is let finish first, o
   }
 });
 
-test("an older session's registration, once a newer one is asked for, is never the one woken", async () => {
+test("the plugin's session is the daemon's last stored endpoint at each step, and ends the latest's", async () => {
   await start();
   await chat("ses_a");
   await until(() => runs().some((l) => l.startsWith("start ses_a ")));
   await chat("ses_b");
-  go("ses_a"); // A ends, B is running and held
+  go("ses_a"); // A ends, stored; B is running and held
   await until(() => runs().some((l) => l.startsWith("start ses_b ")));
-  expect(await wake('{"session":"ses_a"}\n')).toBe('{"ok":false,"refused":"not this plugin\'s session"}');
+  expect(endpoint()).toBe("ses_a");
+  expect(await woken("ses_a")).toBe(true); // what the daemon holds, the plugin wakes
   go("ses_b");
   await until(() => endpoint() === "ses_b");
   expect(await woken("ses_b")).toBe(true);
+  expect(await wake('{"session":"ses_a"}\n')).toBe('{"ok":false,"refused":"not this plugin\'s session"}');
+});
+
+test("a session stored while the agent moved on stays the one woken when the next one fails", async () => {
+  await start();
+  await chat("ses_b");
+  await until(() => runs().some((l) => l.startsWith("start ses_b ")));
+  await chat("ses_a"); // the agent moves on while B registers
+  go("ses_b"); // B is stored
+  await until(() => runs().some((l) => l.startsWith("start ses_a ")));
+  go("ses_a", 1); // and A then fails
+  await until(() => runs().some((l) => l.startsWith("end ses_a")));
+  expect(endpoint()).toBe("ses_b");
+  expect(await woken("ses_b")).toBe(true); // the daemon's endpoint is B's, and the plugin's session too
 });
 
 test("a failed registration of an older session still leaves the latest registered", async () => {
