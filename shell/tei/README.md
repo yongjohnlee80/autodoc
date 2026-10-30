@@ -36,6 +36,12 @@ starts are quick. On a CPU, the warm-up takes a few minutes and briefly needs se
 Once started, TEI comes back by itself when Docker restarts, after a reboot for example
 (`restart: unless-stopped`). `down` removes the container, so a stopped TEI stays stopped.
 
+Each TEI GPU image is built for one compute capability and refuses every other at start (`Runtime
+compute cap 120 is not compatible with compile time compute cap 89`). `up gpu` picks the tag from
+the first GPU `nvidia-smi` lists. If TEI still refuses it, because it ran on another GPU, `up`
+stops the container at once instead of waiting, and names the tag that GPU needs. The bare version
+tag (`1.9`) is the A100 (8.0) build, not a generic one.
+
 ## Models
 
 `shell/tei/tei-rerank.sh models` lists the short names. Any Hugging Face id TEI can load as a

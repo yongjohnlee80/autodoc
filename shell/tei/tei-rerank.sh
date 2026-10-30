@@ -57,12 +57,10 @@ resolve() {
   esac
 }
 
-# gpu_tag is the TEI image tag for this machine's NVIDIA GPU, from its compute capability.
-gpu_tag() {
-  local cap
-  cap="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')" ||
-    true
-  case "$cap" in
+# cap_tag is the TEI image tag for a compute capability ("12.0"), or nothing when TEI builds none.
+# Each GPU image is built for one capability and refuses every other; the bare version is 8.0's.
+cap_tag() {
+  case "$1" in
     12.0) echo "120-$version" ;;
     12.1) echo "121-$version" ;;
     10.0) echo "100-$version" ;;
@@ -71,9 +69,46 @@ gpu_tag() {
     8.6) echo "86-$version" ;;
     8.0) echo "$version" ;;
     7.5) echo "turing-$version" ;;
-    "") die "no NVIDIA GPU found (nvidia-smi): use \`up cpu\`" ;;
-    *) die "no TEI image for compute capability $cap: use \`up cpu\`" ;;
   esac
+}
+
+# gpu_tag is the TEI image tag for this machine's NVIDIA GPU, from its compute capability.
+gpu_tag() {
+  local cap tag
+  cap="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')" ||
+    true
+  [ -n "$cap" ] || die "no NVIDIA GPU found (nvidia-smi): use \`up cpu\`"
+  tag="$(cap_tag "$cap")"
+  [ -n "$tag" ] || die "no TEI image for compute capability $cap: use \`up cpu\`"
+  echo "$tag"
+}
+
+# arch_refusal is TEI's refusal of its image, when the GPU container's log has one: "Runtime compute
+# cap 120 is not compatible with compile time compute cap 89". TEI then exits, and Docker restarts
+# it into the same refusal, so there is nothing to wait for.
+arch_refusal() {
+  compose --profile gpu logs --no-color tei-gpu 2>/dev/null |
+    grep -o 'Runtime compute cap [0-9]* is not compatible with compile time compute cap [0-9]*' |
+    tail -1
+}
+
+# refused stops the GPU container TEI refused, and says which tag the GPU it ran on needs. The
+# numbers are TEI's own: the runtime one is the GPU, the compile-time one the image.
+refused() {
+  local line="$1" runtime cap tag
+  compose --profile gpu down
+  runtime="$(printf '%s' "$line" | sed -n 's/^Runtime compute cap \([0-9]*\) .*/\1/p')"
+  cap="${runtime%?}.${runtime: -1}"
+  tag="$(cap_tag "$cap")"
+  echo "tei-rerank: TEI refused the image: $line" >&2
+  echo "  The image tag is wrong for the GPU TEI ran on (compute capability $cap); the GPU is" >&2
+  echo "  supported. The tag was chosen for the first GPU nvidia-smi lists, and TEI ran on another." >&2
+  if [ -n "$tag" ]; then
+    echo "  Run TEI on it with ghcr.io/huggingface/text-embeddings-inference:$tag, or use \`up cpu\`." >&2
+  else
+    echo "  TEI builds no image for compute capability $cap: use \`up cpu\`." >&2
+  fi
+  exit 1
 }
 
 compose() { docker compose -f "$compose_file" "$@"; }
@@ -90,12 +125,16 @@ running() {
 }
 
 wait_ready() {
-  local i
+  local profile="$1" i line
   echo "waiting for TEI at $url (the first start downloads the model) ..."
   for i in $(seq 1 120); do
     if curl -fsS -m 5 "$url/health" >/dev/null 2>&1; then
       echo "ready after about $((i * 5))s"
       return
+    fi
+    if [ "$profile" = gpu ]; then
+      line="$(arch_refusal || true)"
+      [ -z "$line" ] || refused "$line"
     fi
     sleep 5
   done
@@ -124,7 +163,7 @@ up() {
   echo "starting TEI ($profile) with $model on 127.0.0.1:$port"
   compose --profile "$profile" up -d --force-recreate "tei-$profile"
   url="http://127.0.0.1:$port"
-  wait_ready
+  wait_ready "$profile"
   status
 }
 
