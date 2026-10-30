@@ -27,6 +27,7 @@ var spawnerIdentityNames = []string{
 	"CLAUDE_PID",                   // the parent session's process
 	"NVIM",                         // the parent Neovim's RPC socket
 	"NVIM_LISTEN_ADDRESS",          // the same socket, as older Neovims name it
+	"AUTODOC_CREW_CONTEXT",         // the crew session of the agent that started AutoDoc, never its agents'
 }
 
 // spawnerIdentity are the names in environ (os.Environ's form) that name the agent host that

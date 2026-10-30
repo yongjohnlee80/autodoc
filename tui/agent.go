@@ -24,6 +24,7 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
+	crew                   *crewHost // the window's crew scope; nil in a program without one
 	agentBinPath           string
 	editorPath             func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
@@ -355,9 +356,18 @@ func agentWrapper(bin, config string) string {
 	return "#!/bin/sh\n# AutoDoc as the TUI that started this agent runs it: its build, its config.\n" + cmd + ` "$@"` + "\n"
 }
 
-// agentDir is the folder the agent works in for a workspace: AutoDoc's, never the workspace's.
-func (h *agents) agentFolder(ws wsInfo) string {
-	return filepath.Join(agentBase(h.agentDir), safeName(ws.name))
+// agentFolder is the folder codename's agent works in for ws: AutoDoc's, never the workspace's. While
+// the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
+// sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
+func (h *agents) agentFolder(ws wsInfo, codename string) string {
+	dir := filepath.Join(agentBase(h.agentDir), safeName(ws.name))
+	if h.crew == nil {
+		return dir
+	}
+	if scope, _, ok := h.crew.held(); ok {
+		return filepath.Join(dir, safeName(scope), safeName(codename))
+	}
+	return dir
 }
 
 // agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir.
@@ -378,11 +388,12 @@ func safeName(s string) string {
 	}, s)
 }
 
-// writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into the agent's folder for ws:
-// most agent CLIs read one of the two from where they start; bin/autodoc, agentWrapper; and the
-// workspace notice hook into .claude/settings.json (agenthook.go). It returns the folder.
-func (h *agents) writeAgentGuide(ws wsInfo) (string, error) {
-	dir := h.agentFolder(ws)
+// writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into codename's folder for ws
+// (agentFolder): most agent CLIs read one of the two from where they start; bin/autodoc,
+// agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). It returns
+// the folder.
+func (h *agents) writeAgentGuide(ws wsInfo, codename string) (string, error) {
+	dir := h.agentFolder(ws, codename)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
 	}
