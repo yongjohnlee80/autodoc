@@ -224,7 +224,7 @@ func (t *Tx) NextDeadline() (int64, bool, error) {
 		}
 	}
 	lease, err := deliveries(t.m.deliveries.On(t.tx).With(cState, mail.Leased).
-		WithPredicate(dao.Raw(`"mail_delivery"."lease_until" IS NOT NULL`)).OrderBy(dao.Asc(byLease)).Limit(1).Select())
+		WithPredicate(dao.IsNotNull(`"mail_delivery"."lease_until"`)).OrderBy(dao.Asc(byLease)).Limit(1).Select())
 	if err != nil {
 		return 0, false, err
 	}
