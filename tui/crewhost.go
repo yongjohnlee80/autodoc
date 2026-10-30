@@ -289,7 +289,7 @@ func (h *crewHost) Stopped() {
 	_, _ = h.c.Call(ctx, "crew.release", scope, h.run, epoch)
 	h.scope = ""
 	for id, s := range h.sessions { // released: every session has ended, and its credential with it
-		_ = crew.RemoveContextOf(s.Dir, s.ID)
+		_ = crew.RemoveContext(s.Dir, s.ID)
 		delete(h.sessions, id)
 	}
 	clear(h.pending)
@@ -413,28 +413,28 @@ func (h *crewHost) resolve(r *crewRegistration) {
 	})
 }
 
-// publish writes s's context in its folder (0600, through a rename) for the process about to start,
-// once s is still this window's: registered here and not ended, under the scope and epoch the window
-// holds, on the daemon and store it was registered with. The context names that daemon, and its
-// credential the registration's secret, which is then dropped. A session no longer the window's is
-// refused (errCrewStale), and the caller ends it.
-func (h *crewHost) publish(s crewSession) error {
+// publish writes s's context file in its agent folder (0600, through a rename) for the process about
+// to start, and answers its path, once s is still this window's: registered here and not ended,
+// under the scope and epoch the window holds, on the daemon and store it was registered with. The
+// context names that daemon, and its credential the registration's secret, which is then dropped. A
+// session no longer the window's is refused (errCrewStale), and the caller ends it.
+func (h *crewHost) publish(s crewSession) (string, error) {
 	r := s.reg
 	if _, live := h.sessions[s.ID]; !live || r == nil || r.secret == "" || s.Scope != h.scope || s.Epoch != h.epoch ||
 		r.store != h.c.StoreID() || r.socket != h.c.DaemonAddress() {
-		return errCrewStale
+		return "", errCrewStale
 	}
-	err := crew.WriteContext(s.Dir, crew.Context{Store: r.store, Socket: r.socket, Scope: s.Scope, Profile: s.Profile,
+	path, err := crew.WriteContext(s.Dir, crew.Context{Store: r.store, Socket: r.socket, Scope: s.Scope, Profile: s.Profile,
 		Session: s.ID, Credential: crew.Credential(s.ID, r.secret), Kind: r.kind})
 	r.secret = "" // kept no longer than it is needed
-	return err
+	return path, err
 }
 
-// exit ends s, why: its context file, when it still names s, is removed at once on the loop, so no
-// later process reads its credential and a newer session's context in the folder stays. The daemon
-// is told off the loop; until it answers, the exit is owed, and settle asks again.
+// exit ends s, why: its context file is removed at once on the loop, so no later process reads its
+// credential; it is s's own file, so a newer session's in the folder stays. The daemon is told off
+// the loop; until it answers, the exit is owed, and settle asks again.
 func (h *crewHost) exit(s crewSession, why string) {
-	_ = crew.RemoveContextOf(s.Dir, s.ID)
+	_ = crew.RemoveContext(s.Dir, s.ID)
 	delete(h.sessions, s.ID)
 	h.owed[s.ID] = crewOwedExit{s: s, why: why}
 	h.sendExit(s.ID)
