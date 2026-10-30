@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +40,9 @@ type crewCore interface {
 	Go(fn func(context.Context) any, then func(any))
 	After(d time.Duration, fn func())
 	Notify(msg string)
+	// DaemonAddress and StoreID are the daemon a session context names: its socket and its store
+	DaemonAddress() string
+	StoreID() string
 }
 
 // crewHost holds the window's scope. Its fields are the loop's: work off it answers through Go.
@@ -50,13 +55,25 @@ type crewHost struct {
 	epoch    int64
 	gen      uint64 // bumped by each claim: an earlier claim's renewals stop
 	claiming bool
+	sessions map[string]crewSession // the agents' sessions registered and not yet ended, by id
 }
+
+// crewSession is one agent's session, as registered under the window's scope.
+type crewSession struct {
+	ID, Profile, Scope string
+	Epoch              int64
+	Dir                string // the folder whose context file names it
+}
+
+// errNoCrewScope is a registration asked of a window that holds no scope.
+var errNoCrewScope = errors.New("this window holds no crew scope")
 
 func newCrewHost(c crewCore, agentDir string) *crewHost {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
-	return &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc}
+	return &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
+		sessions: map[string]crewSession{}}
 }
 
 func (*crewHost) Name() string                 { return "crew" }
@@ -240,4 +257,63 @@ func (h *crewHost) Stopped() {
 	defer cancel()
 	_, _ = h.c.Call(ctx, "crew.release", scope, h.run, epoch)
 	h.scope = ""
+	for id, s := range h.sessions { // released: every session has ended, and its credential with it
+		_ = crew.RemoveContext(s.Dir)
+		delete(h.sessions, id)
+	}
+}
+
+// register starts codename's session under the window's scope (ADR 1793271500 §4.4, §4.5): a
+// secret made here, kept only until the context is written; the call off the loop; then, on the
+// loop, the context written in dir (0600, through a rename) before then is told. A registration
+// whose context can't be written is ended (start_failed), so then's error leaves nothing behind.
+// workspace is the workspace's id in the store; instance the host's spawn id.
+func (h *crewHost) register(codename, kind string, workspace int64, instance, dir string, then func(crewSession, error)) {
+	scope, epoch, ok := h.held()
+	if !ok {
+		then(crewSession{}, errNoCrewScope)
+		return
+	}
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	secret := hex.EncodeToString(b)
+	h.c.Go(func(ctx context.Context) any {
+		v, err := h.c.Call(ctx, "crew.register", scope, h.run, epoch, codename, kind, strconv.FormatInt(workspace, 10), instance, secret)
+		if err != nil {
+			return err
+		}
+		m, _ := v.(map[string]any)
+		return crewSession{ID: str(m, "session"), Profile: str(m, "profile"), Scope: scope, Epoch: epoch, Dir: dir}
+	}, func(v any) {
+		s, ok := v.(crewSession)
+		if !ok {
+			err, _ := v.(error)
+			if err == nil {
+				err = errors.New("the registration did not finish")
+			}
+			then(crewSession{}, err)
+			return
+		}
+		c := crew.Context{Store: h.c.StoreID(), Socket: h.c.DaemonAddress(), Scope: scope, Profile: s.Profile,
+			Session: s.ID, Credential: crew.Credential(s.ID, secret), Kind: kind}
+		if err := crew.WriteContext(dir, c); err != nil {
+			h.exit(s, crew.EndedStartFailed)
+			then(crewSession{}, err)
+			return
+		}
+		h.sessions[s.ID] = s
+		then(s, nil)
+	})
+}
+
+// exit ends s, why: its context file is removed at once, on the loop, so no later process reads its
+// credential; the daemon is told off the loop. A refusal (the window lost its scope meanwhile) has
+// ended the session already.
+func (h *crewHost) exit(s crewSession, why string) {
+	_ = crew.RemoveContext(s.Dir)
+	delete(h.sessions, s.ID)
+	h.c.Go(func(ctx context.Context) any {
+		_, err := h.c.Call(ctx, "crew.exit", s.Scope, h.run, s.Epoch, s.ID, why)
+		return err
+	}, func(any) {})
 }

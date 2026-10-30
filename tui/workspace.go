@@ -14,6 +14,7 @@ import (
 // the daemon serves each while it exists). The settings are one dialog: settings.go.
 
 type wsInfo struct {
+	id                                 int64 // the store's own id, which a rename keeps (0 from a daemon before it)
 	name, root, state, embeddingPolicy string
 	sectionTokens                      int64
 	include, exclude                   []string
@@ -219,7 +220,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 	var out []wsInfo
 	for _, w := range asList(res) {
 		m := asMap(w)
-		out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
+		out = append(out, wsInfo{id: num(m, "id"), name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
 			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
 			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
 			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
