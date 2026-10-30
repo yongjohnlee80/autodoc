@@ -139,18 +139,3 @@ func (c *correlated) ToSQL(d dao.Dialect, next *int) (string, []any) {
 	b.WriteString(")")
 	return b.String(), args
 }
-
-// ColumnsCompare is "a op b" between two columns of the statement, op one of = <> < <= > >=: a
-// comparison dao's value predicates can't express. Anything else panics, at the declaration.
-func ColumnsCompare(a, op, b string) dao.Predicate {
-	switch op {
-	case "=", "<>", "<", "<=", ">", ">=":
-	default:
-		panic("store.ColumnsCompare: operator " + op)
-	}
-	return columnsCompare{a + " " + op + " " + b}
-}
-
-type columnsCompare struct{ sql string }
-
-func (c columnsCompare) ToSQL(dao.Dialect, *int) (string, []any) { return c.sql, nil }
