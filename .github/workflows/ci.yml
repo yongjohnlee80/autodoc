@@ -4,7 +4,8 @@
 name: ci
 
 # Pull requests merge into canary and run no CI (each has its own gate and review); CI runs on
-# each merge into canary, and on the milestone pull request that merges canary into main.
+# each merge into canary, and on the release pull request into main: a release/YYYY-MM-DD branch,
+# canary rebased onto main, merged by rebase, after which canary is reset to main.
 on:
   push:
     branches: [canary]
@@ -24,10 +25,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A pull request runs CI only when it is the milestone one, canary into main: any other into main
-  # starts the workflow, but every job is skipped and holds no runner.
+  # A pull request runs CI only when it is the release one into main (from canary, or a release/
+  # branch of canary rebased onto main): any other into main starts the workflow, but every job is
+  # skipped and holds no runner.
   test:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: build, vet, test
     runs-on: ubuntu-latest
     services:
@@ -140,7 +142,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -tags server -o /dev/null ./cmd/autodoc
 
   tui:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: TUI race (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     strategy:
@@ -167,7 +169,7 @@ jobs:
   # The Lua side (lua/autodoc/): the suites under tests/, against a daemon built from this checkout,
   # in a pinned Neovim with a pinned auto-core.nvim (its hard dependency).
   lua:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
     env:
       # auto-core's release the suites were verified against; bump deliberately, with the suites
@@ -201,7 +203,7 @@ jobs:
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.
   macos:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: macOS (cgo)
     runs-on: macos-latest
     steps:
@@ -228,7 +230,7 @@ jobs:
   # The Linux GUI build (make build-gui, the release's -gui artifacts): cgo against the window
   # system's libraries. The static TUI build is the job above's.
   gui-linux:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: Linux GUI (cgo)
     # On Ubuntu 24.04, where release.yml builds the GUI, so this job checks that build; the other
     # Linux jobs stay on ubuntu-latest and would show a new image's change first.
@@ -268,7 +270,7 @@ jobs:
   # toolchain (the release builds with it): the default build, the server's and the GUI's. golang.org/x/vuln
   # at a pinned version, through go run, so its source is checked against the module checksum database.
   govulncheck:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: govulncheck
     runs-on: ubuntu-24.04
     steps:
@@ -292,7 +294,7 @@ jobs:
 
   coverage:
     name: coverage policy
-    if: github.event_name == 'pull_request' && github.head_ref == 'canary'
+    if: github.event_name == 'pull_request' && (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
     services:
       # The same ephemeral Postgres the test job runs: the head-coverage run
@@ -404,7 +406,7 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
-      github.head_ref == 'canary' &&
+      (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/')) &&
       github.event.pull_request.head.repo.full_name == github.repository
     needs: coverage
     runs-on: ubuntu-latest
