@@ -43,6 +43,7 @@ type crewCore interface {
 	// DaemonAddress and StoreID are the daemon a session context names: its socket and its store
 	DaemonAddress() string
 	StoreID() string
+	Ask(q Question) Asked
 }
 
 // crewHost holds the window's scope. Its fields are the loop's: work off it answers through Go.
@@ -55,6 +56,7 @@ type crewHost struct {
 	epoch    int64
 	gen      uint64 // bumped by each claim: an earlier claim's renewals stop
 	claiming bool
+	offered  bool                   // the orphans were offered this run (creworphans.go)
 	sessions map[string]crewSession // the agents' sessions registered and not yet ended, by id
 	// pending is each codename's registration whose answer was lost: the daemon may have committed
 	// it, so its exact tuple is replayed, by the codename's next start or by settle, never a fresh
@@ -153,6 +155,7 @@ func (h *crewHost) claim() {
 		h.gen++
 		h.renewLater(h.gen)
 		h.settle()
+		h.offerOrphans()
 	})
 }
 
