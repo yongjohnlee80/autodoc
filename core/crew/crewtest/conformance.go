@@ -639,7 +639,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		cred := crew.Credential(got.Session, r.Secret)
-		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`
+		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`
 		// a wake row mid-backoff, as a failed attempt leaves it
 		if err := store.Write(ctx, func(tx crew.Tx) error {
 			w, _, err := tx.Wake(got.Session)
@@ -671,11 +671,13 @@ func Run(t *testing.T, h Harness) {
 			t.Fatalf("stored endpoint %+v; want the canonical locator %s", ep, claude)
 		}
 		for name, c := range map[string][2]string{
-			"another user's socket":     {"claude", `{"socket":"/run/user/1001/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"a socket outside the root": {"claude", `{"socket":"/tmp/elsewhere/a.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"a path climbing out":       {"claude", `{"socket":"/run/user/1000/cc-socks/../../x.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"an unknown field":          {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1","token":"x"}`},
-			"no pid":                    {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","start":"9000","session":"c-1"}`},
+			"another user's socket":     {"claude", `{"socket":"/run/user/1001/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"a socket outside the root": {"claude", `{"socket":"/tmp/elsewhere/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"a path climbing out":       {"claude", `{"socket":"/run/user/1000/cc-socks/../../x.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"an unknown field":          {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1","token":"x"}`},
+			"start another pid's":       {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:43:9000","session":"c-1"}`},
+			"start as bare ticks":       {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`},
+			"no pid":                    {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","start":"b:n:42:9000","session":"c-1"}`},
 			"a non-loopback agy":        {"agy", `{"address":"10.0.0.5:4000","conversation":"x"}`},
 			"an unknown kind":           {"vim", `{}`},
 			"not JSON":                  {"claude", `socket=/run/user/1000/cc-socks/a.sock`},
@@ -741,7 +743,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		if _, err := m.SetEndpoint(ctx, crew.Credential(jarvis.Session, rj.Secret), "claude",
-			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"1","session":"c"}`); err != nil {
+			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`); err != nil {
 			t.Fatal(err)
 		}
 		list := func() []crew.Entry {
