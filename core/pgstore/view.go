@@ -138,10 +138,21 @@ func hitFields() []chunkField {
 // breadcrumb (B), tags (C) and body (D), then path, then ordinal, with the filters in the same
 // WHERE so they apply before the rank and the limit.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, terms, f, n, query.TSQuery)
+}
+
+// LexicalAny is Lexical with any one term enough (search.LexicalAny), ranked the same way: the
+// engine's fallback when no chunk holds every term (AM-8).
+func (v *View) LexicalAny(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, terms, f, n, query.TSQueryAny)
+}
+
+// lexical is Lexical with the tsquery render picks.
+func (v *View) lexical(ctx context.Context, terms []search.Term, f search.Filter, n int, render func([]search.Term) (string, error)) ([]search.Candidate[int64], error) {
 	if n <= 0 || len(terms) == 0 {
 		return nil, nil
 	}
-	q, err := query.TSQuery(terms)
+	q, err := render(terms)
 	if err != nil {
 		return nil, err
 	}
