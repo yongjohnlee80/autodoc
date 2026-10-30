@@ -59,6 +59,7 @@ func Run(t *testing.T, h Harness) {
 		{"AdoptionsNoticesFollowTheMergeThroughCrewsAdopt", testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt},
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
 		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
+		{"AnItemNamesItsSenderAsAnAddress", testAnItemNamesItsSenderAsAnAddress},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -916,5 +917,39 @@ func testNextDeadlineIsTheEarliestLive(t *testing.T, h Harness) {
 	r.receive("s-gold") // its lease ends in 10 minutes, before the expiry
 	if at, ok := next(); !ok || at != now.Add(mail.LeaseFor).UnixNano() {
 		t.Fatalf("a leased delivery's deadline: %d %v, want its lease's end", at, ok)
+	}
+}
+
+// Each received or previewed item names its sender as the address the receiver would reply to: the
+// bare codename in the same scope, name@project from another AutoVim scope, and "autodoc" for the
+// daemon's notices.
+func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.profile("p-zen", "autovim:other", "zen", "s-zen")
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "same scope", Key: "k1"})
+	r.send("s-zen", mail.Send{To: []string{"gold@p"}, Body: "other scope", Key: "k2"})
+	in, err := r.m.Preview(r.ctx, "s-gold", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.receive("s-gold")
+	for _, items := range [][]mail.Item{in.Items, got.Items} {
+		var froms []string
+		for _, it := range items {
+			froms = append(froms, it.From)
+		}
+		if strings.Join(froms, ",") != "jarvis,zen@other" {
+			t.Fatalf("the senders: %v, want jarvis,zen@other", froms)
+		}
+	}
+	// a delivery that ends unhandled makes a notice from the daemon
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	for range mail.MaxAttempts {
+		r.receive("s-gold")
+		r.clock.Advance(mail.LeaseFor + time.Second)
+	}
+	notice := r.receive("s-jarvis")
+	if len(notice.Items) != 1 || notice.Items[0].From != "autodoc" {
+		t.Fatalf("the daemon's notice: %+v, want one from autodoc", notice.Items)
 	}
 }
