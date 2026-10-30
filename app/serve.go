@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -255,26 +256,64 @@ func (d *process) startWorkspaces() error {
 // startWakes starts the wake scheduler (ADR 1793271500 §4.7) for this daemon run, its stop pushed
 // onto the daemon's.
 func (d *process) startWakes() {
-	d.stops.push(startScheduler(d.ctx, d.deps.crew, crewWakers(), d.log))
+	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(), d.log)
+	d.stops.push(stop)
+	d.stops.push(addLateWakers(d.ctx, s, d.log))
 }
 
-// crewWakers are the wakers by endpoint kind, for the daemon's user. Phase 3 brings them one CLI at
-// a time; a session whose kind has none is watch-only, reached by crew.wait and the inbox. Codex's
-// is there only when its CLI is installed with the queue it wakes through (codexWaker).
+// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's.
+// Phase 3 brings them one CLI at a time; a session whose kind has none is watch-only, reached by
+// crew.wait and the inbox. A waker that depends on what is installed is a late one (lateWakers).
 func crewWakers() map[string]crew.Waker {
-	w := map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
-	if c := codexWaker(os.Getuid(), codexBin()); c != nil {
-		w["codex"] = c
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
+}
+
+// lateWakers find the wakers that depend on what is installed, each by probing its CLI: Codex's,
+// when the codex CLI has the queue it wakes through. They run in the background once the scheduler
+// has started, so serve never waits on a probe and Claude's waker never waits on Codex; each joins
+// the scheduler when found. A variable so the app's tests can empty it and never run the host's
+// tools.
+var lateWakers = map[string]func(context.Context) crew.Waker{
+	"codex": func(ctx context.Context) crew.Waker { return codexWaker(ctx, os.Getuid(), codexBin(ctx)) },
+}
+
+// addLateWakers runs each late waker's probe in the background and adds what it finds to s; the
+// answer waits for the probes (each bounded by probeTimeout and probeWaitDelay, and ended by ctx).
+func addLateWakers(ctx context.Context, s *crew.Scheduler, log logger.Logger) (wait func()) {
+	var wg sync.WaitGroup
+	for kind, find := range lateWakers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if w := find(ctx); w != nil && ctx.Err() == nil {
+				s.AddWaker(kind, w)
+				logger.Info(log, "the wake scheduler wakes "+kind+" sessions too")
+			}
+		}()
 	}
-	return w
+	return wg.Wait
+}
+
+// The bounds of a capability probe: probeTimeout for the run, then probeWaitDelay for its output
+// once it is killed, so a child that keeps the pipe (a shim, a wrapper) can't hold the probe longer.
+const (
+	probeTimeout   = 5 * time.Second
+	probeWaitDelay = time.Second
+)
+
+// probeOutput runs bin with args, within the probe's bounds, and answers its standard output.
+func probeOutput(ctx context.Context, bin string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.WaitDelay = probeWaitDelay
+	return cmd.Output()
 }
 
 // codexBin is the codex CLI: mise's, as this machine installs its tools, else the first on PATH;
 // "" when there is none.
-func codexBin() string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "mise", "which", "codex").Output(); err == nil {
+func codexBin(ctx context.Context) string {
+	if out, err := probeOutput(ctx, "mise", "which", "codex"); err == nil {
 		if bin := strings.TrimSpace(string(out)); bin != "" {
 			return bin
 		}
@@ -285,30 +324,28 @@ func codexBin() string {
 
 // codexWaker is Codex's waker for user uid when bin is a codex CLI with the queue subcommand it wakes
 // through (`codex queue --thread`), else nil: no waker, so Codex sessions stay watch-only.
-func codexWaker(uid int, bin string) crew.Waker {
+func codexWaker(ctx context.Context, uid int, bin string) crew.Waker {
 	if bin == "" {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "queue", "--help").CombinedOutput()
+	out, err := probeOutput(ctx, bin, "queue", "--help")
 	if err != nil || !strings.Contains(string(out), "--thread") {
 		return nil
 	}
 	return crew.NewCodexWaker(uid, bin)
 }
 
-// startScheduler makes the wake scheduler for a fresh run id, and answers how to stop it. Making it
-// is enough for the long-polls: every committed wake change pokes it, and its Watch serves
+// startScheduler makes the wake scheduler for a fresh run id, and answers it and how to stop it.
+// Making it is enough for the long-polls: every committed wake change pokes it, and its Watch serves
 // mail.wait, crew.wait and inbox.watch. Its loop, which reserves and makes wake attempts, runs only
-// once a waker exists: it reserves only the kinds wakers serve, so with none it would have nothing
-// to do.
-func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (stop func()) {
+// when it starts with a waker: it reserves only the kinds wakers serve, so with none it would have
+// nothing to do. A late waker (AddWaker) joins a running loop; serve's always starts with Claude's.
+func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (*crew.Scheduler, func()) {
 	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") })}, opts...)
 	s := c.NewScheduler(newRunID(), wakers, opts...)
 	if len(wakers) == 0 {
 		logger.Info(log, "the wake scheduler waits for its wakers (phase 3): mail is received when agents ask")
-		return func() {}
+		return s, func() {}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -318,7 +355,7 @@ func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew
 			logger.Warning(log, err, "the wake scheduler stopped")
 		}
 	}()
-	return func() { cancel(); <-done }
+	return s, func() { cancel(); <-done }
 }
 
 // newRunID is a fresh random id: this daemon run's, which the scheduler's attempts carry, so the

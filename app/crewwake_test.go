@@ -104,7 +104,7 @@ func newWakeRig(t *testing.T) *wakeRig {
 // start starts serve's scheduler with wakers (none: as serve does before phase 3), on the store's
 // clock; the answer stops it.
 func (r *wakeRig) start(wakers map[string]crew.Waker) (stop func()) {
-	stop = startScheduler(r.ctx, r.deps.crew, wakers, logger.Nop{}, crew.WithWakeClock(r.clock.Now),
+	_, stop = startScheduler(r.ctx, r.deps.crew, wakers, logger.Nop{}, crew.WithWakeClock(r.clock.Now),
 		crew.WithWakeRetry(10*time.Millisecond))
 	r.t.Cleanup(stop)
 	return stop
