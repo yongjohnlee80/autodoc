@@ -31,13 +31,22 @@ type crewInboxCore interface {
 	Notify(msg string)
 	NotifyOngoingClick(id, msg string, onClick func())
 	NotifyDone(id, msg string)
+	Set(key string, v any)
+	Open(id string)
+	Close(id string)
+	Prefs() prefs
+	SetPref(name, value string)
+	Bell()
+	// SetText sets the text of the layout's text area id (the reply's, at each opening)
+	SetText(id, text string)
 }
 
-// crewOpen is one entry of the open set: what its toast says, and the agent it is about.
+// crewOpen is one entry of the open set: what its toast says, and what its click does.
 type crewOpen struct {
-	text    string
-	session string // the agent's session, for a click to raise it
-	done    string // what the toast says once it leaves the set
+	text  string
+	rings bool // a request or a permission prompt: newly open, it rings the bell (crewbell.go)
+	click func()
+	done  string // what the toast says once it leaves the set
 }
 
 // crewInbox is the window's view of the human's inbox. Its fields are the loop's.
@@ -53,15 +62,26 @@ type crewInbox struct {
 	open    map[string]crewOpen // the toasts shown, by toast id
 	reports map[string]bool     // the open reports a passing toast has announced, by message
 	parts   snapshotParts       // a snapshot's pages read so far
+	// requests is the open requests, by message; replying the one the reply dialog is open on, ""
+	// when it is closed; drafts the replies not sent, by request (crewreply.go)
+	requests map[string]crewRequest
+	replying string
+	drafts   map[string]string
+	// sending is each request's latest send, by attempt (attempt counts them): only its failure
+	// keeps a draft
+	sending map[string]uint64
+	attempt uint64
+	now     func() time.Time // the bell's clock
+	rang    time.Time        // the last ring
 }
 
 func newCrewInbox(c crewInboxCore, raise func(string) bool) *crewInbox {
-	return &crewInbox{c: c, raise: raise, open: map[string]crewOpen{}, reports: map[string]bool{}}
+	return &crewInbox{c: c, raise: raise, open: map[string]crewOpen{}, reports: map[string]bool{},
+		requests: map[string]crewRequest{}, drafts: map[string]string{}, sending: map[string]uint64{}, now: time.Now}
 }
 
-func (*crewInbox) Name() string                 { return "crewInbox" }
-func (*crewInbox) State() map[string]any        { return map[string]any{} }
-func (*crewInbox) Commands() map[string]Command { return map[string]Command{} }
+func (*crewInbox) Name() string            { return "crewInbox" }
+func (x *crewInbox) State() map[string]any { return x.replyState() }
 
 // Connected starts the window's watch on each connection, from a snapshot: what changed while it
 // was away is in it. The earlier connection's watch is cancelled, and its snapshot's pages read so
@@ -126,15 +146,15 @@ func (x *crewInbox) watch(gen uint64, page string) {
 	})
 }
 
-// snapshotParts gathers a snapshot's pages until its last, each entry cut to what its toast says:
-// a page's bodies are never kept across the pages.
+// snapshotParts gathers a snapshot's pages until its last, each entry cut to what its toast (or a
+// request's reply dialog) says: a request's body is kept, for the dialog; a report's never is.
 type snapshotParts struct {
 	items     []crewItem
 	attention []crewAttention
 }
 
 // crewItem is an open request or report, as its toast says it.
-type crewItem struct{ id, kind, from, subject, session string }
+type crewItem struct{ id, kind, from, subject, session, body string } // body: a request's, for its reply
 
 // crewAttention is a raised attention, as its toast says it.
 type crewAttention struct{ session, codename, kind, text string }
@@ -144,8 +164,11 @@ func (p *snapshotParts) add(snap map[string]any) {
 	for _, it := range asList(snap["items"]) {
 		m := asMap(it)
 		if k := str(m, "kind"); k == "request" || k == "message" {
-			p.items = append(p.items, crewItem{id: str(m, "message"), kind: k, from: str(m, "from"), subject: str(m, "subject"),
-				session: str(m, "session")})
+			it := crewItem{id: str(m, "message"), kind: k, from: str(m, "from"), subject: str(m, "subject"), session: str(m, "session")}
+			if k == "request" {
+				it.body = str(m, "body") // the reply dialog shows it; a report's is never kept
+			}
+			p.items = append(p.items, it)
 		}
 	}
 	for _, a := range asList(snap["attention"]) {
@@ -197,12 +220,16 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 
 // show makes the toasts follow the open set p: a toast for each open request and raised attention
 // not shown yet, the end of each shown one no longer open, and a passing toast for each new report.
+// A request's click opens the reply dialog on it; an attention's shows its agent. The dialog open
+// on a request that has left the set closes.
 func (x *crewInbox) show(p snapshotParts) {
-	now, reports := map[string]crewOpen{}, map[string]bool{}
+	now, reports, requests := map[string]crewOpen{}, map[string]bool{}, map[string]crewRequest{}
 	for _, it := range p.items {
 		switch it.kind {
 		case "request":
-			now["crew:"+it.id] = crewOpen{text: fmt.Sprintf("%s asks: %s", it.from, it.subject), session: it.session,
+			requests[it.id] = crewRequest{id: it.id, from: it.from, subject: it.subject, body: it.body}
+			id := it.id
+			now["crew:"+it.id] = crewOpen{text: fmt.Sprintf("%s asks: %s", it.from, it.subject), rings: true, click: func() { x.openReply(id) },
 				done: fmt.Sprintf("%s's request is closed: %s", it.from, it.subject)}
 		case "message":
 			reports[it.id] = true
@@ -213,8 +240,20 @@ func (x *crewInbox) show(p snapshotParts) {
 	}
 	x.reports = reports // one read, so out of the set, is never back: forgotten
 	for _, a := range p.attention {
-		now["crew-attention:"+a.session] = crewOpen{text: fmt.Sprintf("%s waits on you (%s): %s", a.codename, a.kind, a.text),
-			session: a.session, done: fmt.Sprintf("%s no longer waits on you", a.codename)}
+		session, codename := a.session, a.codename
+		now["crew-attention:"+session] = crewOpen{text: fmt.Sprintf("%s waits on you (%s): %s", codename, a.kind, a.text), rings: a.kind == "permission",
+			click: func() { x.raiseAttention(session, codename) }, done: fmt.Sprintf("%s no longer waits on you", codename)}
+	}
+	x.requests = requests
+	for id := range x.drafts {
+		if _, open := requests[id]; !open {
+			delete(x.drafts, id) // answered, dismissed or expired: a draft for it can't be sent
+		}
+	}
+	if _, open := requests[x.replying]; x.replying != "" && !open {
+		x.replying = ""
+		x.c.Close(crewReplyDialog)
+		x.c.Notify("The request you were answering was answered, dismissed or expired.")
 	}
 	for id, o := range x.open {
 		if _, still := now[id]; !still {
@@ -222,16 +261,17 @@ func (x *crewInbox) show(p snapshotParts) {
 			delete(x.open, id)
 		}
 	}
+	fresh := false
 	for id, o := range now {
-		if prev, shown := x.open[id]; shown && prev.text == o.text {
+		prev, shown := x.open[id]
+		fresh = fresh || (o.rings && !(shown && prev.rings)) // newly open, or newly asking (blocked, then a permission)
+		if shown && prev.text == o.text {
 			continue
 		}
-		session := o.session
-		x.c.NotifyOngoingClick(id, o.text, func() {
-			if !x.raise(session) {
-				x.c.Notify("That agent runs in another window, or has exited: answer it there, or in the inbox.")
-			}
-		})
+		x.c.NotifyOngoingClick(id, o.text, o.click)
 		x.open[id] = o
+	}
+	if fresh {
+		x.ring() // one ring for all that opened at once
 	}
 }

@@ -26,6 +26,7 @@ configuration. `editor.commands` lists them with the rest.
 <!-- the commands: generated from the catalog (go test ./tui -run TestTheCommandsReferenceIsGenerated -update) -->
 | Command | `:` name | Arguments | What it does |
 |---|---|---|---|
+| `agent.bell` | `:agent-bell` |  | ring a bell when an agent asks you or waits on you |
 | `agent.setup` |  |  | set up an agent |
 | `agent.toggle` |  |  | AI agent |
 | `app.command_line` |  |  | the command line |

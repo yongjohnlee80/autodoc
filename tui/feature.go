@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	"github.com/yongjohnlee80/golib/decl"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // FEATURES — what the program is made of, each contributing its own state and commands.
@@ -533,11 +535,26 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 	return c.h.call(ctx, verb, params...) // the one send path: a gated authority on ctx is bounded there
 }
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
-func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
-func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
-func (c core) OpenAbsolute(abs string)                         { c.h.openAbsolute(abs) }
-func (c core) Say(msg string)                                  { c.h.say(msg) }
-func (c core) Files() FileList                                 { return c.h.files }
+func (c core) Bell()                                           { c.h.ringBell() }
+
+// SetText sets the text of the layout's text area id (an id inside a component's instance is
+// scoped: crewreply.go's crewReplyText). A layout without it is said, never passed over.
+func (c core) SetText(id, text string) {
+	if c.h.p == nil {
+		return
+	}
+	ta, ok := tuidecl.FindAs[*widget.TextArea](c.h.p, id)
+	if !ok {
+		c.h.keep(fmt.Errorf("the layout has no text area %q", id))
+		return
+	}
+	ta.SetValue(text)
+}
+func (c core) Ticket(seq *uint64, scope TicketScope) Ticket { return c.h.ticket(seq, scope) }
+func (c core) OpenRef(ws, path string)                      { c.h.openIn(ws, path) }
+func (c core) OpenAbsolute(abs string)                      { c.h.openAbsolute(abs) }
+func (c core) Say(msg string)                               { c.h.say(msg) }
+func (c core) Files() FileList                              { return c.h.files }
 func (c core) Workspaces() []Workspace {
 	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {
