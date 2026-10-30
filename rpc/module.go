@@ -28,7 +28,10 @@ func WithModules(ms ...module.Module) Option {
 	return func(o *options) { o.modules = append(o.modules, ms...) }
 }
 
-// registerModules registers every module's verbs and keeps their errors for the catalog.
+// registerModules registers every module's verbs and keeps their errors for the catalog. Every
+// module's errors are known before any verb is served, and a verb's errors map against all of them:
+// a module may answer another's error for the same condition (mail answers crew's bad credential),
+// and each code still belongs to one module, its owner.
 func (s *Server) registerModules(ms []module.Module) {
 	owners := map[int64]int{} // code → the module that answers it
 	for i, m := range ms {
@@ -46,8 +49,10 @@ func (s *Server) registerModules(ms []module.Module) {
 			owners[e.Code] = i
 		}
 		s.moduleErrs = append(s.moduleErrs, errs...)
+	}
+	for _, m := range ms {
 		for _, v := range m.Verbs() {
-			s.add(verb{Contract: v.Contract, h: s.serve(v, errs), events: v.Events})
+			s.add(verb{Contract: v.Contract, h: s.serve(v, s.moduleErrs), events: v.Events})
 		}
 	}
 }
