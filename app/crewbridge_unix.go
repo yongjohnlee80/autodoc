@@ -10,15 +10,10 @@ import (
 	"syscall"
 )
 
-// detachBridge starts this bridge again, detached: its own session (so the agent's tool shell
-// ending does not end it), stdin from /dev/null, stdout and stderr to the session's bridge log, the
-// environment as it is (the token travels there, never in an argument). It answers the child's pid
-// and the log's path.
-func detachBridge(dir, session string, args []string) (int, string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return 0, "", err
-	}
+// detachBridge starts the bridge argv and env name (bridgeChild), detached: its own session (so the
+// agent's tool shell ending does not end it), stdin from /dev/null, stdout and stderr to the
+// session's bridge log in dir. It answers the child's pid and the log's path.
+func detachBridge(dir, session string, argv, env []string) (int, string, error) {
 	_, logPath := bridgeFiles(dir, session)
 	log, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
@@ -30,7 +25,8 @@ func detachBridge(dir, session string, args []string) (int, string, error) {
 		return 0, "", err
 	}
 	defer null.Close()
-	cmd := exec.Command(exe, append([]string{"crew", "bridge"}, append(args, "--foreground")...)...)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = null, log, log
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
