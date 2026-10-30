@@ -336,7 +336,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
