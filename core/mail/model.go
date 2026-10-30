@@ -49,9 +49,11 @@ const (
 	KindResponse = "response"
 	KindEvent    = "event"
 
-	MessageOpen     = "open"
-	MessageAnswered = "answered"
-	MessageExpired  = "expired"
+	MessageOpen      = "open"
+	MessageAnswered  = "answered"
+	MessageDismissed = "dismissed"
+	MessageRead      = "read"
+	MessageExpired   = "expired"
 
 	Queued  = "queued"
 	Leased  = "leased"
@@ -66,12 +68,15 @@ const (
 	WhyDiscarded     = "discarded"
 	WhyRecipientGone = "recipient_gone"
 	WhyReopened      = "reopened_by_adoption"
+	WhyDismissed     = "dismissed" // the human declined a request
 )
 
 // The reserved profiles: the daemon, which sends every generated notice and is never a
-// recipient, and the human, codename "user" in the global scope.
+// recipient, and the human, codename "user" in the global scope. EnsureReserved makes both, with
+// these fixed ids.
 const (
 	DaemonProfile = "crew:autodoc"
+	UserProfile   = "crew:user"
 	GlobalScope   = "global"
 	UserCodename  = "user"
 )
@@ -80,6 +85,9 @@ const (
 const (
 	ChangeRequest       = "request"
 	ChangeReport        = "report"
+	ChangeAnswered      = "answered"
+	ChangeDismissed     = "dismissed"
+	ChangeRead          = "read"
 	ChangeExpired       = "expired"
 	ChangeUndeliverable = "undeliverable"
 )
