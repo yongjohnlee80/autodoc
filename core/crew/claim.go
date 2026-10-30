@@ -137,8 +137,8 @@ func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
 }
 
 // endSession ends s in tx and applies what follows from it, in the same transaction: its
-// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left to announce), and the mail
-// module's effect on its deliveries (SessionEnder).
+// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left
+// to announce), and the mail module's effect on its deliveries (SessionEnder).
 func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	at := tx.Now().UnixNano()
 	s.Ended, s.EndedWhy = &at, why
