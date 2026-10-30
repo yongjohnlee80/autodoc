@@ -22,6 +22,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
@@ -343,5 +344,69 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 	}
 	if len(seen) != 110 || pages < 3 {
 		t.Fatalf("%d of 40 attentions and 70 open requests reached the window, in %d pages; want all 110, in several", len(seen), pages)
+	}
+}
+
+// TestASnapshotMeasuresMetadataThroughRPC: a page is bounded by its entries' whole wire size, not
+// their text alone. A sender's codename stored at 16 KiB (as a row from before crew bounded names
+// would hold it) rides on each of its 260 tiny requests: 4.2 MB of names alone, past the 4 MiB
+// message. Through the daemon's socket, every page still encodes under the message and all 260
+// arrive.
+func TestASnapshotMeasuresMetadataThroughRPC(t *testing.T) {
+	d := newCrewDaemon(t)
+	c, err := readSessionContext(filepath.Join(d.agent("gold", "agent-1", "store-1"), crewContextFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := sqlitecrewmail.New(d.deps.store)
+	if err := st.Write(d.ctx, func(tx crew.Tx) error {
+		p, _, err := tx.Profile(c.Profile)
+		if err != nil {
+			return err
+		}
+		p.Codename = strings.Repeat("g", 16<<10)
+		return tx.PutProfile(p)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 260 {
+		if _, err := d.deps.mail.Send(d.ctx, c.Credential, mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+			Subject: "s", Body: "b", Key: fmt.Sprintf("tiny%03d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	if _, err := cli.Call(d.ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName}); err != nil {
+		t.Fatal(err)
+	}
+	seen, pages := map[string]bool{}, 0
+	res, err := cli.Call(d.ctx, "inbox.watch", int64(0), int64(0))
+	for {
+		if err != nil {
+			t.Fatalf("inbox.watch, page %d: %v", pages+1, err)
+		}
+		pages++
+		if b, err := json.Marshal(jsonOf(res)); err != nil || len(b) >= rpc.MaxMessage {
+			t.Fatalf("page %d encodes to %d bytes (%v): past the transport's %d", pages, len(b), err, rpc.MaxMessage)
+		}
+		m, _ := jsonOf(res).(map[string]any)
+		snap, _ := m["snapshot"].(map[string]any)
+		items, _ := snap["items"].([]any)
+		for _, it := range items {
+			id, _ := it.(map[string]any)["message"].(string)
+			seen[id] = true
+		}
+		next, _ := snap["next"].(string)
+		if next == "" {
+			break
+		}
+		res, err = cli.Call(d.ctx, "inbox.watch", m["cursor"], int64(0), next)
+	}
+	if len(seen) != 260 || pages < 3 {
+		t.Fatalf("%d of 260 requests reached the window, in %d pages; want all, in several", len(seen), pages)
 	}
 }
