@@ -56,6 +56,10 @@ type (
 		Instance  string `param:"instance" doc:"the host's spawn id"`
 		Secret    string `param:"secret" doc:"host-generated, 32+ random bytes; only its hash is kept"`
 	}
+	whoamiParams struct {
+		Credential string `param:"credential" doc:"the session context's \"<session id>.<secret>\""`
+		Store      string `param:"store,optional" doc:"the store id the session context names"`
+	}
 	exitParams struct {
 		Scope   string `param:"scope"`
 		Run     string `param:"run"`
@@ -105,6 +109,12 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(host("crew.renew", "{}", "The host still holds its scope: its lease runs another 90 s.", CodeStaleEpoch),
 			func(ctx context.Context, p hostParams) (struct{}, error) {
 				return struct{}{}, m.Renew(ctx, p.Scope, p.Run, p.Epoch)
+			}),
+		module.Handle(module.Contract{Verb: "crew.whoami", Since: protocol, Audience: module.AudienceAgent,
+			Effect: module.EffectRead, Result: "{codename, scope, profile, session, store}",
+			Errors: []int64{CodeBadCredential, CodeContextMismatch, CodeStaleEpoch}, Doc: "Who the credential belongs to (§4.5)."},
+			func(ctx context.Context, p whoamiParams) (Identity, error) {
+				return m.Whoami(ctx, p.Credential, p.Store)
 			}),
 		module.Handle(host("crew.exit", "{}",
 			"A session ended; its bound deliveries fail (session_ended).", CodeStaleEpoch, CodeBadCredential),
