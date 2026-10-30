@@ -14,7 +14,8 @@ import (
 // with the user's next message, never through its terminal: the agent's folder's
 // .claude/settings.json runs `autodoc --workspace-notice` on UserPromptSubmit, and Claude Code adds
 // what it prints, the switch's one line or nothing, to that message's context. The folder is the
-// workspace's, shared by every profile; only Claude Code reads the file.
+// agent's (agentFolder); only Claude Code reads the file. mergeClaudeSettings writes AutoDoc's other
+// hooks and settings there the same way.
 
 // noticeCommand is the hook's command: dir's own autodoc (agentWrapper), so the TUI's build and
 // config answer.
@@ -22,10 +23,16 @@ func noticeCommand(dir string) string {
 	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " --workspace-notice"
 }
 
-// mergeClaudeHook makes path's hooks.UserPromptSubmit run command once, keeping every other key,
-// hook and matcher the user wrote there, numbers as written. A file that isn't a JSON object, or
-// whose hooks aren't the shape Claude Code reads, is left as it is, and the error says so.
+// mergeClaudeHook makes path's hooks.UserPromptSubmit run command once (mergeClaudeSettings).
 func mergeClaudeHook(path, command string) error {
+	return mergeClaudeSettings(path, map[string]string{"UserPromptSubmit": command}, nil)
+}
+
+// mergeClaudeSettings makes each of path's hooks.<event> run its command in events once, and sets
+// each key in set at the top level, keeping every other key, hook and matcher the user wrote there,
+// numbers as written. A file that isn't a JSON object, or whose hooks aren't the shape Claude Code
+// reads, is left as it is, and the error says so.
+func mergeClaudeSettings(path string, events map[string]string, set map[string]any) error {
 	settings := map[string]any{}
 	switch b, err := os.ReadFile(path); {
 	case err == nil:
@@ -33,30 +40,35 @@ func mergeClaudeHook(path, command string) error {
 		d.UseNumber()
 		// one object and nothing after it: a second value or trailing text would be lost on rewrite
 		if err := d.Decode(&settings); err != nil || settings == nil || d.Decode(new(json.RawMessage)) != io.EOF {
-			return fmt.Errorf("%s is not one JSON object: left as it is, without the workspace notice hook", path)
+			return fmt.Errorf("%s is not one JSON object: left as it is, without AutoDoc's hooks", path)
 		}
 	case !errors.Is(err, os.ErrNotExist):
 		return err
 	}
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok && settings["hooks"] != nil {
-		return fmt.Errorf("%s: hooks is not an object: left as it is, without the workspace notice hook", path)
+		return fmt.Errorf("%s: hooks is not an object: left as it is, without AutoDoc's hooks", path)
 	}
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	groups, ok := hooks["UserPromptSubmit"].([]any)
-	if !ok && hooks["UserPromptSubmit"] != nil {
-		return fmt.Errorf("%s: hooks.UserPromptSubmit is not a list: left as it is, without the workspace notice hook", path)
-	}
-	kept := []any{}
-	for _, g := range groups {
-		if g = withoutCommand(g, command); g != nil {
-			kept = append(kept, g)
+	for event, command := range events {
+		groups, ok := hooks[event].([]any)
+		if !ok && hooks[event] != nil {
+			return fmt.Errorf("%s: hooks.%s is not a list: left as it is, without AutoDoc's hooks", path, event)
 		}
+		kept := []any{}
+		for _, g := range groups {
+			if g = withoutCommand(g, command); g != nil {
+				kept = append(kept, g)
+			}
+		}
+		hooks[event] = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command}}})
 	}
-	hooks["UserPromptSubmit"] = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command}}})
 	settings["hooks"] = hooks
+	for k, v := range set {
+		settings[k] = v
+	}
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
