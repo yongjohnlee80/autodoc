@@ -201,7 +201,7 @@ func (m *Manager) Receive(ctx context.Context, credential string) (Received, err
 		if err := m.expire(tx); err != nil {
 			return err
 		}
-		ds, err := tx.Eligible(s.Profile, s.ID, ReceiveMax+1)
+		ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), ReceiveMax+1)
 		if err != nil {
 			return err
 		}
@@ -388,8 +388,9 @@ type Inbox struct {
 	Items  []Item
 }
 
-// Preview is the credential's session's eligible mail, the first limit of it with its messages, leasing nothing
-// (mail.inbox). A delivery whose message expired, though expire has not yet run, is left out.
+// Preview is the credential's session's eligible mail, the first limit of it with its messages,
+// leasing nothing (mail.inbox). It is a read, so expire does not run: eligibility itself leaves out
+// a delivery whose message has expired (Tx.Eligible), before the count's bound.
 func (m *Manager) Preview(ctx context.Context, credential string, limit int) (Inbox, error) {
 	limit = min(max(limit, 0), previewMax)
 	var out Inbox
@@ -398,18 +399,17 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 		if err != nil {
 			return err
 		}
-		ds, err := tx.Eligible(s.Profile, s.ID, previewMax)
+		ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), previewMax)
 		if err != nil {
 			return err
 		}
-		now := tx.Now().UnixNano()
 		for _, d := range ds {
 			msg, ok, err := tx.Message(d.Message)
 			if err != nil {
 				return err
 			}
-			if !ok || (msg.Expires != nil && *msg.Expires <= now) {
-				continue
+			if !ok {
+				return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
 			}
 			out.Unread++
 			if len(out.Items) < limit {
