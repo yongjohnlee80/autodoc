@@ -26,6 +26,7 @@ import (
 const (
 	CodeProtocolMismatch  int64 = -32020 // upgrade
 	CodeHandshakeRequired int64 = -32021 // say sys.hello
+	CodeStoreDamaged      int64 = -32022 // the store is damaged: autodoc --check-store, then restore it
 	CodeNoSuchWorkspace   int64 = -32060 // re-list the workspaces
 	CodeNotFound          int64 = -32061 // refresh the listing
 	CodeConflict          int64 = -32062 // doc.read, then merge or retry
@@ -52,6 +53,7 @@ var publicErrs = []module.PublicError{
 	{Err: errNoPreferences, Code: CodeUnsupported, Message: "this server keeps no preferences"},
 	{Err: errNoEmbeddings, Code: CodeUnsupported, Message: "this server keeps no embedding providers"},
 	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
+	{Err: errNoCheck, Code: CodeUnsupported, Message: "this server's store has no check here: a PostgreSQL store is checked by its database server"},
 	{Err: errNoProfiler, Code: CodeUnsupported, Message: "this server keeps no profiler"},
 	{Err: errProfileIncomplete, Code: golibrpc.CodeInternal, Message: "the monitor stopped, but its last samples could not be written: the daemon's log says why"},
 	{Err: errProfileRefused, Code: golibrpc.CodeInvalidParams, Message: "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)"},

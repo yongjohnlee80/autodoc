@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/deploy"
@@ -24,41 +25,79 @@ type Store struct {
 	status deploy.Status
 	keys   *keyslot // the store's key, <store>.key (keyslot.go)
 	now    clock.Clock
+	// checkWait bounds the start's quick_check (WithStartCheckWait); unverified is a start whose
+	// quick_check did not finish in it, which the daemon finishes on a reader (check.go)
+	checkWait  time.Duration
+	unverified bool
 }
 
 // Option configures a Store.
 type Option func(*Store)
+
+// WithStartCheckWait bounds the start's quick_check to d (StartCheckWait when not given): a store
+// that takes longer opens unverified, for the daemon to finish its check in the background (Open).
+func WithStartCheckWait(d time.Duration) Option { return func(s *Store) { s.checkWait = d } }
 
 // WithClock is the clock the store's recorded times read (updated_at, an event's time); the
 // default is time.Now.
 func WithClock(c clock.Clock) Option { return func(s *Store) { s.now = c } }
 
 // Open takes the store's lease, opens it and brings its schema up to date. A
-// lease another process holds is ErrBusy.
+// lease another process holds is ErrBusy. A store whose file fails its quick
+// check is a *DamagedError, before anything is written to it (check.go); one
+// whose check does not finish in the start's wait opens Unverified.
 func Open(ctx context.Context, path string, opts ...Option) (*Store, error) {
+	var o Store
+	o.checkWait = StartCheckWait
+	for _, opt := range opts {
+		opt(&o)
+	}
 	lease, err := acquireLease(path)
 	if err != nil {
 		return nil, err
 	}
-	s, err := open(ctx, path)
+	s, err := open(ctx, path, o.checkWait)
 	if err != nil {
 		_ = lease.Close()
 		return nil, err
 	}
 	s.lease = lease
-	for _, o := range opts {
-		o(s)
+	for _, opt := range opts {
+		opt(s)
 	}
 	return s, nil
 }
 
-func open(ctx context.Context, path string) (*Store, error) {
+func open(ctx context.Context, path string, wait time.Duration) (*Store, error) {
+	// read before SQLite opens the store, which makes the write-ahead log (startCheckInline)
+	_, walErr := os.Stat(path + "-wal")
+	_, markErr := os.Stat(path + damagedSuffix)
+	unclean, marked := walErr == nil, markErr == nil
 	// journal_size_limit: a checkpoint truncates the write-ahead log back to 64 MiB, so the room a
 	// large write (a compaction, a reclaim) took in it is given back, not kept at its high-water mark
 	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_size_limit(67108864)"
 	w, err := sqlite.OpenNamed(ctx, "store-w:"+path, dsn+"&_txlock=immediate", sqlite.MaxOpenConns(1))
 	if err != nil {
+		if d := damaged(path, err); d != nil {
+			return nil, d
+		}
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
+	}
+	pending, err := deployments.Runner().Pending(ctx, w)
+	if err != nil {
+		_ = w.Close()
+		if d := damaged(path, err); d != nil {
+			return nil, d
+		}
+		return nil, fmt.Errorf("store: %s: %w", path, err)
+	}
+	unverified, err := startCheck(ctx, w, path, wait, startCheckInline(unclean, marked, len(pending.Pending) > 0))
+	if err == nil && marked {
+		err = markedDamaged(path) // only a whole check clears the mark (ClearDamaged), never a start's
+	}
+	if err != nil {
+		_ = w.Close()
+		return nil, err
 	}
 	st, err := deployments.Runner().Apply(ctx, w)
 	if err != nil {
@@ -75,6 +114,37 @@ func open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("store: opening %s for reading: %w", path, err)
 	}
 	return &Store{path: path, w: w, r: r, wt: newTables(w), rt: newTables(r), status: st,
+		keys: &keyslot{path: path + ".key"}, unverified: unverified}, nil
+}
+
+// OpenForCheck takes the store's lease and opens it to be checked (Check) and nothing else: no
+// schema script runs and nothing is written, so a damaged store can still be reported on, and an
+// older one is left as it is. A store that is not there is an error, never a new one made.
+func OpenForCheck(ctx context.Context, path string) (*Store, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("store: %s: %w", path, err)
+	}
+	lease, err := acquireLease(path)
+	if err != nil {
+		return nil, err
+	}
+	readOnly := func(ctx context.Context, c dao.ConnectedConn) error {
+		_, err := c.ExecContext(ctx, "PRAGMA query_only=1")
+		return err
+	}
+	dsn := "file:" + path + "?_pragma=busy_timeout(5000)"
+	w, err := sqlite.OpenHooked(ctx, "store-check-w:"+path, dsn, readOnly, sqlite.MaxOpenConns(1))
+	if err != nil {
+		_ = lease.Close()
+		return nil, fmt.Errorf("store: opening %s: %w", path, err)
+	}
+	r, err := sqlite.OpenHooked(ctx, "store-check-r:"+path, dsn, readOnly, sqlite.MaxOpenConns(1))
+	if err != nil {
+		_ = w.Close()
+		_ = lease.Close()
+		return nil, fmt.Errorf("store: opening %s: %w", path, err)
+	}
+	return &Store{path: path, w: w, r: r, wt: newTables(w), rt: newTables(r), lease: lease,
 		keys: &keyslot{path: path + ".key"}}, nil
 }
 

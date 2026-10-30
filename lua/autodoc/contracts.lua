@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 38,
+  protocol = 39,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -747,6 +747,12 @@ return {
       result = "{databases, registrations, ranker, verbs}",
       doc = "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}.",
     },
+    ["sys.check"] = {
+      since = 39, scope = "local-peer", audience = "internal",
+      params = {},
+      result = "{quick, integrity, foreign_keys, secrets}",
+      doc = "The store's whole check: integrity_check, foreign_key_check and every sealed secret opened with the store's key; a sound store answers empty lists. SQLite stores only.",
+    },
     ["sys.contracts"] = {
       since = 20, scope = "global", audience = "agent",
       params = {
@@ -1149,6 +1155,7 @@ return {
     { code = -32001, name = "rpc.access_denied", next = "call it on the unix socket: it is for a local peer" },
     { code = -32020, name = "rpc.protocol_mismatch", next = "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves" },
     { code = -32021, name = "rpc.handshake_required", next = "say sys.hello first" },
+    { code = -32022, name = "rpc.store_damaged", next = "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)" },
     { code = -32060, name = "rpc.no_such_workspace", next = "call workspace.list and use a listed name" },
     { code = -32061, name = "rpc.not_found", next = "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone" },
     { code = -32062, name = "rpc.conflict", next = "doc.read, then merge or retry; for a name, choose another" },
