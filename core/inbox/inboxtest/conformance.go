@@ -246,6 +246,8 @@ func testAWatchWakesOnACommitAndARollbackTellsNothing(t *testing.T, h Harness) {
 		if !slices.Equal(kinds(w.Changes), []string{"request:" + q.ID}) {
 			t.Fatalf("the woken watch: %+v, want the request", w)
 		}
+	// NOTE: a bound on a failing run only: a watch the commit never woke fails here rather than
+	// hanging the suite until the test binary's own timeout.
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watch did not wake on the committed request")
 	}
