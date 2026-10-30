@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +37,7 @@ func newFakeBridge() *fakeBridge {
 	f.agyBridge = &agyBridge{
 		c:       sessionContext{Session: "s1", Credential: "s1.secret", Store: "store-1", Kind: "agy"},
 		locator: `{"address":"127.0.0.1:4000","conversation":"c-1"}`, token: "tok", addr: "127.0.0.1:4000",
+		bound: bridgeLook,
 	}
 	f.call = func(_ context.Context, method string, params ...any) (any, error) {
 		f.mu.Lock()
@@ -263,5 +265,144 @@ func TestTheBridgesFilesAreBesideTheContexts(t *testing.T) {
 	defer unlock()
 	if c, err := findSessionContext("", agent); err != nil || c.Session != "s1" {
 		t.Errorf("the agent folder's context with the bridge's lock held: %+v %v, want s1's alone", c, err)
+	}
+}
+
+// unanswered is a call that gets no answer: it ends with ctx, or fails after 2 s when ctx has no
+// bound, so a missing bound fails the cell rather than hanging it.
+func unanswered(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(2 * time.Second):
+		return errors.New("an unanswered call was not bounded")
+	}
+}
+
+// TestABridgeLookThatGetsNoAnswerEnds: a language server that takes the connection and never
+// answers the conversation check, then a daemon that never answers, each hold one look for its
+// bound and no longer. The looks after still come: the session's end is seen and the bridge stops.
+// The unanswered daemon's look leaves the registration standing (the same instance answers after,
+// so nothing registers again).
+func TestABridgeLookThatGetsNoAnswerEnds(t *testing.T) {
+	t.Parallel()
+	f := newFakeBridge()
+	f.bound = 20 * time.Millisecond
+	var instHang bool
+	var hostsDeadlines int
+	f.hosts = func(ctx context.Context) error {
+		if _, ok := ctx.Deadline(); ok {
+			f.mu.Lock()
+			hostsDeadlines++
+			f.mu.Unlock()
+		}
+		return unanswered(ctx)
+	}
+	inner := f.instance
+	f.instance = func(ctx context.Context) (string, error) {
+		f.mu.Lock()
+		hang := instHang
+		f.mu.Unlock()
+		if hang {
+			return "", unanswered(ctx)
+		}
+		return inner(ctx)
+	}
+	err := runFor(t, f, 4, func(i int) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		switch i {
+		case 0:
+			instHang = true
+		case 1:
+			instHang = false
+		case 2:
+			f.refuse = "crew.whoami"
+		}
+	})
+	if err == nil || !strings.Contains(err.Error(), "credential is refused") {
+		t.Fatalf("after unanswered looks: %v, want the session's end seen and the bridge stopped", err)
+	}
+	if n := f.count("crew.endpoint"); n != 1 {
+		t.Errorf("%d registrations, want the first alone: a look the daemon did not answer is no new daemon", n)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if hostsDeadlines == 0 {
+		t.Error("the conversation check ran with no deadline")
+	}
+}
+
+// TestTheDetachedBridgeIsPinnedToItsSession: the detached bridge reads the context the bridge that
+// started it read, and no other. Here the working directory's context (no $AUTODOC_CREW_CONTEXT)
+// is A's when the parent reads it and B's (A ended, B started in the same agent folder) when the
+// child starts, which refuses rather than take up B with A's language server. Its command line
+// carries no credential.
+func TestTheDetachedBridgeIsPinnedToItsSession(t *testing.T) {
+	t.Parallel()
+	agent := t.TempDir()
+	ctxOf := func(s string) crew.Context {
+		return crew.Context{Store: "store-1", Socket: "/x.sock", Session: s, Credential: s + ".secret", Kind: "agy"}
+	}
+	pathA, err := crew.WriteContext(agent, ctxOf("sa"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := pinnedContext("", agent, "")
+	if err != nil || parent.Session != "sa" {
+		t.Fatalf("the parent's context: %+v %v", parent, err)
+	}
+	argv, env := bridgeChild("/bin/autodoc", contextFile("", agent, parent), parent.Session,
+		[]string{"AUTODOC_CREW_CONTEXT=/elsewhere", "ANTIGRAVITY_CSRF_TOKEN=tok"})
+	child := func() (string, string) {
+		envFile, session := "", ""
+		for _, kv := range env {
+			if v, ok := strings.CutPrefix(kv, "AUTODOC_CREW_CONTEXT="); ok {
+				envFile = v
+			}
+		}
+		for i, a := range argv {
+			if a == "--session" && i+1 < len(argv) {
+				session = argv[i+1]
+			}
+		}
+		return envFile, session
+	}
+	envFile, session := child()
+	if envFile != pathA || session != "sa" {
+		t.Fatalf("the child is pinned to %q and %q, want A's file %q and sa", envFile, session, pathA)
+	}
+	if c, err := pinnedContext(envFile, agent, session); err != nil || c.Session != "sa" {
+		t.Errorf("the child, A still there: %+v %v, want A's", c, err)
+	}
+	for _, a := range argv {
+		if strings.Contains(a, "secret") || strings.Contains(a, "tok") {
+			t.Errorf("the child's command line carries %q", a)
+		}
+	}
+	if !slices.Contains(env, "ANTIGRAVITY_CSRF_TOKEN=tok") {
+		t.Error("the child's environment lost the language server's token")
+	}
+	if err := crew.RemoveContext(agent, "sa"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := crew.WriteContext(agent, ctxOf("sb")); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := pinnedContext("", agent, ""); err != nil || c.Session != "sb" {
+		t.Fatalf("the folder's one context is now %+v %v, want B's (what an unpinned child would take up)", c, err)
+	}
+	if c, err := pinnedContext(envFile, agent, session); err == nil {
+		t.Errorf("the child, A replaced by B: took up %s, want refused", c.Session)
+	}
+	// the session a bridge was started for decides: started for sb, it refuses sa's context
+	if _, err := crew.WriteContext(agent, ctxOf("sa")); err != nil {
+		t.Fatal(err)
+	}
+	if err := crew.RemoveContext(agent, "sb"); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := pinnedContext(envFile, agent, "sb"); err == nil {
+		t.Errorf("a bridge started for sb took up %s", c.Session)
 	}
 }

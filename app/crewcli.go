@@ -175,6 +175,7 @@ var crewCommands = map[string]crewCommand{
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
 			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
+			fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 		}}, // run by crewBridgeMain: it stays, so it is no one call
 	"crew attention": {usage: "raise <permission|blocked> [text] | clear: tell the user this session waits on them, or no longer does",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
