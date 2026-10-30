@@ -96,6 +96,24 @@ func table[R any](c dao.DataConn, name string, fields map[col]func(R) any, key .
 	)
 }
 
+// sortedTable is table with orders beyond its id's: each sort its own column.
+func sortedTable[R any](c dao.DataConn, name string, sorts map[sort]string, fields map[col]func(R) any, key ...col) *schema[R] {
+	fs := map[col]dao.Field[R]{}
+	for n, scan := range fields {
+		fs[n] = store.Col(name, n, scan)
+	}
+	sm := map[sort]string{byID: `"` + name + `"."` + string(key[0]) + `"`}
+	for k, v := range sorts {
+		sm[k] = v
+	}
+	return dao.New(c,
+		dao.Table[R, col, sort, string](name),
+		dao.Fields[R, col, sort, string](fs),
+		dao.SortMap[R, col, sort, string](sm),
+		dao.Conflict[R, col, sort, string](key...),
+	)
+}
+
 // profileTable is crew_profile, which also lists in (scope, codename) order.
 func profileTable(c dao.DataConn, fields map[col]func(*crew.Profile) any) *schema[*crew.Profile] {
 	fs := map[col]dao.Field[*crew.Profile]{}
@@ -318,7 +336,7 @@ var errLimit = errors.New("sqlitecrewmail: a limit must be > 0")
 // wakePending is a wake row with pending_gen past announced_gen; wakeLiveReachable, one whose
 // session is live and has an endpoint.
 var (
-	wakePending       = store.ColumnsCompare(`"crew_wake"."pending_gen"`, ">", `"crew_wake"."announced_gen"`)
+	wakePending       = dao.Cmp(dao.T("crew_wake", "pending_gen"), dao.OpGt, dao.T("crew_wake", "announced_gen"))
 	wakeLiveReachable = dao.And(
 		store.Correlated(false, "crew_session", "id", "crew_wake", "session", dao.IsNull(`"crew_session"."ended"`)),
 		store.Correlated(false, "crew_endpoint", "session", "crew_wake", "session"))
