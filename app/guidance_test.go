@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io/fs"
 	"regexp"
 	"strconv"
@@ -78,5 +79,26 @@ func TestTheTutorialIsPrinted(t *testing.T) {
 		if code != 2 || out != "" || !strings.Contains(errOut, "1 to "+strconv.Itoa(len(pages))) {
 			t.Errorf("--tutorial %s: exit %d, stdout %q, stderr %q; want 2 naming 1 to %d", arg, code, out, errOut, len(pages))
 		}
+	}
+}
+
+// errFull is a stdout that takes nothing, as /dev/full.
+type errFull struct{}
+
+func (errFull) Write([]byte) (int, error) { return 0, errors.New("no space left on device") }
+
+// A print mode whose stdout fails says so and exits 1, never 0: a redirect into a KB that fails
+// must not look like a written manual. A bad page stays a usage error, 2.
+func TestAFailedPrintIsAFailure(t *testing.T) {
+	for _, args := range [][]string{{"--kb-operations"}, {"--tutorial"}, {"--tutorial", "6"}} {
+		var stderr bytes.Buffer
+		if code := run(context.Background(), args, Options{Version: "v1"}, errFull{}, &stderr); code != 1 ||
+			!strings.Contains(stderr.String(), "no space left on device") {
+			t.Errorf("%v into a full stdout: exit %d, stderr %q; want 1 naming the write's error", args, code, stderr.String())
+		}
+	}
+	var stderr bytes.Buffer
+	if code := run(context.Background(), []string{"--tutorial", "99"}, Options{Version: "v1"}, errFull{}, &stderr); code != 2 {
+		t.Errorf("--tutorial 99: exit %d; a page it lacks is a usage error (2), whatever stdout is", code)
 	}
 }
