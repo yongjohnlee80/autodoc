@@ -267,8 +267,9 @@ var crewWakers = map[string]crew.Waker{}
 // once a waker exists: with none, every session with an endpoint would fail each attempt
 // (no_waker) and, after five, be journaled unreachable, filling the human's feed with false
 // reports.
-func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger) (stop func()) {
-	s := c.NewScheduler(newRunID(), wakers, crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") }))
+func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (stop func()) {
+	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") })}, opts...)
+	s := c.NewScheduler(newRunID(), wakers, opts...)
 	if len(wakers) == 0 {
 		logger.Info(log, "the wake scheduler waits for its wakers (phase 3): mail is received when agents ask")
 		return func() {}
