@@ -121,8 +121,8 @@ func TestLeadingFrontmatterIsTheParsers(t *testing.T) {
 }
 
 // TestDocumentDoesNotReadTheBody: the frontmatter is read without the body, so asking about a page
-// of megabytes costs what a short one does. A whole-page parse took 160 ms a call on 1 MB
-// (Lector, 2026-10-14); 100 calls on 4 MB, with frontmatter and without, have 2 s together.
+// of megabytes costs what a short one does. A whole-page parse took 160 ms a call on 1 MB;
+// 100 calls on 4 MB, with frontmatter and without, have 2 s together.
 func TestDocumentDoesNotReadTheBody(t *testing.T) {
 	body := strings.Repeat("A paragraph of a long page, with *emphasis* and a [[link]].\n\n", 4<<20/60)
 	with, without := "---\ntitle: Long\n---\n"+body, "# Long\n"+body

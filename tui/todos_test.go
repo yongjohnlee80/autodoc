@@ -307,7 +307,7 @@ func TestTodosStoreDropdownShowsOneStore(t *testing.T) {
 }
 
 // storeBar reports whether the panel, its frame from column left to right, shows the store bar as
-// Johno asked: framed, titled store, so a line runs across the panel between it and the tabs; in it
+// specified: framed, titled store, so a line runs across the panel between it and the tabs; in it
 // the dropdown (kb) on a row of its own, and under it the buttons as words, on one row, whole.
 func storeBar(sc string, left, right int) bool {
 	lines := strings.Split(sc, "\n")

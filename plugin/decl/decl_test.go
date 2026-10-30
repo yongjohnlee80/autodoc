@@ -536,7 +536,7 @@ func TestAQueuedFnChecksTheCardWhenItRuns(t *testing.T) {
 // TestAMissingRoleStillMarksReverseAndTheCursor: a theme that leaves out app.base and app.text (an
 // empty one, or one naming only app.window) still gives a reversed cell and the cursor the colours
 // the Theme.* sources hold, the dark theme's, at Open and after a Theme; a theme that names them
-// wins (Lector #230 r5 R4). The frames are the ones the backend emits, flushed on the program's loop.
+// wins. The frames are the ones the backend emits, flushed on the program's loop.
 func TestAMissingRoleStillMarksReverseAndTheCursor(t *testing.T) {
 	const darkBase, darkText = "#1c1c1c", "#d0d0d0"
 	for _, open := range []plugin.Theme{{Name: "empty"}, {Name: "window only", Colors: map[string]string{"app.window": "#112233"}}} {

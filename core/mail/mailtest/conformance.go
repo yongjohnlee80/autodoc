@@ -626,7 +626,7 @@ func testDiscardFailsEveryUnhandledDelivery(t *testing.T, h Harness) {
 	}
 }
 
-// A profile of a gone scope receives nothing again (Zen's #62 r2): a discard's notice to the
+// A profile of a gone scope receives nothing again: a discard's notice to the
 // discarded profile as a sender (a message it sent itself) fails recipient_gone and shows in the
 // human's history instead of waiting where nothing can receive it, and a later send into the
 // scope is refused. crew marks the scope gone before the mail effects run.
@@ -797,7 +797,7 @@ func (c *lazyCrew) Received(tx crew.Tx, session string) error { return c.m.Recei
 
 func (c *lazyCrew) Watch() (<-chan struct{}, func()) { return c.m.Watch() }
 
-// The real crew.Adopt over mail's real effects, on one store (Zen's #62 r0 F3): a profile of the
+// The real crew.Adopt over mail's real effects, on one store: a profile of the
 // adopted scope sent itself and its namesake in the adopting scope a message, and the namesake's
 // copy had failed. Adoption reopens it, and the reopening notice, to the old profile as the sender,
 // must follow that profile's merge to the survivor: nothing is left on a profile nobody receives.
@@ -880,7 +880,7 @@ func testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt(t *testing.T, h Harness
 
 // The real crew.Discard over mail's real effects: a discarded profile's self-sent message leaves
 // nothing waiting on it, its notice is undeliverable history, and a later send into the scope is
-// refused (Zen's #62 r2). It needs crew to mark the scope gone before DiscardDeliveries.
+// refused. It needs crew to mark the scope gone before DiscardDeliveries.
 func testDiscardLeavesNothingWaitingThroughCrewsDiscard(t *testing.T, h Harness) {
 	ctx := context.Background()
 	clock := crewtest.NewClock()

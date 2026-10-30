@@ -68,7 +68,7 @@ func scaffoldOne(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile) rpc.Scaff
 	}
 	// the filesystem's own name rule (vfs.CheckMutable: io/fs.ValidPath, not the root) on the FULL
 	// name, before anything is derived from it: path.Dir cleans, so notes/../x/leaf.md would
-	// otherwise make x/ before the create refused the name (Zen #240 r1)
+	// otherwise make x/ before the create refused the name
 	if err := vfs.CheckMutable("scaffold", f.Path); err != nil {
 		return refuse(publicReason(err))
 	}

@@ -352,8 +352,8 @@ end }`, []string{"B"}, []string{"A2", "B"}},
 }
 
 // A row its own when withdraws, by removing it or putting another in its place, has its title
-// function never called in that open: the title may act, and it spends the open's budget (Zen's
-// TestZenWithdrawnRowDoesNotEvaluateItsTitle is the removed case).
+// function never called in that open: the title may act, and it spends the open's budget (the
+// removed case is the one a review first tested).
 func TestARowItsWhenWithdrawsNeverRunsItsTitle(t *testing.T) {
 	for _, c := range []struct{ name, src string }{
 		{"removed", `titled = 0

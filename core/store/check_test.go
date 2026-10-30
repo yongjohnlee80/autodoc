@@ -214,7 +214,7 @@ func TestAWrongKeyIsReported(t *testing.T) {
 }
 
 // TestQuickCheckTimeOnALargeStore measures the start's check on a store of AUTODOC_STORE_CHECK_MB
-// megabytes (unset: skipped): the figure the PR reports. Run on VM43 only.
+// megabytes (unset: skipped): the figure the PR reports. Run on the gate machine only.
 func TestQuickCheckTimeOnALargeStore(t *testing.T) {
 	mb, _ := strconv.Atoi(os.Getenv("AUTODOC_STORE_CHECK_MB"))
 	if mb <= 0 {
@@ -427,7 +427,7 @@ func TestTheStartCheckTriggers(t *testing.T) {
 	}
 }
 
-// TestALiveCheckReadsTheKeyAfresh (Lector #101 r0 F1): a check on an open store reads the key file
+// TestALiveCheckReadsTheKeyAfresh: a check on an open store reads the key file
 // as it is now, never the key the store keeps in memory: a key replaced, cut short or exposed since
 // is reported, and the key put back passes again.
 func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
@@ -473,7 +473,7 @@ func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
 	}
 }
 
-// TestACheckLeavesACrashedStoresLogAsItWas (Lector #101 r0 F2): checking a store a crash left with
+// TestACheckLeavesACrashedStoresLogAsItWas: checking a store a crash left with
 // its write-ahead log opens it read-only, so neither the store nor its log is written, before or at
 // Close: the log is never checkpointed or removed.
 func TestACheckLeavesACrashedStoresLogAsItWas(t *testing.T) {
@@ -519,7 +519,7 @@ func TestACheckLeavesACrashedStoresLogAsItWas(t *testing.T) {
 	}
 }
 
-// TestASealedConnectionIsListedNotFailed (Lector #101 r0 F3, Jarvis's (A)): a connection whose DSN
+// TestASealedConnectionIsListedNotFailed: a connection whose DSN
 // does not open with the store's key is listed, marked sealed, to be entered again; it never fails
 // the workspace's listing, and every other connection lists as it is.
 func TestASealedConnectionIsListedNotFailed(t *testing.T) {

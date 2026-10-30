@@ -85,7 +85,7 @@ func TestStatusIsComputedOncePerCommit(t *testing.T) {
 	e.fault.failOpen("z.md", nil)
 }
 
-// TestStatusIsOneSnapshot (Lector r0, required 1): a commit landing between the counts and the
+// TestStatusIsOneSnapshot: a commit landing between the counts and the
 // coverage is in neither: the status is the one at the seq it read.
 func TestStatusIsOneSnapshot(t *testing.T) {
 	var hook func()

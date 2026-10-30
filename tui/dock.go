@@ -70,7 +70,7 @@ func (h *Host) newDockRows() *rows[widgetTarget] {
 	return newRows(tuidecl.NewListModel("key", "icon", "title", "hidden", "flash"), h.dockRowOf)
 }
 
-// A HIDE FLASHES ITS ICON (Johno, 2026-10-24): a panel hidden into the dock, however (the dock's
+// A HIDE FLASHES ITS ICON: a panel hidden into the dock, however (the dock's
 // click, the editor's icon, a strip's _, the terminal's and the agents' toggles, Escape), lights its
 // icon twice, a step apart, so the eye finds where it went: lit, unlit, lit, then its hidden look.
 // A panel closed out of the dock flashes nothing. Shown again mid-flash, its icon is its own at
