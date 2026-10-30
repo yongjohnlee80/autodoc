@@ -24,10 +24,11 @@ import (
 //	description = "word counts"
 //	requires = ["workspace.read"]
 //
-// A package loads gated (ADR 1792004705 §4.2), under its name: its requires, and any requires{}
-// its code says, are asked once (luagate.go); its require reaches its own folder only (package
-// script). The user's own lua/*.lua are not packages and stay ungated. :lua-install <git-url>
-// clones a package and asks before it goes into lua/, as Plugins › Add from a git URL… does.
+// A package loads gated (docs/decisions/contract.md#gated-scripts-and-their-capabilities), under
+// its name: its requires, and any requires{} its code says, are asked once (luagate.go); its
+// require reaches its own folder only (package script). The user's own lua/*.lua are not packages
+// and stay ungated. :lua-install <git-url> clones a package and asks before it goes into lua/, as
+// Plugins › Add from a git URL… does.
 
 // packageManifest is a package's package.toml.
 type packageManifest = manifests.Package
@@ -77,7 +78,7 @@ func (h *Host) loadPackages() []error {
 			continue
 		}
 		// the name is the user's from here, whether the package loads or fails: a plugin's package of
-		// the same name never runs (ADR 1792300990 §4.4)
+		// the same name never runs (docs/decisions/plugins.md#a-plugins-lua-package)
 		h.userPackages[en.Name()] = true
 		dir := filepath.Join(h.luaDir, en.Name())
 		// the package reads its own folder only, links included: os.Root refuses a path, or a
@@ -229,10 +230,11 @@ func (h *Host) installPackageCandidate(c *candidate) {
 }
 
 // loadPluginPackages loads each installed plugin's Lua package, <plugin folder>/lua/ (package.toml
-// naming the plugin, init.lua), gated under "plugin:<name>" (ADR 1792300990 §4.4). A name the user's
-// own package holds (loaded or not) is a notice, and nothing of the plugin's package runs: no grant
-// is asked, no init. The package's identity is recorded before its init runs, so autodoc.plugin.run
-// works from the init too, and dropped again if the load fails.
+// naming the plugin, init.lua), gated under "plugin:<name>"
+// (docs/decisions/plugins.md#a-plugins-lua-package). A name the user's own package holds (loaded or
+// not) is a notice, and nothing of the plugin's package runs: no grant is asked, no init. The
+// package's identity is recorded before its init runs, so autodoc.plugin.run works from the init
+// too, and dropped again if the load fails.
 func (h *Host) loadPluginPackages() []error {
 	h.pluginPackages = map[string]string{}
 	if h.plugins == nil {

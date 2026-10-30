@@ -1,4 +1,5 @@
-// Package fsbounds keeps a gated script's file work inside the workspace (ADR 1792004705 §4.2a.1):
+// Package fsbounds keeps a gated script's file work inside the workspace
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace):
 // the TUI's gate decides that a call is a gated script's and names its Bounds; the daemon enforces
 // them where a workspace's files are reached, in the filesystem every verb goes through (Wrap), so
 // every path any verb touches is checked, however its parameters carry it.

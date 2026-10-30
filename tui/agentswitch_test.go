@@ -37,12 +37,13 @@ func recordingAgent(t *testing.T, bracketed bool) (agent, report string) {
 
 func reported(report string) string { b, _ := os.ReadFile(report); return string(b) }
 
-// TestAnAgentIsToldOfAWorkspaceSwitch (ADR 1792988759 r2): an agent started in kb stays in kb when
-// the user switches the editor to notes, and nothing is typed into its terminal. editor.workspace,
-// with no grant, answers spawn_workspace kb, workspace_in_use notes and one switch, with both roots,
-// the open document and its notice, then none: entering notes again is no switch either.
-// editor.document and editor.buffers mark the notes buffer foreign_workspace, and the kb one not. A
-// parameter is refused. The folder's .claude/settings.json runs the notice hook.
+// TestAnAgentIsToldOfAWorkspaceSwitch
+// (docs/decisions/crew.md#workspace-switches-are-told-not-imposed): an agent started in kb stays in
+// kb when the user switches the editor to notes, and nothing is typed into its terminal.
+// editor.workspace, with no grant, answers spawn_workspace kb, workspace_in_use notes and one
+// switch, with both roots, the open document and its notice, then none: entering notes again is no
+// switch either. editor.document and editor.buffers mark the notes buffer foreign_workspace, and
+// the kb one not. A parameter is refused. The folder's .claude/settings.json runs the notice hook.
 func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	dir := t.TempDir()
@@ -165,10 +166,11 @@ func (r *running) switchTo(t *testing.T, ws string) {
 	r.s.WaitFor(t, ws+" entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == ws }) })
 }
 
-// TestTheSwitchIsCoalesced (ADR 1792988759 r2 §4.1): an agent is told one switch from the workspace
-// it last saw to the one in use, however many came between. kb → notes → other is one, kb → other;
-// back to the one it saw is none; a rename (the same root) is renamed; a name the list doesn't hold
-// yet waits; no workspace is left; a restart (a new token) starts again from its own.
+// TestTheSwitchIsCoalesced (docs/decisions/crew.md#one-coalesced-switch-per-agent): an agent is
+// told one switch from the workspace it last saw to the one in use, however many came between. kb →
+// notes → other is one, kb → other; back to the one it saw is none; a rename (the same root) is
+// renamed; a name the list doesn't hold yet waits; no workspace is left; a restart (a new token)
+// starts again from its own.
 func TestTheSwitchIsCoalesced(t *testing.T) {
 	h := &Host{agents: &agents{instances: map[string]*agentInstance{
 		"zen": {token: "t1", workspace: wsInfo{name: "kb", root: "/k"}},

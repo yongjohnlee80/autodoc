@@ -93,7 +93,7 @@ autodoc --call workspace.configure '[
 
 - **`text_extensions` (`workspace.set_text_extensions`):** Declares additional UTF-8 plain-text file extensions (such as `.sql`, `.proto`, `.lua`, `.toml`, `.rst`, `.ini`) that AutoDoc should read and chunk via `chunk.Text`.
 - **No Sniffing:** AutoDoc never guesses whether an unknown binary file is text; only built-in types, registered code chunkers, derived document formats (`.docx`, `.htm`, `.html`), and declared `text_extensions` are read.
-- **Collision Protection (`text_collisions`):** Built-in code extensions (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.py`, `.rs`) and custom chunkers registered via `app.Options.Chunkers` (`ADR 0216`) take precedence over plain-text extensions. Attempting to pass a registered code extension to `workspace.set_text_extensions` is refused with `-32602 rpc.invalid_params`, and `workspace.list` reports any historical overlap in `text_collisions`.
+- **Collision Protection (`text_collisions`):** Built-in code extensions (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.py`, `.rs`) and custom chunkers registered via `app.Options.Chunkers` ([registered chunkers](../decisions/search.md#registered-chunkers-and-derivers)) take precedence over plain-text extensions. Attempting to pass a registered code extension to `workspace.set_text_extensions` is refused with `-32602 rpc.invalid_params`, and `workspace.list` reports any historical overlap in `text_collisions`.
 
 ---
 
@@ -154,7 +154,7 @@ autodoc --call sys.capabilities '[]'
 
 ## 5. Custom Compile-Time Chunkers (`app.Options.Chunkers`) and Held Files
 
-`cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community one included, has golib's code chunkers (`search/chunk/code`) and derives `.docx`, `.htm` and `.html` (golib's `extract/docx` and `extract/html`; ADR 1791429611). Another main can hand `app.Main` more chunkers and a deriver (ADR 0216):
+`cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community one included, has golib's code chunkers (`search/chunk/code`) and derives `.docx`, `.htm` and `.html` (golib's `extract/docx` and `extract/html`; [derived document formats](../decisions/search.md#derived-document-formats)). Another main can hand `app.Main` more chunkers and a deriver ([registered chunkers and derivers](../decisions/search.md#registered-chunkers-and-derivers)):
 
 ```go
 func main() {

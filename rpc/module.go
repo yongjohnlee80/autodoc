@@ -94,9 +94,9 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 // serve is a module verb's handler, on the wrappers rpc's own verbs use: verb checks the arity the
 // contract gives, resolves a ScopeWorkspace verb's workspace and maps what the module leaves
 // unmapped; local refuses a ScopeLocalPeer verb over TCP; bounded takes a gated script's bounds off
-// a call (ADR 1792004705 §4.2a.1). The handler's ctx carries the session's protocol, client token
-// and bounds too. The result is the handler's own: chain carries it with
-// module.Wire once its events are logged.
+// a call (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace). The handler's
+// ctx carries the session's protocol, client token and bounds too. The result is the handler's own:
+// chain carries it with module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
 	call := func(ctx context.Context, w Workspace, p []any) (any, error) {
 		ctx = module.WithProtocol(ctx, protocolOf(ctx))

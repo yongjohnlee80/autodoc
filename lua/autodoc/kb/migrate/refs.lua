@@ -5,7 +5,7 @@
 -- the daemon's (graph.resolve, over the indexed tree). The migration resolves every reference
 -- against the tree before it and the tree after it, which exists only in its plan, so it cannot ask.
 -- Nothing but the migration uses this module.
--- A port of the 2026-10-06 inventory script (kbrefs.py) that ADR 1791209946 §8 is based on,
+-- A port of the 2026-10-06 inventory script (kbrefs.py) that docs/decisions/crew.md#migrating-a-kb-to-the-layout is based on,
 -- with its classes:
 --
 --   wikilink          [[path/qualified]] (sub path:*), [[bare-name]] (sub bare:*, never rewritten)

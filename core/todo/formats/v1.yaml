@@ -15,7 +15,8 @@ frontmatter:
   # the Markdown body is the description; a description key is accepted and never written
   description: {type: string}
   due: {type: date}
-  # medium is the value, normal its legacy spelling: read as medium, never written (ADR 1791532020 r14)
+  # medium is the value, normal its legacy spelling: read as medium, never written
+  # (docs/decisions/todos.md#priority-low-medium-high)
   priority: {type: string, enum: [low, medium, high], aliases: {normal: medium}}
   assignee: {type: string}
   tags: {type: list, item_type: string}

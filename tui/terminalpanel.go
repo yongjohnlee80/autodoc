@@ -47,7 +47,8 @@ type TerminalPanel interface {
 	Start(widget.TerminalTabID) error
 	// SendBracketedPaste is a paste only to a program that asked for bracketed paste: any other is
 	// refused, nothing sent (widget.ErrTerminalPasteUnbracketed). It is the only paste here: what
-	// AutoDoc sends a tab is text the user didn't type, never keys (ADR 1792991980).
+	// AutoDoc sends a tab is text the user didn't type, never keys
+	// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 	SendBracketedPaste(widget.TerminalTabID, string) error
 	// SetMode puts the tab in a mode; Input needs no program.
 	SetMode(widget.TerminalTabID, widget.TerminalMode) error

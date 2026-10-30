@@ -49,9 +49,10 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 	}
 }
 
-// TestTheWorkspaceNoticePrintsALineOrNothing (ADR 1792988759 r2 §4.3): --workspace-notice prints
-// nothing when editor.workspace has no switch, the switch's notice as one line when it has one, and
-// nothing with the editor refusing, gone or never set; it always exits 0, as a hook must.
+// TestTheWorkspaceNoticePrintsALineOrNothing (docs/decisions/crew.md#the-workspace-notice-hook):
+// --workspace-notice prints nothing when editor.workspace has no switch, the switch's notice as one
+// line when it has one, and nothing with the editor refusing, gone or never set; it always exits 0,
+// as a hook must.
 func TestTheWorkspaceNoticePrintsALineOrNothing(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "e.sock")
 	ln, err := net.Listen("unix", sock)

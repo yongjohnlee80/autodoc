@@ -255,7 +255,7 @@ autodoc --call ranker.use '[""]'
 
 ## 5. Non-Blocking Model Switching and Automatic Vector GC (`reclaim.go`)
 
-Changing embedding models in a large knowledge base requires re-embedding every chunk because vectors from different models (for example, 768-dim `nomic-embed-text` vs. 2,560-dim `qwen3-embedding:4b`) inhabit incompatible vector spaces. AutoDoc (`core/index/reclaim.go`, ADR 1791284787) orchestrates model transitions with zero search downtime and automatic storage reclamation:
+Changing embedding models in a large knowledge base requires re-embedding every chunk because vectors from different models (for example, 768-dim `nomic-embed-text` vs. 2,560-dim `qwen3-embedding:4b`) inhabit incompatible vector spaces. AutoDoc (`core/index/reclaim.go`, [two models' vectors](../decisions/store.md#a-workspace-keeps-two-models-vectors)) orchestrates model transitions with zero search downtime and automatic storage reclamation:
 
 ### Vectors Are Made Once, and Kept
 

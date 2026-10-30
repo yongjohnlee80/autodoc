@@ -104,9 +104,10 @@ func orphanBatchOf(t *testing.T, n uint64) {
 	t.Cleanup(func() { orphanBatch = old })
 }
 
-// TestAReplacedTextsVectorsGoAtGC (ADR 1791329335 §2.3, item 1): an edit that replaces a text leaves
-// its vectors until gc deletes its dead chunk; then they go, under the active model and under a
-// switch's target alike. A text another document still has keeps its vectors.
+// TestAReplacedTextsVectorsGoAtGC (docs/decisions/store.md#vectors-follow-their-chunks): an edit
+// that replaces a text leaves its vectors until gc deletes its dead chunk; then they go, under the
+// active model and under a switch's target alike. A text another document still has keeps its
+// vectors.
 func TestAReplacedTextsVectorsGoAtGC(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

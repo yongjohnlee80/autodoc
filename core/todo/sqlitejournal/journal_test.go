@@ -219,7 +219,8 @@ func TestTheTodoJournalSurfacesAStorageFailure(t *testing.T) {
 }
 
 // The log's lookups go through its index, not a scan of every store's rows, and so does a commit's
-// read of a task's prior snapshot row, by id (its scope, ADR 1791532020 §2.5a).
+// read of a task's prior snapshot row, by id (its scope,
+// docs/decisions/todos.md#an-assignment-carries-its-assigners-scope).
 func TestTheTodoLogLookupsUseTheirIndex(t *testing.T) {
 	s := openStore(t)
 	raw := raw(t, s)

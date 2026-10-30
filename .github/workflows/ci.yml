@@ -258,8 +258,9 @@ jobs:
       # They need no display (decltest's backend), and run without -race to keep this job short.
       - name: the TUI's GUI cells
         run: go test -tags gui -count=1 -timeout 20m ./tui/
-      # The export's GUI cells: the chart hook draws a chart as SVG (ADR 1792395460). Named, since
-      # app's other cells start the GUI, which needs a display. Few and quick, so with -race.
+      # The export's GUI cells: the chart hook draws a chart as SVG
+      # (docs/decisions/editor.md#charts-drawn-as-svg). Named, since app's other cells start the
+      # GUI, which needs a display. Few and quick, so with -race.
       - name: the export's GUI cells
         run: go test -race -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|AnExportedChartGolibCannotDrawSaysWhy|CheckDiagramSaysWhatGolibDraws|TheDiagramReferenceIsGolibs|ExportASite|ExportThroughTheCommandLine' ./app/
 

@@ -1,4 +1,4 @@
----autodoc.views.drawer — the `kb` drawer (ADR 1791209945 §7): three sections over the AutoDoc
+---autodoc.views.drawer — the `kb` drawer (docs/decisions/neovim.md#the-kb-drawer): three sections over the AutoDoc
 ---daemon, rendered into a scratch buffer that a host (auto-finder's `kb` section, or autodoc's own
 ---panel) displays.
 ---
@@ -34,7 +34,7 @@
 ---this view never dials a daemon or re-derives which KB is primary (auto-core.kb answers that).
 ---
 ---**Instances, not a singleton.** `new(profile)` returns a view with its own buffer, rows, tree
----and timer, and the host registry is its only constructor and disposer (ADR 0078).
+---and timer, and the host registry is its only constructor and disposer (docs/decisions/neovim.md#hosts-register-with-the-drawer).
 ---
 ---**Live without push (§4.1, §6).** The daemon never pushes. While the drawer is VISIBLE a timer
 ---pulls `sys.events` every POLL_MS (from the hello's `events` cursor) to refresh the sections a
@@ -1007,7 +1007,7 @@ function M.new(profile)
     confirm({
       title = "Scaffold a KB in " .. w.root .. "?",
       body = { "The folder has no AGENTS.md, so it is not a KB yet.",
-        "The scaffold writes the KB layout (ADR 1791209946 §1): AGENTS.md and its folders.",
+        "The scaffold writes the KB layout: AGENTS.md and its folders.",
         "Nothing already there is overwritten." },
       yes = "Scaffold it",
       no = "Not now",
@@ -1385,7 +1385,7 @@ function M.new(profile)
     st.subs = {}
   end
 
-  -- ─── the DrawerView contract (ADR 0078 §3.2) ───────────────────
+  -- ─── the DrawerView contract (docs/decisions/neovim.md#one-view-per-instance-with-a-fixed-profile) ───────────────────
 
   local view = {}
 
@@ -1465,7 +1465,7 @@ function M.new(profile)
   return view
 end
 
--- ─── host registry re-exports (ADR 0078 §3.3): auto-finder's facade addresses THIS module ───
+-- ─── host registry re-exports (docs/decisions/neovim.md#hosts-register-with-the-drawer): auto-finder's facade addresses THIS module ───
 
 M.register_host = host.register_host
 M.unregister_host = host.unregister_host

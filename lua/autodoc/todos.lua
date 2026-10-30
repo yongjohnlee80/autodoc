@@ -1,6 +1,6 @@
 ---AutoDoc's todo stores, for Neovim: the daemon's todos.* verbs (protocol 20) as Lua functions.
 ---
----The daemon owns the todo format, its rules and every write (ADR 1791532020). This module only
+---The daemon owns the todo format, its rules and every write (docs/decisions/todos.md#the-daemon-owns-the-todo-system). This module only
 ---calls it: each function takes the verb's params in order, then `cb(result, err)`, err as
 ---`{code, message}`. The first param of most is where the store is: a workspace name ("kb"), or
 ---`{ root = "/abs/project" }` for a project that is no AutoDoc workspace.

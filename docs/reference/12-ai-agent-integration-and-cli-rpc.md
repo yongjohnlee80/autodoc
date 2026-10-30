@@ -17,7 +17,7 @@ AutoDoc gives every CLI coding agent direct, zero-configuration access to its hy
 
 ## 1. Self-Describing RPC Contracts (`autodoc --contracts`)
 
-Under the AutoDoc Module Convention (ADR 1791719881, `core/module`), every RPC verb in the daemon is registered from a declarative `module.Contract` struct (`rpc/contracts.go`, `core/todo/module.go`). A contract specifies the verb's name, the protocol version it arrived in (`Since`), its `Scope` (`Global`, `Workspace`, `LocalPeer`), its `Audience` (`Agent`, `User`, `Internal`), its ordered positional `Params`, its `Result` shape, and the numeric `PublicError` codes it may return.
+Under the AutoDoc Module Convention ([features as modules](../decisions/contract.md#features-as-modules-with-verb-contracts), `core/module`), every RPC verb in the daemon is registered from a declarative `module.Contract` struct (`rpc/contracts.go`, `core/todo/module.go`). A contract specifies the verb's name, the protocol version it arrived in (`Since`), its `Scope` (`Global`, `Workspace`, `LocalPeer`), its `Audience` (`Agent`, `User`, `Internal`), its ordered positional `Params`, its `Result` shape, and the numeric `PublicError` codes it may return.
 
 Because `Module.Verbs()` and `Module.Errors()` are pure data functions that perform no I/O, an agent or tool can inspect the complete RPC catalog offline—even when no daemon is running—using `autodoc --contracts`:
 

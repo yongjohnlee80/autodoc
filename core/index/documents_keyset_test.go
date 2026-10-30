@@ -14,9 +14,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// ADR 1793312720 §5: index.documents in SQL, paged by key, against the oracle (the Go listing it
-// replaced, documents_oracle_test.go), on both of its paths: the SQL one, once every document has
-// its keys, and the Go fallback, while one has none.
+// docs/decisions/search.md#document-listing-in-the-store: index.documents in SQL, paged by key,
+// against the oracle (the Go listing it replaced, documents_oracle_test.go), on both of its paths:
+// the SQL one, once every document has its keys, and the Go fallback, while one has none.
 
 // keysetPaths are the generated workspace's files: several depths, prefixes that overlap by
 // characters but not by segments (a/b and a/bc), and names that run against their folders' order,

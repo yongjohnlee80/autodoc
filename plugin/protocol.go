@@ -1,5 +1,6 @@
-// Package plugin is AutoDoc's plugins (ADR 0209, ADR 1791268009): the protocol between the TUI and
-// a plugin it runs, and the SDK a plugin is written with.
+// Package plugin is AutoDoc's plugins (docs/decisions/plugins.md#plugins-are-separate-programs,
+// docs/decisions/plugins.md#protocol-versions-and-strict-manifests): the protocol between the TUI
+// and a plugin it runs, and the SDK a plugin is written with.
 //
 // A dialog plugin is a program the TUI starts when its Plugins menu entry is chosen. The TUI draws a
 // dialog over the page and fills it with the plugin's frames; every key but Esc goes to the plugin,
@@ -82,10 +83,12 @@ import (
 // The plugin protocol's versions this SDK speaks. A host speaks to each plugin the one its manifest
 // says, and Serve answers any from MinProtocol to Protocol with that same one. The protocol rises
 // when a manifest can declare something an older host must not run without, for a changed meaning,
-// or for something a plugin must handle (ADR 1791268009 §1).
+// or for something a plugin must handle (docs/decisions/plugins.md#protocol-versions-and-strict-manifests).
 const (
 	MinProtocol = 1
-	Protocol    = 11 // 11: [[menu]] and host.menu (ADR 1792991184); 10: [surface] (ADR 1792797354)
+	// 11: [[menu]] and host.menu (docs/decisions/plugins.md#editor-menu-rows);
+	// 10: [surface] (docs/decisions/plugins.md#pixel-surfaces)
+	Protocol = 11
 )
 
 // The notifications the host sends.
@@ -194,7 +197,7 @@ type Document struct {
 	Path, Workspace string
 	// Root is the workspace's folder on this machine, absolute: what a plugin reading or writing
 	// beside the note joins Path to (File). "" outside every workspace, and from a host that does
-	// not send it (one before ADR 1792457255's lab files).
+	// not send it (one before lab files, docs/decisions/plugins.md#lab-notes).
 	Root      string
 	Text      string
 	Cursor    Position

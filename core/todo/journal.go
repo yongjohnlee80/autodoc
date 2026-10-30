@@ -62,7 +62,8 @@ type Edit struct {
 	Repath *Repath       // a store move: the store's new path
 	// Scope is the scope an assign gives its Put rows (its Change's). Nil, a Put row keeps the
 	// scope its task's prior row held when the assignee is unchanged, and has none when it
-	// changed: a scope belongs only to the assign that set the assignee (ADR 1791532020 §2.5a).
+	// changed: a scope belongs only to the assign that set the assignee
+	// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope).
 	Scope *string
 }
 
@@ -96,10 +97,13 @@ type Settings struct {
 	Stores map[string]StoreRecord // by store id
 	Roots  map[string]RootRecord  // by canonical root
 	Vars   map[string]string      // the global user vars
-	// MachineVars are this machine's per-store values (ADR 1792015069), by store id then name. Since
-	// ADR 1792132105 they are only read, once, by the migration that folds them into WorkspaceVars.
+	// MachineVars are this machine's per-store values
+	// (docs/decisions/todos.md#one-answer-from-every-route-to-a-store), by store id then name.
+	// Since docs/decisions/todos.md#variables-belong-to-the-workspace they are only read, once, by
+	// the migration that folds them into WorkspaceVars.
 	MachineVars map[string]map[string]string
-	// WorkspaceVars are this machine's values for a workspace's variables (ADR 1792132105 §2.3), by
+	// WorkspaceVars are this machine's values for a workspace's variables
+	// (docs/decisions/todos.md#where-a-variables-value-comes-from), by
 	// the workspace's root then name: absolute paths that never travel.
 	WorkspaceVars map[string]map[string]string
 }
@@ -114,9 +118,11 @@ type StoreRecord struct {
 	LastUse     time.Time
 	RefreshedAt time.Time // the daily refresh's last run (RefreshDue); zero for never
 	// ReleasedAt is when Release gave the store back; zero for never. A released store is claimed
-	// again only by Claim, never by a write (ADR 1791532020 r13).
+	// again only by Claim, never by a write
+	// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write).
 	ReleasedAt time.Time
-	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4), recorded once: the
+	// KB is the root of the workspace the store belongs to
+	// (docs/decisions/todos.md#which-workspace-a-store-belongs-to), recorded once: the
 	// workspace containing it, or the one todos.set_kb named. "" until recorded.
 	KB string
 }
@@ -127,7 +133,7 @@ type RootRecord struct {
 	Root         string
 	Override     string    // the store directory SetDir chose; "" for <root>/.todo-list
 	Registered   time.Time // zero unless Register enrolled it
-	KBRoot       string    // the kb_root an older Open recorded: carried into the store's file once, then cleared (ADR 1792015069 §2.7)
+	KBRoot       string    // the kb_root an older Open recorded: carried into the store's file once, then cleared (docs/decisions/todos.md#retiring-workspace)
 	LastResolved time.Time
 }
 

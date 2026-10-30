@@ -17,8 +17,8 @@ type outNote struct {
 
 // outQueue is what the host sends a plugin, waiting for the sender. A document is state, not an
 // event: one still waiting is dropped when a newer one is sent, which takes the tail, so at most one
-// waits (ADR 1791268009 §2.3). Every other notification keeps its order, and more than pluginQueue
-// of them waiting is a plugin not reading.
+// waits (docs/decisions/plugins.md#the-document-feed). Every other notification keeps its order,
+// and more than pluginQueue of them waiting is a plugin not reading.
 type outQueue struct {
 	mu     sync.Mutex
 	items  []outNote

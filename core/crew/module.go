@@ -8,9 +8,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// Protocol is the protocol the crew, mail and inbox verbs arrive in, as one change (ADR 1793271500
-// §4.1): the one place it is set. It follows #50's 34 and AP-5's and AP-6's 35 and 36; rpc's
-// Protocol and its catalog test move with it.
+// Protocol is the protocol the crew, mail and inbox verbs arrive in, as one change
+// (docs/decisions/crew.md#three-modules-and-one-protocol): the one place it is set. It follows
+// #50's 34 and AP-5's and AP-6's 35 and 36; rpc's Protocol and its catalog test move with it.
 const Protocol = 37
 
 // Name is the module's name: its verbs are crew.*.

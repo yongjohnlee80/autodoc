@@ -1,5 +1,5 @@
 ---autodoc.preview — six floating Markdown previews with cursor memory
----(ADR 1791210485: AutoDoc absorbs md-harpoon).
+---(AutoDoc absorbs md-harpoon: docs/decisions/neovim.md#markdown-preview-slots).
 ---
 ---Six slots, `1 2 3` across the top and `a s d` a few rows lower, each a
 ---float showing one document rendered by AutoDoc's own renderer

@@ -94,10 +94,11 @@ func TestEmptyIncludeSurvivesStoreReload(t *testing.T) {
 	}
 }
 
-// TestAWorkspacesGraphOnlyListAndTodoSearch (ADR 1792015212 §2.2): a workspace that never set its
-// graph_only list has none stored (nil: the default), and its todo_search is on (amendment 1);
-// Configure stores the list and todo_search, an empty list included, and turns todo_search off and
-// on again; another workspace is untouched; one the store does not have is ErrNoWorkspace.
+// TestAWorkspacesGraphOnlyListAndTodoSearch (docs/decisions/todos.md#which-paths-are-graph-only): a
+// workspace that never set its graph_only list has none stored (nil: the default), and its
+// todo_search is on (amendment 1); Configure stores the list and todo_search, an empty list
+// included, and turns todo_search off and on again; another workspace is untouched; one the store
+// does not have is ErrNoWorkspace.
 func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
 	s := openStore(t)
 	ctx := context.Background()

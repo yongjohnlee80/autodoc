@@ -16,12 +16,12 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 )
 
-// THE SITE (ADR 1792395460) — a folder of Markdown published as a website by this package's own
-// page: the sections docs/site.toml names, each folder's *.md a page in file-name order (its
-// README.md the folder's index), every page rendered by RenderWith with Links (a link to another
-// page reaches it, relative to this one, so the site works under any path), Chrome (a sidebar of
-// the sections and the current section's pages, and its previous and next pages) and Chart. The
-// pages are handed to the caller's write: the package still reads only.
+// THE SITE (docs/decisions/editor.md#the-documentation-site) — a folder of Markdown published as a
+// website by this package's own page: the sections docs/site.toml names, each folder's *.md a page
+// in file-name order (its README.md the folder's index), every page rendered by RenderWith with
+// Links (a link to another page reaches it, relative to this one, so the site works under any
+// path), Chrome (a sidebar of the sections and the current section's pages, and its previous and
+// next pages) and Chart. The pages are handed to the caller's write: the package still reads only.
 
 // maxSiteMedia is the most a file a site's page draws (an image, a video, a poster) may hold to be
 // published: a larger one is drawn as its alt text. It bounds what a stray file costs the site.

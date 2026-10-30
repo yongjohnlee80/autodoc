@@ -16,11 +16,12 @@ import (
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
 
-// ONE CANDIDATE PER INSTALL OR UPDATE (ADR 1792351195 §4.7) — every add, update and Lua package
-// install stages one candidate: a fresh clone pinned to a full commit. Its card names that commit,
-// Audit… hands a fresh copy of it to an agent, and Install builds it; the installed tree is never
-// audited or installed from. A candidate owns its card, its stage, its audit copies and its toast,
-// and ends exactly once (end). Two live candidates never share a target (kind/name).
+// ONE CANDIDATE PER INSTALL OR UPDATE
+// (docs/decisions/plugins.md#one-candidate-per-install-or-update) — every add, update and Lua
+// package install stages one candidate: a fresh clone pinned to a full commit. Its card names that
+// commit, Audit… hands a fresh copy of it to an agent, and Install builds it; the installed tree is
+// never audited or installed from. A candidate owns its card, its stage, its audit copies and its
+// toast, and ends exactly once (end). Two live candidates never share a target (kind/name).
 
 // opState is where a candidate is.
 type opState int
@@ -355,8 +356,8 @@ func (cs *candidates) auditWith(a AgentEntry) {
 }
 
 // handOver gives the audit task to a. done(nil) means typed into its input, for the user's Enter
-// (ADR 1792991980 §4.2), never that the audit ran: the toast says so, and no more. A refusal ends
-// the toast and reopens the card.
+// (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent), never that the audit ran: the
+// toast says so, and no more. A refusal ends the toast and reopens the card.
 func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {

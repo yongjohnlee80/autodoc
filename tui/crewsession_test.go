@@ -91,10 +91,11 @@ func startedEnv(a *agents, c *identityHost, instance *agentInstance) (args []str
 	return args, spawned, err
 }
 
-// TestAnAgentIsRegisteredBeforeItStarts (ADR 1793271500 §4.4, §4.5): an agent of a window holding a
-// scope starts only once its crew session is registered and its context written (0600) in its
-// folder, which its process is told; its exit ends the session and removes the context, so no
-// later process reads a dead session's credential, and the codename is free for its next session.
+// TestAnAgentIsRegisteredBeforeItStarts (docs/decisions/crew.md#sessions-and-the-guard,
+// docs/decisions/crew.md#the-session-context): an agent of a window holding a scope starts only
+// once its crew session is registered and its context written (0600) in its folder, which its
+// process is told; its exit ends the session and removes the context, so no later process reads a
+// dead session's credential, and the codename is free for its next session.
 func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
 	scope, _, _ := a.crew.held()

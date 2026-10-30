@@ -1,5 +1,5 @@
 // Package inboxtest is the inbox module's conformance suite: every engine's adapter runs it, so the
-// human feed (ADR 1793271500 §4.8) and §5 case 7 hold the same way on each.
+// human feed (docs/decisions/crew.md#the-human-inbox) and §5 case 7 hold the same way on each.
 package inboxtest
 
 import (

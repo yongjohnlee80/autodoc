@@ -11,11 +11,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 )
 
-// runCompact is --compact (ADR 1791284787 §2.5): with the daemon stopped, reclaim every workspace's
-// models that are neither active nor the target, then rewrite the store with VACUUM, behind its
-// free-space check. Incremental vacuum returns freed pages but leaves the rows kept where they were;
-// a store that switches models often is made contiguous again this way. The daemon serving the store
-// holds its lease, so a daemon running is refused, saying how to stop it.
+// runCompact is --compact (docs/decisions/store.md#the-store-compacts): with the daemon stopped,
+// reclaim every workspace's models that are neither active nor the target, then rewrite the store
+// with VACUUM, behind its free-space check. Incremental vacuum returns freed pages but leaves the
+// rows kept where they were; a store that switches models often is made contiguous again this way.
+// The daemon serving the store holds its lease, so a daemon running is refused, saying how to stop
+// it.
 func runCompact(ctx context.Context, configPath string, out io.Writer) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {

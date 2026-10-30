@@ -21,9 +21,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// INDEX.DOCUMENTS (ADR 1793312720) — the order and the cheap filters run in SQL, a page resumes
-// after the last document it returned by that document's sort key, and no statement skips rows by
-// an offset:
+// INDEX.DOCUMENTS (docs/decisions/search.md#document-listing-in-the-store) — the order and the
+// cheap filters run in SQL, a page resumes after the last document it returned by that document's
+// sort key, and no statement skips rows by an offset:
 //
 //   - every order is the ascending order of a key stored on the document (D1, D2): path; (k_upd_s,
 //     k_upd_ns, path), the updated instant's seconds and nanoseconds negated; (k_indexed, path),

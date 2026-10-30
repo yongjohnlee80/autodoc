@@ -9,10 +9,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// PLUGIN CALLS (ADR 1791762474 §4.5) — protocol 3's host.call: a plugin asks AutoDoc to run a
-// command of its catalog (catalog.go), one its manifest's calls = [...] declares, and is answered
-// plugin.result, both notifications matched by the plugin's call number. Every call accepted is
-// answered exactly once:
+// PLUGIN CALLS (docs/decisions/plugins.md#plugin-calls) — protocol 3's host.call: a plugin asks
+// AutoDoc to run a command of its catalog (catalog.go), one its manifest's calls = [...] declares,
+// and is answered plugin.result, both notifications matched by the plugin's call number. Every call
+// accepted is answered exactly once:
 //
 //	ok                  the entry ran
 //	failed <why>        the entry's own error
@@ -65,7 +65,8 @@ func (r *pluginRun) hostCall(params []any) {
 	case !slices.Contains(r.e.m.Calls, c.ID):
 		refusal = c.ID + " is not in the manifest's calls"
 	case c.ID == "plugins.update" && (len(c.Args) != 1 || c.Args[0] != r.e.m.Name):
-		// one plugin never updates another (ADR 1792301900 §4.10)
+		// one plugin never updates another
+		// (docs/decisions/plugins.md#opening-files-by-path-and-self-update)
 		refusal = "plugins.update: a plugin may update only itself, " + r.e.m.Name
 	}
 	r.pl.c.Post(func() {

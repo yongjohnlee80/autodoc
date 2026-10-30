@@ -7,7 +7,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
-// THE HUMAN'S CREW INBOX IN A WINDOW (ADR 1793271500 §4.8).
+// THE HUMAN'S CREW INBOX IN A WINDOW (docs/decisions/crew.md#the-human-inbox).
 //
 // Each window holds one inbox.watch long-poll, and every window shows the same thing: a toast for
 // each open decision request and each raised attention (an agent waiting on a permission prompt),

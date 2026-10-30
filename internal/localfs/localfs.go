@@ -21,8 +21,9 @@ import (
 
 // WriteFile replaces the file at path with content, atomically: a temporary file beside it,
 // renamed over it. path's directory must exist. Under a gated script's bounds it writes nothing:
-// a bounded call reaches files only through a workspace's guarded filesystem (ADR 1792004705
-// §4.2a.1), so a route here is one the guard never checked.
+// a bounded call reaches files only through a workspace's guarded filesystem
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), so a route here is one
+// the guard never checked.
 func WriteFile(ctx context.Context, path string, content []byte) error {
 	if path == "" {
 		return errors.New("localfs: no file to write")

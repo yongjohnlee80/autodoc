@@ -17,8 +17,9 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 )
 
-// diskwatch_test.go: open files follow the disk (ADR 1792077464), on a daemon over real folders,
-// changed by another program.
+// diskwatch_test.go: open files follow the disk
+// (docs/decisions/editor.md#open-files-follow-the-disk), on a daemon over real folders, changed by
+// another program.
 
 // onDisk is a TUI over a daemon whose workspace alpha is the folder root, a.md and b.md in it.
 func onDisk(t *testing.T, opt Options) (*running, string) {
@@ -417,7 +418,8 @@ func TestAWatchLeavesNoHandleBehind(t *testing.T) {
 	}
 }
 
-// TestAFileOutsideEveryWorkspaceFollowsTheDisk (ADR 1792301900 §4.6's verify-first: a remote note's
+// TestAFileOutsideEveryWorkspaceFollowsTheDisk (the verify-first of
+// docs/decisions/plugins.md#opening-files-by-path-and-self-update: a remote note's
 // cache file is outside every workspace): clean, it reloads from disk; with unsaved edits, it is
 // badged and keeps them, never reloaded under the user.
 func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {

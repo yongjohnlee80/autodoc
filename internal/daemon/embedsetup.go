@@ -13,8 +13,8 @@ import (
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
-// THE EMBEDDING SETUP (ADR 1793005098 §4.3): what the machine offers, a model pulled into Ollama
-// as a job the daemon owns, and a model timed on a workspace's own texts.
+// THE EMBEDDING SETUP (docs/decisions/search.md#embedding-setup): what the machine offers, a model
+// pulled into Ollama as a job the daemon owns, and a model timed on a workspace's own texts.
 
 // Probe is what this machine offers an embedding model, the Ollama at base asked for its version.
 func (e *Embedding) Probe(ctx context.Context, base string) hostprobe.Host {

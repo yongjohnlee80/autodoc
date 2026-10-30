@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-// ADR 1793321612: an unrooted map a page at a time, against the one-reply map (Map) as its oracle.
+// docs/decisions/search.md#unrooted-maps-in-pages: an unrooted map a page at a time, against the
+// one-reply map (Map) as its oracle.
 
 // pagesEnv is a workspace whose links cross page boundaries both ways, of every kind: wikilinks
 // forward and back, a markdown link, a link repeated, a document naming itself, a link to nothing,

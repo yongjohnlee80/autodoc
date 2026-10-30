@@ -21,7 +21,8 @@ func (e *env) refreshedAt() time.Time {
 
 func (e *env) clock() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now }
 
-// The daemon refreshes each claimed store once a day by itself (ADR 1791532020 §2.3), with no
+// The daemon refreshes each claimed store once a day by itself
+// (docs/decisions/todos.md#task-rules-and-the-daily-refresh), with no
 // client asking: at once when its last run is a day old or it never ran, then a day after each run.
 // The run is kept in the journal, so a daemon restarted within the day does not run it again. A
 // store not claimed is never refreshed.

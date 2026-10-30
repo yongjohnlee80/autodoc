@@ -1,5 +1,5 @@
-// Package decl runs a golib QML program (tui/decl) as an AutoDoc card or dialog (ADR 1792254331
-// §4.7–4.10): the program runs inside the plugin on a backend of its own, and every frame it draws
+// Package decl runs a golib QML program (tui/decl) as an AutoDoc card or dialog
+// (docs/decisions/plugins.md#qml-cards-run-in-the-plugin): the program runs inside the plugin on a backend of its own, and every frame it draws
 // is sent to AutoDoc as host.frame. The host never sees QML; the wire is unchanged.
 //
 //	c := decl.New(decl.Options{

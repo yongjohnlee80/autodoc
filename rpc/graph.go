@@ -46,7 +46,8 @@ type linkJSON struct {
 	Anchor   string `json:"anchor"`
 	Kind     string `json:"kind"`
 	Resolved bool   `json:"resolved"`
-	// External is a todo task's link to a file outside the workspace, absolute (ADR 1792015212 §2.4)
+	// External is a todo task's link to a file outside the workspace, absolute
+	// (docs/decisions/todos.md#task-relations-and-external-links)
 	External string `json:"external,omitempty"`
 }
 
@@ -224,14 +225,15 @@ func (s *Server) graphVerbs() []module.Verb {
 const relationsSince = 14
 
 // todoGraphSince is the protocol the review and blocked relations and external links arrived in
-// (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged, and asking
-// for one of todoKinds by name is refused, not answered.
+// (docs/decisions/todos.md#task-relations-and-external-links). A session below it sees the kinds it
+// knew, its graph unchanged, and asking for one of todoKinds by name is refused, not answered.
 const todoGraphSince = 23
 
-// mapSince is the protocol graph.map came in (ADR 1792347044), mapTagsSince the one its nodes'
-// tags, the schema's types and the nodes' types by its discriminator came in, and mapPagesSince the
-// one an unrooted map comes a page at a time (ADR 1793321612): a session below it keeps the one
-// reply, and is refused after and limit.
+// mapSince is the protocol graph.map came in (docs/decisions/search.md#the-workspace-map),
+// mapTagsSince the one its nodes' tags, the schema's types and the nodes' types by its
+// discriminator came in, and mapPagesSince the one an unrooted map comes a page at a time
+// (docs/decisions/search.md#unrooted-maps-in-pages): a session below it keeps the one reply, and is
+// refused after and limit.
 const (
 	mapSince      = 26
 	mapTagsSince  = 28

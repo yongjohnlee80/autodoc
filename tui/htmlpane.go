@@ -13,10 +13,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-// THE NATIVE HTML PREVIEW — File › Preview HTML under --gui (ADR 1791429896): the note exported
-// in-process and shown in golib's HTMLView, in a pane beside the editor, drawn natively, selectable
-// and live. In a terminal Preview HTML is what it was (the page as an image, or the browser): one
-// menu item, the widget chosen by the backend that runs.
+// THE NATIVE HTML PREVIEW — File › Preview HTML under --gui
+// (docs/decisions/editor.md#the-native-html-preview): the note exported in-process and shown in
+// golib's HTMLView, in a pane beside the editor, drawn natively, selectable and live. In a terminal
+// Preview HTML is what it was (the page as an image, or the browser): one menu item, the widget
+// chosen by the backend that runs.
 //
 // The pane follows the editor one way: an edit exports the note again after a moment of quiet,
 // and the cursor's block comes to the pane's top. A link clicked in it opens a note, a file or
@@ -172,7 +173,8 @@ func (h *Host) htmlLink(href string) { h.htmlLinkAs(h.authorityNow(), href) }
 
 // htmlLinkAs is htmlLink as a acts. A gated script's link goes to the browser only as a web or mail
 // address: any other scheme the desktop's opener would launch (an app, a script) is the user's to
-// follow, as file.open_default_app is; a file opens within its bounds (ADR 1792004705 §4.2a.2b).
+// follow, as file.open_default_app is; a file opens within its bounds
+// (docs/decisions/contract.md#path-commands-run-within-the-workspace).
 func (h *Host) htmlLinkAs(a authority, href string) {
 	u, err := url.Parse(strings.TrimSpace(href))
 	if err != nil || href == "" {

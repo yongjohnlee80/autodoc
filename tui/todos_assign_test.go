@@ -138,9 +138,9 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitFor(t, "the delivery told", func(string) bool {
 		return r.noticed("assigned to Scribe, and typed into its input: press Enter there to send it")
 	})
-	// no Enter (ADR 1792991980 §4.2): the task waits in Scribe's input, its panel open and the
-	// keyboard in it; on this small screen it covers the todos' detail: SPC g's toggle hides it,
-	// Scribe running on
+	// no Enter (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent): the task waits
+	// in Scribe's input, its panel open and the keyboard in it; on this small screen it covers the
+	// todos' detail: SPC g's toggle hides it, Scribe running on
 	if raw := heardRaw(heardDir, "scribe"); strings.ContainsRune(raw, '\r') || !strings.HasSuffix(raw, "\x1b[201~") {
 		t.Fatalf("Scribe was sent more than one paste: %q", raw)
 	}

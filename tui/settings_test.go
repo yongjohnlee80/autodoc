@@ -62,8 +62,9 @@ func todoInfo() wsInfo {
 	return w
 }
 
-// The notice of a todo store an exclude keeps out (ADR 1792015212 §2.3): it names the pattern, and
-// its button takes the pattern out of the exclude field, nothing saved until Save.
+// The notice of a todo store an exclude keeps out
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported): it names the pattern, and its button
+// takes the pattern out of the exclude field, nothing saved until Save.
 func TestATodoStoreExcludedIsSaidAndOffered(t *testing.T) {
 	w := todoInfo()
 	w.exclude, w.todoExcluded = []string{".git/**", ".todo-list/**"}, []string{".todo-list/**"}
@@ -116,7 +117,8 @@ func TestSettingsChanges(t *testing.T) {
 			map[string]any{"destination_connection": map[string]any{"engine": "postgres", "dsn": "", "schema": "rag2"}}},
 		"no source": {pg, func(f *settingsForm) { f.src = 0 }, map[string]any{"source": map[string]any{"remove": true}}},
 		"view args": {pg, func(f *settingsForm) { f.viewArgs = "b = 2; a=1" }, map[string]any{"view_args": map[string]any{"a": "1", "b": "2"}}},
-		// ADR 1792015212: the graph_only patterns and the todo tasks in search
+		// docs/decisions/todos.md#graph-only-indexing: the graph_only patterns and the todo tasks
+		// in search
 		"nothing, todo stores": {todoInfo(), func(*settingsForm) {}, map[string]any{}},
 		"a graph_only pattern and todo tasks in search": {todoInfo(), func(f *settingsForm) {
 			f.graphOnly, f.todoSearch = "**/.todo-list/**; drafts/**", 0
@@ -624,7 +626,7 @@ func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
 // A text type a build before this one stored that is now a derived format (.html): the Edit tab
 // leaves it out of the field and says why, and a save of an unrelated setting succeeds, storing
 // the other text types and keeping .html's include, since HTML is still indexed, as a document
-// (ADR 1791429611 §4.6a).
+// (docs/decisions/search.md#stored-html-text-types).
 func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
 	w := kbInfo()
 	w.textExtensions = []string{".html", ".log"}
@@ -683,8 +685,9 @@ func TestTheSettingsDocumentTypes(t *testing.T) {
 	}
 }
 
-// The notice's button (ADR 1792015212 §2.3) takes the exclude patterns that keep the todo store out
-// out of the exclude field, keeps the others, and says so on the help line; nothing is saved.
+// The notice's button (docs/decisions/todos.md#excluded-todo-stores-are-reported) takes the exclude
+// patterns that keep the todo store out out of the exclude field, keeps the others, and says so on
+// the help line; nothing is saved.
 func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 60) // the stacked Edit tab whole

@@ -16,11 +16,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// RANKING — the ranker search's second stage uses (ADR 0215): one for the daemon, every workspace's
-// indexer reading it from one rank.Holder. It is either the stored ranker the preference
-// ranker.in_use names, set up with its key opened, probed, metered into the store's usage and log,
-// and switched while the daemon runs; or the build's own (app.Options.Rank.Ranker), fixed for the
-// daemon's life. None, or a stored one that does not set up, and search answers in recall order.
+// RANKING — the ranker search's second stage uses
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker): one for the daemon, every
+// workspace's indexer reading it from one rank.Holder. It is either the stored ranker the
+// preference ranker.in_use names, set up with its key opened, probed, metered into the store's
+// usage and log, and switched while the daemon runs; or the build's own (app.Options.Rank.Ranker),
+// fixed for the daemon's life. None, or a stored one that does not set up, and search answers in
+// recall order.
 
 // rankerStore is what Ranking keeps in the store.
 type rankerStore interface {

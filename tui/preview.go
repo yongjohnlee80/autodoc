@@ -16,7 +16,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 )
 
-// IMAGE PREVIEWS — a Mermaid diagram and a file's HTML, as images in the terminal (ADR 0212 §6).
+// IMAGE PREVIEWS — a Mermaid diagram and a file's HTML, as images in the terminal
+// (docs/decisions/search.md#outline-breadcrumbs-and-previews).
 //
 // With View › Image previews on, a terminal that confirmed kitty's graphics protocol, and a
 // headless Chromium or Chrome, the preview is an image: the exported HTML, or a page of the one
@@ -350,8 +351,9 @@ func (h *Host) zoomPreview(step int) {
 // withImageCells runs fn once the Image in the dialog (main.qml's id for it) has been laid out with
 // a usable area (minImageCols × minImageRows), with its cells. An area still unusable at imageWait
 // (a screen too small, a layout that never gave it cells) runs fallback instead, with why: a
-// preview always ends as an image or as its fallback, never blank (ADR 0212 §6). A screen resized
-// to a usable size before then renders the image. A new preview or a closed dialog drops both.
+// preview always ends as an image or as its fallback, never blank
+// (docs/decisions/search.md#outline-breadcrumbs-and-previews). A screen resized to a usable size
+// before then renders the image. A new preview or a closed dialog drops both.
 func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk Ticket, img *widget.Image, cols, rows int)) {
 	tk := h.ticket(&h.previewGen, TicketLocal)
 	deadline := time.Now().Add(imageWait)

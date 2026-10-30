@@ -628,8 +628,8 @@ func nodesOf(n int) [][4]any {
 }
 
 // The Mindmap is rooted at the page shown, and only by Shown: a click hides the Mindmap, not closed
-// (ADR 1792397302 r3), and opens the document under it, reading nothing itself; the page the click
-// shows roots it again.
+// (docs/decisions/editor.md#dock-clicks-hide-and-show), and opens the document under it, reading
+// nothing itself; the page the click shows roots it again.
 func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 	c := newScripted("kb")
 	c.answers["graph.map"] = func(p []any) (any, error) {
@@ -895,10 +895,11 @@ func (c *closeHost) RestoreKeyboardHome() error {
 	return nil
 }
 
-// The GlobeMap reads a map of several pages whole (ADR 1793321612 D3, §5.7): at two documents a
-// page, seven documents whose relations cross pages both ways (a's to g on the last page, g's and
-// e's back to earlier ones) lay out with every document and every link, the counts the one-reply
-// map has, in the panel's title.
+// The GlobeMap reads a map of several pages whole
+// (docs/decisions/search.md#clients-read-every-page): at two documents a page, seven documents
+// whose relations cross pages both ways (a's to g on the last page, g's and e's back to earlier
+// ones) lay out with every document and every link, the counts the one-reply map has, in the
+// panel's title.
 func TestTheGlobeMapReadsEveryPage(t *testing.T) {
 	was := globeMapPage
 	globeMapPage = 2

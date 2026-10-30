@@ -9,7 +9,8 @@ import (
 	"github.com/yuin/gopher-lua/parse"
 )
 
-// A SHELL'S ENVIRONMENT AND EVAL — what a Lua shell runs a chunk in (ADR 1792256103 §4.3).
+// A SHELL'S ENVIRONMENT AND EVAL — what a Lua shell runs a chunk in
+// (docs/decisions/editor.md#the-shells-environment).
 //
 // A Shell is a table whose reads fall back to the engine's globals and whose writes stay in it, so
 // x = 1 typed in a shell is that shell's, never a loaded script's. Only assignment is kept apart: a

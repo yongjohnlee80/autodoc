@@ -14,8 +14,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// The cells of ADR 1792351123 §5: notifications from plugins (protocol 8) and Lua. The plugins are
-// the test binary in mode "rawcalls", sending host.notify as a plugin that is not the SDK does.
+// The cells of docs/decisions/plugins.md#notifications: notifications from plugins (protocol 8) and
+// Lua. The plugins are the test binary in mode "rawcalls", sending host.notify as a plugin that is
+// not the SDK does.
 
 const notifyCommands = "[[commands]]\nid = \"notifywith\"\ntitle = \"Notify\"\n[[commands]]\nid = \"badnotify\"\ntitle = \"Bad\"\n" +
 	"[[commands]]\nid = \"manynotify\"\ntitle = \"Many\"\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n"

@@ -300,7 +300,7 @@ func (s *Server) indexVerbs() []module.Verb {
 const diagnosedSince = 15
 
 // afterIsACursor is the refusal of an after that is not a cursor's string: the integer offset
-// protocol 35 retired, for every session (ADR 1793312720 D3).
+// protocol 35 retired, for every session (docs/decisions/search.md#cursors-not-offsets).
 const afterIsACursor = "index.documents: opts.after is the previous page's next, an opaque cursor, since protocol 35: an integer offset is no longer accepted; start with no after, 0 or \"\", then pass each next back unread"
 
 // documentsOpts reads index.documents' options for the request's session: {sort, fields, tags,

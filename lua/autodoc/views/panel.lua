@@ -1,5 +1,6 @@
----autodoc.views.panel — autodoc's own drawer surface, the fallback host (ADR 1791209945 §7; the
----pattern of autodb's panel.lua, ADR 0078 §3.3 / §3.5).
+---autodoc.views.panel — autodoc's own drawer surface, the fallback host (docs/decisions/neovim.md#the-kb-drawer;
+---the pattern of autodb's panel.lua: docs/decisions/neovim.md#hosts-register-with-the-drawer and
+---docs/decisions/neovim.md#closing-a-panel-releases-its-mount).
 ---
 ---When auto-finder is installed it registers its `kb` section as a host at priority 100 and this
 ---one never mounts. When autodoc is installed **alone**, on auto-core only, this is what puts the

@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-// Manager is the crew module: the registry of scopes, hosts, profiles and sessions (ADR 1793271500
-// §4.3–4.5). Its state machines run on a Store's transactions, so every engine shares them.
+// Manager is the crew module: the registry of scopes, hosts, profiles and sessions
+// (docs/decisions/crew.md#the-crew-registry-and-durable-mail). Its state machines run on a Store's
+// transactions, so every engine shares them.
 type Manager struct {
 	store   Store
 	ender   SessionEnder
@@ -114,7 +115,8 @@ func (m *Manager) forgetSecret(session string) {
 }
 
 // SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write
-// transaction after its guard and its own change (ADR 1793271500 §4.3). The mail module implements
+// transaction after its guard and its own change
+// (docs/decisions/crew.md#scopes-and-fenced-ownership). The mail module implements
 // it; its methods take the same tx, which the one adapter makes a mail transaction too.
 type SessionEnder interface {
 	// EndSessionDeliveries: s ended for why; the deliveries bound to it fail ('session_ended'),

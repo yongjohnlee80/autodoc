@@ -245,9 +245,9 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 // TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer, on its Explorer and its
 // Links tab, over the page, from the edge its preference names, and the page's text moves only by the menu bar's
 // row: the dock lists the drawer, so the auto-hidden bar shows, and pushes the page down one row
-// (Johno's choice, 2026-10-19, ADR 1792397302); SPC e again closes it, and the page is back. A side
-// panel takes the middle 85% of the rows, one at the top or bottom the middle 80% of the columns:
-// the page shows around it.
+// (Johno's choice, 2026-10-19, docs/decisions/editor.md#the-dock-of-open-widgets); SPC e again
+// closes it, and the page is back. A side panel takes the middle 85% of the rows, one at the top or
+// bottom the middle 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right"}})
@@ -786,7 +786,7 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 }
 
 // An updated model, the same name with another digest, says it refills rather than that the search
-// switches to a new model (ADR 1793005098 §4.4).
+// switches to a new model (docs/decisions/search.md#the-setup-dialog).
 func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -1622,7 +1622,8 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
 		t.Fatal(err)
 	}
-	// the switch done: other the active model, and embedder, superseded, reclaimed (ADR 1791284787)
+	// the switch done: other the active model, and embedder, superseded, reclaimed
+	// (docs/decisions/store.md#when-a-model-is-reclaimed)
 	r.s.WaitFor(t, "other active, embedder reclaimed", func(string) bool {
 		v, _ := r.h.session.Call(ctx, "index.models", "kb")
 		ms := asList(v)
@@ -1654,10 +1655,11 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	})
 }
 
-// TestRemovingAProviderSaysWhatItDeletes (ADR 1791284787 §2.3, item 4): the removal's question
-// says what goes. The provider in use, its model served by no other: semantic search off, and its
-// vectors counted across the workspaces. Another provider of the same model: its vectors kept.
-// Another provider in use: its vectors go once nothing uses them.
+// TestRemovingAProviderSaysWhatItDeletes
+// (docs/decisions/store.md#removing-a-provider-retires-its-model): the removal's question says what
+// goes. The provider in use, its model served by no other: semantic search off, and its vectors
+// counted across the workspaces. Another provider of the same model: its vectors kept. Another
+// provider in use: its vectors go once nothing uses them.
 func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")

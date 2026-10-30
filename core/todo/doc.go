@@ -1,8 +1,8 @@
-// Package todo is AutoDoc's todo system (ADR 1791532020): the task stores, their format, the rules
-// and every write. A store is a .todo-list directory of Markdown task files in buckets by status,
-// with the archive partitioned by month; the format is auto-core's schema v1 without automation,
-// declared as a versioned core/schema file (formats/v1.yaml) and rendered byte for byte as
-// auto-core renders it.
+// Package todo is AutoDoc's todo system (docs/decisions/todos.md#the-daemon-owns-the-todo-system):
+// the task stores, their format, the rules and every write. A store is a .todo-list directory of
+// Markdown task files in buckets by status, with the archive partitioned by month; the format is
+// auto-core's schema v1 without automation, declared as a versioned core/schema file
+// (formats/v1.yaml) and rendered byte for byte as auto-core renders it.
 //
 // The package does no I/O of its own. It reads and writes through ports the daemon provides: the
 // Filesystems port opens directories as golib vfs filesystems, file content goes through

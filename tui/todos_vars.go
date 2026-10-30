@@ -7,13 +7,13 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// THE VARIABLES TAB (ADR 1792132105 §2.3): the variables of the store's workspace as todos.vars
-// answers them, the same from every route to the store: each one's value, and where it came from
-// (this machine, the KB's file, derived from the workspace, a global var, the environment), or a
-// migration conflict waiting for a person. e sets the one under the cursor in the KB's file, which
-// travels with the KB (a machine-only name: for this machine), m for this machine only, a adds one
-// (NAME=value) to the file, d clears the value set here. A built-in overridden and then cleared is
-// derived again.
+// THE VARIABLES TAB (docs/decisions/todos.md#where-a-variables-value-comes-from): the variables of
+// the store's workspace as todos.vars answers them, the same from every route to the store: each
+// one's value, and where it came from (this machine, the KB's file, derived from the workspace, a
+// global var, the environment), or a migration conflict waiting for a person. e sets the one under
+// the cursor in the KB's file, which travels with the KB (a machine-only name: for this machine), m
+// for this machine only, a adds one (NAME=value) to the file, d clears the value set here. A
+// built-in overridden and then cleared is derived again.
 
 // varsTab is the tab after the statuses' tabs.
 var varsTab = len(todoBuckets)

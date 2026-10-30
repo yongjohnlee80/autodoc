@@ -8,11 +8,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// WHO AN INVOCATION ACTS FOR (ADR 1792004705 §4.2a.2c). A gated script's call is bounded, by the
-// daemon, to the workspace (fsbounds); its catalog runs are bounded the same way here. But the work a
-// call starts runs later: a load or a save job, a conflict's re-save, a key or menu row from its
-// binder. So who it acts for is taken on the loop when it begins (authorityNow) and carried with
-// that work, never asked again once the script's host call has returned.
+// WHO AN INVOCATION ACTS FOR (docs/decisions/contract.md#who-an-invocation-acts-for). A gated
+// script's call is bounded, by the daemon, to the workspace (fsbounds); its catalog runs are
+// bounded the same way here. But the work a call starts runs later: a load or a save job, a
+// conflict's re-save, a key or menu row from its binder. So who it acts for is taken on the loop
+// when it begins (authorityNow) and carried with that work, never asked again once the script's
+// host call has returned.
 
 // authority is the user, or a gated script with the workspace current when its invocation began.
 // The zero authority is no one's: work that reaches a check with it is refused (errNoAuthority).

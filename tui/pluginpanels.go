@@ -22,10 +22,11 @@ import (
 // panel's id (tui.card_<name>.*).
 //
 // The panels are written into main.qml (cardPanelsQML), one for each card plugin found as the
-// program is built. Then the set follows the folder (ADR 1792848741): a card plugin added while
-// AutoDoc runs gets its panel at once, and a removed one's goes. The host stages the registry's
-// change, reloads the document with the new set (declaring the added cards' sources), and commits
-// only when the reload succeeded; a refused change puts the set back (cardPanelsChanged).
+// program is built. Then the set follows the folder
+// (docs/decisions/plugins.md#card-panels-made-at-runtime): a card plugin added while AutoDoc runs
+// gets its panel at once, and a removed one's goes. The host stages the registry's change, reloads
+// the document with the new set (declaring the added cards' sources), and commits only when the
+// reload succeeded; a refused change puts the set back (cardPanelsChanged).
 //
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
 // its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
@@ -419,11 +420,12 @@ func (m memInfo) Size() int64 { return m.size }
 // cardPanelsChanged makes the registry and the document follow the card set reconcileCards left:
 // the registry's change is staged, the document reloaded with the set (the added cards' sources
 // declared as it plans), and only then the change committed. A refused stage or reload is said, the
-// card set is put back (undo), and the registry and the document are as they were (ADR 1792848741
-// §4.4). A reload that failed part-way latches the tree, and a remount would build every widget anew
-// under a host bound to the old ones (attach), so AutoDoc says it must restart instead; once latched,
-// no card reload is tried again. After the handler, as the theme switch's reload: a signal may still be emitting, and the
-// engine reconciles only between emissions.
+// card set is put back (undo), and the registry and the document are as they were
+// (docs/decisions/plugins.md#card-panels-made-at-runtime). A reload that failed part-way latches
+// the tree, and a remount would build every widget anew under a host bound to the old ones
+// (attach), so AutoDoc says it must restart instead; once latched, no card reload is tried again.
+// After the handler, as the theme switch's reload: a signal may still be emitting, and the engine
+// reconciles only between emissions.
 func (h *Host) cardPanelsChanged(undo func()) {
 	h.p.Post(func() {
 		mustRestart := func() {

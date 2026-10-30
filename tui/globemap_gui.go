@@ -716,7 +716,8 @@ func (g *globeMap) load() {
 		if globeMapPage > 0 {
 			opts["limit"] = int64(globeMapPage)
 		}
-		// every page of the map (ADR 1793321612 D3), the documents read so far in the title
+		// every page of the map (docs/decisions/search.md#clients-read-every-page), the documents
+		// read so far in the title
 		m, err := readMap(func(o map[string]any) (any, error) { return g.c.Call(ctx, "graph.map", ws, o) }, opts,
 			func(docs int) {
 				g.c.Post(func() {
@@ -1006,7 +1007,7 @@ func (g *globeMap) zoomBy(f float32, p gui.Point) {
 }
 
 // press opens document i of the picture it was found in, the panel hidden first, not closed: the
-// dock shows it again as it was (ADR 1792397302 r3).
+// dock shows it again as it was (docs/decisions/editor.md#dock-clicks-hide-and-show).
 func (g *globeMap) press(shot *globeShot, i int) {
 	ws, p := shot.f.ws, shot.f.m.Nodes[i].Path
 	g.c.HidePanel(globeMapPanelID)

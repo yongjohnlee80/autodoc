@@ -8,7 +8,7 @@ import (
 // Panel is the optional Feature capability contributing drawers. The registry
 // snapshots these once per program; each feature owns its lifecycle callbacks.
 // The plugins feature's card panels are the one exception: stage and commit swap
-// them as card plugins come and go (ADR 1792848741).
+// them as card plugins come and go (docs/decisions/plugins.md#card-panels-made-at-runtime).
 type Panel interface{ Panels() []PanelSpec }
 
 type panelRegistry struct {
@@ -99,7 +99,8 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 // stage checks f's panels replaced by own, under the same checks as at build, and changes nothing:
 // specs is the program's panel set as it would be, and commit makes it so (it cannot fail). Only
 // for a feature that contributes panels and is not PanelBound: a PanelBound feature holds its host,
-// and a rebuilt one would leave it holding the old (ADR 1792848741 §4.2).
+// and a rebuilt one would leave it holding the old
+// (docs/decisions/plugins.md#card-panels-made-at-runtime).
 func (r *panelRegistry) stage(c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
 	i := slices.IndexFunc(r.contributions, func(p panelContribution) bool { return p.feature == f })
 	if i < 0 {

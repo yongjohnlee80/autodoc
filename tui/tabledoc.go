@@ -7,12 +7,12 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// A CSV OR TSV FILE'S TABLE (ADR 1792303119 §4.7): its Rendered view is an editable table, in the
-// GUI's editor and in the terminal's. Each such buffer has its own TableDocument, made when the
-// buffer is first shown and kept with it, over the editor's core: the editor shows one buffer at a
-// time, and a table is the document view only while its own buffer is shown (documentFor), so it
-// reads that buffer's text and its edits are that buffer's, undone as typing is. Ctrl+T shows the
-// text; Raw is always the text.
+// A CSV OR TSV FILE'S TABLE (docs/decisions/editor.md#csv-and-tsv-files-as-editable-tables): its
+// Rendered view is an editable table, in the GUI's editor and in the terminal's. Each such buffer
+// has its own TableDocument, made when the buffer is first shown and kept with it, over the
+// editor's core: the editor shows one buffer at a time, and a table is the document view only while
+// its own buffer is shown (documentFor), so it reads that buffer's text and its edits are that
+// buffer's, undone as typing is. Ctrl+T shows the text; Raw is always the text.
 
 // tableComma is the separator of a table file's records: ',' for .csv, '\t' for .tsv; 0 for any
 // other file.

@@ -571,7 +571,8 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().Model() != fpB {
 		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().Model())
 	}
-	// after the flip: b active; a, superseded, is reclaimed (ADR 1791284787), its vectors and its row
+	// after the flip: b active; a, superseded, is reclaimed
+	// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors), its vectors and its row
 	e.eventually("the superseded model reclaimed", func() bool { return len(models()) == 1 })
 	ms := models()
 	if len(ms) != 1 || ms[0].FP != fpB || ms[0].State != ModelActive {
@@ -766,7 +767,8 @@ func (e *env) embStatus() EmbeddingStatus {
 
 // TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch of the old model
 // handed to the writer changes nothing about which model is active, and is not stored: the old
-// model is reclaimed, and a late batch must not leave its vectors behind (ADR 1791284787).
+// model is reclaimed, and a late batch must not leave its vectors behind
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors).
 func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -838,7 +840,8 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 
 // Texts is the workspace's distinct alive texts; Pending is those with no vector under a model: none
 // for the model that filled them, all of them for one never embedded here. VectorBytes is the room
-// index.models reports, vector by vector (ADR 1793005098 §4.3's estimate counts with it).
+// index.models reports, vector by vector (docs/decisions/search.md#embedding-setup's estimate
+// counts with it).
 func TestPendingAndTextsCountWhatAModelWouldEmbed(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

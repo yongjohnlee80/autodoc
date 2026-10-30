@@ -504,7 +504,8 @@ func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
 
 // TestTheAgentsTextSizeIsStored: the Fonts dialog's shells row reads the stored share of the cell
 // size, 50–150% by 10%: 90% when none, or one outside the range, is stored; one between steps (an
-// older 75) the nearest, the larger of two as near. It stores the one chosen (ADR 1792350322).
+// older 75) the nearest, the larger of two as near. It stores the one chosen
+// (docs/decisions/editor.md#the-terminal-text-size).
 func TestTheAgentsTextSizeIsStored(t *testing.T) {
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "80"}, fonts)

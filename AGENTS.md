@@ -133,7 +133,7 @@ The answer:
 ```json
 {
   "hits": [
-    {"path": "adrs/0203.md", "breadcrumb": "ADR 0203 › Storage", "snippet": "…",
+    {"path": "adrs/0007.md", "breadcrumb": "ADR 0007 › Storage", "snippet": "…",
      "byte_start": 1204, "byte_end": 2310, "line_start": 41, "line_end": 77, "relevance": 0.94, "score": 0.031,
      "via": ["lexical", "semantic", "rank"], "rank_score": 0.87, "generation": 7, "hold": ""}
   ],

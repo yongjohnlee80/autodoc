@@ -6,7 +6,8 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// EVENTS (ADR 1792004705 §4.4): a script asks to hear what happens to the page,
+// EVENTS (docs/decisions/contract.md#script-events): a script asks to hear what happens to the
+// page,
 //
 //	editor.on("save", function(ed, info) … end)
 //

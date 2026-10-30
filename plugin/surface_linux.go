@@ -8,7 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A PIXEL SURFACE, THE PLUGIN'S SIDE (protocol 10, ADR 1792797354; Linux first). The host sends each
+// A PIXEL SURFACE, THE PLUGIN'S SIDE (protocol 10,
+// docs/decisions/plugins.md#pixel-surfaces; Linux first). The host sends each
 // generation's buffers over the side channel, shared memory the plugin maps read-write; the plugin
 // draws into a free one and presents it, and is told each frame's outcome, then the buffer's credit.
 

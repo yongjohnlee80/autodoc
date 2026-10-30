@@ -26,7 +26,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The agent's commands (ADR 1793271500 §4.5, §4.11): `autodoc crew …` and `autodoc mail …`, each
+// The agent's commands (docs/decisions/crew.md#the-session-context,
+// docs/decisions/crew.md#the-agent-guide-and-commands): `autodoc crew …` and `autodoc mail …`, each
 // one call to the daemon on the session context's credential, its answer printed as JSON. They are
 // what the agent guide (crew.guide) tells an agent to run.
 
@@ -34,7 +35,8 @@ import (
 // session, named by its id.
 const crewContextDir = crew.ContextDir
 
-// sessionContext is a session's context file, written by its host before the agent starts (§4.5).
+// sessionContext is a session's context file, written by its host before the agent starts
+// (docs/decisions/crew.md#the-session-context).
 type sessionContext = crew.Context
 
 var (
@@ -43,10 +45,11 @@ var (
 	errContextMismatch = errors.New("the session contexts disagree: $AUTODOC_CREW_CONTEXT names a session ./" + crewContextDir + "/ does not hold; you may be running with another agent's context, so stop and tell the user")
 )
 
-// findSessionContext is the session context (§4.5): the file $AUTODOC_CREW_CONTEXT names (envFile).
-// Without one, the working directory's ./.autodoc-crew/ when it holds exactly one; several are
-// refused, never one guessed. With both, a working directory whose folder holds contexts, none of
-// them the env's session, is refused: the env may be another agent's.
+// findSessionContext is the session context (docs/decisions/crew.md#the-session-context): the file
+// $AUTODOC_CREW_CONTEXT names (envFile). Without one, the working directory's ./.autodoc-crew/ when
+// it holds exactly one; several are refused, never one guessed. With both, a working directory
+// whose folder holds contexts, none of them the env's session, is refused: the env may be another
+// agent's.
 func findSessionContext(envFile, cwd string) (sessionContext, error) {
 	here, err := folderContexts(filepath.Join(cwd, crewContextDir))
 	if err != nil {

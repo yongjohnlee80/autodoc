@@ -12,7 +12,8 @@ import (
 // moves one, Alt/Option-right drag resizes it, and Go › Arrange panel (SPC L) does both by keys.
 // Where one ends is kept as percentages of the Window, tui.<panel>.float = "x,y,w,h", and it opens
 // there from then on; its edge preference only says where it first appears. Go › Reset panel
-// layout, or a new edge in Preferences, docks it at its edge again (ADR 1791500773).
+// layout, or a new edge in Preferences, docks it at its edge again
+// (docs/decisions/editor.md#fonts-zoom-and-floating-panels).
 
 // readPanelFloats reads each panel's floating rectangle: four percentages (to a hundredth, as the
 // drawer reports them), the size at least 5.

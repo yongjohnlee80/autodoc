@@ -14,9 +14,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// A gated script's bounds, as the TUI's gate sends them (ADR 1792004705 §4.2a.1): one parameter
-// past the verb's own. These cells send them by hand, so each guard of the daemon's is seen from
-// the wire, with the disk read back after.
+// A gated script's bounds, as the TUI's gate sends them
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): one parameter past the
+// verb's own. These cells send them by hand, so each guard of the daemon's is seen from the wire,
+// with the disk read back after.
 
 // boundsFixture is a daemon serving kb (a home-like root: dotfiles, a protected config stand-in,
 // a folder named like a document holding one) and kb2.

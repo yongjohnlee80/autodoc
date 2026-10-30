@@ -28,8 +28,9 @@ func TestAgentsMDIsGenerated(t *testing.T) {
 }
 
 // TestEveryContractHasAnEffect: every verb this build serves says what it does to the store, as a
-// gated Lua script's capability is checked against (ADR 1792004705 §4.1); a new verb that forgets
-// fails here, rather than passing for read. The protocol's own verbs are classified too.
+// gated Lua script's capability is checked against
+// (docs/decisions/contract.md#every-verb-states-its-effect); a new verb that forgets fails here,
+// rather than passing for read. The protocol's own verbs are classified too.
 func TestEveryContractHasAnEffect(t *testing.T) {
 	c := app.Contracts("")
 	if len(c.Verbs) < 80 {

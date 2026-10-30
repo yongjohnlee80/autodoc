@@ -124,7 +124,8 @@ type StoreInfo struct {
 	// Released is a store todos.release gave back (Resolved.Released).
 	Released bool      `json:"released,omitempty"`
 	LastUse  time.Time `json:"last_use"`
-	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4): the recorded one
+	// KB is the root of the workspace the store belongs to
+	// (docs/decisions/todos.md#which-workspace-a-store-belongs-to): the recorded one
 	// while a workspace has it, or else the deepest containing the store; "" for none.
 	KB string `json:"kb,omitempty"`
 }
@@ -138,7 +139,8 @@ type Var struct {
 	Source  string `json:"source,omitempty"`  // where Value came from: machine, kb, derived, global or env; conflict for a held name
 	Machine bool   `json:"machine,omitempty"` // declared machine-only by the KB's file
 	// Conflict is a name a pending migration holds in conflict: unresolved unless this machine's row
-	// sets it, until a KB-file value or a machine-only declaration settles it (ADR 1792132105 §2.7).
+	// sets it, until a KB-file value or a machine-only declaration settles it
+	// (docs/decisions/todos.md#migrating-store-variable-files).
 	Conflict bool `json:"conflict,omitempty"`
 }
 
@@ -219,7 +221,7 @@ type Change struct {
 	To       string    `json:"to,omitempty"`
 	Fields   []string  `json:"fields,omitempty"` // update and refresh: the fields that changed
 	Reason   string    `json:"reason,omitempty"`
-	Scope    string    `json:"scope,omitempty"` // assign: the assigner's scope as given, never read here (ADR 1791532020 §2.5a)
+	Scope    string    `json:"scope,omitempty"` // assign: the assigner's scope as given, never read here (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope)
 	Hand     bool      `json:"hand,omitempty"`  // found by the snapshot diff: an edit made outside the daemon
 	FromPath string    `json:"from_path,omitempty"`
 	ToPath   string    `json:"to_path,omitempty"`

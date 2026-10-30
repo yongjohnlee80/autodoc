@@ -87,8 +87,9 @@ func WithEvents(fn func(Event)) Option { return func(o *options) { o.events = fn
 
 // WithStoresChanged is told, after the write, when the registry's stores (their ids and paths) or
 // the variables they resolve changed: a store registered, moved or removed, a global or machine var
-// set, a store's variable file written (ADR 1792015212 §2.2). The daemon's workspaces read the stores
-// again on it. It is called from the verbs, so it must not wait.
+// set, a store's variable file written (docs/decisions/todos.md#which-paths-are-graph-only). The
+// daemon's workspaces read the stores again on it. It is called from the verbs, so it must not
+// wait.
 func WithStoresChanged(fn func()) Option { return func(o *options) { o.stores = fn } }
 
 // WithRefreshCheck sets how often RefreshDaily looks for a claimed store due its daily refresh;
@@ -224,7 +225,8 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 }
 
 // newStore records the store at path with a fresh id, unless another call just did, and the workspace
-// it belongs to: the deepest one containing it (ADR 1792132105 §2.4).
+// it belongs to: the deepest one containing it
+// (docs/decisions/todos.md#which-workspace-a-store-belongs-to).
 func (m *Manager) newStore(ctx context.Context, path string) (StoreRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -325,7 +327,8 @@ func (m *Manager) SetDir(ctx context.Context, at At, dir string) (Resolved, erro
 }
 
 // OpenOpts is what an older client tells Open about a root. Its kb_root is accepted and ignored: a
-// store's $KB_ROOT is the store's own (ADR 1792015069), never a route's.
+// store's $KB_ROOT is the store's own
+// (docs/decisions/todos.md#one-answer-from-every-route-to-a-store), never a route's.
 type OpenOpts struct {
 	KBRoot string `json:"kb_root,omitempty"`
 }
@@ -473,8 +476,9 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 		return err
 	}
 	// the project auto-core's $WORKSPACE meant becomes the store's $PROJECT_ROOT first, so the
-	// cutover's rewritten refs read $PROJECT_ROOT/… (ADR 1792015069 §2.7) — only when the store is
-	// inside that project: a store several projects share (a global KB) belongs to none of them
+	// cutover's rewritten refs read $PROJECT_ROOT/… (docs/decisions/todos.md#retiring-workspace) —
+	// only when the store is inside that project: a store several projects share (a global KB)
+	// belongs to none of them
 	if paths.Under(w.rec.Path, o.LegacyWorkspace) {
 		if err := m.recordProjectRoot(ctx, w, o.LegacyWorkspace); err != nil {
 			return err
@@ -528,8 +532,8 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 
 // writable resolves an At for a write: a writable, claimed store that no ambiguous move blocks. A
 // writable store that was never claimed, nor released, is claimed by this first write, as Claim
-// claims it, marker included (ADR 1791532020 r13): a workspace's or a registered root's store is
-// the daemon's to write from the start.
+// claims it, marker included (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): a
+// workspace's or a registered root's store is the daemon's to write from the start.
 func (m *Manager) writable(ctx context.Context, at At) (where, error) {
 	w, err := m.resolve(ctx, at)
 	if err != nil {

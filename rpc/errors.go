@@ -21,8 +21,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// The error codes, chosen by what the client does next (ADR 0203 §4.4). The protocol codes keep
-// AutoDB's numbers.
+// The error codes, chosen by what the client does next
+// (docs/decisions/contract.md#one-rpc-api-for-every-client). The protocol codes keep AutoDB's
+// numbers.
 const (
 	CodeProtocolMismatch  int64 = -32020 // upgrade
 	CodeHandshakeRequired int64 = -32021 // say sys.hello
@@ -134,7 +135,7 @@ func wireErr(err error) error {
 		return re
 	}
 	var refused *fsbounds.Refusal
-	if errors.As(err, &refused) { // a gated script's call past its bounds (ADR 1792004705 §4.2a.1)
+	if errors.As(err, &refused) { // a gated script's call past its bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace)
 		return &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: refused.Error()}
 	}
 	var maxErr *store.ContextMaximumError

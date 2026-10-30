@@ -85,7 +85,8 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 		return
 	}
 	v := strconv.Itoa(n)
-	// golib's one check: the panel's places and its bounds (ADR 1792459145 §4.1)
+	// golib's one check: the panel's places and its bounds
+	// (docs/decisions/plugins.md#shared-panels-and-their-geometry)
 	if panelgeometry.Validate([]panelgeometry.Spec{s.geometry()}, k, v) != nil {
 		return
 	}

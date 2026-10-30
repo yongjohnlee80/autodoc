@@ -17,8 +17,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// The limits a type is read within (ADR 1792349867 §4.1). They bound what is read and applied,
-// not the clone that staged it: that is the git helper's timeout's (rationale §R2).
+// The limits a type is read within (docs/decisions/contract.md#kb-types-are-git-repos-of-files).
+// They bound what is read and applied, not the clone that staged it: that is the git helper's
+// timeout's (rationale §R2).
 const (
 	MaxManifestSize = 64 << 10  // kbtype.toml
 	MaxFileSize     = 256 << 10 // one file of tree/

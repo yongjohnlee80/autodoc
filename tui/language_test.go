@@ -22,10 +22,10 @@ import (
 	"github.com/yongjohnlee80/golib/tui/i18n"
 )
 
-// language_test.go: the six languages' gates (ADR 1792451618 §5), as AutoDB's: every id AutoDoc uses
-// is in the English catalog (the inventory), every shipped language says every one of them (the
-// coverage), golib's walk of the screen in each (mnemonics and collisions), and a switch relabels
-// the screen in one frame.
+// language_test.go: the six languages' gates (docs/decisions/editor.md#six-languages), as AutoDB's:
+// every id AutoDoc uses is in the English catalog (the inventory), every shipped language says
+// every one of them (the coverage), golib's walk of the screen in each (mnemonics and collisions),
+// and a switch relabels the screen in one frame.
 
 var (
 	qsTrIDs = regexp.MustCompile(`qsTrId\("([^"]+)"\)`)
@@ -291,8 +291,8 @@ func englishRuns(t *testing.T) []string {
 }
 
 // notCatalogText are the sources whose words are not the catalog's: the tutorial's page (docs, in
-// each language's own pages) and the dock's titles, which name widgets for Lua and a tooltip (ADR
-// 1792451618 Q3b).
+// each language's own pages) and the dock's titles, which name widgets for Lua and a tooltip
+// (docs/decisions/editor.md#six-languages).
 var notCatalogText = map[string]bool{"App.tutorialText": true, "App.dock": true}
 
 // A switch leaves no English on screen: in a language that says every message marked, no App.*

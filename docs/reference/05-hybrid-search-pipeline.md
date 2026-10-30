@@ -29,7 +29,7 @@ The index is in the store, one SQLite file for every workspace, with each worksp
 When the indexer (`core/index`) processes a Markdown file, it parses the heading hierarchy (`# H1` through `###### H6`) and splits the body at heading boundaries:
 
 - **Target Chunk Size (`section_tokens`):** Each workspace configures a target section budget (default `350` estimated tokens, configurable via `workspace.section_size` or `workspace.configure` with `section_tokens`). Sections smaller than the budget remain a single chunk; oversized sections are subdivided along paragraph boundaries while preserving their parent heading breadcrumb.
-- **Structural Breadcrumbs:** Every chunk stores its full ancestor path in `Hit.Breadcrumb` (for example, `ADR 0203 › 4. Storage Engine › 4.4 Search Constants`). Both the lexical index and the embedding text prepend this breadcrumb so a subsection titled simply `### Trade-offs` retains the topical context of its parent document.
+- **Structural Breadcrumbs:** Every chunk stores its full ancestor path in `Hit.Breadcrumb` (for example, `ADR 0007 › 4. Storage Engine › 4.4 Search Constants`). Both the lexical index and the embedding text prepend this breadcrumb so a subsection titled simply `### Trade-offs` retains the topical context of its parent document.
 - **Synthesized Abstract Chunks (`abstract_chunk`):** When a document's YAML frontmatter includes an `abstract` field (required by AutoDoc's v2 KB schema), the indexer synthesizes a dedicated abstract chunk representing the document's high-level thesis. Queries can include or exclude these abstract chunks on the fly via `retrieval.abstract_chunk`.
 - **Exact Line and Byte Spans:** Every chunk records both its byte offsets (`byte_start..byte_end`) and 1-based line numbers (`line_start..line_end`) alongside the document's monotonic `generation`. Clients and AI agents can read the exact matched section (typically ~220 tokens) rather than pulling an entire 2,600-token file into context.
 - **Content-Addressed Deduplication:** Chunk embeddings are keyed in SQLite by `(workspace, model_fp, text_hash)`. Editing a single paragraph in a 20-section specification re-embeds only the modified section; identical boilerplate sections across files share a single vector row.
@@ -103,7 +103,7 @@ After summing RRF contributions across every retriever that found chunk $c$, Aut
 
 ## 5. Stage 3: Cross-Encoder Reranking (`core/rank`)
 
-Bi-encoder embeddings compress an entire chunk into a single vector independent of the query. Stage 3 (`StageRerank`, ADR 0215) passes the top fused window (`ranker.window`, default `40`, configurable from `10` to `100`) to a **cross-encoder reranker** (`core/rank`).
+Bi-encoder embeddings compress an entire chunk into a single vector independent of the query. Stage 3 (`StageRerank`, [re-ranking with one global ranker](../decisions/search.md#re-ranking-with-one-global-ranker)) passes the top fused window (`ranker.window`, default `40`, configurable from `10` to `100`) to a **cross-encoder reranker** (`core/rank`).
 
 The cross-encoder reads the raw query string side by side with each candidate chunk's breadcrumb and body text, computing full cross-attention across query and document tokens to emit a calibrated logit (`Hit.RankScore`). Hits in the top window are re-sorted by `RankScore` descending, and `"rank"` is appended to `Hit.Via`.
 
@@ -169,8 +169,8 @@ Distributed systems and AI agents need to know whether a search result reflects 
 {
   "hits": [
     {
-      "path": "adrs/0203.md",
-      "breadcrumb": "ADR 0203 › Storage",
+      "path": "adrs/0007.md",
+      "breadcrumb": "ADR 0007 › Storage",
       "snippet": "The store takes an exclusive lease beside autodoc.db...",
       "byte_start": 1204,
       "byte_end": 2310,

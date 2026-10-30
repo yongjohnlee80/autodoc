@@ -73,8 +73,9 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
 	eng.SetFunction("widgets", s.luaWidgets)
 	// autodoc.plugin: a plugin's package's own plugin. The empty-capability gate asks for no grant;
-	// it makes the gated proxy wrap these functions, which is what sets Engine.Caller (ADR 1792300990
-	// §4.5); an ungated user script has no caller and is refused
+	// it makes the gated proxy wrap these functions, which is what sets Engine.Caller
+	// (docs/decisions/plugins.md#a-plugins-lua-package); an ungated user script has no caller and
+	// is refused
 	pt := L.NewTable()
 	L.SetFuncs(pt, map[string]lua.LGFunction{"run": s.luaPluginRun})
 	L.SetField(eng.Global(), "plugin", pt)

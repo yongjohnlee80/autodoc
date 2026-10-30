@@ -17,16 +17,17 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// KB TYPES — a workspace scaffolded from a KB type's git repo (ADR 1792349867). The add dialog's KB
-// type field stages a type: a shallow clone, read and validated by core/kbtype, never run. Add
-// then writes its plan through the daemon's workspace.scaffold, between workspace.add and
-// workspace.configure. A choice is fenced by a Ticket, so only the latest choice's stage can land.
+// KB TYPES — a workspace scaffolded from a KB type's git repo
+// (docs/decisions/contract.md#kb-types-are-git-repos-of-files). The add dialog's KB type field
+// stages a type: a shallow clone, read and validated by core/kbtype, never run. Add then writes its
+// plan through the daemon's workspace.scaffold, between workspace.add and workspace.configure. A
+// choice is fenced by a Ticket, so only the latest choice's stage can land.
 
 // kbTypeChoice is one of the KB type field's rows: None has no URL, Custom URL… is asked for.
 type kbTypeChoice struct{ name, title, url string }
 
-// builtinKBTypes are the first-party types, shown until the registry lists them (ADR 1792351195),
-// and kept for offline use after.
+// builtinKBTypes are the first-party types, shown until the registry lists them
+// (docs/decisions/plugins.md#the-registry), and kept for offline use after.
 var builtinKBTypes = []kbTypeChoice{
 	{"autovim.kb", "AutoVim coding KB", "https://github.com/yongjohnlee80/autovim.kb"},
 	{"zettelkasten.kb", "Zettelkasten", "https://github.com/yongjohnlee80/zettelkasten.kb"},
@@ -164,7 +165,7 @@ func (h *Host) kbTypeURL(url string) {
 
 // pickKBType stages url for the open add dialog ("" is None). Every pick, and the dialog's opening
 // and closing (dropKBType), bump h.kbTypeSeq, so only the latest pick's stage can land: a stale
-// one is removed unseen (ADR 1792349867 §4.4).
+// one is removed unseen (docs/decisions/contract.md#choosing-a-type-stages-it).
 func (h *Host) pickKBType(url string) {
 	h.dropKBType()
 	h.set("App.kbTypeCustomShown", false)

@@ -11,8 +11,8 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// A SCRIPT'S CARD — autodoc.ui.card, autodoc.ui.charts and autodoc.app.stats (ADR 1792256101 §4.3,
-// §4.4):
+// A SCRIPT'S CARD — autodoc.ui.card, autodoc.ui.charts and autodoc.app.stats
+// (docs/decisions/editor.md#lua-cards):
 //
 //	autodoc.ui.card{title=, text=, every=, tick=}   the luaCard panel shows text (Markdown, drawn
 //	                                                Rendered in the GUI, a vega-lite fence a chart);

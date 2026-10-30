@@ -8,13 +8,14 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE DOCK — the menu bar's corner (ADR 1792397302): one icon per widget that is open, or that
-// runs on with its drawer closed (the terminal's shells, the agents, a plugin card's plugin), the
-// editor first. A click shows or hides (ADR 1792397302 r3): a shown panel's icon hides it, the
-// keyboard back in the editor; a hidden or closed one's is Go-to's own path (goTo), which shows it
-// as it was, or opens it, and gives it the keyboard. The editor's icon hides every shown panel, and
-// its next click shows those again. Hidden is golib's window minimize: the panel stays open, its
-// state kept and its Closed hook not run, and its icon is dimmed. While the dock lists more than the
+// THE DOCK — the menu bar's corner (docs/decisions/editor.md#the-dock-of-open-widgets): one icon
+// per widget that is open, or that runs on with its drawer closed (the terminal's shells, the
+// agents, a plugin card's plugin), the editor first. A click shows or hides
+// (docs/decisions/editor.md#dock-clicks-hide-and-show): a shown panel's icon hides it, the keyboard
+// back in the editor; a hidden or closed one's is Go-to's own path (goTo), which shows it as it
+// was, or opens it, and gives it the keyboard. The editor's icon hides every shown panel, and its
+// next click shows those again. Hidden is golib's window minimize: the panel stays open, its state
+// kept and its Closed hook not run, and its icon is dimmed. While the dock lists more than the
 // editor, the bar stays shown however tui.menu.autohide is set.
 
 // editorIcon is the editor's dock icon.

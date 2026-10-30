@@ -47,7 +47,7 @@ func (s *sessioner) CommandArgs(id string, args []string) {
 
 func (s *sessioner) Close() { s.rec.add("close " + s.peer.CloseReason()) }
 
-// TestProtocolSevenCarriesTheSlotTheReasonAndTheArgs (ADR 1792300990 §4.2): plugin.open hands the
+// TestProtocolSevenCarriesTheSlotTheReasonAndTheArgs (docs/decisions/plugins.md#plugin-sessions): plugin.open hands the
 // slot over; a CommandArgser takes every command, with its arguments or none, in place of Command;
 // SetSession sends host.session with the values; Close reads plugin.close's reason.
 func TestProtocolSevenCarriesTheSlotTheReasonAndTheArgs(t *testing.T) {

@@ -15,9 +15,10 @@ import (
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
-// CARD PANELS MADE AT RUNTIME (ADR 1792848741) — a card plugin added while AutoDoc runs gets its
-// panel at once, and a removed one's goes: the registry's change is staged, the document reloaded
-// with the new card set, and the change committed only when the reload succeeded.
+// CARD PANELS MADE AT RUNTIME (docs/decisions/plugins.md#card-panels-made-at-runtime) — a card
+// plugin added while AutoDoc runs gets its panel at once, and a removed one's goes: the registry's
+// change is staged, the document reloaded with the new card set, and the change committed only when
+// the reload succeeded.
 
 const toggleCmd = "[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n"
 
