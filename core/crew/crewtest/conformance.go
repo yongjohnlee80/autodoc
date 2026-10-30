@@ -417,6 +417,14 @@ func Run(t *testing.T, h Harness) {
 		if w := wakeOf(t, store, waiting.Session); w.PendingGen != 1 {
 			t.Fatalf("a session whose profile has mail waiting: pending_gen %d, want 1", w.PendingGen)
 		}
+		// Its session ends with that mail unannounced: the row must stop being due, or ended
+		// sessions pile up ahead of live ones in the scheduler's look.
+		if err := m.Exit(ctx, scope, "run-a", e, waiting.Session, crew.EndedExit); err != nil {
+			t.Fatalf("exit: %v", err)
+		}
+		if w := wakeOf(t, store, waiting.Session); w.State != crew.WakeIdle || w.AnnouncedGen != w.PendingGen {
+			t.Fatalf("an ended session's wake row: %+v; want idle with announced_gen = pending_gen, never due again", w)
+		}
 	})
 
 	t.Run("exit: once, idempotent, and fenced", func(t *testing.T) {

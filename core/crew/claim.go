@@ -137,7 +137,7 @@ func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
 }
 
 // endSession ends s in tx and applies what follows from it, in the same transaction: its
-// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline), and the mail
+// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left to announce), and the mail
 // module's effect on its deliveries (SessionEnder).
 func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	at := tx.Now().UnixNano()
@@ -154,7 +154,9 @@ func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	if w, ok, err := tx.Wake(s.ID); err != nil {
 		return err
 	} else if ok {
-		w.State, w.Token, w.NextAt = WakeIdle, "", nil
+		// An ended session is never announced to: with its pending work marked announced, its
+		// row is no longer due, so it can't hold a place in the scheduler's look ahead of a live one.
+		w.State, w.Token, w.NextAt, w.AnnouncedGen = WakeIdle, "", nil, w.PendingGen
 		if err := tx.PutWake(w); err != nil {
 			return err
 		}
