@@ -65,7 +65,7 @@ func (m *Manager) Orphans(ctx context.Context) ([]Orphan, error) {
 // holder is free (revalidated here, never trusted from an earlier Orphans), then fences from: its
 // epoch rises and its incarnation clears, so the old owner can do nothing more, and its sessions
 // end. It answers from's active profiles.
-func (m *Manager) fenceOrphan(tx Tx, from, to, run string, epoch int64) ([]Profile, error) {
+func (m *Manager) fenceOrphan(tx Tx, after *afterCommit, from, to, run string, epoch int64) ([]Profile, error) {
 	if from == to {
 		return nil, fmt.Errorf("%w: a scope can't adopt or discard itself", ErrInvalid)
 	}
@@ -91,7 +91,7 @@ func (m *Manager) fenceOrphan(tx Tx, from, to, run string, epoch int64) ([]Profi
 	if err := tx.PutScope(sc); err != nil {
 		return nil, err
 	}
-	if err := m.endScopeSessions(tx, from, EndedAdopted); err != nil {
+	if err := m.endScopeSessions(tx, after, from, EndedAdopted); err != nil {
 		return nil, err
 	}
 	all, err := tx.ActiveProfiles()
@@ -114,8 +114,8 @@ func (m *Manager) fenceOrphan(tx Tx, from, to, run string, epoch int64) ([]Profi
 // (MergeDeliveries), and raise the survivors' pending_gen: a delivery the merge itself makes to p
 // already resolves to the survivor. from ends 'gone'.
 func (m *Manager) Adopt(ctx context.Context, from, to, run string, epoch int64) error {
-	return m.store.Write(ctx, func(tx Tx) error {
-		profiles, err := m.fenceOrphan(tx, from, to, run, epoch)
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
+		profiles, err := m.fenceOrphan(tx, after, from, to, run, epoch)
 		if err != nil {
 			return err
 		}
@@ -152,8 +152,8 @@ func (m *Manager) Adopt(ctx context.Context, from, to, run string, epoch int64) 
 // gone BEFORE the mail half runs: a profile that mailed itself gets its discard notice queued
 // on it, and only a gone scope makes mail fail that notice rather than leave it waiting forever.
 func (m *Manager) Discard(ctx context.Context, from, to, run string, epoch int64) error {
-	return m.store.Write(ctx, func(tx Tx) error {
-		profiles, err := m.fenceOrphan(tx, from, to, run, epoch)
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
+		profiles, err := m.fenceOrphan(tx, after, from, to, run, epoch)
 		if err != nil {
 			return err
 		}
