@@ -521,8 +521,9 @@ func TestAdoptionNormalizesOrMergesEveryUnhandledDelivery(t *testing.T) {
 	if d := of(bound, "p-old"); d.State != mail.Failed || d.Why != mail.WhySessionEnded {
 		t.Fatalf("the bound delivery: %+v", d)
 	}
-	if r.woken("p-gold") != before+1 {
-		t.Fatal("into was not woken")
+	// one wake for the mail that moved, one for the reopening notice that followed p-old's forwarding
+	if got := r.woken("p-gold"); got != before+2 {
+		t.Fatalf("into woken %d times by the adoption, want 2", got-before)
 	}
 	seqs := map[int64]bool{}
 	for _, d := range r.mem.Deliveries() {
