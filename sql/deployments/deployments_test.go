@@ -13,8 +13,10 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/deploy"
+	"github.com/yongjohnlee80/golib/dao/postgres"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 
+	"github.com/yongjohnlee80/autodoc/core/pgstore/pgtest"
 	"github.com/yongjohnlee80/autodoc/sql/deployments"
 )
 
@@ -676,4 +678,117 @@ func ExampleFS() {
 	all, _ := deploy.Load(deployments.FS(), dao.DialectSQLite)
 	fmt.Println(all[0].Name)
 	// Output: 000001_update_initialize_tables.sql
+}
+
+// The PostgreSQL scripts apply on PostgreSQL, a second apply has nothing to do, and the schema
+// they make is SQLite's (ADR 1793319634): the same tables, each with the same columns. The one
+// named difference is chunk.tsv, the generated full-text vector that stands where SQLite's FTS5
+// table and its triggers do; SQLite's FTS5 tables and its sequence table have no PostgreSQL twin.
+func TestThePostgresScriptsMakeSQLitesSchema(t *testing.T) {
+	ctx := context.Background()
+	pg, err := postgres.Open(ctx, pgtest.ScratchURL(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pg.Close() })
+	if _, err := deployments.Runner().Apply(ctx, pg); err != nil {
+		t.Fatal(err)
+	}
+	st, err := deployments.Runner().Apply(ctx, pg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates := 0
+	for n := range names(t, dao.DialectPostgres) {
+		if strings.Contains(n, "_update_") {
+			updates++
+		}
+	}
+	if len(st.Pending) != 0 || len(st.Applied) != updates {
+		t.Errorf("a second apply: %d scripts recorded, %v applied now; want %d and none", len(st.Applied), st.Pending, updates)
+	}
+	lite := open(t)
+	want := map[string]map[string]bool{}
+	tables, err := lite.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table'
+		AND name NOT LIKE 'chunk_fts%' AND name <> 'sqlite_sequence' AND name <> '`+deploy.DefaultLedger+`'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for tables.Next() {
+		var n string
+		if err := tables.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, n)
+	}
+	tables.Close()
+	for _, n := range names {
+		want[n] = columnsOf(t, lite, `SELECT name FROM pragma_table_info(?)`, n)
+	}
+	got := map[string]map[string]bool{}
+	ptables, err := pg.QueryContext(ctx, `SELECT table_name FROM information_schema.tables
+		WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pnames []string
+	for ptables.Next() {
+		var n string
+		if err := ptables.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		pnames = append(pnames, n)
+	}
+	ptables.Close()
+	for _, n := range pnames {
+		got[n] = columnsOf(t, pg, `SELECT column_name FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = $1`, n)
+	}
+	delete(got["chunk"], "tsv") // FTS5's stand-in, named above
+	delete(got, deploy.DefaultLedger)
+	for n, cols := range want {
+		g, ok := got[n]
+		if !ok {
+			t.Errorf("PostgreSQL has no table %s", n)
+			continue
+		}
+		for c := range cols {
+			if !g[c] {
+				t.Errorf("PostgreSQL's %s has no column %s", n, c)
+			}
+		}
+		for c := range g {
+			if !cols[c] {
+				t.Errorf("PostgreSQL's %s has a column %s SQLite's has not", n, c)
+			}
+		}
+	}
+	for n := range got {
+		if _, ok := want[n]; !ok && n != deploy.DefaultLedger {
+			t.Errorf("PostgreSQL has a table %s SQLite has not", n)
+		}
+	}
+	if len(want) < 30 {
+		t.Fatalf("only %d SQLite tables read: this test would show nothing", len(want))
+	}
+}
+
+// columnsOf is the set of names q (one parameter, the table) returns.
+func columnsOf(t *testing.T, db dao.DataConn, q, table string) map[string]bool {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), q, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		out[c] = true
+	}
+	return out
 }

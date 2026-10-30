@@ -5,6 +5,7 @@
 //	sqlite/000001_update_initialize_tables.sql   the baseline: no revert
 //	sqlite/000002_update_<slug>.sql              a change …
 //	sqlite/000002_revert_<slug>.sql              … and its undo
+//	postgres/…                                   the same names, for PostgreSQL
 //
 // dao/deploy reads the tree, refuses a set that is not dense and paired,
 // applies every pending script in one transaction and keeps the ledger. A
@@ -19,12 +20,15 @@ import (
 	"github.com/yongjohnlee80/golib/dao/deploy"
 )
 
-//go:embed sqlite/*.sql
+//go:embed sqlite/*.sql postgres/*.sql
 var files embed.FS
 
 // Engines are the engines the store has scripts for: each is a directory,
-// named for its dialect.
-var Engines = []string{dao.DialectSQLite}
+// named for its dialect. SQLite is every AutoDoc's store; PostgreSQL is the
+// server component's (ADR 1793319634), whose 000001 folds SQLite's 000001 to
+// 000025, so its 000002 to 000025 are empty and every later script ships for
+// both under one name.
+var Engines = []string{dao.DialectSQLite, dao.DialectPostgres}
 
 // FS is the script tree.
 func FS() fs.FS { return files }
