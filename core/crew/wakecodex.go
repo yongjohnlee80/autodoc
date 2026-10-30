@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // CodexWaker wakes a Codex session through its app-server's persistent queue (§4.7, rationale §R15):
@@ -43,6 +44,9 @@ func (w *CodexWaker) Wake(ctx context.Context, ep Endpoint, notice string) error
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, w.bin, "queue", "--remote=unix://"+l.Server, "--thread="+l.Thread, "--message="+notice)
 	cmd.Stderr = &stderr
+	// a child codex leaves behind (holding stderr) must not keep the call past its deadline: once
+	// the process is killed, Run returns this soon after, whatever still holds the pipe
+	cmd.WaitDelay = codexWaitDelay
 	err := cmd.Run()
 	switch {
 	case err == nil:
@@ -95,5 +99,8 @@ func (w *CodexWaker) ownedBy(fi os.FileInfo) error {
 	}
 	return nil
 }
+
+// codexWaitDelay is how long Run waits for codex's output pipe after the process has gone.
+const codexWaitDelay = time.Second
 
 var _ Waker = (*CodexWaker)(nil)
