@@ -57,6 +57,8 @@ type Server struct {
 	HTTP    *HTTP
 	Sources []Source
 	Log     Log
+	// Metrics is [metrics]: whether GET /v1/metrics is served; off by default.
+	Metrics Metrics
 	// Warnings are what is allowed but unwise, such as a short bearer token: --server --check
 	// prints them.
 	Warnings []string
@@ -115,6 +117,12 @@ type Client struct {
 	// Grants are, by tenant, the values of each of the tenant's access fields the client may ask
 	// for: ["*"] for any value, which a request must still name.
 	Grants map[string]map[string][]string
+}
+
+// Metrics is [metrics]. Enabled serves GET /v1/metrics, behind the operators' tokens, so it needs
+// an [http] table with at least one operator; off by default.
+type Metrics struct {
+	Enabled bool
 }
 
 // Log is what the server logs beyond its events.
@@ -226,6 +234,9 @@ type file struct {
 	Log *struct {
 		MetricsInterval *duration `toml:"metrics_interval"`
 	} `toml:"log"`
+	Metrics *struct {
+		Enabled bool `toml:"enabled"`
+	} `toml:"metrics"`
 	Sources []struct {
 		Tenant   string    `toml:"tenant"`
 		View     string    `toml:"view"`
@@ -272,6 +283,7 @@ func Load(path string) (*Server, error) {
 	s.Embedding = v.embedding(f)
 	s.HTTP = v.http(f, s.Sources)
 	s.Log = v.log(f)
+	s.Metrics = v.metrics(f)
 	s.Warnings = v.warnings
 	if len(v.errs) > 0 {
 		return nil, &Refusal{Path: path, Errors: v.errs}
@@ -633,6 +645,21 @@ func (v *validator) log(f file) Log {
 		}
 	}
 	return l
+}
+
+// metrics reads [metrics]. Enabled with no [http] table, or with no operator, would serve an
+// endpoint nobody can reach: refused.
+func (v *validator) metrics(f file) Metrics {
+	if f.Metrics == nil || !f.Metrics.Enabled {
+		return Metrics{}
+	}
+	switch {
+	case f.HTTP == nil:
+		v.refuse("metrics.enabled", "true with no [http] table: /v1/metrics is served by the HTTP API")
+	case len(f.HTTP.Operators) == 0:
+		v.refuse("metrics.enabled", "true with no [[http.operator]]: /v1/metrics answers only an operator's token")
+	}
+	return Metrics{Enabled: true}
 }
 
 // grant checks one field's grant: ["*"] alone, or distinct, non-empty values.
