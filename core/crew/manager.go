@@ -2,6 +2,7 @@ package crew
 
 import (
 	"os"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +14,8 @@ type Manager struct {
 	storeID string // the daemon's store id (sys.hello's store_id): a session context names it
 	uid     int    // the daemon's user: endpoint sockets must be this user's
 	started time.Time
+	sched   atomic.Pointer[Scheduler] // the daemon's scheduler, once NewScheduler made it: Watch hears its pokes
+	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
 }
 
 // SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write
@@ -54,6 +57,10 @@ func WithUID(uid int) Option { return func(m *Manager) { m.uid = uid } }
 
 // WithStoreID sets the daemon's store id, which crew.whoami checks a session context against.
 func WithStoreID(id string) Option { return func(m *Manager) { m.storeID = id } }
+
+// WithLongPolls sets the daemon's long-poll limiter, which crew.wait enters: the same one the other
+// modules' long-polls share.
+func WithLongPolls(l *LongPolls) Option { return func(m *Manager) { m.polls = l } }
 
 // WithSessionEnder sets the mail module's effect of a session's end.
 func WithSessionEnder(e SessionEnder) Option { return func(m *Manager) { m.ender = e } }

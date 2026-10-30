@@ -6,7 +6,11 @@ package crew
 type Signals struct {
 	// Feed: the write appended to the human feed's journal (inbox_change).
 	Feed func()
-	// Wake: the write left a wake row due (WakeDue), so a wake may now be reserved for it.
+	// Wake: the write changed a wake row: a send or a lapsed lease raised its pending_gen, a
+	// register seeded it, an endpoint reset it, or an attempt moved it. The scheduler looks again,
+	// and every long-poll (mail.wait, crew.wait) checks again. Every change is told, not only a row
+	// left due: a send to a session whose row is in_flight raises pending_gen without making the row
+	// due, and a waiter must still hear it. A poke is idempotent, so the superset costs a re-check.
 	Wake func()
 }
 
@@ -19,7 +23,3 @@ func (s Signals) Fire(feed, wake bool) {
 		s.Wake()
 	}
 }
-
-// WakeDue reports whether w, as written, leaves work to announce from an idle row: a send, a
-// register's seed, a lapsed lease queued again, or a new endpoint's reset. Signals.Wake follows it.
-func WakeDue(w Wake) bool { return w.State == WakeIdle && w.PendingGen > w.AnnouncedGen }

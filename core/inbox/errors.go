@@ -3,6 +3,7 @@ package inbox
 import (
 	"github.com/yongjohnlee80/golib/errs"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
@@ -45,5 +46,7 @@ func (m *Manager) Errors() []module.PublicError {
 		{Err: mail.ErrTooLarge, Code: CodeTooLarge, Name: "inbox.too_large", Message: "the body is past 64 KiB"},
 		{Err: ErrNotFound, Code: codeNotFound, Name: "inbox.not_found", Message: "no such live session",
 			Next: "the agent exited: nothing to raise"},
+		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "inbox.long_polls_busy",
+			Message: "a connection holds at most two long-polls", Next: "finish one first, or open another connection"},
 	}
 }

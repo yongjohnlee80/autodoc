@@ -165,8 +165,14 @@ func (m *Manager) Verbs() []module.Verb {
 	}
 	return []module.Verb{
 		module.Handle(user("inbox.watch", module.EffectRead, "{cursor, snapshot?{items, attention, next}, changes[]}",
-			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases."),
+			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases. A connection holds at most two long-polls.",
+			crew.CodeLongPollsBusy),
 			func(ctx context.Context, p watchParams) (watchResult, error) {
+				leave, err := m.polls.Enter(module.ClientFrom(ctx))
+				if err != nil {
+					return watchResult{}, err
+				}
+				defer leave()
 				w, err := m.Watch(ctx, p.Cursor, time.Duration(p.Timeout)*time.Millisecond, p.Page)
 				return toWireWatched(w), err
 			}),

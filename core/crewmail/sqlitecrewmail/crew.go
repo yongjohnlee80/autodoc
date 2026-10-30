@@ -300,7 +300,7 @@ func (t *Tx) Wake(session string) (crew.Wake, bool, error) {
 }
 
 func (t *Tx) PutWake(w crew.Wake) error {
-	t.wake = t.wake || crew.WakeDue(w)
+	t.wake = true
 	return t.t.wakes.On(t.tx).SetMap(map[col]any{cSession: w.Session, cPendingGen: w.PendingGen,
 		cAnnounced: w.AnnouncedGen, cState: w.State, cToken: w.Token, cAttemptGen: w.AttemptGen,
 		cFailures: w.Failures, cDaemonRun: w.DaemonRun, cNextAt: w.NextAt}).Upsert()

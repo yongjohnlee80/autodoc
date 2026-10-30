@@ -146,4 +146,7 @@ type Crew interface {
 	// Received is a receive's half of the wake, in the receive's write: the session has seen what is
 	// pending (§4.7).
 	Received(tx crew.Tx, session string) error
+	// Watch is a channel that hears every change mail.wait may be waiting for (crew's wake signal);
+	// stop unregisters it. Registered before mail.wait's check.
+	Watch() (ch <-chan struct{}, stop func())
 }

@@ -42,6 +42,7 @@ var codeDocs = []struct {
 	{CodeProtocolMismatch, "rpc.protocol_mismatch", "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves"},
 	{CodeHandshakeRequired, "rpc.handshake_required", "say sys.hello first"},
 	{CodeNoSuchWorkspace, "rpc.no_such_workspace", "call workspace.list and use a listed name"},
+	{CodeLongPollsBusy, "rpc.long_polls_busy", "a connection holds at most two long-polls (crew.wait, mail.wait, inbox.watch): finish one first, or open another connection"},
 	{CodeNotFound, "rpc.not_found", "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone"},
 	{CodeConflict, "rpc.conflict", "doc.read, then merge or retry; for a name, choose another"},
 	{CodeCursorExpired, "rpc.cursor_expired", "re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it"},
