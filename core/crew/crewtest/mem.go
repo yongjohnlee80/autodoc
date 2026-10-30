@@ -112,6 +112,17 @@ func (t *memTx) ActiveProfile(scope, codename string) (crew.Profile, bool, error
 
 func (t *memTx) PutProfile(p crew.Profile) error { t.st.profiles[p.ID] = p; return nil }
 
+func (t *memTx) Scopes(kind string) ([]crew.Scope, error) {
+	var out []crew.Scope
+	for _, s := range t.st.scopes {
+		if s.Kind == kind {
+			out = append(out, s)
+		}
+	}
+	slices.SortFunc(out, func(a, b crew.Scope) int { return strings.Compare(a.ID, b.ID) })
+	return out, nil
+}
+
 func (t *memTx) ActiveProfiles() ([]crew.Profile, error) {
 	var out []crew.Profile
 	for _, p := range t.st.profiles {
