@@ -69,10 +69,11 @@ func Open(ctx context.Context, path string, opts ...Option) (*Store, error) {
 }
 
 func open(ctx context.Context, path string, wait time.Duration) (*Store, error) {
-	// read before SQLite opens the store, which makes the write-ahead log (startCheckInline)
-	_, walErr := os.Stat(path + "-wal")
+	// read before SQLite opens the store, which makes the write-ahead log (startCheckInline). An
+	// empty log is no crash's: a TRUNCATE checkpoint, or a read-only open, leaves one.
+	wal, walErr := os.Stat(path + "-wal")
 	_, markErr := os.Stat(path + damagedSuffix)
-	unclean, marked := walErr == nil, markErr == nil
+	unclean, marked := walErr == nil && wal.Size() > 0, markErr == nil
 	// journal_size_limit: a checkpoint truncates the write-ahead log back to 64 MiB, so the room a
 	// large write (a compaction, a reclaim) took in it is given back, not kept at its high-water mark
 	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_size_limit(67108864)"
