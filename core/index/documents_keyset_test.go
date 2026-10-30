@@ -354,7 +354,7 @@ func (c *pageRows) AfterExec(_ context.Context, q *dao.QueryInfo, out dao.Outcom
 		c.rows += out.Rows
 		c.pages++
 	}
-	return nil
+	return out.Err // the hook contract: AfterExec passes the statement's error on
 }
 
 // TestAListingReadsEachDocumentOnce (§5.3, §4's cost): a whole listing materialises O(N + pages ×
@@ -379,6 +379,10 @@ func TestAListingReadsEachDocumentOnce(t *testing.T) {
 		window := o.Limit + 1
 		if len(o.Missing) > 0 {
 			window = missingWindow
+		}
+		// the counter saw the reads: at least one row a document listed, so a zero budget can't pass
+		if counter.pages == 0 || counter.rows < len(got) {
+			t.Fatalf("%+v: the counter saw %d reads of %d rows for %d documents listed", o, counter.pages, counter.rows, len(got))
 		}
 		if budget := n + counter.pages*window; counter.rows > budget || len(got) == 0 {
 			t.Errorf("%+v: %d documents listed in %d reads of %d rows; the budget is %d (N %d + reads × window %d)",
