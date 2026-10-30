@@ -717,3 +717,20 @@ func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(
 func (c core) SendText(to AgentRef, text string, done func(error)) error {
 	return c.h.agents.SendText(to, text, done)
 }
+
+// raiseSession opens the agent drawer on this window's agent whose crew session is session (a crew
+// toast's click, an inbox focus), and answers false when no agent here has it. One here whose tab
+// can't be selected is still here: that failure is kept, not taken for another window's.
+func (a *agents) raiseSession(session string) bool {
+	if session == "" {
+		return false
+	}
+	for _, instance := range a.instances {
+		if instance.session.ID == session {
+			a.c.OpenDrawer("agent")
+			a.c.Keep(a.selectInstance(instance))
+			return true
+		}
+	}
+	return false
+}
