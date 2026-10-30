@@ -232,6 +232,8 @@ autodoc --call index.documents '[
 ]'
 ```
 
+**Paging.** A listing is answered a page at a time: `more` says whether documents follow, and `next` is where the following page starts. Pass `next` back unread as `after`, with the same `sort` and filters, until `more` is false. From protocol 35, `next` is an opaque cursor, a string (`""` when no more follow), for every session whatever protocol it declared: the listing orders and filters in the store and resumes after the last document it returned, so a page costs the same at the end of a large workspace as at its start, and documents added or removed before it don't shift the pages after it. A cursor is good only for the sort and filters it came from; another one, or an integer offset (what `next` was before protocol 35), is refused as invalid params.
+
 ---
 
 ## 4. How Schema Fields Become Indexed Search Facets
