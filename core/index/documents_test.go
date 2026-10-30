@@ -17,7 +17,7 @@ func TestDocumentsFilters(t *testing.T) {
 		{"notes/a.md", []string{"adrs", "notes"}, true},
 		{"a.md", []string{"."}, true},
 	} {
-		if got := underAny(tc.path, tc.prefixes); got != tc.want {
+		if got := underAny(tc.path, normFilters(DocumentsOpts{Paths: tc.prefixes})); got != tc.want {
 			t.Errorf("underAny(%q, %q) = %v", tc.path, tc.prefixes, got)
 		}
 	}
