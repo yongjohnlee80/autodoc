@@ -4,15 +4,18 @@
 package mailtest
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
@@ -61,6 +64,9 @@ func (m *Mem) Read(ctx context.Context, fn func(mail.Tx) error) error {
 	defer m.mu.Unlock()
 	return m.crew.Read(ctx, func(ct crew.Tx) error { return fn(&memTx{Tx: ct, st: m.st.clone()}) })
 }
+
+// SetSignals sets what a committed write tells (crew.Signals), as the engine's adapter does.
+func (m *Mem) SetSignals(s crew.Signals) { m.crew.SetSignals(s) }
 
 // Crew is the same store as the crew module takes it: its transactions are mail's too.
 func (m *Mem) Crew() crew.Store { return crewStore{m} }
@@ -237,3 +243,84 @@ func sorted(ds []mail.Delivery) []mail.Delivery {
 	})
 	return ds
 }
+
+// The inbox module's reads (inbox.Tx), over the same copies: the journal and attention are
+// crewtest's, the messages and deliveries this Mem's.
+
+// journal is what crewtest's transaction offers of the feed's journal.
+type journal interface {
+	InboxRows(after int64, limit int) []crewtest.InboxRow
+	InboxBounds() (int64, int64)
+	Raised() ([]crew.Attention, error)
+}
+
+func (t *memTx) Changes(after int64, limit int) ([]inbox.Change, error) {
+	var out []inbox.Change
+	for _, r := range t.Tx.(journal).InboxRows(after, limit) {
+		out = append(out, inbox.Change{Seq: r.Seq, Kind: r.Kind, Ref: r.Ref, At: r.At})
+	}
+	return out, nil
+}
+
+func (t *memTx) ChangeBounds() (int64, int64, error) {
+	oldest, newest := t.Tx.(journal).InboxBounds()
+	return oldest, newest, nil
+}
+
+func (t *memTx) Raised() ([]crew.Attention, error) { return t.Tx.(journal).Raised() }
+
+// items pairs each delivery with its message.
+func (t *memTx) items(ds []mail.Delivery) []mail.Item {
+	out := make([]mail.Item, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, mail.Item{Delivery: d, Message: t.st.messages[d.Message]})
+	}
+	return out
+}
+
+func (t *memTx) OpenToUser(user string, limit int) ([]mail.Item, error) {
+	return t.items(t.where(func(d mail.Delivery) bool {
+		msg := t.st.messages[d.Message]
+		return d.Recipient == user && msg.State == mail.MessageOpen && msg.Kind != mail.KindEvent
+	}, limit)), nil
+}
+
+func (t *memTx) ToUser(user string, before int64, limit int) ([]mail.Item, error) {
+	ds := t.where(func(d mail.Delivery) bool { return d.Recipient == user && (before <= 0 || d.Seq < before) }, 0)
+	slices.Reverse(ds)
+	if limit > 0 && len(ds) > limit {
+		ds = ds[:limit]
+	}
+	return t.items(ds), nil
+}
+
+func (t *memTx) FailedNotices(limit int) ([]mail.Item, error) {
+	ds := t.where(func(d mail.Delivery) bool {
+		return d.State == mail.Failed && t.st.messages[d.Message].Kind == mail.KindEvent
+	}, 0)
+	slices.SortStableFunc(ds, func(a, b mail.Delivery) int { // newest done first; ties by id
+		if c := cmp.Compare(*b.DoneAt, *a.DoneAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	if limit > 0 && len(ds) > limit {
+		ds = ds[:limit]
+	}
+	return t.items(ds), nil
+}
+
+// Inbox is the same store as the inbox module takes it: its transactions are mail's and crew's too.
+func (m *Mem) Inbox() inbox.Store { return inboxStore{m} }
+
+type inboxStore struct{ m *Mem }
+
+func (s inboxStore) Write(ctx context.Context, fn func(inbox.Tx) error) error {
+	return s.m.Write(ctx, func(tx mail.Tx) error { return fn(tx.(*memTx)) })
+}
+
+func (s inboxStore) Read(ctx context.Context, fn func(inbox.Tx) error) error {
+	return s.m.Read(ctx, func(tx mail.Tx) error { return fn(tx.(*memTx)) })
+}
+
+var _ inbox.Tx = (*memTx)(nil)
