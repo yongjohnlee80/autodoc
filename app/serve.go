@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -258,9 +259,43 @@ func (d *process) startWakes() {
 }
 
 // crewWakers are the wakers by endpoint kind, for the daemon's user. Phase 3 brings them one CLI at
-// a time; a session whose kind has none is watch-only, reached by crew.wait and the inbox.
+// a time; a session whose kind has none is watch-only, reached by crew.wait and the inbox. Codex's
+// is there only when its CLI is installed with the queue it wakes through (codexWaker).
 func crewWakers() map[string]crew.Waker {
-	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
+	w := map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
+	if c := codexWaker(os.Getuid(), codexBin()); c != nil {
+		w["codex"] = c
+	}
+	return w
+}
+
+// codexBin is the codex CLI: mise's, as this machine installs its tools, else the first on PATH;
+// "" when there is none.
+func codexBin() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, "mise", "which", "codex").Output(); err == nil {
+		if bin := strings.TrimSpace(string(out)); bin != "" {
+			return bin
+		}
+	}
+	bin, _ := exec.LookPath("codex")
+	return bin
+}
+
+// codexWaker is Codex's waker for user uid when bin is a codex CLI with the queue subcommand it wakes
+// through (`codex queue --thread`), else nil: no waker, so Codex sessions stay watch-only.
+func codexWaker(uid int, bin string) crew.Waker {
+	if bin == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "queue", "--help").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "--thread") {
+		return nil
+	}
+	return crew.NewCodexWaker(uid, bin)
 }
 
 // startScheduler makes the wake scheduler for a fresh run id, and answers how to stop it. Making it
