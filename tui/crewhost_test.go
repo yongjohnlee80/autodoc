@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -94,6 +95,7 @@ func crewWire(err error) error {
 
 // crewWindow is one window's crewCore: work runs at once, timers wait until fired, notices are kept.
 type crewWindow struct {
+	marked  bool // Tr and Trf answer the marked test language (markedText), else the English catalog's words
 	d       *crewDaemon
 	timers  []func()
 	notices []string
@@ -310,4 +312,22 @@ func TestADaemonWithoutCrewLeavesTheWindowQuiet(t *testing.T) {
 	if _, _, ok := h.held(); !ok {
 		t.Fatal("the next connection, to a daemon with crew, claimed nothing")
 	}
+}
+
+// markedText is the marked test language: a message's id and its arguments, so a cell sees that a
+// notice came through the catalog, and which message it was.
+func markedText(id string, args ...any) string {
+	parts := []string{"⟪" + id + "⟫"}
+	for _, a := range args {
+		parts = append(parts, fmt.Sprint(a))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (w *crewWindow) Tr(id string) string { return w.Trf(id) }
+func (w *crewWindow) Trf(id string, args ...any) string {
+	if w.marked {
+		return markedText(id, args...)
+	}
+	return fill(englishText(id), args...)
 }

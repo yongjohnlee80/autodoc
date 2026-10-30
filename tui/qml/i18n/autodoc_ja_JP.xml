@@ -1191,6 +1191,146 @@
         <source>switch workspace</source>
         <translation>ワークスペースを切り替え</translation>
     </message>
+    <message id="autodoc.crew.adopted">
+        <source>Adopted %1 message(s) for %2.</source>
+        <translation>%2 宛ての %1 件のメッセージを引き継ぎました。</translation>
+    </message>
+    <message id="autodoc.crew.answering_closed">
+        <source>The request you were answering was answered, dismissed or expired.</source>
+        <translation>回答中の依頼は、回答済み・却下・期限切れのいずれかになりました。</translation>
+    </message>
+    <message id="autodoc.crew.asks">
+        <source>%1 asks: %2</source>
+        <translation>%1 からの質問: %2</translation>
+    </message>
+    <message id="autodoc.crew.bell_off">
+        <source>The agent bell is off.</source>
+        <translation>エージェントのベルはオフです。</translation>
+    </message>
+    <message id="autodoc.crew.bell_on">
+        <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
+        <translation>エージェントのベルはオンです。依頼や許可の確認で鳴ります（最大で 10 秒に 1 回）。</translation>
+    </message>
+    <message id="autodoc.crew.did_not_start">
+        <source>%1 did not start: %2</source>
+        <translation>%1 は起動しませんでした: %2</translation>
+    </message>
+    <message id="autodoc.crew.discarded">
+        <source>Discarded %1 message(s) for %2; each sender is told.</source>
+        <translation>%2 宛ての %1 件のメッセージを破棄しました。各送信者に知らせます。</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_failed">
+        <source>%1's request was not dismissed: %2.</source>
+        <translation>%1 の依頼は却下されませんでした: %2。</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_too_late">
+        <source>%1's request was already answered, dismissed or expired.</source>
+        <translation>%1 の依頼はすでに回答済み・却下・期限切れです。</translation>
+    </message>
+    <message id="autodoc.crew.no_longer_waits">
+        <source>%1 no longer waits on you</source>
+        <translation>%1 はもうあなたを待っていません</translation>
+    </message>
+    <message id="autodoc.crew.no_scope">
+        <source>This window's agents have no crew scope: %1</source>
+        <translation>このウィンドウのエージェントにはクルーのスコープがありません: %1</translation>
+    </message>
+    <message id="autodoc.crew.not_registered">
+        <source>%1 did not start: its crew session was not registered: %2</source>
+        <translation>%1 は起動しませんでした。クルーのセッションが登録されませんでした: %2</translation>
+    </message>
+    <message id="autodoc.crew.not_shown">
+        <source>%1 could not be shown: %2.</source>
+        <translation>%1 を表示できませんでした: %2。</translation>
+    </message>
+    <message id="autodoc.crew.orphan_adopt">
+        <source>&amp;Adopt</source>
+        <translation>引き継ぐ(&amp;a)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_discard">
+        <source>&amp;Discard</source>
+        <translation>破棄(&amp;d)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_keep">
+        <source>&amp;Keep</source>
+        <translation>保持(&amp;k)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_not_settled">
+        <source>%1's mail was not settled: %2</source>
+        <translation>%1 のメールは処理されませんでした: %2</translation>
+    </message>
+    <message id="autodoc.crew.orphan_text">
+        <source>%1 unhandled message(s) wait for %2, agents of a window that is gone (%3). Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; Keep leaves them for that window, or a later one.</source>
+        <translation>なくなったウィンドウ（%3）のエージェント %2 宛てに、未処理のメッセージが %1 件あります。「引き継ぐ」はこのウィンドウの同名のエージェントへ移し、「破棄」は失敗として各送信者に知らせ、「保持」はそのウィンドウか後のウィンドウのために残します。</translation>
+    </message>
+    <message id="autodoc.crew.orphan_title">
+        <source>Mail for a window that is gone</source>
+        <translation>なくなったウィンドウ宛てのメール</translation>
+    </message>
+    <message id="autodoc.crew.orphans_unlisted">
+        <source>The crew's orphaned mail could not be listed: %1</source>
+        <translation>クルーの宛先不明のメールを一覧できませんでした: %1</translation>
+    </message>
+    <message id="autodoc.crew.other_window">
+        <source>%1 runs in another window: that window shows it.</source>
+        <translation>%1 は別のウィンドウで動作しています。そのウィンドウに表示されます。</translation>
+    </message>
+    <message id="autodoc.crew.replied">
+        <source>Replied to %1.</source>
+        <translation>%1 に返信しました。</translation>
+    </message>
+    <message id="autodoc.crew.reply_closed_meanwhile">
+        <source>Your reply to %1 was not sent (%2), and the request has closed meanwhile.</source>
+        <translation>%1 への返信は送信されませんでした（%2）。その間に依頼は終了しました。</translation>
+    </message>
+    <message id="autodoc.crew.reply_earlier_failed">
+        <source>An earlier reply to %1 was not sent: %2.</source>
+        <translation>%1 への以前の返信は送信されませんでした: %2。</translation>
+    </message>
+    <message id="autodoc.crew.reply_failed">
+        <source>Your reply to %1 was not sent: %2. Open the request again to send it.</source>
+        <translation>%1 への返信は送信されませんでした: %2。依頼をもう一度開いて送信してください。</translation>
+    </message>
+    <message id="autodoc.crew.reply_too_late">
+        <source>%1's request was already answered, dismissed or expired: your reply was not sent.</source>
+        <translation>%1 の依頼はすでに回答済み・却下・期限切れです。返信は送信されていません。</translation>
+    </message>
+    <message id="autodoc.crew.reports">
+        <source>%1 reports: %2</source>
+        <translation>%1 からの報告: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_closed">
+        <source>%1's request is closed: %2</source>
+        <translation>%1 の依頼は終了しました: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_gone">
+        <source>That request is closed.</source>
+        <translation>その依頼は終了しています。</translation>
+    </message>
+    <message id="autodoc.crew.scope_lost">
+        <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
+        <translation>このウィンドウは離れている間にクルーのスコープ %1 を失いました。エージェントは現在 %2 の下にあります。</translation>
+    </message>
+    <message id="autodoc.crew.scope_unlisted">
+        <source>This window's crew scope is held, but not listed for a successor: %1</source>
+        <translation>このウィンドウのクルーのスコープは保持されていますが、後継のために記録されていません: %1</translation>
+    </message>
+    <message id="autodoc.crew.tab_not_shown">
+        <source>%1 started, but its tab could not be shown: %2</source>
+        <translation>%1 は起動しましたが、タブを表示できませんでした: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits">
+        <source>%1 waits on you (%2): %3</source>
+        <translation>%1 があなたを待っています（%2）: %3</translation>
+    </message>
+    <message id="autodoc.crew.waits_blocked">
+        <source>%1 is blocked and waits on you: %2</source>
+        <translation>%1 は止まっていて、あなたを待っています: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits_permission">
+        <source>%1 waits on you (a permission prompt): %2</source>
+        <translation>%1 があなたを待っています（許可の確認）: %2</translation>
+    </message>
     <message id="autodoc.dialog.aIModels.add">
         <source>&amp;Add…</source>
         <translation>追加(&amp;a)…</translation>

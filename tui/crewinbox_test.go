@@ -17,6 +17,7 @@ import (
 // inboxWindow is a window's crewInboxCore over a scripted daemon: each inbox.watch takes the next
 // answer; work waits until step runs it, so the long-poll loop runs one turn at a time.
 type inboxWindow struct {
+	marked  bool    // Tr and Trf answer the marked test language (markedText), else the English catalog's words
 	answers []any   // map[string]any or error, one per inbox.watch, in order
 	calls   [][]any // each inbox.watch's params
 	pending []inboxWork
@@ -646,4 +647,12 @@ func TestAWaitThatBecomesAPermissionRings(t *testing.T) {
 	if w.bells != 1 {
 		t.Fatalf("the same agent now on a permission prompt: %d rings, want 1", w.bells)
 	}
+}
+
+func (w *inboxWindow) Tr(id string) string { return w.Trf(id) }
+func (w *inboxWindow) Trf(id string, args ...any) string {
+	if w.marked {
+		return markedText(id, args...)
+	}
+	return fill(englishText(id), args...)
 }
