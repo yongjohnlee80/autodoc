@@ -360,7 +360,23 @@ func TestWorkspaceVerbs(t *testing.T) {
 			t.Errorf("%s: %v, want code %d", name, err, c.code)
 		}
 	}
+	idOf := func(name string) int64 { // workspace.list's id for name, 0 when it is not listed
+		for _, w := range call(t, cli, "workspace.list").([]any) {
+			if m := w.(map[string]any); m["name"] == name {
+				id, _ := m["id"].(int64)
+				return id
+			}
+		}
+		return 0
+	}
+	id := idOf("kb")
+	if id <= 0 {
+		t.Fatalf("workspace.list's id for kb: %d, want the store's id", id)
+	}
 	call(t, cli, "workspace.rename", "kb", "knowledge")
+	if got := idOf("knowledge"); got != id {
+		t.Errorf("the id after a rename: %d, want the same %d (a record keyed on it must not split)", got, id)
+	}
 	if _, err := cli.Call(context.Background(), "index.status", "kb"); !errors.As(err, &re) || re.Code != rpc.CodeNoSuchWorkspace {
 		t.Errorf("the old name after a rename: %v, want NoSuchWorkspace", err)
 	}
