@@ -21,6 +21,7 @@ type Mem struct {
 	mu  sync.Mutex
 	now func() time.Time
 	st  memState
+	sig crew.Signals
 }
 
 type memState struct {
@@ -52,15 +53,26 @@ func (s memState) clone() memState {
 		ends: maps.Clone(s.ends), attn: maps.Clone(s.attn), inbox: slices.Clone(s.inbox)}
 }
 
-// Write runs fn on a copy of the state and commits the copy if fn succeeds.
+// SetSignals sets what a committed write tells (crew.Signals), as the engine's adapter does.
+func (m *Mem) SetSignals(s crew.Signals) {
+	m.mu.Lock()
+	m.sig = s
+	m.mu.Unlock()
+}
+
+// Write runs fn on a copy of the state and commits the copy if fn succeeds; then, outside the
+// lock, it fires the signals the write raised.
 func (m *Mem) Write(_ context.Context, fn func(crew.Tx) error) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	tx := &memTx{st: m.st.clone(), now: m.now()}
 	if err := fn(tx); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	m.st = tx.st
+	sig := m.sig
+	m.mu.Unlock()
+	sig.Fire(tx.feed, tx.wake)
 	return nil
 }
 
@@ -72,8 +84,9 @@ func (m *Mem) Read(_ context.Context, fn func(crew.Tx) error) error {
 }
 
 type memTx struct {
-	st  memState
-	now time.Time
+	st         memState
+	now        time.Time
+	feed, wake bool // the signals this write raised (crew.Signals)
 }
 
 func (t *memTx) Now() time.Time { return t.now }
@@ -182,7 +195,11 @@ func (t *memTx) Wake(session string) (crew.Wake, bool, error) {
 	return copyWake(w), ok, nil
 }
 
-func (t *memTx) PutWake(w crew.Wake) error { t.st.wakes[w.Session] = copyWake(w); return nil }
+func (t *memTx) PutWake(w crew.Wake) error {
+	t.st.wakes[w.Session] = copyWake(w)
+	t.wake = t.wake || crew.WakeDue(w)
+	return nil
+}
 
 // wakesWhere is the wake rows keep admits, by session, at most limit (0: all).
 func (t *memTx) wakesWhere(keep func(crew.Wake) bool, limit int) []crew.Wake {
@@ -270,6 +287,7 @@ func (t *memTx) PutAttention(a crew.Attention) error {
 
 func (t *memTx) AddInboxChange(kind, ref string) error {
 	t.st.inbox = append(t.st.inbox, InboxChange{kind, ref})
+	t.feed = true
 	return nil
 }
 
