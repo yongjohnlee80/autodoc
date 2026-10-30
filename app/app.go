@@ -126,6 +126,9 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
+	if isCrewCommand(args) { // an agent's `autodoc crew|mail …` (ADR 1793271500 §4.11), not a mode
+		return crewMain(ctx, args, os.Stdin, stdout, stderr)
+	}
 	chunkers, err := registrations.Builtin(o.Chunkers)
 	var reg *registrations.Table
 	if err == nil {

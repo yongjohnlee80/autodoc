@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -32,8 +33,12 @@ func TestTheDaemonServesTheTodosModule(t *testing.T) {
 	kb := t.TempDir()
 	deps := &moduleDeps{store: db, workspaces: rpc.Fixed(rpc.Static(rpc.WorkspaceInfo{Name: "kb", Root: kb})), journal: sqlitejournal.New(db), log: logger.Nop{}}
 	ms := modules(deps)
-	if len(ms) != 1 || ms[0].Name() != "todos" {
-		t.Fatalf("modules %v", ms)
+	var names []string
+	for _, m := range ms {
+		names = append(names, m.Name())
+	}
+	if !slices.Equal(names, []string{"todos", "crew", "mail", "inbox"}) {
+		t.Fatalf("modules %v, want todos, crew, mail and inbox", names)
 	}
 	m := ms[0].(*todo.Manager)
 	// the served workspace resolves through the daemon's roots and disk
