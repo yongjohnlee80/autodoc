@@ -189,6 +189,12 @@ An operator reads `GET /v1/status` for its tenants ([operations](operations.md#s
 |---|---|---|---|
 | `metrics_interval` | `1m` | How often the server logs its metrics lines ([operations](operations.md#metrics-in-the-log)). `"0s"` logs none. | under `10s`, other than `0s` |
 
+## `[metrics]`: the Prometheus endpoint (optional)
+
+| Field | Default | Meaning | Refused when |
+|---|---|---|---|
+| `enabled` | `false` | Serves `GET /v1/metrics` ([operations](operations.md#metrics-for-a-scraper-get-v1metrics)), behind the operators' tokens. | `true` with no `[http]` table, or with no `[[http.operator]]` |
+
 ## `[[source]]`: what is indexed
 
 Each source is one `.view` file, indexed into a tenant of its own. There must be at least one.
