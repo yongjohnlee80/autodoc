@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+// MaxAttentionText is the longest text an attention may carry, as long as a mail body: what the
+// session waits on is shown in every window's snapshot, which pages within the transport's message.
+const MaxAttentionText = 64 << 10
+
 // Attention kinds, and the inbox_change kinds raising and clearing one journal (§4.8).
 const (
 	AttentionPermission = "permission"
@@ -20,6 +24,9 @@ const (
 func (m *Manager) RaiseAttention(ctx context.Context, credential, kind, text string) error {
 	if kind != AttentionPermission && kind != AttentionBlocked {
 		return fmt.Errorf("%w: attention kind %q", ErrInvalid, kind)
+	}
+	if len(text) > MaxAttentionText {
+		return fmt.Errorf("%w: attention text of %d bytes, at most %d: say what the session waits on, briefly", ErrInvalid, len(text), MaxAttentionText)
 	}
 	return m.store.Write(ctx, func(tx Tx) error {
 		s, err := m.Authenticate(tx, credential)

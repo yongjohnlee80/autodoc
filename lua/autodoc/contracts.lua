@@ -498,10 +498,10 @@ return {
       params = {
         { name = "cursor", type = "int" },
         { name = "timeout", type = "int", optional = true },
-        { name = "page", type = "int", optional = true }
+        { name = "page", type = "string", optional = true }
       },
       result = "{cursor, snapshot?{items, attention, next}, changes[]}",
-      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, at most 500 items a page (page = next for the rest). Never leases.",
+      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases.",
     },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",

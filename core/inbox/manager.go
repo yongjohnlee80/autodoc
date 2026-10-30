@@ -3,6 +3,8 @@ package inbox
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -14,8 +16,8 @@ const (
 	MaxWait     = 25 * time.Second // the longest inbox.watch waits
 	changesMax  = 256              // changes one watch returns; the next takes the rest
 	listMax     = 200              // items one list returns
-	snapshotMax = 500              // open items one snapshot page carries; Next pages in the rest
-	// pageBytes bounds the text one snapshot page or list answer carries (subjects and bodies, plus
+	snapshotMax = 500              // entries one snapshot page carries; Next pages in the rest
+	// pageBytes bounds the text one snapshot page or list answer carries (attention texts, subjects and bodies, plus
 	// itemOverhead each), well under the transport's 4 MiB message: 65 bodies of mail's 64 KiB
 	// already pass it. A page always carries at least one item, so paging makes progress.
 	pageBytes    = 2 << 20
@@ -58,12 +60,12 @@ type Attention struct {
 }
 
 // Snapshot is what the human has open: requests to answer, reports not yet read, and the
-// attention agents raised. It's bounded: a page carries at most snapshotMax items, and Next, when
-// not 0, is where the rest continues (Watch's page). Continuation pages carry items only.
+// attention agents raised. It's bounded and paged (snapshotFrom): Next, when not "", is where the
+// rest continues (Watch's page).
 type Snapshot struct {
 	Items     []Item
 	Attention []Attention
-	Next      int64
+	Next      string
 }
 
 // name is p's codename and scope, as a window shows it; a profile no longer kept is shown by id.
@@ -101,14 +103,14 @@ type Watched struct {
 // A journal that never had a row has nothing to show, so cursor 0 on it waits like any other:
 // otherwise its snapshot's cursor, 0 again, would answer every next watch at once.
 //
-// A snapshot is bounded and lossless. Its first page carries at most snapshotMax open items, the
-// attention, and Next when more remain. The caller asks for the rest with page = Next, passing the
-// snapshot's cursor. A page answers at once, with items only and that cursor echoed, and the
-// caller then watches from the first page's cursor. An item answered between pages arrives as its
+// A snapshot is bounded and lossless: each page carries the raised attention and then the open
+// items, within one budget of entries and bytes (snapshotFrom), and Next when more remain. The
+// caller asks for the rest with page = Next, passing the snapshot's cursor. A page answers at once,
+// with that cursor echoed, and the caller then watches from the first page's cursor. An item answered between pages arrives as its
 // change, and one sent between pages appears both in a page and as its change; the caller keys
 // items by message.
-func (m *Manager) Watch(ctx context.Context, cursor int64, wait time.Duration, page int64) (Watched, error) {
-	if page > 0 {
+func (m *Manager) Watch(ctx context.Context, cursor int64, wait time.Duration, page string) (Watched, error) {
+	if page != "" {
 		return m.snapshotPage(ctx, cursor, page)
 	}
 	wait = min(max(wait, 0), MaxWait)
@@ -151,35 +153,96 @@ func (m *Manager) Watch(ctx context.Context, cursor int64, wait time.Duration, p
 	}
 }
 
-// snapshotPage is a snapshot's continuation: the open items past after, at once, with the
-// snapshot's cursor echoed.
-func (m *Manager) snapshotPage(ctx context.Context, cursor, after int64) (Watched, error) {
+// snapshotPage is a snapshot's continuation from token next, at once, with the snapshot's cursor
+// echoed.
+func (m *Manager) snapshotPage(ctx context.Context, cursor int64, next string) (Watched, error) {
 	out := Watched{Cursor: cursor, Changes: []Change{}}
 	err := m.store.Read(ctx, func(tx Tx) error {
-		items, next, err := openItems(tx, after)
-		out.Snapshot = &Snapshot{Items: items, Attention: []Attention{}, Next: next}
+		snap, err := snapshotFrom(tx, next)
+		out.Snapshot = &snap
 		return err
 	})
 	return out, err
 }
 
-// openItems is one page of the human's open items past after, and the page's Next.
-func openItems(tx Tx, after int64) ([]Item, int64, error) {
+func snapshot(tx Tx) (Snapshot, error) { return snapshotFrom(tx, "") }
+
+// snapshotFrom is one page of what the human has open, from token next ("" for the first page).
+// The feed is the raised attention by session, then the open items by seq, under one budget: at
+// most snapshotMax entries, and pageBytes of their text (an attention's text, an item's subject and
+// body, each plus itemOverhead), never none while one is left, so paging always progresses. The
+// page's Next is "a:<session>" while attention remains after that session, "m:<seq>" while items
+// remain after that seq, and "" when the snapshot is complete.
+func snapshotFrom(tx Tx, next string) (Snapshot, error) {
+	snap := Snapshot{Items: []Item{}, Attention: []Attention{}}
+	phase, after, _ := strings.Cut(next, ":")
+	if next == "" {
+		phase = "a"
+	}
+	if phase != "a" && phase != "m" {
+		return Snapshot{}, fmt.Errorf("%w: page %q is no snapshot's next", ErrInvalid, next)
+	}
+	n, size := 0, 0
+	fits := func(text int) bool {
+		size += text + itemOverhead
+		if n == snapshotMax || (n > 0 && size > pageBytes) {
+			return false
+		}
+		n++
+		return true
+	}
+	afterSeq := int64(0)
+	if phase == "a" {
+		raised, err := tx.Raised()
+		if err != nil {
+			return Snapshot{}, err
+		}
+		for _, a := range raised {
+			if a.Session <= after {
+				continue
+			}
+			if !fits(len(a.Text)) {
+				snap.Next = "a:" + snap.Attention[len(snap.Attention)-1].Session
+				return snap, nil
+			}
+			c, sc := a.Session, ""
+			if s, ok, err := tx.Session(a.Session); err != nil {
+				return Snapshot{}, err
+			} else if ok {
+				if c, sc, err = name(tx, s.Profile); err != nil {
+					return Snapshot{}, err
+				}
+			}
+			snap.Attention = append(snap.Attention, Attention{Attention: a, Codename: c, Scope: sc})
+		}
+	} else {
+		var err error
+		if afterSeq, err = strconv.ParseInt(after, 10, 64); err != nil {
+			return Snapshot{}, fmt.Errorf("%w: page %q is no snapshot's next", ErrInvalid, next)
+		}
+	}
 	user, ok, err := tx.ActiveProfile(mail.GlobalScope, mail.UserCodename)
 	if err != nil || !ok {
-		return []Item{}, 0, err
+		return snap, err
 	}
-	open, err := tx.OpenToUser(user.ID, after, snapshotMax+1)
+	open, err := tx.OpenToUser(user.ID, afterSeq, snapshotMax-n+1)
 	if err != nil {
-		return nil, 0, err
+		return Snapshot{}, err
 	}
-	page := fitPage(open, snapshotMax)
-	next := int64(0)
-	if len(page) < len(open) {
-		next = page[len(page)-1].Delivery.Seq
+	var page []mail.Item
+	for _, it := range open {
+		if !fits(len(it.Message.Subject) + len(it.Message.Body)) {
+			if len(page) > 0 {
+				snap.Next = fmt.Sprintf("m:%d", page[len(page)-1].Delivery.Seq)
+			} else {
+				snap.Next = fmt.Sprintf("m:%d", afterSeq) // the page filled with attention
+			}
+			break
+		}
+		page = append(page, it)
 	}
-	items, err := named(tx, page)
-	return items, next, err
+	snap.Items, err = named(tx, page)
+	return snap, err
 }
 
 // fitPage is the first of items that fit one answer: at most limit of them, and their text within
@@ -193,30 +256,6 @@ func fitPage(items []mail.Item, limit int) []mail.Item {
 		}
 	}
 	return items
-}
-
-func snapshot(tx Tx) (Snapshot, error) {
-	snap := Snapshot{Items: []Item{}, Attention: []Attention{}}
-	var err error
-	if snap.Items, snap.Next, err = openItems(tx, 0); err != nil {
-		return Snapshot{}, err
-	}
-	raised, err := tx.Raised()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	for _, a := range raised {
-		c, sc := a.Session, ""
-		if s, ok, err := tx.Session(a.Session); err != nil {
-			return Snapshot{}, err
-		} else if ok {
-			if c, sc, err = name(tx, s.Profile); err != nil {
-				return Snapshot{}, err
-			}
-		}
-		snap.Attention = append(snap.Attention, Attention{Attention: a, Codename: c, Scope: sc})
-	}
-	return snap, nil
 }
 
 // List is inbox.list: the human's history, newest first (filter ""), or the generated notices

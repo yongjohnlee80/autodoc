@@ -123,7 +123,7 @@ func (r *rig) ask(session, kind, subject string, ttl time.Duration) mail.Message
 
 func (r *rig) watch(cursor int64, wait time.Duration) inbox.Watched {
 	r.t.Helper()
-	w, err := r.in.Watch(r.ctx, cursor, wait, 0)
+	w, err := r.in.Watch(r.ctx, cursor, wait, "")
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -209,7 +209,8 @@ func testAWatchSnapshotsThenFollowsTheJournal(t *testing.T, h Harness) {
 // answer may, its Next pages in the rest at once with the cursor echoed, and the changes after
 // that cursor bring what changed between pages. Paged by count (520 short requests), by bytes
 // (70 requests of mail's largest body, 4.5 MB together, past the transport's 4 MiB message), and
-// with an answer and a new request between pages, every open item reaches the window.
+// attention and mail together by bytes (40 attentions and 30 requests, each 64 KiB), and with an
+// answer and a new request between pages, every open item and every attention reaches the window.
 func testASnapshotPagesEveryOpenItem(t *testing.T, h Harness) {
 	type page struct{ n, bytes int }
 	all := func(r *rig) (map[string]bool, []page, int64) {
@@ -222,12 +223,16 @@ func testASnapshotPagesEveryOpenItem(t *testing.T, h Harness) {
 				t.Fatalf("a snapshot page: %+v", w)
 			}
 			size := 0
+			for _, a := range w.Snapshot.Attention {
+				got["attention:"+a.Session] = true
+				size += len(a.Text)
+			}
 			for _, it := range w.Snapshot.Items {
 				got[it.Message.ID] = true
 				size += len(it.Message.Subject) + len(it.Message.Body)
 			}
 			pages = append(pages, page{len(w.Snapshot.Items), size})
-			if w.Snapshot.Next == 0 {
+			if w.Snapshot.Next == "" {
 				return got, pages, cursor
 			}
 			next, err := r.in.Watch(r.ctx, cursor, 0, w.Snapshot.Next)
@@ -269,6 +274,35 @@ func testASnapshotPagesEveryOpenItem(t *testing.T, h Harness) {
 			}
 		}
 	})
+	t.Run("attention and mail, by bytes", func(t *testing.T) {
+		r := newRig(t, h)
+		text := strings.Repeat("a", crew.MaxAttentionText)
+		r.write(func(tx inbox.Tx) error {
+			for i := range 40 {
+				if err := tx.PutAttention(crew.Attention{Session: fmt.Sprintf("s-%02d", i), Owner: "autovim:p",
+					Kind: crew.AttentionPermission, Text: text, Raised: tx.Now().UnixNano()}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		body := strings.Repeat("x", mail.MaxBody)
+		for i := range 30 {
+			if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+				Subject: fmt.Sprintf("big%02d", i), Body: body, Key: fmt.Sprintf("big%02d", i)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, pages, _ := all(r)
+		if len(got) != 70 || len(pages) < 3 {
+			t.Fatalf("40 attentions and 30 requests of 64 KiB: %d reached in pages %v; want all 70, over several pages", len(got), pages)
+		}
+		for _, p := range pages {
+			if p.bytes > 2<<20 {
+				t.Fatalf("a page of %d bytes of text: past the 2 MiB a page may carry, pages %v", p.bytes, pages)
+			}
+		}
+	})
 	t.Run("with changes between pages", func(t *testing.T) {
 		r := newRig(t, h)
 		var first mail.Message
@@ -279,7 +313,7 @@ func testASnapshotPagesEveryOpenItem(t *testing.T, h Harness) {
 			}
 		}
 		w := r.watch(0, 0)
-		if w.Snapshot == nil || w.Snapshot.Next == 0 {
+		if w.Snapshot == nil || w.Snapshot.Next == "" {
 			t.Fatalf("the first page: %+v", w)
 		}
 		if _, err := r.in.Reply(r.ctx, first.ID, "yes", "r1"); err != nil { // answered after page one showed it
@@ -328,7 +362,7 @@ func testAWatchWakesOnACommitAndARollbackTellsNothing(t *testing.T, h Harness) {
 	at := r.watch(0, 0).Cursor // a snapshot's cursor: whenever the watch below starts, it follows from here
 	got := make(chan inbox.Watched, 1)
 	go func() {
-		w, err := r.in.Watch(r.ctx, at, inbox.MaxWait, 0)
+		w, err := r.in.Watch(r.ctx, at, inbox.MaxWait, "")
 		if err != nil {
 			t.Error(err)
 		}
