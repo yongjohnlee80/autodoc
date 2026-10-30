@@ -141,6 +141,7 @@ func newANNIndexSchema(conn dao.DataConn) *annIndexSchema {
 			aiUpdated:  {Expr: dao.T(tANNIndex, aiUpdated)},
 		})),
 		o(dao.Default[*annIndexRow, annIndexField, string, string](aiModel, aiName, aiDims, aiDef, aiState, aiAttempts, aiNextAt, aiError)),
+		o(dao.Conflict[*annIndexRow, annIndexField, string, string](aiModel)),
 	)
 }
 
@@ -208,6 +209,10 @@ type ANN struct {
 
 	hook    dao.Hook    // the builder's statements, observed; nil in production
 	checked atomic.Bool // the ready indexes' definitions were checked once this run (verifyReady)
+
+	// leaseFor and renewEvery are a claim's lease and how often a build renews it (annLease,
+	// annRenew; variables so a cell can shorten them)
+	leaseFor, renewEvery time.Duration
 }
 
 // NewANN is the approximate search on conn (pgstore's pool), with cfg's settings. run names this
@@ -216,7 +221,8 @@ func NewANN(conn dao.DataConn, cfg ANNConfig, run string) *ANN {
 	return &ANN{cfg: cfg, conn: conn, run: run,
 		rwIndex: newANNIndexSchema(committedConn{conn}), rwBuilder: newANNBuilderSchema(committedConn{conn}),
 		roIndex: newANNIndexSchema(snapshotConn{conn}), rwMeta: newMetaSchema(committedConn{conn}), rwEmb: newEmbSchema(committedConn{conn}),
-		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{}}
+		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{},
+		leaseFor: annLease, renewEvery: annRenew}
 }
 
 // candidates is t's candidate schema: the chunk schema with an ANN sort key over the embeddings
