@@ -189,7 +189,7 @@ func (m *Manager) Verbs() []module.Verb {
 			Errors: []int64{CodeStaleEpoch, CodeLongPollsBusy},
 			Doc:    "One long-poll for the host's tier-3 sessions (at most 25 s): which have mail waiting. A connection holds at most two long-polls."},
 			func(ctx context.Context, p waitParams) (waitedResult, error) {
-				leave, err := m.polls.Enter(module.ClientFrom(ctx))
+				leave, err := m.polls.Enter(module.ConnFrom(ctx))
 				if err != nil {
 					return waitedResult{}, err
 				}

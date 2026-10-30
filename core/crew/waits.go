@@ -27,35 +27,36 @@ var ErrLongPollsBusy = errs.Sentinel(errs.ErrPrecondition, "crew: the connection
 // connection's handler slots.
 const MaxLongPolls = 2
 
-// LongPolls counts each connection's long-polls in flight, by its client token, across the modules
-// that serve them. A nil *LongPolls caps nothing.
+// LongPolls counts each connection's long-polls in flight, across the modules that serve them,
+// keyed by the connection's identity (module.ConnFrom): not its client token, which each sys.hello
+// mints anew, so a re-hello on the same socket can't buy more. A nil *LongPolls caps nothing.
 type LongPolls struct {
 	mu   sync.Mutex
-	held map[string]int
+	held map[any]int
 }
 
 // NewLongPolls is a limiter with no long-poll in flight.
-func NewLongPolls() *LongPolls { return &LongPolls{held: map[string]int{}} }
+func NewLongPolls() *LongPolls { return &LongPolls{held: map[any]int{}} }
 
-// Enter admits one long-poll on client's connection, or answers ErrLongPollsBusy; leave ends it.
-// A caller with no client token (no host set one) is not counted.
-func (l *LongPolls) Enter(client string) (leave func(), err error) {
-	if l == nil || client == "" {
+// Enter admits one long-poll on conn, or answers ErrLongPollsBusy; leave ends it. A caller with no
+// connection identity (no host set one) is not counted. conn must be comparable.
+func (l *LongPolls) Enter(conn any) (leave func(), err error) {
+	if l == nil || conn == nil {
 		return func() {}, nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.held[client] >= MaxLongPolls {
+	if l.held[conn] >= MaxLongPolls {
 		return nil, ErrLongPollsBusy
 	}
-	l.held[client]++
+	l.held[conn]++
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			if l.held[client]--; l.held[client] <= 0 {
-				delete(l.held, client)
+			if l.held[conn]--; l.held[conn] <= 0 {
+				delete(l.held, conn)
 			}
 		})
 	}, nil

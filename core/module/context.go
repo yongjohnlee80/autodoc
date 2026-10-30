@@ -11,6 +11,7 @@ const (
 	keyWorkspace ctxKey = iota
 	keyProtocol
 	keyClient
+	keyConn
 )
 
 // WithWorkspace is ctx carrying the resolved workspace; only a host calls it.
@@ -45,3 +46,13 @@ func ClientFrom(ctx context.Context) string {
 	c, _ := ctx.Value(keyClient).(string)
 	return c
 }
+
+// WithConn is ctx carrying the caller's connection: an identity stable for as long as the
+// connection is open, whatever its hellos say (a client token is minted by each); only a host
+// calls it.
+func WithConn(ctx context.Context, conn any) context.Context {
+	return context.WithValue(ctx, keyConn, conn)
+}
+
+// ConnFrom is the caller's connection identity (comparable); nil when no host set one.
+func ConnFrom(ctx context.Context) any { return ctx.Value(keyConn) }
