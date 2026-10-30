@@ -345,6 +345,27 @@ func TestTheStartCheckRunsWholeAfterACrash(t *testing.T) {
 	}
 }
 
+// TestAnEmptyWriteAheadLogIsNoCrash (AM-4, #101 N1): a cleanly closed store with an empty
+// write-ahead log beside it (a TRUNCATE checkpoint's, or a read-only open's) starts with the bounded
+// check, not the whole one a crash's log costs.
+func TestAnEmptyWriteAheadLogIsNoCrash(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	withFiller(t, path, 300)
+	noWAL(t, path)
+	if err := os.WriteFile(path+"-wal", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(ctx, path, WithStartCheckWait(time.Nanosecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if !s.Unverified() {
+		t.Fatal("an empty write-ahead log was taken for a crash's: the start checked the store whole")
+	}
+}
+
 // TestTheStartCheckRunsWholeWithScriptsPending (AM-4): a store with schema scripts to apply (here a
 // new one: all of them) is checked whole before they write, whatever the wait.
 func TestTheStartCheckRunsWholeWithScriptsPending(t *testing.T) {
