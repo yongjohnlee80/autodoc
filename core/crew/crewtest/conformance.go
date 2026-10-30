@@ -86,6 +86,13 @@ func (e *Enders) UnhandledCount(_ crew.Tx, profile string) (int, error) {
 	return e.Unhandled[profile], nil
 }
 
+// EligibleFor reports the profiles Pending names, for any of their sessions (crew.SessionEnder).
+func (e *Enders) EligibleFor(_ crew.Tx, profile, _ string) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Pending[profile], nil
+}
+
 // HasEligible reports the profiles Pending names (crew.SessionEnder).
 func (e *Enders) HasEligible(_ crew.Tx, profile string) (bool, error) {
 	e.mu.Lock()
