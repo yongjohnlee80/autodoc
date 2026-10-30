@@ -1,5 +1,5 @@
 {
-  "protocol": 38,
+  "protocol": 39,
   "min_protocol": 12,
   "verbs": [
     {
@@ -1334,6 +1334,19 @@
       "doc": "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}."
     },
     {
+      "verb": "sys.check",
+      "since": 39,
+      "scope": "local-peer",
+      "audience": "internal",
+      "effect": "read",
+      "params": [],
+      "result": "{quick, integrity, foreign_keys, secrets}",
+      "errors": [
+        -32065
+      ],
+      "doc": "The store's whole check: integrity_check, foreign_key_check and every sealed secret opened with the store's key; a sound store answers empty lists. SQLite stores only."
+    },
+    {
       "verb": "sys.contracts",
       "since": 20,
       "scope": "global",
@@ -1805,6 +1818,11 @@
       "next": "say sys.hello first"
     },
     {
+      "code": -32022,
+      "name": "rpc.store_damaged",
+      "next": "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)"
+    },
+    {
       "code": -32060,
       "name": "rpc.no_such_workspace",
       "next": "call workspace.list and use a listed name",
@@ -1857,6 +1875,7 @@
         "this server keeps no preferences",
         "this server keeps no embedding providers",
         "this server keeps no event log",
+        "this server's store has no check here: a PostgreSQL store is checked by its database server",
         "this server keeps no profiler",
         "this server keeps no rankers",
         "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models",

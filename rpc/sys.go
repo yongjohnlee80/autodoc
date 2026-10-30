@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/procstat"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // THE PROTOCOL'S OWN — sys.hello opens a session, sys.shutdown stops the daemon, and the rest say
@@ -143,6 +144,18 @@ func (s *Server) sysVerbs() []module.Verb {
 			Result: "{on, dir}", Errors: []int64{golibrpc.CodeAccessDenied, golibrpc.CodeInvalidParams, CodeUnsupported, golibrpc.CodeInternal},
 			Doc: "Starts (op start, in dir or the default), stops (op stop) or reports (op status) the daemon's memory monitor, --profile's; dir is where its samples, heap profiles and pprof.sock are, \"\" while it is off."},
 			s.profile),
+		// sys.check is the store's whole check (AM-4): integrity_check, foreign_key_check and every
+		// sealed secret opened with the store's key, on the readers, so the daemon serves on; what
+		// --check-store asks when a daemon serves the store (Protocol 39). It never writes.
+		module.Handle(module.Contract{Verb: "sys.check", Effect: module.EffectRead, Since: 39, Scope: module.ScopeLocalPeer, Audience: internal,
+			Result: "{quick, integrity, foreign_keys, secrets}", Errors: []int64{CodeUnsupported},
+			Doc: "The store's whole check: integrity_check, foreign_key_check and every sealed secret opened with the store's key; a sound store answers empty lists. SQLite stores only."},
+			func(ctx context.Context, _ struct{}) (store.CheckReport, error) {
+				if s.checker == nil {
+					return store.CheckReport{}, errNoCheck
+				}
+				return s.checker.Check(ctx)
+			}),
 		module.Handle(module.Contract{Verb: "sys.contracts", Effect: module.EffectRead, Since: 20, Audience: agent,
 			Result: "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
 			Doc:    "These tables: the verbs this session may call, and the codes they may answer."},
