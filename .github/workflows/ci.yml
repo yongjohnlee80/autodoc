@@ -135,9 +135,9 @@ jobs:
   lua:
     runs-on: ubuntu-latest
     env:
-      # auto-core v0.3.1: the managed KB documents autodoc.kb.managed hands it; bump deliberately
-      # with a compatibility check.
-      AUTO_CORE_SHA: "9ea026c"  # v0.3.1
+      # auto-core's release the suites were verified against; bump deliberately, with the suites
+      # run at the new pin.
+      AUTO_CORE_SHA: "e1bef96"  # v0.5.2
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -302,8 +302,7 @@ jobs:
       # The base run gets the URL only when the base tree already has
       # core/pgstore: this PR's base still carries the old destination test,
       # which is red against a real Postgres, and the service would fail the
-      # step for a tree this PR does not change. The base also has the plugin
-      # rebinding regression fixed by this PR; the head still runs that test.
+      # step for a tree this PR does not change.
       - name: generate base coverage
         run: |
           git worktree add --detach "$RUNNER_TEMP/coverage-base" "$BASE_SHA"
@@ -311,15 +310,12 @@ jobs:
           if [ -d core/pgstore ]; then
             export AUTODOC_TEST_PGURL="$PGURL"
           fi
-          # The todos' dropdown: a base at #161's merge (4b37f2a) fails TestTodosLabelAStoreAndClearIt and
-          # TestTodosAtTheEdges, which #164 fixes; the head still runs both. These two entries can go once
-          # every base this job sees includes #164.
           # A base with the server tag (app/server_on.go) builds its server only with it.
           tags=
           if [ -f app/server_on.go ]; then
             tags=server
           fi
-          go test -count=1 -timeout 20m -tags "$tags" -skip '^(TestAPreferenceRebindsAPluginCommand|TestTodosLabelAStoreAndClearIt|TestTodosAtTheEdges)$' -covermode=atomic \
+          go test -count=1 -timeout 20m -tags "$tags" -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
