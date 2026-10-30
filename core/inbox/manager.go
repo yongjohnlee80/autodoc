@@ -17,12 +17,16 @@ const (
 	changesMax  = 256              // changes one watch returns; the next takes the rest
 	listMax     = 200              // items one list returns
 	snapshotMax = 500              // entries one snapshot page carries; Next pages in the rest
-	// pageBytes bounds the wire size one snapshot page or list answer carries, every entry measured
-	// whole (wireSize), with half the transport's 4 MiB message left for the envelope: 65 bodies of
-	// mail's 64 KiB already pass the message. Admission bounds every variable field (crew's names,
-	// mail's subject and body, attention's text), so one entry always fits; a page always carries
-	// at least one, so paging makes progress.
+	// pageBytes bounds the wire size one snapshot page or list answer carries: each entry measured
+	// exactly as the RPC encodes it (wireSize), plus envelopeBytes once, within half the transport's
+	// 4 MiB message (65 bodies of mail's 64 KiB already pass the message). Admission bounds every
+	// variable field (crew's names, mail's subject and body, attention's text), so the largest
+	// entry, about 140 KB, always fits a page (TestTheLargestEntryFitsAPage); a page always carries
+	// at least one entry, so paging makes progress.
 	pageBytes = 2 << 20
+	// envelopeBytes is a page's answer around its entries (cursor, next, the arrays and keys),
+	// counted once; it's far larger than they encode to.
+	envelopeBytes = 4 << 10
 )
 
 // List filters.
@@ -183,7 +187,7 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 	if phase != "a" && phase != "m" {
 		return Snapshot{}, fmt.Errorf("%w: page %q is no snapshot's next", ErrInvalid, next)
 	}
-	n, size := 0, 0
+	n, size := 0, envelopeBytes
 	fits := func(entry int) bool { // entry: its whole wire size
 		size += entry
 		if n == snapshotMax || (n > 0 && size > pageBytes) {
@@ -249,7 +253,7 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 // fitPage is the first of items that fit one answer: at most limit of them, and their whole wire
 // size within pageBytes, but never none while there is one.
 func fitPage(items []Item, limit int) []Item {
-	size := 0
+	size := envelopeBytes
 	for i, it := range items {
 		size += wireSize(toWireItem(it))
 		if i == limit || (i > 0 && size > pageBytes) {
