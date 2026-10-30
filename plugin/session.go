@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// PROTOCOL 7 (ADR 1792300990): a plugin's session slot, the reason it is closed, and a command's
+// PROTOCOL 7 (docs/decisions/plugins.md#plugin-sessions): a plugin's session slot, the reason it is closed, and a command's
 // arguments.
 //
 //	host → plugin   plugin.open {…, session}       the slot as this plugin left it in this run of AutoDoc

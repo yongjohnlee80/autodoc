@@ -39,9 +39,10 @@ type plugins struct {
 	pluginCards map[string]*pluginCard
 	cardPlugin  string
 	running     map[string]*pluginRun
-	// sessions are the plugins' session slots, by plugin name (protocol 7, ADR 1792300990 §4.3):
-	// memory only, until AutoDoc quits or the plugin is removed. Loop-owned; acceptSession is their
-	// one writer, and a run gets a copy at its open, never the map.
+	// sessions are the plugins' session slots, by plugin name (protocol 7,
+	// docs/decisions/plugins.md#plugin-sessions): memory only, until AutoDoc quits or the plugin is
+	// removed. Loop-owned; acceptSession is their one writer, and a run gets a copy at its open,
+	// never the map.
 	sessions map[string]map[string]string
 	// scriptsChanged reloads the Lua scripts (Host.reloadScripts): after the plugins are read again
 	// (an install, an update, a removal), so a plugin's Lua package comes and goes with it

@@ -13,11 +13,12 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// SETTING UP SEMANTIC SEARCH — Search models › Embedding Models › Set up… (ADR 1793005098 §4.4):
-// what this machine runs (host.probe), the models that fit it (embedding.catalog), the room and time
-// each workspace takes (embedding.estimate), the download (embedding.pull, polled once a second),
-// and Use: a plan of existing setters, each workspace's target computed apart (its provider, its
-// policy), applied in order and retried from the start, every step a no-op once done.
+// SETTING UP SEMANTIC SEARCH — Search models › Embedding Models › Set up…
+// (docs/decisions/search.md#the-setup-dialog): what this machine runs (host.probe), the models that
+// fit it (embedding.catalog), the room and time each workspace takes (embedding.estimate), the
+// download (embedding.pull, polled once a second), and Use: a plan of existing setters, each
+// workspace's target computed apart (its provider, its policy), applied in order and retried from
+// the start, every step a no-op once done.
 
 // pollPullEvery is how often a running download's state is read.
 const pollPullEvery = time.Second

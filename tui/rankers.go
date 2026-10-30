@@ -8,11 +8,12 @@ import (
 	"github.com/yongjohnlee80/golib/search/rank"
 )
 
-// THE RANKER MODELS — AI models' second tab (ADR 0215): the rankers search's second stage can use,
-// the one in use and the window of top candidates it ranks, each one's usage and recent calls, and
-// the form that adds or edits one (endpoints.go). A key goes in through the form and is never shown
-// again. A build that supplies its own ranker shows it, read-only, in place of the one in use: the
-// stored rankers can still be added, edited and removed, but none chosen.
+// THE RANKER MODELS — AI models' second tab
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker): the rankers search's second stage
+// can use, the one in use and the window of top candidates it ranks, each one's usage and recent
+// calls, and the form that adds or edits one (endpoints.go). A key goes in through the form and is
+// never shown again. A build that supplies its own ranker shows it, read-only, in place of the one
+// in use: the stored rankers can still be added, edited and removed, but none chosen.
 
 // shortModel is a model's name without its owner: bge-reranker-v2-m3 for BAAI/bge-reranker-v2-m3.
 func shortModel(m string) string {

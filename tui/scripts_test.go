@@ -146,10 +146,10 @@ autodoc.command{ name = "badarg", run = function(ed)
 end }
 `
 
-// TestAutodocRunRunsTheCatalog (ADR 1791762474 §5.6, §5.8): autodoc.run runs a built-in, a
-// feature's and a Lua entry, and answers ok, err, never raising: unknown for an id no entry has, a
-// refusal for a plugin's, and for an argument it cannot pass. A Lua entry run from outside ':'
-// edits the attached editor.
+// TestAutodocRunRunsTheCatalog (docs/decisions/plugins.md#lua-runs-catalog-entries): autodoc.run
+// runs a built-in, a feature's and a Lua entry, and answers ok, err, never raising: unknown for an
+// id no entry has, a refusal for a plugin's, and for an argument it cannot pass. A Lua entry run
+// from outside ':' edits the attached editor.
 func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	_, r := luaTUI(t, "a\n", map[string]string{"run.lua": runit})
 	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("lua.mark") }); e == nil || e.Source != SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
@@ -187,9 +187,9 @@ func (r *running) waitPage(t *testing.T, want string) {
 	r.s.WaitFor(t, "the page holds "+want, func(string) bool { return strings.Contains(r.editorText(), want) })
 }
 
-// TestALuaCommandTakesOnlyTheNameItAsksFor (ADR 1791762474 §4.2, r2): a Lua find replaces :find and
-// leaves the page's find runnable by its id; a Lua term takes :term alone, and :terminal still
-// opens the terminal. A Lua id outside lua.* does not load.
+// TestALuaCommandTakesOnlyTheNameItAsksFor (docs/decisions/plugins.md#one-owner-per-command-name):
+// a Lua find replaces :find and leaves the page's find runnable by its id; a Lua term takes :term
+// alone, and :terminal still opens the terminal. A Lua id outside lua.* does not load.
 func TestALuaCommandTakesOnlyTheNameItAsksFor(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
 	t.Setenv("HOME", t.TempDir())

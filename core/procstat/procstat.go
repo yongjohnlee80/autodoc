@@ -1,7 +1,7 @@
 // Package procstat reads what one process uses of its machine: the daemon's for sys.stats, the
-// app's for autodoc.app.stats (ADR 1792256101 §4.1). It needs nothing beyond the standard library.
-// A size the platform cannot say is 0: Darwin has no current resident size without Mach's
-// task_info, so its RSS is 0 and its PeakRSS is getrusage's.
+// app's for autodoc.app.stats (docs/decisions/editor.md#process-stats). It needs nothing beyond the
+// standard library. A size the platform cannot say is 0: Darwin has no current resident size
+// without Mach's task_info, so its RSS is 0 and its PeakRSS is getrusage's.
 package procstat
 
 import (

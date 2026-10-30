@@ -13,8 +13,9 @@ import (
 )
 
 // ValidateFrontmatter checks src's frontmatter as the index does at path (doc.validate): a task in
-// a todo store by its todo format, every other file by kb, the workspace's schema (ADR 1792015212
-// amendment 2). So the editor's diagnostics and index.documents' agree.
+// a todo store by its todo format, every other file by kb, the workspace's schema
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format). So the editor's diagnostics and
+// index.documents' agree.
 func (x *Indexer) ValidateFrontmatter(path string, src []byte, kb *schema.Schema) schema.Result {
 	return frontmatterOf(path, kind.ParseMarkdown(src), src, kb, x.mode(path).Store)
 }
@@ -49,11 +50,11 @@ func (x *Indexer) schema() (*schema.Schema, string) {
 // workspace's own text extensions.
 func (x *Indexer) Kind(p string) kind.Kind { return x.kinds.Of(p) }
 
-// versionOf is what document.indexer records for path, of kind k, indexed now (ADR 0216 §1.6): a
-// registered chunker's extension and version; a derived format's frozen identity, then the
-// built-in identity its Markdown is chunked under; or the built-in chunkers' version, with the
-// schema's fingerprint for Markdown. A derived document has no frontmatter to check, so a schema
-// change never derives it again.
+// versionOf is what document.indexer records for path, of kind k, indexed now
+// (docs/decisions/search.md#indexer-identity-strings): a registered chunker's extension and
+// version; a derived format's frozen identity, then the built-in identity its Markdown is chunked
+// under; or the built-in chunkers' version, with the schema's fingerprint for Markdown. A derived
+// document has no frontmatter to check, so a schema change never derives it again.
 func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, abstract bool) string {
 	builtIn := docVersion(indexerVersion(tokens), k.Traits().Frontmatter, schemaFP, abstract)
 	return identities.Of(k)(x, p, tokens, builtIn) + x.mode(p).version()
@@ -99,7 +100,7 @@ func (x *Indexer) Revalidate(ctx context.Context) error {
 	}
 	for _, p := range outdated {
 		if _, held := h.of(p); held {
-			continue // never reinterpreted (ADR 0216 §1.4)
+			continue // never reinterpreted (docs/decisions/search.md#held-documents)
 		}
 		x.touch(p, false) // the version check rebuilds each: no file changed, the indexer did
 	}

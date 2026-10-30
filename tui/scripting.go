@@ -14,7 +14,8 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// SCRIPTS CALL THE DAEMON — the daemon's verbs as Lua functions (ADR 1791719881 §4.8).
+// SCRIPTS CALL THE DAEMON — the daemon's verbs as Lua functions
+// (docs/decisions/contract.md#scripts-call-the-daemon-through-its-contracts).
 //
 //	autodoc.call(verb, params, cb)   any verb but the protocol's own; params a list, as the wire's
 //	autodoc.run(id, args…)           a command catalog entry, by id (catalog.go): ok, err; never
@@ -165,7 +166,8 @@ func (*scripting) Cards() []Card { return nil }
 // once the daemon says its contracts.
 func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) error) {
 	s.eng, s.run = eng, run
-	// a gated script's calls need the capability the verb's effect asks (ADR 1792004705 §4.2)
+	// a gated script's calls need the capability the verb's effect asks
+	// (docs/decisions/contract.md#gated-scripts-and-their-capabilities)
 	eng.SetGate("call", func(_ string, L *lua.LState) string { return s.capabilityOf(L.CheckString(1)) })
 	eng.SetGate("run", func(string, *lua.LState) string { return "commands" })
 	// keys and rows run any command line: commands, as run (luakeys.go)
@@ -445,7 +447,7 @@ func (s *scripting) authority() authority {
 // is refused by its contract's audience before it is ever sent. A gated script's call is refused a
 // preference that holds rights or commands (AS-2b), and goes out with its authority on the ctx, so
 // the one send path (Host.call) gives it its bounds and checks its workspace is still the one in
-// use (ADR 1792004705 §4.2a.1, 2c).
+// use (docs/decisions/contract.md#who-an-invocation-acts-for).
 func (s *scripting) call(a authority, verb string, params []any, cb *lua.LFunction) {
 	known := s.verbs
 	if a.gated() {

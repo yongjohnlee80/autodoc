@@ -20,18 +20,19 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
-// THE EDITOR SOCKET (ADR 1792014854): the page's functions as tools for the agents this TUI starts.
-// The TUI serves editor.* on a unix socket of its own, <state>/editor/<pid>.sock, mode 0600, and
-// tells its agents where (AUTODOC_EDITOR) and who they are (AUTODOC_AGENT); `autodoc --editor
-// <verb> [params]` calls it. Every verb's first param is the agent's codename; positions are
-// 1-based, as Lua's. A verb needs a capability of the agent, agent:<codename> in the Lua grants
-// (luagate.go), editor.workspace none: without it the call is refused at once and the user asked,
-// and an Allow works for the next call. Every edit is one undo step; an edit given the revision it read is refused when the
-// text has moved on. editor.add_command writes a Lua command into lua/ only after the user's yes.
+// THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
+// the agents this TUI starts. The TUI serves editor.* on a unix socket of its own,
+// <state>/editor/<pid>.sock, mode 0600, and tells its agents where (AUTODOC_EDITOR) and who they
+// are (AUTODOC_AGENT); `autodoc --editor <verb> [params]` calls it. Every verb's first param is the
+// agent's codename; positions are 1-based, as Lua's. A verb needs a capability of the agent,
+// agent:<codename> in the Lua grants (luagate.go), editor.workspace none: without it the call is
+// refused at once and the user asked, and an Allow works for the next call. Every edit is one undo
+// step; an edit given the revision it read is refused when the text has moved on.
+// editor.add_command writes a Lua command into lua/ only after the user's yes.
 //
 //	editor.document                         {path, workspace, kind, modified, revision, cursor, selection?,
 //	                                         spawn_workspace, foreign_workspace?}                            editor.read
-//	editor.workspace                        {spawn_workspace, workspace_in_use, switch?} (ADR 1792988759)   none
+//	editor.workspace                        {spawn_workspace, workspace_in_use, switch?}                     none
 //	editor.read [from_line, to_line]        {text, revision}                                                 editor.read
 //	editor.find term [opts]                 [[l1, c1, l2, c2], …]                                            editor.read
 //	editor.insert line col text [rev]       {line, col, revision}                                            editor.write
@@ -42,10 +43,12 @@ import (
 //	editor.commands                         [{id, title, source, name?, aliases?, args?, help?}, …]          none
 //	editor.add_command name source          {installed}, once the user answered                              asked each time
 //
+// The editor.workspace row: docs/decisions/crew.md#workspace-switches-are-told-not-imposed.
+//
 // Param 1 of every verb is the agent's token, $AUTODOC_EDITOR_TOKEN: a secret made when AutoDoc
 // started the agent, which the socket knows it by. A process of the same user can read another's
 // environment, so the grants keep the user's agents to what each was allowed; they are no defense
-// against the user's own hostile programs (ADR 1792014854 §R4).
+// against the user's own hostile programs (docs/decisions/crew.md#editor-tokens-and-their-limit).
 
 // The codes an editor verb refuses with, beside golib's invalid params.
 const (
@@ -194,9 +197,11 @@ func (a editorArgs) pos(i int) (widget.TextPos, error) {
 // editorVerbs are the socket's handlers.
 func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 	return map[string]golibrpc.Handler{
-		"editor.buffers":     h.editorVerb("editor.read", h.editorBuffers),
-		"editor.document":    h.editorVerb("editor.read", h.editorDocument),
-		"editor.workspace":   h.editorVerb("", h.editorWorkspace), // no grant: names, roots and a path (ADR 1792988759 r2)
+		"editor.buffers":  h.editorVerb("editor.read", h.editorBuffers),
+		"editor.document": h.editorVerb("editor.read", h.editorDocument),
+		// no grant: names, roots and a path
+		// (docs/decisions/crew.md#workspace-switches-are-told-not-imposed)
+		"editor.workspace":   h.editorVerb("", h.editorWorkspace),
 		"editor.read":        h.editorVerb("editor.read", h.editorRead),
 		"editor.find":        h.editorVerb("editor.read", h.editorFind),
 		"editor.insert":      h.editorVerb("editor.write", h.editorInsert),

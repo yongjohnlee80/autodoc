@@ -1,4 +1,4 @@
----What a KB document is connected to, by the edge's kind and direction (ADR 1791430651 §4.4, the
+---What a KB document is connected to, by the edge's kind and direction (docs/decisions/editor.md#the-relations-drawer, the
 ---TUI's Relations drawer): superseded by · supersedes · sources · cited by · amends · amended by ·
 ---related · adr · links · backlinks, then what names nothing and the supersession loops. Depth 2
 ---adds the documents two links away under the first-ring one that reaches them.
@@ -48,7 +48,7 @@ local WARN = vim.log.levels.WARN
 ---@field raw string as written
 ---@field kind string
 ---@field resolved boolean
----@field external string|nil a todo task's file outside the workspace, absolute (ADR 1792015212 §2.4)
+---@field external string|nil a todo task's file outside the workspace, absolute (docs/decisions/todos.md#task-relations-and-external-links)
 
 ---@class autodoc.RelRow
 ---@field kind "heading"|"doc"|"beyond"|"unresolved"|"external"

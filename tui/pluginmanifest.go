@@ -112,8 +112,9 @@ func discoverPlugins(dir string) []pluginEntry {
 // shadowedClaim is an extension a plugin's [open] claims and another plugin opens instead: by.
 type shadowedClaim struct{ ext, by string }
 
-// openerOf is the index of the plugin in list whose [open] claims ext (protocol 9, ADR 1792457255):
-// the first that runs; -1 when none does. A later claimant is shadowed.
+// openerOf is the index of the plugin in list whose [open] claims ext (protocol 9,
+// docs/decisions/plugins.md#plugins-that-open-file-types): the first that runs; -1 when none does.
+// A later claimant is shadowed.
 func openerOf(list []pluginEntry, ext string) int {
 	return slices.IndexFunc(list, func(e pluginEntry) bool { return e.reason == "" && slices.Contains(e.m.Open.Extensions, ext) })
 }

@@ -11,9 +11,9 @@ import (
 )
 
 // In the GUI the agent and terminal panels' terminals are views at the stored share of the cell size
-// (ADR 1792350322): their text is drawn off the window's grid, natively, so none of it is in the
-// grid's cells; a Fonts change rescales both panels' views, and a panel without them gets them at
-// the next apply.
+// (docs/decisions/editor.md#the-terminal-text-size): their text is drawn off the window's grid,
+// natively, so none of it is in the grid's cells; a Fonts change rescales both panels' views, and a
+// panel without them gets them at the next apply.
 func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",

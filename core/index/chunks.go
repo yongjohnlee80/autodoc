@@ -39,7 +39,7 @@ func abstractChunk(c search.Chunk) DocChunk {
 func hashed(chunks []search.Chunk) []DocChunk { return hashedUnder(ChunkerVersion, chunks) }
 
 // hashedUnder is chunks cut by a chunker of version, with their hashes: a chunker's change of
-// version rewrites only its own documents' chunks (ADR 0216 §1.5).
+// version rewrites only its own documents' chunks (docs/decisions/search.md#per-chunker-versions).
 func hashedUnder(version string, chunks []search.Chunk) []DocChunk {
 	out := make([]DocChunk, len(chunks))
 	for i, c := range chunks {

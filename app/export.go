@@ -48,10 +48,10 @@ func exportMain(sourcePath, format, destination, theme, base string) error {
 	return localfs.WriteFile(context.Background(), destination, content)
 }
 
-// siteMain builds the site docs/site.toml describes into out (ADR 1792395460): theme, when given,
-// over the site's own. out is a new or empty folder, never inside docs, as its symlinks resolve:
-// a page left from an earlier build would still be published, and a site written into docs would
-// be read as docs.
+// siteMain builds the site docs/site.toml describes into out
+// (docs/decisions/editor.md#the-documentation-site): theme, when given, over the site's own. out is
+// a new or empty folder, never inside docs, as its symlinks resolve: a page left from an earlier
+// build would still be published, and a site written into docs would be read as docs.
 func siteMain(docs, out, theme, base string) error {
 	if base != "" {
 		return errors.New("--base does not go with --export=site: a site's links are to its own pages")

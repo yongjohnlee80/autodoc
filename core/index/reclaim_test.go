@@ -49,8 +49,9 @@ func (e *env) seedModel(ws int64, fp string, n int, active, target int) {
 	}
 }
 
-// TestACancelledSwitchIsReclaimed (ADR 1791284787 §2.3, item 2): a switch to b, part-way, goes back
-// to a: b's partial vectors and its row go, and a, which answered throughout, keeps every vector.
+// TestACancelledSwitchIsReclaimed (docs/decisions/store.md#when-a-model-is-reclaimed): a switch to
+// b, part-way, goes back to a: b's partial vectors and its row go, and a, which answered
+// throughout, keeps every vector.
 func TestACancelledSwitchIsReclaimed(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

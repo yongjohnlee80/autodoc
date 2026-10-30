@@ -94,7 +94,8 @@ type daemonOpts struct {
 	// notReady fails this many workspace lookups first (every verb on a workspace), as a daemon
 	// still starting up can
 	notReady int32
-	// reg are the registrations its sys.capabilities reports (ADR 0216); zero: the community build's
+	// reg are the registrations its sys.capabilities reports
+	// (docs/decisions/search.md#registered-chunkers-and-derivers); zero: the community build's
 	reg registrations.Tables
 	// deriver, when set, is its build's deriver: it indexes and reads PDFs with it, and reports it
 	deriver registrations.Deriver
@@ -713,8 +714,9 @@ func TestCommittedIsReadBack(t *testing.T) {
 }
 
 // TestBacklinks: SPC l opens the explorer's drawer on its Links tab, over the files linking to the
-// open one, the cursor on the first, and Enter opens it, hiding the drawer (ADR 1792397302 r3); SPC l
-// shows it again, and it holds src.md's own links.
+// open one, the cursor on the first, and Enter opens it, hiding the drawer
+// (docs/decisions/editor.md#dock-clicks-hide-and-show); SPC l shows it again, and it holds src.md's
+// own links.
 func TestBacklinks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)

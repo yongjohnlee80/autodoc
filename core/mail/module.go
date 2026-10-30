@@ -8,7 +8,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// protocol is the protocol the mail verbs arrive in: crew's, as one change (ADR 1793271500 §4.1).
+// protocol is the protocol the mail verbs arrive in: crew's, as one change
+// (docs/decisions/crew.md#three-modules-and-one-protocol).
 const protocol = crew.Protocol
 
 // Name is the module's name: its verbs are mail.*.

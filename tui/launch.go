@@ -53,8 +53,9 @@ type LaunchOptions struct {
 	TermOptions []term.Option
 	// Backend, when set, is the terminal to run on instead of opening one: a test's, say.
 	Backend tuicore.Backend
-	// Registrations are this binary's own (ADR 0216): the daemon's are compared with them
-	// (Options.Registrations). The zero value is the community build's.
+	// Registrations are this binary's own
+	// (docs/decisions/search.md#registered-chunkers-and-derivers): the daemon's are compared with
+	// them (Options.Registrations). The zero value is the community build's.
 	Registrations registrations.Tables
 	// ProgramOptions are added to the program's own (Options.ProgramOptions): a build's choice of
 	// how the document runs, such as the native style a window build passes. nil: none.

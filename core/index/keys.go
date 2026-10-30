@@ -8,11 +8,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// THE SORT KEYS' BACKFILL (ADR 1793312720 D2) — documents written before 000027 have no stored sort
-// keys, and index.documents lists by the Go fallback while any workspace document lacks them. At
-// start, the writer gives them their keys, keyBatch documents a commit, through docKeys (the
-// function upsertDoc writes them with). It is resumable by its own gate: a restart finds the
-// documents still without keys and goes on from there.
+// THE SORT KEYS' BACKFILL (docs/decisions/search.md#stored-sort-keys) — documents written before
+// 000027 have no stored sort keys, and index.documents lists by the Go fallback while any workspace
+// document lacks them. At start, the writer gives them their keys, keyBatch documents a commit,
+// through docKeys (the function upsertDoc writes them with). It is resumable by its own gate: a
+// restart finds the documents still without keys and goes on from there.
 
 // keyBatch is the most documents one backfill commit keys (as AP-8 bounds a job write).
 var keyBatch uint64 = 2000

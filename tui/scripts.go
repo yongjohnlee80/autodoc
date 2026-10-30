@@ -155,7 +155,7 @@ func (h *Host) registerLua(r script.Registration) error {
 }
 
 // runFromLua is autodoc.run's: any entry but a plugin's, which one extension may not drive for
-// another (ADR 1791762474 §R4).
+// another (docs/decisions/plugins.md#lua-runs-catalog-entries).
 func (h *Host) runFromLua(id string, args []string) error {
 	if strings.HasPrefix(id, "plugin.") {
 		return fmt.Errorf("refused: %s is a plugin's command, which Lua cannot run", id)

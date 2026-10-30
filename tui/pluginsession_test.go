@@ -14,10 +14,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// The cells of ADR 1792300990 §5: a plugin's session slot, the reason it is closed, a command's
-// arguments, and a plugin's Lua package. The plugin is the test binary in mode "session" (sessioned,
-// plugins_test.go), which says its slot's values reversed: a value itself appearing in a log or a
-// notice is the host's leak.
+// The cells of docs/decisions/plugins.md#plugin-sessions: a plugin's session slot, the reason it is
+// closed, a command's arguments, and a plugin's Lua package. The plugin is the test binary in mode
+// "session" (sessioned, plugins_test.go), which says its slot's values reversed: a value itself
+// appearing in a log or a notice is the host's leak.
 
 // sessionCommands are a session plugin's [[commands]]: login sets its slot, echo says its args.
 const sessionCommands = "[[commands]]\nid = \"login\"\ntitle = \"Log in\"\nkey = \"l\"\n" +
@@ -515,9 +515,10 @@ autodoc.command{ name = "plugin-res", run = function(ed) ed:insert("the plugin's
 	r.s.WaitFor(t, "its commands gone", func(string) bool { return r.luaRun("plugin-res") != nil })
 }
 
-// TestAPluginOpensAPathAndUpdatesItself (ADR 1792301900 §4.10): file.open_path opens an absolute
-// path, as File › Open any file does, and refuses a relative one; plugins.update from a plugin may
-// name only itself (a plugin put in the folder by hand is then told to update it there).
+// TestAPluginOpensAPathAndUpdatesItself
+// (docs/decisions/plugins.md#opening-files-by-path-and-self-update): file.open_path opens an
+// absolute path, as File › Open any file does, and refuses a relative one; plugins.update from a
+// plugin may name only itself (a plugin put in the folder by hand is then told to update it there).
 func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "opener", "service", "rawcalls",

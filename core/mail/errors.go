@@ -2,7 +2,8 @@ package mail
 
 import "github.com/yongjohnlee80/golib/errs"
 
-// The mail.* verbs' public codes, in the module's range (core/module codes.go), ADR 1793271500 §4.1.
+// The mail.* verbs' public codes, in the module's range (core/module codes.go),
+// docs/decisions/crew.md#three-modules-and-one-protocol.
 const (
 	CodeNoRecipient int64 = -32110 // an address that resolves to no profile or live session
 	CodeKeyReused   int64 = -32111 // an idempotency key already names another message

@@ -300,7 +300,8 @@ func (m *mindmap) click(p, at gui.Point) {
 		return
 	}
 	if i, ok := cur.m.mindIndex(id); ok {
-		// hidden, not closed, as the GlobeMap is: the dock shows it again (ADR 1792397302 r3)
+		// hidden, not closed, as the GlobeMap is: the dock shows it again
+		// (docs/decisions/editor.md#dock-clicks-hide-and-show)
 		m.c.HidePanel(mindmapPanelID)
 		m.c.OpenRef(cur.root.ws, cur.m.Nodes[i].Path)
 	}

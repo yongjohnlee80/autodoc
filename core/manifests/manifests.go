@@ -2,8 +2,8 @@
 // plugin.toml and a Lua package's package.toml. It parses and validates them, fills in a plugin's
 // defaults, and says what a plugin declares it does in AutoDoc, without running anything from the
 // repo. The TUI reads them through it before it installs or starts a plugin or package, and the
-// plugin registry's tools read the same manifests at a repo's commit (ADR 1792351195 §4.2), so the
-// two never disagree on what is valid.
+// plugin registry's tools read the same manifests at a repo's commit
+// (docs/decisions/plugins.md#the-registry), so the two never disagree on what is valid.
 //
 // Nothing here looks at the folder a manifest sits in beyond the files it names: whether a
 // plugin's name is unique among the installed ones, or a package's folder is named for it, is the
@@ -64,10 +64,11 @@ func (d *Size) UnmarshalTOML(v any) error {
 	return fmt.Errorf("height %v: want rows, or a percentage from \"10%%\" to \"100%%\"", v)
 }
 
-// Plugin is a plugin.toml. Protocol 2's keys (ADR 1791268009) are kind = "service", start,
+// Plugin is a plugin.toml. Protocol 2's keys
+// (docs/decisions/plugins.md#protocol-versions-and-strict-manifests) are kind = "service", start,
 // [dialog] modal, [feed] and [[commands]]; a manifest that uses any of them says protocol = 2.
-// Protocol 3's (ADR 1791762474 §4.5) is calls; a manifest with it says protocol = 3. Protocol 4's
-// is [table]; a manifest with it says protocol = 4.
+// Protocol 3's (docs/decisions/plugins.md#plugin-calls) is calls; a manifest with it says protocol
+// = 3. Protocol 4's is [table]; a manifest with it says protocol = 4.
 type Plugin struct {
 	Name     string   `toml:"name"`
 	Title    string   `toml:"title"`
@@ -108,15 +109,16 @@ type Plugin struct {
 	Table struct {
 		Title string `toml:"title"`
 	} `toml:"table"`
-	// Open is the extensions the plugin opens (protocol 9, ADR 1792457255): a file with one of them is
-	// handed, by its absolute path, to the plugin's Command (one of its [[commands]]) in place of
-	// being opened.
+	// Open is the extensions the plugin opens (protocol 9, docs/decisions/plugins.md#lab-notes): a
+	// file with one of them is handed, by its absolute path, to the plugin's Command (one of its
+	// [[commands]]) in place of being opened.
 	Open struct {
 		Extensions []string `toml:"extensions"`
 		Command    string   `toml:"command"`
 	} `toml:"open"`
-	// Surface is a pixel surface (protocol 10, ADR 1792797354): the card or dialog draws frames over
-	// a side channel and takes the pointer in dp, where the host draws pixels; nil for none.
+	// Surface is a pixel surface (protocol 10, docs/decisions/plugins.md#pixel-surfaces): the card
+	// or dialog draws frames over a side channel and takes the pointer in dp, where the host draws
+	// pixels; nil for none.
 	Surface *Surface `toml:"surface"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv.
@@ -195,7 +197,7 @@ func ParsePlugin(src []byte) (*Plugin, error) {
 		reason = fmt.Sprintf("protocol %d; this AutoDoc speaks %d to %d", m.Protocol, plugin.MinProtocol, plugin.Protocol)
 	case len(md.Undecoded()) > 0:
 		// strictly: a key this AutoDoc does not know is one it would ignore, and run the plugin
-		// without (ADR 1791268009 §1)
+		// without (docs/decisions/plugins.md#protocol-versions-and-strict-manifests)
 		reason = fmt.Sprintf("unknown key %q", md.Undecoded()[0].String())
 	case len(m.Command) == 0 || m.Command[0] == "":
 		reason = "no command"
@@ -387,7 +389,8 @@ func Letter(k string) bool {
 }
 
 // Declares is what m's protocol-2 and later keys say the plugin does in AutoDoc, one item each,
-// for an install's confirmation and the registry's listing (ADR 1791268009 §2.1): none for a plain
+// for an install's confirmation and the registry's listing
+// (docs/decisions/plugins.md#declared-contributions): none for a plain
 // dialog.
 func (m *Plugin) Declares() []string {
 	var parts []string

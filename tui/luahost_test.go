@@ -178,7 +178,8 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 }
 
 // autodoc.agents.send to a program that never asked for bracketed paste sends it nothing, never
-// keys, and the script hears "unbracketed" (ADR 1792991980 §6).
+// keys, and the script hears "unbracketed"
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
 	agent, report := recordingAgent(t, false)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")

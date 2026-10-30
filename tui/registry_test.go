@@ -219,7 +219,8 @@ func TestTheAuditLineComparesFullCommits(t *testing.T) {
 }
 
 // Each install card says the audit line above its risk sentence, and the plugin's risk sentence is
-// word for word what it was before the registry (ADR 1792351195 §4.7).
+// word for word what it was before the registry
+// (docs/decisions/plugins.md#one-candidate-per-install-or-update).
 func TestTheInstallCardsSayTheAuditAboveTheRisk(t *testing.T) {
 	const risk = "A plugin is a program that runs as you, with your files. AutoDoc does " +
 		"not check what a plugin does: add only plugins you trust. Adding one is at your own risk."

@@ -13,7 +13,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// PLUGIN CALLS (ADR 1791762474 §4.5, §5.7, §5.8) — protocol 3's host.call, through the running
+// PLUGIN CALLS (docs/decisions/plugins.md#plugin-calls,
+// docs/decisions/plugins.md#lua-runs-catalog-entries) — protocol 3's host.call, through the running
 // program: the test plugin is this binary (plugins_test.go), its answers read from its log.
 
 // markLua is the Lua the calls run: lua.mark writes its line into the page, lua.boom fails.
@@ -137,10 +138,10 @@ func heldLoop(t *testing.T, r *running, run *pluginRun, command string, until fu
 	free()
 }
 
-// TestACallReusingAWaitingNumberIsNeverAnswered (ADR 1791762474 r3): a host.call whose number is
-// a call still running is a protocol violation: logged, run never, answered never. The waiting
-// call gets its own answer, the only one with its number. A call with no number is dropped, and
-// a malformed one with a number refused.
+// TestACallReusingAWaitingNumberIsNeverAnswered (docs/decisions/plugins.md#plugin-calls): a
+// host.call whose number is a call still running is a protocol violation: logged, run never,
+// answered never. The waiting call gets its own answer, the only one with its number. A call with
+// no number is dropped, and a malformed one with a number refused.
 func TestACallReusingAWaitingNumberIsNeverAnswered(t *testing.T) {
 	r, logs, run := rawTUI(t, 3)
 	heldLoop(t, r, run, "dup", func(waiting, dupes, _ int) bool { return waiting == 3 && dupes == 1 })
@@ -291,7 +292,7 @@ func TestAPluginOpensADraftWithBufferNew(t *testing.T) {
 
 // TestAPluginRedrawsTheRenderedView: a plugin whose manifest's calls has view.redraw has the editor's
 // Rendered view laid out again, answered ok: what it draws from beside the note changed, as a lab
-// note's cell outputs do after a run (ADR 1792457255).
+// note's cell outputs do after a run (docs/decisions/plugins.md#lab-notes).
 func TestAPluginRedrawsTheRenderedView(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin3(t, dir, "lab", "service", "rawcalls", "calls = [\"view.redraw\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")

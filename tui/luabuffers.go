@@ -8,7 +8,7 @@ import (
 )
 
 // luaBuffers is the host's buffers as scripts see them: autodoc.buffers() and autodoc.buffer(n)
-// (script.WithBuffers, ADR 1792076688 §4.5).
+// (script.WithBuffers, docs/decisions/editor.md#buffers-in-lua-and-the-editor-socket).
 type luaBuffers struct{ h *Host }
 
 func (s luaBuffers) Buffers() []script.BufferInfo {

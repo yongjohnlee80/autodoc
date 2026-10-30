@@ -2,7 +2,7 @@
 
 Technical notes, incident post-mortems, and architecture decision records rarely live in isolation from production and staging databases. Engineers constantly switch between writing prose in an editor and running diagnostic queries in a separate SQL client—copying queries out, losing track of which connection ran them, and manually reformatting tabular output back into Markdown.
 
-By pairing AutoDoc's plugin host (Chapter 15) with the **AutoDB plugin** (`autodoc-autodb`, ADR 1792078052), AutoDoc becomes a full-featured **live SQL workbench**. You write SQL either in dedicated `.sql` buffers or inside fenced code blocks within your Markdown notes, execute the statement under your cursor with a single chord, browse 100,000-row virtualized cursors in the docked Results panel, and insert formatted Markdown tables or export atomic CSV/JSON snapshots without leaving your workspace.
+By pairing AutoDoc's plugin host (Chapter 15) with the **AutoDB plugin** (`autodoc-autodb`, [plugin tables](../decisions/plugins.md#plugin-tables-in-the-results-panel)), AutoDoc becomes a full-featured **live SQL workbench**. You write SQL either in dedicated `.sql` buffers or inside fenced code blocks within your Markdown notes, execute the statement under your cursor with a single chord, browse 100,000-row virtualized cursors in the docked Results panel, and insert formatted Markdown tables or export atomic CSV/JSON snapshots without leaving your workspace.
 
 ---
 

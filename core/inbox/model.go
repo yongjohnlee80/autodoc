@@ -1,9 +1,9 @@
-// Package inbox is the human's side of the crew and its mail (ADR 1793271500 §4.8): one feed every
-// window and Neovim watch (inbox.watch), the history (inbox.list), and the human's answers
-// (inbox.reply, inbox.dismiss, inbox.ack) and focus requests (inbox.focus). Its verbs take no
-// credential: they run under the same-UID trust the daemon's socket already has (rationale §R19).
-// The answers are mail's state transitions (mail.Manager's Answer, Dismiss and Read); this package
-// serves them, and reads the feed.
+// Package inbox is the human's side of the crew and its mail
+// (docs/decisions/crew.md#the-human-inbox): one feed every window and Neovim watch (inbox.watch),
+// the history (inbox.list), and the human's answers (inbox.reply, inbox.dismiss, inbox.ack) and
+// focus requests (inbox.focus). Its verbs take no credential: they run under the same-UID trust the
+// daemon's socket already has (rationale §R19). The answers are mail's state transitions
+// (mail.Manager's Answer, Dismiss and Read); this package serves them, and reads the feed.
 package inbox
 
 import (

@@ -118,10 +118,10 @@ func (b *bigMap) mapAt(proto int64, opts map[string]any) (map[string]any, error)
 	return res.(map[string]any), nil
 }
 
-// TestTheOneReplyMapsLimitAndPagesPastIt (ADR 1793321612 §5.1, §5.6): the workspace grows until the
-// one-reply map, which a session below protocol 36 still gets, fails; the size and the refusal are
-// logged, so the ADR's estimate is a measurement. At that size and at twice it, a session at 36
-// reads the same map a page at a time, and every page fits.
+// TestTheOneReplyMapsLimitAndPagesPastIt (docs/decisions/search.md#unrooted-maps-in-pages): the
+// workspace grows until the one-reply map, which a session below protocol 36 still gets, fails; the
+// size and the refusal are logged, so the decision's estimate is a measurement. At that size and at
+// twice it, a session at 36 reads the same map a page at a time, and every page fits.
 func TestTheOneReplyMapsLimitAndPagesPastIt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("grows a workspace past the transport's limit")
@@ -150,7 +150,7 @@ func TestTheOneReplyMapsLimitAndPagesPastIt(t *testing.T) {
 		lastSize, lastN = size, n
 	}
 	if failedAt == 0 {
-		t.Fatalf("the one-reply map was answered at %d documents: the limit the paging works round is not where the ADR puts it", b.docs)
+		t.Fatalf("the one-reply map was answered at %d documents: the limit the paging works round is not where the decision puts it", b.docs)
 	}
 	for _, n := range []int{failedAt, 2 * failedAt} {
 		b.grow(n)
@@ -187,10 +187,10 @@ func encodedSize(t *testing.T, v any) int {
 	return len(b)
 }
 
-// TestOnlyANewSessionGetsPages (§5.5): a session below protocol 36 gets the whole unrooted map in one
-// reply, with no next, and is refused after and limit; a session at 36 gets pages, and next. A
-// rooted map is one reply at any protocol, and is refused paging; a limit out of bounds, or a
-// cursor from other kinds, is invalid params.
+// TestOnlyANewSessionGetsPages (docs/decisions/search.md#unrooted-maps-in-pages): a session below
+// protocol 36 gets the whole unrooted map in one reply, with no next, and is refused after and
+// limit; a session at 36 gets pages, and next. A rooted map is one reply at any protocol, and is
+// refused paging; a limit out of bounds, or a cursor from other kinds, is invalid params.
 func TestOnlyANewSessionGetsPages(t *testing.T) {
 	r := serve(t)
 	w := r.dial(true)

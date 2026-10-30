@@ -19,7 +19,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// Scaffold creates a KB type's files in workspace name (workspace.scaffold, ADR 1792349867 §4.3).
+// Scaffold creates a KB type's files in workspace name (workspace.scaffold,
+// docs/decisions/contract.md#the-daemon-writes-the-scaffold-create-only).
 //
 // It writes through the workspace's own filesystem, golib vfs/local, so every name resolves
 // through os.Root under the root: neither ".." nor a symlinked folder inside the KB reaches
@@ -173,7 +174,7 @@ func scaffoldManaged(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc
 func publicReason(err error) string {
 	var refused *fsbounds.Refusal
 	switch {
-	case errors.As(err, &refused): // a gated script's scaffold past its bounds (ADR 1792004705 §4.2a.1)
+	case errors.As(err, &refused): // a gated script's scaffold past its bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace)
 		return refused.Why + ": a script may not reach it"
 	case errors.Is(err, vfs.ErrNotExist):
 		return "not found"

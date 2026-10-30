@@ -1,8 +1,9 @@
 // AIModels.qml — System › Search models… (SPC s), in two tabs. Embedding Models: the providers semantic
-// search can use. Ranker Models: the rankers search's second stage can use (ADR 0215), and the
-// window of top candidates the one in use ranks. On each, the list and which is in use on the left;
-// on the right, the one under the cursor's usage by day and its latest calls. Add…, Edit…, Use and
-// Remove… act on the tab that is current; each tab's own buttons show only on it.
+// search can use. Ranker Models: the rankers search's second stage can use
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker), and the window of top candidates
+// the one in use ranks. On each, the list and which is in use on the left; on the right, the one
+// under the cursor's usage by day and its latest calls. Add…, Edit…, Use and Remove… act on the tab
+// that is current; each tab's own buttons show only on it.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 94

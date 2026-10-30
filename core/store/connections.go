@@ -14,10 +14,11 @@ import (
 )
 
 // DATABASES — a workspace's source, the database its .view files run on, and its destination,
-// where its index and vectors live (ADR 0214). A workspace is still a directory; these attach to
-// it. Each workspace has at most one connection of each role. Its DSN is sealed by the keyslot and
-// bound to the workspace and the role, as a provider's API key is: it is never stored as written,
-// and only the daemon opens it. A client sees a ConnectionSummary, never the DSN.
+// where its index and vectors live (docs/decisions/store.md#databases-attach-to-a-workspace). A
+// workspace is still a directory; these attach to it. Each workspace has at most one connection of
+// each role. Its DSN is sealed by the keyslot and bound to the workspace and the role, as a
+// provider's API key is: it is never stored as written, and only the daemon opens it. A client sees
+// a ConnectionSummary, never the DSN.
 
 // The roles a connection plays, the engines one names, and where an index can live.
 const (

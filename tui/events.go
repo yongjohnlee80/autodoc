@@ -13,7 +13,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// PEER CHANGES — what other clients of the daemon changed (ADR 0212 §7).
+// PEER CHANGES — what other clients of the daemon changed
+// (docs/decisions/search.md#workspace-providers-and-peer-changes).
 //
 // The daemon logs every configuration and lifecycle change with the token of the client that made
 // it; this TUI follows the log (sys.events) once a second, as long as its connection lasts. A
@@ -163,7 +164,8 @@ func (h *Host) applyEvents(events []peerEvent) {
 			}
 			notice = h.trf("autodoc.notice.events.workspace_was_removed", e.workspace, by)
 			relist = true
-		case "models.reclaimed": // the daemon's own: what its start sweep removed (ADR 1791284787)
+		// the daemon's own: what its start sweep removed (docs/decisions/store.md#the-start-sweep)
+		case "models.reclaimed":
 			notice = h.trf("autodoc.notice.events.workspace_reclaimed", e.workspace, e.detail)
 		case "store.compacted", "store.compact_skipped":
 			notice = e.detail

@@ -13,9 +13,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// textExtensions is one workspace's own plain-text extensions (ADR 0212 §3), read by its indexer
-// and its document API at each use, so a change applies without a restart. Like the schema, it
-// outlives the workspace's restarts.
+// textExtensions is one workspace's own plain-text extensions
+// (docs/decisions/search.md#a-workspaces-own-text-types), read by its indexer and its document API
+// at each use, so a change applies without a restart. Like the schema, it outlives the workspace's
+// restarts.
 type textExtensions struct{ v atomic.Pointer[[]string] }
 
 func (t *textExtensions) load() []string {
@@ -101,7 +102,8 @@ func (m *Workspaces) applyTextExtensions(ctx context.Context, s *served, norm []
 }
 
 // textExtensions normalizes a workspace's own plain-text extensions (kind.TextExtensions) and
-// refuses one a registration of this build reads (ADR 0216 §1.3): the registration would win.
+// refuses one a registration of this build reads
+// (docs/decisions/search.md#file-kinds-and-their-precedence): the registration would win.
 func (m *Workspaces) textExtensions(exts []string) ([]string, error) {
 	norm, err := kind.TextExtensions(exts)
 	if err != nil {

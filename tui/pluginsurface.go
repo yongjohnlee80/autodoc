@@ -9,10 +9,11 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// A PLUGIN'S PIXEL SURFACE, AS THE REST OF THE HOST SEES IT (ADR 1792797354): a run whose manifest
-// declares [surface] at protocol 10 gets a side channel (pluginsurface_linux.go), and, in a window
-// that draws streams, a native view in its own cells (pluginsurface_gui.go). Elsewhere it draws
-// host.frame's cells, as every plugin does.
+// A PLUGIN'S PIXEL SURFACE, AS THE REST OF THE HOST SEES IT
+// (docs/decisions/plugins.md#pixel-surfaces): a run whose manifest declares [surface] at protocol
+// 10 gets a side channel (pluginsurface_linux.go), and, in a window that draws streams, a native
+// view in its own cells (pluginsurface_gui.go). Elsewhere it draws host.frame's cells, as every
+// plugin does.
 
 // pointerShapes are host.surface.cursor's names, as the SDK's SetPointerShape lists them.
 var pointerShapes = map[string]tuicore.PointerShape{

@@ -7,14 +7,15 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
-// THE ORPHANS OFFER (ADR 1793271500 §4.3, Q2 b): a window's scope whose holder is gone (its lease
-// lapsed: the window crashed, or quit without a release reaching the daemon) keeps its agents'
-// unhandled mail. Once this window holds its own scope, it asks the daemon for such scopes
-// (crew.orphans) and offers each, one at a time: Adopt moves its mail under this window's agents
-// (crew.adopt), Discard fails it and tells each sender (crew.discard), Keep leaves it for its window
-// or a later one. It is asked once a run, at the first claim, never on a reconnect. An offer waits
-// for the question card to be free (askWhenFree): it never displaces a question the user is
-// answering, and one that displaces it puts it back to wait.
+// THE ORPHANS OFFER (docs/decisions/crew.md#scopes-and-fenced-ownership,
+// docs/decisions/crew.md#orphan-scopes-are-offered-to-the-user): a window's scope whose holder is
+// gone (its lease lapsed: the window crashed, or quit without a release reaching the daemon) keeps
+// its agents' unhandled mail. Once this window holds its own scope, it asks the daemon for such
+// scopes (crew.orphans) and offers each, one at a time: Adopt moves its mail under this window's
+// agents (crew.adopt), Discard fails it and tells each sender (crew.discard), Keep leaves it for
+// its window or a later one. It is asked once a run, at the first claim, never on a reconnect. An
+// offer waits for the question card to be free (askWhenFree): it never displaces a question the
+// user is answering, and one that displaces it puts it back to wait.
 
 // crewOrphan is one orphan scope, as the offer says it.
 type crewOrphan struct {

@@ -125,7 +125,8 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool, 
 }
 
 // varLink reads the destination dest of markdown link raw as a $NAME ref, with vars the variables of
-// the file's workspace and root its index root (ADR 1792132105 §2.5): inside root, the workspace path,
+// the file's workspace and root its index root
+// (docs/decisions/todos.md#resolving-refs-in-every-document): inside root, the workspace path,
 // when targetsFile takes it; outside, an external link; an unknown or unset name, unresolved. ok is
 // false with no vars or for a destination that is no $NAME ref; a link ok with no Name is left out.
 func varLink(raw, dest string, vars *Vars, root string, targetsFile func(string) bool) (l DocLink, ok bool) {
@@ -244,11 +245,11 @@ func markdownNames(p string) []string {
 	return []string{p}
 }
 
-// resolve finds the document a link reaches (ADR 0204 §4.6). A markdown link reaches its path, or
-// the path with ".md". A wikilink reaches the document whose path is its name; else the one
-// document with that file name, path suffix or alias; of several, the one nearest the root; still
-// tied, none (ReasonAmbiguous). Readers and the writer resolve with this one function, so a reader's
-// reason for an unresolved link is the writer's.
+// resolve finds the document a link reaches (docs/decisions/search.md#link-resolution). A markdown
+// link reaches its path, or the path with ".md". A wikilink reaches the document whose path is its
+// name; else the one document with that file name, path suffix or alias; of several, the one
+// nearest the root; still tied, none (ReasonAmbiguous). Readers and the writer resolve with this
+// one function, so a reader's reason for an unresolved link is the writer's.
 func (s *Store) resolve(tx *store.Tx, kind, name string) (dst int64, reason string, err error) {
 	if kind == LinkMarkdown {
 		for _, p := range []string{name, name + ".md"} {

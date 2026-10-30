@@ -1,4 +1,4 @@
-# The documentation site (ADR 1792395460): what `autodoc --export=site --output _site docs` publishes,
+# The documentation site (docs/decisions/editor.md#the-documentation-site): what `autodoc --export=site --output _site docs` publishes,
 # where, and in what order. A section is a file (one page) or a folder (its *.md, README.md its
 # index), at a url relative to the site's root ("" the root itself, else a path ending in /). The
 # Pages workflow (.github/workflows/pages.yml) builds and deploys it on a release tag.

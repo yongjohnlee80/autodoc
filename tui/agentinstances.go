@@ -78,8 +78,9 @@ type agentRuntimeHost interface {
 }
 
 // agentReadyWait is how long a delivery to an agent it just started waits for the agent's program
-// to take bracketed pastes, trying again agentReadyPoll apart (ADR 1792991980 §3): a starting
-// program hasn't asked for them yet.
+// to take bracketed pastes, trying again agentReadyPoll apart
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste): a starting program
+// hasn't asked for them yet.
 // NOTE: can't announce: a program says nothing when it enables bracketed paste, so the paste is
 // tried again until it is taken.
 const (
@@ -280,10 +281,10 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	instance.profile, instance.workspace, instance.crewed = p, ws, crewed
 	if crewed {
-		// registered first (ADR 1793271500 §4.4): the process starts only once its session's context
-		// is written, and a refused registration starts nothing. The answer is checked before either:
-		// a tab closed or restarted meanwhile, or a window whose scope, epoch or daemon changed, ends
-		// the session instead
+		// registered first (docs/decisions/crew.md#sessions-and-the-guard): the process starts only
+		// once its session's context is written, and a refused registration starts nothing. The
+		// answer is checked before either: a tab closed or restarted meanwhile, or a window whose
+		// scope, epoch or daemon changed, ends the session instead
 		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
 		instance.starting = true
 		token := instance.token
@@ -471,9 +472,9 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 // once on the UI loop, including cancellation and orderly owner shutdown.
 // The task goes as one bracketed paste, or not at all: a program that takes none
 // gets nothing, and done hears widget.ErrTerminalPasteUnbracketed. No Enter
-// follows (ADR 1792991980 §4.2): the task waits in the agent's input, its panel
-// brought forward ready to type, and the user's Enter sends it. Success means
-// the task typed, not submitted.
+// follows (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent): the task waits in the
+// agent's input, its panel brought forward ready to type, and the user's Enter sends it. Success
+// means the task typed, not submitted.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	check := func() error {
 		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
@@ -491,7 +492,8 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 // delivery: the same refusals, the same consent to start a stopped agent, the same checks before
 // anything is sent. The text goes as one bracketed paste, whole, waiting at the prompt for Enter;
 // to a program that takes none nothing is sent, and done hears widget.ErrTerminalPasteUnbracketed
-// (ADR 1792991980 §6). No Enter is added after it. Success means typed delivery.
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste). No Enter is added
+// after it. Success means typed delivery.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	check := func() error {
 		if text == "" || len(text) > widget.TerminalInputLimit {
@@ -504,9 +506,10 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	}, done)
 }
 
-// present brings instance forward for the user's Enter (ADR 1792991980 §4.2): the agents panel
-// open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails
-// here is kept, never the delivery's error.
+// present brings instance forward for the user's Enter
+// (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent): the agents panel open, its
+// tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is
+// kept, never the delivery's error.
 func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
 	a.c.OpenDrawer("agent")
 	a.c.Keep(a.selectInstance(instance))

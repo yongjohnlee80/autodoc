@@ -18,9 +18,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// luashell_test.go: the Lua shell (ADR 1792256103 §5). The unit cells drive a luaShell with a loop
-// of the test's own: each post waits in the test's queue until the test runs it, on the test's
-// goroutine, the only one touching the engine. Every wait is for an observed state, never a sleep.
+// luashell_test.go: the Lua shell (docs/decisions/editor.md#a-lua-shell-in-the-terminal-panel). The
+// unit cells drive a luaShell with a loop of the test's own: each post waits in the test's queue
+// until the test runs it, on the test's goroutine, the only one touching the engine. Every wait is
+// for an observed state, never a sleep.
 
 // shellRig is a luaShell, its engine and page, the loop's queue and what the shell has written.
 type shellRig struct {

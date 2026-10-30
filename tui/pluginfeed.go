@@ -9,12 +9,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// THE DOCUMENT FEED (ADR 1791268009 §2.3) — a plugin whose manifest declares [feed] document =
-// true is sent the note in the editor as it stands, saved or not: its text, the cursor and the
-// selection. It is sent when the plugin starts, and after each pause in editing, moving or opening
-// (pluginFeedDelay). Version rises with every edit, and with every note opened or closed, so a
-// plugin can drop an answer it computed for an older one. A note too large for the link is sent
-// too large, without its text (plugin.FitDocument); only the newest waits to be sent (outQueue).
+// THE DOCUMENT FEED (docs/decisions/plugins.md#the-document-feed) — a plugin whose manifest
+// declares [feed] document = true is sent the note in the editor as it stands, saved or not: its
+// text, the cursor and the selection. It is sent when the plugin starts, and after each pause in
+// editing, moving or opening (pluginFeedDelay). Version rises with every edit, and with every note
+// opened or closed, so a plugin can drop an answer it computed for an older one. A note too large
+// for the link is sent too large, without its text (plugin.FitDocument); only the newest waits to
+// be sent (outQueue).
 //
 // A service that starts on use (start = "use") starts on its first feed event.
 

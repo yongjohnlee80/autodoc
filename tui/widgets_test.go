@@ -9,7 +9,8 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// widgets_test.go: :go, the Go-to picker and F6 (ADR 1792256102 §5).
+// widgets_test.go: :go, the Go-to picker and F6
+// (docs/decisions/editor.md#going-to-a-widget-by-name).
 
 func (r *running) focusedOn(id string) bool { return onLoop(r, func() bool { return r.h.within(id) }) }
 

@@ -64,7 +64,8 @@ type Workspaces struct {
 	build     func(ctx context.Context, name string) (embed.Provider, error)
 
 	// todoStores lists the todo registry (under mu), stores is what every workspace's modes read of
-	// it, and modes are the workspaces' graph_only settings by id (under mu): ADR 1792015212
+	// it, and modes are the workspaces' graph_only settings by id (under mu):
+	// docs/decisions/todos.md#graph-only-indexing
 	todoStores  TodoStores
 	stores      atomic.Pointer[registry]
 	storesDirty chan struct{}     // TodoStoresChanged's signal to the reader, one pending at most
@@ -110,7 +111,7 @@ type served struct {
 	// the rest is nil or zero for one that could not be opened
 	ix            *index.Indexer
 	docs          *docs.Docs
-	files         *docs.Docs             // every file of the root, admitted or not: a bounded file.*'s (ADR 1792004705 §4.2a.1)
+	files         *docs.Docs             // every file of the root, admitted or not: a bounded file.*'s (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace)
 	fsys          vfs.FS                 // the root, golib vfs/local (os.Root) behind the guard: workspace.scaffold writes through it, borrowed, never closed there
 	name          atomic.Pointer[string] // its name now, for the guard: a rename moves it
 	follower      *follow.Follower
@@ -143,12 +144,15 @@ type Options struct {
 	// Databases offers a workspace's source and destination databases (core/edition): when false,
 	// Configure refuses them and Capabilities says so.
 	Databases bool
-	// Registrations are the build's chunkers and deriver (ADR 0216); nil: none, the community build.
+	// Registrations are the build's chunkers and deriver
+	// (docs/decisions/search.md#registered-chunkers-and-derivers); nil: none, the community build.
 	Registrations *registrations.Table
-	// Rank is the re-ranking stage every workspace's indexer wraps its searches in (ADR 0215): the
-	// daemon's one Holder, the texts the ranker reads, and whether a search is ranked or refused.
+	// Rank is the re-ranking stage every workspace's indexer wraps its searches in
+	// (docs/decisions/search.md#re-ranking-with-one-global-ranker): the daemon's one Holder, the texts
+	// the ranker reads, and whether a search is ranked or refused.
 	Rank index.Rank
-	// Guard holds a gated script's calls to their bounds (ADR 1792004705 §4.2a.1): every served
+	// Guard holds a gated script's calls to their bounds
+	// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): every served
 	// workspace's files are reached through it. nil: every bounded call is refused.
 	Guard *fsbounds.Guard
 }
@@ -716,7 +720,8 @@ func (m *Workspaces) renameServed(name, to string, s *served) {
 // one transaction. Its files are not touched. A delete that fails (the request cancelled, the
 // store's write refused) leaves the workspace as it was: stored, and served again. Once it is gone,
 // the todo registry is read again: a store recorded to it now belongs to the workspace containing
-// it, or to none (ADR 1792132105 §2.4), and the other workspaces' documents re-resolve with that.
+// it, or to none (docs/decisions/todos.md#which-workspace-a-store-belongs-to), and the other
+// workspaces' documents re-resolve with that.
 func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	m.chg.Lock()
 	defer m.chg.Unlock()

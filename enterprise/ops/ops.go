@@ -1,8 +1,9 @@
-// Package ops is what `autodoc --server` tells an operator (ADR 1791762085 M4): its health, public
-// and minimal (GET /v1/health); its status per tenant, for an operator's token (GET /v1/status);
-// and its metrics lines in the log. One Collector serves them all, from the tenants' stores and the
-// states their ingesters and the embedding worker publish. A failure is a code (opcode), never an
-// error's text, which stays in the log.
+// Package ops is what `autodoc --server` tells an operator
+// (docs/decisions/server.md#operator-health-status-and-metrics): its health, public and minimal
+// (GET /v1/health); its status per tenant, for an operator's token (GET /v1/status); and its
+// metrics lines in the log. One Collector serves them all, from the tenants' stores and the states
+// their ingesters and the embedding worker publish. A failure is a code (opcode), never an error's
+// text, which stays in the log.
 package ops
 
 import (

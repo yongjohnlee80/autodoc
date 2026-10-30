@@ -13,11 +13,12 @@ type Ready struct {
 	TimedOut bool
 }
 
-// Wait is mail.wait (ADR 1793271500 §4.6): it answers as soon as credential's session has eligible
-// mail, or at wait (at most crew.MaxWait). It registers on crew's wake signal before it checks, so a
-// send committed in between is heard. Each check is one write (the credential, then expire, then
-// eligibility); between checks it holds no transaction, and it checks again only when the wake
-// signal fires or mail's next deadline passes (a lapsing lease makes a delivery eligible again).
+// Wait is mail.wait (docs/decisions/crew.md#durable-mail): it answers as soon as credential's
+// session has eligible mail, or at wait (at most crew.MaxWait). It registers on crew's wake signal
+// before it checks, so a send committed in between is heard. Each check is one write (the
+// credential, then expire, then eligibility); between checks it holds no transaction, and it checks
+// again only when the wake signal fires or mail's next deadline passes (a lapsing lease makes a
+// delivery eligible again).
 func (m *Manager) Wait(ctx context.Context, credential string, wait time.Duration) (Ready, error) {
 	wait = min(max(wait, 0), crew.MaxWait)
 	heard, stop := m.crew.Watch()

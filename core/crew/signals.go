@@ -1,8 +1,9 @@
 package crew
 
 // Signals are what a Store adapter tells once a write has committed, so the long-polls and the
-// wake scheduler look again without polling (ADR 1793271500 §4.7, §4.8). A write that rolls back
-// tells nothing, and a write tells each signal at most once. Either func may be nil.
+// wake scheduler look again without polling (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
+// A write that rolls back tells nothing, and a write tells each signal at most once. Either func
+// may be nil.
 type Signals struct {
 	// Feed: the write appended to the human feed's journal (inbox_change).
 	Feed func()

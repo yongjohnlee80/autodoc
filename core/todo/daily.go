@@ -13,9 +13,9 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 )
 
-// RefreshEvery is how often the daemon refreshes each claimed store by itself (ADR 1791532020
-// §2.3): bucket placement, errors[], and the 28-day archive, which otherwise run only when a
-// client calls todos.refresh.
+// RefreshEvery is how often the daemon refreshes each claimed store by itself
+// (docs/decisions/todos.md#task-rules-and-the-daily-refresh): bucket placement, errors[], and the
+// 28-day archive, which otherwise run only when a client calls todos.refresh.
 const RefreshEvery = 24 * time.Hour
 
 // RefreshDaily refreshes every claimed store once a day until ctx ends: at once each store whose

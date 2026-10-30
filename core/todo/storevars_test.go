@@ -12,7 +12,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
-// kbFile is the kb workspace's variable file, at its root (ADR 1792132105 §2.3).
+// kbFile is the kb workspace's variable file, at its root
+// (docs/decisions/todos.md#where-a-variables-value-comes-from).
 const kbFile = "/kb/.autodoc-vars.toml"
 
 // varOf is name's entry in at's todos.vars.
@@ -79,7 +80,8 @@ func outside(t *testing.T, e *env) todo.At {
 }
 
 // Every route to a store resolves its workspace's variables: the workspace name and a folder whose
-// todos are the store's (ADR 1792015069 §2.1, ADR 1792132105 §2.1). $KB_ROOT is the workspace root and
+// todos are the store's (docs/decisions/todos.md#one-answer-from-every-route-to-a-store,
+// docs/decisions/todos.md#variables-belong-to-the-workspace). $KB_ROOT is the workspace root and
 // $HOME the daemon user's; $WORKSPACE and $PROJECT_ROOT are no longer derived. A refresh on the folder
 // route writes no error for $KB_ROOT.
 func TestEveryRouteResolvesTheWorkspacesVars(t *testing.T) {
@@ -119,9 +121,10 @@ func TestEveryRouteResolvesTheWorkspacesVars(t *testing.T) {
 	}
 }
 
-// One precedence (ADR 1792132105 §2.3): this machine's row, then the KB's file (relative to the KB
-// root), then the derived built-in, then a global var, then the environment. An absolute value in the
-// KB's file is refused, reported once, and the name falls through.
+// One precedence (docs/decisions/todos.md#where-a-variables-value-comes-from): this machine's row,
+// then the KB's file (relative to the KB root), then the derived built-in, then a global var, then
+// the environment. An absolute value in the KB's file is refused, reported once, and the name falls
+// through.
 func TestThePrecedence(t *testing.T) {
 	e := claimed(t)
 	e.disk.WriteFile(kbFile, []byte("[vars]\nPROJECT_ROOT = \"../src/p\"\nKB_ROOT = \".\"\nABS = \"/abs\"\nBOTH = \"rel\"\n"))
@@ -215,7 +218,8 @@ func TestEffectiveVars(t *testing.T) {
 
 // workspace.vars("") is no workspace's: $HOME and the global variables, with no $KB_ROOT, the same a
 // path in no workspace resolves with in the index (AllEffectiveVars' ""). A client resolving a file no
-// workspace owns reads them there (ADR 1792132105 §2.5); a name no workspace's is unknown.
+// workspace owns reads them there (docs/decisions/todos.md#resolving-refs-in-every-document); a
+// name no workspace's is unknown.
 func TestTheVarsOfNoWorkspace(t *testing.T) {
 	e := claimed(t)
 	e.m = todo.New(e.roots, e.disk, e.j, todo.WithHome("/home/u"))
@@ -345,7 +349,8 @@ func TestAStoresWorkspace(t *testing.T) {
 		t.Errorf("a note's owner: %q", ws)
 	}
 	delete(e.roots, "inner")
-	// a store recorded before ADR 1792132105 has no workspace in its record: its first use records it
+	// a store recorded before docs/decisions/todos.md#variables-belong-to-the-workspace has no
+	// workspace in its record: its first use records it
 	e.must(e.j.UpdateSettings(ctx, func(s *todo.Settings) error {
 		for id, r := range s.Stores {
 			r.KB = ""
@@ -454,10 +459,10 @@ func TestAStoreOfARemovedWorkspace(t *testing.T) {
 	agree("its nested workspace back", nested, "/w/in/.todo-list/open/x.md", "/w/in")
 }
 
-// The migration (ADR 1792132105 §2.7): a store's old file's relative values are rebased into the KB's
-// file, its absolute values become this machine's rows and machine-only names, its old machine values
-// become rows, and the store's file is renamed only after; a second machine then resolves the
-// portable names and reports the machine-only one.
+// The migration (docs/decisions/todos.md#migrating-store-variable-files): a store's old file's
+// relative values are rebased into the KB's file, its absolute values become this machine's rows
+// and machine-only names, its old machine values become rows, and the store's file is renamed only
+// after; a second machine then resolves the portable names and reports the machine-only one.
 func TestTheMigrationFoldsAStoresFile(t *testing.T) {
 	e := claimed(t)
 	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("machine = [\"LOGS\"]\n\n[vars]\nPROJECT_ROOT = \"../../src/p\"\nDUMPS = \"/data\"\n"))

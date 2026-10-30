@@ -14,7 +14,8 @@ import (
 )
 
 // THE KEYSLOT — the store's key, which seals the secrets it keeps (an embedding provider's API
-// key), as AutoDB's service keyslot holds its master key (ADR 0087).
+// key), as AutoDB's service keyslot holds its master key
+// (docs/decisions/store.md#a-keyslot-seals-the-stores-secrets).
 //
 // It is a file beside the store, <store>.key, 32 random bytes, 0600: made the first time a secret
 // is sealed, and refused when anyone but its owner can read it. A copied store without it opens no

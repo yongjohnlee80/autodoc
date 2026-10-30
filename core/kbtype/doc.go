@@ -1,4 +1,5 @@
-// Package kbtype reads a KB type and plans the files it creates (ADR 1792349867). A KB type is a
+// Package kbtype reads a KB type and plans the files it creates
+// (docs/decisions/contract.md#kb-types-are-git-repos-of-files). A KB type is a
 // git repo with a kbtype.toml, which says what the type is, lists its folders with their purposes
 // and proposes the workspace's settings, and a tree/, which is the KB as it is created. Read parses
 // and validates a staged clone of it; Type.Plan renders the files a KB gets from it, AutoDoc's own

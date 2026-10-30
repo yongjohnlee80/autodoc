@@ -302,7 +302,8 @@ func TestThePreferenceFollowsItsProvider(t *testing.T) {
 	step("removing a2", func() error { return s.RemoveProvider(ctx, "a2") }, "")
 }
 
-// TestRemovingTheProviderInUseRetiresItsModel (ADR 1791284787 §2.3, item 4): in one transaction the
+// TestRemovingTheProviderInUseRetiresItsModel
+// (docs/decisions/store.md#removing-a-provider-retires-its-model): in one transaction the
 // provider goes and, in every workspace, the model it serves is neither active nor the target; with
 // another provider of the same family and model, the model stays as it is; a failure part-way
 // changes nothing.

@@ -27,9 +27,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// The wired daemon's wake path, end to end (ADR 1793271500 §5 cases 1 and 2): serve's modules on a
-// temp SQLite store whose clock the test moves, the scheduler serve starts (startScheduler) with a
-// fake waker, and agents that register, set an endpoint, receive and ack as the guide says.
+// The wired daemon's wake path, end to end (docs/decisions/crew.md#what-the-crew-guarantees):
+// serve's modules on a temp SQLite store whose clock the test moves, the scheduler serve starts
+// (startScheduler) with a fake waker, and agents that register, set an endpoint, receive and ack as
+// the guide says.
 
 // fakeWaker records each wake by session, fails or blocks on demand, and counts the calls out at
 // once.
@@ -208,8 +209,9 @@ func (r *wakeRig) advance(d time.Duration) {
 	r.deps.crew.Poke()
 }
 
-// TestNoMailIsStranded (§5 case 1): each way mail could wait unseen, with no keypress and no
-// unrelated send, ends with the scheduler reaching the agent, which drains to more=false.
+// TestNoMailIsStranded (docs/decisions/crew.md#what-the-crew-guarantees): each way mail could wait
+// unseen, with no keypress and no unrelated send, ends with the scheduler reaching the agent, which
+// drains to more=false.
 func TestNoMailIsStranded(t *testing.T) {
 	t.Run("commit, then a crash before the wake", func(t *testing.T) {
 		r := newWakeRig(t)
@@ -303,8 +305,9 @@ func TestNoMailIsStranded(t *testing.T) {
 	})
 }
 
-// TestFourCallsAtMostWithFiftyDue (§5 case 2): with fifty sessions due at once and every call
-// held, no more than four calls run; released, every session is woken.
+// TestFourCallsAtMostWithFiftyDue (docs/decisions/crew.md#what-the-crew-guarantees): with fifty
+// sessions due at once and every call held, no more than four calls run; released, every session is
+// woken.
 func TestFourCallsAtMostWithFiftyDue(t *testing.T) {
 	r := newWakeRig(t)
 	r.waker.block = make(chan struct{})

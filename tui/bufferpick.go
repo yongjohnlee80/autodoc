@@ -11,8 +11,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// SWITCHING BUFFERS IN THE TUI — the Buffers picker (BufferPick.qml) and :b (ADR 1792076688 §4.7).
-// Both list the open buffers by number and name, [+] on a modified one; choosing one shows it.
+// SWITCHING BUFFERS IN THE TUI — the Buffers picker (BufferPick.qml) and :b
+// (docs/decisions/editor.md#switching-buffers). Both list the open buffers by number and name, [+]
+// on a modified one; choosing one shows it.
 
 // newBufferPick is the Buffers picker: a filter over the open buffers' labels (bufferLabel), the
 // buffer under the cursor previewed from its text as it is, unsaved edits and all.

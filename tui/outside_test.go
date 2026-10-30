@@ -19,9 +19,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// outside_test.go: files outside every workspace (ADR 1791430651) — File › Open file… and File ›
-// New file… over the whole disk, file.locate's routing into a workspace, and what such a file keeps
-// and lacks.
+// outside_test.go: files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace) — File › Open file… and File › New file…
+// over the whole disk, file.locate's routing into a workspace, and what such a file keeps and
+// lacks.
 
 // diskFiles is the daemon's documents of the whole disk, as app/serve.go serves them.
 func diskFiles(t *testing.T, opts ...docs.Option) *docs.Docs {
@@ -62,7 +63,7 @@ func waitDisk(t *testing.T, r *running, abs, want string) {
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line
 // says so, a save writes it, and a change on disk since it was read is a conflict that asks
-// (ADR 1791430651 §5.1, §5.7).
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
@@ -273,8 +274,9 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 	})
 }
 
-// whyOutside (ADR 1792015212 §2.5): the innermost workspace root holding a file, and the exclude
-// pattern that keeps it out ("" when it is only not admitted); none for a file under no root.
+// whyOutside (docs/decisions/todos.md#excluded-todo-stores-are-reported): the innermost workspace
+// root holding a file, and the exclude pattern that keeps it out ("" when it is only not admitted);
+// none for a file under no root.
 func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 	list := []wsInfo{
 		{name: "outer", root: "/src", exclude: []string{".git/**"}},
@@ -298,7 +300,8 @@ func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 }
 
 // A file a workspace's exclude keeps out, opened by its path, says which workspace and which
-// pattern, and offers that workspace's settings (ADR 1792015212 §2.5).
+// pattern, and offers that workspace's settings
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	root := fileDir(t, "a.md", "# A\n")
 	if err := os.MkdirAll(filepath.Join(root, "drafts"), 0o755); err != nil {
