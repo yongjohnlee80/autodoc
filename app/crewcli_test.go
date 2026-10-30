@@ -436,16 +436,16 @@ func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
 	a := dial()
 	held := make(chan error, 2)
 	for range 2 { // an empty journal: each waits out its timeout
-		go func() { _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(3000)); held <- err }()
+		go func() { _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(5000)); held <- err }()
 	}
-	var third error // until both are in, a probe is admitted and answers at once
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if _, third = a.Call(d.ctx, "inbox.watch", int64(0), int64(0)); busy(third) {
-			break
+	// both admitted, read from the limiter itself: nothing probes for a slot while they enter
+	for deadline := time.Now().Add(4 * time.Second); d.deps.polls.Held() < 2; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d long-polls held, want the 2 in flight", d.deps.polls.Held())
 		}
 	}
-	if !busy(third) {
-		t.Fatalf("a third long-poll on the connection: %v, want rpc.long_polls_busy", third)
+	if _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(0)); !busy(err) {
+		t.Fatalf("a third long-poll on the connection: %v, want rpc.long_polls_busy", err)
 	}
 	if _, err := a.Call(d.ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName}); err != nil {
 		t.Fatal(err)
@@ -453,8 +453,16 @@ func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
 	if _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(0)); !busy(err) {
 		t.Fatalf("a third long-poll after a re-hello on the same socket: %v, want rpc.long_polls_busy still", err)
 	}
+	if n := d.deps.polls.Held(); n != 2 {
+		t.Fatalf("%d long-polls held after the re-hello, want the same 2", n)
+	}
 	if _, err := dial().Call(d.ctx, "inbox.watch", int64(0), int64(100)); err != nil {
 		t.Fatalf("another connection's first long-poll: %v, want admitted", err)
+	}
+	select { // the two were held all along: neither answered before its timeout
+	case err := <-held:
+		t.Fatalf("a held long-poll answered during the checks (%v): the refusals were not the cap's", err)
+	default:
 	}
 	for range 2 {
 		if err := <-held; err != nil {

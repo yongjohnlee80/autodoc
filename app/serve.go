@@ -352,6 +352,7 @@ type moduleDeps struct {
 	crew  *crew.Manager
 	mail  *mail.Manager
 	inbox *inbox.Manager
+	polls *crew.LongPolls // the three's one long-poll limiter
 	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
 	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
 	onStores func()
@@ -385,6 +386,7 @@ func modules(d *moduleDeps) []module.Module {
 func crewModules(d *moduleDeps) {
 	feed := inbox.NewFeed()
 	polls := crew.NewLongPolls()
+	d.polls = polls
 	st := sqlitecrewmail.New(d.store, sqlitecrewmail.WithSignals(crew.Signals{Feed: feed.Notify,
 		Wake: func() { d.crew.Poke() }}))
 	port := &crewPort{}

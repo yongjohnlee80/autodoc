@@ -20,6 +20,9 @@ func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	if _, err := l.Enter("tui#a"); !errors.Is(err, crew.ErrLongPollsBusy) {
 		t.Fatalf("a third: %v, want ErrLongPollsBusy", err)
 	}
+	if n := l.Held(); n != 2 {
+		t.Fatalf("Held: %d, want 2 (a refused call holds nothing)", n)
+	}
 	if b, err := l.Enter("nvim#b"); err != nil {
 		t.Fatalf("another connection's first: %v", err)
 	} else {
@@ -27,6 +30,9 @@ func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	}
 	a1()
 	a1() // a second leave of the same long-poll frees nothing more
+	if n := l.Held(); n != 1 {
+		t.Fatalf("Held after one left twice: %d, want 1", n)
+	}
 	a3, err := l.Enter("tui#a")
 	if err != nil {
 		t.Fatalf("a long-poll after one ended: %v", err)
@@ -36,6 +42,9 @@ func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	}
 	a2()
 	a3()
+	if n := l.Held(); n != 0 {
+		t.Fatalf("Held once all left: %d, want 0", n)
+	}
 	for range 5 {
 		if _, err := l.Enter(nil); err != nil {
 			t.Fatalf("a caller with no connection identity: %v", err)
