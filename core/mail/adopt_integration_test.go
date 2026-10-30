@@ -2,6 +2,7 @@ package mail_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -101,5 +102,54 @@ func TestAdoptionsNoticesFollowTheMergeThroughCrewsAdopt(t *testing.T) {
 	}
 	if reopened != 1 {
 		t.Fatalf("%d reopening notices, want 1", reopened)
+	}
+}
+
+// The real crew.Discard over mail's real effects: a discarded profile's self-sent message leaves
+// nothing waiting on it, its notice is undeliverable history, and a later send into the scope is
+// refused (Zen's #62 r2). It needs crew to mark the scope gone before DiscardDeliveries.
+func TestDiscardLeavesNothingWaitingThroughCrewsDiscard(t *testing.T) {
+	ctx := context.Background()
+	clock := crewtest.NewClock()
+	mem := mailtest.NewMem(clock.Now)
+	port := &lazyCrew{}
+	mm := mail.New(mem, port)
+	cm := crew.New(mem.Crew(), crew.WithSessionEnder(mm))
+	port.m = cm
+	secret := strings.Repeat("s", 40)
+	oldEpoch, err := cm.Claim(ctx, "autodoc:old", "r1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := cm.Register(ctx, crew.Registration{Scope: "autodoc:old", Run: "r1", Epoch: oldEpoch, Codename: "gold",
+		Kind: "claude", Workspace: "w", Instance: "i1", Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newEpoch, err := cm.Claim(ctx, "autodoc:new", "r2", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := cm.Register(ctx, crew.Registration{Scope: "autodoc:new", Run: "r2", Epoch: newEpoch, Codename: "zen",
+		Kind: "claude", Workspace: "w", Instance: "i2", Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mm.Send(ctx, crew.Credential(old.Session, secret), mail.Send{To: []string{"gold"}, Body: "self", Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Release(ctx, "autodoc:old", "r1", oldEpoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Discard(ctx, "autodoc:old", "autodoc:new", "r2", newEpoch); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range mem.Deliveries() {
+		if d.Recipient == old.Profile && (d.State == mail.Queued || d.State == mail.Leased) {
+			t.Errorf("a delivery waits on the discarded profile: %+v", d)
+		}
+	}
+	if _, err := mm.Send(ctx, crew.Credential(other.Session, secret), mail.Send{To: []string{"gold@autodoc:old"}, Body: "b", Key: "later"}); !errors.Is(err, mail.ErrNoRecipient) {
+		t.Fatalf("a send into the discarded scope: %v, want ErrNoRecipient", err)
 	}
 }

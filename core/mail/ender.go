@@ -148,7 +148,9 @@ func (m *Manager) UnhandledCount(ctx crew.Tx, profile string) (int, error) {
 }
 
 // DiscardDeliveries fails every unhandled delivery of profile (discarded), each sender told, in
-// crew.discard's write (§4.3).
+// crew.discard's write (§4.3). crew calls it after it has marked the scope gone, so a notice to
+// profile as a sender (a message it sent itself) finds no recipient: it fails recipient_gone and
+// shows in the human's history, never queued where nothing can receive it.
 func (m *Manager) DiscardDeliveries(ctx crew.Tx, profile string) error {
 	tx, err := mailTx(ctx)
 	if err != nil {

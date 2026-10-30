@@ -569,6 +569,46 @@ func TestDiscardFailsEveryUnhandledDelivery(t *testing.T) {
 	}
 }
 
+// A profile of a gone scope receives nothing again (Zen's #62 r2): a discard's notice to the
+// discarded profile as a sender (a message it sent itself) fails recipient_gone and shows in the
+// human's history instead of waiting where nothing can receive it, and a later send into the
+// scope is refused. crew marks the scope gone before the mail effects run.
+func TestAGoneScopesProfilesReceiveNothing(t *testing.T) {
+	r := newRig(t)
+	r.profile("p-old", "autodoc:w", "gold", "s-old")
+	self := r.send("s-old", mail.Send{To: []string{"gold", "gold@p"}, Body: "self", Key: "k"})
+	r.write(func(tx mail.Tx) error {
+		if err := tx.PutScope(crew.Scope{ID: "autodoc:w", Kind: "autodoc", State: crew.ScopeGone}); err != nil {
+			return err
+		}
+		return r.m.DiscardDeliveries(tx, "p-old")
+	})
+	for _, d := range r.mem.Deliveries() {
+		if d.Recipient == "p-old" && (d.State == mail.Queued || d.State == mail.Leased) {
+			t.Fatalf("a delivery waits on the gone scope's profile: %+v", d)
+		}
+	}
+	var notice mail.Delivery
+	for _, m := range r.mem.Messages() {
+		if m.Kind == mail.KindEvent && m.ReplyTo == self.Message.ID {
+			for _, d := range r.mem.Deliveries() {
+				if d.Message == m.ID {
+					notice = d
+				}
+			}
+		}
+	}
+	if notice.State != mail.Failed || notice.Why != mail.WhyRecipientGone {
+		t.Fatalf("the discard's notice to the discarded sender: %+v, want failed recipient_gone", notice)
+	}
+	if ch := r.mem.Changes(); len(ch) == 0 || ch[len(ch)-1].Kind != mail.ChangeUndeliverable {
+		t.Fatalf("the human's feed: %+v, want the undeliverable notice", ch)
+	}
+	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{"gold@autodoc:w"}, Body: "b", Key: "later"}); !errors.Is(err, mail.ErrNoRecipient) {
+		t.Fatalf("a send into the gone scope: %v, want ErrNoRecipient", err)
+	}
+}
+
 // A receive leases at most ReceiveMax, in seq order, and says more remains; a preview leases
 // nothing.
 func TestAReceiveIsBoundedAndAPreviewLeasesNothing(t *testing.T) {

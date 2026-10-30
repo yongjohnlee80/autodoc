@@ -9,7 +9,9 @@ import (
 
 // resolveRecipient is the profile a new delivery to profile goes to: profile itself while active,
 // else the survivor its merged_into links lead to, at most mergeHops of them (§4.6). A missing
-// profile, a cycle, a longer chain or a merge to nowhere is errRecipientGone.
+// profile, a cycle, a longer chain or a merge to nowhere is errRecipientGone, and so is an active
+// profile of a scope that is gone (a discard ended it): nothing can ever receive there, so no new
+// delivery may wait there.
 func resolveRecipient(tx Tx, profile string) (string, error) {
 	seen := map[string]bool{}
 	for p := profile; ; {
@@ -21,6 +23,13 @@ func resolveRecipient(tx Tx, profile string) (string, error) {
 			return "", errRecipientGone
 		}
 		if row.Status == crew.ProfileActive {
+			gone, err := scopeGone(tx, row.Scope)
+			switch {
+			case err != nil:
+				return "", err
+			case gone:
+				return "", errRecipientGone
+			}
 			return p, nil
 		}
 		if seen[p] || len(seen) >= mergeHops || row.MergedInto == "" {
@@ -29,6 +38,15 @@ func resolveRecipient(tx Tx, profile string) (string, error) {
 		seen[p] = true
 		p = row.MergedInto
 	}
+}
+
+// scopeGone reports whether scope has ended for good (crew's 'gone': discarded, or adopted away).
+func scopeGone(tx Tx, scope string) (bool, error) {
+	sc, ok, err := tx.Scope(scope)
+	if err != nil {
+		return false, err
+	}
+	return ok && sc.State == crew.ScopeGone, nil
 }
 
 // deliver inserts msg's delivery to profile (bound to session when it is not ""), the one way every
