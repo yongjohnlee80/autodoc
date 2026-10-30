@@ -490,7 +490,7 @@ func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
 
 // TestServeWakesClaudeSessions: the scheduler serve starts, with serve's own wakers (crewWakers),
 // wakes a Claude session through its inbox socket, bound to its process, and leaves a session whose
-// kind has no waker (OpenCode) alone. The socket is a stand-in the test serves in Claude's socket folder, so
+// kind has no waker at once (Codex, whose waker is a late one) alone. The socket is a stand-in the test serves in Claude's socket folder, so
 // the test process is its peer and the binding (pid, process reference) is real.
 func TestServeWakesClaudeSessions(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -533,17 +533,18 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	if _, err := r.deps.crew.SetEndpoint(r.ctx, goldCred, "claude", string(loc)); err != nil {
 		t.Fatal(err)
 	}
-	// tifa: an OpenCode session with an endpoint, in the same daemon; serve has no OpenCode waker
+	// tifa: a Codex session with an endpoint, in the same daemon; serve's wakers at once have no
+	// Codex waker (it is a late one, which this cell does not start)
 	r.n++
 	secret := strings.Repeat("s", 32) + "tifa"
 	reg, err := r.deps.crew.Register(r.ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: r.epoch,
-		Codename: "tifa", Kind: "opencode", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
+		Codename: "tifa", Kind: "codex", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tifa := reg.Session
-	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(tifa, secret), "opencode",
-		fmt.Sprintf(`{"session":"ses-1","pid":%d,"start":%q}`, os.Getpid(), self)); err != nil {
+	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(tifa, secret), "codex",
+		fmt.Sprintf(`{"server":"%s/app.sock","thread":"t-1"}`, crew.CodexSocketDirs(os.Getuid())[0])); err != nil {
 		t.Fatal(err)
 	}
 	r.start(crewWakers(r.deps.crew))
