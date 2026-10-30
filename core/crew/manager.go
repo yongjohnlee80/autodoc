@@ -7,11 +7,22 @@ type Manager struct {
 	ender SessionEnder
 }
 
-// SessionEnder is what follows a session's end in the mail module, in the same transaction:
-// deliveries bound to the session fail ('session_ended'), and their senders are told. The mail
-// module implements it.
+// SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write
+// transaction after its guard and its own change (ADR 1793271500 §4.3). The mail module implements
+// it; its methods take the same tx, which the one adapter makes a mail transaction too.
 type SessionEnder interface {
+	// EndSessionDeliveries: s ended for why; the deliveries bound to it fail ('session_ended'),
+	// and their senders are told.
 	EndSessionDeliveries(tx Tx, s Session, why string) error
+	// MergeDeliveries: adoption's mail half. from's open deliveries are normalized onto into; a
+	// duplicate of one into already holds becomes 'merged'; moved rows take into's next seqs, and
+	// into's live session's pending_gen is raised.
+	MergeDeliveries(tx Tx, from, into string) error
+	// DiscardDeliveries: every unhandled delivery of profile fails ('discarded'), senders told.
+	DiscardDeliveries(tx Tx, profile string) error
+	// HasEligible: profile has a delivery a new session of it may receive now. crew.register
+	// seeds the new session's pending_gen from it, so queued mail wakes it (§4.4).
+	HasEligible(tx Tx, profile string) (bool, error)
 }
 
 // Option configures a Manager.

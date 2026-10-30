@@ -3,6 +3,7 @@ package crewtest
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,8 +34,11 @@ func (c *Clock) Advance(d time.Duration) { c.mu.Lock(); c.at = c.at.Add(d); c.mu
 
 // Enders records the sessions the crew module ended, as the mail module would hear of them.
 type Enders struct {
-	mu    sync.Mutex
-	Ended []EndedSession
+	mu        sync.Mutex
+	Ended     []EndedSession
+	Merged    [][2]string     // (from, into) profiles
+	Discarded []string        // profiles
+	Pending   map[string]bool // profiles with eligible mail, for HasEligible
 }
 
 // EndedSession is one call of EndSessionDeliveries.
@@ -44,6 +48,29 @@ type EndedSession struct{ Session, Why string }
 func (e *Enders) EndSessionDeliveries(_ crew.Tx, s crew.Session, why string) error {
 	e.mu.Lock()
 	e.Ended = append(e.Ended, EndedSession{s.ID, why})
+	e.mu.Unlock()
+	return nil
+}
+
+// MergeDeliveries records adoption's mail half (crew.SessionEnder).
+func (e *Enders) MergeDeliveries(_ crew.Tx, from, into string) error {
+	e.mu.Lock()
+	e.Merged = append(e.Merged, [2]string{from, into})
+	e.mu.Unlock()
+	return nil
+}
+
+// HasEligible reports the profiles Pending names (crew.SessionEnder).
+func (e *Enders) HasEligible(_ crew.Tx, profile string) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Pending[profile], nil
+}
+
+// DiscardDeliveries records discard's mail half (crew.SessionEnder).
+func (e *Enders) DiscardDeliveries(_ crew.Tx, profile string) error {
+	e.mu.Lock()
+	e.Discarded = append(e.Discarded, profile)
 	e.mu.Unlock()
 	return nil
 }
@@ -221,6 +248,197 @@ func Run(t *testing.T, h Harness) {
 			t.Fatalf("%d of %d racing claims won, want exactly 1", won, n)
 		}
 	})
+
+	reg := func(epoch int64, codename, instance string) crew.Registration {
+		return crew.Registration{Scope: scope, Run: "run-a", Epoch: epoch, Codename: codename, Kind: "claude",
+			Workspace: "ws-1", Instance: instance, Secret: strings.Repeat("s", 32) + instance}
+	}
+
+	t.Run("register, and its replays", func(t *testing.T) {
+		m, _, _, _ := setup(t)
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := reg(e, "jarvis", "agent-1")
+		got, err := m.Register(ctx, r)
+		if err != nil || got.Session == "" || got.Profile == "" {
+			t.Fatalf("register: %+v, %v", got, err)
+		}
+		if again, err := m.Register(ctx, r); err != nil || again != got {
+			t.Fatalf("a replay after a lost answer: %+v, %v; want %+v", again, err, got)
+		}
+		for name, change := range map[string]func(*crew.Registration){
+			"another secret":    func(r *crew.Registration) { r.Secret = strings.Repeat("x", 40) },
+			"another codename":  func(r *crew.Registration) { r.Codename = "vision" },
+			"another kind":      func(r *crew.Registration) { r.Kind = "codex" },
+			"another workspace": func(r *crew.Registration) { r.Workspace = "ws-2" },
+		} {
+			bad := r
+			change(&bad)
+			if _, err := m.Register(ctx, bad); !errors.Is(err, crew.ErrInstanceReused) {
+				t.Errorf("a replay with %s: %v, want ErrInstanceReused", name, err)
+			}
+		}
+		if _, err := m.Register(ctx, reg(e, "jarvis", "agent-2")); !errors.Is(err, crew.ErrCodenameBusy) {
+			t.Fatalf("a second live session of the codename: %v, want ErrCodenameBusy", err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); err != nil {
+			t.Fatalf("exit: %v", err)
+		}
+		if _, err := m.Register(ctx, r); !errors.Is(err, crew.ErrInstanceReused) {
+			t.Fatalf("a replay of an ended session: %v, want ErrInstanceReused (never an ended session back)", err)
+		}
+		next, err := m.Register(ctx, reg(e, "jarvis", "agent-2"))
+		if err != nil || next.Profile != got.Profile || next.Session == got.Session {
+			t.Fatalf("the codename's next session: %+v, %v; want a new session of profile %s", next, err, got.Profile)
+		}
+	})
+
+	t.Run("a new epoch is a new namespace of instances", func(t *testing.T) {
+		m, _, clock, _ := setup(t)
+		e1, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, err := m.Register(ctx, reg(e1, "jarvis", "agent-1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		clock.Advance(91 * time.Second) // the host crashed; its successor claims
+		e2, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := reg(e2, "jarvis", "agent-1") // the successor's own agent-1
+		r.Secret = strings.Repeat("n", 40)
+		second, err := m.Register(ctx, r)
+		if err != nil || second.Session == first.Session {
+			t.Fatalf("the successor's agent-1: %+v, %v; want a new session", second, err)
+		}
+		if _, err := m.Register(ctx, reg(e1, "jarvis", "agent-3")); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("a register under the fenced epoch: %v, want ErrStaleEpoch", err)
+		}
+	})
+
+	t.Run("register seeds pending_gen only for waiting mail", func(t *testing.T) {
+		m, store, _, enders := setup(t)
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		quiet, err := m.Register(ctx, reg(e, "jarvis", "agent-1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w := wakeOf(t, store, quiet.Session); w.PendingGen != 0 || w.State != crew.WakeIdle {
+			t.Fatalf("a session with no mail waiting: wake %+v, want idle with pending_gen 0", w)
+		}
+		// a profile with mail waiting before its first session exists
+		if err := store.Write(ctx, func(tx crew.Tx) error {
+			return tx.PutProfile(crew.Profile{ID: "p-vision", Scope: scope, Codename: "vision", Kind: "claude",
+				Status: crew.ProfileActive, Created: tx.Now().UnixNano()})
+		}); err != nil {
+			t.Fatal(err)
+		}
+		enders.mu.Lock()
+		enders.Pending = map[string]bool{"p-vision": true}
+		enders.mu.Unlock()
+		waiting, err := m.Register(ctx, reg(e, "vision", "agent-2"))
+		if err != nil || waiting.Profile != "p-vision" {
+			t.Fatalf("register vision: %+v, %v", waiting, err)
+		}
+		if w := wakeOf(t, store, waiting.Session); w.PendingGen != 1 {
+			t.Fatalf("a session whose profile has mail waiting: pending_gen %d, want 1", w.PendingGen)
+		}
+	})
+
+	t.Run("exit: once, idempotent, and fenced", func(t *testing.T) {
+		m, store, clock, enders := setup(t)
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := m.Register(ctx, reg(e, "jarvis", "agent-1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, "crashed"); !errors.Is(err, crew.ErrInvalid) {
+			t.Fatalf("an unknown exit reason: %v, want ErrInvalid", err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedStartFailed); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); err != nil {
+			t.Fatalf("exiting an ended session again: %v, want nil", err)
+		}
+		wantEnded(t, store, enders, got.Session, crew.EndedStartFailed)
+		if err := m.Exit(ctx, scope, "run-a", e, "no-such-session", crew.EndedExit); !errors.Is(err, crew.ErrBadCredential) {
+			t.Fatalf("exit of another host's session: %v, want ErrBadCredential", err)
+		}
+		clock.Advance(91 * time.Second)
+		if _, err := m.Claim(ctx, scope, "run-b", proc); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("exit from a fenced host: %v, want ErrStaleEpoch", err)
+		}
+		if err := m.Renew(ctx, scope, "run-a", e); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("renew from a fenced host: %v, want ErrStaleEpoch", err)
+		}
+	})
+
+	t.Run("GuardSession and RaisePending, for the mail module", func(t *testing.T) {
+		m, store, clock, _ := setup(t)
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := m.Register(ctx, reg(e, "jarvis", "agent-1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		inWrite := func(fn func(crew.Tx) error) error { return store.Write(ctx, fn) }
+		if err := inWrite(func(tx crew.Tx) error { _, err := m.GuardSession(tx, got.Session); return err }); err != nil {
+			t.Fatalf("a live session's guard: %v", err)
+		}
+		for range 2 {
+			if err := inWrite(func(tx crew.Tx) error { return m.RaisePending(tx, got.Profile) }); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if w := wakeOf(t, store, got.Session); w.PendingGen != 2 {
+			t.Fatalf("pending_gen after two raises: %d, want 2", w.PendingGen)
+		}
+		if err := inWrite(func(tx crew.Tx) error { return m.RaisePending(tx, "no-such-profile") }); err != nil {
+			t.Fatalf("raising a profile with no live session: %v, want nil", err)
+		}
+		clock.Advance(91 * time.Second)
+		if _, err := m.Claim(ctx, scope, "run-b", proc); err != nil { // reclaims: the session ends
+			t.Fatal(err)
+		}
+		if err := inWrite(func(tx crew.Tx) error { _, err := m.GuardSession(tx, got.Session); return err }); !errors.Is(err, crew.ErrBadCredential) {
+			t.Fatalf("a reclaimed session's guard: %v, want ErrBadCredential", err)
+		}
+	})
+}
+
+// wakeOf is session's wake row.
+func wakeOf(t *testing.T, store crew.Store, session string) crew.Wake {
+	t.Helper()
+	var w crew.Wake
+	if err := store.Read(context.Background(), func(tx crew.Tx) error {
+		var ok bool
+		var err error
+		w, ok, err = tx.Wake(session)
+		if err == nil && !ok {
+			t.Fatalf("session %s has no wake row", session)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return w
 }
 
 // seedSession puts a live session of scope at epoch, as crew.register will.

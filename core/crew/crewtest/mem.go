@@ -27,19 +27,20 @@ type memState struct {
 	scopes   map[string]crew.Scope
 	profiles map[string]crew.Profile
 	sessions map[string]crew.Session
+	wakes    map[string]crew.Wake
 }
 
 // NewMem is an empty store whose transactions read the time from now.
 func NewMem(now func() time.Time) *Mem {
 	return &Mem{now: now, st: memState{
 		hosts: map[string]crew.Host{}, scopes: map[string]crew.Scope{},
-		profiles: map[string]crew.Profile{}, sessions: map[string]crew.Session{},
+		profiles: map[string]crew.Profile{}, sessions: map[string]crew.Session{}, wakes: map[string]crew.Wake{},
 	}}
 }
 
 func (s memState) clone() memState {
 	return memState{hosts: maps.Clone(s.hosts), scopes: maps.Clone(s.scopes),
-		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions)}
+		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions), wakes: maps.Clone(s.wakes)}
 }
 
 // Write runs fn on a copy of the state and commits the copy if fn succeeds.
@@ -139,6 +140,22 @@ func (t *memTx) LiveSessionsOfScope(scope string) ([]crew.Session, error) {
 }
 
 func (t *memTx) PutSession(s crew.Session) error { t.st.sessions[s.ID] = copySession(s); return nil }
+
+func (t *memTx) Wake(session string) (crew.Wake, bool, error) {
+	w, ok := t.st.wakes[session]
+	return copyWake(w), ok, nil
+}
+
+func (t *memTx) PutWake(w crew.Wake) error { t.st.wakes[w.Session] = copyWake(w); return nil }
+
+// copyWake keeps a stored wake row from sharing a caller's pointer.
+func copyWake(w crew.Wake) crew.Wake {
+	if w.NextAt != nil {
+		n := *w.NextAt
+		w.NextAt = &n
+	}
+	return w
+}
 
 // copySession keeps a stored session from sharing a caller's slices or pointer.
 func copySession(s crew.Session) crew.Session {
