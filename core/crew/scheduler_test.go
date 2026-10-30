@@ -264,6 +264,7 @@ type faultStore struct {
 	mu     sync.Mutex
 	writes int
 	failAt int
+	down   bool // every write fails while set
 }
 
 var errInjected = errors.New("injected store fault")
@@ -271,7 +272,7 @@ var errInjected = errors.New("injected store fault")
 func (f *faultStore) Write(ctx context.Context, fn func(crew.Tx) error) error {
 	f.mu.Lock()
 	f.writes++
-	fail := f.writes == f.failAt
+	fail := f.writes == f.failAt || f.down
 	f.mu.Unlock()
 	if fail {
 		return errInjected
@@ -379,6 +380,70 @@ func TestRunLooksAgainAfterAStoreError(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- sched.Run(ctx) }()
 	within(t, "the wake after the refused look", func() bool { return w.count() == 1 })
+	cancel()
+	<-done
+}
+
+// Two attempts of one session can each owe an end: an old call that outlived an endpoint
+// replacement, and the current one. Neither replaces the other, and paying them records the
+// current attempt's end and takes nothing from the stale one.
+func TestEachAttemptOwesItsOwnEnd(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	tok, _, ok, err := r.m.Reserve(r.ctx, s.Session, "run1")
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	r.s.Owe(s.Session, tok, crew.OutcomeAccepted)   // the current attempt, B
+	r.s.Owe(s.Session, "stale", crew.OutcomeFailed) // the old call, A, after it
+	if left := r.s.PayOwed(r.ctx); left {
+		t.Fatal("ends still owed with a healthy store")
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeAwaiting || w.Failures != 0 {
+		t.Fatalf("the current attempt's end was not recorded: %+v", w)
+	}
+}
+
+// While the store refuses every write, an overdue deadline never shortens the retry: Run backs
+// off at the retry wait instead of spinning, and goes on once the store is back.
+func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	s := r.session("gold")
+	past := clock.Now().Add(-time.Minute).UnixNano()
+	r.write(func(tx crew.Tx) error { // an unanswered wake whose timeout has already passed
+		wk, _, _ := tx.Wake(s.Session)
+		wk.State, wk.Token, wk.NextAt = crew.WakeAwaiting, "t", &past
+		return tx.PutWake(wk)
+	})
+	fs.mu.Lock()
+	fs.down, fs.writes = true, 0
+	fs.mu.Unlock()
+	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(20*time.Millisecond))
+	ctx, cancel := context.WithCancel(r.ctx)
+	done := make(chan error, 1)
+	go func() { done <- sched.Run(ctx) }()
+	time.Sleep(300 * time.Millisecond) // a cell's own window, measuring how often Run tries
+	fs.mu.Lock()
+	tries := fs.writes
+	fs.down = false
+	fs.mu.Unlock()
+	if tries > 40 { // 300 ms at a 20 ms retry is about 15; a spin is thousands
+		t.Fatalf("%d writes in 300 ms while the store refused: Run spun on the overdue deadline", tries)
+	}
+	if tries < 3 {
+		t.Fatalf("%d writes in 300 ms: Run stopped retrying", tries)
+	}
+	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
 	cancel()
 	<-done
 }

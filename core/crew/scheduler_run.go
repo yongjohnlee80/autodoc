@@ -38,12 +38,15 @@ type Scheduler struct {
 	// Without it, one refused write would leave the row in_flight with no deadline, and nothing in
 	// this run would look at it again.
 	omu  sync.Mutex
-	owed map[string]owedEnd
+	owed map[owedKey]owedEnd
 }
+
+// owedKey is one attempt: a session can owe the ends of two (an old call that outlived an endpoint
+// replacement, and the new one), and neither may replace the other.
+type owedKey struct{ session, token string }
 
 // owedEnd is one attempt's unrecorded end.
 type owedEnd struct {
-	token   string
 	outcome Outcome
 	abandon bool
 }
@@ -67,7 +70,7 @@ func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) 
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
 	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
 		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
-		watchers: map[chan struct{}]struct{}{}, owed: map[string]owedEnd{}}
+		watchers: map[chan struct{}]struct{}{}, owed: map[owedKey]owedEnd{}}
 	for _, o := range opts {
 		o(s)
 	}
@@ -131,11 +134,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			default:
 			}
 		}
-		wait, armed := s.retry, again // a store error, or an end still owed: look again soon
+		// After a store error (or an end still owed) the next look waits the retry, never less:
+		// a deadline already past is one this look could not process, and acting on it at once
+		// would spin on the store's error. Otherwise the earliest deadline decides.
+		wait, armed := s.retry, again
 		if at, ok, err := s.m.nextAt(ctx); err != nil {
 			s.report(err)
 			armed = true
-		} else if ok && (!armed || at.Sub(s.clock()) < wait) {
+		} else if ok && !again {
 			wait, armed = max(at.Sub(s.clock()), 0), true
 		}
 		if armed {
@@ -189,9 +195,9 @@ func (s *Scheduler) look(ctx context.Context) bool {
 func (s *Scheduler) Wait() { s.wg.Wait() }
 
 // owe keeps an end the store refused, to be written again at the next look.
-func (s *Scheduler) owe(session string, e owedEnd) {
+func (s *Scheduler) owe(session, token string, e owedEnd) {
 	s.omu.Lock()
-	s.owed[session] = e
+	s.owed[owedKey{session, token}] = e
 	s.omu.Unlock()
 }
 
@@ -202,12 +208,12 @@ func (s *Scheduler) payOwed(ctx context.Context) bool {
 	owed := maps.Clone(s.owed)
 	s.omu.Unlock()
 	left := false
-	for session, e := range owed {
+	for k, e := range owed {
 		var err error
 		if e.abandon {
-			err = s.m.Abandon(ctx, session, e.token)
+			err = s.m.Abandon(ctx, k.session, k.token)
 		} else {
-			err = s.m.Outcome(ctx, session, e.token, e.outcome)
+			err = s.m.Outcome(ctx, k.session, k.token, e.outcome)
 		}
 		if err != nil {
 			s.report(err)
@@ -215,9 +221,7 @@ func (s *Scheduler) payOwed(ctx context.Context) bool {
 			continue
 		}
 		s.omu.Lock()
-		if s.owed[session] == e {
-			delete(s.owed, session)
-		}
+		delete(s.owed, k) // this attempt's end, and only it: written, or stale and taken by nothing
 		s.omu.Unlock()
 	}
 	return left
@@ -232,7 +236,7 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 		}
 		if err := s.m.Abandon(ctx, session, tok); err != nil {
 			s.report(err)
-			s.owe(session, owedEnd{token: tok, abandon: true})
+			s.owe(session, tok, owedEnd{abandon: true})
 		}
 		return
 	}
@@ -245,6 +249,6 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 	o := classify(werr)
 	if err := s.m.Outcome(ctx, session, tok, o); err != nil {
 		s.report(err)
-		s.owe(session, owedEnd{token: tok, outcome: o})
+		s.owe(session, tok, owedEnd{outcome: o})
 	}
 }
