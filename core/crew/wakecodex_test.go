@@ -125,8 +125,13 @@ func TestTheCodexWakerQueuesOnTheUsersOwnServer(t *testing.T) {
 	slow, _ := fakeCodex(t, 0, "5")
 	short, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
+	began := time.Now()
 	if err := waker(slow).Wake(short, codexEndpoint(t, sock, "t"), crew.WakeNotice); !errors.Is(err, crew.ErrWakeUnknown) {
 		t.Errorf("codex killed at the deadline: %v, want unknown (it may have queued)", err)
+	}
+	// the stand-in's sleep outlives the killed shell and holds stderr: the call still ends at once
+	if took := time.Since(began); took > 3*time.Second {
+		t.Errorf("a wake killed at its 200 ms deadline returned after %v: a child holding codex's output kept the call", took)
 	}
 }
 
