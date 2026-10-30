@@ -171,6 +171,11 @@ var crewCommands = map[string]crewCommand{
 			}
 			return "crew.endpoint", []any{c.Credential, args[0], args[1]}, nil, nil
 		}},
+	"crew bridge": {usage: "--agy: an Antigravity session's bridge, run once from the agent's shell: it detaches, registers how the session is woken, and registers again whenever the daemon restarts",
+		flags: func(fs *flag.FlagSet) {
+			fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
+			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
+		}}, // run by crewBridgeMain: it stays, so it is no one call
 	"crew attention": {usage: "raise <permission|blocked> [text] | clear: tell the user this session waits on them, or no longer does",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
 			switch {
@@ -341,6 +346,9 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 		return usage()
 	}
 	name := args[0] + " " + args[1]
+	if name == "crew bridge" {
+		return crewBridgeMain(ctx, args[2:], stdout, stderr)
+	}
 	cmd, ok := crewCommands[name]
 	if !ok {
 		fmt.Fprintf(stderr, "autodoc: no command %q\n", name)
