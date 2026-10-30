@@ -36,7 +36,7 @@ type Tx interface {
 	// Retention never prunes the newest row, so a journal that had one is never empty again.
 	ChangeBounds() (oldest, newest int64, err error)
 	// OpenToUser is user's deliveries whose message is an open request or an unread report (any
-	// kind but a generated event), in seq order, at most limit: what a snapshot shows.
+	// kind but a generated event), in seq order, at most limit (0: all): what a snapshot shows.
 	OpenToUser(user string, limit int) ([]mail.Item, error)
 	// Raised is every attention row not yet cleared, by session.
 	Raised() ([]crew.Attention, error)

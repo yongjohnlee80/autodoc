@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
@@ -51,12 +52,19 @@ func (m *Manager) EnsureReserved(ctx context.Context) error {
 	})
 }
 
-// expireFirst makes the time-driven changes real in a write of their own, before a human operation's
-// write. That write runs expire again, for an expiry racing it, but a refusal rolls it back: an
-// answer refused because the request expired would otherwise leave the request open, unjournaled,
-// and its sender untold, until some other write expired it.
-func (m *Manager) expireFirst(ctx context.Context) error {
-	return m.store.Write(ctx, func(tx Tx) error { return m.expire(tx) })
+// keepExpiry makes an expiry real when an operation was refused for it. Each human operation runs
+// expire inside its own write, so an expiry is caught however late it falls, but the refusal rolls
+// that write back. Left so, a request refused as expired would stay open, unjournaled (every
+// window's toast up) and its sender untold, until some other write expired it. So after an
+// ErrExpired the expiry is committed in a write of its own, and the refusal still answered.
+func (m *Manager) keepExpiry(ctx context.Context, err error) error {
+	if !errors.Is(err, ErrExpired) {
+		return err
+	}
+	if werr := m.store.Write(ctx, func(tx Tx) error { return m.expire(tx) }); werr != nil {
+		return werr
+	}
+	return err
 }
 
 // userProfile is the human's profile id.
@@ -128,9 +136,6 @@ func (m *Manager) Answer(ctx context.Context, message, body, key string) (Messag
 	case key == "":
 		return Message{}, fmt.Errorf("%w: an empty key", ErrInvalid)
 	}
-	if err := m.expireFirst(ctx); err != nil {
-		return Message{}, err
-	}
 	var out Message
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
@@ -171,7 +176,7 @@ func (m *Manager) Answer(ctx context.Context, message, body, key string) (Messag
 		}
 		return tx.AddInboxChange(ChangeAnswered, req.ID)
 	})
-	return out, err
+	return out, m.keepExpiry(ctx, err)
 }
 
 func answerDigest(message, body string) []byte {
@@ -186,10 +191,7 @@ func answerDigest(message, body string) []byte {
 // Dismiss is inbox.dismiss: the human declines request message, and its sender is told, in one
 // write (§4.8). A second dismiss of a dismissed request is a replay, and answers ok.
 func (m *Manager) Dismiss(ctx context.Context, message string) error {
-	if err := m.expireFirst(ctx); err != nil {
-		return err
-	}
-	return m.store.Write(ctx, func(tx Tx) error {
+	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
 			return err
 		}
@@ -218,15 +220,13 @@ func (m *Manager) Dismiss(ctx context.Context, message string) error {
 		}
 		return tx.AddInboxChange(ChangeDismissed, req.ID)
 	})
+	return m.keepExpiry(ctx, err)
 }
 
 // Read is inbox.ack: the human has read report message (§4.8). A request is answered or
 // dismissed, never acked; a second ack is a replay, and answers ok.
 func (m *Manager) Read(ctx context.Context, message string) error {
-	if err := m.expireFirst(ctx); err != nil {
-		return err
-	}
-	return m.store.Write(ctx, func(tx Tx) error {
+	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
 			return err
 		}
@@ -254,4 +254,5 @@ func (m *Manager) Read(ctx context.Context, message string) error {
 		}
 		return tx.AddInboxChange(ChangeRead, msg.ID)
 	})
+	return m.keepExpiry(ctx, err)
 }
