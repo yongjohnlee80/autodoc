@@ -443,12 +443,12 @@ func TestSnapshotAndFallbackAgree(t *testing.T) {
 	if e.ix.sem.fallbackScans.Load() != falls+1 {
 		t.Fatal("a stale snapshot was used")
 	}
-	e.ix.sem.snap.Store(vector.NewIndex[int64, int64](cur.Model(), cur.Watermark()+1, nil))
+	e.ix.sem.snap.Store(vector.NewIndex[int64, chunkKey](cur.Model(), cur.Watermark()+1, nil))
 	withNewer := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+2 {
 		t.Fatal("a newer snapshot was used")
 	}
-	e.ix.sem.snap.Store(vector.NewIndex[int64, int64]("another|model||64", cur.Watermark(), nil))
+	e.ix.sem.snap.Store(vector.NewIndex[int64, chunkKey]("another|model||64", cur.Watermark(), nil))
 	withOther := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+3 {
 		t.Fatal("another model's snapshot was used")
@@ -692,12 +692,12 @@ func sharesCodes(a, b *codeIndex) bool {
 	at := map[int64]*uint64{}
 	for c := range a.Codes() {
 		if len(c.Bits) > 0 {
-			at[c.Chunk] = &c.Bits[0]
+			at[c.Chunk.ID] = &c.Bits[0]
 		}
 	}
 	n := 0
 	for c := range b.Codes() {
-		if len(c.Bits) == 0 || at[c.Chunk] != &c.Bits[0] {
+		if len(c.Bits) == 0 || at[c.Chunk.ID] != &c.Bits[0] {
 			return false
 		}
 		n++
