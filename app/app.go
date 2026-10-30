@@ -174,6 +174,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
+	fs.Bool("check-store", false, "check the store: SQLite's integrity_check and foreign_key_check, and every sealed secret opened with its key; JSON out, exit 1 on a problem. The daemon serving it checks it when one runs")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
@@ -239,6 +240,12 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flag: "contracts", arg: true, flagsAfter: true, run: func(filter string) int {
 			if err := writeContracts(stdout, Contracts(filter), *format); err != nil {
 				return failed(err, 2)
+			}
+			return 0
+		}},
+		{flag: "check-store", run: func(string) int {
+			if err := runCheckStore(ctx, *configPath, stdout); err != nil {
+				return failed(err, 1)
 			}
 			return 0
 		}},

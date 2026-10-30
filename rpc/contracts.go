@@ -41,6 +41,7 @@ var codeDocs = []struct {
 	{golibrpc.CodeAccessDenied, "rpc.access_denied", "call it on the unix socket: it is for a local peer"},
 	{CodeProtocolMismatch, "rpc.protocol_mismatch", "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves"},
 	{CodeHandshakeRequired, "rpc.handshake_required", "say sys.hello first"},
+	{CodeStoreDamaged, "rpc.store_damaged", "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)"},
 	{CodeNoSuchWorkspace, "rpc.no_such_workspace", "call workspace.list and use a listed name"},
 	{CodeLongPollsBusy, "rpc.long_polls_busy", "a connection holds at most two long-polls (crew.wait, mail.wait, inbox.watch): finish one first, or open another connection"},
 	{CodeNotFound, "rpc.not_found", "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone"},

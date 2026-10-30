@@ -162,11 +162,15 @@ func (d *process) bind() error {
 	return nil
 }
 
+// startCheckWait bounds the store's quick_check at the daemon's start (store.WithStartCheckWait):
+// a var, so a cell can make a store's check run past it.
+var startCheckWait = store.StartCheckWait
+
 // openStore opens the store, taking its lease, and applies its schema scripts.
 func (d *process) openStore() error {
 	storePath := d.p.Store
 	noteOldIndexes(d.p.StateDir, storePath, d.out)
-	db, err := store.Open(d.ctx, storePath)
+	db, err := store.Open(d.ctx, storePath, store.WithStartCheckWait(startCheckWait))
 	if errors.Is(err, store.ErrBusy) {
 		// the store's daemon serves on another endpoint: a config naming another socket for the
 		// same store finds it there, through the lease-info, and leaves it be
@@ -179,6 +183,10 @@ func (d *process) openStore() error {
 		if _, lerr := store.ReadLeaseInfo(storePath); errors.Is(lerr, fs.ErrNotExist) {
 			db, err = openAfterPredecessor(d.ctx, storePath)
 		}
+	}
+	if errors.Is(err, store.ErrDamaged) {
+		// not served: writing on a damaged store spreads the damage (AM-4)
+		return fmt.Errorf("%w; this daemon does not serve it. `autodoc --check-store` reports it whole, and docs/ops/backup-and-restore.md says how to restore it from a backup", err)
 	}
 	if err != nil {
 		return err
@@ -386,7 +394,7 @@ func (d *process) openFiles() error {
 // the lease-info beside the store: the lease and the socket are both this process's now.
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
-	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
+	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
 		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
@@ -397,7 +405,44 @@ func (d *process) buildServer() error {
 	}
 	instance := d.srv.Instance()
 	d.stops.push(func() { _ = store.RemoveLeaseInfo(d.p.Store, instance) })
+	d.verifyStore()
 	return nil
+}
+
+// verifyStore finishes the start's quick_check on a reader, for a store whose check did not finish
+// in its wait (store.Unverified, AM-4): the daemon serves meanwhile. Damage found: every write is
+// refused at once, the store is marked so the next start checks it whole and refuses it, the
+// damage is logged and recorded as the store.damaged event, and the daemon stops.
+func (d *process) verifyStore() {
+	if !d.db.Unverified() {
+		return
+	}
+	ctx, cancel := context.WithCancel(d.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r, err := d.db.QuickCheck(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Warning(d.log, err, "the store's start check did not finish: autodoc --check-store checks it")
+			}
+			return
+		}
+		if r.OK() {
+			return
+		}
+		dmg := &store.DamagedError{Path: d.p.Store, Report: r}
+		d.srv.RefuseWrites(fmt.Sprintf("%s; this daemon refuses writes and stops. `autodoc --check-store` reports it, and docs/ops/backup-and-restore.md says how to restore it from a backup", dmg))
+		logger.Error(d.log, dmg, "the store is damaged: refusing writes and stopping")
+		if err := d.db.MarkDamaged(r); err != nil {
+			logger.Warning(d.log, err, "the store's damage was not marked for the next start")
+		}
+		if _, err := d.db.AppendEvent(context.WithoutCancel(ctx), store.Event{Kind: "store.damaged", Detail: dmg.Error()}); err != nil {
+			logger.Warning(d.log, err, "the store.damaged event was not recorded")
+		}
+		d.srv.RequestShutdown()
+	}()
+	d.stops.push(func() { cancel(); <-done })
 }
 
 // refreshTodos runs the todo system's daily refresh of claimed stores (ADR 1791532020 §2.3) for as
@@ -527,7 +572,7 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 			// try every 100 ms keeps a restart's handoff quick.
 		case <-time.After(100 * time.Millisecond):
 		}
-		db, err := store.Open(ctx, storePath)
+		db, err := store.Open(ctx, storePath, store.WithStartCheckWait(startCheckWait))
 		if !errors.Is(err, store.ErrBusy) {
 			return db, err
 		}
