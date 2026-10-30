@@ -79,12 +79,14 @@ type wakeRig struct {
 	waker *fakeWaker
 	epoch int64
 	n     int
+	path  string // the store's file
 }
 
 func newWakeRig(t *testing.T) *wakeRig {
 	t.Helper()
 	r := &wakeRig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), waker: newFakeWaker()}
-	db, err := store.Open(r.ctx, filepath.Join(t.TempDir(), "autodoc.db"), store.WithClock(r.clock.Now))
+	r.path = filepath.Join(t.TempDir(), "autodoc.db")
+	db, err := store.Open(r.ctx, r.path, store.WithClock(r.clock.Now))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -488,7 +490,7 @@ func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
 
 // TestServeWakesClaudeSessions: the scheduler serve starts, with serve's own wakers (crewWakers),
 // wakes a Claude session through its inbox socket, bound to its process, and leaves a session whose
-// kind has no waker (agy) alone. The socket is a stand-in the test serves in Claude's socket folder, so
+// kind has no waker (OpenCode) alone. The socket is a stand-in the test serves in Claude's socket folder, so
 // the test process is its peer and the binding (pid, process reference) is real.
 func TestServeWakesClaudeSessions(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -531,20 +533,20 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	if _, err := r.deps.crew.SetEndpoint(r.ctx, goldCred, "claude", string(loc)); err != nil {
 		t.Fatal(err)
 	}
-	// tifa: an Antigravity session with an endpoint, in the same daemon; serve has no agy waker
+	// tifa: an OpenCode session with an endpoint, in the same daemon; serve has no OpenCode waker
 	r.n++
 	secret := strings.Repeat("s", 32) + "tifa"
 	reg, err := r.deps.crew.Register(r.ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: r.epoch,
-		Codename: "tifa", Kind: "agy", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
+		Codename: "tifa", Kind: "opencode", Workspace: "w", Instance: fmt.Sprintf("agent-%d", r.n), Secret: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tifa := reg.Session
-	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(tifa, secret), "agy",
-		`{"address":"127.0.0.1:4000","conversation":"c-1"}`); err != nil {
+	if _, err := r.deps.crew.SetEndpoint(r.ctx, crew.Credential(tifa, secret), "opencode",
+		fmt.Sprintf(`{"session":"ses-1","pid":%d,"start":%q}`, os.Getpid(), self)); err != nil {
 		t.Fatal(err)
 	}
-	r.start(crewWakers())
+	r.start(crewWakers(r.deps.crew))
 	r.send(jarvis, "gold", "for gold")
 	r.send(jarvis, "tifa", "for tifa")
 	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"` + crew.WakeNotice + `"}}` + "\n"

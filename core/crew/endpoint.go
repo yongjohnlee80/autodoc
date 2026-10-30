@@ -160,6 +160,20 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 // deadline and no backoff, so pending mail is reservable at once and its first failure retries in
 // 5 s. It answers the generation.
 func (m *Manager) SetEndpoint(ctx context.Context, credential, kind, locator string) (int64, error) {
+	return m.SetEndpointWith(ctx, credential, kind, locator, "")
+}
+
+// SetEndpointWith is SetEndpoint with the endpoint's secret: what its waker needs that the locator
+// may never carry (an agy session's language-server token). Only an agy endpoint takes one. It is
+// held in the daemon's memory for this generation, never written to the store, and never named in
+// an error.
+func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator, secret string) (int64, error) {
+	if secret != "" && kind != "agy" {
+		return 0, fmt.Errorf("%w: a %s endpoint takes no secret", ErrBadEndpoint, kind)
+	}
+	if !secretOK(secret) {
+		return 0, fmt.Errorf("%w: the secret is over %d bytes, or holds a control character or a space", ErrBadEndpoint, maxSecret)
+	}
 	canon, err := checkLocator(kind, locator, m.uid)
 	if err != nil {
 		return 0, err
@@ -194,7 +208,30 @@ func (m *Manager) SetEndpoint(ctx context.Context, credential, kind, locator str
 			w = Wake{Session: s.ID}
 		}
 		w.State, w.Token, w.NextAt, w.Failures = WakeIdle, "", nil, 0
-		return tx.PutWake(w)
+		if err := tx.PutWake(w); err != nil {
+			return err
+		}
+		// published in the write, as its last step: writes are one at a time, so a session's end
+		// (endSession, which forgets it in its own) can only follow this, never be overtaken by it
+		m.keepSecret(s.ID, gen, secret)
+		return nil
 	})
 	return gen, err
+}
+
+// maxSecret bounds an endpoint secret: a header value, never a payload.
+const maxSecret = 512
+
+// secretOK reports whether s may be an endpoint secret: at most maxSecret bytes of printable ASCII
+// other than a space, so it is safe as an HTTP header value.
+func secretOK(s string) bool {
+	if len(s) > maxSecret {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] <= ' ' || s[i] >= 0x7f {
+			return false
+		}
+	}
+	return true
 }
