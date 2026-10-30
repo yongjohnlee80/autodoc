@@ -37,7 +37,8 @@ func indexerVersion(tokens int) string {
 
 // registeredVersion is what document.indexer records for a file a registered chunker cut: its
 // extension and the chunker's version, then the layout and the section size, as the built-ins'
-// (ADR 0216 §1.6's registered form: "c" EXT "@" VERSION ".s" SCHEMA ".t" TOKENS).
+// (docs/decisions/search.md#indexer-identity-strings's registered form: "c" EXT "@" VERSION ".s"
+// SCHEMA ".t" TOKENS).
 func registeredVersion(ext, version string, tokens int) string {
 	if tokens <= 0 {
 		tokens = store.SectionTokensDefault

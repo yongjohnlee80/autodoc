@@ -13,10 +13,11 @@ const (
 	RuleTaskError = "todo-"
 )
 
-// CheckFile is a task file's frontmatter as the todo format judges it (ADR 1792015212 amendment
-// 2): the reason it is malformed, as todos.list gives it, or else its format's facets and each
-// entry of its errors[] as a diagnostic on the field it names. A task is never checked against a
-// KB's schema: its frontmatter is the format's, not a document type's.
+// CheckFile is a task file's frontmatter as the todo format judges it
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format): the reason it is malformed, as
+// todos.list gives it, or else its format's facets and each entry of its errors[] as a diagnostic
+// on the field it names. A task is never checked against a KB's schema: its frontmatter is the
+// format's, not a document type's.
 func CheckFile(src []byte) schema.Result {
 	t, err := decode(src)
 	if fe := (*formatError)(nil); errors.As(err, &fe) {

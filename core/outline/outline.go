@@ -52,7 +52,7 @@ type reading struct {
 
 // readings are each kind's (kind.Table: a kind added is a kind navigated). Markdown has headings;
 // YAML has key paths; plain text and a registered chunker's file only the title, since a code
-// outline is not AutoDoc's yet (ADR 0216 §3).
+// outline is not AutoDoc's yet (docs/decisions/search.md#file-kinds-and-their-precedence).
 var readings = kind.NewTable(map[kind.Kind]reading{
 	kind.Markdown:   {readHeadings, headingCrumbs},
 	kind.Derived:    {readHeadings, headingCrumbs},

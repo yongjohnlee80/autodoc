@@ -30,8 +30,8 @@ type Doc struct {
 	Links       []DocLink     // its links and relations, in order
 	Frontmatter schema.Result // its facets and diagnostics under the workspace's schema
 	ADR         string        // the decision-record number a document of type adr carries; "" for none
-	// TodoName is the name a todo store's task answers to, "#todo:<store>/<task id>" (ADR 1792015212
-	// §2.4); "" for a document in no store
+	// TodoName is the name a todo store's task answers to, "#todo:<store>/<task id>"
+	// (docs/decisions/todos.md#task-relations-and-external-links); "" for a document in no store
 	TodoName string
 }
 

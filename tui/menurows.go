@@ -14,11 +14,12 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// MENU ROWS (ADR 1792991184): one registry of the rows scripts (autodoc.menu) and plugins'
-// manifests ([[menu]]) add to the editor's right-click menu and the Plugins menu. The editor's are
-// built as that menu opens: each row scoped by its files and its when, titled by its title (a
-// string, a Lua function, or a plugin's pushed title), grouped under its menu's submenu. Every
-// when and title of one open shares one budget (menuBudget), so slow rows can't hold the menu.
+// MENU ROWS (docs/decisions/plugins.md#editor-menu-rows): one registry of the rows scripts
+// (autodoc.menu) and plugins' manifests ([[menu]]) add to the editor's right-click menu and the
+// Plugins menu. The editor's are built as that menu opens: each row scoped by its files and its
+// when, titled by its title (a string, a Lua function, or a plugin's pushed title), grouped under
+// its menu's submenu. Every when and title of one open shares one budget (menuBudget), so slow rows
+// can't hold the menu.
 
 // menuBudget is all the time one menu open gives its rows' when and title functions together.
 const menuBudget = 200 * time.Millisecond

@@ -41,7 +41,7 @@ func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
 // TestADraggedPanelFloatsWhereItIsLeft: the terminal at the bottom, Alt-dragged up six rows, floats
 // there, and the explorer at the left (35% wide), Alt-right-dragged ten columns wider, floats at 45%;
 // the store keeps each as percentages of the Window, and a TUI attached after opens them there
-// (ADR 1791500773). No corner grip is drawn.
+// (docs/decisions/editor.md#fonts-zoom-and-floating-panels). No corner grip is drawn.
 func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	d, r := runShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })

@@ -20,12 +20,13 @@ import (
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// A WORKSPACE'S SETTINGS — one dialog, two tabs (ADR 0214). Edit is what the workspace is and which
-// files it holds: its name, its root (typed only when it is added), its frontmatter schema, its
-// file types and its rules. Advanced is how it is indexed and embedded, and, where the edition
-// offers them, its databases: a source its .view files read, and the destination its index is
-// kept in. Save sends what changed in one workspace.configure, which saves all of it or none; a
-// refusal opens the dialog again as it was typed, the reason on its help line.
+// A WORKSPACE'S SETTINGS — one dialog, two tabs
+// (docs/decisions/store.md#workspace-settings-saved-together). Edit is what the workspace is and
+// which files it holds: its name, its root (typed only when it is added), its frontmatter schema,
+// its file types and its rules. Advanced is how it is indexed and embedded, and, where the edition
+// offers them, its databases: a source its .view files read, and the destination its index is kept
+// in. Save sends what changed in one workspace.configure, which saves all of it or none; a refusal
+// opens the dialog again as it was typed, the reason on its help line.
 
 // The choosers' rows, in the order their indices are read.
 var (
@@ -157,11 +158,12 @@ type settingsBase struct {
 	adding    bool
 	providers []string
 	databases bool
-	// registered are the extensions the daemon's chunkers read (ADR 0216 §1.9): the Edit tab offers
-	// each beside the built-in types
+	// registered are the extensions the daemon's chunkers read
+	// (docs/decisions/search.md#opt-in-file-types): the Edit tab offers each beside the built-in
+	// types
 	registered []string
 	// derived are the formats the daemon reads as documents (.docx, .html; a Pro build's .pdf): the
-	// Edit tab's Documents row (ADR 1791429611 §4.7)
+	// Edit tab's Documents row (docs/decisions/search.md#opt-in-file-types)
 	derived []string
 }
 
@@ -178,7 +180,7 @@ func typeIndex(m wsfilter.Matcher, exts ...string) int {
 
 // asText are the stored text extensions still read as text, and those now read as derived
 // documents instead (.html, once a text type, is an HTML document): the Edit tab offers only the
-// first, and says why the others went (ADR 1791429611 §4.6a).
+// first, and says why the others went (docs/decisions/search.md#stored-html-text-types).
 func asText(stored []string) (text, derived []string) {
 	for _, e := range stored {
 		if slices.Contains(kind.DerivedExtensions, e) {
@@ -267,7 +269,8 @@ func registeredOn(m wsfilter.Matcher, registered []string) []string {
 
 // codeExcludes are what turning a registered type on writes to the excludes, where they are not
 // already there: the directories a code repository vendors or builds into. They are written, so
-// they are visible and editable, and never applied by condition (ADR 0216 §1.9).
+// they are visible and editable, and never applied by condition
+// (docs/decisions/search.md#opt-in-file-types).
 var codeExcludes = []string{"vendor/**", "target/**", "dist/**", "build/**"}
 
 // setCodeTypes applies the registered types whose state changed: one turned on is included, no
@@ -795,7 +798,8 @@ func (h *Host) saveSettings(f settingsForm) {
 // the workspace exists with the defaults, and the dialog opens again on it to edit.
 func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(error)) {
 	name, root := strings.TrimSpace(f.name), strings.TrimSpace(f.root)
-	// the type as staged when Add is pressed: a later pick doesn't touch this add (ADR 1792349867 §4.4)
+	// the type as staged when Add is pressed: a later pick doesn't touch this add
+	// (docs/decisions/contract.md#choosing-a-type-stages-it)
 	kb := h.kbStaged
 	if kb != nil {
 		f = base.withKBType(f, kb.t)
@@ -832,7 +836,8 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 			a.err, a.unread = fmt.Errorf("%s is not in the list read back", name), true
 			return a
 		}
-		// the type's files before the configure, so the schema it names exists (ADR 1792349867 §4.3)
+		// the type's files before the configure, so the schema it names exists
+		// (docs/decisions/contract.md#the-daemon-writes-the-scaffold-create-only)
 		if kb != nil {
 			if a.applied, a.err = h.applyKBType(ctx, name, h.kbPlan(kb)); a.err != nil {
 				a.partial = true
@@ -928,9 +933,9 @@ func (h *Host) saved(name string, c map[string]any) {
 	}
 }
 
-// todoExcludedNote says which exclude patterns keep a todo store of w out of the index (ADR
-// 1792015212 §2.3): its tasks open in no workspace, without relations; "" for none. It is in t's
-// language.
+// todoExcludedNote says which exclude patterns keep a todo store of w out of the index
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported): its tasks open in no workspace,
+// without relations; "" for none. It is in t's language.
 func todoExcludedNote(t wording, w wsInfo) string {
 	if len(w.todoExcluded) == 0 {
 		return ""

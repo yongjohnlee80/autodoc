@@ -10,10 +10,11 @@ import (
 	"testing"
 )
 
-// TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope (ADR 1793271500 §4.5, phase 2): while the window
-// holds a crew scope, each agent starts in its own folder under it, the same across its sessions;
-// without a scope, in the workspace's folder as before. A stopped tab whose folder the scope moved
-// is not started there again: its process would run in the old scope's folder.
+// TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope (docs/decisions/crew.md#the-session-context):
+// while the window holds a crew scope, each agent starts in its own folder under it, the same
+// across its sessions; without a scope, in the workspace's folder as before. A stopped tab whose
+// folder the scope moved is not started there again: its process would run in the old scope's
+// folder.
 func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 	a, c := modelAgents(t)
 	ws := wsInfo{name: "kb", root: t.TempDir()}

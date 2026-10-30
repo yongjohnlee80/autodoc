@@ -81,7 +81,7 @@ type pluginView struct {
 }
 
 // NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
-// ok false otherwise, and the cells are painted (ADR 1792797354).
+// ok false otherwise, and the cells are painted (docs/decisions/plugins.md#pixel-surfaces).
 func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
 
 // surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.

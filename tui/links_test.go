@@ -3,8 +3,8 @@ package tui
 import "testing"
 
 // Enter on a document in the Links tab opens it in the editor and hides the explorer's drawer, not
-// closed (ADR 1792397302 r3): it stays in the dock, hidden, and the editor has the keyboard. Its
-// icon shows it again on the Links tab, the keyboard in the list.
+// closed (docs/decisions/editor.md#dock-clicks-hide-and-show): it stays in the dock, hidden, and
+// the editor has the keyboard. Its icon shows it again on the Links tab, the keyboard in the list.
 func TestEnterInTheLinksOpensAndHides(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := attached(t, d)

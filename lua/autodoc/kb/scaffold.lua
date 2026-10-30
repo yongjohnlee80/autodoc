@@ -1,4 +1,5 @@
--- autodoc.kb.scaffold: create a KB's layout (ADR 1791209946 §1), idempotently.
+-- autodoc.kb.scaffold: create a KB's layout (docs/decisions/crew.md#one-shared-kb-layout),
+-- idempotently.
 --
 --   * Never overwrites an existing file, with two exceptions: the managed KB_OPERATIONS.md and
 --     _schema/frontmatter.yaml are replaced when the KB's copy carries an older autodoc_version

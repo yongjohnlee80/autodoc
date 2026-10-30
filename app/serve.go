@@ -47,12 +47,12 @@ import (
 // lease-info names: this process serves nothing, and exits 0.
 var errAlreadyServing = errors.New("autodoc is already serving")
 
-// runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
-// only daemon serving it), open every workspace in it and start its indexer and follower (the
-// follower watches, then reconciles), and serve the API until ctx ends or a client says
-// sys.shutdown. The subsystems start in serveSteps' order, and each pushes how to stop what it
-// started: they stop in reverse, the lease-info first and the socket last, whether serving ended or
-// a later step failed.
+// runServe is --serve (docs/decisions/contract.md#the-daemons-start-order): bind the endpoint, open
+// the store (its lease makes this the only daemon serving it), open every workspace in it and start
+// its indexer and follower (the follower watches, then reconciles), and serve the API until ctx
+// ends or a client says sys.shutdown. The subsystems start in serveSteps' order, and each pushes
+// how to stop what it started: they stop in reverse, the lease-info first and the socket last,
+// whether serving ended or a later step failed.
 func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
@@ -92,7 +92,7 @@ type process struct {
 	ws      *serving.Workspaces
 	emb     *serving.Embedding
 	files   *docs.Docs
-	guard   *fsbounds.Guard // a gated script's bounds (ADR 1792004705 §4.2a.1), over every workspace's files
+	guard   *fsbounds.Guard // a gated script's bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), over every workspace's files
 	srv     *rpc.Server
 	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
 	mods    []module.Module // the modules, built before any workspace starts
@@ -232,8 +232,8 @@ func (d *process) startWorkspaces() error {
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(d.ctx)
 	d.wsCtx = wsCtx
-	// one ranker for the daemon (ADR 0215), set up before any workspace starts, so each first
-	// search is ranked
+	// one ranker for the daemon (docs/decisions/search.md#re-ranking-with-one-global-ranker), set up
+	// before any workspace starts, so each first search is ranked
 	holder := &rank.Holder{}
 	d.ranking = serving.NewRanking(db, holder, serving.Supplied{Ranker: b.rank.Ranker, Window: b.rank.Window}, d.log)
 	d.ranking.Start(wsCtx)
@@ -242,7 +242,8 @@ func (d *process) startWorkspaces() error {
 		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
 		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard})
 	// the modules, the todo system first among them, before any workspace starts: a workspace's
-	// index reads the todo stores, so its first pass indexes their tasks graph-only (ADR 1792015212)
+	// index reads the todo stores, so its first pass indexes their tasks graph-only
+	// (docs/decisions/todos.md#graph-only-indexing)
 	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
 		onStores: d.ws.TodoStoresChanged}
 	d.mods = modules(d.deps)
@@ -263,7 +264,8 @@ func (d *process) startWorkspaces() error {
 		return err
 	}
 	// every workspace keeps only its active and target models' vectors; the store is compacted
-	// once (ADR 1791284787): in the background, while the daemon serves
+	// once (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): in the background, while
+	// the daemon serves
 	go d.ws.SweepModels(wsCtx)
 	if len(d.ws.List()) == 0 {
 		logger.Warning(d.log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
@@ -271,8 +273,8 @@ func (d *process) startWorkspaces() error {
 	return nil
 }
 
-// startWakes starts the wake scheduler (ADR 1793271500 §4.7) for this daemon run, its stop pushed
-// onto the daemon's.
+// startWakes starts the wake scheduler (docs/decisions/crew.md#wakers-and-the-wake-scheduler) for
+// this daemon run, its stop pushed onto the daemon's.
 func (d *process) startWakes() {
 	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(d.deps.crew), d.log)
 	d.stops.push(stop)
@@ -386,8 +388,8 @@ func newRunID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// openFiles opens a local peer's files outside every workspace (ADR 1791430651): the whole disk,
-// every file.
+// openFiles opens a local peer's files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file.
 func (d *process) openFiles() error {
 	disk, err := local.New("/", local.WithLogger(d.log))
 	if err != nil {
@@ -460,8 +462,9 @@ func (d *process) verifyStore() {
 	d.stops.push(func() { cancel(); <-done })
 }
 
-// refreshTodos runs the todo system's daily refresh of claimed stores (ADR 1791532020 §2.3) for as
-// long as the daemon serves. It stops, its refresh in progress ended, before the store closes.
+// refreshTodos runs the todo system's daily refresh of claimed stores
+// (docs/decisions/todos.md#task-rules-and-the-daily-refresh) for as long as the daemon serves. It
+// stops, its refresh in progress ended, before the store closes.
 func (d *process) refreshTodos(m *todo.Manager) {
 	ctx, cancel := context.WithCancel(d.ctx)
 	done := make(chan struct{})
@@ -482,13 +485,15 @@ type moduleDeps struct {
 	log        logger.Logger
 
 	todos *todo.Manager // the todo system modules built, for its daily refresh
-	// the crew, its mail and the human's inbox (ADR 1793271500), on one store
+	// the crew, its mail and the human's inbox
+	// (docs/decisions/crew.md#the-crew-registry-and-durable-mail), on one store
 	crew  *crew.Manager
 	mail  *mail.Manager
 	inbox *inbox.Manager
 	polls *crew.LongPolls // the three's one long-poll limiter
 	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
-	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
+	// workspaces read the stores again (docs/decisions/todos.md#which-paths-are-graph-only). nil: no
+	// one is.
 	onStores func()
 }
 
@@ -503,20 +508,20 @@ func modules(d *moduleDeps) []module.Module {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (ADR 1792015069 §2.2)
+		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (docs/decisions/todos.md#where-a-variables-value-comes-from)
 	}
 	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal, opts...)
 	crewModules(d)
 	return []module.Module{d.todos, d.crew, d.mail, d.inbox}
 }
 
-// crewModules builds the crew, mail and inbox modules on one store (ADR 1793271500 §4.1): every
-// transaction is crew's, mail's and the inbox's at once, so a verb's guard, crew's change and
-// mail's effect commit together. Mail authenticates through crew, and crew ends a session's mail
-// through mail (its SessionEnder), so mail's port to crew is set once crew exists. A committed
-// write tells the human feed's waiters (inbox.Feed) and, when it changed a wake row, the wake
-// scheduler and every long-poll (crew's Poke). One limiter caps each connection's long-polls
-// across the three modules.
+// crewModules builds the crew, mail and inbox modules on one store
+// (docs/decisions/crew.md#three-modules-and-one-protocol): every transaction is crew's, mail's and
+// the inbox's at once, so a verb's guard, crew's change and mail's effect commit together. Mail
+// authenticates through crew, and crew ends a session's mail through mail (its SessionEnder), so
+// mail's port to crew is set once crew exists. A committed write tells the human feed's waiters
+// (inbox.Feed) and, when it changed a wake row, the wake scheduler and every long-poll (crew's
+// Poke). One limiter caps each connection's long-polls across the three modules.
 func crewModules(d *moduleDeps) {
 	feed := inbox.NewFeed()
 	polls := crew.NewLongPolls()
@@ -627,8 +632,10 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
 }
 
-// todoStores is the todo registry as the workspaces read it (ADR 1792015212 §2.2, ADR 1792132105
-// §2.5): each store's id, directory and workspace, and every workspace's variables.
+// todoStores is the todo registry as the workspaces read it
+// (docs/decisions/todos.md#which-paths-are-graph-only,
+// docs/decisions/todos.md#resolving-refs-in-every-document): each store's id, directory and
+// workspace, and every workspace's variables.
 func todoStores(m *todo.Manager) serving.TodoStores {
 	return func(ctx context.Context) (serving.TodoRegistry, error) {
 		list, err := m.Stores(ctx)

@@ -1,7 +1,7 @@
 // Package hostprobe reads what this machine offers an embedding model, without a network or a
-// provider (ADR 1793005098 §4.2): its GPU (vendor, VRAM, compute capability), its RAM, the free
-// space under the data directory, and whether Ollama answers. Nothing here fails: what can't be
-// read is reported as unknown (0, ""), and the setup recommends by what is known.
+// provider (docs/decisions/search.md#host-probe): its GPU (vendor, VRAM, compute capability), its
+// RAM, the free space under the data directory, and whether Ollama answers. Nothing here fails:
+// what can't be read is reported as unknown (0, ""), and the setup recommends by what is known.
 package hostprobe
 
 import (

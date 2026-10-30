@@ -168,7 +168,8 @@ func TestPruningAndResync(t *testing.T) {
 	}
 }
 
-// A resync is delivered at least once, as a page is (ADR 1791532020 §2.5): until the consumer
+// A resync is delivered at least once, as a page is
+// (docs/decisions/todos.md#a-pull-based-change-log): until the consumer
 // acknowledges its cursor, every ask is answered the resync again, across a restart too. The ack
 // registers the consumer again at that cursor, what came after the cursor kept for it, and it is
 // not dropped again for the silence before. An ack from before the silence never registers it.

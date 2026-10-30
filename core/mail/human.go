@@ -14,9 +14,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The human's operations on mail (ADR 1793271500 §4.8): inbox.reply, inbox.dismiss and inbox.ack.
-// They are mail's state transitions, so they run here, inside mail's own write, with expire,
-// deliver and notifySender; core/inbox serves them under the user's rules (no credential).
+// The human's operations on mail (docs/decisions/crew.md#the-human-inbox): inbox.reply,
+// inbox.dismiss and inbox.ack. They are mail's state transitions, so they run here, inside mail's
+// own write, with expire, deliver and notifySender; core/inbox serves them under the user's rules
+// (no credential).
 
 var (
 	// ErrAlreadyAnswered is a reply or dismiss of a request the human already answered or

@@ -21,7 +21,8 @@ type listed struct {
 	updated time.Time
 }
 
-// oracleDocuments is index.documents as it was before ADR 1793312720 (core/index/documents.go at
+// oracleDocuments is index.documents as it was before
+// docs/decisions/search.md#document-listing-in-the-store (core/index/documents.go at
 // e797f45), kept verbatim but for its offset field, as the parity oracle (§5.1): it reads every
 // document, filters and sorts in Go, and pages by an offset.
 //

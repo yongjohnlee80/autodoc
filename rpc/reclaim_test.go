@@ -45,7 +45,8 @@ func (e *recordingEmbeddings) CancelSwitch(context.Context) (string, error) {
 	return "a", nil
 }
 
-// TestTheVerbsThatDeleteVectorsNeedProtocol16 (ADR 1791284787 §2.7): embedding.cancel_switch and
+// TestTheVerbsThatDeleteVectorsNeedProtocol16
+// (docs/decisions/store.md#protocol-16-gates-the-deleting-verbs): embedding.cancel_switch and
 // embedding.remove delete vectors since protocol 16; a session below it is refused them, naming the
 // protocol, and they never reach the embeddings; a session at 16 runs them.
 func TestTheVerbsThatDeleteVectorsNeedProtocol16(t *testing.T) {

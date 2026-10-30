@@ -10,14 +10,15 @@ import (
 	"time"
 )
 
-// HANDOFF — a restart's successor is the requester's build (ADR 0216 §1.4). When the daemon stops,
-// every client whose connection ends would start one at once, the requester only after the old
-// process is gone, so another client's binary would usually win. Every spawner was the installed
-// binary until builds differed in their registrations. Before it stops the daemon, the requester
-// writes a handoff beside the daemon's log; Session.Connect, which every spawner in this repository
-// goes through (--ui and --call), only dials while another live process's handoff for its socket
-// stands. The socket's bind stays the lock: two daemons never serve; the handoff decides which
-// build does. A daemon started by hand or by a supervisor does not read it, and the bind settles it.
+// HANDOFF — a restart's successor is the requester's build
+// (docs/decisions/search.md#restarting-the-daemon-as-another-build). When the daemon stops, every
+// client whose connection ends would start one at once, the requester only after the old process is
+// gone, so another client's binary would usually win. Every spawner was the installed binary until
+// builds differed in their registrations. Before it stops the daemon, the requester writes a
+// handoff beside the daemon's log; Session.Connect, which every spawner in this repository goes
+// through (--ui and --call), only dials while another live process's handoff for its socket stands.
+// The socket's bind stays the lock: two daemons never serve; the handoff decides which build does.
+// A daemon started by hand or by a supervisor does not read it, and the bind settles it.
 
 // handoffSpan is how long a handoff stands: the old process's exit, then the new daemon's start.
 // Every build shares RestartWait, so a handoff another build wrote is never longer; a deadline

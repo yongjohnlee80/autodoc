@@ -12,21 +12,23 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// PLUGIN COMMANDS (ADR 1791268009 §2.5, ADR 1792132889) — a manifest's [[commands]] are on the
-// Plugins menu, under the plugin's own submenu, and on the plugin's SPC p card by their letters: SPC p
-// chooses the plugin (pluginpick.go), then its card shows its commands. Each is a command catalog
-// entry (catalog.go), plugin.<name>.<id>, with no verb: the cards are made from the catalog's, and F1
-// lists them with their keys. A letter is the manifest's, or the user's (tui.plugin.<name>.key.<id>;
-// "" unbinds it), unique within its plugin only: two plugins may both use s. Two of one plugin's
-// commands wanting a letter, the first in the manifest keeps it, and the other is listed unbound,
-// saying why. Plugins never take AutoDoc's own leader letters: SPC p is a card of its own.
+// PLUGIN COMMANDS (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser) — a manifest's
+// [[commands]] are on the Plugins menu, under the plugin's own submenu, and on the plugin's SPC p
+// card by their letters: SPC p chooses the plugin (pluginpick.go), then its card shows its
+// commands. Each is a command catalog entry (catalog.go), plugin.<name>.<id>, with no verb: the
+// cards are made from the catalog's, and F1 lists them with their keys. A letter is the manifest's,
+// or the user's (tui.plugin.<name>.key.<id>; "" unbinds it), unique within its plugin only: two
+// plugins may both use s. Two of one plugin's commands wanting a letter, the first in the manifest
+// keeps it, and the other is listed unbound, saying why. Plugins never take AutoDoc's own leader
+// letters: SPC p is a card of its own.
 //
 // A command starts its plugin when it is not running, and is sent once the plugin has opened. A
 // card's commands open its panel and focus it, but its "toggle", which is the host's own: it starts
 // the card, its panel open and focused; it shows a card whose panel was closed (the plugin ran on);
-// and it hides a card whose panel is open, its plugin running on, signed in (ADR 1792300990 §4.1).
-// A focused card takes every key, SPC included, so a toggle that only hid a focused card could never
-// be reached from the keyboard. Plugins › Turn off is what stops a plugin.
+// and it hides a card whose panel is open, its plugin running on, signed in
+// (docs/decisions/plugins.md#cards). A focused card takes every key, SPC included, so a toggle that
+// only hid a focused card could never be reached from the keyboard. Plugins › Turn off is what
+// stops a plugin.
 
 // The targets of the Plugins menu's rows and the SPC p cards' letters: "<key>|open",
 // "<key>|close" and "<key>|cmd|<id>".
@@ -260,9 +262,9 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 	}
 	r := pl.running[key]
 	if e.m.Card() && id == pluginToggle && r != nil && !r.hidden && pl.c.PanelShown(cardPanelID(e.m.Name)) {
-		// the toggle hides a shown card, its plugin running on, signed in (ADR 1792300990 §4.1);
-		// Plugins › Turn off is the way to stop it. A card the dock hid is not shown: the toggle
-		// shows it again, as the plugin's other commands do
+		// the toggle hides a shown card, its plugin running on, signed in
+		// (docs/decisions/plugins.md#cards); Plugins › Turn off is the way to stop it. A card the
+		// dock hid is not shown: the toggle shows it again, as the plugin's other commands do
 		pl.hideCard(r)
 		return
 	}

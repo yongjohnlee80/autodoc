@@ -27,11 +27,11 @@ func TestSQLiteConforms(t *testing.T) {
 	}})
 }
 
-// TestLostAnswersSurviveARestart (ADR 1793271500 §5 case 4): crew.claim's and crew.register's
-// first answers are lost after they commit, and the daemon restarts (the store closed and opened
-// again). Retries with the same run, instance and secret answer the same epoch and session; a
-// replay with another codename, kind or workspace is refused against the stored args_digest, and
-// so is one for the session once it ended.
+// TestLostAnswersSurviveARestart (docs/decisions/crew.md#what-the-crew-guarantees): crew.claim's
+// and crew.register's first answers are lost after they commit, and the daemon restarts (the store
+// closed and opened again). Retries with the same run, instance and secret answer the same epoch
+// and session; a replay with another codename, kind or workspace is refused against the stored
+// args_digest, and so is one for the session once it ended.
 func TestLostAnswersSurviveARestart(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "autodoc.db")

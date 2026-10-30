@@ -8,7 +8,7 @@ import (
 	"image"
 )
 
-// Surface is Linux's first (ADR 1792797354): elsewhere a plugin has none, and draws cells.
+// Surface is Linux's first (docs/decisions/plugins.md#pixel-surfaces): elsewhere a plugin has none, and draws cells.
 type Surface struct{}
 
 // SurfaceBuffer is one buffer to draw into; there are none here.

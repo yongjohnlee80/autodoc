@@ -252,10 +252,10 @@ func edge(src, dst string) map[string]any {
 	return map[string]any{"src": src, "dst": dst, "kind": "wikilink"}
 }
 
-// readMap (ADR 1793321612 D3) reads every page, each asked after the last one's next with the
-// caller's options kept: a link to a document of a later page, or of an earlier one, is placed; a
-// link whose document never came is dropped; the counts are told after each page; the types are
-// the answer's.
+// readMap (docs/decisions/search.md#clients-read-every-page) reads every page, each asked after the
+// last one's next with the caller's options kept: a link to a document of a later page, or of an
+// earlier one, is placed; a link whose document never came is dropped; the counts are told after
+// each page; the types are the answer's.
 func TestReadMapReadsEveryPage(t *testing.T) {
 	read, asked := pagedReader(
 		map[string]any{"nodes": []any{node("a.md"), node("b.md")}, "edges": []any{edge("a.md", "e.md"), edge("b.md", "a.md")}, "types": []any{"adr"}},

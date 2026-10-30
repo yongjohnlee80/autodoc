@@ -15,7 +15,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 )
 
-// A workspace's store is the daemon's from its first write (ADR 1791532020 r13): no claim comes
+// A workspace's store is the daemon's from its first write
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): no claim comes
 // first. The write claims it as todos.claim does, marker included, and the task written there by
 // hand before is adopted, its file untouched. A store Release gave back takes no write at all, a
 // write no longer claiming it, until Claim; its tasks read all along. The claim, and the release,
@@ -105,7 +106,8 @@ func TestAWorkspacesFirstTaskMakesItsStore(t *testing.T) {
 	}
 }
 
-// A store a registered root has not made yet reads as an empty one (ADR 1791532020 r13): no task,
+// A store a registered root has not made yet reads as an empty one
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): no task,
 // no malformed file, cursor 0, no such task, no change. The reads write nothing: no store, no
 // marker, no claim. A root no one registered is refused, as before.
 func TestAStoreNotMadeYetReadsEmpty(t *testing.T) {
@@ -161,7 +163,8 @@ func TestAStoreNotMadeYetReadsEmpty(t *testing.T) {
 	}
 }
 
-// Priority medium is the value, normal its legacy spelling (ADR 1791532020 r14). A task written with
+// Priority medium is the value, normal its legacy spelling
+// (docs/decisions/todos.md#priority-low-medium-high). A task written with
 // normal is valid, with no error, and reads as medium; a refresh leaves its file byte for byte; its
 // next write writes medium. A new task given normal is written medium, and the normal filter lists
 // medium's tasks.
@@ -297,8 +300,9 @@ func TestWhere(t *testing.T) {
 }
 
 // Writes stay inside the writable stores: an unregistered project's .todo-list is not one. A kb_root
-// a client passes is ignored (ADR 1792015069): a store outside any KB has no $KB_ROOT until its own
-// file names one, and it is never a write location.
+// a client passes is ignored (docs/decisions/todos.md#one-answer-from-every-route-to-a-store): a
+// store outside any KB has no $KB_ROOT until its own file names one, and it is never a write
+// location.
 func TestConfinement(t *testing.T) {
 	e := claimed(t)
 	e.disk.MkdirAll("/src/other/.todo-list/open")
@@ -809,9 +813,10 @@ func TestAFailedClaimIsUndoneWhateverItsRequest(t *testing.T) {
 	}
 }
 
-// CheckFile judges a task by its todo format, never a KB's schema (ADR 1792015212 amendment 2): a
-// valid task has no diagnostic and its format's facets, normal faceted as medium; a malformed one
-// has the reason todos.list gives; each errors[] entry is a diagnostic on the field it names.
+// CheckFile judges a task by its todo format, never a KB's schema
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format): a valid task has no diagnostic
+// and its format's facets, normal faceted as medium; a malformed one has the reason todos.list
+// gives; each errors[] entry is a diagnostic on the field it names.
 func TestCheckFileJudgesATaskByItsFormat(t *testing.T) {
 	ok := todo.CheckFile([]byte(taskFile("t", "open", "priority: normal")))
 	if len(ok.Diagnostics) != 0 {

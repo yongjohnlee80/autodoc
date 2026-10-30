@@ -281,8 +281,9 @@ type keyedCatFake struct {
 
 func (f *keyedCatFake) Catalog() []Entry { return f.entries }
 
-// TestAKeyRunsACatalogEntryByItsID (ADR 1791762474 §4.3, §5.4): a feature's key with Cmd runs
-// App.run with the id quoted, and its card names it by the entry's title when the key does not.
+// TestAKeyRunsACatalogEntryByItsID (docs/decisions/plugins.md#keys-and-help-read-the-catalog): a
+// feature's key with Cmd runs App.run with the id quoted, and its card names it by the entry's
+// title when the key does not.
 func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"},
 		cards: []Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: leader, Help: "SPC Z — ZZ"}},
@@ -308,9 +309,10 @@ func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 	}
 }
 
-// TestAFeaturesKeyRunsItsEntryInTheProgram (ADR 1791762474 §5.4): in the running program, a
-// feature's Window key with Cmd runs its entry, through App.run, on the attached editor; App.run of
-// an id no entry has says so.
+// TestAFeaturesKeyRunsItsEntryInTheProgram
+// (docs/decisions/plugins.md#keys-and-help-read-the-catalog): in the running program, a feature's
+// Window key with Cmd runs its entry, through App.run, on the attached editor; App.run of an id no
+// entry has says so.
 func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	ran := make(chan *widget.EditorCore, 1)

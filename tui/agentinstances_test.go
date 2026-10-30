@@ -278,7 +278,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 		t.Fatalf("the task goes as one bracketed paste, and done: done=%d pastes=%q", done, c.panel.pastes)
 	}
 	if len(c.delays) != 0 { // and TerminalPanel has no way to type one: no SendText
-		t.Fatalf("something waits to follow the paste, as an Enter did (ADR 1792991980 §4.2): delays=%v", c.delays)
+		t.Fatalf("something waits to follow the paste, as an Enter did: delays=%v", c.delays)
 	}
 	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, widget.TerminalInput)}) {
 		t.Fatalf("the agent's panel is brought forward for the Enter: opened=%q active=%q modes=%q", c.opened, c.panel.active, c.panel.modes)
@@ -364,7 +364,8 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 	}
 }
 
-// TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes (ADR 1792991980 §3): an agent HandTask
+// TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste): an agent HandTask
 // starts has a program still starting, which takes no bracketed paste yet. The paste is tried again
 // agentReadyPoll apart: taken once the program takes it, and never sent as keys meanwhile.
 func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
@@ -389,10 +390,11 @@ func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	}
 }
 
-// TestHandTaskToAnUnbracketedProgramSendsNothing (ADR 1792991980 §2): a program that never takes
-// bracketed pastes gets nothing, as keys or otherwise. A running one refuses at once; one HandTask
-// started is given agentReadyWait. done hears widget.ErrTerminalPasteUnbracketed once, and no panel
-// is brought forward.
+// TestHandTaskToAnUnbracketedProgramSendsNothing
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste): a program that never
+// takes bracketed pastes gets nothing, as keys or otherwise. A running one refuses at once; one
+// HandTask started is given agentReadyWait. done hears widget.ErrTerminalPasteUnbracketed once, and
+// no panel is brought forward.
 func TestHandTaskToAnUnbracketedProgramSendsNothing(t *testing.T) {
 	for _, target := range []string{"running", "started"} {
 		t.Run(target, func(t *testing.T) {

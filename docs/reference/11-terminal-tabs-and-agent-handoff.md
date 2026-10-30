@@ -115,7 +115,7 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
      Instruction: Task assigned to you.
      ```
    - It dispatches the payload via `panel.SendBracketedPaste(tab, payload)`: one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact at the prompt. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
-   - **AutoDoc never presses Enter** (ADR 1792991980). An Enter can't tell the agent's input from a permission or select prompt it is showing, so it could answer one. Instead the payload waits in the agent's input, and the agent's panel opens with its tab selected and the keyboard in input mode. The toast says *"assigned to Claude Code, and typed into its input: press Enter there to send it"*, and the user's Enter starts the agent on the task file and its linked `$KB_ROOT` ADRs.
+   - **AutoDoc never presses Enter** ([the decision](../decisions/todos.md#autodoc-never-presses-enter-for-an-agent)). An Enter can't tell the agent's input from a permission or select prompt it is showing, so it could answer one. Instead the payload waits in the agent's input, and the agent's panel opens with its tab selected and the keyboard in input mode. The toast says *"assigned to Claude Code, and typed into its input: press Enter there to send it"*, and the user's Enter starts the agent on the task file and its linked `$KB_ROOT` ADRs.
 
 ![Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff](agent-dispatch-latency.chart.json)
 
@@ -123,7 +123,7 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
 
 ## 4. Separation of Concerns: `autodoc:<codename>` vs. Other Tools' Agents
 
-A critical architectural boundary in ADR 1791532020 (§2.7a) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage:
+A critical architectural boundary ([AutoDoc assigns only to its own agents](../decisions/todos.md#autodoc-assigns-only-to-its-own-agents)) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage:
 
 - **Assignee Namespace Isolation**: When you assign a task via `A` in AutoDoc's Todos Panel, the `assignee` field is always prefixed with `autodoc:<codename>` (for example, `autodoc:claude` or `autodoc:gemini`). An assignee written by another tool keeps that tool's own form (for example `agent:<name>`), and AutoDoc never delivers to it.
 - **Durable Record vs. Best-Effort Terminal Delivery**: The `todos.assign` write in `.todo-list/` is the durable record of ownership; `HandTask` is a best-effort UI delivery side effect. If you decline to start a stopped agent (`ErrAgentCancelled`), or if you switch workspaces before the RPC write returns, the task remains durably assigned to `autodoc:<codename>` in `.todo-list/in-progress/` and AutoDoc displays an actionable toast:

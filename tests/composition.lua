@@ -1,6 +1,6 @@
 -- The kb drawer hosted by auto-finder, against the real auto-finder.nvim and a real daemon: the
 -- cases each plugin's own suite cannot cover, because each needs the other on the runtimepath
--- (as autodb's tests/composition.lua does for the dbase drawer, ADR-0078).
+-- (as autodb's tests/composition.lua does for the dbase drawer, docs/decisions/neovim.md#hosts-register-with-the-drawer).
 --
 --   C2  auto-core + auto-finder + AutoDoc: auto-finder's setup registers its kb section as the
 --       drawer's host unprompted; the drawer mounts there with auto-finder's identity (filetype,

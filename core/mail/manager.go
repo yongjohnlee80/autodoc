@@ -20,8 +20,8 @@ const (
 )
 
 // Manager is the mail module: durable messages and their deliveries, leased and acknowledged
-// (ADR 1793271500 §4.6). Its state machines run on a Store's transactions, so every engine shares
-// them; crew guards each session inside the same write.
+// (docs/decisions/crew.md#durable-mail). Its state machines run on a Store's transactions, so every
+// engine shares them; crew guards each session inside the same write.
 type Manager struct {
 	store Store
 	crew  Crew

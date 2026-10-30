@@ -8,9 +8,10 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
-// The long-polls (ADR 1793271500 §4.6): crew.wait (a host's), mail.wait (an agent's) and
-// inbox.watch (a window's). Each registers on the wake signal before it checks, re-checks only when
-// that signal or a deadline fires, and holds no store transaction while it waits.
+// The long-polls (docs/decisions/crew.md#durable-mail): crew.wait (a host's), mail.wait (an
+// agent's) and inbox.watch (a window's). Each registers on the wake signal before it checks,
+// re-checks only when that signal or a deadline fires, and holds no store transaction while it
+// waits.
 
 // MaxWait is the longest a long-poll waits for a change.
 const MaxWait = 25 * time.Second

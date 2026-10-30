@@ -67,7 +67,7 @@ func (s PanelSpec) focusView() string {
 }
 
 // geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
-// bounds (tui/panelgeometry, ADR 1792459145 §4.1).
+// bounds (tui/panelgeometry, docs/decisions/plugins.md#shared-panels-and-their-geometry).
 func (s PanelSpec) geometry() panelgeometry.Spec {
 	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
 }
@@ -104,7 +104,7 @@ func (h *Host) panelView(id string) string {
 
 // togglePanel opens or closes a panel its own way, or the one way: the drawer, and its view
 // takes the keyboard. Open, it has the keyboard. Hidden by the dock, it is shown again as it was,
-// as the dock's own click does (ADR 1792397302 r3).
+// as the dock's own click does (docs/decisions/editor.md#dock-clicks-hide-and-show).
 func (h *Host) togglePanel(name string) {
 	s := h.panelSpec(name)
 	if s == nil {

@@ -16,13 +16,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
-// THE TODO JOURNAL ON THE STORE — core/todo's Journal port (ADR 1791532020 §2.5) on the store's
-// todo tables (migration 000017; 000018 adds a consumer's resync, 000019 a store's daily refresh,
-// 000020 a store's per-machine variables):
-// each todo store's change log, snapshot and consumers' cursors, and the store, root and var
-// records, all keyed by the store's stable id, never its path. The tables are declared through
-// core/store's seam (store.Declare), so neither core/store nor core/todo imports the other: this
-// package joins them.
+// THE TODO JOURNAL ON THE STORE — core/todo's Journal port
+// (docs/decisions/todos.md#a-pull-based-change-log) on the store's todo tables (migration 000017;
+// 000018 adds a consumer's resync, 000019 a store's daily refresh, 000020 a store's per-machine
+// variables): each todo store's change log, snapshot and consumers' cursors, and the store, root
+// and var records, all keyed by the store's stable id, never its path. The tables are declared
+// through core/store's seam (store.Declare), so neither core/store nor core/todo imports the other:
+// this package joins them.
 //
 // Every method is one transaction. A write runs on the store's single writer connection, so Commit
 // and Record write their row and apply their Edit together, and UpdateSettings reads, changes and

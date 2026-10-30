@@ -10,10 +10,11 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
-// COMPACTING (ADR 1791284787 §2.5) — SQLite puts the pages a delete frees on its freelist: the file
-// does not shrink, and the rows kept stay where they were, among the gaps. In incremental
-// auto-vacuum mode, PRAGMA incremental_vacuum returns the freelist to the file system; switching a
-// store into that mode takes one VACUUM, which also rewrites every table contiguously.
+// COMPACTING (docs/decisions/store.md#the-store-compacts) — SQLite puts the pages a delete frees on
+// its freelist: the file does not shrink, and the rows kept stay where they were, among the gaps.
+// In incremental auto-vacuum mode, PRAGMA incremental_vacuum returns the freelist to the file
+// system; switching a store into that mode takes one VACUUM, which also rewrites every table
+// contiguously.
 //
 // Both run outside any transaction (SQLite refuses VACUUM inside one, and Write always opens one),
 // on the writer's one connection: writes wait for them, and reads, the store being in WAL mode, go

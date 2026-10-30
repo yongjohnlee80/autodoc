@@ -562,7 +562,8 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 	if m.Replacing(ctx) != "" {
 		t.Error("still replacing after the cancel")
 	}
-	// the partial target is reclaimed (ADR 1791284787 §2.3, item 2): only embedder's model is left
+	// the partial target is reclaimed (docs/decisions/store.md#when-a-model-is-reclaimed): only
+	// embedder's model is left
 	kb := mustID(t, m, "kb")
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		got := modelsOf(t, db, kb)
@@ -580,10 +581,11 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 	}
 }
 
-// TestRemovingTheProviderInUseReclaimsItsModel (ADR 1791284787 §2.3, item 4): removing the provider
-// in use turns semantic search off; another provider could still serve its model (b serves
-// embedder too), so the model stays active with its vectors. Removing b, the last provider of the
-// model, with none in use, reclaims its vectors and rows in every workspace.
+// TestRemovingTheProviderInUseReclaimsItsModel
+// (docs/decisions/store.md#removing-a-provider-retires-its-model): removing the provider in use
+// turns semantic search off; another provider could still serve its model (b serves embedder too),
+// so the model stays active with its vectors. Removing b, the last provider of the model, with none
+// in use, reclaims its vectors and rows in every workspace.
 func TestRemovingTheProviderInUseReclaimsItsModel(t *testing.T) {
 	o := newOllama(t, "embedder")
 	e, m, db := embedding(t, o)

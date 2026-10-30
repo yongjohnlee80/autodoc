@@ -14,7 +14,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// luacard_test.go: autodoc.ui.card, its tick, and :usage (ADR 1792256101 §4.4-§4.6, §5).
+// luacard_test.go: autodoc.ui.card, its tick, and :usage (docs/decisions/editor.md#lua-cards,
+// docs/decisions/editor.md#the-usage-card).
 
 // heldAfter is the program's luaHost with its after held by the test: each fn waits in pending
 // until the test runs it, so a cell orders the timers itself, with no sleep.

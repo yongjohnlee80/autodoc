@@ -2,7 +2,7 @@
 
 A Jupyter notebook is a good place to try code and a poor place to keep knowledge. Its `.ipynb` file is JSON, so `git diff` fills with base64 plots and execution counts. It is out of reach of your editor's search and links. And the prose around the code lives in cells that nothing else in your workspace can see.
 
-AutoDoc's answer is the **lab note** (Chapter 4, §4.10): an ordinary Markdown note named `*.lab.md`, whose fenced code cells run in a Jupyter kernel through the **Jupyter plugin** (`autodoc-jupyter`, ADR 1792457255). The note is never edited by a run. Each cell's outputs are files in the note's companion folder, which AutoDoc's HTML export and `--gui`'s Rendered View draw under the cell. Opening an `.ipynb` turns it into a lab note beside it, and Export writes one back.
+AutoDoc's answer is the **lab note** (Chapter 4, §4.10): an ordinary Markdown note named `*.lab.md`, whose fenced code cells run in a Jupyter kernel through the **Jupyter plugin** (`autodoc-jupyter`, [lab notes](../decisions/plugins.md#lab-notes)). The note is never edited by a run. Each cell's outputs are files in the note's companion folder, which AutoDoc's HTML export and `--gui`'s Rendered View draw under the cell. Opening an `.ipynb` turns it into a lab note beside it, and Export writes one back.
 
 ---
 

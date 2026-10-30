@@ -11,13 +11,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE RELATIONS DRAWER — SPC l (ADR 1791430651 §4.4): what the open document is connected to,
-// grouped by the edge's kind and direction, from its frontmatter's relations and its body's links
-// both ways. Enter opens a row in the editor and closes the drawer; d, in the drawer, shows the
-// second ring (graph.neighborhood at depth 2) under each first-ring document; the unresolved
-// relations and supersession cycles close the list. SPC j goes to the link under the cursor and
-// SPC b b back to the document opened before (golink.go, navigation.go); the editor's right-click
-// menu has both, "Go to link", on a link, and "Back".
+// THE RELATIONS DRAWER — SPC l (docs/decisions/editor.md#the-relations-drawer): what the open
+// document is connected to, grouped by the edge's kind and direction, from its frontmatter's
+// relations and its body's links both ways. Enter opens a row in the editor and closes the drawer;
+// d, in the drawer, shows the second ring (graph.neighborhood at depth 2) under each first-ring
+// document; the unresolved relations and supersession cycles close the list. SPC j goes to the link
+// under the cursor and SPC b b back to the document opened before (golink.go, navigation.go); the
+// editor's right-click menu has both, "Go to link", on a link, and "Back".
 //
 // The drawer is a feature of its own, a DocWatcher: a page shown loads its relations. Opening a
 // document, following a link, the history it leaves and back stay the host's (files.go, below).
@@ -57,7 +57,8 @@ var relSections = []relSection{
 type relRow struct{ label, ws, path, section, external string }
 
 // relEdge is one link of graph.links or graph.backlinks: the other end, as written, and its kind;
-// external is a todo task's file outside the workspace, absolute (ADR 1792015212 §2.4).
+// external is a todo task's file outside the workspace, absolute
+// (docs/decisions/todos.md#task-relations-and-external-links).
 type relEdge struct {
 	path, raw, kind, external string
 	resolved                  bool
@@ -347,7 +348,8 @@ func (r *related) labels() []string {
 }
 
 // open opens the Links tab's row i in the editor, the explorer's drawer hidden first, not closed, as
-// the GlobeMap is: the dock shows it again, on this tab (ADR 1792397302 r3).
+// the GlobeMap is: the dock shows it again, on this tab
+// (docs/decisions/editor.md#dock-clicks-hide-and-show).
 func (r *related) open(i int) {
 	row, ok := r.rows.At(i)
 	if !ok || row.external == "" && row.path == "" {

@@ -20,8 +20,8 @@ import (
 
 // TestAnUndeclaredVerbIsBoundedToo: enforcement is where the files are reached, so a verb that
 // declares nothing about paths, reading through a workspace's guarded documents with its request's
-// ctx, is refused a hidden file under bounds, and reads it for the user (ADR 1792004705 r11 F1's
-// audit).
+// ctx, is refused a hidden file under bounds, and reads it for the user
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace).
 func TestAnUndeclaredVerbIsBoundedToo(t *testing.T) {
 	root := t.TempDir()
 	for p, s := range map[string]string{"a.md": "# A\n", ".hidden/n.md": "# N\n"} {
@@ -77,7 +77,8 @@ var directDiskAllowed = map[string]string{
 // TestHandlersReachFilesThroughTheGuard: a text assertion over rpc's and the daemon's sources. A
 // gated script's call is bounded where a workspace's files are reached (core/fsbounds); a handler
 // that went to the disk itself (os.*) would be a route the guard never sees, so each one there is
-// named here with why it serves no request (ADR 1792004705 §4.2a.1).
+// named here with why it serves no request
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace).
 func TestHandlersReachFilesThroughTheGuard(t *testing.T) {
 	for _, dir := range []string{".", "../internal/daemon"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))

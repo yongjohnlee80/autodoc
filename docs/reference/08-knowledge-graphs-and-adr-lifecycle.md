@@ -34,7 +34,7 @@ AutoDoc promotes structured relationship fields in YAML frontmatter into first-c
 - **`amends`:** Connects an incremental ADR amendment to the base ADR it modifies without replacing it wholesale.
 - **`sources`:** Connects `synthesis` documents (benchmarks, investigations, postmortems) to the primary documents or ADRs they cite.
 - **`related`:** Captures symmetric topical cross-references.
-- **`adr` and `review`:** Connects `adr-rationale` docs, `review` records, and `.todo-list/` tasks (`$KB_ROOT/...` or `$PROJECT_ROOT/...` symbolic refs, ADR 1792015212) to their governing ADRs and review artifacts.
+- **`adr` and `review`:** Connects `adr-rationale` docs, `review` records, and `.todo-list/` tasks (`$KB_ROOT/...` or `$PROJECT_ROOT/...` symbolic refs, [task relations](../decisions/todos.md#task-relations-and-external-links)) to their governing ADRs and review artifacts.
 
 ### Example: Frontmatter Lineage Across Three Linked Documents
 

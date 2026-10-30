@@ -14,7 +14,7 @@ import (
 
 // THE SIDE CHANNEL'S SOCKET (Linux): a SOCK_SEQPACKET pair, one datagram per message, its fds as
 // SCM_RIGHTS. A received fd is the message's until admission takes it (FDGuard): no rejection path
-// leaks a descriptor (ADR 1792797354 §4.2, rationale R12).
+// leaks a descriptor (docs/decisions/plugins.md#the-surface-side-channel).
 
 // SurfaceConn is one end of the side channel. Send and Recv may run on different goroutines; Close
 // unblocks a Recv.

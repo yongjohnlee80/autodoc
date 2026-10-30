@@ -32,9 +32,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// THE PLUGINS (ADR 0209) — the Plugins menu lists the plugins folder; a plugin's dialog shows its
-// frames and takes its keys; Esc, a crash, silence or another protocol close it, and the close
-// leaves nothing of the plugin running.
+// THE PLUGINS (docs/decisions/plugins.md#plugins-are-separate-programs) — the Plugins menu lists
+// the plugins folder; a plugin's dialog shows its frames and takes its keys; Esc, a crash, silence
+// or another protocol close it, and the close leaves nothing of the plugin running.
 //
 // The plugin is this test binary, run again: TestMain serves as one when its first argument is
 // testPluginArg (the manifest's command).
@@ -1236,10 +1236,11 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	}
 }
 
-// TestProtocolTwosManifestKeys (ADR 1791268009 §1, §2.1): protocol 2's keys run only under
-// protocol = 2, so no manifest half-works on an AutoDoc that speaks 1; an unknown key at any level
-// disables the plugin, naming it; each key's own rules hold. A 0209 manifest still runs, and a valid
-// card and service are listed enabled.
+// TestProtocolTwosManifestKeys (docs/decisions/plugins.md#protocol-versions-and-strict-manifests,
+// docs/decisions/plugins.md#declared-contributions): protocol 2's keys run only under protocol = 2,
+// so no manifest half-works on an AutoDoc that speaks 1; an unknown key at any level disables the
+// plugin, naming it; each key's own rules hold. A 0209 manifest still runs, and a valid card and
+// service are listed enabled.
 func TestProtocolTwosManifestKeys(t *testing.T) {
 	const head = "kind = \"dialog\"\ncommand = [\"x\"]\n"
 	const svc = "kind = \"service\"\nprotocol = 2\ncommand = [\"x\"]\n"
@@ -1288,10 +1289,10 @@ func (r *running) textAt(text string) (x, y int) {
 	return -1, -1
 }
 
-// TestACardTakesTheKeysOnlyWhenFocused (ADR 1791268009 §2.2): a non-modal card opens in its panel
-// beside the page without taking the keys; a click on it focuses it, the plugin told plugin.focus
-// true, and its keys go to the plugin; Esc gives them back to the editor, plugin.focus false, and
-// closes the panel, the plugin told plugin.hide and running on.
+// TestACardTakesTheKeysOnlyWhenFocused (docs/decisions/plugins.md#cards): a non-modal card opens in
+// its panel beside the page without taking the keys; a click on it focuses it, the plugin told
+// plugin.focus true, and its keys go to the plugin; Esc gives them back to the editor, plugin.focus
+// false, and closes the panel, the plugin told plugin.hide and running on.
 func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"top-right\"]\n")
@@ -1336,10 +1337,10 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	}
 }
 
-// TestTheHostKeepsOnlyTheNewestDocumentWaiting (ADR 1791268009 §2.3): with the plugin reading
-// nothing, 50 documents among keys and commands leave one document waiting, the newest, at the
-// tail of what came before it; the keys and commands all wait, in order. Documents never count
-// toward the queue's bound, and anything else past it is a plugin not reading.
+// TestTheHostKeepsOnlyTheNewestDocumentWaiting (docs/decisions/plugins.md#the-document-feed): with
+// the plugin reading nothing, 50 documents among keys and commands leave one document waiting, the
+// newest, at the tail of what came before it; the keys and commands all wait, in order. Documents
+// never count toward the queue's bound, and anything else past it is a plugin not reading.
 func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 	q := newOutQueue()
 	var want []string
@@ -1396,13 +1397,14 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 	}
 }
 
-// TestPluginCommandsOnTheSpcPCard (ADR 1791268009 §2.5, ADR 1792132889): SPC p chooses a plugin,
-// then its card lists its commands with their letters; a letter runs its command, starting the
-// plugin first and sending the command once it has opened, and a card's command focuses it. A letter
-// is unique within its plugin only: alpha and beta both have s, and gamma has h as alpha does. A
+// TestPluginCommandsOnTheSpcPCard
+// (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): SPC p chooses a plugin, then
+// its card lists its commands with their letters; a letter runs its command, starting the plugin
+// first and sending the command once it has opened, and a card's command focuses it. A letter is
+// unique within its plugin only: alpha and beta both have s, and gamma has h as alpha does. A
 // card's toggle is the host's, and never sent to the plugin: it shows a hidden card, focused; it
-// hides a shown one, its plugin running on (ADR 1792300990: Turn off stops it); and it starts one
-// that is off.
+// hides a shown one, its plugin running on (docs/decisions/plugins.md#plugin-sessions: Turn off
+// stops it); and it starts one that is off.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
@@ -1462,7 +1464,8 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	r.openPlugin("alpha") // its menu entry: shown, the keys left with the editor
 	r.s.WaitFor(t, "the panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	r.pluginCardOf(t, "alpha")
-	r.keys(t, key('s')) // toggle, the card shown: hidden, its plugin running on (ADR 1792300990 §4.1)
+	// toggle, the card shown: hidden, its plugin running on (docs/decisions/plugins.md#cards)
+	r.keys(t, key('s'))
 	waitCount(t, logs, "alpha", "hide", 3)
 	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	if onLoop(r, func() *pluginRun { return r.h.plugins.running["alpha"] }) != run {
@@ -1589,10 +1592,11 @@ func docsIn(lines []string) []string {
 	return slices.DeleteFunc(slices.Clone(lines), func(s string) bool { return !strings.HasPrefix(s, "doc ") })
 }
 
-// TestTheDocumentFeed (ADR 1791268009 §2.3): a plugin that declares the feed is sent the note when
-// it starts, then once per pause in editing: the editor's own text, unsaved, with the cursor and the
-// selection in its columns (grapheme clusters, from 1), the version rising with each edit. A note too
-// large for the link is sent too large. A plugin that did not declare the feed is never sent it.
+// TestTheDocumentFeed (docs/decisions/plugins.md#the-document-feed): a plugin that declares the
+// feed is sent the note when it starts, then once per pause in editing: the editor's own text,
+// unsaved, with the cursor and the selection in its columns (grapheme clusters, from 1), the
+// version rising with each edit. A note too large for the link is sent too large. A plugin that did
+// not declare the feed is never sent it.
 func TestTheDocumentFeed(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
@@ -1651,9 +1655,9 @@ func version(t *testing.T, doc string) int {
 	return v
 }
 
-// TestServicesStartOnUseOrAtLaunch (ADR 1791268009 §2.4): a service has no surface. One that starts
-// on use is not running until its command, which it is then sent, or the first event of its feed;
-// one that starts at launch runs with the TUI. Each is opened with no size.
+// TestServicesStartOnUseOrAtLaunch (docs/decisions/plugins.md#services): a service has no surface.
+// One that starts on use is not running until its command, which it is then sent, or the first
+// event of its feed; one that starts at launch runs with the TUI. Each is opened with no size.
 //
 // The page shown at start is the feed's first event (§2.3: sent when a note opens), so onfeed
 // starts pluginFeedDelay after it. The cell holds that send (the delay an hour) while it looks for
@@ -1692,9 +1696,9 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	waitSaid(t, logs, "onfeed", `doc "" v`)
 }
 
-// TestTheInstallConfirmationListsWhatIsDeclared (ADR 1791268009 §2.1): after the risk, the question
-// says what the manifest declares: a card or a service and when it starts, the feed, and the
-// commands with their letters; a 0209 dialog declares nothing more.
+// TestTheInstallConfirmationListsWhatIsDeclared (docs/decisions/plugins.md#declared-contributions):
+// after the risk, the question says what the manifest declares: a card or a service and when it
+// starts, the feed, and the commands with their letters; a 0209 dialog declares nothing more.
 func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	read := func(toml string) manifest {
 		dir := filepath.Join(t.TempDir(), "p")
@@ -1727,10 +1731,11 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	}
 }
 
-// TestThePluginReferenceKeepsUp (ADR 1791268009 §4): docs/plugins.md is the published reference.
-// Every notification the protocol defines (each plugin.Method* constant, read from the source) is
-// documented, and every manifest sample in it runs: it decodes, strictly, with no reason against it.
-// One sample declares editor menu rows ([[menu]], protocol 11).
+// TestThePluginReferenceKeepsUp (docs/decisions/plugins.md#the-published-reference):
+// docs/plugins.md is the published reference. Every notification the protocol defines (each
+// plugin.Method* constant, read from the source) is documented, and every manifest sample in it
+// runs: it decodes, strictly, with no reason against it. One sample declares editor menu rows
+// ([[menu]], protocol 11).
 func TestThePluginReferenceKeepsUp(t *testing.T) {
 	doc, err := os.ReadFile("../docs/plugins.md")
 	if err != nil {
@@ -1801,9 +1806,10 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 	}
 }
 
-// TestThePythonExampleSpeaksTheProtocol (ADR 1791268009 §4): examples/python/echo_plugin.py, with no
-// AutoDoc code, runs as a card: opened at protocol 2, a command, and the feed. It needs python3 with
-// msgpack (AUTODOC_TEST_PYTHON names another interpreter); without one it is skipped, saying so.
+// TestThePythonExampleSpeaksTheProtocol (docs/decisions/plugins.md#the-published-reference):
+// examples/python/echo_plugin.py, with no AutoDoc code, runs as a card: opened at protocol 2, a
+// command, and the feed. It needs python3 with msgpack (AUTODOC_TEST_PYTHON names another
+// interpreter); without one it is skipped, saying so.
 func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 	py := os.Getenv("AUTODOC_TEST_PYTHON")
 	if py == "" {
@@ -1841,10 +1847,11 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 	})
 }
 
-// TestPluginCommandsAreCatalogEntries (ADR 1791762474 §3.2, §3.5): a runnable plugin's [[commands]]
-// are catalog entries, plugin.<name>.<id>, with no ':' name; F1 lists them with their keys (SPC p,
-// the plugin, the letter); run by id they run the plugin's command; the folder read anew without the plugin takes
-// them out, and SPC p with them. A plugin that cannot run has none.
+// TestPluginCommandsAreCatalogEntries (docs/decisions/plugins.md#one-command-catalog,
+// docs/decisions/plugins.md#keys-and-help-read-the-catalog): a runnable plugin's [[commands]] are
+// catalog entries, plugin.<name>.<id>, with no ':' name; F1 lists them with their keys (SPC p, the
+// plugin, the letter); run by id they run the plugin's command; the folder read anew without the
+// plugin takes them out, and SPC p with them. A plugin that cannot run has none.
 func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+

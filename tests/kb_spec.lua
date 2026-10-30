@@ -1,4 +1,5 @@
--- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate (ADR 1791209946 §1–§4, §8, §9).
+-- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate (docs/decisions/crew.md#one-shared-kb-layout,
+-- docs/decisions/crew.md#migrating-a-kb-to-the-layout).
 --
 -- Run (tests/run-all.sh does this inside an XDG sandbox):
 --   AUTO_CORE=<auto-core.nvim checkout> nvim --headless -u NONE -l tests/kb_spec.lua
@@ -526,7 +527,7 @@ end
 
 section("[E] a mention of an empty folder the migration removes")
 do
-  -- ADR 1791209946's own table mentions `shared/agents/`, an empty folder the migration removes: it
+  -- The layout decision's own table mentions `shared/agents/`, an empty folder the migration removes: it
   -- was planned "unchanged" (map_dir is vacuously true of a folder with no files), so the apply's
   -- validation found it broken and rolled back
   local E = tmp .. "/kb-e"

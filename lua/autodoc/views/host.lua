@@ -1,5 +1,5 @@
----autodoc.views.host — the KB drawer's host-provider registry (ADR 1791209945 §6–§7, the
----pattern of ADR 0078 §3.3, copied from autodoc's so auto-finder's facade is the same for both).
+---autodoc.views.host — the KB drawer's host-provider registry (docs/decisions/neovim.md#the-kb-drawer,
+---the pattern of docs/decisions/neovim.md#hosts-register-with-the-drawer, copied from autodoc's so auto-finder's facade is the same for both).
 ---
 ---The drawer can be displayed by more than one surface: auto-finder's `kb` section when that
 ---plugin is installed (priority 100), and autodoc's own panel when it is not (priority 0). autodoc
@@ -36,7 +36,7 @@ local M = {}
 -- of its identity are reserved, because losing either one loses the
 -- guarantee -- a foreign provider that took priority 0 would make
 -- autodoc.views.panel.setup() fail and leave a user with no fallback at all
--- (autodb ADR 0078 review).
+-- (docs/decisions/neovim.md#hosts-register-with-the-drawer).
 local SELF_HOST_ID = "autodoc"
 local SELF_HOST_PRIORITY = 0
 
@@ -186,7 +186,7 @@ end
 ---Validating the id/priority PAIR was not enough: anyone could present
 ---{ id = "autodoc", priority = 0 } and, by the same-id replacement rule,
 ---tear down and replace the genuine fallback -- leaving a standalone
----user with no drawer host at all (autodb ADR 0078 review). The real
+---user with no drawer host at all (docs/decisions/neovim.md#hosts-register-with-the-drawer). The real
 ---self-host registers through _register_self, which checks that the
 ---provider IS autodoc's own object rather than one that merely claims
 ---its name.
@@ -340,7 +340,7 @@ end
 ---The registry is the single source of truth for "am I advertising
 ---myself as a host". A host that keeps its own parallel boolean will
 ---desynchronise the moment any entry point registers without updating
----it (autodb ADR 0078 review) — so ask here instead of remembering.
+---it (docs/decisions/neovim.md#hosts-register-with-the-drawer) — so ask here instead of remembering.
 ---@param id string
 ---@return boolean
 function M.has_host(id)

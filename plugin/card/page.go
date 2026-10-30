@@ -1,5 +1,5 @@
-// Package card is AutoDoc's native UI kit for dialog and card plugins (ADR 1792254331): a plugin
-// describes what its card shows as a Page of blocks and controls, and a Card fits it to the size
+// Package card is AutoDoc's native UI kit for dialog and card plugins
+// (docs/decisions/plugins.md#the-native-card-kit): a plugin describes what its card shows as a Page of blocks and controls, and a Card fits it to the size
 // AutoDoc gives, draws it in the theme's colours, and handles the keys, the focus and the pointer.
 //
 // The controls (Input, Buttons, List, Tree) are values the plugin keeps between draws; the Card

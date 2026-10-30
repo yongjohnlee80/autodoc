@@ -1,7 +1,8 @@
-// Package lab is what a lab file is (ADR 1792457255): a Markdown note named *.lab.md whose fenced
-// code cells run in a Jupyter kernel, and whose outputs are files in its companion folder. AutoDoc's
-// export and Rendered view and the autodoc-jupyter plugin all read a lab note through this package,
-// so the cell key that names a cell's outputs is computed one way only.
+// Package lab is what a lab file is (docs/decisions/plugins.md#lab-notes): a Markdown note named
+// *.lab.md whose fenced code cells run in a Jupyter kernel, and whose outputs are files in its
+// companion folder. AutoDoc's export and Rendered view and the autodoc-jupyter plugin all read a
+// lab note through this package, so the cell key that names a cell's outputs is computed one way
+// only.
 package lab
 
 import (

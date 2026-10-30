@@ -17,7 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// THE WINDOW'S CREW IDENTITY (ADR 1793271500 §4.3).
+// THE WINDOW'S CREW IDENTITY (docs/decisions/crew.md#scopes-and-fenced-ownership).
 //
 // An AutoDoc window hosts its agents under one scope, autodoc:<id>, which it claims from the daemon
 // with a run token: random, made once per process, and kept in memory only. Holding the token is
@@ -326,7 +326,8 @@ func newSecret() string {
 	return hex.EncodeToString(b)
 }
 
-// register starts codename's session under the window's scope (ADR 1793271500 §4.4, §4.5), off
+// register starts codename's session under the window's scope
+// (docs/decisions/crew.md#sessions-and-the-guard, docs/decisions/crew.md#the-session-context), off
 // the loop; then is told on it. Nothing is written here: the caller, once it knows the session is
 // still wanted, publishes its context and starts its process, or ends it. A registration whose
 // answer was lost is kept, since the daemon may have committed it, and replayed as it was by the

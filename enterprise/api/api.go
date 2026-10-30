@@ -1,5 +1,6 @@
 // Package api is `autodoc --server`'s HTTP API over enterprise search: POST /v1/search, with a
-// bearer token per client (ADR 1791762085 §4.5). A request is answered, in order:
+// bearer token per client (docs/decisions/server.md#an-http-api-with-a-token-per-client). A request
+// is answered, in order:
 //
 //  1. the method and the path (405, 404);
 //  2. the bearer token, its SHA-256 compared with every client's in constant time (401), so a

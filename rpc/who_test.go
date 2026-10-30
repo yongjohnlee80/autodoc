@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// A CLI's hello says who runs it (ADR 1792015069 §2.6): its agent, pid and cwd go in its token, so a
-// todo event names its caller; another client's token, or a CLI that sent nothing, is as before.
+// A CLI's hello says who runs it (docs/decisions/todos.md#a-cli-call-says-who-runs-it): its agent,
+// pid and cwd go in its token, so a todo event names its caller; another client's token, or a CLI
+// that sent nothing, is as before.
 func TestACLISaysWhoItIsInItsToken(t *testing.T) {
 	info := map[string]any{"agent": "agent:reed-richards:1", "pid": int64(42), "cwd": "/src/lm#x"}
 	if got, want := who(CLIName, info), "(agent=agent:reed-richards:1 pid=42 cwd=/src/lmx)"; got != want {

@@ -1,10 +1,10 @@
-# The documentation site (ADR 1792395460): a pushed v* tag builds docs/ with AutoDoc's own export
-# (autodoc --export=site, the sections docs/site.toml names) and deploys it to GitHub Pages, so
-# the site is the release's. It builds with -tags gui, so the charts are drawn (golib's
-# gui/vegalite on a gui.SVGCanvas); building them needs the window system's libraries, as the
-# release's Linux GUI build does, but no display. The repository's Pages source is "GitHub
-# Actions" (Settings › Pages). Its runners are Ubuntu 24.04, as release.yml's are, for the same
-# window-system packages.
+# The documentation site (docs/decisions/editor.md#the-documentation-site): a pushed v* tag builds
+# docs/ with AutoDoc's own export (autodoc --export=site, the sections docs/site.toml names) and
+# deploys it to GitHub Pages, so the site is the release's. It builds with -tags gui, so the charts
+# are drawn (golib's gui/vegalite on a gui.SVGCanvas); building them needs the window system's
+# libraries, as the release's Linux GUI build does, but no display. The repository's Pages source is
+# "GitHub Actions" (Settings › Pages). Its runners are Ubuntu 24.04, as release.yml's are, for the
+# same window-system packages.
 name: pages
 
 on:

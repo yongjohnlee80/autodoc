@@ -70,7 +70,8 @@ func settersOf(ws Workspaces) setters {
 }
 
 // todoModer is a workspace that reports its graph_only patterns, its todo_search, and the exclude
-// patterns that keep a todo store of it out of the index (ADR 1792015212).
+// patterns that keep a todo store of it out of the index
+// (docs/decisions/todos.md#graph-only-indexing).
 type todoModer interface {
 	TodoModes() (graphOnly []string, todoSearch bool, excluded []string)
 }

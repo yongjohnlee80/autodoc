@@ -382,8 +382,10 @@ type Options struct {
 	Profiler *profiling.Profiler
 	// Plugins is where the Plugins menu finds plugins (plugins.go); its zero value finds none.
 	Plugins Plugins
-	// Registrations are this binary's own (ADR 0216): a daemon reporting a strict subset of them is
-	// offered a restart as this build (registrations.go). The zero value is the community build's.
+	// Registrations are this binary's own
+	// (docs/decisions/search.md#registered-chunkers-and-derivers): a daemon reporting a strict
+	// subset of them is offered a restart as this build (registrations.go). The zero value is the
+	// community build's.
 	Registrations registrations.Tables
 	// AgentDir is where the agent terminal's agents work, a folder a workspace (agent.go); "" is
 	// one under the system's temporary folder.

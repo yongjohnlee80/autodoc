@@ -19,8 +19,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// opencodePlugin is AutoDoc's OpenCode plugin (ADR 1793271500 §4.7): it registers its session and
-// wakes it when asked (crew.OpenCodeWaker).
+// opencodePlugin is AutoDoc's OpenCode plugin
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): it registers its session and wakes it
+// when asked (crew.OpenCodeWaker).
 //
 //go:embed opencode/autodoc-crew.js
 var opencodePlugin []byte

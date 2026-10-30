@@ -240,8 +240,8 @@ func (s *Store) SetWorkspaceSchema(ctx context.Context, id int64, path string) e
 type WorkspaceInfo struct {
 	Workspace
 	Include, Exclude []string
-	// GraphOnly are its graph_only patterns (ADR 1792015212 §2.2); nil until they are set, which is
-	// the default (workspace.DefaultGraphOnly).
+	// GraphOnly are its graph_only patterns (docs/decisions/todos.md#which-paths-are-graph-only);
+	// nil until they are set, which is the default (workspace.DefaultGraphOnly).
 	GraphOnly []string
 }
 
@@ -280,7 +280,8 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 }
 
 // WorkspaceModes are workspace id's graph_only patterns (nil: never set, the default) and its
-// todo_search, on unless the workspace turned it off (ADR 1792015212 §2.2, amendment 1).
+// todo_search, on unless the workspace turned it off
+// (docs/decisions/todos.md#tasks-stay-in-search-by-default).
 func (s *Store) WorkspaceModes(ctx context.Context, id int64) (graphOnly []string, todoSearch bool, err error) {
 	err = s.Read(ctx, func(tx *Tx) error {
 		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceGraphOnlySet, WorkspaceTodoGraphOnly)

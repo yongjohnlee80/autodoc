@@ -52,7 +52,8 @@ func (a Audience) String() string {
 }
 
 // Effect is what a verb does to the store: what a gated Lua script's capability must cover to call
-// it (ADR 1792004705 §4.1). Every contract names one; EffectUnset is a contract that forgot.
+// it (docs/decisions/contract.md#every-verb-states-its-effect). Every contract names one;
+// EffectUnset is a contract that forgot.
 type Effect int
 
 const (

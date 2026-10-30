@@ -8,11 +8,11 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// SETTING UP AN AGENT — the first run's card (ADR 1792395801): when the setup was never answered
-// and no profile exists, AutoDoc offers the agent CLIs it finds on PATH, the first one chosen.
-// Set up saves an ordinary profile through the profiles dialog's own save (storeAgentProfile) and
-// starts it, typing nothing into it; No is remembered. System › Set up an agent… opens the card again
-// at any time.
+// SETTING UP AN AGENT — the first run's card (docs/decisions/crew.md#first-run-agent-setup): when
+// the setup was never answered and no profile exists, AutoDoc offers the agent CLIs it finds on
+// PATH, the first one chosen. Set up saves an ordinary profile through the profiles dialog's own
+// save (storeAgentProfile) and starts it, typing nothing into it; No is remembered. System › Set up
+// an agent… opens the card again at any time.
 
 // agentCLI is one agent CLI AutoDoc knows to offer: the command a profile runs, and the name the
 // card fills in.

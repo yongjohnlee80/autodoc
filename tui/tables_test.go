@@ -10,10 +10,11 @@ import (
 // tableInclude admits CSV and TSV files beside the notes: a workspace's default include does not.
 var tableInclude = []string{"**/*.md", "**/*.csv", "**/*.tsv"}
 
-// A CSV or TSV file opens as an editable table in the terminal's editor (ADR 1792303119 §4.7): the
-// editor starts Rendered, a cell kept is the file's text and modifies the buffer, the editor's u
-// undoes it; Ctrl+T shows the text and that choice holds; each table file has its own table, kept
-// with its buffer, and a note has none.
+// A CSV or TSV file opens as an editable table in the terminal's editor
+// (docs/decisions/editor.md#csv-and-tsv-files-as-editable-tables): the editor starts Rendered, a
+// cell kept is the file's text and modifies the buffer, the editor's u undoes it; Ctrl+T shows the
+// text and that choice holds; each table file has its own table, kept with its buffer, and a note
+// has none.
 func TestACSVFileIsATableInTheTerminal(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n", "b.tsv", "h\tv\nx\t1\n", "c.md", "# Note\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -117,9 +118,10 @@ func TestThePageViewIsKeptWhileATableIsShown(t *testing.T) {
 	}
 }
 
-// The table's clipboard in the terminal (ADR 1792349021 §4.8): the row numbers show; yy then p
-// duplicates a row; a system paste (a PasteEvent) fills cells from the cursor's; the yank is in
-// the editor's own register, so Raw sees it too.
+// The table's clipboard in the terminal
+// (docs/decisions/editor.md#the-tables-clipboard-menu-and-row-numbers): the row numbers show; yy
+// then p duplicates a row; a system paste (a PasteEvent) fills cells from the cursor's; the yank is
+// in the editor's own register, so Raw sees it too.
 func TestTheTableYanksAndPastesInTheTerminal(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n", "c.md", "# Note\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})

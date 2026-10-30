@@ -9,8 +9,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// unkeyed counts workspace ws's documents with no stored sort keys (ADR 1793312720 D2), through a
-// raw connection to the store's file.
+// unkeyed counts workspace ws's documents with no stored sort keys
+// (docs/decisions/search.md#stored-sort-keys), through a raw connection to the store's file.
 func unkeyed(t *testing.T, db *store.Store, ws int64) int {
 	t.Helper()
 	raw, err := sqlite.Open(context.Background(), "file:"+db.Path()+"?_pragma=busy_timeout(5000)")
@@ -46,10 +46,11 @@ func execRaw(t *testing.T, db *store.Store, q string, args ...any) {
 	}
 }
 
-// TestTheStartSweepKeysTheDocuments (ADR 1793312720 D2): a store whose documents have no sort keys,
-// as one indexed before 000027 has, gets them at the start sweep the daemon runs (app/serve.go:
-// SweepModels): a served workspace's through its indexer, a stored one no indexer serves through
-// the store. Without it, every index.documents call would list by the Go fallback for good.
+// TestTheStartSweepKeysTheDocuments (docs/decisions/search.md#stored-sort-keys): a store whose
+// documents have no sort keys, as one indexed before 000027 has, gets them at the start sweep the
+// daemon runs (app/serve.go: SweepModels): a served workspace's through its indexer, a stored one
+// no indexer serves through the store. Without it, every index.documents call would list by the Go
+// fallback for good.
 func TestTheStartSweepKeysTheDocuments(t *testing.T) {
 	ctx := context.Background()
 	m, db := openWith(t, Options{})

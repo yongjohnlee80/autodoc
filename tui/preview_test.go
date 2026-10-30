@@ -308,7 +308,8 @@ func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 }
 
 // A recovery restart whose installed backend does not come up stays in its dialog, saying why, and
-// Restart Now tries the start again (ADR 0212 §8: a failed restart remains actionable).
+// Restart Now tries the start again (docs/decisions/search.md#protocol-mismatch-recovery: a failed
+// restart remains actionable).
 func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 	dir, err := os.MkdirTemp("", "adf")
 	if err != nil {

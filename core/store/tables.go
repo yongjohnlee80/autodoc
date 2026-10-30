@@ -196,7 +196,8 @@ type Pattern struct {
 	Pattern     string
 }
 
-// GraphOnly is one of a workspace's graph_only patterns (ADR 1792015212 §2.2), in order.
+// GraphOnly is one of a workspace's graph_only patterns
+// (docs/decisions/todos.md#which-paths-are-graph-only), in order.
 type GraphOnly struct {
 	WorkspaceID int64
 	Ord         int64

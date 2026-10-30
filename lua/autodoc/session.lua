@@ -335,7 +335,7 @@ function M.older_daemon(info)
 end
 
 ---offer_restart asks, once per daemon instance, whether to restart an older daemon as this
----plugin's build (ADR 1791209945 §3.1); other clients share it, hence the question. Not after
+---plugin's build (docs/decisions/neovim.md#a-protocol-range-per-session); other clients share it, hence the question. Not after
 ---this session restarted it already: a daemon that still refuses then is the binary's fault, and
 ---offering again would loop.
 ---@param info table the probe's answer

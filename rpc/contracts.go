@@ -123,7 +123,7 @@ type contractJSON struct {
 	Since    int64             `json:"since"`
 	Scope    string            `json:"scope"`
 	Audience string            `json:"audience"`
-	Effect   string            `json:"effect"` // read, write or settings (ADR 1792004705 §4.1)
+	Effect   string            `json:"effect"` // read, write or settings (docs/decisions/contract.md#every-verb-states-its-effect)
 	Params   []module.Param    `json:"params"`
 	Result   string            `json:"result,omitempty"`
 	Errors   []int64           `json:"errors,omitempty"`

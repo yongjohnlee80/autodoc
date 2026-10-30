@@ -23,16 +23,17 @@ import (
 // ErrNoDocument is a path the index does not hold.
 var ErrNoDocument = errs.Sentinel(errs.ErrInvalidArgument, "index: no such document")
 
-// Link is one link of graph.links or graph.backlinks (ADR 0204 §4.6). Path is the other end: the
-// target of a link, the source of a backlink; "" for an unresolved link.
+// Link is one link of graph.links or graph.backlinks (docs/decisions/search.md#link-resolution).
+// Path is the other end: the target of a link, the source of a backlink; "" for an unresolved link.
 type Link struct {
 	Path     string
 	Raw      string // the link as written
 	Anchor   string // the heading, or "^" and the block id; "" for none
 	Kind     string // LinkWikilink, LinkEmbed or LinkMarkdown, or a relation's field
 	Resolved bool
-	// External is a link's file outside the workspace, absolute: a todo task's ref (ADR 1792015212
-	// §2.4). It reaches no document, and is not unresolved. "" for every other link.
+	// External is a link's file outside the workspace, absolute: a todo task's ref
+	// (docs/decisions/todos.md#task-relations-and-external-links). It reaches no document, and is
+	// not unresolved. "" for every other link.
 	External string
 }
 
@@ -208,13 +209,14 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 	return m, nil
 }
 
-// AN UNROOTED MAP, A PAGE AT A TIME (ADR 1793321612) — the whole workspace's map in one reply fails
-// past the transport's message limit, so a client from protocol 36 reads it in pages: documents in
-// path order after a cursor, through document's (workspace_id, path) key, each page with the links
-// whose source is on it (link_src, the destination's path joined), and those documents' tags and
-// supersession. Every link is sent once, by the page of its source; one to a document of a later
-// page names a node the client has not had yet, and it holds the link until the map ends. No
-// snapshot crosses pages: a document added or removed meanwhile may be missing or extra.
+// AN UNROOTED MAP, A PAGE AT A TIME (docs/decisions/search.md#unrooted-maps-in-pages) — the whole
+// workspace's map in one reply fails past the transport's message limit, so a client from protocol
+// 36 reads it in pages: documents in path order after a cursor, through document's (workspace_id,
+// path) key, each page with the links whose source is on it (link_src, the destination's path
+// joined), and those documents' tags and supersession. Every link is sent once, by the page of its
+// source; one to a document of a later page names a node the client has not had yet, and it holds
+// the link until the map ends. No snapshot crosses pages: a document added or removed meanwhile may
+// be missing or extra.
 
 // The pages of an unrooted map: DefaultMapPage documents unless asked, MaxMapPage at most.
 const (

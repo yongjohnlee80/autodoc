@@ -1,7 +1,7 @@
-// EmbeddingSetup.qml — Search models › Embedding Models › Set up… (embedsetup.go, ADR 1793005098
-// §4.4): the Ollama to ask and what this machine has, the models that fit it (the recommended one
-// chosen), each workspace ticked or not with what Use will do to it and what it takes, the download,
-// and Use, Retry after a step that failed, or Close.
+// EmbeddingSetup.qml — Search models › Embedding Models › Set up… (embedsetup.go,
+// docs/decisions/search.md#the-setup-dialog): the Ollama to ask and what this machine has, the
+// models that fit it (the recommended one chosen), each workspace ticked or not with what Use will
+// do to it and what it takes, the download, and Use, Retry after a step that failed, or Close.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 95

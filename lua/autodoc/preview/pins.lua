@@ -1,7 +1,7 @@
 ---autodoc.preview.pins — per-project slot pins in auto-core state.
 ---
 ---A fresh namespace, `autodoc.preview` (persist json): md-harpoon's pins
----are not read (ADR 1791210485 §1). The pins of each project are kept
+---are not read (docs/decisions/neovim.md#markdown-preview-slots). The pins of each project are kept
 ---under a key derived from the project's root — auto-core's active
 ---worktree, else the cwd — and `worktree:switched` moves the key to the
 ---worktree switched to.

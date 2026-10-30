@@ -57,7 +57,7 @@ var ErrSwitching = errs.Sentinel(errs.ErrPrecondition, "index: a new model is fi
 // replaces, offline for the switch.
 var errOffline = errs.Sentinel(errs.ErrPrecondition, "index: the model is offline while a new one fills")
 
-// The semantic tier's constants (ADR 0204 §4.4, §4.5).
+// The semantic tier's constants (docs/decisions/search.md#hybrid-search-and-rank-fusion).
 const (
 	embedBatch   = 64               // texts per provider call
 	refusedFor   = time.Hour        // how long a rejected text is set aside before it is tried again
@@ -183,7 +183,7 @@ func (m *semantic) signal() {
 // model has nothing to keep answering. Another active model keeps answering until the target
 // covers every chunk (commitVectors flips then). The target is recorded as such, and a model that
 // was the target and is no longer, and is not active, is reclaimed: a cancelled switch's, or one
-// switched past (ADR 1791284787 §2.3).
+// switched past (docs/decisions/store.md#when-a-model-is-reclaimed).
 func (x *Indexer) setupModels(ctx context.Context) error {
 	m := x.sem
 	target := m.target.Model()
@@ -289,7 +289,8 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 			chunks = append(chunks, rows...)
 		}
 		// a few documents (a batch of vectors): only their texts, looked up by key, so the cost follows
-		// the batch, not the workspace's vectors (ADR 1791329335 §2.6). Every document, or documents
+		// the batch, not the workspace's vectors
+		// (docs/decisions/store.md#readiness-follows-the-batch). Every document, or documents
 		// with more sections than one lookup list holds (one large file): the model's every vector,
 		// read once through its index, which is then the cheaper read.
 		var have map[string]bool
@@ -399,7 +400,7 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			return nil // a late batch of a retired model: reclaimed, never stored again
 		}
 		// a text no chunk has any more was replaced while the provider embedded it: its vector would
-		// only be an orphan (ADR 1791329335)
+		// only be an orphan (docs/decisions/store.md#vectors-follow-their-chunks)
 		items, err := s.withChunks(tx, vb.items)
 		if err != nil {
 			return err
@@ -495,7 +496,8 @@ func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
 		hashes[i] = it.textHash
 	}
 	// not SELECT DISTINCT doc_id: without statistics SQLite would take chunk_doc for its order, and
-	// scan the workspace's chunks; a plain select looks each text up in chunk_text (ADR 1791329335)
+	// scan the workspace's chunks; a plain select looks each text up in chunk_text
+	// (docs/decisions/store.md#vectors-follow-their-chunks)
 	rows, err := s.chunks(tx).With(ChunkTextHash, hashes...).Select(ChunkDoc)
 	if err != nil {
 		return nil, err
@@ -1108,9 +1110,9 @@ func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 }
 
 // PurgeModel reclaims a model no longer used, at once rather than at the next start
-// (index.purge_model; ADR 1791284787 §2.4). The active model and the target are refused, saying
-// what to do instead: a workspace's active model goes with its provider, in Search models, and a
-// switch's target with the switch's cancel.
+// (index.purge_model; docs/decisions/store.md#purging-refuses-the-active-model-and-the-target). The
+// active model and the target are refused, saying what to do instead: a workspace's active model
+// goes with its provider, in Search models, and a switch's target with the switch's cancel.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 	var active, target string
 	if x.sem != nil {
@@ -1227,7 +1229,8 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 	return out, nil
 }
 
-// EmbeddingStatus is index.status's embeddings (ADR 0204 §4.7).
+// EmbeddingStatus is index.status's embeddings
+// (docs/decisions/search.md#index-status-and-change-log-retention).
 type EmbeddingStatus struct {
 	Provider string // the target's provider
 	Model    string // the active model's fingerprint

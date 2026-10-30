@@ -1,4 +1,5 @@
--- autodoc.kb.migrate: move a KB to the v2 layout (ADR 1791209946 §8) through a checksummed
+-- autodoc.kb.migrate: move a KB to the v2 layout (docs/decisions/crew.md#migrating-a-kb-to-the-layout)
+-- through a checksummed
 -- manifest, with a full pre-image undo.
 --
 --   :AutodocKbMigrate [root]            dry run: writes migration-manifest.json, migration.diff and
@@ -179,7 +180,7 @@ M.STORES_WAIT_MS = 5000
 ---dir_overrides a Neovim root points elsewhere in auto-core's persisted todo state. The second
 ---result is whether the daemon answered. Before the cutover's end auto-core.todo.known_dirs() was
 ---asked; that module is gone from auto-core v0.4.1, and the daemon has known every store since
----the cutover (ADR 1791532020).
+---the cutover (docs/decisions/todos.md#the-daemon-owns-the-todo-system).
 ---@param list_stores fun(cb: fun(result: table?, err: table?))?  -- for tests; the daemon's todos.stores by default
 ---@return string[] dirs, boolean answered
 function M.known_todo_stores(list_stores)
@@ -1398,7 +1399,7 @@ function M.apply(opts)
 
   if #fails == 0 and m.git.repo and opts.commit ~= false then
     local sha, gerr = git_stage_and_commit(root, git_paths(m),
-      "kb: migrate to the v2 layout (ADR 1791209946 §8)\n\nAutoDoc migration " .. m.id .. ".\n")
+      "kb: migrate to the v2 layout\n\nAutoDoc migration " .. m.id .. ".\n")
     if not sha then
       fails = { gerr }
       util.run({ "git", "-C", root, "reset", "-q" })

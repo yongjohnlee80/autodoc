@@ -119,7 +119,7 @@ func (e *Enders) DiscardDeliveries(tx crew.Tx, profile string) error {
 }
 
 // Run is the crew module's conformance suite, over the Store h makes: the ownership state machine
-// of ADR 1793271500 §4.3, which every engine's adapter must keep.
+// of docs/decisions/crew.md#scopes-and-fenced-ownership, which every engine's adapter must keep.
 func Run(t *testing.T, h Harness) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (*crew.Manager, crew.Store, *Clock, *Enders) {

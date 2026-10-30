@@ -69,10 +69,10 @@ func (e *env) revalidate(done func() bool) {
 	e.eventually("revalidated", func() bool { return done() && e.pendingJobs() == 0 })
 }
 
-// TestAGraphOnlyDocumentIsInTheGraphNotInSearch (ADR 1792015212 §2.1): a graph-only document has
-// its row, frontmatter, links, relations and backlinks, and no chunk, so no search finds it. Its
-// mode is part of what the indexer compares: a change of mode alone re-indexes it, its chunks
-// added, or dead in the generation that flips.
+// TestAGraphOnlyDocumentIsInTheGraphNotInSearch (docs/decisions/todos.md#graph-only-indexing): a
+// graph-only document has its row, frontmatter, links, relations and backlinks, and no chunk, so no
+// search finds it. Its mode is part of what the indexer compares: a change of mode alone re-indexes
+// it, its chunks added, or dead in the generation that flips.
 func TestAGraphOnlyDocumentIsInTheGraphNotInSearch(t *testing.T) {
 	m := &modes{graph: []string{".todo-list/"}}
 	e := newEnv(t, options{Modes: m.mode})
@@ -111,10 +111,10 @@ func TestAGraphOnlyDocumentIsInTheGraphNotInSearch(t *testing.T) {
 	}
 }
 
-// TestBlockedNamesATaskOfItsOwnStore (ADR 1792015212 §2.4): a task answers to its store's name for
-// it, and "blocked" looks the id up in the task's own store only, so another store's task of the
-// same id never captures it. The link follows the blocker as it comes, moves and goes, the task
-// that names it unchanged.
+// TestBlockedNamesATaskOfItsOwnStore (docs/decisions/todos.md#task-relations-and-external-links): a
+// task answers to its store's name for it, and "blocked" looks the id up in the task's own store
+// only, so another store's task of the same id never captures it. The link follows the blocker as
+// it comes, moves and goes, the task that names it unchanged.
 func TestBlockedNamesATaskOfItsOwnStore(t *testing.T) {
 	m := &modes{stores: map[string]*TodoStore{"a/.todo-list/": {ID: "A"}, "b/.todo-list/": {ID: "B"}}}
 	e := newEnv(t, options{Modes: m.mode})
@@ -134,7 +134,8 @@ func TestBlockedNamesATaskOfItsOwnStore(t *testing.T) {
 	eq(t, "a note's blocked", e.kinds("notes/n.md"), nil)
 }
 
-// TestEveryDocumentsVariableRefs (ADR 1792132105 §2.5, generalizing ADR 1792015212 §2.4): a
+// TestEveryDocumentsVariableRefs (docs/decisions/todos.md#resolving-refs-in-every-document,
+// generalizing docs/decisions/todos.md#task-relations-and-external-links): a
 // document's $NAME ref, a relation or a markdown link, task or note, resolves through the variables
 // of the workspace it belongs to: a path in the indexed workspace is that document, one outside it an
 // external link, which is not unresolved; an unknown name is unresolved, never the workspace root.
@@ -221,7 +222,8 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 		"related $NOPE/z.md -> -",
 	})
 
-	// with no variables given, a note's $NAME root is the workspace root, as before ADR 1792132105
+	// with no variables given, a note's $NAME root is the workspace root, as before
+	// docs/decisions/todos.md#variables-belong-to-the-workspace
 	m.set(func(m *modes) { m.vars = nil })
 	e.revalidate(func() bool {
 		return strings.Join(e.kinds("notes/n.md"), "|") == "related $KB_ROOT/adrs/b.md -> adrs/b.md|related $NOPE/z.md -> z.md"
@@ -256,7 +258,8 @@ func TestVarLink(t *testing.T) {
 	}
 }
 
-// TestATaskIsCheckedByItsStoresFormat (ADR 1792015212 amendment 2): a task in a store is checked
+// TestATaskIsCheckedByItsStoresFormat
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format): a task in a store is checked
 // by the store's Check, the todo format's, never by the workspace's KB schema, so it has none of
 // the KB's diagnostics and the format's facets. A file beside the store keeps the KB schema's. A
 // store whose Check comes later indexes its unchanged task again, now checked by it.

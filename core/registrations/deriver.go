@@ -11,7 +11,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// Deriver makes text of a build's document formats (ADR 0216 §1.8): every build has Documents, and
+// Deriver makes text of a build's document formats
+// (docs/decisions/search.md#derived-document-formats): every build has Documents, and
 // a Pro build adds one that adapts autorag's derive.Cache. The indexer and doc.read call them
 // through core/derived, as one (byFormat). Derive is called from several goroutines at once (the
 // indexer's workers, and every doc.read): an implementation must be safe for concurrent use.

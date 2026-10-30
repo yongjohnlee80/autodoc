@@ -9,12 +9,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 )
 
-// THE REPLY DIALOG (ADR 1793271500 §4.8): a request's toast opens it, in any window, wherever the
-// asking agent runs: the request's subject and body, a text area for the answer, and Send, Dismiss
-// or Cancel. Send is inbox.reply, keyed by the request and the body, so a reply sent again after a
-// lost answer is the same reply; Dismiss is inbox.dismiss, the sender told. A reply that could not
-// be sent is kept as the request's draft: the dialog opens on it again. An attention's toast raises
-// its agent here, or asks the window that shows it to (inbox.focus).
+// THE REPLY DIALOG (docs/decisions/crew.md#the-human-inbox): a request's toast opens it, in any
+// window, wherever the asking agent runs: the request's subject and body, a text area for the
+// answer, and Send, Dismiss or Cancel. Send is inbox.reply, keyed by the request and the body, so a
+// reply sent again after a lost answer is the same reply; Dismiss is inbox.dismiss, the sender
+// told. A reply that could not be sent is kept as the request's draft: the dialog opens on it
+// again. An attention's toast raises its agent here, or asks the window that shows it to
+// (inbox.focus).
 
 // crewReplyDialog is the dialog's id in the layout (main.qml's Reply { id: crewReply }); crewReplyText
 // its text area's, as golib names an id inside a component's instance: the file's own id, "@", the

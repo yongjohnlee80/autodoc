@@ -38,7 +38,8 @@ type Partition struct {
 
 // reading opens an At's store for a read: resolved, recovered, locked. The caller unlocks. A store
 // a registered root (a workspace, or todos.register) has not made yet reads as an empty one, and
-// the read writes nothing: no scaffold, no claim, no journal (ADR 1791532020 r13). Any other root
+// the read writes nothing: no scaffold, no claim, no journal
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write). Any other root
 // without a store is refused, as before.
 func (m *Manager) reading(ctx context.Context, at At) (where, *store, error) {
 	w, err := m.resolve(ctx, at)
@@ -211,7 +212,8 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec, scope string) (Task
 	}
 	w, st, err := m.writing(ctx, at)
 	if errors.Is(err, ErrNotAStore) {
-		// a workspace's first task makes its store, as its first write claims it (ADR 1791532020 r13)
+		// a workspace's first task makes its store, as its first write claims it
+		// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write)
 		if _, err = m.Scaffold(ctx, at); err == nil {
 			w, st, err = m.writing(ctx, at)
 		}
@@ -413,7 +415,7 @@ func (m *Manager) Status(ctx context.Context, at At, id, seen, status string) (T
 // same write (D1); nothing else changes status. Assigning again, even to the same assignee, is a
 // new assignment: it is written and logged, so it is delivered again. Clearing an unassigned task
 // is a no-op. scope is the assigner's, kept on the change and the snapshot and never read here
-// (ADR 1791532020 §2.5a); "" for none.
+// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope); "" for none.
 func (m *Manager) Assign(ctx context.Context, at At, id, seen, assignee, reason, scope string) (Task, error) {
 	if len(scope) > MaxScope {
 		return Task{}, fmt.Errorf("%w: a scope of %d bytes; at most %d", ErrInvalid, len(scope), MaxScope)
@@ -705,7 +707,8 @@ func (m *Manager) Changes(ctx context.Context, at At, consumer string, limit int
 			m.event(Event{Kind: "todos.consumer_dropped", Store: id, Detail: consumer})
 		}
 		// Acked stays: the cursor moves only when the client acknowledges this page, after it has
-		// durably handled it (ADR 1791532020 §2.5). A client that dies first is answered it again.
+		// durably handled it (docs/decisions/todos.md#a-pull-based-change-log). A client that dies
+		// first is answered it again.
 		c.Unregistered, c.SeenAt, c.Resync = true, now, head
 		if err := m.j.PutConsumer(ctx, id, c); err != nil {
 			return ChangesPage{}, err
