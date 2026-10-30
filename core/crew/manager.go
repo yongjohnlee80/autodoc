@@ -33,6 +33,13 @@ type SessionEnder interface {
 	HasEligible(tx Tx, profile string) (bool, error)
 	// UnhandledCount: how many of profile's deliveries are queued or leased, for crew.orphans.
 	UnhandledCount(tx Tx, profile string) (int, error)
+	// Expire makes mail's time-driven changes real in tx (a lapsed lease queued again, raising
+	// pending_gen; an expired message ended), first in every scheduler write that reads
+	// eligibility (§4.2, §4.7).
+	Expire(tx Tx) error
+	// NextDeadline is the earliest instant mail's state changes by time alone (a lease lapsing, a
+	// message expiring), so the scheduler's timer wakes for it; false when none is pending.
+	NextDeadline(tx Tx) (int64, bool, error)
 }
 
 // Option configures a Manager.
