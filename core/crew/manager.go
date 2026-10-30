@@ -34,6 +34,10 @@ type SessionEnder interface {
 	// HasEligible: profile has a delivery a new session of it may receive now. crew.register
 	// seeds the new session's pending_gen from it, so queued mail wakes it (§4.4).
 	HasEligible(tx Tx, profile string) (bool, error)
+	// EligibleFor: session, a live session of profile, has a delivery it may receive now, unbound
+	// or bound to it. crew.wait asks it for each session a host waits on: HasEligible's
+	// new-session view leaves out the mail bound to the session itself.
+	EligibleFor(tx Tx, profile, session string) (bool, error)
 	// UnhandledCount: how many of profile's deliveries are queued or leased, for crew.orphans.
 	UnhandledCount(tx Tx, profile string) (int, error)
 	// Expire makes mail's time-driven changes real in tx (a lapsed lease queued again, raising
