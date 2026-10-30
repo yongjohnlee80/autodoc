@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 35,
+  protocol = 36,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -269,8 +269,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}",
-      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one).",
+      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28), next? (protocol 36)}",
+      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one). From protocol 36, a map without a root comes a page at a time: opts.limit documents (default 500, at most 2000) in path order after opts.after (the previous page's next, an opaque cursor), the links whose source is among them (to any document, one on a later page included), and next, \"\" at the end. Each link comes once; drop one whose document never came. A cursor from other kinds is invalid params. A session below 36 gets the whole map in one reply.",
     },
     ["graph.neighborhood"] = {
       since = 1, scope = "workspace", audience = "agent",

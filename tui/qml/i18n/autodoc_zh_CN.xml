@@ -5811,6 +5811,10 @@ WHAT A KEY NEEDS
         <source>reading %1…</source>
         <translation>正在读取 %1…</translation>
     </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>正在读取 %1：%2 个文档…</translation>
+    </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
         <translation>关系</translation>

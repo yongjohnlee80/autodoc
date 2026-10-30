@@ -75,6 +75,10 @@ func edgeClass(kind string) int {
 	return edgeRelation
 }
 
+// globeMapPage is the documents a page of the GlobeMap's map asks for; 0 is the daemon's default.
+// A test makes it small, to read a map of a few documents over several pages.
+var globeMapPage = 0
+
 // globe is one GlobeMap frame: one graph.map answer placed as the simulation has it at one step,
 // made off the loop and never changed once handed over.
 type globe struct {
@@ -528,6 +532,7 @@ type globeMap struct {
 	counts    [2]int       // the load's documents and links, once its map is read
 	status    string       // what a load under way says, a catalog id statusArg fills; "" none
 	statusArg string       // fills status's %1
+	statusN   int          // fills status's %2 while the map is read a page at a time: its documents so far
 	stepped   int          // the load's simulation steps run, as last posted
 	toast     bool         // the load's progress toast is up
 	noKey     bool         // l hid the legend
@@ -708,11 +713,22 @@ func (g *globeMap) load() {
 		if k := globeFilters[filter].kinds; k != nil {
 			opts["kinds"] = k
 		}
-		res, err := g.c.Call(ctx, "graph.map", ws, opts)
+		if globeMapPage > 0 {
+			opts["limit"] = int64(globeMapPage)
+		}
+		// every page of the map (ADR 1793321612 D3), the documents read so far in the title
+		m, err := readMap(func(o map[string]any) (any, error) { return g.c.Call(ctx, "graph.map", ws, o) }, opts,
+			func(docs int) {
+				g.c.Post(func() {
+					if tk.Current() && g.open && g.views == views {
+						g.status, g.statusArg, g.statusN = "autodoc.text.globemap_gui.reading_documents", ws, docs
+						g.title()
+					}
+				})
+			})
 		if err != nil {
 			return err
 		}
-		m := decodeMap(res)
 		g.c.Post(func() {
 			if tk.Current() && g.open && g.views == views {
 				g.counts, g.status = [2]int{len(m.Nodes), len(m.Edges)}, ""
@@ -922,6 +938,9 @@ func (g *globeMap) title() {
 func (g *globeMap) statusText() string {
 	if g.status == "" {
 		return ""
+	}
+	if g.status == "autodoc.text.globemap_gui.reading_documents" {
+		return g.c.Trf(g.status, g.statusArg, g.statusN)
 	}
 	return g.c.Trf(g.status, g.statusArg)
 }

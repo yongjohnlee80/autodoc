@@ -5827,6 +5827,10 @@ WHAT A KEY NEEDS
         <source>reading %1…</source>
         <translation>reading %1…</translation>
     </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>reading %1: %2 documents…</translation>
+    </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
         <translation>relations</translation>
