@@ -478,3 +478,93 @@ func TestANNLife_BoundedRetries(t *testing.T) {
 		t.Fatalf("the status: %+v %v", st, err)
 	}
 }
+
+// A deployment from before approximate search: its tenants' models were set with no ANN, so no
+// Want ran. The tick wants every model a tenant names that has no row, then builds it; a row an
+// operator deletes to retry comes back the same way.
+func TestANNLife_TheTickWantsTheTenantsModels(t *testing.T) {
+	conn, a := annSetup(t, DefaultANNConfig())
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 2000, annDims, 0.31) // rag_meta written directly: no Want
+	ctx := context.Background()
+	if _, err := a.rwIndex.DAO().With(aiModel, model).Get(); !errors.Is(err, dao.ErrNoRows) {
+		t.Fatalf("precondition: a row before the tick: %v", err)
+	}
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if indexOf(t, a, model).State != annReady {
+		t.Fatalf("after the first tick: %s", indexOf(t, a, model).State)
+	}
+	if _, err := conn.ExecContext(ctx, "DELETE FROM rag_ann_index"); err != nil { // the operator's retry
+		t.Fatal(err)
+	}
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if indexOf(t, a, model).State != annReady || !indexState(t, conn, model).Valid {
+		t.Fatalf("after the operator cleared the row: %s", indexOf(t, a, model).State)
+	}
+}
+
+// A drop that waits: the build of a model whose index of the name is not the declared one drops it
+// first, and a transaction holding the table makes the drop wait past a lease. The lease is renewed
+// from the builder's registration on, so a second server's recovery finds it live and fences
+// nothing; once the transaction ends the build completes.
+func TestANNLife_TheLeaseOutlivesALongDrop(t *testing.T) {
+	conn, a := annSetup(t, DefaultANNConfig())
+	a.leaseFor, a.renewEvery = time.Second, 150*time.Millisecond
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 2000, annDims, 0.32)
+	ctx := context.Background()
+	// an index of the name with another operator class, and the row wanted
+	p, err := postgres.PinSessionConn(ctx, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	el, _ := postgres.HNSWIndexElement("vec", dao.L2, dao.VectorType{Kind: dao.VectorFloat32, Dims: annDims})
+	l2 := postgres.IndexSpec{Table: tEmb, Name: annIndexName(model), Method: "hnsw", Element: el, WhereEq: []postgres.EqText{{Column: "model", Value: model}}}
+	if err := postgres.CreateIndexConcurrently(ctx, p, l2, postgres.BuildOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	p.Discard()
+	if err := a.Want(ctx, model); err != nil {
+		t.Fatal(err)
+	}
+	blocker, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// released on every path, a failing one included: a test that stops while the table is held
+	// would leave its pool's cleanup waiting on this connection for ever
+	defer func() { _ = blocker.Rollback() }()
+	if _, err := blocker.ExecContext(ctx, "LOCK TABLE rag_embedding IN SHARE UPDATE EXCLUSIVE MODE"); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- a.Tick(ctx) }()
+	until(t, "the drop to wait on the held table", func() bool {
+		rows, _ := conn.QueryContext(ctx, "SELECT count(*) FROM pg_stat_activity WHERE query LIKE 'DROP INDEX CONCURRENTLY%' AND wait_event_type = 'Lock'")
+		var n int
+		if rows != nil && rows.Next() {
+			_ = rows.Scan(&n)
+			rows.Close()
+		}
+		return n > 0
+	})
+	time.Sleep(3 * a.leaseFor) // the drop waits past three leases
+	b := NewANN(conn, DefaultANNConfig(), "runb")
+	if err := b.recoverLapsed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if bo := builderOf(t, a); bo.Owner != "cellrun" {
+		t.Fatalf("recovery fenced the waiting builder: owner %q; want the lease renewed through the drop", bo.Owner)
+	}
+	_ = blocker.Rollback()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if st := indexState(t, conn, model); indexOf(t, a, model).State != annReady || st.Def.OpClass != "vector_cosine_ops" {
+		t.Fatalf("after the drop: %s %+v", indexOf(t, a, model).State, st.Def)
+	}
+}
