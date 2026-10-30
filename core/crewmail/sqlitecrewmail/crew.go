@@ -53,7 +53,8 @@ const (
 	cRef         col = "ref"
 	cAt          col = "at"
 
-	byID sort = "id"
+	byID       sort = "id"
+	byCodename sort = "codename"
 )
 
 type schema[R any] = dao.Schema[R, col, sort, string]
@@ -94,6 +95,21 @@ func table[R any](c dao.DataConn, name string, fields map[col]func(R) any, key .
 	)
 }
 
+// profileTable is crew_profile, which also lists in (scope, codename) order.
+func profileTable(c dao.DataConn, fields map[col]func(*crew.Profile) any) *schema[*crew.Profile] {
+	fs := map[col]dao.Field[*crew.Profile]{}
+	for n, scan := range fields {
+		fs[n] = store.Col("crew_profile", n, scan)
+	}
+	return dao.New(c,
+		dao.Table[*crew.Profile, col, sort, string]("crew_profile"),
+		dao.Fields[*crew.Profile, col, sort, string](fs),
+		dao.SortMap[*crew.Profile, col, sort, string](map[sort]string{
+			byID: `"crew_profile"."id"`, byCodename: `"crew_profile"."scope", "crew_profile"."codename"`}),
+		dao.Conflict[*crew.Profile, col, sort, string](cID),
+	)
+}
+
 func newCrewTables(c dao.DataConn) *crewTables {
 	return &crewTables{
 		hosts: table(c, "crew_host", map[col]func(*crew.Host) any{
@@ -105,12 +121,12 @@ func newCrewTables(c dao.DataConn) *crewTables {
 			cID: func(r *crew.Scope) any { return &r.ID }, cKind: func(r *crew.Scope) any { return &r.Kind },
 			cState: func(r *crew.Scope) any { return &r.State }, cCreated: func(r *crew.Scope) any { return &r.Created },
 		}, cID),
-		profiles: table(c, "crew_profile", map[col]func(*crew.Profile) any{
+		profiles: profileTable(c, map[col]func(*crew.Profile) any{
 			cID: func(r *crew.Profile) any { return &r.ID }, cScope: func(r *crew.Profile) any { return &r.Scope },
 			cCodename: func(r *crew.Profile) any { return &r.Codename }, cKind: func(r *crew.Profile) any { return &r.Kind },
 			cStatus: func(r *crew.Profile) any { return &r.Status }, cMergedInto: func(r *crew.Profile) any { return &r.MergedInto },
 			cCreated: func(r *crew.Profile) any { return &r.Created },
-		}, cID),
+		}),
 		sessions: table(c, "crew_session", map[col]func(*crew.Session) any{
 			cID: func(r *crew.Session) any { return &r.ID }, cProfile: func(r *crew.Session) any { return &r.Profile },
 			cHost: func(r *crew.Session) any { return &r.Host }, cEpoch: func(r *crew.Session) any { return &r.Epoch },
@@ -192,6 +208,18 @@ func (t *Tx) ActiveProfile(scope, codename string) (crew.Profile, bool, error) {
 		return crew.Profile{}, false, err
 	}
 	return *r, true, nil
+}
+
+func (t *Tx) ActiveProfiles() ([]crew.Profile, error) {
+	rows, err := t.t.profiles.On(t.tx).With(cStatus, crew.ProfileActive).OrderBy(dao.Asc(byCodename)).Select()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crew.Profile, len(rows))
+	for i, r := range rows {
+		out[i] = *r
+	}
+	return out, nil
 }
 
 func (t *Tx) PutProfile(p crew.Profile) error {

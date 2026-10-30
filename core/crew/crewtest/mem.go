@@ -112,6 +112,22 @@ func (t *memTx) ActiveProfile(scope, codename string) (crew.Profile, bool, error
 
 func (t *memTx) PutProfile(p crew.Profile) error { t.st.profiles[p.ID] = p; return nil }
 
+func (t *memTx) ActiveProfiles() ([]crew.Profile, error) {
+	var out []crew.Profile
+	for _, p := range t.st.profiles {
+		if p.Status == crew.ProfileActive {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b crew.Profile) int {
+		if c := strings.Compare(a.Scope, b.Scope); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Codename, b.Codename)
+	})
+	return out, nil
+}
+
 func (t *memTx) Session(id string) (crew.Session, bool, error) {
 	s, ok := t.st.sessions[id]
 	return copySession(s), ok, nil
