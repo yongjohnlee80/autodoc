@@ -58,6 +58,7 @@ func Run(t *testing.T, h Harness) {
 		{"APreviewSeesLiveMailBehindExpiredMail", testAPreviewSeesLiveMailBehindExpiredMail},
 		{"AdoptionsNoticesFollowTheMergeThroughCrewsAdopt", testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt},
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
+		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -873,5 +874,47 @@ func testDiscardLeavesNothingWaitingThroughCrewsDiscard(t *testing.T, h Harness)
 	}
 	if _, err := mm.Send(ctx, crew.Credential(other.Session, secret), mail.Send{To: []string{"gold@autodoc:old"}, Body: "b", Key: "later"}); !errors.Is(err, mail.ErrNoRecipient) {
 		t.Fatalf("a send into the discarded scope: %v, want ErrNoRecipient", err)
+	}
+}
+
+// NextDeadline, which the wake scheduler's timer reads, is the earliest instant mail changes by time
+// alone: none with no mail; a queued delivery's message expiry; a lease's end when it comes first;
+// never a finished delivery's.
+func testNextDeadlineIsTheEarliestLive(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	next := func() (int64, bool) {
+		t.Helper()
+		var at int64
+		var ok bool
+		if err := r.st.Mail.Read(r.ctx, func(tx mail.Tx) error {
+			var err error
+			at, ok, err = r.m.NextDeadline(tx)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return at, ok
+	}
+	if _, ok := next(); ok {
+		t.Fatal("a deadline with no mail")
+	}
+	now := r.clock.Now()
+	// a finished delivery: its message's expiry (the earliest of all) must not count
+	done := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "done", Key: "k-done", TTL: time.Minute})
+	got := r.receive("s-gold")
+	if err := r.m.Ack(r.ctx, "s-gold", got.Items[0].Delivery.ID, got.Items[0].Delivery.Lease); err != nil {
+		t.Fatal(err)
+	}
+	_ = done
+	if _, ok := next(); ok {
+		t.Fatal("a deadline from an acked delivery")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "live", Key: "k-live", TTL: 30 * time.Minute})
+	if at, ok := next(); !ok || at != now.Add(30*time.Minute).UnixNano() {
+		t.Fatalf("a queued delivery's deadline: %d %v, want its message's expiry", at, ok)
+	}
+	r.receive("s-gold") // its lease ends in 10 minutes, before the expiry
+	if at, ok := next(); !ok || at != now.Add(mail.LeaseFor).UnixNano() {
+		t.Fatalf("a leased delivery's deadline: %d %v, want its lease's end", at, ok)
 	}
 }

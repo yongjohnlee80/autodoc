@@ -261,10 +261,11 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 // error would.
 type faultStore struct {
 	crew.Store
-	mu     sync.Mutex
-	writes int
-	failAt int
-	down   bool // every write fails while set
+	mu       sync.Mutex
+	writes   int
+	failAt   int
+	failFrom int  // every write from this one on fails (0: none)
+	down     bool // every write fails while set
 }
 
 var errInjected = errors.New("injected store fault")
@@ -272,7 +273,7 @@ var errInjected = errors.New("injected store fault")
 func (f *faultStore) Write(ctx context.Context, fn func(crew.Tx) error) error {
 	f.mu.Lock()
 	f.writes++
-	fail := f.writes == f.failAt || f.down
+	fail := f.writes == f.failAt || f.down || (f.failFrom > 0 && f.writes >= f.failFrom)
 	f.mu.Unlock()
 	if fail {
 		return errInjected
@@ -404,8 +405,10 @@ func TestEachAttemptOwesItsOwnEnd(t *testing.T) {
 	}
 }
 
-// While the store refuses every write, an overdue deadline never shortens the retry: Run backs
-// off at the retry wait instead of spinning, and goes on once the store is back.
+// While the store refuses the looks' writes, an overdue deadline never shortens the retry: Run's
+// recovery succeeds, every sweep after it is refused with an awaiting_receive whose timeout has
+// passed still readable, and Run backs off at the retry wait instead of spinning. Once the store
+// is back, the wait is processed.
 func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 	clock := crewtest.NewClock()
 	mem := crewtest.NewMem(clock.Now)
@@ -426,24 +429,27 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 		return tx.PutWake(wk)
 	})
 	fs.mu.Lock()
-	fs.down, fs.writes = true, 0
+	base := fs.writes
+	fs.failFrom = base + 2 // Run's recovery (the next write) succeeds; every sweep after it fails
 	fs.mu.Unlock()
 	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(20*time.Millisecond))
 	ctx, cancel := context.WithCancel(r.ctx)
 	done := make(chan error, 1)
 	go func() { done <- sched.Run(ctx) }()
+	defer func() { cancel(); <-done }()
 	time.Sleep(300 * time.Millisecond) // a cell's own window, measuring how often Run tries
 	fs.mu.Lock()
-	tries := fs.writes
-	fs.down = false
+	tries := fs.writes - base - 1 // the sweeps refused after the recovery
+	fs.failFrom = 0
 	fs.mu.Unlock()
-	if tries > 40 { // 300 ms at a 20 ms retry is about 15; a spin is thousands
-		t.Fatalf("%d writes in 300 ms while the store refused: Run spun on the overdue deadline", tries)
-	}
 	if tries < 3 {
-		t.Fatalf("%d writes in 300 ms: Run stopped retrying", tries)
+		t.Fatalf("%d refused sweeps in 300 ms: the failing look was not reached, or Run stopped retrying", tries)
+	}
+	if tries > 40 { // 300 ms at a 20 ms retry is about 15; a spin on the overdue deadline is thousands
+		t.Fatalf("%d refused sweeps in 300 ms: Run spun on the overdue deadline", tries)
+	}
+	if got := r.wake(s.Session); got.State != crew.WakeAwaiting {
+		t.Fatalf("the wait moved while every sweep was refused: %+v", got)
 	}
 	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
-	cancel()
-	<-done
 }
