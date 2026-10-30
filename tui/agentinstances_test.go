@@ -21,15 +21,16 @@ func (r *modelRemoval) Wait(context.Context) error { <-r.done; return r.err }
 func (*modelRemoval) Generation() int              { return 1 }
 
 type modelPanel struct {
-	owner   *identityHost
-	configs map[widget.TerminalTabID]TerminalConfig
-	tabs    []widget.TerminalTab
-	active  widget.TerminalTabID
-	next    int
-	pastes  []string
-	resumed []widget.TerminalTabID // each Resume's tab
-	modes   []string               // each SetMode, tab:mode
-	sendErr error
+	owner    *identityHost
+	configs  map[widget.TerminalTabID]TerminalConfig
+	tabs     []widget.TerminalTab
+	active   widget.TerminalTabID
+	next     int
+	pastes   []string
+	resumed  []widget.TerminalTabID // each Resume's tab
+	modes    []string               // each SetMode, tab:mode
+	sendErr  error
+	startErr error // what Start answers instead of starting, when set
 	// unbracketed is how many bracketed pastes the programs refuse before they take them, a program
 	// still starting; below zero, they never do
 	unbracketed int
@@ -68,6 +69,9 @@ func (p *modelPanel) Add(label string, config TerminalConfig) (widget.TerminalTa
 }
 func (p *modelPanel) Select(id widget.TerminalTabID) error { p.active = id; return nil }
 func (p *modelPanel) Start(id widget.TerminalTabID) error {
+	if p.startErr != nil {
+		return p.startErr
+	}
 	for i := range p.tabs {
 		if p.tabs[i].ID == id {
 			p.tabs[i].Running = true

@@ -107,3 +107,23 @@ func withoutCommand(g any, command string) any {
 	group["hooks"] = left
 	return group
 }
+
+// endpointCommand is the SessionStart hook that registers a Claude session's endpoint (§4.7), run
+// by dir's own autodoc: what it prints (the endpoint's generation) is not for the agent's context,
+// which a SessionStart hook's output joins; a failure still says why, on stderr.
+func endpointCommand(dir string) string {
+	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew endpoint --claude >/dev/null"
+}
+
+// writeWakeAcceptance configures only what lets the crew's fixed notice start a turn (ADR 1793271500
+// §4.9), for a crew session's CLI of kind in dir: for Claude Code, the SessionStart hook that
+// registers its endpoint and crossSessionInbound "accept"; for the others nothing yet (Codex's
+// queue starts turns as it is). It never writes approval policies, permission modes, or allow or
+// deny rules: a turn a wake starts runs under the profile's own tool policy.
+func writeWakeAcceptance(dir, kind string) error {
+	if kind != "claude" {
+		return nil
+	}
+	return mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"),
+		map[string]string{"SessionStart": endpointCommand(dir)}, map[string]any{"crossSessionInbound": "accept"})
+}

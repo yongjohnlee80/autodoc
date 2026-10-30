@@ -59,6 +59,7 @@ func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
 func (c core) SetFormText(name, value string)  { c.h.setField(name, value) }
 func (c core) DaemonAddress() string           { return c.h.session.Address() }
+func (c core) StoreID() string                 { return c.h.session.StoreID() }
 func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {
 	view, ok := c.h.p.Find(id)
 	if !ok {

@@ -273,6 +273,22 @@ func fillAgentCommand(command string, ws wsInfo) string {
 // shellQuote is s as one shell word.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): its
+// program's name, after any VAR=value assignments the command starts with; "agent" when none.
+func agentKind(command string) string {
+	for _, f := range strings.Fields(command) {
+		if strings.Contains(f, "=") && !strings.HasPrefix(f, "=") && !strings.ContainsAny(f, "/'\"") {
+			continue // an environment assignment before the program
+		}
+		name := filepath.Base(strings.Trim(f, `'"`))
+		if name == "" || name == "." || name == "/" {
+			break
+		}
+		return name
+	}
+	return "agent"
+}
+
 // agentArgv is how the terminal runs command: env, dropping the identity another agent host gave
 // the TUI (spawnerIdentity) and setting AutoDoc's variables, running the shell on the command as
 // the user wrote it, so its quoting and arguments are the shell's.

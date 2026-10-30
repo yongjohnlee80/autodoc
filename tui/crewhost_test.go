@@ -22,6 +22,7 @@ type crewDaemon struct {
 	clock   *crewtest.Clock
 	failing string // a scope whose claims fail as a store failure would
 	none    bool   // a daemon before crew: every crew verb is unknown
+	refuse  error  // what crew.register answers instead of registering, when set
 }
 
 func newCrewDaemonForHost() *crewDaemon {
@@ -45,6 +46,18 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 		err = d.m.Renew(ctx, p[0].(string), p[1].(string), p[2].(int64))
 	case "crew.release":
 		err = d.m.Release(ctx, p[0].(string), p[1].(string), p[2].(int64))
+	case "crew.register":
+		if d.refuse != nil {
+			return nil, d.refuse
+		}
+		reg, err := d.m.Register(ctx, crew.Registration{Scope: p[0].(string), Run: p[1].(string), Epoch: p[2].(int64),
+			Codename: p[3].(string), Kind: p[4].(string), Workspace: p[5].(string), Instance: p[6].(string), Secret: p[7].(string)})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"session": reg.Session, "profile": reg.Profile}, nil
+	case "crew.exit":
+		err = d.m.Exit(ctx, p[0].(string), p[1].(string), p[2].(int64), p[3].(string), p[4].(string))
 	default:
 		return nil, errors.New("no verb " + verb)
 	}
@@ -64,14 +77,33 @@ type crewWindow struct {
 	d       *crewDaemon
 	timers  []func()
 	notices []string
+	hold    bool     // work waits in held until release, as a call in flight does
+	held    []func() // the held work's answers
 }
 
 func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
 	return w.d.call(ctx, verb, p...)
 }
-func (w *crewWindow) Go(fn func(context.Context) any, then func(any)) { then(fn(context.Background())) }
-func (w *crewWindow) After(_ time.Duration, fn func())                { w.timers = append(w.timers, fn) }
-func (w *crewWindow) Notify(msg string)                               { w.notices = append(w.notices, msg) }
+func (w *crewWindow) Go(fn func(context.Context) any, then func(any)) {
+	if w.hold {
+		w.held = append(w.held, func() { then(fn(context.Background())) })
+		return
+	}
+	then(fn(context.Background()))
+}
+
+// release answers the held work, as its calls returning would.
+func (w *crewWindow) release() {
+	h := w.held
+	w.held, w.hold = nil, false
+	for _, f := range h {
+		f()
+	}
+}
+func (w *crewWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
+func (w *crewWindow) Notify(msg string)                { w.notices = append(w.notices, msg) }
+func (w *crewWindow) DaemonAddress() string            { return "/run/test/d.sock" }
+func (w *crewWindow) StoreID() string                  { return "store-1" }
 
 // fire runs the timers set so far, as their time coming would.
 func (w *crewWindow) fire() {
