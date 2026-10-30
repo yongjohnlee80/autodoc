@@ -184,8 +184,8 @@ func keysetFilters(file string) map[string]DocumentsOpts {
 		"diagnosed":          {Diagnosed: true},
 		"paths+tags+missing": {Paths: []string{"a"}, Tags: []string{"kb"}, Missing: []string{"abstract"}},
 		"facets+diagnosed":   {Facets: map[string][]string{"status": {"active"}}, Diagnosed: true},
-		"everything": {Paths: []string{"a/b/", "notes"}, Tags: []string{"kb"}, Facets: map[string][]string{"status": {"draft", "active"}},
-			Missing: []string{"updated"}, Diagnosed: true, Fields: []string{"type", "updated", "abstract"}},
+		"everything": {Paths: []string{"a/b/", "notes", "ab"}, Tags: []string{"kb"}, Facets: map[string][]string{"status": {"draft", "active"}},
+			Missing: []string{"abstract"}, Diagnosed: true, Fields: []string{"type", "updated", "abstract"}},
 	}
 }
 
@@ -205,7 +205,7 @@ func TestDocumentsMatchTheOracle(t *testing.T) {
 				want := oracleAll(t, e.store, f)
 				for _, limit := range []int{1, 2, 7, 500} {
 					f.Limit = limit
-					if got := traverse(t, e.store, f); !reflect.DeepEqual(got, want) {
+					if got := traverse(t, e.store, f); !sameEntries(got, want) {
 						t.Errorf("%s, %s, sort %s, limit %d: %d documents\n%v\nwant %d\n%v", mode, name, sort, limit,
 							len(got), entryPaths(got), len(want), entryPaths(want))
 					}
@@ -213,9 +213,21 @@ func TestDocumentsMatchTheOracle(t *testing.T) {
 			}
 		}
 	}
-	if n := len(oracleAll(t, e.store, DocumentsOpts{Facets: map[string][]string{"status": {"draft"}}})); n == 0 || n == len(ps) {
-		t.Errorf("the facet filter admits %d of %d: the workspace does not exercise it", n, len(ps))
+	// the workspace exercises each filter: it admits some documents and refuses others, so a filter
+	// dropped from the SQL is seen
+	for name, f := range keysetFilters(file) {
+		if name == "a facet, no values" || strings.HasPrefix(name, "root") || name == "none" {
+			continue
+		}
+		if n := len(oracleAll(t, e.store, f)); n == 0 || n == len(ps) {
+			t.Errorf("%s admits %d of %d documents: it exercises nothing", name, n, len(ps))
+		}
 	}
+}
+
+// sameEntries is a and b equal, none and an empty list alike.
+func sameEntries(a, b []DocumentEntry) bool {
+	return len(a) == 0 && len(b) == 0 || reflect.DeepEqual(a, b)
 }
 
 func entryPaths(es []DocumentEntry) []string {
@@ -268,7 +280,7 @@ func TestDocumentsSeekByKey(t *testing.T) {
 			continue // answered without a statement
 		}
 		for _, sort := range []string{SortUpdated, SortPath, SortIndexed} {
-			f.Sort, f.Limit = sort, 2
+			f.Sort, f.Limit, f.After = sort, 2, ""
 			capture.stmts = nil
 			first, err := s.Documents(context.Background(), f)
 			if err != nil {
