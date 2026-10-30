@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 )
 
-// codexLocator is the calling Codex session's endpoint (§4.7), for `crew endpoint --codex-thread`,
-// which the agent guide has a Codex agent run with its $CODEX_THREAD_ID: the thread, and the
-// app-server its TUI is attached to, which is Codex's control socket under $CODEX_HOME (default
-// ~/.codex) resolved to the socket itself.
+// codexLocator is the calling Codex session's endpoint
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler), for `crew endpoint --codex-thread`, which
+// the agent guide has a Codex agent run with its $CODEX_THREAD_ID: the thread, and the app-server
+// its TUI is attached to, which is Codex's control socket under $CODEX_HOME (default ~/.codex)
+// resolved to the socket itself.
 func codexLocator(thread string, getenv func(string) string) (string, error) {
 	if thread == "" {
 		return "", errors.New("no Codex thread: pass $CODEX_THREAD_ID, which Codex sets in every tool command")

@@ -16,11 +16,12 @@ import (
 	"time"
 )
 
-// AgyWaker wakes an Antigravity session through its language server (§4.7, rationale §R15): the
-// server's SendAgentMessage puts the notice into the session's conversation, and an idle session
-// starts a turn, a busy one holds it until its turn ends. The server is on loopback and answers only
-// a request carrying its CSRF token, which the session's bridge gave the daemon with its endpoint
-// and the daemon holds in memory alone (Manager.EndpointSecret).
+// AgyWaker wakes an Antigravity session through its language server
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): the server's SendAgentMessage puts the
+// notice into the session's conversation, and an idle session starts a turn, a busy one holds it
+// until its turn ends. The server is on loopback and answers only a request carrying its CSRF
+// token, which the session's bridge gave the daemon with its endpoint and the daemon holds in
+// memory alone (Manager.EndpointSecret).
 //
 // Before every send the conversation is checked to be the server's own (GetConversationMetadata): a
 // server the address names that hosts some other conversation, or refuses the token, is never sent

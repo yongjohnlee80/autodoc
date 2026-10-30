@@ -13,12 +13,13 @@ import (
 	"time"
 )
 
-// CodexWaker wakes a Codex session through its app-server's persistent queue (§4.7, rationale §R15):
-// `codex queue`, run as argv, never through a shell. An idle thread runs the notice at once, a busy
-// one after its turn, an unloaded one at its next resume; a TUI attached to the app-server shows it
-// with its draft left alone. Before every wake the server is bound to the daemon's user: a socket
-// (not a link to one) in Codex's socket folder for that user, owned by it, in a folder only it can
-// enter. Each value is passed as --flag=value, so a thread id can never be read as a flag.
+// CodexWaker wakes a Codex session through its app-server's persistent queue
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): `codex queue`, run as argv, never through
+// a shell. An idle thread runs the notice at once, a busy one after its turn, an unloaded one at
+// its next resume; a TUI attached to the app-server shows it with its draft left alone. Before
+// every wake the server is bound to the daemon's user: a socket (not a link to one) in Codex's
+// socket folder for that user, owned by it, in a folder only it can enter. Each value is passed as
+// --flag=value, so a thread id can never be read as a flag.
 type CodexWaker struct {
 	bin   string   // the codex CLI
 	uid   int      // the daemon's user, who must own the server and its folder

@@ -8,10 +8,10 @@ import (
 )
 
 // resolveRecipient is the profile a new delivery to profile goes to: profile itself while active,
-// else the survivor its merged_into links lead to, at most mergeHops of them (§4.6). A missing
-// profile, a cycle, a longer chain or a merge to nowhere is errRecipientGone, and so is an active
-// profile of a scope that is gone (a discard ended it): nothing can ever receive there, so no new
-// delivery may wait there.
+// else the survivor its merged_into links lead to, at most mergeHops of them
+// (docs/decisions/crew.md#durable-mail). A missing profile, a cycle, a longer chain or a merge to
+// nowhere is errRecipientGone, and so is an active profile of a scope that is gone (a discard ended
+// it): nothing can ever receive there, so no new delivery may wait there.
 func resolveRecipient(tx Tx, profile string) (string, error) {
 	seen := map[string]bool{}
 	for p := profile; ; {
@@ -114,9 +114,10 @@ func isUser(tx Tx, profile string) (bool, error) {
 	return p.Scope == GlobalScope && p.Codename == UserCodename, nil
 }
 
-// notifySender tells d's sender that d ended without being handled, for why (§4.6): one event from
-// the daemon's profile, keyed so that a retried write or a replay makes no second one. A notice
-// itself never bounces: an event's failed delivery only shows in the human's history.
+// notifySender tells d's sender that d ended without being handled, for why
+// (docs/decisions/crew.md#durable-mail): one event from the daemon's profile, keyed so that a
+// retried write or a replay makes no second one. A notice itself never bounces: an event's failed
+// delivery only shows in the human's history.
 func (m *Manager) notifySender(tx Tx, d Delivery, why string) error {
 	msg, ok, err := tx.Message(d.Message)
 	if err != nil {
@@ -141,9 +142,10 @@ func (m *Manager) notifySender(tx Tx, d Delivery, why string) error {
 	return err
 }
 
-// expire makes the time-driven changes real (§4.2), first in every write that reads eligibility:
-// a lapsed lease is queued again (its recipient woken), or failed after MaxAttempts; a delivery
-// past its message's expiry is expired. Each one's sender is told.
+// expire makes the time-driven changes real (docs/decisions/crew.md#the-crew-and-mail-tables),
+// first in every write that reads eligibility: a lapsed lease is queued again (its recipient
+// woken), or failed after MaxAttempts; a delivery past its message's expiry is expired. Each one's
+// sender is told.
 func (m *Manager) expire(tx Tx) error {
 	now := tx.Now().UnixNano()
 	for {

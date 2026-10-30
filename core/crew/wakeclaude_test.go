@@ -59,7 +59,8 @@ func claudeEndpoint(t *testing.T, socket string, pid int, start string) crew.End
 	return crew.Endpoint{Session: "s1", Generation: 1, Kind: "claude", Locator: string(b)}
 }
 
-// TestTheClaudeWakerBindsToTheSessionsProcess (§5 case 11): a wake writes the one notice line to a
+// TestTheClaudeWakerBindsToTheSessionsProcess
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a wake writes the one notice line to a
 // socket whose other end is the registered process, and to nothing else. Another process at the
 // socket, a pid now held by a later process, a socket gone, one outside Claude's folders, or a
 // deadline already passed fails the wake with nothing written; only a write cut off by the deadline

@@ -91,9 +91,9 @@ func noLeak(t *testing.T, r *running, logs string, values ...string) {
 	}
 }
 
-// TestTheToggleHidesACardSignedIn (§5.1): the toggle on a shown card hides it and shows it again,
-// the same run all along and its slot unchanged; Turn off stops it with reason off, and its next
-// start is handed the slot.
+// TestTheToggleHidesACardSignedIn (docs/decisions/plugins.md#cards): the toggle on a shown card
+// hides it and shows it again, the same run all along and its slot unchanged; Turn off stops it
+// with reason off, and its next start is handed the slot.
 func TestTheToggleHidesACardSignedIn(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "card", "dialog", "session", rightCard+
@@ -133,10 +133,11 @@ func TestTheToggleHidesACardSignedIn(t *testing.T) {
 	noLeak(t, r, logs, "tok-alpha")
 }
 
-// TestTheSlotOutlivesARunNotItsPlugin (§5.2): a slot set is handed to the next start; removed with
-// its plugin, whether running or not, so a reinstall starts with none. A slot over a bound, or not
-// of strings, is refused, the old one kept, and the log says why without a value; a protocol-6
-// plugin's host.session is refused, and its plugin.open carries no slot.
+// TestTheSlotOutlivesARunNotItsPlugin (docs/decisions/plugins.md#plugin-sessions): a slot set is
+// handed to the next start; removed with its plugin, whether running or not, so a reinstall starts
+// with none. A slot over a bound, or not of strings, is refused, the old one kept, and the log says
+// why without a value; a protocol-6 plugin's host.session is refused, and its plugin.open carries
+// no slot.
 func TestTheSlotOutlivesARunNotItsPlugin(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "svc", "service", "session", sessionCommands+"[[commands]]\nid = \"big\"\ntitle = \"Big\"\n")
@@ -197,9 +198,10 @@ func TestTheSlotOutlivesARunNotItsPlugin(t *testing.T) {
 	noLeak(t, r, logs, "tok-one", "tok-two", "tok-big", "tok-six")
 }
 
-// TestAPluginIsToldWhyItCloses (§5.3): off, update, remove, failed and closed (a modal dialog's Esc,
-// and a dialog's own host.close) each reach a cooperative plugin's CloseReason; a second stop keeps
-// the first's reason. An update's old run cannot write the slot after its stop began.
+// TestAPluginIsToldWhyItCloses (docs/decisions/plugins.md#plugin-sessions): off, update, remove,
+// failed and closed (a modal dialog's Esc, and a dialog's own host.close) each reach a cooperative
+// plugin's CloseReason; a second stop keeps the first's reason. An update's old run cannot write
+// the slot after its stop began.
 func TestAPluginIsToldWhyItCloses(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "off", "service", "session", sessionCommands)
@@ -290,10 +292,10 @@ func commitSessionPlugin(t *testing.T, repo, title string) {
 	runGit(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", title)
 }
 
-// TestTheSlotIsFencedToTheLiveRun (§5.3b): a write from a run whose stop began, or that another run
-// replaced, is dropped; one from the live run is kept; after a removal none brings the slot back,
-// and a reinstall starts with none. The posted acceptSession is called in the order the cell sets:
-// the old run's write held past its replacement.
+// TestTheSlotIsFencedToTheLiveRun (docs/decisions/plugins.md#plugin-sessions): a write from a run
+// whose stop began, or that another run replaced, is dropped; one from the live run is kept; after
+// a removal none brings the slot back, and a reinstall starts with none. The posted acceptSession
+// is called in the order the cell sets: the old run's write held past its replacement.
 func TestTheSlotIsFencedToTheLiveRun(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "svc", "service", "session", sessionCommands)
@@ -330,9 +332,10 @@ func TestTheSlotIsFencedToTheLiveRun(t *testing.T) {
 	noLeak(t, r, logs, "tok-a", "tok-stopping", "tok-replaced", "tok-live", "tok-zombie")
 }
 
-// TestQuitClearsTheSlotsOfEveryRun (§5.3, §5.3b): AutoDoc quitting tells a cooperative plugin quit,
-// stops one that never answered its handshake by the signals, and drops every slot; meanwhile a
-// plugin writes its slot as fast as it can, turned off and started again, under -race.
+// TestQuitClearsTheSlotsOfEveryRun (docs/decisions/plugins.md#plugin-sessions): AutoDoc quitting
+// tells a cooperative plugin quit, stops one that never answered its handshake by the signals, and
+// drops every slot; meanwhile a plugin writes its slot as fast as it can, turned off and started
+// again, under -race.
 func TestQuitClearsTheSlotsOfEveryRun(t *testing.T) {
 	shorten(t, 20*time.Second, 300*time.Millisecond, 300*time.Millisecond)
 	dir := t.TempDir()
@@ -386,10 +389,11 @@ func runInsert(name, body string) string {
 	return fmt.Sprintf("autodoc.command{ name = %q, run = function(ed) local ok, err = %s; ed:insert(tostring(ok) .. \" \" .. tostring(err)) end }\n", name, body)
 }
 
-// TestAPluginsPackageRunsItsOwnPluginOnly (§5.4, §5.5): a plugin's lua/ loads as plugin:<name>; its
-// autodoc.plugin.run reaches its own plugin with args, at its init and from its command later; two
-// plugins with a command id in common each get their own package's; an undeclared id is unknown; a
-// user's script or package is refused; args to a protocol-6 plugin need protocol 7.
+// TestAPluginsPackageRunsItsOwnPluginOnly (docs/decisions/plugins.md#a-plugins-lua-package): a
+// plugin's lua/ loads as plugin:<name>; its autodoc.plugin.run reaches its own plugin with args, at
+// its init and from its command later; two plugins with a command id in common each get their own
+// package's; an undeclared id is unknown; a user's script or package is refused; args to a
+// protocol-6 plugin need protocol 7.
 func TestAPluginsPackageRunsItsOwnPluginOnly(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "own", "service", "session", sessionCommands)
@@ -435,8 +439,9 @@ func TestAPluginsPackageRunsItsOwnPluginOnly(t *testing.T) {
 	}
 }
 
-// TestAPluginsPackageIsGated (§5.4): its requires are asked naming the plugin, and until granted a
-// gated call answers "needs …: not granted"; the grant is the plugin's script's.
+// TestAPluginsPackageIsGated (docs/decisions/plugins.md#a-plugins-lua-package): its requires are
+// asked naming the plugin, and until granted a gated call answers "needs …: not granted"; the grant
+// is the plugin's script's.
 func TestAPluginsPackageIsGated(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "gated", "service", "session", sessionCommands)
@@ -457,10 +462,10 @@ func TestAPluginsPackageIsGated(t *testing.T) {
 	r.wantText(t, ":gated-read granted", "nil nil")
 }
 
-// TestAUsersPackageReservesItsName (§5.6): a user's package of a plugin's name loads, and nothing
-// of the plugin's runs (no init, so no sentinel command reaches the plugin; no grant asked); a
-// broken user package still reserves the name; with the user's gone, the plugin's loads; and the
-// plugin removed, its package's commands go with it.
+// TestAUsersPackageReservesItsName (docs/decisions/plugins.md#a-plugins-lua-package): a user's
+// package of a plugin's name loads, and nothing of the plugin's runs (no init, so no sentinel
+// command reaches the plugin; no grant asked); a broken user package still reserves the name; with
+// the user's gone, the plugin's loads; and the plugin removed, its package's commands go with it.
 func TestAUsersPackageReservesItsName(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin7(t, dir, "res", "service", "session", sessionCommands)

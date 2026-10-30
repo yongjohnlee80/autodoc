@@ -97,8 +97,9 @@ func (v *view) FrontmatterSchema() (*schema.Schema, rpc.SchemaStatus, bool) {
 }
 
 // TodoModes are the workspace's graph_only patterns, the default until it sets its own, its
-// todo_search, and the exclude patterns that keep a todo store of it out of the index (ADR
-// 1792015212 §2.2, §2.3).
+// todo_search, and the exclude patterns that keep a todo store of it out of the index
+// (docs/decisions/todos.md#which-paths-are-graph-only,
+// docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func (v *view) TodoModes() (graphOnly []string, todoSearch bool, excluded []string) {
 	v.m.mu.Lock()
 	h := v.m.modes[v.s.id]

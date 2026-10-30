@@ -62,8 +62,10 @@ func twoPlugins(t *testing.T) string {
 	return dir
 }
 
-// TestEachPluginsCardRunsItsOwnLetter (§5.1, §5.2): both plugins bind s, and each card's s runs its
-// own plugin's command. Backspace on a card goes back to the chooser; q closes the chooser.
+// TestEachPluginsCardRunsItsOwnLetter
+// (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): both plugins bind s, and each
+// card's s runs its own plugin's command. Backspace on a card goes back to the chooser; q closes
+// the chooser.
 func TestEachPluginsCardRunsItsOwnLetter(t *testing.T) {
 	r, logs := pluginTUI(t, twoPlugins(t))
 	r.pluginCardOf(t, "beta")
@@ -89,10 +91,11 @@ func TestEachPluginsCardRunsItsOwnLetter(t *testing.T) {
 	r.s.WaitFor(t, "q closed the chooser", func(sc string) bool { return !strings.Contains(sc, "SPC p — plugins") })
 }
 
-// TestStarGivesAPluginALetter (§5.3): * then a letter gives the plugin under the cursor that letter,
-// stored, and the letter then shows its card: g among them, which a focused list would have taken. A
-// letter another plugin has moves, the chooser saying so. One of the chooser's own (j, k, q) is
-// refused, and nothing moves. Backspace after * removes the letter. F1 names the keys.
+// TestStarGivesAPluginALetter (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): *
+// then a letter gives the plugin under the cursor that letter, stored, and the letter then shows
+// its card: g among them, which a focused list would have taken. A letter another plugin has moves,
+// the chooser saying so. One of the chooser's own (j, k, q) is refused, and nothing moves.
+// Backspace after * removes the letter. F1 names the keys.
 func TestStarGivesAPluginALetter(t *testing.T) {
 	dir := twoPlugins(t)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: maps.Clone(testPrefs)})
@@ -153,10 +156,11 @@ func loopPair[A, B any](r *running, fn func() (A, B)) (A, B) {
 	return a, b
 }
 
-// TestPluginLettersFromThePreferences (§5.3, the restart): the letters are read from the stored
-// preferences. Two plugins the preferences give one letter (edited by hand): the first by name keeps
-// it, and the other says why; a reserved one is refused. Binding the letter to the second takes it
-// from every other, so the preferences then name one plugin per letter.
+// TestPluginLettersFromThePreferences
+// (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): the letters are read from the
+// stored preferences. Two plugins the preferences give one letter (edited by hand): the first by
+// name keeps it, and the other says why; a reserved one is refused. Binding the letter to the
+// second takes it from every other, so the preferences then name one plugin per letter.
 func TestPluginLettersFromThePreferences(t *testing.T) {
 	dir := twoPlugins(t)
 	installPlugin2(t, dir, "gamma", "dialog", "echo", "[[commands]]\nid = \"g\"\ntitle = \"Do g\"\nkey = \"h\"\n")

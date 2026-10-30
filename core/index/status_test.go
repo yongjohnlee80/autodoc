@@ -115,8 +115,9 @@ func TestStatusIsOneSnapshot(t *testing.T) {
 	}
 }
 
-// TestStatusIsComputedOnceForItsWaiters (§2.5): callers that wait on a computation at one seq share
-// it; one that waited while a commit landed gets a computation at the newer seq.
+// TestStatusIsComputedOnceForItsWaiters
+// (docs/decisions/store.md#status-is-computed-once-per-commit): callers that wait on a computation
+// at one seq share it; one that waited while a commit landed gets a computation at the newer seq.
 func TestStatusIsComputedOnceForItsWaiters(t *testing.T) {
 	var computed atomic.Int64
 	gate := make(chan struct{})

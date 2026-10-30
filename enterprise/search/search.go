@@ -1,6 +1,6 @@
 // Package search is AutoDoc's enterprise search, for web applications: hybrid search, by words and
-// by meaning, over a tenant that `autodoc --server` indexes from a .view into PostgreSQL (ADR
-// 1791762085). A Go web application opens a Searcher on its own pool and searches in-process;
+// by meaning, over a tenant that `autodoc --server` indexes from a .view into PostgreSQL
+// (docs/decisions/server.md#a-headless-server-mode). A Go web application opens a Searcher on its own pool and searches in-process;
 // `autodoc --server` serves the same Searcher over HTTP (POST /v1/search).
 //
 // Every search carries a Scope: for each access field of the tenant's policy, the values the

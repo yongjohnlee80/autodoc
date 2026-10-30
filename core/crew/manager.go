@@ -21,10 +21,11 @@ type Manager struct {
 	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
 
 	// secrets are the endpoint secrets a waker needs and the store never holds (an agy session's
-	// language-server token, §4.7), by session, each for the endpoint generation it came with; ended
-	// is the sessions that have ended, whose secrets are never held again. Both change only after the
-	// write that warrants it has committed (write): a write that rolls back changes neither. A daemon
-	// restart forgets them all, and each session's bridge registers again.
+	// language-server token, docs/decisions/crew.md#wakers-and-the-wake-scheduler), by session,
+	// each for the endpoint generation it came with; ended is the sessions that have ended, whose
+	// secrets are never held again. Both change only after the write that warrants it has committed
+	// (write): a write that rolls back changes neither. A daemon restart forgets them all, and each
+	// session's bridge registers again.
 	secretsMu sync.Mutex
 	secrets   map[string]endpointSecret
 	ended     map[string]bool
@@ -129,7 +130,8 @@ type SessionEnder interface {
 	// DiscardDeliveries: every unhandled delivery of profile fails ('discarded'), senders told.
 	DiscardDeliveries(tx Tx, profile string) error
 	// HasEligible: profile has a delivery a new session of it may receive now. crew.register
-	// seeds the new session's pending_gen from it, so queued mail wakes it (§4.4).
+	// seeds the new session's pending_gen from it, so queued mail wakes it
+	// (docs/decisions/crew.md#sessions-and-the-guard).
 	HasEligible(tx Tx, profile string) (bool, error)
 	// EligibleFor: session, a live session of profile, has a delivery it may receive now, unbound
 	// or bound to it. crew.wait asks it for each session a host waits on: HasEligible's
@@ -139,7 +141,8 @@ type SessionEnder interface {
 	UnhandledCount(tx Tx, profile string) (int, error)
 	// Expire makes mail's time-driven changes real in tx (a lapsed lease queued again, raising
 	// pending_gen; an expired message ended), first in every scheduler write that reads
-	// eligibility (§4.2, §4.7).
+	// eligibility (docs/decisions/crew.md#the-crew-and-mail-tables,
+	// docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	Expire(tx Tx) error
 	// NextDeadline is the earliest instant mail's state changes by time alone (a lease lapsing, a
 	// message expiring), so the scheduler's timer wakes for it; false when none is pending.

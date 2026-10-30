@@ -2,7 +2,7 @@ package crew
 
 import "context"
 
-// Presences, as crew.list reports them (§4.4).
+// Presences, as crew.list reports them (docs/decisions/crew.md#sessions-and-the-guard).
 const (
 	PresenceLive         = "live"         // its host renewed within the lease
 	PresenceReconnecting = "reconnecting" // the daemon is younger than a lease: hosts are still coming back
@@ -10,7 +10,8 @@ const (
 	PresenceEnded        = "ended"        // no live session
 )
 
-// unreachableAfter is how many consecutive failed wakes make a session unreachable (§4.7).
+// unreachableAfter is how many consecutive failed wakes make a session unreachable
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 const unreachableAfter = 5
 
 // Entry is one row of the addressbook.

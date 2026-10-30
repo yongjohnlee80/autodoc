@@ -10,13 +10,14 @@ import (
 	"os"
 )
 
-// OpenCodeWaker wakes an OpenCode session through AutoDoc's plugin in its opencode process (§4.7,
-// rationale §R15): the plugin listens on a unix socket and, asked to wake its session, starts a
-// turn with client.session.promptAsync, which a busy session takes in at its next step. Nothing is
-// typed into the TUI. Before every wake the socket is bound to the session's own process, as for
-// Claude (boundTo): a socket a dead opencode left, or one at a pid a later process holds, is never
-// trusted. The plugin wakes with its own fixed notice, never text it is sent, and refuses a session
-// that is not its own top-level one, so a stray connection can do no more than a spurious wake.
+// OpenCodeWaker wakes an OpenCode session through AutoDoc's plugin in its opencode process
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): the plugin listens on a unix socket and,
+// asked to wake its session, starts a turn with client.session.promptAsync, which a busy session
+// takes in at its next step. Nothing is typed into the TUI. Before every wake the socket is bound
+// to the session's own process, as for Claude (boundTo): a socket a dead opencode left, or one at a
+// pid a later process holds, is never trusted. The plugin wakes with its own fixed notice, never
+// text it is sent, and refuses a session that is not its own top-level one, so a stray connection
+// can do no more than a spurious wake.
 type OpenCodeWaker struct {
 	roots []string
 }

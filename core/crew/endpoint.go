@@ -12,9 +12,10 @@ import (
 	"unicode"
 )
 
-// The endpoint kinds and their locators (§4.7). A locator names only the CLI's own channel on
-// this machine: a socket under the CLI's own directory for this user, or a loopback address. The
-// daemon never connects to an arbitrary host, and a locator never carries a secret.
+// The endpoint kinds and their locators (docs/decisions/crew.md#wakers-and-the-wake-scheduler). A
+// locator names only the CLI's own channel on this machine: a socket under the CLI's own directory
+// for this user, or a loopback address. The daemon never connects to an arbitrary host, and a
+// locator never carries a secret.
 type (
 	// claudeLocator is a Claude Code session's inbox socket and the process holding it: Start is
 	// that process's reference (ProcRef), so a pid a later process reuses is never taken for it.
@@ -173,11 +174,12 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 	return string(b), err
 }
 
-// SetEndpoint records how to wake the calling session (crew.endpoint, §4.7). One write: the
-// credential is authenticated; the kind must be the session's profile's; the locator is checked for
-// this user. A new endpoint raises the generation and restarts the session's wake row with no
-// deadline and no backoff, so pending mail is reservable at once and its first failure retries in
-// 5 s. It answers the generation.
+// SetEndpoint records how to wake the calling session (crew.endpoint,
+// docs/decisions/crew.md#wakers-and-the-wake-scheduler). One write: the credential is
+// authenticated; the kind must be the session's profile's; the locator is checked for this user. A
+// new endpoint raises the generation and restarts the session's wake row with no deadline and no
+// backoff, so pending mail is reservable at once and its first failure retries in 5 s. It answers
+// the generation.
 func (m *Manager) SetEndpoint(ctx context.Context, credential, kind, locator string) (int64, error) {
 	return m.SetEndpointWith(ctx, credential, kind, locator, "")
 }

@@ -67,8 +67,9 @@ type crewHost struct {
 	owed    map[string]crewOwedExit
 }
 
-// crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends
-// it as it was, which the daemon answers with the session it committed (§4.4).
+// crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends it
+// as it was, which the daemon answers with the session it committed
+// (docs/decisions/crew.md#sessions-and-the-guard).
 type crewRegistration struct {
 	codename, kind string
 	workspace      int64

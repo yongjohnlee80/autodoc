@@ -850,7 +850,8 @@ func TestChangeRetention(t *testing.T) {
 }
 
 // TestFollowerIntoIndexer: the follower and the indexer together keep the index on the root —
-// 0203 §5.1's changes reach the index, visible through the change log.
+// the changes in docs/decisions/contract.md#the-index-follows-the-files reach the index, visible
+// through the change log.
 func TestFollowerIntoIndexer(t *testing.T) {
 	e := newEnv(t, options{})
 	e.write("a.md", "# A\n\nfirst\n")

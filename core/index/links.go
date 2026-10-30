@@ -36,8 +36,9 @@ type DocLink struct {
 	// Keys are a relation link's names, tried in order, Name being the first; nil for a body link,
 	// which has the one name
 	Keys []string
-	// Target is an external link's file, absolute: a todo task's ref outside the workspace (ADR
-	// 1792015212 §2.4). It reaches no document. "" for every other link.
+	// Target is an external link's file, absolute: a todo task's ref outside the workspace
+	// (docs/decisions/todos.md#task-relations-and-external-links). It reaches no document. "" for
+	// every other link.
 	Target string
 }
 

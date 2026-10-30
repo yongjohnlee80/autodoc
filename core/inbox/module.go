@@ -10,8 +10,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// protocol is the protocol the inbox verbs arrive in: crew's and mail's, as one change (ADR
-// 1793271500 §4.1).
+// protocol is the protocol the inbox verbs arrive in: crew's and mail's, as one change
+// (docs/decisions/crew.md#three-modules-and-one-protocol).
 const protocol = crew.Protocol
 
 // The verbs' params, in their positional order.
@@ -157,7 +157,8 @@ func toWireWatched(w Watched) watchResult {
 // listDefault is inbox.list's limit when the caller gives none.
 const listDefault = 50
 
-// Verbs are the inbox module's verbs: the human's, LocalPeer, with no credential (§4.8).
+// Verbs are the inbox module's verbs: the human's, LocalPeer, with no credential
+// (docs/decisions/crew.md#the-human-inbox).
 func (m *Manager) Verbs() []module.Verb {
 	user := func(verb string, effect module.Effect, result, doc string, codes ...int64) module.Contract {
 		return module.Contract{Verb: verb, Since: protocol, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,

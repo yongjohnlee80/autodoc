@@ -1659,11 +1659,11 @@ func version(t *testing.T, doc string) int {
 // One that starts on use is not running until its command, which it is then sent, or the first
 // event of its feed; one that starts at launch runs with the TUI. Each is opened with no size.
 //
-// The page shown at start is the feed's first event (§2.3: sent when a note opens), so onfeed
-// starts pluginFeedDelay after it. The cell holds that send (the delay an hour) while it looks for
-// onfeed not running, then puts the delay back and types: the edit's send replaces the held one, and
-// onfeed starts with it. Asserting "not running" against the real 300 ms raced the debounce, and a
-// slow (-race, GUI) runner lost.
+// The page shown at start is the feed's first event (docs/decisions/plugins.md#the-document-feed:
+// sent when a note opens), so onfeed starts pluginFeedDelay after it. The cell holds that send (the
+// delay an hour) while it looks for onfeed not running, then puts the delay back and types: the
+// edit's send replaces the held one, and onfeed starts with it. Asserting "not running" against the
+// real 300 ms raced the debounce, and a slow (-race, GUI) runner lost.
 func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	delay := pluginFeedDelay
 	pluginFeedDelay = time.Hour                   // before the TUI starts: its loop reads it from then on

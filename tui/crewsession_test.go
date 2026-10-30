@@ -180,9 +180,9 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	}
 }
 
-// TestAClaudeSessionAcceptsWakes (§4.9): a Claude agent's crew session gets the SessionStart hook
-// that registers its endpoint and crossSessionInbound "accept", nothing about tool approvals; an
-// agent of another CLI gets neither.
+// TestAClaudeSessionAcceptsWakes (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): a
+// Claude agent's crew session gets the SessionStart hook that registers its endpoint and
+// crossSessionInbound "accept", nothing about tool approvals; an agent of another CLI gets neither.
 func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 	a, c, _ := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
 	for code, wants := range map[string]bool{"cl": true, "one": false} {

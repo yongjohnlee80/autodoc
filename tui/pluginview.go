@@ -123,7 +123,8 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 		p.Kind = "scroll"
 		if m.ScrollX != 0 || m.ScrollY != 0 || m.Button == tuicore.MouseNone {
 			v.precise = true
-			p.DX, p.DY = m.ScrollX, m.ScrollY // the precise scroll, in dp (§4.10)
+			// The precise scroll, in dp (docs/decisions/plugins.md#pixel-surfaces).
+			p.DX, p.DY = m.ScrollX, m.ScrollY
 			break
 		}
 		if v.precise {

@@ -21,10 +21,11 @@ func (w *crewWindow) shown() string {
 	return w.card.current.Title + ": " + w.card.current.Text
 }
 
-// TestTheOrphansAreOfferedOnceAtTheFirstClaim (§4.3, Q2 b): once the window holds its scope, each
-// orphan scope is offered in turn: Adopt moves its mail here (crew.adopt from it to the window's
-// scope, with the run and epoch), Keep does nothing, Discard fails it (crew.discard); each answer
-// says how it went, and the next is offered. A reconnect offers nothing again.
+// TestTheOrphansAreOfferedOnceAtTheFirstClaim
+// (docs/decisions/crew.md#orphan-scopes-are-offered-to-the-user): once the window holds its scope,
+// each orphan scope is offered in turn: Adopt moves its mail here (crew.adopt from it to the
+// window's scope, with the run and epoch), Keep does nothing, Discard fails it (crew.discard); each
+// answer says how it went, and the next is offered. A reconnect offers nothing again.
 func TestTheOrphansAreOfferedOnceAtTheFirstClaim(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	w.d.orphans = []any{orphan("autodoc:dead1", 3, "gold", "jarvis"), orphan("autodoc:dead2", 1, "lector"), orphan("autodoc:dead3", 2, "zen")}

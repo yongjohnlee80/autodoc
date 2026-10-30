@@ -82,7 +82,7 @@ const (
 	UserCodename  = "user"
 )
 
-// The human feed's change kinds this module appends (§4.8).
+// The human feed's change kinds this module appends (docs/decisions/crew.md#the-human-inbox).
 const (
 	ChangeRequest       = "request"
 	ChangeReport        = "report"
@@ -94,7 +94,8 @@ const (
 )
 
 // Tx is one transaction over the crew and mail tables together: a crew verb's mail effect and a
-// mail verb's crew guard commit in the same write (§4.4). Every engine's one adapter implements it.
+// mail verb's crew guard commit in the same write (docs/decisions/crew.md#sessions-and-the-guard).
+// Every engine's one adapter implements it.
 type Tx interface {
 	crew.Tx
 
@@ -114,7 +115,8 @@ type Tx interface {
 	DeliveriesOf(message string) ([]Delivery, error)
 	// Eligible is recipient's queued deliveries for session (unbound, or bound to it) whose message
 	// has not expired by now, in seq order: the store applies both before the limit, so no prefix
-	// of expired mail can hide a live delivery behind it (eligible(now), §4.2).
+	// of expired mail can hide a live delivery behind it (eligible(now),
+	// docs/decisions/crew.md#the-crew-and-mail-tables).
 	Eligible(recipient, session string, now int64, limit int) ([]Delivery, error)
 	// Unhandled is every queued or leased delivery of recipient, in seq order.
 	Unhandled(recipient string) ([]Delivery, error)
@@ -140,12 +142,15 @@ type Store interface {
 // Crew is what the mail module needs of the crew module, inside mail's own transaction.
 type Crew interface {
 	// Authenticate is the live session a credential names, its secret checked and the session
-	// guarded (§4.4, §4.5), in tx: a takeover committed meanwhile fails the verb.
+	// guarded (docs/decisions/crew.md#sessions-and-the-guard,
+	// docs/decisions/crew.md#the-session-context), in tx: a takeover committed meanwhile fails the
+	// verb.
 	Authenticate(tx crew.Tx, credential string) (crew.Session, error)
-	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it (§4.7).
+	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it
+	// (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	RaisePending(tx crew.Tx, profile string) error
 	// Received is a receive's half of the wake, in the receive's write: the session has seen what is
-	// pending (§4.7).
+	// pending (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	Received(tx crew.Tx, session string) error
 	// Watch is a channel that hears every change mail.wait may be waiting for (crew's wake signal);
 	// stop unregisters it. Registered before mail.wait's check.

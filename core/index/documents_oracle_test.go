@@ -23,8 +23,9 @@ type listed struct {
 
 // oracleDocuments is index.documents as it was before
 // docs/decisions/search.md#document-listing-in-the-store (core/index/documents.go at
-// e797f45), kept verbatim but for its offset field, as the parity oracle (§5.1): it reads every
-// document, filters and sorts in Go, and pages by an offset.
+// e797f45), kept verbatim but for its offset field, as the parity oracle
+// (docs/decisions/search.md#document-listing-in-the-store): it reads every document, filters and
+// sorts in Go, and pages by an offset.
 //
 // Documents lists the workspace's documents with their frontmatter: the index a person or an agent
 // reads instead of a hand-kept one, in the order asked for, narrowed by tags, paths, facets and

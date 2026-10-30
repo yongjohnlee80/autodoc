@@ -211,7 +211,7 @@ func (c *Card) Key(k plugin.Key) {
 }
 
 // Resize is plugin.resize: the size Size answers moves, and the App takes it on its loop; the grid
-// follows in FlushSized (§4.8).
+// follows in FlushSized (docs/decisions/plugins.md#qml-cards-run-in-the-plugin).
 func (c *Card) Resize(w, h int) {
 	if c.live() {
 		c.be.setWant(w, h)
