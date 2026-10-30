@@ -137,6 +137,21 @@ func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	return len(ds) > 0, err
 }
 
+// EligibleFor is whether session, a live session of profile, has a delivery it may receive now:
+// queued, unexpired, and unbound or bound to it, as mail.receive and mail.wait take them
+// (crew.SessionEnder, for crew.wait). expire runs first, as in every write that reads eligibility.
+func (m *Manager) EligibleFor(ctx crew.Tx, profile, session string) (bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := m.expire(tx); err != nil {
+		return false, err
+	}
+	ds, err := tx.Eligible(profile, session, tx.Now().UnixNano(), 1)
+	return len(ds) > 0, err
+}
+
 // Expire is mail's time-driven changes, for the wake scheduler's writes (crew.SessionEnder).
 func (m *Manager) Expire(ctx crew.Tx) error {
 	tx, err := mailTx(ctx)

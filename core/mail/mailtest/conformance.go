@@ -55,6 +55,7 @@ func Run(t *testing.T, h Harness) {
 		{"AGoneScopesProfilesReceiveNothing", testAGoneScopesProfilesReceiveNothing},
 		{"AReceiveIsBoundedAndAPreviewLeasesNothing", testAReceiveIsBoundedAndAPreviewLeasesNothing},
 		{"HasEligibleSeesOnlyWhatANewSessionMayReceive", testHasEligibleSeesOnlyWhatANewSessionMayReceive},
+		{"EligibleForSeesTheSessionsOwnBoundMail", testEligibleForSeesTheSessionsOwnBoundMail},
 		{"APreviewSeesLiveMailBehindExpiredMail", testAPreviewSeesLiveMailBehindExpiredMail},
 		{"AdoptionsNoticesFollowTheMergeThroughCrewsAdopt", testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt},
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
@@ -692,6 +693,46 @@ func testAReceiveIsBoundedAndAPreviewLeasesNothing(t *testing.T, h Harness) {
 
 // HasEligible sees a queued, unbound, unexpired delivery only, however much expired mail lies
 // before it.
+// EligibleFor is a live session's view, as mail.receive and mail.wait take mail: a delivery bound
+// to the session itself counts, which HasEligible's new-session view leaves out, and one bound to
+// another session doesn't. A bound delivery leased and lapsed is eligible for its session again.
+func testEligibleForSeesTheSessionsOwnBoundMail(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	eligible := func(session string) (bool, bool) {
+		var own, fresh bool
+		r.write(func(tx mail.Tx) error {
+			var err error
+			if own, err = r.m.EligibleFor(tx, "p-gold", session); err != nil {
+				return err
+			}
+			fresh, err = r.m.HasEligible(tx, "p-gold")
+			return err
+		})
+		return own, fresh
+	}
+	if own, _ := eligible("s-gold"); own {
+		t.Fatal("eligible mail before any send")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"session:s-gold"}, Body: "b", Key: "k1"})
+	if own, fresh := eligible("s-gold"); !own || fresh {
+		t.Fatalf("mail bound to s-gold: EligibleFor(s-gold) %v, HasEligible %v; want true, false", own, fresh)
+	}
+	if own, _ := eligible("s-other"); own {
+		t.Fatal("mail bound to s-gold is eligible for another session")
+	}
+	got := r.receive("s-gold") // leased, and never acked
+	if len(got.Items) != 1 {
+		t.Fatalf("receive: %+v", got)
+	}
+	if own, _ := eligible("s-gold"); own {
+		t.Fatal("a leased delivery is eligible")
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	if own, _ := eligible("s-gold"); !own {
+		t.Fatal("a lapsed lease of mail bound to s-gold is not eligible for it again")
+	}
+}
+
 func testHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	has := func() bool {

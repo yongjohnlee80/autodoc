@@ -94,10 +94,11 @@ type Waited struct {
 }
 
 // Wait is crew.wait (§4.4): one long-poll for a host's tier-3 sessions, answering as soon as any of
-// sessions (the host's own, live under epoch) has mail it may receive, or at wait (at most
-// MaxWait). Each check is one write, which guards the host, runs mail's expiry and reads each
-// session's eligibility; between checks it holds no transaction, and it checks again only when the
-// wake signal fires or mail's next deadline passes (a lapsing lease makes mail eligible again).
+// sessions (the host's own, live under epoch) has mail it may receive, unbound or bound to it, or at
+// wait (at most MaxWait). Each check is one write, which guards the host, runs mail's expiry and
+// reads each session's eligibility; between checks it holds no transaction, and it checks again
+// only when the wake signal fires or mail's next deadline passes (a lapsing lease makes mail
+// eligible again).
 func (m *Manager) Wait(ctx context.Context, scope, run string, epoch int64, sessions []string, wait time.Duration) (Waited, error) {
 	wait = min(max(wait, 0), MaxWait)
 	heard, stop := m.Watch() // before the check: a change committed in between is heard
@@ -128,7 +129,7 @@ func (m *Manager) Wait(ctx context.Context, scope, run string, epoch int64, sess
 				if !ok || s.Ended != nil || s.Host != scope || s.Epoch != epoch {
 					continue // not this host's live session: nothing it may wait on
 				}
-				ready, err := m.ender.HasEligible(tx, s.Profile)
+				ready, err := m.ender.EligibleFor(tx, s.Profile, s.ID) // its own bound mail too
 				if err != nil || !ready {
 					if err != nil {
 						return err
