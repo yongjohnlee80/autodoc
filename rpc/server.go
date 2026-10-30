@@ -112,7 +112,10 @@ import (
 // meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
 // scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
 // every project. Without the assignee it delivers none; an unscoped assignment is as before.
-const Protocol int64 = 33
+// Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
+// their verbs' Since is set), after 34, 35 and 36, which ADR 1792004705 r9, AP-5 and AP-6 claim. A
+// session below 37 sees their verbs as unknown methods.
+const Protocol int64 = 37
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
