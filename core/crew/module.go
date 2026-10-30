@@ -7,9 +7,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// protocol is the protocol the crew verbs arrive in: the next free one when they merge (ADR
-// 1793271500 §4.1), set then; rpc's Protocol and its catalog test move with it.
-const protocol = 34
+// Protocol is the protocol the crew, mail and inbox verbs arrive in, as one change (ADR 1793271500
+// §4.1): the one place it is set. It follows #50's 34 and AP-5's and AP-6's 35 and 36; rpc's
+// Protocol and its catalog test move with it.
+const Protocol = 37
 
 // Name is the module's name: its verbs are crew.*.
 func (m *Manager) Name() string { return "crew" }
@@ -104,7 +105,7 @@ type epochResult struct {
 // the daemon's socket, never an agent (§4.4).
 func (m *Manager) Verbs() []module.Verb {
 	host := func(verb, result, doc string, codes ...int64) module.Contract {
-		return module.Contract{Verb: verb, Since: protocol, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,
+		return module.Contract{Verb: verb, Since: Protocol, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,
 			Effect: module.EffectWrite, Result: result, Errors: codes, Doc: doc}
 	}
 	return []module.Verb{
@@ -136,13 +137,13 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p hostParams) (struct{}, error) {
 				return struct{}{}, m.Renew(ctx, p.Scope, p.Run, p.Epoch)
 			}),
-		module.Handle(module.Contract{Verb: "crew.whoami", Since: protocol, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "crew.whoami", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "{codename, scope, profile, session, store}",
 			Errors: []int64{CodeBadCredential, CodeContextMismatch, CodeStaleEpoch}, Doc: "Who the credential belongs to (§4.5)."},
 			func(ctx context.Context, p whoamiParams) (Identity, error) {
 				return m.Whoami(ctx, p.Credential, p.Store)
 			}),
-		module.Handle(module.Contract{Verb: "crew.orphans", Since: protocol, Scope: module.ScopeLocalPeer,
+		module.Handle(module.Contract{Verb: "crew.orphans", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "[{scope, profiles, unread}]",
 			Doc: "AutoDoc scopes with a free holder and unhandled mail (§4.3)."},
 			func(ctx context.Context, _ struct{}) ([]Orphan, error) { return m.Orphans(ctx) }),
@@ -154,14 +155,14 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p adoptParams) (struct{}, error) {
 				return struct{}{}, m.Discard(ctx, p.From, p.To, p.Run, p.Epoch)
 			}),
-		module.Handle(module.Contract{Verb: "crew.endpoint", Since: protocol, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "crew.endpoint", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectWrite, Result: "{generation}", Errors: []int64{CodeBadCredential, CodeBadEndpoint, CodeStaleEpoch},
 			Doc: "How to wake the calling session (§4.7)."},
 			func(ctx context.Context, p endpointParams) (generationResult, error) {
 				g, err := m.SetEndpoint(ctx, p.Credential, p.Kind, p.Locator)
 				return generationResult{g}, err
 			}),
-		module.Handle(module.Contract{Verb: "crew.attention", Since: protocol, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "crew.attention", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectWrite, Result: "{}", Errors: []int64{CodeBadCredential, CodeStaleEpoch},
 			Doc: "Raise or clear: the session waits on the user (§4.8)."},
 			func(ctx context.Context, p attentionParams) (struct{}, error) {
@@ -173,11 +174,11 @@ func (m *Manager) Verbs() []module.Verb {
 				}
 				return struct{}{}, fmt.Errorf("%w: attention op %q, want raise or clear", ErrInvalid, p.Op)
 			}),
-		module.Handle(module.Contract{Verb: "crew.guide", Since: protocol, Scope: module.ScopeLocalPeer,
+		module.Handle(module.Contract{Verb: "crew.guide", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "{markdown, protocol}",
 			Doc: "The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide."},
 			func(_ context.Context, p guideParams) (Guide, error) { return m.GuideFor(p.Kind), nil }),
-		module.Handle(module.Contract{Verb: "crew.list", Since: protocol, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "crew.list", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable}]", Doc: "The addressbook."},
 			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),
 		module.Handle(host("crew.exit", "{}",
