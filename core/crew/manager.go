@@ -3,8 +3,9 @@ package crew
 // Manager is the crew module: the registry of scopes, hosts, profiles and sessions (ADR 1793271500
 // §4.3–4.5). Its state machines run on a Store's transactions, so every engine shares them.
 type Manager struct {
-	store Store
-	ender SessionEnder
+	store   Store
+	ender   SessionEnder
+	storeID string // the daemon's store id (sys.hello's store_id): a session context names it
 }
 
 // SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write
@@ -27,6 +28,9 @@ type SessionEnder interface {
 
 // Option configures a Manager.
 type Option func(*Manager)
+
+// WithStoreID sets the daemon's store id, which crew.whoami checks a session context against.
+func WithStoreID(id string) Option { return func(m *Manager) { m.storeID = id } }
 
 // WithSessionEnder sets the mail module's effect of a session's end.
 func WithSessionEnder(e SessionEnder) Option { return func(m *Manager) { m.ender = e } }

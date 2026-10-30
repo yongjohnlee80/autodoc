@@ -421,6 +421,48 @@ func Run(t *testing.T, h Harness) {
 			t.Fatalf("a reclaimed session's guard: %v, want ErrBadCredential", err)
 		}
 	})
+
+	t.Run("authenticate and whoami", func(t *testing.T) {
+		clock, enders := NewClock(), &Enders{}
+		store := h.New(t, clock.Now)
+		m := crew.New(store, crew.WithSessionEnder(enders), crew.WithStoreID("store-1"))
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := reg(e, "jarvis", "agent-1")
+		got, err := m.Register(ctx, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cred := crew.Credential(got.Session, r.Secret)
+		id, err := m.Whoami(ctx, cred, "store-1")
+		want := crew.Identity{Codename: "jarvis", Scope: scope, Profile: got.Profile, Session: got.Session, Store: "store-1"}
+		if err != nil || id != want {
+			t.Fatalf("whoami: %+v, %v; want %+v", id, err, want)
+		}
+		for name, c := range map[string]string{
+			"another secret":   crew.Credential(got.Session, strings.Repeat("z", 40)),
+			"no such session":  crew.Credential("nope", r.Secret),
+			"no separator":     got.Session + r.Secret,
+			"an empty secret":  got.Session + ".",
+			"an empty session": "." + r.Secret,
+			"the empty string": "",
+		} {
+			if _, err := m.Whoami(ctx, c, ""); !errors.Is(err, crew.ErrBadCredential) {
+				t.Errorf("whoami with %s: %v, want ErrBadCredential", name, err)
+			}
+		}
+		if _, err := m.Whoami(ctx, cred, "store-2"); !errors.Is(err, crew.ErrContextMismatch) {
+			t.Fatalf("whoami with another store's context: %v, want ErrContextMismatch", err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Whoami(ctx, cred, "store-1"); !errors.Is(err, crew.ErrBadCredential) {
+			t.Fatalf("whoami of an ended session: %v, want ErrBadCredential", err)
+		}
+	})
 }
 
 // wakeOf is session's wake row.
