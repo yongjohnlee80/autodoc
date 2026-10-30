@@ -111,7 +111,7 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 // session (start_failed) and removes its context.
 func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	c.panel.startErr = errors.New("no such program")
+	c.panel = &modelPanel{owner: c, startErr: errors.New("no such program")}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 // agent's crew session is registered, and reaches the agent once it runs, never as a stale send.
 func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	c.panel.unbracketed = 0
+	c.panel = &modelPanel{owner: c} // takes a bracketed paste at once
 	w.hold = true
 	calls := 0
 	var outcome error
