@@ -137,6 +137,25 @@ func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	return len(ds) > 0, err
 }
 
+// Expire is mail's time-driven changes, for the wake scheduler's writes (crew.SessionEnder).
+func (m *Manager) Expire(ctx crew.Tx) error {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return err
+	}
+	return m.expire(tx)
+}
+
+// NextDeadline is when mail next changes by time alone, for the scheduler's timer
+// (crew.SessionEnder).
+func (m *Manager) NextDeadline(ctx crew.Tx) (int64, bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	return tx.NextDeadline()
+}
+
 // UnhandledCount is how many of profile's deliveries are queued or leased, for crew.orphans.
 func (m *Manager) UnhandledCount(ctx crew.Tx, profile string) (int, error) {
 	tx, err := mailTx(ctx)

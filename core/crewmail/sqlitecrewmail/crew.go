@@ -295,6 +295,57 @@ func (t *Tx) PutWake(w crew.Wake) error {
 		cFailures: w.Failures, cDaemonRun: w.DaemonRun, cNextAt: w.NextAt}).Upsert()
 }
 
+// the wake rows a reservation, a timeout and a deadline read (§4.7)
+var (
+	wakeHasWork = dao.Raw(`(("crew_wake"."state" = ? AND "crew_wake"."pending_gen" > "crew_wake"."announced_gen")`+
+		` OR "crew_wake"."state" = ?)`, crew.WakeIdle, crew.WakeAwaiting)
+)
+
+func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crew.Wake, len(rows))
+	for i, r := range rows {
+		out[i] = *r
+	}
+	return out, nil
+}
+
+func (t *Tx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
+	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).
+		WithPredicate(dao.Raw(`"crew_wake"."pending_gen" > "crew_wake"."announced_gen"`)).
+		WithPredicate(dao.Raw(`("crew_wake"."next_at" IS NULL OR "crew_wake"."next_at" <= ?)`, now)).
+		OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
+}
+
+func (t *Tx) WakesTimedOut(now int64, limit int) ([]crew.Wake, error) {
+	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeAwaiting).
+		WithPredicate(dao.Lte(`"crew_wake"."next_at"`, now)).OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
+}
+
+func (t *Tx) WakesInFlight() ([]crew.Wake, error) {
+	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeInFlight).OrderBy(dao.Asc(byID)).Select())
+}
+
+// NextWakeAt reads the rows with work and a deadline, and takes the earliest: at most one per live
+// session, so the scan is the crew's size.
+func (t *Tx) NextWakeAt() (int64, bool, error) {
+	ws, err := wakes(t.t.wakes.On(t.tx).WithPredicate(wakeHasWork).
+		WithPredicate(dao.Raw(`"crew_wake"."next_at" IS NOT NULL`)).Select())
+	if err != nil {
+		return 0, false, err
+	}
+	var at int64
+	has := false
+	for _, w := range ws {
+		if !has || *w.NextAt < at {
+			at, has = *w.NextAt, true
+		}
+	}
+	return at, has, nil
+}
+
 func (t *Tx) Endpoint(session string) (crew.Endpoint, bool, error) {
 	r, ok, err := got(t.t.ends.On(t.tx).With(cSession, session).Get())
 	if !ok {

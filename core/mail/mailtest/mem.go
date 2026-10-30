@@ -209,6 +209,25 @@ func (t *memTx) Expiring(now int64, limit int) ([]mail.Delivery, error) {
 	}, limit), nil
 }
 
+func (t *memTx) NextDeadline() (int64, bool, error) {
+	var at int64
+	has := false
+	take := func(v *int64) {
+		if v != nil && (!has || *v < at) {
+			at, has = *v, true
+		}
+	}
+	for _, d := range t.st.deliveries {
+		if d.State == mail.Leased {
+			take(d.LeaseUntil)
+		}
+		if unhandled(d) {
+			take(t.st.messages[d.Message].Expires)
+		}
+	}
+	return at, has, nil
+}
+
 func unhandled(d mail.Delivery) bool { return d.State == mail.Queued || d.State == mail.Leased }
 
 func (t *memTx) where(keep func(mail.Delivery) bool, limit int) []mail.Delivery {
