@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"path/filepath"
 	"strconv"
@@ -42,8 +43,8 @@ func strictJSON(s string, v any) error {
 	if err := d.Decode(v); err != nil {
 		return err
 	}
-	if d.More() {
-		return fmt.Errorf("trailing data")
+	if err := d.Decode(new(json.RawMessage)); err != io.EOF {
+		return fmt.Errorf("trailing data after the locator")
 	}
 	return nil
 }

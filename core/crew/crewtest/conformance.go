@@ -279,7 +279,7 @@ func Run(t *testing.T, h Harness) {
 	}
 
 	t.Run("register, and its replays", func(t *testing.T) {
-		m, _, _, _ := setup(t)
+		m, store, _, _ := setup(t)
 		e, err := m.Claim(ctx, scope, "run-a", proc)
 		if err != nil {
 			t.Fatal(err)
@@ -304,6 +304,18 @@ func Run(t *testing.T, h Harness) {
 				t.Errorf("a replay with %s: %v, want ErrInstanceReused", name, err)
 			}
 		}
+		// The digest must tell argument tuples apart whatever bytes they hold: joined with a
+		// separator, these two would encode alike.
+		odd := reg(e, "gold", "agent-9")
+		odd.Workspace = "codex\x00ws-1"
+		if _, err := m.Register(ctx, odd); err != nil {
+			t.Fatalf("register gold: %v", err)
+		}
+		shifted := odd
+		shifted.Codename, shifted.Kind, shifted.Workspace = "gold\x00claude", "codex", "ws-1"
+		if _, err := m.Register(ctx, shifted); !errors.Is(err, crew.ErrInstanceReused) {
+			t.Errorf("a replay whose fields shift across the separator: %v, want ErrInstanceReused", err)
+		}
 		if _, err := m.Register(ctx, reg(e, "jarvis", "agent-2")); !errors.Is(err, crew.ErrCodenameBusy) {
 			t.Fatalf("a second live session of the codename: %v, want ErrCodenameBusy", err)
 		}
@@ -316,6 +328,24 @@ func Run(t *testing.T, h Harness) {
 		next, err := m.Register(ctx, reg(e, "jarvis", "agent-2"))
 		if err != nil || next.Profile != got.Profile || next.Session == got.Session {
 			t.Fatalf("the codename's next session: %+v, %v; want a new session of profile %s", next, err, got.Profile)
+		}
+		// The codename comes back under another CLI: its profile takes the new kind, or the
+		// session's own endpoints would be refused as another kind's.
+		if err := m.Exit(ctx, scope, "run-a", e, next.Session, crew.EndedExit); err != nil {
+			t.Fatalf("exit: %v", err)
+		}
+		r3 := reg(e, "jarvis", "agent-3")
+		r3.Kind = "codex"
+		third, err := m.Register(ctx, r3)
+		if err != nil || third.Profile != got.Profile {
+			t.Fatalf("the codename under codex: %+v, %v; want a session of profile %s", third, err, got.Profile)
+		}
+		var p crew.Profile
+		if err := store.Read(ctx, func(tx crew.Tx) error { var err error; p, _, err = tx.Profile(got.Profile); return err }); err != nil {
+			t.Fatal(err)
+		}
+		if p.Kind != "codex" {
+			t.Fatalf("the profile's kind after a codex session registered: %q, want codex", p.Kind)
 		}
 	})
 
@@ -552,6 +582,9 @@ func Run(t *testing.T, h Harness) {
 			"a non-loopback agy":        {"agy", `{"address":"10.0.0.5:4000","conversation":"x"}`},
 			"an unknown kind":           {"vim", `{}`},
 			"not JSON":                  {"claude", `socket=/run/user/1000/cc-socks/a.sock`},
+			"a stray closing bracket":   {"claude", claude + `]`},
+			"a stray closing brace":     {"claude", claude + `}`},
+			"a second value":            {"claude", claude + ` {}`},
 		} {
 			if _, err := m.SetEndpoint(ctx, cred, c[0], c[1]); !errors.Is(err, crew.ErrBadEndpoint) {
 				t.Errorf("%s: %v, want ErrBadEndpoint", name, err)
