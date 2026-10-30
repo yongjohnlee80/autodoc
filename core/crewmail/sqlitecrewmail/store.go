@@ -35,13 +35,14 @@ func (st *Store) Read(ctx context.Context, fn func(crew.Tx) error) error {
 }
 
 func (st *Store) tx(tx *store.Tx) *Tx {
-	return &Tx{tx: tx.Transaction(), t: tables.In(tx), now: st.s.Clock().Now()}
+	return &Tx{tx: tx.Transaction(), t: tables.In(tx), m: mailDecl.In(tx), now: st.s.Clock().Now()}
 }
 
-// Tx is one transaction over the tables: a crew.Tx.
+// Tx is one transaction over the tables: a crew.Tx, and a mail.Tx (mail.go).
 type Tx struct {
 	tx  *dao.Transaction
 	t   *crewTables
+	m   *mailTables
 	now time.Time
 }
 
