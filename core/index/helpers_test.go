@@ -62,7 +62,7 @@ func (e *env) docsOf(idx *codeIndex) map[int64][]code {
 	out := map[int64][]code{}
 	for c := range idx.Codes() {
 		var doc int64
-		if err := scanOne(context.Background(), e.raw, &doc, "SELECT doc_id FROM chunk WHERE id = ?", c.Chunk); err != nil {
+		if err := scanOne(context.Background(), e.raw, &doc, "SELECT doc_id FROM chunk WHERE id = ?", c.Chunk.ID); err != nil {
 			e.t.Fatal(err)
 		}
 		out[doc] = append(out[doc], c)
