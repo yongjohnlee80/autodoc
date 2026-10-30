@@ -254,19 +254,20 @@ func (d *process) startWorkspaces() error {
 // startWakes starts the wake scheduler (ADR 1793271500 §4.7) for this daemon run, its stop pushed
 // onto the daemon's.
 func (d *process) startWakes() {
-	d.stops.push(startScheduler(d.ctx, d.deps.crew, crewWakers, d.log))
+	d.stops.push(startScheduler(d.ctx, d.deps.crew, crewWakers(), d.log))
 }
 
-// crewWakers are the wakers by endpoint kind. Phase 3 brings them, one CLI at a time; until then
-// there are none.
-var crewWakers = map[string]crew.Waker{}
+// crewWakers are the wakers by endpoint kind, for the daemon's user. Phase 3 brings them one CLI at
+// a time; a session whose kind has none is watch-only, reached by crew.wait and the inbox.
+func crewWakers() map[string]crew.Waker {
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid())}
+}
 
 // startScheduler makes the wake scheduler for a fresh run id, and answers how to stop it. Making it
 // is enough for the long-polls: every committed wake change pokes it, and its Watch serves
 // mail.wait, crew.wait and inbox.watch. Its loop, which reserves and makes wake attempts, runs only
-// once a waker exists: with none, every session with an endpoint would fail each attempt
-// (no_waker) and, after five, be journaled unreachable, filling the human's feed with false
-// reports.
+// once a waker exists: it reserves only the kinds wakers serve, so with none it would have nothing
+// to do.
 func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (stop func()) {
 	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") })}, opts...)
 	s := c.NewScheduler(newRunID(), wakers, opts...)
