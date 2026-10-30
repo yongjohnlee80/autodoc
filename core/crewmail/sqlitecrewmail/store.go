@@ -17,16 +17,41 @@ import (
 )
 
 // Store is the crew tables on a store.
-type Store struct{ s *store.Store }
+type Store struct {
+	s   *store.Store
+	sig crew.Signals
+}
+
+// Option configures a Store.
+type Option func(*Store)
+
+// WithSignals sets what a committed write tells (crew.Signals): the human feed's waiters, and the
+// wake scheduler.
+func WithSignals(s crew.Signals) Option { return func(st *Store) { st.sig = s } }
 
 // New is the crew tables on s.
-func New(s *store.Store) *Store { return &Store{s: s} }
+func New(s *store.Store, opts ...Option) *Store {
+	st := &Store{s: s}
+	for _, o := range opts {
+		o(st)
+	}
+	return st
+}
 
 var _ crew.Store = (*Store)(nil)
 
-// Write runs fn in one write transaction on the store's writer.
+// Write runs fn in one write transaction on the store's writer, and once it commits fires the
+// signals it raised. A retried transaction's signals are its last attempt's.
 func (st *Store) Write(ctx context.Context, fn func(crew.Tx) error) error {
-	return st.s.Write(ctx, func(tx *store.Tx) error { return fn(st.tx(tx)) })
+	var last *Tx
+	err := st.s.Write(ctx, func(tx *store.Tx) error {
+		last = st.tx(tx)
+		return fn(last)
+	})
+	if err == nil && last != nil {
+		st.sig.Fire(last.feed, last.wake)
+	}
+	return err
 }
 
 // Read runs fn in one read transaction on a reader.
@@ -40,10 +65,11 @@ func (st *Store) tx(tx *store.Tx) *Tx {
 
 // Tx is one transaction over the tables: a crew.Tx, and a mail.Tx (mail.go).
 type Tx struct {
-	tx  *dao.Transaction
-	t   *crewTables
-	m   *mailTables
-	now time.Time
+	tx         *dao.Transaction
+	t          *crewTables
+	m          *mailTables
+	now        time.Time
+	feed, wake bool // the signals this transaction raised (crew.Signals)
 }
 
 var _ crew.Tx = (*Tx)(nil)
