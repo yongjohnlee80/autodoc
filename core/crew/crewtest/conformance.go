@@ -431,6 +431,15 @@ func Run(t *testing.T, h Harness) {
 		if err := inWrite(func(tx crew.Tx) error { return m.RaisePending(tx, "no-such-profile") }); err != nil {
 			t.Fatalf("raising a profile with no live session: %v, want nil", err)
 		}
+		// a live session with no wake row yet (registered before the scheduler kept one): the raise
+		// makes its row, idle, with the raise in it
+		seedSession(t, store, scope, e, "bare")
+		if err := inWrite(func(tx crew.Tx) error { return m.RaisePending(tx, "p-bare") }); err != nil {
+			t.Fatal(err)
+		}
+		if w := wakeOf(t, store, "bare"); w.PendingGen != 1 || w.State != crew.WakeIdle {
+			t.Fatalf("the wake row a raise made: %+v, want idle with pending_gen 1", w)
+		}
 		clock.Advance(91 * time.Second)
 		if _, err := m.Claim(ctx, scope, "run-b", proc); err != nil { // reclaims: the session ends
 			t.Fatal(err)
