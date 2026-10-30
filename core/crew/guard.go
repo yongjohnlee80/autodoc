@@ -28,6 +28,10 @@ func guardHost(tx Tx, scope, run string, epoch int64) error {
 	return scopeLive(tx, scope)
 }
 
+// GuardSession is guardSession for another module's write transaction (the mail module's send,
+// receive, ack and reply): the same checks, in tx.
+func (m *Manager) GuardSession(tx Tx, id string) (Session, error) { return guardSession(tx, id) }
+
 // guardSession re-reads session id in this transaction (never trusting an earlier read) and passes
 // when it is live and its host still holds the scope at the epoch it was registered under.
 func guardSession(tx Tx, id string) (Session, error) {

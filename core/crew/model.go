@@ -50,7 +50,24 @@ type (
 		Ended      *int64
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
 	}
+
+	// Wake is a session's row of the wake scheduler's state machine (§4.7). The crew module
+	// raises PendingGen; the scheduler owns the rest.
+	Wake struct {
+		Session      string
+		PendingGen   int64 // raised whenever a delivery becomes eligible for the session
+		AnnouncedGen int64 // the PendingGen its last mail.receive had seen
+		State        string
+		Token        string
+		AttemptGen   int64
+		Failures     int64
+		DaemonRun    string
+		NextAt       *int64
+	}
 )
+
+// WakeIdle is a wake row's state with no attempt out.
+const WakeIdle = "idle"
 
 // Scope states, host and session end reasons, and profile statuses.
 const (
@@ -89,6 +106,9 @@ type Tx interface {
 	LiveSession(profile string) (Session, bool, error)
 	LiveSessionsOfScope(scope string) ([]Session, error)
 	PutSession(Session) error
+
+	Wake(session string) (Wake, bool, error)
+	PutWake(Wake) error
 }
 
 // Store runs transactions over the crew tables, each one atomic: Write commits fn's changes or
