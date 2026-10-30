@@ -135,6 +135,18 @@ return {
       result = "{epoch}",
       doc = "Claim a held scope after the user agreed; the old owner is fenced and its sessions end.",
     },
+    ["crew.wait"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "sessions", type = "[]string" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{ready[{session, unhandled}], timed_out}",
+      doc = "One long-poll for the host's tier-3 sessions (at most 25 s): which have mail waiting. A connection holds at most two long-polls.",
+    },
     ["crew.whoami"] = {
       since = 37, scope = "global", audience = "agent",
       params = {
@@ -501,7 +513,7 @@ return {
         { name = "page", type = "string", optional = true }
       },
       result = "{cursor, snapshot?{items, attention, next}, changes[]}",
-      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases.",
+      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases. A connection holds at most two long-polls.",
     },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",
@@ -627,6 +639,15 @@ return {
       },
       result = "{message, deliveries[]}",
       doc = "Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
+    },
+    ["mail.wait"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{ready, timed_out}",
+      doc = "Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls.",
     },
     ["preference.list"] = {
       since = 3, scope = "global", audience = "user",
@@ -1131,6 +1152,7 @@ return {
     { code = -32061, name = "rpc.not_found", next = "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone" },
     { code = -32062, name = "rpc.conflict", next = "doc.read, then merge or retry; for a name, choose another" },
     { code = -32063, name = "rpc.cursor_expired", next = "re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it" },
+    { code = -32064, name = "rpc.long_polls_busy", next = "a connection holds at most two long-polls (crew.wait, mail.wait, inbox.watch): finish one first, or open another connection" },
     { code = -32065, name = "rpc.unsupported", next = "this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages" },
     { code = -32066, name = "rpc.committed", next = "the write landed: doc.read and compare, never re-send" },
     { code = -32067, name = "rpc.embed_failed", next = "retry later, or search with lexical among the stages" },
