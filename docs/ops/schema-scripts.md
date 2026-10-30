@@ -1,15 +1,17 @@
 # The store's schema: SQL scripts
 
-AutoDoc keeps its workspaces and every workspace's index in one store, a
-SQLite file. The store's schema is a set of SQL scripts, one directory per
-engine, compiled into the binary.
+AutoDoc keeps its workspaces and every workspace's index in one store: a
+SQLite file by default, and PostgreSQL for the server component. The store's
+schema is a set of SQL scripts, one directory per engine, compiled into the
+binary.
 
 ```
 sql/deployments/
-└── sqlite/
-    ├── 000001_update_initialize_tables.sql     the baseline: no revert
-    ├── 000002_update_<slug>.sql                a change …
-    └── 000002_revert_<slug>.sql                … and its undo
+├── sqlite/
+│   ├── 000001_update_initialize_tables.sql     the baseline: no revert
+│   ├── 000002_update_<slug>.sql                a change …
+│   └── 000002_revert_<slug>.sql                … and its undo
+└── postgres/                                   the same names, for PostgreSQL
 ```
 
 - Numbers are dense and never reused. An `update` changes the schema; its
@@ -19,6 +21,18 @@ sql/deployments/
   tagged release shipped, so an edit cannot ship. A fix is the next script.
 - A second engine is a second directory with the same names. A script with no
   work on one engine is a comment saying why.
+- **PostgreSQL** (ADR 1793319634): `postgres/000001` creates, in one script, the
+  schema SQLite's 000001 to 000025 leave, so `postgres/000002` to `000025` are
+  comments. From 000026 on, every script ships for both engines. Its
+  translation:
+  - integer keys become `bigint` identities;
+  - `BLOB` becomes `bytea`;
+  - text is `COLLATE "C"`, byte order as SQLite compares;
+  - FTS5's `chunk_fts` becomes `chunk.tsv`, a generated, weighted `tsvector`
+    with a GIN index.
+
+  A test applies the scripts on PostgreSQL and requires the same tables and
+  columns SQLite's make.
 - The scripts hold the schema (the DDL) and nothing else. The program reads
   and writes rows through golib `dao`, one schema declaration for each table,
   never through SQL of its own.
@@ -71,7 +85,7 @@ A new workspace-owned table follows the same rule.
 | `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
 | `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012); its kind, `section` or `abstract` (000014); found by its text through `chunk_text` (000016) | `id`, `(workspace_id, id)` |
-| `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content) | the chunk's `id` |
+| `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content); on PostgreSQL, `chunk.tsv` and its GIN index instead | the chunk's `id` |
 | `doc_tag` | a tag from a document's frontmatter | `(workspace_id, tag, doc_id)` |
 | `doc_alias` | an alias from a document's frontmatter | `(workspace_id, alias, doc_id)` |
 | `doc_name` | a name a link can resolve through | `(workspace_id, name_key, doc_id)` |
