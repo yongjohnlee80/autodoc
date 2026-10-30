@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -40,6 +39,8 @@ type crewCore interface {
 	Go(fn func(context.Context) any, then func(any))
 	After(d time.Duration, fn func())
 	Notify(msg string)
+	Tr(id string) string
+	Trf(id string, args ...any) string
 	// DaemonAddress and StoreID are the daemon a session context names: its socket and its store
 	DaemonAddress() string
 	StoreID() string
@@ -141,15 +142,15 @@ func (h *crewHost) claim() {
 			return // panicked (kept and said where it happened, work.go), or a daemon with no crew
 		}
 		if r.err != nil {
-			h.c.Notify("This window's agents have no crew scope: " + r.err.Error())
+			h.c.Notify(h.c.Trf("autodoc.crew.no_scope", r.err.Error()))
 			h.c.After(crewRenewEvery, h.claim) // a store or daemon failure may pass: try again
 			return
 		}
 		if r.warn != nil {
-			h.c.Notify("This window's crew scope is held, but not listed for a successor: " + r.warn.Error())
+			h.c.Notify(h.c.Trf("autodoc.crew.scope_unlisted", r.warn.Error()))
 		}
 		if held != "" && r.scope != held {
-			h.c.Notify(fmt.Sprintf("This window lost its crew scope %s while away; its agents now live under %s.", held, r.scope))
+			h.c.Notify(h.c.Trf("autodoc.crew.scope_lost", held, r.scope))
 		}
 		h.scope, h.epoch = r.scope, r.epoch
 		h.gen++
