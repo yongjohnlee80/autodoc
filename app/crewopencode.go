@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -107,8 +108,12 @@ func pluginURL(path string) (string, error) {
 
 // opencodeConfigContent is $OPENCODE_CONFIG_CONTENT with the plugin at path in its plugin list:
 // existing, a value already set (the user's, or another tool's), kept whole and its list extended,
-// never replaced. OpenCode merges it over the user's own configuration.
+// never replaced. OpenCode merges it over the user's own configuration. A plugin whose path holds a
+// '?' is refused: opencode loads none from there, its URL escaped or not (by a live probe).
 func opencodeConfigContent(existing, path string) (string, error) {
+	if strings.ContainsRune(path, '?') {
+		return "", fmt.Errorf("the plugin's folder %s holds a '?', and opencode loads no plugin from such a path: give --dir another folder", filepath.Dir(path))
+	}
 	cfg := map[string]any{}
 	if existing != "" {
 		d := json.NewDecoder(bytes.NewReader([]byte(existing)))

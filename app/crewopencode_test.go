@@ -284,7 +284,7 @@ func TestThePluginURLNamesTheFile(t *testing.T) {
 // `crew plugin --print-env` gives, for a folder whose name a bare "file://"+path would misname.
 func TestThePluginLoadsFromItsURL(t *testing.T) {
 	bun := bunFor(t)
-	for _, name := range []string{"team#1 50%41 a?b ünï", "plain"} {
+	for _, name := range []string{"team#1 50%41 ünï", "plain"} {
 		dir := filepath.Join(t.TempDir(), name)
 		var out, errOut bytes.Buffer
 		if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 {
@@ -302,5 +302,18 @@ func TestThePluginLoadsFromItsURL(t *testing.T) {
 		if err != nil {
 			t.Errorf("%q: bun could not load %s: %v\n%s", name, cfg.Plugin[0], err, b)
 		}
+	}
+}
+
+// TestThePluginsEnvRefusesAFolderOpenCodeCantLoadFrom: opencode loads no plugin from a path holding
+// a '?', escaped or not, so --print-env refuses such a folder, saying so, rather than print an
+// environment that loads nothing.
+func TestThePluginsEnvRefusesAFolderOpenCodeCantLoadFrom(t *testing.T) {
+	t.Parallel()
+	var out, errOut bytes.Buffer
+	dir := filepath.Join(t.TempDir(), "a?b")
+	if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 1 ||
+		out.Len() != 0 || !strings.Contains(errOut.String(), "holds a '?'") {
+		t.Errorf("a folder holding '?': exit %d, %q %q, want refused", code, out.String(), errOut.String())
 	}
 }
