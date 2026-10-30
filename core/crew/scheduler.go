@@ -12,11 +12,28 @@ const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
 
 // The scheduler's bounds (§4.7).
 const (
-	wakePermits    = 4                // calls out at once, whatever the sessions
-	wakeCallLimit  = 10 * time.Second // one waker call's deadline
-	wakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out
-	wakeLookBatch  = 64               // rows one look reserves from, before it looks again
+	wakePermits     = 4                // calls out at once, whatever the sessions
+	wakeCallLimit   = 10 * time.Second // one waker call's deadline
+	wakeUnanswered  = 2 * time.Minute  // an accepted notice with no receive after it times out
+	wakeLookBatch   = 64               // rows one look reserves from, before it looks again
+	wakeUnreachable = 5                // consecutive failures past which the session is unreachable
 )
+
+// ChangeReachability is the human feed's change when a session stops (or starts again) being
+// reachable by its waker (§4.7, §4.8): its ref is the session.
+const ChangeReachability = "reachability"
+
+// failed counts one more consecutive failure of w and backs it off from now; the failure that
+// crosses wakeUnreachable journals the loss in the same write, once.
+func failed(tx Tx, w *Wake, now time.Time) error {
+	w.Failures++
+	at := now.Add(backoff(w.Failures)).UnixNano()
+	w.State, w.Token, w.NextAt = WakeIdle, "", &at
+	if w.Failures == wakeUnreachable {
+		return tx.AddInboxChange(ChangeReachability, w.Session)
+	}
+	return nil
+}
 
 // Outcome is what a waker's call came to.
 type Outcome int
@@ -104,9 +121,9 @@ func (m *Manager) sweep(ctx context.Context) ([]string, error) {
 			return err
 		}
 		for _, w := range late {
-			w.Failures++
-			at := now.Add(backoff(w.Failures)).UnixNano()
-			w.State, w.Token, w.NextAt = WakeIdle, "", &at
+			if err := failed(tx, &w, now); err != nil {
+				return err
+			}
 			if err := tx.PutWake(w); err != nil {
 				return err
 			}
@@ -208,9 +225,9 @@ func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome)
 		case w.AnnouncedGen >= w.AttemptGen:
 			w.State, w.Failures, w.NextAt = WakeIdle, 0, nil
 		case o == OutcomeFailed:
-			w.Failures++
-			at := now.Add(backoff(w.Failures)).UnixNano()
-			w.State, w.NextAt = WakeIdle, &at
+			if err := failed(tx, &w, now); err != nil {
+				return err
+			}
 		default:
 			at := now.Add(wakeUnanswered).UnixNano()
 			w.State, w.NextAt = WakeAwaiting, &at
@@ -227,6 +244,11 @@ func (m *Manager) Received(tx Tx, session string) error {
 	w, found, err := tx.Wake(session)
 	if err != nil || !found {
 		return err
+	}
+	if w.Failures >= wakeUnreachable { // reachable again: the feed hears that too
+		if err := tx.AddInboxChange(ChangeReachability, session); err != nil {
+			return err
+		}
 	}
 	w.AnnouncedGen, w.Failures, w.NextAt = w.PendingGen, 0, nil
 	if w.State == WakeAwaiting {
