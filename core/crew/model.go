@@ -138,17 +138,22 @@ type Tx interface {
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
 	// WakesDue is the idle rows with pending_gen past announced_gen whose next_at is unset or at or
-	// before now, of a live session with an endpoint: the sessions a wake may be reserved for. An
-	// ended session's row, or an endpoint-less one's, is never due, so such rows can't crowd out
-	// the live ones under the limit. limit must be > 0, here and in every limited read.
-	WakesDue(now int64, limit int) ([]Wake, error)
+	// before now, of a live session with an endpoint of one of kinds (the kinds the scheduler has
+	// wakers for): the sessions a wake may be reserved for. An ended session's row, an
+	// endpoint-less one's, or one whose endpoint no waker serves is never due, so such rows can't
+	// crowd out the live ones under the limit; no kinds, none. limit must be > 0, here and in every
+	// limited read.
+	WakesDue(now int64, kinds []string, limit int) ([]Wake, error)
 	// WakesTimedOut is the awaiting_receive rows whose next_at is at or before now (limit > 0).
 	WakesTimedOut(now int64, limit int) ([]Wake, error)
 	// WakesInFlight is every in_flight row, for a daemon start's recovery.
 	WakesInFlight() ([]Wake, error)
 	// NextWakeAt is the earliest next_at among the rows that have work: idle with pending_gen past
-	// announced_gen, or awaiting_receive; false when none has a deadline.
-	NextWakeAt() (int64, bool, error)
+	// announced_gen and due by WakesDue's other terms (a live session, an endpoint of one of
+	// kinds), or awaiting_receive of any kind (its timeout ends an attempt already made); false
+	// when none has a deadline. A row no look can act on never sets the timer, or a past deadline
+	// on it would have the loop look again at once, forever.
+	NextWakeAt(kinds []string) (int64, bool, error)
 
 	Endpoint(session string) (Endpoint, bool, error)
 	PutEndpoint(Endpoint) error

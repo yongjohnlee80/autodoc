@@ -228,15 +228,20 @@ func (t *memTx) wakesWhere(keep func(crew.Wake) bool, limit int) []crew.Wake {
 // errLimit is a limited read asked for no rows: a caller's bug, as SQLite's LIMIT 0 would hide.
 var errLimit = errors.New("crewtest: a limit must be > 0")
 
-func (t *memTx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
+// wakeable reports whether w's session is live and has an endpoint of one of kinds.
+func (t *memTx) wakeable(w crew.Wake, kinds []string) bool {
+	s, live := t.st.sessions[w.Session]
+	e, reachable := t.st.ends[w.Session]
+	return live && s.Ended == nil && reachable && slices.Contains(kinds, e.Kind)
+}
+
+func (t *memTx) WakesDue(now int64, kinds []string, limit int) ([]crew.Wake, error) {
 	if limit <= 0 {
 		return nil, errLimit
 	}
 	return t.wakesWhere(func(w crew.Wake) bool {
-		s, live := t.st.sessions[w.Session]
-		_, reachable := t.st.ends[w.Session]
 		return w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen && (w.NextAt == nil || *w.NextAt <= now) &&
-			live && s.Ended == nil && reachable
+			t.wakeable(w, kinds)
 	}, limit), nil
 }
 
@@ -253,11 +258,11 @@ func (t *memTx) WakesInFlight() ([]crew.Wake, error) {
 	return t.wakesWhere(func(w crew.Wake) bool { return w.State == crew.WakeInFlight }, 0), nil
 }
 
-func (t *memTx) NextWakeAt() (int64, bool, error) {
+func (t *memTx) NextWakeAt(kinds []string) (int64, bool, error) {
 	var at int64
 	has := false
 	for _, w := range t.st.wakes {
-		if w.NextAt == nil || !(w.State == crew.WakeAwaiting || (w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen)) {
+		if w.NextAt == nil || !(w.State == crew.WakeAwaiting || (w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen && t.wakeable(w, kinds))) {
 			continue
 		}
 		if !has || *w.NextAt < at {

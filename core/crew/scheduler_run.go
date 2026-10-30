@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 )
 
-// errNoWaker is an endpoint of a kind no waker serves (phase 3 brings them): a failed attempt,
-// backed off like any other.
+// errNoWaker is an endpoint of a kind no waker serves. A reservation takes only the kinds there are
+// wakers for, so an attempt meets it only if that ever changes under it: a failed attempt, backed
+// off like any other.
 var errNoWaker = errors.New("crew: no waker for the endpoint's kind")
 
 // wakeRetry is how soon a look that met a store error, or left an end unrecorded, looks again.
@@ -23,6 +25,7 @@ type Scheduler struct {
 	m       *Manager
 	run     string
 	wakers  map[string]Waker
+	kinds   []string // the endpoint kinds wakers serves, sorted: the only ones reserved
 	clock   func() time.Time
 	report  func(error)
 	retry   time.Duration
@@ -71,6 +74,12 @@ func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...Sche
 	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
 		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
 		watchers: map[chan struct{}]struct{}{}, owed: map[owedKey]owedEnd{}}
+	for kind, w := range wakers {
+		if w != nil {
+			s.kinds = append(s.kinds, kind)
+		}
+	}
+	slices.Sort(s.kinds)
 	for _, o := range opts {
 		o(s)
 	}
@@ -143,7 +152,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// a deadline already past is one this look could not process, and acting on it at once
 		// would spin on the store's error. Otherwise the earliest deadline decides.
 		wait, armed := s.retry, again
-		if at, ok, err := s.m.nextAt(ctx); err != nil {
+		if at, ok, err := s.m.nextAt(ctx, s.kinds); err != nil {
 			s.report(err)
 			armed = true
 		} else if ok && !again {
@@ -170,7 +179,7 @@ func (s *Scheduler) Look(ctx context.Context) { s.look(ctx) }
 // still owed.
 func (s *Scheduler) look(ctx context.Context) bool {
 	again := s.payOwed(ctx)
-	due, err := s.m.sweep(ctx)
+	due, err := s.m.sweep(ctx, s.kinds)
 	if err != nil {
 		s.report(err)
 		return true
@@ -181,7 +190,7 @@ func (s *Scheduler) look(ctx context.Context) bool {
 		default:
 			return again // none free: a returning call pokes the loop
 		}
-		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run)
+		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run, s.kinds)
 		if err != nil || !ok {
 			if err != nil {
 				s.report(err)
