@@ -429,6 +429,10 @@ func testAReplyWinsOnceAndReplaysExactly(t *testing.T, h Harness) {
 	if user.State != mail.Acked || user.DoneAt == nil {
 		t.Fatalf("the human's delivery of the answered request: %+v, want acked with done_at (retention)", user)
 	}
+	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+		Subject: strings.Repeat("s", mail.MaxSubject+1), Body: "b", Key: "long-subject"}); !errors.Is(err, mail.ErrInvalid) {
+		t.Fatalf("a subject past %d bytes: %v, want ErrInvalid (it travels in the human's feed)", mail.MaxSubject, err)
+	}
 	if _, err := r.in.Reply(r.ctx, "nope", "x", "r3"); !errors.Is(err, mail.ErrNotARequest) {
 		t.Fatalf("a reply to no message: %v, want ErrNotARequest", err)
 	}

@@ -32,6 +32,9 @@ func kindOf(scope string) string {
 
 // checkClaim refuses a scope id no host may claim, or an empty run token.
 func checkClaim(scope, run string) error {
+	if len(scope) > MaxIdent {
+		return fmt.Errorf("%w: a scope of %d bytes, at most %d", ErrInvalid, len(scope), MaxIdent)
+	}
 	if kindOf(scope) == "" {
 		return fmt.Errorf("%w: scope %q is not autovim:, nvim: or autodoc:<name>", ErrInvalid, scope)
 	}

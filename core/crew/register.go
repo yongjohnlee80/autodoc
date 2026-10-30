@@ -49,8 +49,20 @@ func newID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// The longest names and identifiers crew accepts. They travel in every snapshot entry and list
+// item that names a sender or a session, so each is bounded at admission: an entry then always fits
+// one page of the human's feed, which the inbox measures whole.
+const (
+	MaxName  = 64  // a codename, a kind
+	MaxIdent = 256 // a scope, an instance, a workspace
+)
+
 func checkRegistration(r Registration) error {
 	switch {
+	case len(r.Codename) > MaxName || len(r.Kind) > MaxName:
+		return fmt.Errorf("%w: a codename or kind longer than %d bytes", ErrInvalid, MaxName)
+	case len(r.Instance) > MaxIdent || len(r.Workspace) > MaxIdent:
+		return fmt.Errorf("%w: an instance or workspace longer than %d bytes", ErrInvalid, MaxIdent)
 	case r.Codename == "" || r.Codename == "user" || strings.ContainsAny(r.Codename, "@ \t\n"):
 		return fmt.Errorf("%w: codename %q", ErrInvalid, r.Codename)
 	case r.Kind == "":
