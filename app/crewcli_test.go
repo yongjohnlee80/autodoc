@@ -264,12 +264,9 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 
 // TestTheGuideNamesOnlyRealCommands: every `autodoc crew|mail …` the agent guide tells a CLI to run
 // is one of the commands, with the flag it names, so an agent following it never meets "no command".
-// agy's bridge, which phase 3 brings with agy's waker, is named here as pending, positively: another
-// would fail.
+// A command named as pending would be skipped: none is.
 func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
-	pending := map[string]bool{
-		"crew bridge": true, // agy's bridge (phase 3)
-	}
+	pending := map[string]bool{}
 	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z]+)( --[a-z-]+)?")
 	m := crew.New(nil)
 	seen := map[string]bool{}
