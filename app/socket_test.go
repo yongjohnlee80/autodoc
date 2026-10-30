@@ -33,7 +33,7 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 		sock := filepath.Join(shared, "a.sock")
 		// bounded: a daemon that binds there anyway serves until ctx ends, and fails the cell then
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), ""), io.Discard, testBuild, nil)
+		err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), ""), io.Discard, testBuild, nil, "")
 		cancel()
 		var unsafe *peercred.UnsafeDirError
 		if !errors.As(err, &unsafe) || unsafe.Dir != shared {

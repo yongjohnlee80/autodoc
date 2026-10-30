@@ -52,8 +52,9 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // its indexer and follower (the follower watches, then reconciles), and serve the API until ctx
 // ends or a client says sys.shutdown. The subsystems start in serveSteps' order, and each pushes
 // how to stop what it started: they stop in reverse, the lease-info first and the socket last,
-// whether serving ended or a later step failed.
-func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler) error {
+// whether serving ended or a later step failed. level, when not "", is --log-level, over the
+// config's [log] level.
+func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler, level logger.Severity) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
@@ -62,7 +63,10 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build, pr
 	if err != nil {
 		return err
 	}
-	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, prof: prof, log: logger.New(logger.WithWriter(out))}
+	if level == "" {
+		level = e.Config.Log.Severity()
+	}
+	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, prof: prof, log: logger.New(logger.WithWriter(out), logger.WithMinLevel(level))}
 	defer d.stops.unwind()
 	for _, step := range serveSteps {
 		if err := step.start(d); err != nil {

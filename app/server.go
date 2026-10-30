@@ -35,8 +35,8 @@ import (
 // Otherwise it logs to stderr, and its subsystems start in serverSteps' order, each pushing how to
 // stop what it started: they stop in reverse when ctx ends (SIGTERM) or an ingester fails (a lost
 // lock), the embedding worker first, then the ingesters, releasing their tenants' locks, and the
-// pools last.
-func runServer(ctx context.Context, path string, check bool, stdout, stderr io.Writer, version string) error {
+// pools last. level, when not "", is --log-level, over the file's [log] level.
+func runServer(ctx context.Context, path string, check bool, level logger.Severity, stdout, stderr io.Writer, version string) error {
 	cfg, err := config.Load(path)
 	if err != nil {
 		return err
@@ -48,7 +48,10 @@ func runServer(ctx context.Context, path string, check bool, stdout, stderr io.W
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
-	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr), logger.WithContext("autodoc-server")), failed: make(chan error, len(sources)+1), version: version}
+	if level == "" {
+		level = cfg.Log.Level
+	}
+	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr), logger.WithContext("autodoc-server"), logger.WithMinLevel(level)), failed: make(chan error, len(sources)+1), version: version}
 	defer s.stops.unwind()
 	for _, step := range serverSteps {
 		if err := step.start(s); err != nil {

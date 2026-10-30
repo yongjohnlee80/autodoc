@@ -71,7 +71,7 @@ func TestADamagedStoreIsNotServed(t *testing.T) {
 	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	spoilPage(t, filepath.Join(state, config.StoreName), 6)
-	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil)
+	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, "")
 	if !errors.Is(err, store.ErrDamaged) || !strings.Contains(err.Error(), "--check-store") {
 		t.Fatalf("serving a damaged store: %v; want it refused, naming --check-store", err)
 	}
@@ -133,13 +133,13 @@ func TestDamageFoundAfterTheStartStopsTheDaemon(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	out := &syncBuf{}
-	if err := runServe(ctx, cfg, out, testBuild, nil); err != nil || ctx.Err() != nil {
+	if err := runServe(ctx, cfg, out, testBuild, nil, ""); err != nil || ctx.Err() != nil {
 		t.Fatalf("the daemon over a store damaged far from its schema: %v (ctx %v); want it started, then stopped by its check\n%s", err, ctx.Err(), out)
 	}
 	if _, err := os.Stat(path + ".damaged"); err != nil {
 		t.Fatalf("the damage found was not marked: %v", err)
 	}
-	if err := runServe(context.Background(), cfg, io.Discard, testBuild, nil); !errors.Is(err, store.ErrDamaged) {
+	if err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, ""); !errors.Is(err, store.ErrDamaged) {
 		t.Fatalf("the next start: %v; want the marked store checked whole and refused", err)
 	}
 }
@@ -155,7 +155,7 @@ func TestCheckStoreClearsTheMarkOfASoundStore(t *testing.T) {
 	if err := os.WriteFile(mark, []byte(`{"quick":true,"integrity":["page 9: bad"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runServe(context.Background(), cfg, io.Discard, testBuild, nil); !errors.Is(err, store.ErrDamaged) {
+	if err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, ""); !errors.Is(err, store.ErrDamaged) {
 		t.Fatalf("serving a marked store: %v, want it refused", err)
 	}
 	var out bytes.Buffer
@@ -258,7 +258,7 @@ func TestADamageEventThatCannotBeWrittenNeverHoldsTheStop(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if err := runServe(ctx, cfg, io.Discard, testBuild, nil); err != nil || ctx.Err() != nil {
+	if err := runServe(ctx, cfg, io.Discard, testBuild, nil, ""); err != nil || ctx.Err() != nil {
 		t.Fatalf("the daemon with its event write held: %v (ctx %v); want it stopped regardless", err, ctx.Err())
 	}
 	select {

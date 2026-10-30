@@ -123,6 +123,10 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
+		// --log-level is the daemon's and the server's, and an unknown level is refused before any
+		// config is read
+		{[]string{"--ui", "--log-level", "warning"}, 2, "", "autodoc: --log-level is for --serve and --server\n"},
+		{[]string{"--config", bad, "--serve", "--log-level", "loud"}, 2, "", "autodoc: --log-level \"loud\": want debug, info, notice, warning, error or critical\n"},
 		{[]string{"--gui", "kb", "extra"}, 2, "", "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
 		// --editor outside an agent AutoDoc started: no page to reach, and it says what is missing
 		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},

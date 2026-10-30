@@ -198,11 +198,16 @@ An operator reads `GET /v1/status` for its tenants ([operations](operations.md#s
 | `token_sha256`, `token_env` | As a client's: exactly one. | as a client's; **the same token as a client's** (one token, one role) |
 | `tenants` | The tenants whose status it reads, or `["*"]` for every one. | missing or empty; not a configured tenant; a tenant twice; `"*"` with others |
 
-## `[log]`: the metrics lines
+## `[log]`: the level and the metrics lines
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
+| `level` | `""` | The least severe record the server logs: `debug`, `info`, `notice`, `warning`, `error` or `critical`, in any case. `""` logs every one. `autodoc --server --log-level LEVEL server.toml` sets it for one run, over the file's. | any other value |
 | `metrics_interval` | `1m` | How often the server logs its metrics lines ([operations](operations.md#metrics-in-the-log)). `"0s"` logs none. | under `10s`, other than `0s` |
+
+The metrics lines and each successful request's line are `Info`: a `level` of `notice` or above
+leaves them out of the log (a failed request's line is a `Warning`, and stays); `GET /v1/metrics`,
+when enabled, still serves the totals.
 
 ## `[metrics]`: the Prometheus endpoint (optional)
 
