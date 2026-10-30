@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/tui/pty"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -33,13 +35,19 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 
 const oneTwo = `[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`
 
+// readContext is the one session context in the agent folder dir (crew.ContextDir), and its file;
+// ok is false when there is none, and more than one fails the test.
 func readContext(t *testing.T, dir string) (crew.Context, os.FileInfo, bool) {
 	t.Helper()
-	path := filepath.Join(dir, crew.ContextFile)
-	fi, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
+	names := contextFiles(t, dir)
+	if len(names) == 0 {
 		return crew.Context{}, nil, false
 	}
+	if len(names) > 1 {
+		t.Fatalf("%s holds %d contexts: %v", dir, len(names), names)
+	}
+	path := crew.ContextPath(dir, names[0])
+	fi, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +60,35 @@ func readContext(t *testing.T, dir string) (crew.Context, os.FileInfo, bool) {
 		t.Fatal(err)
 	}
 	return c, fi, true
+}
+
+// contextFiles is the context files in the agent folder dir, by name; a write in progress (a dot
+// file) is one too, so none is left behind unseen.
+func contextFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	es, err := os.ReadDir(filepath.Join(dir, crew.ContextDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
+// startedEnv is the variables instance's tab starts its program with, through the tab's own start
+// (runAgent), its program not run; err is the start's refusal.
+func startedEnv(a *agents, c *identityHost, instance *agentInstance) (args []string, spawned bool, err error) {
+	cfg := c.panel.configs[instance.tab]
+	spawn := a.spawn
+	defer func() { a.spawn = spawn }()
+	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) { args, spawned = cmd.Args, true; return nil, nil }
+	_, err = cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
+	return args, spawned, err
 }
 
 // TestAnAgentIsRegisteredBeforeItStarts (ADR 1793271500 §4.4, §4.5): an agent of a window holding a
@@ -75,8 +112,12 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 		ctx.Socket != "/run/test/d.sock" || !strings.HasPrefix(ctx.Credential, ctx.Session+".") || ctx.Profile == "" {
 		t.Fatalf("the context: %+v", ctx)
 	}
-	if !slices.Contains(c.panel.configs[instance.tab].Args, "AUTODOC_CREW_CONTEXT="+dir) {
-		t.Fatalf("the process isn't told its context: %v", c.panel.configs[instance.tab].Args)
+	if fi.Name() != instance.session.ID {
+		t.Fatalf("the context file %s: want its session's own, %s", fi.Name(), instance.session.ID)
+	}
+	args, _, err := startedEnv(a, c, instance)
+	if err != nil || !slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(dir, instance.session.ID)) {
+		t.Fatalf("the process isn't told its context file: %v %v", err, args)
 	}
 	first := instance.session.ID
 	c.panel.exit(instance.tab, 0)
@@ -308,8 +349,8 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 	}
 }
 
-// TestAnEndedSessionLeavesAReplacementsContext: ending a session removes its context only while it
-// names that session: a newer session's context in the same folder stays.
+// TestAnEndedSessionLeavesAReplacementsContext: ending a session removes its own context file, by
+// its session's name: a newer session's, published in the same agent folder by another host, stays.
 func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
 	p, _ := a.profile("one")
@@ -318,7 +359,9 @@ func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	dir := c.panel.configs[instance.tab].Dir
-	if err := crew.WriteContext(dir, crew.Context{Session: "newer", Scope: instance.session.Scope}); err != nil {
+	// another host, the scope's next owner, publishes its session's context into the same agent
+	// folder while this one's agent still runs
+	if _, err := crew.WriteContext(dir, crew.Context{Session: "newer", Scope: instance.session.Scope}); err != nil {
 		t.Fatal(err)
 	}
 	a.crew.exit(instance.session, crew.EndedExit)
@@ -414,5 +457,29 @@ func TestAgentKindReadsTheShellsWords(t *testing.T) {
 		if got := agentKind(command); got != want {
 			t.Errorf("agentKind(%q) = %q, want %q", command, got, want)
 		}
+	}
+}
+
+// TestACrewTabRestartedFromItselfIsRefused: a crew agent's tab started again from the tab itself
+// (Enter after its program exited) runs nothing, since no session is registered for that start;
+// the agents panel's start registers one, and its program is told that session's file.
+func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil || !instance.running {
+		t.Fatalf("start: %v", err)
+	}
+	c.panel.exit(instance.tab, 0)
+	if _, spawned, err := startedEnv(a, c, instance); !errors.Is(err, errCrewStartHere) || spawned {
+		t.Fatalf("a restart from the tab: %v, spawned %v; want refused, nothing run", err, spawned)
+	}
+	again, err := a.startInstance(p)
+	if err != nil || !again.running {
+		t.Fatalf("a start from the panel: %v", err)
+	}
+	if args, spawned, err := startedEnv(a, c, again); err != nil || !spawned ||
+		!slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(again.dir, again.session.ID)) {
+		t.Fatalf("its program after the panel's start: %v, spawned %v, %v", err, spawned, args)
 	}
 }

@@ -69,8 +69,9 @@ func newCrewDaemon(t *testing.T) *crewDaemon {
 	return d
 }
 
-// agent registers codename and writes its session context into a folder of its own, as a host
-// does before the agent starts (§4.5); store is the context's store id.
+// agent registers codename and writes its session context into an agent folder of its own, as a
+// host does before the agent starts (§4.5), and answers the context file's path, which the agent is
+// told; store is the context's store id.
 func (d *crewDaemon) agent(codename, instance, store string) string {
 	d.t.Helper()
 	secret := strings.Repeat("s", 32) + instance
@@ -79,20 +80,22 @@ func (d *crewDaemon) agent(codename, instance, store string) string {
 	if err != nil {
 		d.t.Fatal(err)
 	}
-	dir := d.t.TempDir()
-	b, _ := json.Marshal(sessionContext{Store: store, Socket: d.sock, Scope: "autodoc:aaaa", Profile: r.Profile,
+	path, err := crew.WriteContext(d.t.TempDir(), sessionContext{Store: store, Socket: d.sock, Scope: "autodoc:aaaa", Profile: r.Profile,
 		Session: r.Session, Credential: crew.Credential(r.Session, secret), Kind: "claude"})
-	if err := os.WriteFile(filepath.Join(dir, crewContextFile), b, 0o600); err != nil {
+	if err != nil {
 		d.t.Fatal(err)
 	}
-	return dir
+	return path
 }
 
-// as runs `autodoc <args>` as the agent whose context folder is dir (AUTODOC_CREW_CONTEXT), from
+// agentFolder is the agent folder of the context file path.
+func agentFolder(path string) string { return filepath.Dir(filepath.Dir(path)) }
+
+// as runs `autodoc <args>` as the agent whose context file is path (AUTODOC_CREW_CONTEXT), from
 // the working directory the test is in, with stdin.
-func (d *crewDaemon) as(dir, stdin string, args ...string) (int, map[string]any, string) {
+func (d *crewDaemon) as(path, stdin string, args ...string) (int, map[string]any, string) {
 	d.t.Helper()
-	d.t.Setenv("AUTODOC_CREW_CONTEXT", dir)
+	d.t.Setenv("AUTODOC_CREW_CONTEXT", path)
 	var out, errOut bytes.Buffer
 	code := crewMain(d.ctx, args, strings.NewReader(stdin), &out, &errOut)
 	var res map[string]any
@@ -160,18 +163,37 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 	}
 }
 
-// TestContextsNeverMix (§5 case 5): two contexts present and naming different sessions are refused
-// before any call; a context for another store is refused by the daemon (crew.context_mismatch);
-// with none, the command says this process is no crew agent.
+// TestContextsNeverMix (§5 case 5): an env context whose session the working directory's contexts
+// don't hold is refused before any call; without the env, the working directory's one context is
+// the agent's, and several are refused, never one guessed; a context for another store is refused
+// by the daemon (crew.context_mismatch); with none, the command says this process is no crew agent.
 func TestContextsNeverMix(t *testing.T) {
 	d := newCrewDaemon(t)
 	gold, jarvis := d.agent("gold", "agent-1", "store-1"), d.agent("jarvis", "agent-2", "store-1")
-	t.Chdir(gold) // gold's context in the working directory …
+	t.Chdir(agentFolder(gold)) // gold's context in the working directory …
 	if code, _, errOut := d.as(jarvis, "", "crew", "whoami"); code != 1 || !strings.Contains(errOut, "disagree") {
 		t.Fatalf("whoami with gold's context here and jarvis's in the env: exit %d, %s; want refused", code, errOut)
 	}
 	if code, who, errOut := d.as(gold, "", "crew", "whoami"); code != 0 || who["codename"] != "gold" {
 		t.Fatalf("whoami with gold's context in both: exit %d, %v, %s", code, who, errOut)
+	}
+	if code, who, errOut := d.as("", "", "crew", "whoami"); code != 0 || who["codename"] != "gold" {
+		t.Fatalf("whoami with gold's context alone here, no env: exit %d, %v, %s", code, who, errOut)
+	}
+	// a second session's context in the same folder (a replacement, or one a crash left): without the
+	// env, neither is taken
+	b, err := os.ReadFile(jarvis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentFolder(gold), crewContextDir, filepath.Base(jarvis)), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := d.as("", "", "crew", "whoami"); code != 1 || !strings.Contains(errOut, "several session contexts") {
+		t.Fatalf("whoami with two contexts here, no env: exit %d, %s; want refused", code, errOut)
+	}
+	if code, who, errOut := d.as(gold, "", "crew", "whoami"); code != 0 || who["codename"] != "gold" {
+		t.Fatalf("whoami with two contexts here and gold's in the env: exit %d, %v, %s", code, who, errOut)
 	}
 	t.Chdir(t.TempDir())
 	foreign := d.agent("vision", "agent-3", "store-other")
@@ -289,7 +311,7 @@ func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 	d := newCrewDaemon(t)
 	// the sender has the longest codename crew accepts, which every one of its items carries
-	c, err := readSessionContext(filepath.Join(d.agent(strings.Repeat("g", crew.MaxName), "agent-1", "store-1"), crewContextFile))
+	c, err := readSessionContext(d.agent(strings.Repeat("g", crew.MaxName), "agent-1", "store-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +319,7 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 	// longer that crew refuses
 	text := strings.Repeat("a", crew.MaxAttentionText)
 	for i := range 40 {
-		a, err := readSessionContext(filepath.Join(d.agent(fmt.Sprintf("w%02d", i), fmt.Sprintf("agent-w%02d", i), "store-1"), crewContextFile))
+		a, err := readSessionContext(d.agent(fmt.Sprintf("w%02d", i), fmt.Sprintf("agent-w%02d", i), "store-1"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -365,7 +387,7 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 // arrive.
 func TestASnapshotMeasuresMetadataThroughRPC(t *testing.T) {
 	d := newCrewDaemon(t)
-	c, err := readSessionContext(filepath.Join(d.agent("gold", "agent-1", "store-1"), crewContextFile))
+	c, err := readSessionContext(d.agent("gold", "agent-1", "store-1"))
 	if err != nil {
 		t.Fatal(err)
 	}

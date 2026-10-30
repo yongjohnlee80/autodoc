@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/pty"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc"
 )
@@ -26,8 +28,11 @@ type agents struct {
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
 	crew                   *crewHost // the window's crew scope; nil in a program without one
-	agentBinPath           string
-	editorPath             func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
+	// tab's own start is
+	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
+	agentBinPath string
+	editorPath   func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
 	editorTokens        map[string]string
@@ -47,7 +52,8 @@ type agents struct {
 
 func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
-		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
+		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)
@@ -451,6 +457,13 @@ func agentArgv(command string, env []string) (string, []string, error) {
 	}
 	args = append(append(args, env...), shell, "-c", command)
 	return envPath, args, nil
+}
+
+// withEnvArg is agentArgv's args with kv set for the program as well: among its variables, before
+// the shell that runs the command (the args end with the shell, -c and the command).
+func withEnvArg(args []string, kv string) []string {
+	i := max(len(args)-3, 0)
+	return slices.Concat(args[:i:i], []string{kv}, args[i:])
 }
 
 // agentEnv are the variables the agent codename is started with, in its folder dir: the workspace,

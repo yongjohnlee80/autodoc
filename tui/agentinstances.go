@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -45,9 +46,14 @@ type agentInstance struct {
 	profile agentProfile
 	dir     string // the folder its tab's process runs in (agentFolder)
 	// starting is a start whose crew session is being registered: the process starts once the
-	// session's context is written. session is the crew session it runs under, when it has one.
+	// session's context is written. session is the crew session it runs under, when it has one;
+	// crewed whether its starts are crew sessions' (its window held a scope when it was started);
+	// context the file of the session its next process runs under, told it at its start
+	// (AUTODOC_CREW_CONTEXT, runAgent), "" while there is none.
 	starting         bool
 	session          crewSession
+	crewed           bool
+	context          string
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -255,7 +261,6 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if crewed {
 		// a wake reaches it only with these: without them it still starts, and receives when it asks
 		a.c.Keep(writeWakeAcceptance(dir, agentKind(p.Command)))
-		env = append(env, "AUTODOC_CREW_CONTEXT="+dir) // the folder the session's context is written in
 	}
 	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
 	if err != nil {
@@ -264,7 +269,8 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
-			Exited: func(code int) { a.instanceExited(instance, code) }})
+			Exited: func(code int) { a.instanceExited(instance, code) },
+			Start:  func(c pty.Cmd) (widget.TerminalProcess, error) { return a.runAgent(instance, c) }})
 		if err != nil {
 			return nil, err
 		}
@@ -272,7 +278,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.instances[p.Codename] = instance
 		a.instanceOrder = append(a.instanceOrder, p.Codename)
 	}
-	instance.profile, instance.workspace = p, ws
+	instance.profile, instance.workspace, instance.crewed = p, ws, crewed
 	if crewed {
 		// registered first (ADR 1793271500 §4.4): the process starts only once its session's context
 		// is written, and a refused registration starts nothing. The answer is checked before either:
@@ -291,7 +297,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 				return
 			}
 			if err == nil {
-				if err = a.crew.publish(s); err != nil {
+				if instance.context, err = a.crew.publish(s); err != nil {
 					a.crew.exit(s, crew.EndedStartFailed)
 				}
 			}
@@ -301,6 +307,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 				return
 			}
 			if err := a.start(panel, instance); err != nil {
+				instance.context = ""
 				a.crew.exit(s, crew.EndedStartFailed)
 				a.c.Notify(fmt.Sprintf("%s did not start: %s", p.Name, err.Error()))
 				a.listAgents()
@@ -322,6 +329,23 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	return instance, nil
+}
+
+// errCrewStartHere is a crew agent's tab restarted from the tab itself (Enter after its program
+// exited): its crew session is registered by the agents panel's start, never without one.
+var errCrewStartHere = errors.New("this agent runs as a crew session: start it from the agents panel, which registers one")
+
+// runAgent is an agent tab's TerminalConfig.Start, on the loop: its program, told the context
+// file of the crew session it starts under (AUTODOC_CREW_CONTEXT), that file being this session's
+// own (crew.ContextPath). A crew agent's start with no session published for it is refused.
+func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalProcess, error) {
+	if instance.crewed {
+		if instance.context == "" {
+			return nil, errCrewStartHere
+		}
+		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
+	}
+	return a.spawn(c)
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.
@@ -346,6 +370,7 @@ func (a *agents) showStarted(instance *agentInstance) error {
 }
 
 func (a *agents) instanceExited(instance *agentInstance, code int) {
+	instance.context = ""                         // its session ends with it: a next start registers a new one
 	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
 		a.crew.exit(instance.session, crew.EndedExit)
 		instance.session = crewSession{}
