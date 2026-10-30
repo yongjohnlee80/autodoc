@@ -32,10 +32,13 @@ type (
 		Address      string `json:"address"`
 		Conversation string `json:"conversation"`
 	}
+	// opencodeLocator is an OpenCode session and the socket AutoDoc's plugin listens on in the
+	// opencode process holding it: named by that process's pid, Start its reference (ProcRef).
 	opencodeLocator struct {
-		Session string `json:"session"`
+		Socket  string `json:"socket"`
 		PID     int    `json:"pid"`
 		Start   string `json:"start"`
+		Session string `json:"session"`
 	}
 )
 
@@ -69,6 +72,13 @@ func under(path string, roots ...string) bool {
 func ClaudeSocketDirs(uid int) []string {
 	u := strconv.Itoa(uid)
 	return []string{"/run/user/" + u + "/cc-socks", "/tmp/cc-socks-" + u}
+}
+
+// OpenCodeSocketDirs are the folders AutoDoc's OpenCode plugin binds its sockets in, for user uid:
+// each made 0700 by the plugin, which refuses one it does not own or that others can reach.
+func OpenCodeSocketDirs(uid int) []string {
+	u := strconv.Itoa(uid)
+	return []string{"/run/user/" + u + "/autodoc-opencode", "/tmp/autodoc-opencode-" + u}
 }
 
 // CodexSocketDirs are the folders Codex's app-server binds its sockets in, for user uid.
@@ -143,8 +153,17 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 		if err := strictJSON(locator, &l); err != nil {
 			return bad(err.Error())
 		}
-		if l.Session == "" || l.PID <= 0 || l.Start == "" {
-			return bad("session, pid and start are required")
+		if !under(l.Socket, OpenCodeSocketDirs(uid)...) {
+			return bad("the socket is not under /run/user/<uid>/autodoc-opencode/ or /tmp/autodoc-opencode-<uid>/")
+		}
+		if l.PID <= 0 || filepath.Base(l.Socket) != strconv.Itoa(l.PID)+".sock" {
+			return bad("the socket is not named by the pid (<pid>.sock)")
+		}
+		if p, ok := parseProc(l.Start); !ok || p.pid != l.PID {
+			return bad("start is not the pid's process reference (boot:ns:pid:start)")
+		}
+		if !threadOK(l.Session) {
+			return bad("session is not a session id: required, at most 256 bytes, no leading '-', no control characters")
 		}
 		v = l
 	default:

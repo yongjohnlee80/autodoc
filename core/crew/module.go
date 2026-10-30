@@ -74,7 +74,7 @@ type (
 	endpointParams struct {
 		Credential string `param:"credential"`
 		Kind       string `param:"kind" doc:"claude, codex, agy or opencode: the session's own"`
-		Locator    string `param:"locator" doc:"JSON, kind-specific; never a secret"`
+		Locator    string `param:"locator" doc:"JSON, kind-specific; never a secret. opencode's is the AutoDoc plugin's socket, its process and the session (protocol 39)"`
 		Secret     string `param:"secret,optional" doc:"agy only: its language server's token, held in memory for this endpoint, never stored (protocol 38)"`
 	}
 	waitParams struct {

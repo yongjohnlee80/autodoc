@@ -135,10 +135,11 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
-	"crew endpoint": {usage: "--claude | --codex-thread ID | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID)",
+	"crew endpoint": {usage: "--claude | --codex-thread ID | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --opencode: AutoDoc's OpenCode plugin runs it)",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
 			fs.String("codex-thread", "", "this Codex session's thread ($CODEX_THREAD_ID), on the app-server its TUI is attached to")
+			fs.String("opencode", "", "this OpenCode session (AutoDoc's OpenCode plugin runs it, from the session's own opencode)")
 		},
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
 			if fs.Lookup("claude").Value.(flag.Getter).Get().(bool) {
@@ -166,6 +167,20 @@ var crewCommands = map[string]crewCommand{
 				}
 				return "crew.endpoint", []any{c.Credential, "codex", loc}, nil, nil
 			}
+			if session := strFlag(fs, "opencode"); session != "" {
+				if len(args) != 0 {
+					return "", nil, nil, errors.New("crew endpoint --opencode takes no arguments")
+				}
+				// the plugin's process holds the session's own context: never one found by folder
+				if os.Getenv("AUTODOC_CREW_CONTEXT") == "" {
+					return "", nil, nil, errors.New("crew endpoint --opencode needs $AUTODOC_CREW_CONTEXT, the session's own context: the plugin runs it from its session's opencode")
+				}
+				loc, err := opencodeLocator(session, os.Getppid(), crew.OpenCodeSocketDirs(os.Getuid()))
+				if err != nil {
+					return "", nil, nil, err
+				}
+				return "crew.endpoint", []any{c.Credential, "opencode", loc}, nil, nil
+			}
 			if len(args) != 2 {
 				return "", nil, nil, errors.New("crew endpoint takes --claude, --codex-thread ID, or a kind and a locator")
 			}
@@ -177,6 +192,12 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
 			fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 		}}, // run by crewBridgeMain: it stays, so it is no one call
+	"crew plugin": {usage: "--opencode [--print-env] [--dir D]: write AutoDoc's OpenCode plugin into AutoDoc's data folder and print its path, or with --print-env the OPENCODE_CONFIG_CONTENT that loads it (for a host's agent launch; nothing is written into a project)",
+		flags: func(fs *flag.FlagSet) {
+			fs.Bool("opencode", false, "OpenCode's plugin")
+			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
+			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
+		}}, // run by crewPluginMain: it needs no session, so it is no call
 	"crew attention": {usage: "raise <permission|blocked> [text] | clear: tell the user this session waits on them, or no longer does",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
 			switch {
@@ -354,6 +375,9 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 	if !ok {
 		fmt.Fprintf(stderr, "autodoc: no command %q\n", name)
 		return usage()
+	}
+	if name == "crew plugin" {
+		return crewPluginMain(args[2:], os.Getenv, stdout, stderr)
 	}
 	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)

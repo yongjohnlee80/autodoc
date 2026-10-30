@@ -134,7 +134,10 @@ import (
 // Protocol 38 is ADR 1793271500 §4.7's agy waker: crew.endpoint's optional secret, an agy session's
 // language-server token, which the daemon holds in memory alone for that endpoint (never stored),
 // and which any other kind refuses. A session below 38 sends none, and its crew.endpoint is as before.
-const Protocol int64 = 38
+// Protocol 39 is ADR 1793271500's OpenCode waker: crew.endpoint's opencode locator is the AutoDoc
+// plugin's socket, its opencode process and the session ({socket, pid, start, session}); the shape
+// before it, without the socket, is refused. No client registered one before.
+const Protocol int64 = 39
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

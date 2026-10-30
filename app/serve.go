@@ -261,12 +261,13 @@ func (d *process) startWakes() {
 	d.stops.push(addLateWakers(d.ctx, s, d.log))
 }
 
-// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's,
-// and agy's, which reads each endpoint's token from m (held in memory, never stored). Phase 3 brings
-// them one CLI at a time; a session whose kind has none is watch-only, reached by crew.wait and the
-// inbox. A waker that depends on what is installed is a late one (lateWakers).
+// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's;
+// agy's, which reads each endpoint's token from m (held in memory, never stored); and OpenCode's.
+// Phase 3 brings them one CLI at a time; a session whose kind has none is watch-only, reached by
+// crew.wait and the inbox. A waker that depends on what is installed is a late one (lateWakers).
 func crewWakers(m *crew.Manager) map[string]crew.Waker {
-	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid()), "agy": crew.NewAgyWaker(m.EndpointSecret)}
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid()), "agy": crew.NewAgyWaker(m.EndpointSecret),
+		"opencode": crew.NewOpenCodeWaker(os.Getuid())}
 }
 
 // lateWakers find the wakers that depend on what is installed, each by probing its CLI: Codex's,
