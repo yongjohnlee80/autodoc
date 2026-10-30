@@ -290,3 +290,16 @@ func TestTheMetricsLines(t *testing.T) {
 		t.Errorf("after %d intervals the log holds %q", taken.Load(), logged)
 	}
 }
+
+// TestACancelledHealthCallerDoesNotSpeakForTheDatabase: a health request whose context has ended
+// (its client left) is not the database's answer: the ping it made is not kept, and the next
+// caller, within PingFor, gets the database's own.
+func TestACancelledHealthCallerDoesNotSpeakForTheDatabase(t *testing.T) {
+	f := newFixture()
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	f.c.Health(gone)
+	if h := f.c.Health(context.Background()); h.Status != StatusOK || h.Checks["database"] != CheckOK {
+		t.Errorf("after a cancelled caller, a live one within PingFor: %+v, want ok", h)
+	}
+}

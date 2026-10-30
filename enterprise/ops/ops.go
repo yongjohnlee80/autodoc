@@ -152,6 +152,9 @@ func (c *Collector) ping(ctx context.Context) error {
 	pctx, cancel := context.WithTimeout(ctx, Deadline)
 	_, err := c.o.Now(pctx)
 	cancel()
+	if ctx.Err() != nil {
+		return err // the caller left, or its deadline passed: that is no answer of the database's to keep
+	}
 	c.pinged, c.pingAt, c.pingErr = true, now, err
 	return err
 }
