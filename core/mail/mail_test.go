@@ -203,13 +203,17 @@ func TestASendsKeyMakesOneMessage(t *testing.T) {
 func TestASendsAddresses(t *testing.T) {
 	r := newRig(t)
 	r.profile("p-zen", "autovim:other", "zen", "s-zen")
-	sent := r.send("s-jarvis", mail.Send{To: []string{"user", "session:s-gold", "zen@other", "gold"}, Body: "b", Key: "k"})
+	sent := r.send("s-jarvis", mail.Send{To: []string{"user", "session:s-gold", "zen@other", "user"}, Body: "b", Key: "k"})
 	var got []string
 	for _, d := range sent.Deliveries {
 		got = append(got, d.Recipient+"/"+d.Session)
 	}
-	if want := "p-user/ p-gold/s-gold p-zen/ p-gold/"; strings.Join(got, " ") != want {
-		t.Fatalf("the deliveries: %v, want %s", got, want)
+	if want := "p-user/ p-gold/s-gold p-zen/"; strings.Join(got, " ") != want {
+		t.Fatalf("the deliveries: %v, want %s (one per recipient)", got, want)
+	}
+	// one profile bound two ways is refused, never narrowed or widened
+	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{"gold", "session:s-gold"}, Body: "b", Key: "k-two"}); !errors.Is(err, mail.ErrInvalid) {
+		t.Fatalf("gold and one of its sessions in one send: %v", err)
 	}
 	if ch := r.mem.Changes(); len(ch) != 1 || ch[0] != (crewtest.InboxChange{Kind: mail.ChangeReport, Ref: sent.Message.ID}) {
 		t.Fatalf("the human's feed: %+v", ch)
@@ -470,9 +474,31 @@ func TestAdoptionNormalizesOrMergesEveryUnhandledDelivery(t *testing.T) {
 		failedCopy.State, failedCopy.Why = mail.Failed, mail.WhyAttempts
 		return tx.PutDelivery(failedCopy)
 	})
+	// a message p-old sent to itself and to gold, whose gold copy failed: its reopening notice is to
+	// p-old as the sender, so it must follow p-old's forwarding to gold
+	self := r.send("s-old", mail.Send{To: []string{"gold@autodoc:w", "gold@p"}, Body: "self", Key: "k5"})
+	for _, d := range self.Deliveries {
+		if d.Recipient == "p-gold" {
+			r.write(func(tx mail.Tx) error { d.State, d.Why = mail.Failed, mail.WhyAttempts; return tx.PutDelivery(d) })
+		}
+	}
 	r.receive("s-old") // a lease on the old profile's mail: adoption clears it
 	before := r.woken("p-gold")
-	r.write(func(tx mail.Tx) error { return r.m.MergeDeliveries(tx, "p-old", "p-gold") })
+	// crew's order: the forwarding is real first, then the mail moves
+	r.write(func(tx mail.Tx) error {
+		p, _, _ := tx.Profile("p-old")
+		p.Status, p.MergedInto = crew.ProfileMerged, "p-gold"
+		if err := tx.PutProfile(p); err != nil {
+			return err
+		}
+		return r.m.MergeDeliveries(tx, "p-old", "p-gold")
+	})
+	if ev := r.events("p-gold"); len(ev) != 1 || ev[0] != mail.WhyReopened+":"+self.Message.ID {
+		t.Fatalf("the self-sent message's reopening notice went to %v, want gold (p-old's survivor)", ev)
+	}
+	if ev := r.events("p-old"); len(ev) != 0 {
+		t.Fatalf("a notice was left on the merged profile: %v", ev)
+	}
 
 	of := func(s mail.Sent, recipient string) mail.Delivery {
 		for _, d := range s.Deliveries {
@@ -567,7 +593,8 @@ func TestAReceiveIsBoundedAndAPreviewLeasesNothing(t *testing.T) {
 	}
 }
 
-// HasEligible sees a queued, unbound, unexpired delivery only.
+// HasEligible sees a queued, unbound, unexpired delivery only, however much expired mail lies
+// before it.
 func TestHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T) {
 	r := newRig(t)
 	has := func() bool {
@@ -583,6 +610,15 @@ func TestHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T) {
 	r.clock.Advance(time.Minute)
 	if has() {
 		t.Fatal("a bound delivery, or one past its expiry, is eligible for a new session")
+	}
+	// more expired mail than one look reads, then one live delivery behind it, in seq order
+	for i := range 300 {
+		r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "old", Key: fmt.Sprint("x", i), TTL: time.Minute})
+	}
+	r.clock.Advance(time.Minute)
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "live", Key: "live"})
+	if !has() {
+		t.Fatal("a live delivery behind 300 expired ones was not seen")
 	}
 }
 
