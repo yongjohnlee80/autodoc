@@ -73,9 +73,11 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     unlinkSync(path); // this pid's own, left by a process that held it before: never another's
   } catch {}
   // Registration is one owned lifecycle: one worker at a time, always toward the latest top-level
-  // session the agent chats in (desired), so the last endpoint written is the latest's and session
-  // (the one the plugin wakes) is published only for it. Each attempt is bounded, owns its child,
-  // and is cancelled by dispose; after a failure, the session's next message tries again.
+  // session the agent chats in (desired), so the last endpoint written is the latest's. Each
+  // registration that succeeds is published (session, the one the plugin wakes): run one at a
+  // time, the plugin's session is always the daemon's last stored endpoint, even when a later one
+  // then fails. Each attempt is bounded, owns its child, and is cancelled by dispose; after a
+  // failure, the session's next message tries again.
   let session = null; // the session registered with AutoDoc, the one a wake may name
   let desired = null; // the latest top-level session asked for
   let worker = null; // the running registration, if any
@@ -170,7 +172,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       const target = desired;
       const r = await attempt(target);
       if (disposed) return;
-      if (r === "ok" && desired === target) session = target; // published for the latest alone
+      if (r === "ok") session = target; // as the daemon now has it: the loop goes on to the latest
       if (r === "child" && desired === target) desired = session;
       if (r === "failed" && desired === target) return; // its next message tries again
     }
