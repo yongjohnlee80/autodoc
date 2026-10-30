@@ -102,6 +102,31 @@ metrics scope=tenant tenant=music lock=held documents=120344 ready=120344 quaran
 - **The HTTP counts cover the interval:** requests by status class, and the slowest.
 - **No line holds a token, a query's text or a client's name.** Each request's own log line names its client.
 
+## Metrics for a scraper: `GET /v1/metrics`
+
+With `[metrics] enabled = true`, the server serves its figures in Prometheus's text format (0.0.4), for Prometheus, VictoriaMetrics, Grafana Agent or any OpenMetrics-compatible scraper. Off, the path is not found.
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: autodoc
+    scrape_interval: 30s
+    authorization:
+      credentials_file: /etc/autodoc/ops.token   # an operator's token
+    static_configs:
+      - targets: ["127.0.0.1:8730"]
+```
+
+- **An operator's token, as `/v1/status`.** A search client's token is refused (403), and a missing or wrong one is refused (401). An operator sees the server's series, and its own tenants' only.
+- **The series:**
+  - `autodoc_server_info{version}`, `autodoc_provider_up`;
+  - `autodoc_http_requests_total{path, class}` and `autodoc_http_request_duration_seconds{path}` (a histogram). They count since the server started, so take rates of them, and they're never reset by the metrics lines.
+  - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (absent until the cursor first moves), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
+- **`path` is one of search, status, metrics, health and other.** Any other URL is counted as `other`, never by its own name.
+- **A tenant whose state can't be read** shows `autodoc_tenant_errors{kind="tenant"} 1` and its lock, and no document or quarantine figures, never a false 0.
+- **No series holds a token, a query's text, a client's name, an access value or an error's text.** Errors are 0 or 1 by kind; their text is in `/v1/status` and the log.
+- **A scrape is counted once it has answered,** so `path="metrics"` shows the previous scrapes. A scrape interval of 30 s or more is plenty.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:
