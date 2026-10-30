@@ -11,7 +11,7 @@ import (
 
 // BenchmarkSemanticScale measures the semantic path at scale (the 2026-10-28 audit's AP-3 and
 // AP-4): AUTODOC_BENCH_DOCS documents (default 10000) of four sections each, every one
-// semantic-ready.
+// semantic-ready, seeded (seedEnv).
 //   - Unfiltered: a semantic query over the snapshot.
 //   - OneFile: a query whose path filter admits one document, the most restrictive case: the
 //     fetches (SQL round trips) it makes are reported as fetches/op.
@@ -23,7 +23,7 @@ func BenchmarkSemanticScale(b *testing.B) {
 	if v, err := strconv.Atoi(os.Getenv("AUTODOC_BENCH_DOCS")); err == nil && v > 0 {
 		n = v
 	}
-	e := benchEnv(b, n)
+	e := seedEnv(b, n)
 	ctx := context.Background()
 	m := e.ix.sem
 	var fetches atomic.Int64

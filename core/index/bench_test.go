@@ -58,23 +58,28 @@ var benchVocabulary = strings.Fields(`storage search index chunk vector model qu
 	snapshot commit table column schema facet tag path link graph daemon client socket session
 	editor outline export diagram theme plugin provider embedding fusion rank score window`)
 
+// benchNote is the i-th generated file: a title and four sections of 40 words each.
+func benchNote(i int) string {
+	var body strings.Builder
+	fmt.Fprintf(&body, "# Note %d\n\n", i)
+	for s := range 4 {
+		fmt.Fprintf(&body, "## Section %d\n\n", s)
+		for w := range 40 {
+			body.WriteString(benchVocabulary[(i*7+s*13+w*w)%len(benchVocabulary)])
+			body.WriteByte(' ')
+		}
+		body.WriteString("\n\n")
+	}
+	return body.String()
+}
+
 // benchEnv indexes n generated files with the fake provider, every one semantic-ready.
 func benchEnv(b *testing.B, n int) *env {
 	b.Helper()
 	e := newEnv(b, options{Provider: newFake("m", "a"), BatchDelay: time.Millisecond, BatchSize: 200})
 	var pc []string
 	for i := range n {
-		var body strings.Builder
-		fmt.Fprintf(&body, "# Note %d\n\n", i)
-		for s := range 4 {
-			fmt.Fprintf(&body, "## Section %d\n\n", s)
-			for w := range 40 {
-				body.WriteString(benchVocabulary[(i*7+s*13+w*w)%len(benchVocabulary)])
-				body.WriteByte(' ')
-			}
-			body.WriteString("\n\n")
-		}
-		pc = append(pc, fmt.Sprintf("notes/%04d.md", i), body.String())
+		pc = append(pc, fmt.Sprintf("notes/%04d.md", i), benchNote(i))
 	}
 	for i := 0; i < len(pc); i += 200 { // 100 files at a time: put waits for the whole queue
 		e.put(pc[i:min(i+200, len(pc))]...)
