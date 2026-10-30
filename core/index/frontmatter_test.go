@@ -125,14 +125,16 @@ func TestSchemaFacetsAndDiagnostics(t *testing.T) {
 		"zebra count:0x3":    {"adr.md"}, // read as its field's type
 		"zebra type:note":    nil,
 		"type:adr":           {"adr.md"}, // filters alone list the files
-		"zebra other:thing":  nil,        // an undeclared field is a word, which no file has
+		// an undeclared field is a word, which no file has, not a filter: nothing is narrowed, and
+		// the any-word fallback (AM-8) finds zebra's files
+		"zebra other:thing": {"adr.md", "bare.md", "memo.md"},
 	} {
 		r, err := e.ix.Search(ctx, q, QueryOpts{})
 		if err != nil {
 			t.Errorf("%q: %v", q, err)
 			continue
 		}
-		if got := hitPaths(r); !reflect.DeepEqual(got, want) {
+		if got := sortedCopy(hitPaths(r)); !reflect.DeepEqual(got, want) {
 			t.Errorf("%q = %v, want %v", q, got, want)
 		}
 	}

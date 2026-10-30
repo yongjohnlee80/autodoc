@@ -171,9 +171,11 @@ func TestSemanticFindsWhatLexicalCannot(t *testing.T) {
 		mode, used string
 		want       []string
 	}{
-		{ModeAuto, ModeHybrid, []string{"z.md semantic", "b.md semantic"}},
+		// lexically only z.md's "zebra" matches (no file holds "lion"; any one word is enough, AM-8);
+		// b.md shares no word with the query: only the vectors find it
+		{ModeAuto, ModeHybrid, []string{"z.md lexical+semantic", "b.md semantic"}},
 		{ModeSemantic, ModeSemantic, []string{"z.md semantic", "b.md semantic"}},
-		{ModeLexical, ModeLexical, nil},
+		{ModeLexical, ModeLexical, []string{"z.md lexical"}},
 	} {
 		res := e.query("zebra lion", QueryOpts{Mode: c.mode})
 		eq(t, c.mode, via(res), c.want)
