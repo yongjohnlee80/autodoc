@@ -139,7 +139,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       const info = await Promise.race([get, aborted(ac.signal)]);
       if (!info?.data) return "failed";
       if (info.data.parentID) return "child";
+      // env: the process's environment as it is now ($AUTODOC_CREW_CONTEXT, and PATH as opencode left
+      // it), which Bun then resolves autodoc in: without it, Bun looks in the PATH it started with
       p = Bun.spawn(["autodoc", "crew", "endpoint", "--opencode", id], {
+        env: process.env,
         stdin: "ignore",
         stdout: "ignore",
         stderr: "pipe",
