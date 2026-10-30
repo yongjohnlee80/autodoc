@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -142,7 +142,7 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 	if code, _, errOut := d.as(gold, "", "mail", "send", "user", "--kind", "request", "--subject", "Decision: ship?", "--body", "now or later"); code != 0 {
 		t.Fatalf("mail send user: exit %d, %s", code, errOut)
 	}
-	w, err := d.deps.inbox.Watch(d.ctx, 0, 0, 0)
+	w, err := d.deps.inbox.Watch(d.ctx, 0, 0, "")
 	if err != nil || w.Snapshot == nil || len(w.Snapshot.Items) != 1 || w.Snapshot.Items[0].Codename != "gold" {
 		t.Fatalf("the human's snapshot: %+v, %v; want gold's request", w, err)
 	}
@@ -269,15 +269,33 @@ func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
 	}
 }
 
-// TestASnapshotPastTheMessageLimitPagesThroughRPC: the human has 70 open requests of mail's
-// largest body, 4.5 MB together, past the transport's 4 MiB message. A window that connects
-// through the daemon's socket, as every window does, still reads all of them: inbox.watch answers a
-// first page and then each next page within the limit.
+// TestASnapshotPastTheMessageLimitPagesThroughRPC: forty sessions wait on the human, each with the
+// longest attention text crew accepts (a longer one is refused), and the human has 70 open requests
+// of mail's largest body: 7 MB together, past the transport's 4 MiB message. A window that connects
+// through the daemon's socket, as every window does, still reads every attention and request:
+// inbox.watch answers a first page and then each next page within the limit.
 func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 	d := newCrewDaemon(t)
 	c, err := readSessionContext(filepath.Join(d.agent("gold", "agent-1", "store-1"), crewContextFile))
 	if err != nil {
 		t.Fatal(err)
+	}
+	// forty sessions waiting on the user, each with the longest attention text crew accepts, and one
+	// longer that crew refuses
+	text := strings.Repeat("a", crew.MaxAttentionText)
+	for i := range 40 {
+		a, err := readSessionContext(filepath.Join(d.agent(fmt.Sprintf("w%02d", i), fmt.Sprintf("agent-w%02d", i), "store-1"), crewContextFile))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.deps.crew.RaiseAttention(d.ctx, a.Credential, crew.AttentionPermission, text); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if err := d.deps.crew.RaiseAttention(d.ctx, a.Credential, crew.AttentionPermission, text+"!"); !errors.Is(err, crew.ErrInvalid) {
+				t.Fatalf("an attention past the longest text: %v, want ErrInvalid (refused, never truncated)", err)
+			}
+		}
 	}
 	body := strings.Repeat("x", mail.MaxBody)
 	for i := range 70 {
@@ -308,24 +326,18 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 			id, _ := it.(map[string]any)["message"].(string)
 			seen[id] = true
 		}
-		next := asInt64(snap["next"])
-		if next == 0 {
+		attention, _ := snap["attention"].([]any)
+		for _, a := range attention {
+			id, _ := a.(map[string]any)["session"].(string)
+			seen["attention:"+id] = true
+		}
+		next, _ := snap["next"].(string)
+		if next == "" {
 			break
 		}
 		res, err = cli.Call(d.ctx, "inbox.watch", m["cursor"], int64(0), next)
 	}
-	if len(seen) != 70 || pages < 3 {
-		t.Fatalf("%d of 70 open requests reached the window, in %d pages; want all, in several", len(seen), pages)
+	if len(seen) != 110 || pages < 3 {
+		t.Fatalf("%d of 40 attentions and 70 open requests reached the window, in %d pages; want all 110, in several", len(seen), pages)
 	}
-}
-
-// asInt64 is a decoded msgpack integer of any width as an int64.
-func asInt64(v any) int64 {
-	switch r := reflect.ValueOf(v); {
-	case r.CanInt():
-		return r.Int()
-	case r.CanUint():
-		return int64(r.Uint())
-	}
-	return 0
 }
