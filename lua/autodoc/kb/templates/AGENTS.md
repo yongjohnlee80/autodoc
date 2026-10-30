@@ -36,6 +36,10 @@ Before reading broadly or writing, search through AutoDoc
 hits' line ranges. Extend an existing document rather than writing a near-duplicate.
 `KB_OPERATIONS.md` has the filters, the listings, history and the fallback.
 
+While search can't use meaning yet (`semantic` isn't `ready`), finding nothing doesn't mean the KB
+has nothing: rephrase, then grep (`KB_OPERATIONS.md` §8). To set up the search models,
+follow `KB_OPERATIONS.md` §9, not memory.
+
 ## 3. Frontmatter
 
 Every document starts with YAML frontmatter valid against `_schema/frontmatter.yaml`:
