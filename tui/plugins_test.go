@@ -1396,6 +1396,29 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 	}
 }
 
+// TestAClosedQueueTakesNothingMore: once the queue is closed (the plugin stopping), a push is
+// refused, a document as well as any other notification, though the queue is empty and far under
+// its bound; the sender, popping, hears it is done at once with nothing to send.
+func TestAClosedQueueTakesNothingMore(t *testing.T) {
+	q := newOutQueue()
+	q.close()
+	for _, n := range []outNote{
+		{plugin.MethodKey, plugin.KeyParams(plugin.Key{Key: "a"})},
+		{plugin.MethodCommand, plugin.CommandParams("c")},
+		{plugin.MethodDocument, plugin.DocumentParams(plugin.Document{Path: "a.md", Version: 1})},
+	} {
+		if q.push(n) {
+			t.Errorf("a closed queue took a %s", n.method)
+		}
+	}
+	if all, docs := q.waiting(); all != 0 || docs != 0 {
+		t.Fatalf("a closed queue holds %d, %d documents; want none", all, docs)
+	}
+	if n, ok := q.pop(); ok {
+		t.Fatalf("a closed, empty queue handed the sender a %s", n.method)
+	}
+}
+
 // TestPluginCommandsOnTheSpcPCard
 // (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): SPC p chooses a plugin, then
 // its card lists its commands with their letters; a letter runs its command, starting the plugin

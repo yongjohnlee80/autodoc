@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -150,5 +151,21 @@ func TestMetricsHoldNothingPrivateAndNoFalseZero(t *testing.T) {
 		if _, ok := d.samples["state=total,tenant=music"]; ok {
 			t.Errorf("music's documents shown while its state can't be read: %+v", d.samples)
 		}
+	}
+}
+
+// TestMetricsTakeGetOnly: /v1/metrics answers another method 405, with Allow GET and the
+// method_not_allowed code, even to an operator, and writes no exposition. (Its WriteMetrics failure,
+// a 500, has no cell: the exposition is written into a strings.Builder, whose writes never fail.)
+func TestMetricsTakeGetOnly(t *testing.T) {
+	srv := opsAPIWith(t, nil, nil, WithMetrics(true))
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+MetricsPath, nil)
+	req.Header.Set("Authorization", "Bearer "+opsToken)
+	r := do(t, req)
+	if r.status != http.StatusMethodNotAllowed || r.header.Get("Allow") != http.MethodGet || r.code() != "method_not_allowed" {
+		t.Fatalf("POST metrics: %d, Allow %q, code %q; want 405, GET, method_not_allowed", r.status, r.header.Get("Allow"), r.code())
+	}
+	if strings.Contains(string(r.body), "autodoc_server_info") {
+		t.Errorf("the refused method was answered the exposition: %s", r.body)
 	}
 }
