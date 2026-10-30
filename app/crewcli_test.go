@@ -410,3 +410,55 @@ func TestASnapshotMeasuresMetadataThroughRPC(t *testing.T) {
 		t.Fatalf("%d of 260 requests reached the window, in %d pages; want all, in several", len(seen), pages)
 	}
 }
+
+// TestTheLongPollCapIsPerConnectionAcrossReHellos (§4.6): a connection holds at most two long-polls.
+// A third is refused, and still is after the client says sys.hello again on the same socket, which
+// mints it a new client token: the cap counts the connection, not the token. Another connection
+// has its own.
+func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
+	d := newCrewDaemon(t)
+	dial := func() *golibrpc.Client {
+		t.Helper()
+		cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { cli.Close() })
+		if _, err := cli.Call(d.ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName}); err != nil {
+			t.Fatal(err)
+		}
+		return cli
+	}
+	busy := func(err error) bool {
+		var re *golibrpc.Error
+		return errors.As(err, &re) && re.Code == crew.CodeLongPollsBusy
+	}
+	a := dial()
+	held := make(chan error, 2)
+	for range 2 { // an empty journal: each waits out its timeout
+		go func() { _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(3000)); held <- err }()
+	}
+	var third error // until both are in, a probe is admitted and answers at once
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if _, third = a.Call(d.ctx, "inbox.watch", int64(0), int64(0)); busy(third) {
+			break
+		}
+	}
+	if !busy(third) {
+		t.Fatalf("a third long-poll on the connection: %v, want rpc.long_polls_busy", third)
+	}
+	if _, err := a.Call(d.ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Call(d.ctx, "inbox.watch", int64(0), int64(0)); !busy(err) {
+		t.Fatalf("a third long-poll after a re-hello on the same socket: %v, want rpc.long_polls_busy still", err)
+	}
+	if _, err := dial().Call(d.ctx, "inbox.watch", int64(0), int64(100)); err != nil {
+		t.Fatalf("another connection's first long-poll: %v, want admitted", err)
+	}
+	for range 2 {
+		if err := <-held; err != nil {
+			t.Fatalf("a held long-poll: %v", err)
+		}
+	}
+}
