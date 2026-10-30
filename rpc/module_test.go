@@ -187,3 +187,23 @@ func TestModuleRegistrationRefuses(t *testing.T) {
 	twice := fakeModule{name: "todos", errs: []module.PublicError{stale, {Err: errFixed, Code: -32071, Name: "todos.stale", Message: "fixed"}}}
 	New(Fixed(), "v", WithModules(twice))
 }
+
+var errFakeCredential = errors.New("fake crew: bad credential")
+
+// TestAVerbAnswersAnotherModulesError: a module's verb may answer another module's error for the
+// same condition (mail answers crew's bad credential), with that module's code; each code still
+// belongs to one module.
+func TestAVerbAnswersAnotherModulesError(t *testing.T) {
+	crew := fakeModule{name: "crew", errs: []module.PublicError{{Err: errFakeCredential, Code: -32094,
+		Name: "crew.bad_credential", Message: "no such live session"}}}
+	mail := fakeModule{name: "mail", verbs: []module.Verb{module.Handle(module.Contract{Verb: "mail.x", Since: 12,
+		Errors: []int64{-32094}}, func(context.Context, struct{}) (bool, error) {
+		return false, fmt.Errorf("mail: %w", errFakeCredential)
+	})}}
+	// mail is registered before crew: the mapping can't depend on the order modules come in
+	cli, _ := moduleServer(t, mail, crew)
+	_, err := cli.Call(context.Background(), "mail.x")
+	if code, msg := wireError(err); code != -32094 || msg != "no such live session" {
+		t.Fatalf("mail.x answering crew's error: %d %q, want -32094", code, msg)
+	}
+}
