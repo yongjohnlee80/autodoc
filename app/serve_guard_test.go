@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,13 +51,14 @@ func TestTheDiskOutsideEveryWorkspaceRefusesABoundedCall(t *testing.T) {
 	if err := d.openFiles(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.files.Read(context.Background(), p); err != nil {
+	name := strings.TrimPrefix(p, "/") // as rpc names a file on the disk (its root is "/")
+	if _, err := d.files.Read(context.Background(), name); err != nil {
 		t.Fatalf("the user's read: %v", err)
 	}
 	for _, within := range []string{fsbounds.AnyWorkspace, "kb"} {
 		ctx := fsbounds.With(context.Background(), fsbounds.Bounds{Within: within})
-		if _, err := d.files.Read(ctx, p); err == nil {
-			t.Errorf("a read bounded within %q reached the disk outside every workspace", within)
+		if _, err := d.files.Read(ctx, name); !errors.Is(err, fsbounds.ErrRefused) {
+			t.Errorf("a read bounded within %q of the disk outside every workspace: %v, want refused", within, err)
 		}
 	}
 }
