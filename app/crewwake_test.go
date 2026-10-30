@@ -241,7 +241,8 @@ func TestNoMailIsStranded(t *testing.T) {
 		stop() // the daemon restarts while everyone is idle
 		r.start(r.withWaker())
 		r.advance(2*time.Minute + time.Second) // the unanswered wake times out
-		r.advance(6 * time.Second)             // and its backoff passes
+		r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeIdle && w.Failures == 1 })
+		r.advance(6 * time.Second) // and its backoff passes
 		r.woken(gold)
 		if got := r.drain(goldCred); len(got) != 1 {
 			t.Fatalf("gold drained %v", got)
