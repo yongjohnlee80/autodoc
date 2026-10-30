@@ -120,10 +120,15 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		// NOTE: a store that refused the recovery announces nothing when it heals, so the retry is
+		// timed; ctx still ends the wait at once.
 		case <-time.After(s.retry):
 		}
 	}
 	defer s.wg.Wait()
+	// NOTE: the times no event announces (a lease's end, a message's expiry, a backoff's next
+	// attempt, the retry after a store error) are waited on with this one timer, reset each turn to
+	// the first of them; a poke or ctx ends the wait before it.
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	for {
