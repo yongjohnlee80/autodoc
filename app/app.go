@@ -33,8 +33,6 @@
 // every view, then exits:
 //
 //	autodoc --server [--check | --health] server.toml
-//
-// The Web-UI (--web-ui) follows.
 package app
 
 import (

@@ -1,5 +1,5 @@
 // Package rpc is AutoDoc's msgpack-RPC API (ADR 0203 §4.4): a projection of core, with no business
-// logic of its own. Every client speaks it: the TUI, the Web-UI, AutoVim's auto-core, the GUI.
+// logic of its own. Every client speaks it: the TUI, the GUI, AutoVim's auto-core.
 //
 // A session must say sys.hello with a protocol this build serves (MinProtocol through Protocol)
 // before any other verb answers; a hello with another refuses the session for good. The TUI is held

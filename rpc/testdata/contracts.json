@@ -573,7 +573,7 @@
         "kind": "embedding.switched",
         "detail": "name"
       },
-      "doc": "Switches the daemon's provider; the new model fills while the old one answers."
+      "doc": "Switches the daemon's provider; the new model fills, and search is by words until it has embedded every section."
     },
     {
       "verb": "file.locate",

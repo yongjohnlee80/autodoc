@@ -197,7 +197,7 @@ return {
       params = {
         { name = "name", type = "string" }
       },
-      doc = "Switches the daemon's provider; the new model fills while the old one answers.",
+      doc = "Switches the daemon's provider; the new model fills, and search is by words until it has embedded every section.",
     },
     ["file.locate"] = {
       since = 17, scope = "local-peer", audience = "agent",

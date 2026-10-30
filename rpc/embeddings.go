@@ -316,7 +316,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 			}),
 		module.Handle(module.Contract{Verb: "embedding.use", Effect: module.EffectSettings, Since: 3, Audience: user,
 			Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Event: ev("embedding.switched", "name"),
-			Doc: "Switches the daemon's provider; the new model fills while the old one answers."},
+			Doc: "Switches the daemon's provider; the new model fills, and search is by words until it has embedded every section."},
 			func(ctx context.Context, p providerName) (any, error) {
 				if err := need(); err != nil {
 					return nil, err

@@ -255,7 +255,7 @@ Verbs at protocol 34; the daemon serves sessions from protocol 12.
 | `embedding.remove` | `name` string | Deletes the provider and its model's vectors (refused below protocol 16). Logs `embedding.providers`. Codes: -32065, -32061. | 3 | for people's tools | settings |
 | `embedding.update` | `name` string, `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one while base_url stays on its server (another server needs the key again), "" removes it) | Logs `embedding.providers`. Codes: -32065, -32061, -32062, -32068. | 3 | for people's tools | settings |
 | `embedding.usage` | `name` string, `days` int | `[{day, requests, texts, tokens, failures, limited}]` — A provider's usage by day. Codes: -32065, -32061. | 3 | for people's tools | read |
-| `embedding.use` | `name` string | Switches the daemon's provider; the new model fills while the old one answers. Logs `embedding.switched`. Codes: -32065, -32061, -32068. | 3 | for people's tools | settings |
+| `embedding.use` | `name` string | Switches the daemon's provider; the new model fills, and search is by words until it has embedded every section. Logs `embedding.switched`. Codes: -32065, -32061, -32068. | 3 | for people's tools | settings |
 
 ### `file`
 
