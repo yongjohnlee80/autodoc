@@ -211,7 +211,8 @@ releases:
   https://yongjohnlee80.github.io/autodoc/reference/06-configuring-embeddings-and-rerankers.html.
   Fetch it when you can.
 - **This version's:** the same chapter at `docs/reference/06-configuring-embeddings-and-rerankers.md`
-  in AutoDoc's plugin or source checkout.
+  in AutoDoc's plugin or source checkout. With neither, `autodoc --tutorial 6` prints this version's
+  short page on the search models, and `autodoc --kb-operations` this manual.
 
 **The embedding model** (meaning, `semantic`): with Ollama running, **Search models › Embedding
 Models › Set up…** probes the machine, recommends a model, downloads it and applies it. Agents
