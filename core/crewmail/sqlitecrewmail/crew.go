@@ -298,8 +298,7 @@ func (t *Tx) PutWake(w crew.Wake) error {
 
 // the wake rows a reservation, a timeout and a deadline read (§4.7)
 var (
-	wakeHasWork = dao.Raw(`(("crew_wake"."state" = ? AND "crew_wake"."pending_gen" > "crew_wake"."announced_gen")`+
-		` OR "crew_wake"."state" = ?)`, crew.WakeIdle, crew.WakeAwaiting)
+	wakeHasWork = dao.Or(dao.And(dao.Eq(`"crew_wake"."state"`, crew.WakeIdle), wakePending), dao.Eq(`"crew_wake"."state"`, crew.WakeAwaiting))
 )
 
 func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
@@ -316,17 +315,22 @@ func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
 // errLimit is a limited read asked for no rows: dao would emit LIMIT 0 and answer nothing.
 var errLimit = errors.New("sqlitecrewmail: a limit must be > 0")
 
-// wakeLiveReachable is a wake row whose session is live and has an endpoint.
-var wakeLiveReachable = dao.Raw(`EXISTS (SELECT 1 FROM "crew_session" WHERE "crew_session"."id" = "crew_wake"."session"` +
-	` AND "crew_session"."ended" IS NULL) AND EXISTS (SELECT 1 FROM "crew_endpoint" WHERE "crew_endpoint"."session" = "crew_wake"."session")`)
+// wakePending is a wake row with pending_gen past announced_gen; wakeLiveReachable, one whose
+// session is live and has an endpoint.
+var (
+	wakePending       = store.ColumnsCompare(`"crew_wake"."pending_gen"`, ">", `"crew_wake"."announced_gen"`)
+	wakeLiveReachable = dao.And(
+		store.Correlated(false, "crew_session", "id", "crew_wake", "session", dao.IsNull(`"crew_session"."ended"`)),
+		store.Correlated(false, "crew_endpoint", "session", "crew_wake", "session"))
+)
 
 func (t *Tx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
 	if limit <= 0 {
 		return nil, errLimit
 	}
 	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).WithPredicate(wakeLiveReachable).
-		WithPredicate(dao.Raw(`"crew_wake"."pending_gen" > "crew_wake"."announced_gen"`)).
-		WithPredicate(dao.Raw(`("crew_wake"."next_at" IS NULL OR "crew_wake"."next_at" <= ?)`, now)).
+		WithPredicate(wakePending).
+		WithPredicate(dao.Or(dao.IsNull(`"crew_wake"."next_at"`), dao.Lte(`"crew_wake"."next_at"`, now))).
 		OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
 }
 
@@ -346,7 +350,7 @@ func (t *Tx) WakesInFlight() ([]crew.Wake, error) {
 // session, so the scan is the crew's size.
 func (t *Tx) NextWakeAt() (int64, bool, error) {
 	ws, err := wakes(t.t.wakes.On(t.tx).WithPredicate(wakeHasWork).
-		WithPredicate(dao.Raw(`"crew_wake"."next_at" IS NOT NULL`)).Select())
+		WithPredicate(dao.IsNotNull(`"crew_wake"."next_at"`)).Select())
 	if err != nil {
 		return 0, false, err
 	}
