@@ -142,10 +142,17 @@ func TestTheOpenCodeWakerBindsToTheSessionsProcess(t *testing.T) {
 	if err := w.Wake(context.Background(), opencodeEndpoint(t, sock, os.Getpid(), self), crew.WakeNotice); crew.Classify(err) != crew.OutcomeFailed {
 		t.Errorf("a socket outside the plugin's folders: %v, want a failure", err)
 	}
-	select {
-	case line := <-got:
-		t.Errorf("a refused wake wrote %q", line)
-	case <-time.After(200 * time.Millisecond):
+	// each refused wake connected (the binding is read from the connection) and wrote nothing: the
+	// stand-in hands on what each connection wrote, "" for none
+	for {
+		select {
+		case line := <-got:
+			if line != "" {
+				t.Errorf("a refused wake wrote %q", line)
+			}
+		case <-time.After(200 * time.Millisecond):
+			return
+		}
 	}
 }
 
