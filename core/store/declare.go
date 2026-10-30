@@ -1,6 +1,8 @@
 package store
 
 import (
+	"strings"
+
 	"fmt"
 	"sync"
 
@@ -106,3 +108,49 @@ func NoMatchIn(table, col, from, key, eqCol string, eqVal any) dao.Predicate {
 // NoText is the empty string as a column expression: what a COALESCE over a join that found no
 // row falls back to.
 var NoText = dao.SQL("''")
+
+// Correlated is EXISTS (with not, NOT EXISTS) a row of table whose col equals from's key and whose
+// conds hold, for tables that belong to no workspace (the crew, mail and inbox tables, which
+// key on their own ids): a correlated subquery that probes table by col for each row of from read.
+// conds are dao predicates, rendered inside the subquery with the outer statement's placeholders.
+func Correlated(not bool, table, col, from, key string, conds ...dao.Predicate) dao.Predicate {
+	return &correlated{not: not, table: table, col: col, from: from, key: key, conds: conds}
+}
+
+type correlated struct {
+	not                   bool
+	table, col, from, key string
+	conds                 []dao.Predicate
+}
+
+func (c *correlated) ToSQL(d dao.Dialect, next *int) (string, []any) {
+	q := func(t, col string) string { return `"` + t + `"."` + col + `"` }
+	var b strings.Builder
+	if c.not {
+		b.WriteString("NOT ")
+	}
+	b.WriteString(`EXISTS (SELECT 1 FROM "` + c.table + `" WHERE ` + q(c.table, c.col) + ` = ` + q(c.from, c.key))
+	var args []any
+	for _, p := range c.conds {
+		s, a := p.ToSQL(d, next)
+		b.WriteString(" AND (" + s + ")")
+		args = append(args, a...)
+	}
+	b.WriteString(")")
+	return b.String(), args
+}
+
+// ColumnsCompare is "a op b" between two columns of the statement, op one of = <> < <= > >=: a
+// comparison dao's value predicates can't express. Anything else panics, at the declaration.
+func ColumnsCompare(a, op, b string) dao.Predicate {
+	switch op {
+	case "=", "<>", "<", "<=", ">", ">=":
+	default:
+		panic("store.ColumnsCompare: operator " + op)
+	}
+	return columnsCompare{a + " " + op + " " + b}
+}
+
+type columnsCompare struct{ sql string }
+
+func (c columnsCompare) ToSQL(dao.Dialect, *int) (string, []any) { return c.sql, nil }

@@ -106,13 +106,15 @@ var unhandled = dao.In(`"mail_delivery"."state"`, []any{mail.Queued, mail.Leased
 
 // unexpired is a delivery whose message has not expired by now; expiredBy, one whose has.
 func unexpired(now int64) dao.Predicate {
-	return dao.Raw(`NOT EXISTS (SELECT 1 FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message"`+
-		` AND "mail_message"."expires" IS NOT NULL AND "mail_message"."expires" <= ?)`, now)
+	return store.Correlated(true, "mail_message", "id", "mail_delivery", "message", messageExpiredBy(now)...)
 }
 
 func expiredBy(now int64) dao.Predicate {
-	return dao.Raw(`EXISTS (SELECT 1 FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message"`+
-		` AND "mail_message"."expires" IS NOT NULL AND "mail_message"."expires" <= ?)`, now)
+	return store.Correlated(false, "mail_message", "id", "mail_delivery", "message", messageExpiredBy(now)...)
+}
+
+func messageExpiredBy(now int64) []dao.Predicate {
+	return []dao.Predicate{dao.IsNotNull(`"mail_message"."expires"`), dao.Lte(`"mail_message"."expires"`, now)}
 }
 
 func (t *Tx) Message(id string) (mail.Message, bool, error) {
