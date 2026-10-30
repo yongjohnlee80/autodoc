@@ -1458,7 +1458,151 @@
       }
     },
     "Result": {
-      "Hits": [],
+      "Hits": [
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes \u003e Durability",
+          "Snippet": "The write-ahead log makes every commit durable before the writer reports it.",
+          "Generation": 1,
+          "ByteStart": 178,
+          "ByteEnd": 254,
+          "Score": 0.01752974947632778,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes",
+          "Snippet": "…file. The [architecture](architecture.md) explains why.\n\u0002Storage\u0003 is written by one writer and read by…",
+          "Generation": 1,
+          "ByteStart": 17,
+          "ByteEnd": 161,
+          "Score": 0.0172470115815483,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview \u003e Storage",
+          "Snippet": "| table    | holds                      |\n|----------|----------------------------|\n| document | one row per file           |\n| chunk    | one row per section        |\n| model    | one row per…",
+          "Generation": 1,
+          "ByteStart": 269,
+          "ByteEnd": 479,
+          "Score": 0.016973249492952293,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/broken-frontmatter.md",
+          "Breadcrumb": "Broken",
+          "Snippet": "The body still indexes: pelican \u0002storage\u0003.",
+          "Generation": 1,
+          "ByteStart": 44,
+          "ByteEnd": 84,
+          "Score": 0.015625,
+          "Relevance": 0.953125,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/broken.yaml",
+          "Breadcrumb": "broken",
+          "Snippet": "database:\n  host: [unclosed\n\tport: tabs are not yaml\nflamingo \u0002storage\u0003",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 70,
+          "Score": 0.015384615384615385,
+          "Relevance": 0.9384615384615385,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/settings.yaml",
+          "Breadcrumb": "settings \u003e owners",
+          "Snippet": "owners \u003e [0] \u003e name: \u0002storage\u0003 team\nowners \u003e [0] \u003e pager: true",
+          "Generation": 1,
+          "ByteStart": 143,
+          "ByteEnd": 189,
+          "Score": 0.015151515151515152,
+          "Relevance": 0.9242424242424243,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview",
+          "Snippet": "…See [[\u0002storage\u0003-notes]] and the\n[reference][r] for the wire format. #inline-tag",
+          "Generation": 1,
+          "ByteStart": 118,
+          "ByteEnd": 255,
+          "Score": 0.015060770676844994,
+          "Relevance": 0.9187070112875446,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/draft.md",
+          "Breadcrumb": "Draft ideas",
+          "Snippet": "A draft about \u0002storage\u0003 compaction and vacuum scheduling.",
+          "Generation": 1,
+          "ByteStart": 63,
+          "ByteEnd": 118,
+          "Score": 0.014925373134328358,
+          "Relevance": 0.9104477611940298,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/plain.txt",
+          "Breadcrumb": "plain",
+          "Snippet": "Plain text notes about the heron and the egret.\n\nA second paragraph mentions \u0002storage\u0003 once.",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 91,
+          "Score": 0.014705882352941176,
+          "Relevance": 0.8970588235294118,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/schema-bad.md",
+          "Breadcrumb": "Off-schema",
+          "Snippet": "This note breaks the schema in three fields but still indexes its \u0002storage\u0003 words.",
+          "Generation": 1,
+          "ByteStart": 62,
+          "ByteEnd": 142,
+          "Score": 0.014492753623188406,
+          "Relevance": 0.8840579710144928,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "big/table.md",
+          "Breadcrumb": "Big table",
+          "Snippet": "…row69 | a table row describing item 69 with several plain words |\n\nAfter the table, \u0002storage\u0003 again.",
+          "Generation": 1,
+          "ByteStart": 5076,
+          "ByteEnd": 5181,
+          "Score": 0.014285714285714285,
+          "Relevance": 0.8714285714285714,
+          "Via": [
+            "lexical"
+          ]
+        }
+      ],
       "ModeUsed": "lexical",
       "Semantic": "ready",
       "SemanticError": ""
@@ -2519,6 +2663,45 @@
     "Result": {
       "Hits": [
         {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes \u003e Durability",
+          "Snippet": "The write-ahead log makes every commit durable before the writer reports it.",
+          "Generation": 1,
+          "ByteStart": 178,
+          "ByteEnd": 254,
+          "Score": 0.01752974947632778,
+          "Relevance": 0.5346573590279973,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes",
+          "Snippet": "…file. The [architecture](architecture.md) explains why.\n\u0002Storage\u0003 is written by one writer and read by…",
+          "Generation": 1,
+          "ByteStart": 17,
+          "ByteEnd": 161,
+          "Score": 0.0172470115815483,
+          "Relevance": 0.5260338532372231,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview \u003e Storage",
+          "Snippet": "| table    | holds                      |\n|----------|----------------------------|\n| document | one row per file           |\n| chunk    | one row per section        |\n| model    | one row per…",
+          "Generation": 1,
+          "ByteStart": 269,
+          "ByteEnd": 479,
+          "Score": 0.016973249492952293,
+          "Relevance": 0.517684109535045,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
           "Path": "big/code.md",
           "Breadcrumb": "Big code",
           "Snippet": "```go\n\tvalue44 := compute(44, \"argument number 44\")\n\tvalue45 := compute(45, \"argument number 45\")\n\tvalue46 := compute(46, \"argument number 46\")\n\tvalue47 := compute(47, \"argument number 47\")\n\tvalue48 :…",
@@ -2571,6 +2754,32 @@
           ]
         },
         {
+          "Path": "notes/broken-frontmatter.md",
+          "Breadcrumb": "Broken",
+          "Snippet": "The body still indexes: pelican \u0002storage\u0003.",
+          "Generation": 1,
+          "ByteStart": 44,
+          "ByteEnd": 84,
+          "Score": 0.015625,
+          "Relevance": 0.4765625,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/broken.yaml",
+          "Breadcrumb": "broken",
+          "Snippet": "database:\n  host: [unclosed\n\tport: tabs are not yaml\nflamingo \u0002storage\u0003",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 70,
+          "Score": 0.015384615384615385,
+          "Relevance": 0.46923076923076923,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
           "Path": "noise/n000.md",
           "Breadcrumb": "n000",
           "Snippet": "zebra giraffe",
@@ -2581,6 +2790,19 @@
           "Relevance": 0.46923076923076923,
           "Via": [
             "semantic"
+          ]
+        },
+        {
+          "Path": "config/settings.yaml",
+          "Breadcrumb": "settings \u003e owners",
+          "Snippet": "owners \u003e [0] \u003e name: \u0002storage\u0003 team\nowners \u003e [0] \u003e pager: true",
+          "Generation": 1,
+          "ByteStart": 143,
+          "ByteEnd": 189,
+          "Score": 0.015151515151515152,
+          "Relevance": 0.46212121212121215,
+          "Via": [
+            "lexical"
           ]
         },
         {
@@ -2597,6 +2819,19 @@
           ]
         },
         {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview",
+          "Snippet": "…See [[\u0002storage\u0003-notes]] and the\n[reference][r] for the wire format. #inline-tag",
+          "Generation": 1,
+          "ByteStart": 118,
+          "ByteEnd": 255,
+          "Score": 0.015060770676844994,
+          "Relevance": 0.4593535056437723,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
           "Path": "noise/n002.md",
           "Breadcrumb": "n002",
           "Snippet": "zebra giraffe",
@@ -2607,6 +2842,19 @@
           "Relevance": 0.4552238805970149,
           "Via": [
             "semantic"
+          ]
+        },
+        {
+          "Path": "notes/draft.md",
+          "Breadcrumb": "Draft ideas",
+          "Snippet": "A draft about \u0002storage\u0003 compaction and vacuum scheduling.",
+          "Generation": 1,
+          "ByteStart": 63,
+          "ByteEnd": 118,
+          "Score": 0.014925373134328358,
+          "Relevance": 0.4552238805970149,
+          "Via": [
+            "lexical"
           ]
         },
         {
@@ -2623,6 +2871,19 @@
           ]
         },
         {
+          "Path": "notes/plain.txt",
+          "Breadcrumb": "plain",
+          "Snippet": "Plain text notes about the heron and the egret.\n\nA second paragraph mentions \u0002storage\u0003 once.",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 91,
+          "Score": 0.014705882352941176,
+          "Relevance": 0.4485294117647059,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
           "Path": "noise/n004.md",
           "Breadcrumb": "n004",
           "Snippet": "zebra giraffe",
@@ -2636,146 +2897,29 @@
           ]
         },
         {
-          "Path": "noise/n005.md",
-          "Breadcrumb": "n005",
-          "Snippet": "zebra giraffe",
+          "Path": "notes/schema-bad.md",
+          "Breadcrumb": "Off-schema",
+          "Snippet": "This note breaks the schema in three fields but still indexes its \u0002storage\u0003 words.",
           "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
+          "ByteStart": 62,
+          "ByteEnd": 142,
+          "Score": 0.014492753623188406,
+          "Relevance": 0.4420289855072464,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "big/table.md",
+          "Breadcrumb": "Big table",
+          "Snippet": "…row69 | a table row describing item 69 with several plain words |\n\nAfter the table, \u0002storage\u0003 again.",
+          "Generation": 1,
+          "ByteStart": 5076,
+          "ByteEnd": 5181,
           "Score": 0.014285714285714285,
           "Relevance": 0.4357142857142857,
           "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n006.md",
-          "Breadcrumb": "n006",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.014084507042253521,
-          "Relevance": 0.4295774647887324,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n007.md",
-          "Breadcrumb": "n007",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.013888888888888888,
-          "Relevance": 0.4236111111111111,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n008.md",
-          "Breadcrumb": "n008",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.0136986301369863,
-          "Relevance": 0.4178082191780822,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n009.md",
-          "Breadcrumb": "n009",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.013513513513513514,
-          "Relevance": 0.41216216216216217,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n010.md",
-          "Breadcrumb": "n010",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.013333333333333334,
-          "Relevance": 0.4066666666666667,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n011.md",
-          "Breadcrumb": "n011",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.013157894736842105,
-          "Relevance": 0.4013157894736842,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n012.md",
-          "Breadcrumb": "n012",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.012987012987012988,
-          "Relevance": 0.3961038961038961,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n013.md",
-          "Breadcrumb": "n013",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.01282051282051282,
-          "Relevance": 0.391025641025641,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n014.md",
-          "Breadcrumb": "n014",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.012658227848101266,
-          "Relevance": 0.3860759493670886,
-          "Via": [
-            "semantic"
-          ]
-        },
-        {
-          "Path": "noise/n015.md",
-          "Breadcrumb": "n015",
-          "Snippet": "zebra giraffe",
-          "Generation": 1,
-          "ByteStart": 0,
-          "ByteEnd": 13,
-          "Score": 0.0125,
-          "Relevance": 0.38125000000000003,
-          "Via": [
-            "semantic"
+            "lexical"
           ]
         }
       ],
@@ -7762,7 +7906,151 @@
       "Store": true
     },
     "Result": {
-      "Hits": [],
+      "Hits": [
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes \u003e Durability",
+          "Snippet": "The write-ahead log makes every commit durable before the writer reports it.",
+          "Generation": 1,
+          "ByteStart": 178,
+          "ByteEnd": 254,
+          "Score": 0.01752974947632778,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes",
+          "Snippet": "…file. The [architecture](architecture.md) explains why.\n\u0002Storage\u0003 is written by one writer and read by…",
+          "Generation": 1,
+          "ByteStart": 17,
+          "ByteEnd": 161,
+          "Score": 0.0172470115815483,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview \u003e Storage",
+          "Snippet": "| table    | holds                      |\n|----------|----------------------------|\n| document | one row per file           |\n| chunk    | one row per section        |\n| model    | one row per…",
+          "Generation": 1,
+          "ByteStart": 269,
+          "ByteEnd": 479,
+          "Score": 0.016973249492952293,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/broken-frontmatter.md",
+          "Breadcrumb": "Broken",
+          "Snippet": "The body still indexes: pelican \u0002storage\u0003.",
+          "Generation": 1,
+          "ByteStart": 44,
+          "ByteEnd": 84,
+          "Score": 0.015625,
+          "Relevance": 0.953125,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/broken.yaml",
+          "Breadcrumb": "broken",
+          "Snippet": "database:\n  host: [unclosed\n\tport: tabs are not yaml\nflamingo \u0002storage\u0003",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 70,
+          "Score": 0.015384615384615385,
+          "Relevance": 0.9384615384615385,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/settings.yaml",
+          "Breadcrumb": "settings \u003e owners",
+          "Snippet": "owners \u003e [0] \u003e name: \u0002storage\u0003 team\nowners \u003e [0] \u003e pager: true",
+          "Generation": 1,
+          "ByteStart": 143,
+          "ByteEnd": 189,
+          "Score": 0.015151515151515152,
+          "Relevance": 0.9242424242424243,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview",
+          "Snippet": "…See [[\u0002storage\u0003-notes]] and the\n[reference][r] for the wire format. #inline-tag",
+          "Generation": 1,
+          "ByteStart": 118,
+          "ByteEnd": 255,
+          "Score": 0.015060770676844994,
+          "Relevance": 0.9187070112875446,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/draft.md",
+          "Breadcrumb": "Draft ideas",
+          "Snippet": "A draft about \u0002storage\u0003 compaction and vacuum scheduling.",
+          "Generation": 1,
+          "ByteStart": 63,
+          "ByteEnd": 118,
+          "Score": 0.014925373134328358,
+          "Relevance": 0.9104477611940298,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/plain.txt",
+          "Breadcrumb": "plain",
+          "Snippet": "Plain text notes about the heron and the egret.\n\nA second paragraph mentions \u0002storage\u0003 once.",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 91,
+          "Score": 0.014705882352941176,
+          "Relevance": 0.8970588235294118,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/schema-bad.md",
+          "Breadcrumb": "Off-schema",
+          "Snippet": "This note breaks the schema in three fields but still indexes its \u0002storage\u0003 words.",
+          "Generation": 1,
+          "ByteStart": 62,
+          "ByteEnd": 142,
+          "Score": 0.014492753623188406,
+          "Relevance": 0.8840579710144928,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "big/table.md",
+          "Breadcrumb": "Big table",
+          "Snippet": "…row69 | a table row describing item 69 with several plain words |\n\nAfter the table, \u0002storage\u0003 again.",
+          "Generation": 1,
+          "ByteStart": 5076,
+          "ByteEnd": 5181,
+          "Score": 0.014285714285714285,
+          "Relevance": 0.8714285714285714,
+          "Via": [
+            "lexical"
+          ]
+        }
+      ],
       "ModeUsed": "lexical",
       "Semantic": "off",
       "SemanticError": ""
@@ -7800,7 +8088,151 @@
       }
     },
     "Result": {
-      "Hits": [],
+      "Hits": [
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes \u003e Durability",
+          "Snippet": "The write-ahead log makes every commit durable before the writer reports it.",
+          "Generation": 1,
+          "ByteStart": 178,
+          "ByteEnd": 254,
+          "Score": 0.01752974947632778,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes",
+          "Snippet": "…file. The [architecture](architecture.md) explains why.\n\u0002Storage\u0003 is written by one writer and read by…",
+          "Generation": 1,
+          "ByteStart": 17,
+          "ByteEnd": 161,
+          "Score": 0.0172470115815483,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview \u003e Storage",
+          "Snippet": "| table    | holds                      |\n|----------|----------------------------|\n| document | one row per file           |\n| chunk    | one row per section        |\n| model    | one row per…",
+          "Generation": 1,
+          "ByteStart": 269,
+          "ByteEnd": 479,
+          "Score": 0.016973249492952293,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/broken-frontmatter.md",
+          "Breadcrumb": "Broken",
+          "Snippet": "The body still indexes: pelican \u0002storage\u0003.",
+          "Generation": 1,
+          "ByteStart": 44,
+          "ByteEnd": 84,
+          "Score": 0.015625,
+          "Relevance": 0.953125,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/broken.yaml",
+          "Breadcrumb": "broken",
+          "Snippet": "database:\n  host: [unclosed\n\tport: tabs are not yaml\nflamingo \u0002storage\u0003",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 70,
+          "Score": 0.015384615384615385,
+          "Relevance": 0.9384615384615385,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/settings.yaml",
+          "Breadcrumb": "settings \u003e owners",
+          "Snippet": "owners \u003e [0] \u003e name: \u0002storage\u0003 team\nowners \u003e [0] \u003e pager: true",
+          "Generation": 1,
+          "ByteStart": 143,
+          "ByteEnd": 189,
+          "Score": 0.015151515151515152,
+          "Relevance": 0.9242424242424243,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview",
+          "Snippet": "…See [[\u0002storage\u0003-notes]] and the\n[reference][r] for the wire format. #inline-tag",
+          "Generation": 1,
+          "ByteStart": 118,
+          "ByteEnd": 255,
+          "Score": 0.015060770676844994,
+          "Relevance": 0.9187070112875446,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/draft.md",
+          "Breadcrumb": "Draft ideas",
+          "Snippet": "A draft about \u0002storage\u0003 compaction and vacuum scheduling.",
+          "Generation": 1,
+          "ByteStart": 63,
+          "ByteEnd": 118,
+          "Score": 0.014925373134328358,
+          "Relevance": 0.9104477611940298,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/plain.txt",
+          "Breadcrumb": "plain",
+          "Snippet": "Plain text notes about the heron and the egret.\n\nA second paragraph mentions \u0002storage\u0003 once.",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 91,
+          "Score": 0.014705882352941176,
+          "Relevance": 0.8970588235294118,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/schema-bad.md",
+          "Breadcrumb": "Off-schema",
+          "Snippet": "This note breaks the schema in three fields but still indexes its \u0002storage\u0003 words.",
+          "Generation": 1,
+          "ByteStart": 62,
+          "ByteEnd": 142,
+          "Score": 0.014492753623188406,
+          "Relevance": 0.8840579710144928,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "big/table.md",
+          "Breadcrumb": "Big table",
+          "Snippet": "…row69 | a table row describing item 69 with several plain words |\n\nAfter the table, \u0002storage\u0003 again.",
+          "Generation": 1,
+          "ByteStart": 5076,
+          "ByteEnd": 5181,
+          "Score": 0.014285714285714285,
+          "Relevance": 0.8714285714285714,
+          "Via": [
+            "lexical"
+          ]
+        }
+      ],
       "ModeUsed": "lexical",
       "Semantic": "error",
       "SemanticError": "index: the query could not be embedded"
@@ -7833,7 +8265,151 @@
       }
     },
     "Result": {
-      "Hits": [],
+      "Hits": [
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes \u003e Durability",
+          "Snippet": "The write-ahead log makes every commit durable before the writer reports it.",
+          "Generation": 1,
+          "ByteStart": 178,
+          "ByteEnd": 254,
+          "Score": 0.01752974947632778,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/storage-notes.md",
+          "Breadcrumb": "Storage Notes",
+          "Snippet": "…file. The [architecture](architecture.md) explains why.\n\u0002Storage\u0003 is written by one writer and read by…",
+          "Generation": 1,
+          "ByteStart": 17,
+          "ByteEnd": 161,
+          "Score": 0.0172470115815483,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview \u003e Storage",
+          "Snippet": "| table    | holds                      |\n|----------|----------------------------|\n| document | one row per file           |\n| chunk    | one row per section        |\n| model    | one row per…",
+          "Generation": 1,
+          "ByteStart": 269,
+          "ByteEnd": 479,
+          "Score": 0.016973249492952293,
+          "Relevance": 1,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/broken-frontmatter.md",
+          "Breadcrumb": "Broken",
+          "Snippet": "The body still indexes: pelican \u0002storage\u0003.",
+          "Generation": 1,
+          "ByteStart": 44,
+          "ByteEnd": 84,
+          "Score": 0.015625,
+          "Relevance": 0.953125,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/broken.yaml",
+          "Breadcrumb": "broken",
+          "Snippet": "database:\n  host: [unclosed\n\tport: tabs are not yaml\nflamingo \u0002storage\u0003",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 70,
+          "Score": 0.015384615384615385,
+          "Relevance": 0.9384615384615385,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "config/settings.yaml",
+          "Breadcrumb": "settings \u003e owners",
+          "Snippet": "owners \u003e [0] \u003e name: \u0002storage\u0003 team\nowners \u003e [0] \u003e pager: true",
+          "Generation": 1,
+          "ByteStart": 143,
+          "ByteEnd": 189,
+          "Score": 0.015151515151515152,
+          "Relevance": 0.9242424242424243,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "guides/architecture.md",
+          "Breadcrumb": "Architecture Guide \u003e Overview",
+          "Snippet": "…See [[\u0002storage\u0003-notes]] and the\n[reference][r] for the wire format. #inline-tag",
+          "Generation": 1,
+          "ByteStart": 118,
+          "ByteEnd": 255,
+          "Score": 0.015060770676844994,
+          "Relevance": 0.9187070112875446,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/draft.md",
+          "Breadcrumb": "Draft ideas",
+          "Snippet": "A draft about \u0002storage\u0003 compaction and vacuum scheduling.",
+          "Generation": 1,
+          "ByteStart": 63,
+          "ByteEnd": 118,
+          "Score": 0.014925373134328358,
+          "Relevance": 0.9104477611940298,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/plain.txt",
+          "Breadcrumb": "plain",
+          "Snippet": "Plain text notes about the heron and the egret.\n\nA second paragraph mentions \u0002storage\u0003 once.",
+          "Generation": 1,
+          "ByteStart": 0,
+          "ByteEnd": 91,
+          "Score": 0.014705882352941176,
+          "Relevance": 0.8970588235294118,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "notes/schema-bad.md",
+          "Breadcrumb": "Off-schema",
+          "Snippet": "This note breaks the schema in three fields but still indexes its \u0002storage\u0003 words.",
+          "Generation": 1,
+          "ByteStart": 62,
+          "ByteEnd": 142,
+          "Score": 0.014492753623188406,
+          "Relevance": 0.8840579710144928,
+          "Via": [
+            "lexical"
+          ]
+        },
+        {
+          "Path": "big/table.md",
+          "Breadcrumb": "Big table",
+          "Snippet": "…row69 | a table row describing item 69 with several plain words |\n\nAfter the table, \u0002storage\u0003 again.",
+          "Generation": 1,
+          "ByteStart": 5076,
+          "ByteEnd": 5181,
+          "Score": 0.014285714285714285,
+          "Relevance": 0.8714285714285714,
+          "Via": [
+            "lexical"
+          ]
+        }
+      ],
       "ModeUsed": "lexical",
       "Semantic": "ready",
       "SemanticError": ""
