@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,12 +17,10 @@ import (
 // The crew module is the mail module's Crew.
 var _ mail.Crew = (*crew.Manager)(nil)
 
-// guard is the crew port as the mail module sees it: a credential naming a live session passes; every raised wake is
-// counted by profile.
-type guard struct {
-	mu     sync.Mutex
-	raised map[string]int
-}
+// guard is the crew port as the mail module sees it: a credential naming a live session passes
+// (the rig's credentials are its session ids), and a wake is crew's own, in the transaction, so a
+// write that rolls back raises none.
+type guard struct{ crew *crew.Manager }
 
 func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
 	id, _, _ := strings.Cut(credential, ".") // the rig's credentials are the session ids
@@ -37,14 +34,9 @@ func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error
 	return s, nil
 }
 
-func (g *guard) RaisePending(_ crew.Tx, profile string) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.raised[profile]++
-	return nil
+func (g *guard) RaisePending(tx crew.Tx, profile string) error {
+	return g.crew.RaisePending(tx, profile)
 }
-
-func (g *guard) woken(profile string) int { g.mu.Lock(); defer g.mu.Unlock(); return g.raised[profile] }
 
 type rig struct {
 	t     *testing.T
@@ -59,7 +51,7 @@ type rig struct {
 // newRig has the scope autovim:p with profiles jarvis (session s-jarvis) and gold (s-gold), and the
 // human (global/user).
 func newRig(t *testing.T) *rig {
-	r := &rig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), g: &guard{raised: map[string]int{}}}
+	r := &rig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), g: &guard{crew: crew.New(nil)}}
 	r.mem = mailtest.NewMem(r.clock.Now)
 	r.m = mail.New(r.mem, r.g, mail.WithIDs(func() string { r.n++; return fmt.Sprintf("id%03d", r.n) }))
 	r.profile("p-jarvis", "autovim:p", "jarvis", "s-jarvis")
@@ -107,6 +99,25 @@ func (r *rig) receive(session string) mail.Received {
 	return out
 }
 
+// woken is the pending generation of profile's live session's wake: how many times a committed
+// write made mail eligible for it.
+func (r *rig) woken(profile string) int {
+	r.t.Helper()
+	var n int64
+	if err := r.mem.Read(r.ctx, func(tx mail.Tx) error {
+		s, ok, err := tx.LiveSession(profile)
+		if err != nil || !ok {
+			return err
+		}
+		w, _, err := tx.Wake(s.ID)
+		n = w.PendingGen
+		return err
+	}); err != nil {
+		r.t.Fatal(err)
+	}
+	return int(n)
+}
+
 func (r *rig) delivery(id string) mail.Delivery {
 	r.t.Helper()
 	for _, d := range r.mem.Deliveries() {
@@ -142,8 +153,8 @@ func TestASendIsReceivedLeasedAndAcked(t *testing.T) {
 	if len(sent.Deliveries) != 1 || sent.Deliveries[0].Recipient != "p-gold" || sent.Deliveries[0].Seq != 1 || sent.Message.Sender != "p-jarvis" {
 		t.Fatalf("the send: %+v", sent)
 	}
-	if r.g.woken("p-gold") != 1 {
-		t.Fatalf("gold woken %d times, want 1", r.g.woken("p-gold"))
+	if r.woken("p-gold") != 1 {
+		t.Fatalf("gold woken %d times, want 1", r.woken("p-gold"))
 	}
 	got := r.receive("s-gold")
 	if len(got.Items) != 1 || got.More || got.Items[0].Message.Body != "b" || got.Items[0].Delivery.State != mail.Leased {
@@ -244,8 +255,8 @@ func TestALapsedLeaseIsRedeliveredThenFails(t *testing.T) {
 		t.Fatalf("after %d lapses: %+v", mail.MaxAttempts, d)
 	}
 	// the send's wake, then one per redelivery; the last lapse fails it instead
-	if r.g.woken("p-gold") != mail.MaxAttempts {
-		t.Fatalf("gold woken %d times, want %d", r.g.woken("p-gold"), mail.MaxAttempts)
+	if r.woken("p-gold") != mail.MaxAttempts {
+		t.Fatalf("gold woken %d times, want %d", r.woken("p-gold"), mail.MaxAttempts)
 	}
 	if ev := r.events("p-jarvis"); len(ev) != 1 || ev[0] != mail.WhyAttempts+":"+sent.Message.ID {
 		t.Fatalf("the sender's events: %v", ev)
@@ -378,7 +389,12 @@ func TestMergedProfilesForwardToTheirSurvivor(t *testing.T) {
 		return tx.PutSession(crew.Session{ID: "s-short", Profile: "p-short", Host: "autovim:old"})
 	})
 	q2 := r.send("s-short", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k2"})
-	gd2 := r.receive("s-gold").Items[0].Delivery
+	var gd2 mail.Delivery // the first reply's recipient_gone notice is gold's mail too
+	for _, it := range r.receive("s-gold").Items {
+		if it.Message.ID == q2.Message.ID {
+			gd2 = it.Delivery
+		}
+	}
 	resp2, err := r.m.Reply(r.ctx, "s-gold", gd2.ID, gd2.Lease, mail.Reply{Body: "a", Key: "r2"})
 	if err != nil {
 		t.Fatal(err)
@@ -455,7 +471,7 @@ func TestAdoptionNormalizesOrMergesEveryUnhandledDelivery(t *testing.T) {
 		return tx.PutDelivery(failedCopy)
 	})
 	r.receive("s-old") // a lease on the old profile's mail: adoption clears it
-	before := r.g.woken("p-gold")
+	before := r.woken("p-gold")
 	r.write(func(tx mail.Tx) error { return r.m.MergeDeliveries(tx, "p-old", "p-gold") })
 
 	of := func(s mail.Sent, recipient string) mail.Delivery {
@@ -479,7 +495,7 @@ func TestAdoptionNormalizesOrMergesEveryUnhandledDelivery(t *testing.T) {
 	if d := of(bound, "p-old"); d.State != mail.Failed || d.Why != mail.WhySessionEnded {
 		t.Fatalf("the bound delivery: %+v", d)
 	}
-	if r.g.woken("p-gold") != before+1 {
+	if r.woken("p-gold") != before+1 {
 		t.Fatal("into was not woken")
 	}
 	seqs := map[int64]bool{}
