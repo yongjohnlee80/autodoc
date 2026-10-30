@@ -43,7 +43,7 @@ type crewCore interface {
 	// DaemonAddress and StoreID are the daemon a session context names: its socket and its store
 	DaemonAddress() string
 	StoreID() string
-	Ask(q Question) Asked
+	AskWhenFree(q Question)
 }
 
 // crewHost holds the window's scope. Its fields are the loop's: work off it answers through Go.

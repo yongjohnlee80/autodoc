@@ -55,6 +55,12 @@ type asker struct {
 	// onIdle hears that the card is free again, once an answer left no question open: a queue of
 	// questions waiting their turn (the Lua grants, luagate.go) asks its next one then
 	onIdle func()
+	// waiting is the questions asked to wait for a free card (askWhenFree), oldest first. polite is
+	// whether the open question is one of them, current: another question displaces it back to the
+	// head of waiting, its callbacks not run, rather than cancelling it.
+	waiting []Question
+	polite  bool
+	current Question
 }
 
 func newAsker(c Core) *asker { return &asker{c: c} }
@@ -76,8 +82,41 @@ func (a *asker) Commands() map[string]Command {
 }
 
 // ask shows q, replacing any question still open.
-func (a *asker) ask(q Question) Asked {
+func (a *asker) ask(q Question) Asked { return a.show(q, false) }
+
+// askWhenFree asks q once the card is free: at once when no question is open, else after the open
+// one and those waiting before it are answered. It never displaces a question; one that displaces
+// it puts it back at the head of the wait, and it is asked again when the card is next free. A
+// stopping host cancels it (OnCancel), asked or waiting.
+func (a *asker) askWhenFree(q Question) {
+	if a.stopped {
+		if q.OnCancel != nil {
+			q.OnCancel()
+		}
+		return
+	}
+	a.waiting = append(a.waiting, q)
+	a.drain()
+}
+
+// drain asks the first waiting question while the card is free.
+func (a *asker) drain() {
+	if a.pending || a.stopped || len(a.waiting) == 0 {
+		return
+	}
+	q := a.waiting[0]
+	a.waiting = a.waiting[1:]
+	a.show(q, true)
+}
+
+// show shows q, polite when it waited for the card (askWhenFree), replacing any question still
+// open: a polite one goes back to wait, the rest are cancelled.
+func (a *asker) show(q Question, polite bool) Asked {
 	previous := a.cancel
+	if a.pending && a.polite {
+		a.waiting = append([]Question{a.current}, a.waiting...) // displaced, not answered: it waits again
+		previous = nil
+	}
 	a.answered() // retire the old question before its callback may re-enter Ask
 	tk := a.c.Ticket(&a.seq, TicketLocal)
 	if previous != nil {
@@ -91,6 +130,7 @@ func (a *asker) ask(q Question) Asked {
 	}
 	a.yes, a.other = q.OnYes, q.OnOther
 	a.cancel, a.pending = q.OnCancel, true
+	a.polite, a.current = polite, q
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
 	a.c.Set("App.askYes", cmp.Or(q.Yes, a.c.Tr("autodoc.question.yes")))
@@ -134,8 +174,10 @@ func (a *asker) otherChosen() {
 	a.idle()
 }
 
-// idle tells onIdle the card is free, when the answer's callback asked nothing new.
+// idle asks the next waiting question, when the answer's callback asked nothing new, and else
+// tells onIdle the card is free.
 func (a *asker) idle() {
+	a.drain()
 	if !a.pending && !a.stopped && a.onIdle != nil {
 		a.onIdle()
 	}
@@ -174,6 +216,13 @@ func (a *asker) cancelCurrent() {
 func (a *asker) Stopping() {
 	a.stopped = true
 	a.cancelCurrent()
+	waiting := a.waiting
+	a.waiting = nil
+	for _, q := range waiting {
+		if q.OnCancel != nil {
+			q.OnCancel()
+		}
+	}
 }
 func (a *asker) Stopped() { a.Stopping() }
 
@@ -182,4 +231,5 @@ func (a *asker) answered() {
 	a.seq++
 	a.yes, a.other = nil, nil
 	a.cancel, a.pending = nil, false
+	a.polite, a.current = false, Question{}
 }

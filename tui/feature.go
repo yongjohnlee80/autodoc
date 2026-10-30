@@ -523,6 +523,7 @@ func (c core) Trf(id string, args ...any) string {
 func (c core) WidgetsChanged()               { c.h.refreshDock() }
 func (c core) HidePanel(id string)           { c.h.hidePanel(id); c.h.focusEditor() }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
+func (c core) AskWhenFree(q Question)        { c.h.asker.askWhenFree(q) }
 func (c core) Workspace() string             { return c.h.ws }
 func (c core) Prefs() prefs                  { return c.h.prefs }
 func (c core) OpenFile(abs string)           { c.h.openAbsolute(abs) }
