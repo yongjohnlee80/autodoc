@@ -143,6 +143,16 @@ func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	return false, nil
 }
 
+// UnhandledCount is how many of profile's deliveries are queued or leased, for crew.orphans.
+func (m *Manager) UnhandledCount(ctx crew.Tx, profile string) (int, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	ds, err := tx.Unhandled(profile)
+	return len(ds), err
+}
+
 // DiscardDeliveries fails every unhandled delivery of profile (discarded), each sender told, in
 // crew.discard's write (§4.3).
 func (m *Manager) DiscardDeliveries(ctx crew.Tx, profile string) error {
