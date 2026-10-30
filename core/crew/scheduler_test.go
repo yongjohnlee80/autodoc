@@ -22,14 +22,18 @@ type fakeWaker struct {
 	answer error
 	block  chan struct{}
 	inside chan struct{} // one value per call that has started
+	onCall func()        // runs inside each call, before it answers
 }
 
 func (f *fakeWaker) Wake(ctx context.Context, ep crew.Endpoint, notice string) error {
 	f.mu.Lock()
 	f.calls = append(f.calls, ep.Session)
 	f.notes = append(f.notes, notice)
-	block, inside, answer := f.block, f.inside, f.answer
+	block, inside, answer, onCall := f.block, f.inside, f.answer, f.onCall
 	f.mu.Unlock()
+	if onCall != nil {
+		onCall()
+	}
 	if inside != nil {
 		inside <- struct{}{}
 	}
@@ -251,4 +255,130 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	if cur, err := r.m.StillCurrent(r.ctx, s.Session, tok, ep.Generation); err != nil || cur {
 		t.Fatalf("still current after the exit: %v %v", cur, err)
 	}
+}
+
+// faultStore is a crew.Store whose nth write (counting from 1) fails once, as a store's transient
+// error would.
+type faultStore struct {
+	crew.Store
+	mu     sync.Mutex
+	writes int
+	failAt int
+}
+
+var errInjected = errors.New("injected store fault")
+
+func (f *faultStore) Write(ctx context.Context, fn func(crew.Tx) error) error {
+	f.mu.Lock()
+	f.writes++
+	fail := f.writes == f.failAt
+	f.mu.Unlock()
+	if fail {
+		return errInjected
+	}
+	return f.Store.Write(ctx, fn)
+}
+
+func (f *faultStore) failNext() { f.mu.Lock(); f.failAt = f.writes + 1; f.mu.Unlock() }
+
+// within waits, in real time, for cond: Run's own timers drive these cells, never a poke of ours.
+func within(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for !cond() {
+		select {
+		case <-deadline:
+			t.Fatalf("%s never happened", what)
+		case <-tick.C:
+		}
+	}
+}
+
+// The failure that makes a session unreachable journals it in the human feed, once, in the same
+// write; a later failure adds nothing; a receive that makes it reachable again journals that.
+func TestReachabilityIsJournaledOnLossAndOnReturn(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.w.answer = errors.New("refused")
+	reach := func() int {
+		n := 0
+		for _, c := range r.mem.Inbox() {
+			if c.Kind == crew.ChangeReachability && c.Ref == s.Session {
+				n++
+			}
+		}
+		return n
+	}
+	for i := 1; i <= 6; i++ {
+		r.look()
+		want := 0
+		if i >= 5 {
+			want = 1
+		}
+		if got := reach(); got != want {
+			t.Fatalf("after %d failures: %d reachability changes, want %d", i, got, want)
+		}
+		r.clock.Advance(10 * time.Minute)
+	}
+	r.received(s.Session)
+	if got := reach(); got != 2 {
+		t.Fatalf("after the receive: %d reachability changes, want 2 (lost, then back)", got)
+	}
+}
+
+// A refused outcome write is kept and written at the next look: Run's retry timer, with no poke,
+// no send and no restart, takes the row out of in_flight.
+func TestRunRecordsAnOutcomeTheStoreFirstRefused(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	w.onCall = fs.failNext // the call's own outcome write is the one refused
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	sess := r.session("gold")
+	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(10*time.Millisecond))
+	ctx, cancel := context.WithCancel(r.ctx)
+	done := make(chan error, 1)
+	go func() { done <- sched.Run(ctx) }()
+	within(t, "the outcome recorded after its refused write", func() bool { return r.wake(sess.Session).State == crew.WakeAwaiting })
+	cancel()
+	<-done
+	if w.count() != 1 {
+		t.Fatalf("%d calls, want 1: the owed outcome is written, not the wake sent again", w.count())
+	}
+}
+
+// A look whose write the store refuses is retried by Run's timer: pending mail with no deadline
+// is still woken, with no poke.
+func TestRunLooksAgainAfterAStoreError(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	r.session("gold")
+	fs.mu.Lock()
+	fs.failAt = fs.writes + 2 // Run's recovery is the next write; the first look's sweep, the one after
+	fs.mu.Unlock()
+	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(10*time.Millisecond))
+	ctx, cancel := context.WithCancel(r.ctx)
+	done := make(chan error, 1)
+	go func() { done <- sched.Run(ctx) }()
+	within(t, "the wake after the refused look", func() bool { return w.count() == 1 })
+	cancel()
+	<-done
 }
