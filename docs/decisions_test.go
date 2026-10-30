@@ -99,6 +99,8 @@ var releasedScripts = map[string]int{
 // examples are the files where a record number is the product's own example: AutoDoc indexes ADRs
 // as a document type, and these show sample ones. Each names the sample numbers it may show.
 var examples = map[string][]string{
+	"AGENTS.md": {"0007"},
+	"docs/reference/05-hybrid-search-pipeline.md":                                         {"0007"},
 	"core/todo/worktree_test.go":                                                          {"0158"},
 	"docs/reference/07-frontmatter-schemas-and-validation.md":                             {"0220"},
 	"docs/reference/08-knowledge-graphs-and-adr-lifecycle.md":                             {"0001", "0009", "0014"},
