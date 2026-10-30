@@ -5827,6 +5827,10 @@ O QUE UMA TECLA PRECISA
         <source>reading %1…</source>
         <translation>lendo %1…</translation>
     </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>lendo %1: %2 documentos…</translation>
+    </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
         <translation>relações</translation>

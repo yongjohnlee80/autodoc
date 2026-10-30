@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 
@@ -66,6 +67,45 @@ func decodeMap(res any) relMap {
 		}
 	}
 	return m
+}
+
+// mapPagesMax bounds the pages readMap reads of one map: a daemon that answered the same next
+// for ever would otherwise hold the view for good.
+const mapPagesMax = 100000
+
+// readMap reads an unrooted graph.map whole (ADR 1793321612 D3): from protocol 36 the daemon answers
+// it a page at a time, so it asks for the next page with the last one's next until next is "", and
+// decodes the pages as one answer. A link to a document of a later page waits for that page; one
+// whose document never came (removed while the map paged) is dropped, as decodeMap drops any link
+// it cannot place. An answer without next (an older daemon's, or a rooted map) is the whole map.
+// read is graph.map with opts; got is told the documents read so far, after each page.
+func readMap(read func(opts map[string]any) (any, error), opts map[string]any, got func(docs int)) (relMap, error) {
+	var nodes, edges, types []any
+	for pages := 0; ; pages++ {
+		res, err := read(opts)
+		if err != nil {
+			return relMap{}, err
+		}
+		page := asMap(res)
+		nodes = append(nodes, asList(page["nodes"])...)
+		edges = append(edges, asList(page["edges"])...)
+		if t := asList(page["types"]); len(t) > 0 {
+			types = t // every page says the same: the last one's
+		}
+		if got != nil {
+			got(len(nodes))
+		}
+		next, _ := page["next"].(string)
+		if next == "" {
+			break
+		}
+		if pages+1 >= mapPagesMax {
+			return relMap{}, fmt.Errorf("graph.map: no end after %d pages", mapPagesMax)
+		}
+		opts = maps.Clone(opts)
+		opts["after"] = next
+	}
+	return decodeMap(map[string]any{"nodes": nodes, "edges": edges, "types": types}), nil
 }
 
 // label is how a view names document i: its title, else its file's name.
