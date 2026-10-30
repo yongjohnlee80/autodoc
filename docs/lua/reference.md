@@ -564,7 +564,20 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 The text goes as one bracketed paste, or not at all. An agent CLI that asked for bracketed paste
 gets it whole, held at its prompt for Enter. A program that didn't gets nothing, and `err` is
 `"unbracketed"`: text you didn't type never arrives as keys, whose newlines would be Enters. An
-agent the send started is given up to 10 seconds to ask for it. AutoDoc's own `usage.lua` is `:usage`: a card of the daemon's and the app's memory and CPU and the workspace's index, ticking each second, with charts in the window. Its `agents.lua` uses the others: `:agent-buffer` sends the
+agent the send started is given up to 10 seconds to ask for it.
+
+**Limits, and how a send fails.**
+- **Size.** `text` must be non-empty and at most 1 MiB, the terminal's input limit. Anything else
+  fails with that reason.
+- **Without a callback.** A send that fails shows a notice ("the send to <agent> failed: <why>"),
+  so no failure is ever silent.
+- **From outside AutoDoc.** Through `autodoc --editor editor.run ':lua …'`, the chunk is Lua
+  source inside a JSON string, so its escapes are decoded twice: the JSON's first, then Lua's. Write
+  a newline in the Lua string as `\\n` in the JSON. A chunk that no longer parses (a bare newline
+  inside a Lua string) is `editor.run`'s error, never `{"ok": true}`. For long text, a Lua command
+  file (`editor.add_command`) avoids the double escaping.
+
+AutoDoc's own `usage.lua` is `:usage`: a card of the daemon's and the app's memory and CPU and the workspace's index, ticking each second, with charts in the window. Its `agents.lua` uses the others: `:agent-buffer` sends the
 page, and `:agent-forward` the selection, else the clipboard, to the agent running (with several,
 or none, a picker asks which; one not running is started once you agree).
 

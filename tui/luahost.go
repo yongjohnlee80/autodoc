@@ -268,14 +268,25 @@ func (s *scripting) luaAgentsSend(L *lua.LState) int {
 		s.later("agents.send", cb, nil, "unavailable")
 		return 0
 	}
+	// a send without a callback that fails is a notice: no failure of it is ever silent
+	failed := func(err error, now bool) {
+		switch {
+		case cb == nil:
+			s.c.Notify(s.c.Trf("autodoc.notice.luahost.a_send_to_the_agent_failed", ref.Codename, agentErr(err)))
+		case now:
+			s.callback("agents.send", cb, nil, agentErr(err))
+		default:
+			s.later("agents.send", cb, nil, agentErr(err))
+		}
+	}
 	if err := s.host.sendText(ref, text, func(err error) {
 		if err != nil {
-			s.callback("agents.send", cb, nil, agentErr(err))
+			failed(err, true)
 			return
 		}
 		s.callback("agents.send", cb, lua.LTrue, "")
 	}); err != nil {
-		s.later("agents.send", cb, nil, agentErr(err))
+		failed(err, false)
 	}
 	return 0
 }
