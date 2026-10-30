@@ -15,14 +15,18 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/mail/mailtest"
 )
 
-// guard is the crew port as the mail module sees it: a live session passes; every raised wake is
+// The crew module is the mail module's Crew.
+var _ mail.Crew = (*crew.Manager)(nil)
+
+// guard is the crew port as the mail module sees it: a credential naming a live session passes; every raised wake is
 // counted by profile.
 type guard struct {
 	mu     sync.Mutex
 	raised map[string]int
 }
 
-func (g *guard) GuardSession(tx crew.Tx, id string) (crew.Session, error) {
+func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
+	id, _, _ := strings.Cut(credential, ".") // the rig's credentials are the session ids
 	s, ok, err := tx.Session(id)
 	if err != nil {
 		return crew.Session{}, err
