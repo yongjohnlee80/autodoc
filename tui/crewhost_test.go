@@ -21,6 +21,7 @@ type crewDaemon struct {
 	m       *crew.Manager
 	clock   *crewtest.Clock
 	failing string // a scope whose claims fail as a store failure would
+	none    bool   // a daemon before crew: every crew verb is unknown
 }
 
 func newCrewDaemonForHost() *crewDaemon {
@@ -29,6 +30,9 @@ func newCrewDaemonForHost() *crewDaemon {
 }
 
 func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, error) {
+	if d.none {
+		return nil, &golibrpc.Error{Code: golibrpc.CodeMethodNotFound, Message: "unknown method: " + verb}
+	}
 	if verb == "crew.claim" && d.failing != "" && p[0] == d.failing {
 		return nil, errors.New("the store is unavailable")
 	}
@@ -192,5 +196,24 @@ func TestALostScopeIsClaimedAgain(t *testing.T) {
 	}
 	if len(w.notices) != 1 || !strings.Contains(w.notices[0], "lost its crew scope") {
 		t.Fatalf("notices %v, want one saying the scope moved", w.notices)
+	}
+}
+
+// TestADaemonWithoutCrewLeavesTheWindowQuiet: a daemon with no crew verbs (one before protocol 37, or
+// a test's) leaves the window without a scope, says nothing and sets no retry: the next connection
+// asks again.
+func TestADaemonWithoutCrewLeavesTheWindowQuiet(t *testing.T) {
+	d, dir := newCrewDaemonForHost(), t.TempDir()
+	d.none = true
+	w := &crewWindow{d: d}
+	h := newCrewHost(w, dir)
+	h.Connected()
+	if _, _, ok := h.held(); ok || len(w.notices) != 0 || len(w.timers) != 0 || len(listedScopes(t, dir)) != 0 {
+		t.Fatalf("a daemon without crew: held %v, notices %v, %d timers, listed %v; want none of them", ok, w.notices, len(w.timers), listedScopes(t, dir))
+	}
+	d.none = false
+	h.Connected() // a newer daemon, after a restart
+	if _, _, ok := h.held(); !ok {
+		t.Fatal("the next connection, to a daemon with crew, claimed nothing")
 	}
 }
