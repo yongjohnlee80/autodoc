@@ -2,9 +2,148 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 34,
+  protocol = 37,
   min_protocol = 12,
   verbs = {
+    ["crew.adopt"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "from", type = "string" },
+        { name = "to", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Fence an orphan scope and move its mail here (§4.3).",
+    },
+    ["crew.attention"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "op", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "text", type = "string", optional = true }
+      },
+      result = "{}",
+      doc = "Raise or clear: the session waits on the user (§4.8).",
+    },
+    ["crew.claim"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "proc", type = "string", optional = true }
+      },
+      result = "{epoch}",
+      doc = "Claim or reattach a scope with the process's run token (§4.3). Idempotent.",
+    },
+    ["crew.discard"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "from", type = "string" },
+        { name = "to", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Fence an orphan scope and fail its mail, telling senders.",
+    },
+    ["crew.endpoint"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "kind", type = "string" },
+        { name = "locator", type = "string" }
+      },
+      result = "{generation}",
+      doc = "How to wake the calling session (§4.7).",
+    },
+    ["crew.exit"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "session", type = "string" },
+        { name = "why", type = "string", optional = true }
+      },
+      result = "{}",
+      doc = "A session ended; its bound deliveries fail (session_ended).",
+    },
+    ["crew.guide"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "kind", type = "string" }
+      },
+      result = "{markdown, protocol}",
+      doc = "The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide.",
+    },
+    ["crew.list"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {},
+      result = "[{codename, scope, kind, presence, reachable}]",
+      doc = "The addressbook.",
+    },
+    ["crew.orphans"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {},
+      result = "[{scope, profiles, unread}]",
+      doc = "AutoDoc scopes with a free holder and unhandled mail (§4.3).",
+    },
+    ["crew.register"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "codename", type = "string" },
+        { name = "kind", type = "string" },
+        { name = "workspace", type = "string" },
+        { name = "instance", type = "string" },
+        { name = "secret", type = "string" }
+      },
+      result = "{session, profile}",
+      doc = "Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret).",
+    },
+    ["crew.release"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Give a scope back on a clean exit; the run can't reattach.",
+    },
+    ["crew.renew"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "The host still holds its scope: its lease runs another 90 s.",
+    },
+    ["crew.takeover"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "proc", type = "string", optional = true }
+      },
+      result = "{epoch}",
+      doc = "Claim a held scope after the user agreed; the old owner is fenced and its sessions end.",
+    },
+    ["crew.whoami"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "store", type = "string", optional = true }
+      },
+      result = "{codename, scope, profile, session, store}",
+      doc = "Who the credential belongs to (§4.5).",
+    },
     ["doc.outline"] = {
       since = 8, scope = "workspace", audience = "agent",
       params = {
@@ -310,6 +449,59 @@ return {
       result = "{gpu: {vendor, name, vram, compute}, ram, free, ollama}",
       doc = "What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version (\"\" when none answers); 0 or \"\" is unknown.",
     },
+    ["inbox.ack"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" }
+      },
+      result = "{}",
+      doc = "Mark a report read. Replaying an ack answers ok.",
+    },
+    ["inbox.dismiss"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" }
+      },
+      result = "{}",
+      doc = "Decline a request; its sender is told. Replaying a dismiss answers ok.",
+    },
+    ["inbox.focus"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "session", type = "string" }
+      },
+      result = "{session, owner}",
+      doc = "Ask the session's current owner to raise its agent: the owner's host hears a focus change.",
+    },
+    ["inbox.list"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "filter", type = "string", optional = true },
+        { name = "before", type = "int", optional = true },
+        { name = "limit", type = "int", optional = true }
+      },
+      result = "{items[]}",
+      doc = "The human's history, newest first, or the generated notices nobody could receive (filter undeliverable).",
+    },
+    ["inbox.reply"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" }
+      },
+      result = "{message}",
+      doc = "Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response.",
+    },
+    ["inbox.watch"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "cursor", type = "int" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{cursor, snapshot?, changes[]}",
+      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained. Never leases.",
+    },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",
       params = {
@@ -370,6 +562,70 @@ return {
       },
       result = "{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}",
       doc = "diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them.",
+    },
+    ["mail.ack"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" }
+      },
+      result = "{}",
+      doc = "Done with a delivery under its lease. Replaying an ack of the same lease answers ok.",
+    },
+    ["mail.inbox"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "limit", type = "int", optional = true }
+      },
+      result = "{unread, items[]}",
+      doc = "A preview of the caller's eligible mail: never leases.",
+    },
+    ["mail.receive"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" }
+      },
+      result = "{deliveries[], more}",
+      doc = "Lease the caller's next eligible deliveries, at most 8, in seq order; more=true until drained.",
+    },
+    ["mail.renew"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" }
+      },
+      result = "{}",
+      doc = "Extend a lease the caller holds by 10 minutes.",
+    },
+    ["mail.reply"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it.",
+    },
+    ["mail.send"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true },
+        { name = "ttl", type = "int", optional = true }
+      },
+      result = "{message, deliveries[]}",
+      doc = "Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
     },
     ["preference.list"] = {
       since = 3, scope = "global", audience = "user",
@@ -887,6 +1143,22 @@ return {
     { code = -32075, name = "todos.exists", next = "pick another id, or another move_store target" },
     { code = -32076, name = "todos.not_writable", next = "todos.register the project's root, or todos.set_dir" },
     { code = -32077, name = "todos.unclaimed", next = "todos.claim it to write it again" },
+    { code = -32090, name = "crew.scope_busy", next = "wait for its lease to lapse, or crew.takeover after the user agrees" },
+    { code = -32091, name = "crew.stale_epoch", next = "claim the scope again; this owner was fenced" },
+    { code = -32092, name = "crew.codename_busy", next = "offer the user to take it over, or pick another codename" },
+    { code = -32093, name = "crew.instance_reused", next = "register a new instance" },
+    { code = -32094, name = "crew.bad_credential", next = "the session ended: its host registers a new one" },
+    { code = -32095, name = "crew.context_mismatch", next = "fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew" },
+    { code = -32096, name = "crew.bad_endpoint", next = "register an endpoint of a known kind, with its locator" },
+    { code = -32110, name = "mail.no_recipient", next = "crew.list the addressbook, and send to a name it shows" },
+    { code = -32111, name = "mail.key_reused", next = "a retry sends the same content; new content takes a new key" },
+    { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },
+    { code = -32113, name = "mail.lease_lost", next = "mail.receive again: the delivery comes back if it is still unhandled" },
+    { code = -32130, name = "inbox.already_answered", next = "inbox.list shows who answered, and when" },
+    { code = -32131, name = "inbox.not_a_request", next = "inbox.ack a report" },
+    { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },
+    { code = -32133, name = "inbox.key_reused", next = "retry the same reply with the same key, or use a new key" },
+    { code = -32134, name = "inbox.too_large" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

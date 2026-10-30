@@ -222,7 +222,26 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 34; the daemon serves sessions from protocol 12.
+Verbs at protocol 37; the daemon serves sessions from protocol 12.
+
+### `crew`
+
+| verb | params | result | since | audience | effect |
+| --- | --- | --- | --- | --- | --- |
+| `crew.adopt` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and move its mail here (§4.3). Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
+| `crew.attention` | `credential` string, `op` string (raise or clear), `kind`? string (for raise: permission or blocked), `text`? string (for raise: what the session waits on) | `{}` — Raise or clear: the session waits on the user (§4.8). Codes: -32094, -32091. | 37 | agent | write |
+| `crew.claim` | `scope` string (autovim:<project>, nvim:<key> or autodoc:<id>), `run` string (the host process's run token, held in memory only), `proc`? string (<boot id>:<pid ns>:<pid>:<start time>; "" when unknown) | `{epoch}` — Claim or reattach a scope with the process's run token (§4.3). Idempotent. Codes: -32090. | 37 | for people's tools; unix socket only | write |
+| `crew.discard` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and fail its mail, telling senders. Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
+| `crew.endpoint` | `credential` string, `kind` string (claude, codex, agy or opencode: the session's own), `locator` string (JSON, kind-specific; never a secret) | `{generation}` — How to wake the calling session (§4.7). Codes: -32094, -32096, -32091. | 37 | agent | write |
+| `crew.exit` | `scope` string, `run` string, `epoch` int, `session` string, `why`? string (exit (the default) or start_failed) | `{}` — A session ended; its bound deliveries fail (session_ended). Codes: -32091, -32094. | 37 | for people's tools; unix socket only | write |
+| `crew.guide` | `kind` string (the CLI: claude, codex, agy, opencode …) | `{markdown, protocol}` — The crew and mail procedure for a CLI kind (§4.11), for a host's agent guide. | 37 | for people's tools; unix socket only | read |
+| `crew.list` | — | `[{codename, scope, kind, presence, reachable}]` — The addressbook. | 37 | agent | read |
+| `crew.orphans` | — | `[{scope, profiles, unread}]` — AutoDoc scopes with a free holder and unhandled mail (§4.3). | 37 | for people's tools; unix socket only | read |
+| `crew.register` | `scope` string, `run` string, `epoch` int, `codename` string, `kind` string (claude, codex, agy, opencode …), `workspace` string (the workspace's uid), `instance` string (the host's spawn id), `secret` string (host-generated, 32+ random bytes; only its hash is kept) | `{session, profile}` — Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret). Codes: -32091, -32092, -32093. | 37 | for people's tools; unix socket only | write |
+| `crew.release` | `scope` string, `run` string, `epoch` int | `{}` — Give a scope back on a clean exit; the run can't reattach. Codes: -32091. | 37 | for people's tools; unix socket only | write |
+| `crew.renew` | `scope` string, `run` string, `epoch` int | `{}` — The host still holds its scope: its lease runs another 90 s. Codes: -32091. | 37 | for people's tools; unix socket only | write |
+| `crew.takeover` | `scope` string (autovim:<project>, nvim:<key> or autodoc:<id>), `run` string (the host process's run token, held in memory only), `proc`? string (<boot id>:<pid ns>:<pid>:<start time>; "" when unknown) | `{epoch}` — Claim a held scope after the user agreed; the old owner is fenced and its sessions end. | 37 | for people's tools; unix socket only | write |
+| `crew.whoami` | `credential` string (the session context's "<session id>.<secret>"), `store`? string (the store id the session context names) | `{codename, scope, profile, session, store}` — Who the credential belongs to (§4.5). Codes: -32094, -32095, -32091. | 37 | agent | read |
 
 ### `doc`
 
@@ -284,6 +303,17 @@ Verbs at protocol 34; the daemon serves sessions from protocol 12.
 | --- | --- | --- | --- | --- | --- |
 | `host.probe` | `base`? string (the Ollama's URL; absent, embed.DefaultOllamaURL) | `{gpu: {vendor, name, vram, compute}, ram, free, ollama}` — What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version ("" when none answers); 0 or "" is unknown. Codes: -32065. | 31 | for people's tools | read |
 
+### `inbox`
+
+| verb | params | result | since | audience | effect |
+| --- | --- | --- | --- | --- | --- |
+| `inbox.ack` | `message` string | `{}` — Mark a report read. Replaying an ack answers ok. Codes: -32132. | 37 | for people's tools; unix socket only | write |
+| `inbox.dismiss` | `message` string | `{}` — Decline a request; its sender is told. Replaying a dismiss answers ok. Codes: -32130, -32131, -32132. | 37 | for people's tools; unix socket only | write |
+| `inbox.focus` | `session` string (the session whose agent to raise) | `{session, owner}` — Ask the session's current owner to raise its agent: the owner's host hears a focus change. Codes: -32061. | 37 | for people's tools; unix socket only | write |
+| `inbox.list` | `filter`? string ("" for the history, or undeliverable), `before`? int (the history's seq to page below; 0 for the newest), `limit`? int (at most 200; default 50) | `{items[]}` — The human's history, newest first, or the generated notices nobody could receive (filter undeliverable). | 37 | for people's tools; unix socket only | read |
+| `inbox.reply` | `message` string (the request's id), `body` string, `key` string (the idempotency key: a retry with the same body answers the first reply) | `{message}` — Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response. Codes: -32130, -32131, -32132, -32133, -32134. | 37 | for people's tools; unix socket only | write |
+| `inbox.watch` | `cursor` int (the last answer's cursor; 0 for a snapshot), `timeout`? int (milliseconds to wait for a change, at most 25000) | `{cursor, snapshot?, changes[]}` — The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained. Never leases. | 37 | for people's tools; unix socket only | read |
+
 ### `index`
 
 | verb | params | result | since | audience | effect |
@@ -295,6 +325,17 @@ Verbs at protocol 34; the daemon serves sessions from protocol 12.
 | `index.purge_model` | `workspace` string, `model` string (a model's fp, as index.models answers it) | Deletes a model's vectors; the active model and the target are refused. Codes: -32060. | 1 | for people's tools | settings |
 | `index.reindex` | `workspace` string, `path` string | Indexes one file again; a held file is refused, naming the way out. Codes: -32060, -32061. | 1 | for people's tools | write |
 | `index.status` | `workspace` string | `{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}` — diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them. Codes: -32060. | 1 | agent | read |
+
+### `mail`
+
+| verb | params | result | since | audience | effect |
+| --- | --- | --- | --- | --- | --- |
+| `mail.ack` | `credential` string, `delivery` string, `lease` string (the lease mail.receive gave) | `{}` — Done with a delivery under its lease. Replaying an ack of the same lease answers ok. Codes: -32094, -32091, -32113. | 37 | agent | write |
+| `mail.inbox` | `credential` string, `limit`? int (items to show, at most 1000; 0 counts only) | `{unread, items[]}` — A preview of the caller's eligible mail: never leases. Codes: -32094, -32091. | 37 | agent | read |
+| `mail.receive` | `credential` string | `{deliveries[], more}` — Lease the caller's next eligible deliveries, at most 8, in seq order; more=true until drained. Codes: -32094, -32091. | 37 | agent | write |
+| `mail.renew` | `credential` string, `delivery` string, `lease` string (the lease mail.receive gave) | `{}` — Extend a lease the caller holds by 10 minutes. Codes: -32094, -32091, -32113. | 37 | agent | write |
+| `mail.reply` | `credential` string, `delivery` string (the request's delivery), `lease` string, `body` string, `key` string (the reply's idempotency key), `subject`? string | `{message}` — Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it. Codes: -32094, -32091, -32113, -32111, -32112. | 37 | agent | write |
+| `mail.send` | `credential` string (the session context's "<session id>.<secret>"), `to` []string (names in the scope, name@scope, user, or session:<id>), `body` string (at most 64 KiB), `key` string (the idempotency key: a retry with the same content answers the first send), `kind`? string (message (the default) or request), `subject`? string, `ttl`? int (seconds until the message expires; 0 never) | `{message, deliveries[]}` — Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained. Codes: -32094, -32091, -32110, -32111, -32112. | 37 | agent | write |
 
 ### `preference`
 
@@ -393,7 +434,7 @@ Verbs at protocol 34; the daemon serves sessions from protocol 12.
 | -32020 | `rpc.protocol_mismatch` | the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves |  |
 | -32021 | `rpc.handshake_required` | say sys.hello first |  |
 | -32060 | `rpc.no_such_workspace` | call workspace.list and use a listed name | "no such workspace" |
-| -32061 | `rpc.not_found` | refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone | "no such pull: it ended and another began, or the daemon restarted"; "no such embedding provider"; "no such ranker"; "not found" |
+| -32061 | `rpc.not_found` | refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone | "no such pull: it ended and another began, or the daemon restarted"; "no such embedding provider"; "no such ranker"; "not found"; "no such live session" |
 | -32062 | `rpc.conflict` | doc.read, then merge or retry; for a name, choose another | "another workspace has this name or root"; "a model is being pulled: wait for it, or cancel it"; "another ranker has this name"; "another embedding provider has this name"; "the document is not at that version" |
 | -32063 | `rpc.cursor_expired` | re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it | "the event cursor is outside the retained log: take a snapshot and resume from the head"; "the change cursor is older than the retained log" |
 | -32065 | `rpc.unsupported` | this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages | "this server keeps no preferences"; "this server keeps no embedding providers"; "this server keeps no event log"; "this server keeps no profiler"; "this server keeps no rankers"; "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"; "this edition has no database settings"; "this server's set of workspaces is fixed"; "this server serves no files outside its workspaces"; "this document's text could not be made now: try again later, or open it in its own viewer"; "this document's text could not be derived: open it in its own viewer"; "the workspace's filesystem cannot do this" |
@@ -409,6 +450,22 @@ Verbs at protocol 34; the daemon serves sessions from protocol 12.
 | -32075 | `todos.exists` | pick another id, or another move_store target | "that already exists" |
 | -32076 | `todos.not_writable` | todos.register the project's root, or todos.set_dir | "not a writable todo store: a workspace's or a registered root's .todo-list, or a set_dir override" |
 | -32077 | `todos.unclaimed` | todos.claim it to write it again | "this todo store was released (todos.release): AutoDoc only reads it" |
+| -32090 | `crew.scope_busy` | wait for its lease to lapse, or crew.takeover after the user agrees | "another live owner holds the scope" |
+| -32091 | `crew.stale_epoch` | claim the scope again; this owner was fenced | "the scope changed hands since this epoch" |
+| -32092 | `crew.codename_busy` | offer the user to take it over, or pick another codename | "the codename already has a live session" |
+| -32093 | `crew.instance_reused` | register a new instance | "this instance was registered with another secret, codename, kind or workspace, or has ended" |
+| -32094 | `crew.bad_credential` | the session ended: its host registers a new one | "no such live session" |
+| -32095 | `crew.context_mismatch` | fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew | "two session contexts disagree, or one is for another store" |
+| -32096 | `crew.bad_endpoint` | register an endpoint of a known kind, with its locator | "the daemon refuses that endpoint" |
+| -32110 | `mail.no_recipient` | crew.list the addressbook, and send to a name it shows | "an address names no active profile or live session" |
+| -32111 | `mail.key_reused` | a retry sends the same content; new content takes a new key | "the key already names another message" |
+| -32112 | `mail.too_large` | send a shorter body, and put the rest in a file the recipient can read | "the body is past 64 KiB" |
+| -32113 | `mail.lease_lost` | mail.receive again: the delivery comes back if it is still unhandled | "the caller no longer holds the delivery's lease" |
+| -32130 | `inbox.already_answered` | inbox.list shows who answered, and when | "the request was already answered or dismissed" |
+| -32131 | `inbox.not_a_request` | inbox.ack a report | "that message is no request to the user" |
+| -32132 | `inbox.expired` | its sender was told; nothing waits on it | "the message expired first" |
+| -32133 | `inbox.key_reused` | retry the same reply with the same key, or use a new key | "the key is bound to another request or reply" |
+| -32134 | `inbox.too_large` |  | "the body is past 64 KiB" |
 | -32601 | `rpc.method_not_found` | the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call |  |
 | -32602 | `rpc.invalid_params` | the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out | "embedding policy must be always, when opened, or never"; "a preference needs a name"; "this preference is set by its own verb: embedding.use, ranker.use or ranker.window"; "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)"; "no model switch is under way"; "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"; "the base URL moves to another server: type the API key again, or remove it"; "this build supplies its ranker"; "a ranker's window is 10 to 100 candidates"; "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"; "a provider's context window is 256 to 262144 tokens"; "an Ollama Cloud provider needs its API key"; "the root is not a directory"; "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"; "a derived document is read-only: its text is served, its file never written"; "not a file of this workspace"; "the document is over the size limit"; "not a valid path in the workspace"; "unknown search mode"; "search stages must include lexical or semantic: a ranker only re-orders what they find"; "unknown search stage: the stages are lexical, semantic and rerank"; "a search stage is named twice"; "search stages and a search mode together: send one or the other"; "a facet filter names a field the workspace's schema does not declare"; "a facet filter's value is not of its field's type"; "the model is in use" |
 | -32603 | `rpc.internal` | a failure the daemon's log details: retry, or report it | "the monitor stopped, but its last samples could not be written: the daemon's log says why" |
