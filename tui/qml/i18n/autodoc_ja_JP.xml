@@ -4275,6 +4275,10 @@ WHAT A KEY NEEDS
         <source>a Lua callback failed: %1</source>
         <translation>Lua コールバックが失敗しました: %1</translation>
     </message>
+    <message id="autodoc.notice.luahost.a_send_to_the_agent_failed">
+        <source>the send to %1 failed: %2</source>
+        <translation>%1 への送信に失敗しました: %2</translation>
+    </message>
     <message id="autodoc.notice.luakeys.its_keys_and_menu_rows_need_commands_not_granted">
         <source>%1: its keys and menu rows need commands: not granted</source>
         <translation>%1: キーとメニュー行にはコマンドが必要です: 許可されていません</translation>
