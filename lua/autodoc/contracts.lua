@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 39,
+  protocol = 40,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
