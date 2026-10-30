@@ -481,3 +481,12 @@ func TestCrewWaitHearsMailBoundToTheSession(t *testing.T) {
 		t.Fatalf("crew.wait after the bound lease lapsed: %+v, %v; want gold ready", w, err)
 	}
 }
+
+// TestServeWakesClaudeSessions: serve's scheduler has a waker for Claude Code's sessions (phase 3),
+// so its loop runs and a Claude session with an endpoint is woken; any other kind stays watch-only.
+func TestServeWakesClaudeSessions(t *testing.T) {
+	w := crewWakers()
+	if _, ok := w["claude"].(*crew.ClaudeWaker); !ok || len(w) != 1 {
+		t.Fatalf("serve's wakers: %v, want Claude's alone", w)
+	}
+}
