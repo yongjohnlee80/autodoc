@@ -30,6 +30,7 @@ const (
 	CodeNotFound          int64 = -32061 // refresh the listing
 	CodeConflict          int64 = -32062 // doc.read, then merge or retry
 	CodeCursorExpired     int64 = -32063 // re-list, and restart index.changes from the status cursor
+	CodeLongPollsBusy     int64 = -32064 // a connection holds two long-polls: finish one first
 	CodeUnsupported       int64 = -32065 // the workspace's driver cannot
 	CodeCommitted         int64 = -32066 // the write landed: doc.read and compare, never re-send
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later

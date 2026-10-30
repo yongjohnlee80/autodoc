@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -249,10 +251,46 @@ func (d *process) startWorkspaces() error {
 	return nil
 }
 
-// startWakes starts the wake scheduler and sets d.deps.wake to its poke. Phase 1d (the scheduler,
-// ADR 1793271500 §4.7) fills it in; until then a due wake row waits, and its agent sees its mail
-// at its next receive.
-func (d *process) startWakes() {}
+// startWakes starts the wake scheduler (ADR 1793271500 §4.7) for this daemon run, its stop pushed
+// onto the daemon's.
+func (d *process) startWakes() {
+	d.stops.push(startScheduler(d.ctx, d.deps.crew, crewWakers, d.log))
+}
+
+// crewWakers are the wakers by endpoint kind. Phase 3 brings them, one CLI at a time; until then
+// there are none.
+var crewWakers = map[string]crew.Waker{}
+
+// startScheduler makes the wake scheduler for a fresh run id, and answers how to stop it. Making it
+// is enough for the long-polls: every committed wake change pokes it, and its Watch serves
+// mail.wait, crew.wait and inbox.watch. Its loop, which reserves and makes wake attempts, runs only
+// once a waker exists: with none, every session with an endpoint would fail each attempt
+// (no_waker) and, after five, be journaled unreachable, filling the human's feed with false
+// reports.
+func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger) (stop func()) {
+	s := c.NewScheduler(newRunID(), wakers, crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") }))
+	if len(wakers) == 0 {
+		logger.Info(log, "the wake scheduler waits for its wakers (phase 3): mail is received when agents ask")
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Warning(log, err, "the wake scheduler stopped")
+		}
+	}()
+	return func() { cancel(); <-done }
+}
+
+// newRunID is a fresh random id: this daemon run's, which the scheduler's attempts carry, so the
+// next run recovers what this one left in flight.
+func newRunID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go 1.24+)
+	return hex.EncodeToString(b[:])
+}
 
 // openFiles opens a local peer's files outside every workspace (ADR 1791430651): the whole disk,
 // every file.
@@ -313,9 +351,6 @@ type moduleDeps struct {
 	crew  *crew.Manager
 	mail  *mail.Manager
 	inbox *inbox.Manager
-	// wake is the wake scheduler's poke, told after every write that leaves a wake row due
-	// (crew.Signals.Wake). nil until the scheduler runs (phase 1d): rows wait for its first look.
-	wake func()
 	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
 	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
 	onStores func()
@@ -343,20 +378,19 @@ func modules(d *moduleDeps) []module.Module {
 // transaction is crew's, mail's and the inbox's at once, so a verb's guard, crew's change and
 // mail's effect commit together. Mail authenticates through crew, and crew ends a session's mail
 // through mail (its SessionEnder), so mail's port to crew is set once crew exists. A committed
-// write tells the human feed's waiters and the wake scheduler (crew.Signals).
+// write tells the human feed's waiters (inbox.Feed) and, when it changed a wake row, the wake
+// scheduler and every long-poll (crew's Poke). One limiter caps each connection's long-polls
+// across the three modules.
 func crewModules(d *moduleDeps) {
 	feed := inbox.NewFeed()
-	wake := func() {
-		if d.wake != nil {
-			d.wake()
-		}
-	}
-	st := sqlitecrewmail.New(d.store, sqlitecrewmail.WithSignals(crew.Signals{Feed: feed.Notify, Wake: wake}))
+	polls := crew.NewLongPolls()
+	st := sqlitecrewmail.New(d.store, sqlitecrewmail.WithSignals(crew.Signals{Feed: feed.Notify,
+		Wake: func() { d.crew.Poke() }}))
 	port := &crewPort{}
-	d.mail = mail.New(st.Mail(), port)
-	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID))
+	d.mail = mail.New(st.Mail(), port, mail.WithLongPolls(polls))
+	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID), crew.WithLongPolls(polls))
 	port.Manager = d.crew
-	d.inbox = inbox.New(st.Inbox(), d.mail, feed)
+	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls))
 }
 
 // crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each
