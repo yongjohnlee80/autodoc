@@ -15,6 +15,8 @@ import (
 // this machine: a socket under the CLI's own directory for this user, or a loopback address. The
 // daemon never connects to an arbitrary host, and a locator never carries a secret.
 type (
+	// claudeLocator is a Claude Code session's inbox socket and the process holding it: Start is
+	// that process's reference (ProcRef), so a pid a later process reuses is never taken for it.
 	claudeLocator struct {
 		Socket  string `json:"socket"`
 		PID     int    `json:"pid"`
@@ -62,6 +64,12 @@ func under(path string, roots ...string) bool {
 	return false
 }
 
+// ClaudeSocketDirs are the folders Claude Code binds its sessions' inbox sockets in, for user uid.
+func ClaudeSocketDirs(uid int) []string {
+	u := strconv.Itoa(uid)
+	return []string{"/run/user/" + u + "/cc-socks", "/tmp/cc-socks-" + u}
+}
+
 // checkLocator validates a locator of kind for the daemon's user uid, in its canonical JSON.
 func checkLocator(kind, locator string, uid int) (string, error) {
 	bad := func(why string) (string, error) {
@@ -75,11 +83,14 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 		if err := strictJSON(locator, &l); err != nil {
 			return bad(err.Error())
 		}
-		if !under(l.Socket, "/run/user/"+u+"/cc-socks", "/tmp/cc-socks-"+u) {
+		if !under(l.Socket, ClaudeSocketDirs(uid)...) {
 			return bad("the socket is not under /run/user/<uid>/cc-socks/ or /tmp/cc-socks-<uid>/")
 		}
 		if l.PID <= 0 || l.Start == "" || l.Session == "" {
 			return bad("pid, start and session are required")
+		}
+		if p, ok := parseProc(l.Start); !ok || p.pid != l.PID {
+			return bad("start is not the pid's process reference (boot:ns:pid:start)")
 		}
 		v = l
 	case "codex":
