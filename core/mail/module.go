@@ -86,6 +86,7 @@ type (
 		Why        string `json:"why,omitempty"`
 	}
 	wireItem struct {
+		From     string       `json:"from"` // the sender as an address the receiver can reply to
 		Delivery wireDelivery `json:"delivery"`
 		Message  wireMessage  `json:"message"`
 	}
@@ -128,7 +129,7 @@ func toWireDelivery(d Delivery) wireDelivery {
 func toWireItems(items []Item) []wireItem {
 	out := make([]wireItem, 0, len(items))
 	for _, it := range items {
-		out = append(out, wireItem{Delivery: toWireDelivery(it.Delivery), Message: toWireMessage(it.Message)})
+		out = append(out, wireItem{From: it.From, Delivery: toWireDelivery(it.Delivery), Message: toWireMessage(it.Message)})
 	}
 	return out
 }
