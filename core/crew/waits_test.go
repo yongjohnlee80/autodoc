@@ -9,7 +9,7 @@ import (
 
 // TestAConnectionHoldsTwoLongPolls (§4.6): a connection's third long-poll is refused until one of
 // its two ends; a leave is idempotent; another connection is counted apart; a caller with no
-// client token, or a nil limiter, is never refused.
+// connection identity, or a nil limiter, is never refused.
 func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	l := crew.NewLongPolls()
 	a1, err1 := l.Enter("tui#a")
@@ -37,8 +37,8 @@ func TestAConnectionHoldsTwoLongPolls(t *testing.T) {
 	a2()
 	a3()
 	for range 5 {
-		if _, err := l.Enter(""); err != nil {
-			t.Fatalf("a caller with no client token: %v", err)
+		if _, err := l.Enter(nil); err != nil {
+			t.Fatalf("a caller with no connection identity: %v", err)
 		}
 	}
 	var none *crew.LongPolls

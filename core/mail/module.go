@@ -191,7 +191,7 @@ func (m *Manager) Verbs() []module.Verb {
 			"Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls.",
 			crew.CodeLongPollsBusy),
 			func(ctx context.Context, p waitParams) (readyResult, error) {
-				leave, err := m.polls.Enter(module.ClientFrom(ctx))
+				leave, err := m.polls.Enter(module.ConnFrom(ctx))
 				if err != nil {
 					return readyResult{}, err
 				}
