@@ -942,14 +942,37 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 			t.Fatalf("the senders: %v, want jarvis,zen@other", froms)
 		}
 	}
+	// a sender merged into a survivor after it sent is named as its survivor, which a reply reaches
+	r.profile("p-old", "autodoc:w", "gold", "s-old")
+	r.send("s-old", mail.Send{To: []string{"jarvis@autovim:p"}, Body: "before the merge", Key: "k3"})
+	r.write(func(tx mail.Tx) error {
+		if err := tx.PutScope(crew.Scope{ID: "autodoc:w", Kind: "autodoc", State: crew.ScopeGone}); err != nil {
+			return err
+		}
+		p, _, _ := tx.Profile("p-old")
+		p.Status, p.MergedInto = crew.ProfileMerged, "p-gold"
+		return tx.PutProfile(p)
+	})
+	merged := r.receive("s-jarvis")
+	if len(merged.Items) != 1 || merged.Items[0].From != "gold" || merged.Items[0].Message.Sender != "p-old" {
+		t.Fatalf("a merged sender's item: %+v, want From gold (the survivor), Sender p-old (history)", merged.Items)
+	}
+	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{merged.Items[0].From}, Body: "reply", Key: "k4"}); err != nil {
+		t.Fatalf("a reply to the advertised address: %v", err)
+	}
 	// a delivery that ends unhandled makes a notice from the daemon
 	r.clock.Advance(mail.LeaseFor + time.Second)
 	for range mail.MaxAttempts {
 		r.receive("s-gold")
 		r.clock.Advance(mail.LeaseFor + time.Second)
 	}
-	notice := r.receive("s-jarvis")
-	if len(notice.Items) != 1 || notice.Items[0].From != "autodoc" {
-		t.Fatalf("the daemon's notice: %+v, want one from autodoc", notice.Items)
+	notice := r.receive("s-jarvis") // the failures of jarvis's two sends, the reply above included
+	if len(notice.Items) == 0 {
+		t.Fatal("no notice reached jarvis")
+	}
+	for _, it := range notice.Items {
+		if it.Message.Kind != mail.KindEvent || it.From != "autodoc" {
+			t.Fatalf("the daemon's notice: %+v, want an event from autodoc", it)
+		}
 	}
 }
