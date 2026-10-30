@@ -81,15 +81,14 @@ func (w *ClaudeWaker) bound(c net.Conn, l claudeLocator) error {
 	if err != nil {
 		return err
 	}
-	if pid != l.PID {
-		return fmt.Errorf("crew: claude's inbox socket is held by pid %d, not the session's %d", pid, l.PID)
-	}
 	ref, err := ProcRef(pid)
 	if err != nil {
 		return err
 	}
+	// the reference names the pid too (registration made Start the pid's): one comparison refuses
+	// another process and a later one at the same pid alike
 	if ref != l.Start {
-		return fmt.Errorf("crew: pid %d is now %s, not the session's process %s", pid, ref, l.Start)
+		return fmt.Errorf("crew: claude's inbox socket is held by process %s, not the session's %s", ref, l.Start)
 	}
 	return nil
 }
