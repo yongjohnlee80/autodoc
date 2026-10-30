@@ -79,7 +79,13 @@ func hijackClose(w http.ResponseWriter, r *http.Request) {
 // fails rather than sends.
 func TestTheAgyWakersOutcomes(t *testing.T) {
 	t.Parallel()
-	hang := func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
+	// hang answers nothing until the client goes: the body is read first, since only then does the
+	// server watch the connection, so the client's hang-up ends r's context (and httptest's Close
+	// is not left waiting on this handler)
+	hang := func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		<-r.Context().Done()
+	}
 	status := func(code int, body string) func(http.ResponseWriter, *http.Request) {
 		return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(code); _, _ = io.WriteString(w, body) }
 	}
