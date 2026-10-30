@@ -80,6 +80,7 @@ type Session struct {
 	stale   *OlderServer // the daemon refused this build's protocol, and is older: what it said
 	token   string       // this connection's client token, as its hello said (events.go)
 	head    int64        // the event log's head when this connection said hello
+	storeID string       // the store the daemon serves, as its hello said
 }
 
 // OlderServer is a daemon of an older protocol than this build's, as its probe said: a restart
@@ -290,8 +291,9 @@ func (s *Session) Connect(ctx context.Context) error {
 	pid, _ := m["pid"].(int64)
 	token, _ := m["client"].(string)
 	head, _ := m["events"].(int64)
+	storeID, _ := m["store_id"].(string)
 	s.mu.Lock()
-	s.client, s.version, s.pid, s.stale, s.token, s.head = cli, v, pid, nil, token, head
+	s.client, s.version, s.pid, s.stale, s.token, s.head, s.storeID = cli, v, pid, nil, token, head, storeID
 	s.mu.Unlock()
 	return nil
 }
@@ -451,6 +453,14 @@ func (s *Session) Client() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.token
+}
+
+// StoreID is the store the daemon serves, as its hello said ("" before protocol 13): what a crew
+// session context names, so a CLI using it reaches the same store.
+func (s *Session) StoreID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.storeID
 }
 
 // EventsHead is the event log's head when this connection said hello: where following it begins.
