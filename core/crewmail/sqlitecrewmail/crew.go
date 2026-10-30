@@ -290,6 +290,7 @@ func (t *Tx) Wake(session string) (crew.Wake, bool, error) {
 }
 
 func (t *Tx) PutWake(w crew.Wake) error {
+	t.wake = t.wake || crew.WakeDue(w)
 	return t.t.wakes.On(t.tx).SetMap(map[col]any{cSession: w.Session, cPendingGen: w.PendingGen,
 		cAnnounced: w.AnnouncedGen, cState: w.State, cToken: w.Token, cAttemptGen: w.AttemptGen,
 		cFailures: w.Failures, cDaemonRun: w.DaemonRun, cNextAt: w.NextAt}).Upsert()
@@ -328,5 +329,6 @@ func (t *Tx) PutAttention(a crew.Attention) error {
 // AddInboxChange journals one change of the human feed; its seq is the table's own.
 func (t *Tx) AddInboxChange(kind, ref string) error {
 	_, err := t.t.inbox.On(t.tx).SetMap(map[col]any{cKind: kind, cRef: ref, cAt: t.now.UnixNano()}).Insert()
+	t.feed = t.feed || err == nil
 	return err
 }
