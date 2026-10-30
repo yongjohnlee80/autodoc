@@ -56,13 +56,41 @@ type crewHost struct {
 	gen      uint64 // bumped by each claim: an earlier claim's renewals stop
 	claiming bool
 	sessions map[string]crewSession // the agents' sessions registered and not yet ended, by id
+	// pending is each codename's registration whose answer was lost: the daemon may have committed
+	// it, so its exact tuple is replayed, by the codename's next start or by settle, never a fresh
+	// one that would find the session it left as busy. owed is each ended session whose crew.exit
+	// the daemon has not confirmed, by id: asked again until it answers.
+	pending map[string]*crewRegistration
+	owed    map[string]crewOwedExit
+}
+
+// crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends
+// it as it was, which the daemon answers with the session it committed (§4.4).
+type crewRegistration struct {
+	codename, kind string
+	workspace      int64
+	instance       string
+	secret         string // until the context is written, or the registration is dropped
+	scope          string
+	epoch          int64
+	store, socket  string // the daemon that answered it: the context names this one, never a later
+	dir            string
+	inflight       bool // sent, its answer not yet back
+}
+
+// crewOwedExit is a session ended here whose crew.exit the daemon has not confirmed.
+type crewOwedExit struct {
+	s        crewSession
+	why      string
+	inflight bool
 }
 
 // crewSession is one agent's session, as registered under the window's scope.
 type crewSession struct {
 	ID, Profile, Scope string
 	Epoch              int64
-	Dir                string // the folder whose context file names it
+	Dir                string            // the folder whose context file names it
+	reg                *crewRegistration // what registered it: its secret, kind and daemon, for its context
 }
 
 // errNoCrewScope is a registration asked of a window that holds no scope.
@@ -73,7 +101,7 @@ func newCrewHost(c crewCore, agentDir string) *crewHost {
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
 	return &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
-		sessions: map[string]crewSession{}}
+		sessions: map[string]crewSession{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
 }
 
 func (*crewHost) Name() string                 { return "crew" }
@@ -124,6 +152,7 @@ func (h *crewHost) claim() {
 		h.scope, h.epoch = r.scope, r.epoch
 		h.gen++
 		h.renewLater(h.gen)
+		h.settle()
 	})
 }
 
@@ -241,6 +270,7 @@ func (h *crewHost) renewLater(gen uint64) {
 				h.claim()
 				return
 			}
+			h.settle() // the daemon answers again: what the window owes it is asked again
 			h.renewLater(gen)
 		})
 	})
@@ -248,6 +278,7 @@ func (h *crewHost) renewLater(gen uint64) {
 
 // Stopped releases the scope on a clean quit, so the run can't reattach and its agents' sessions end.
 // The loop has ended, so nothing is shown: a release that fails leaves the lease to lapse in 90 s.
+// The release ends every session, so no registration or exit is owed any longer.
 func (h *crewHost) Stopped() {
 	scope, epoch, ok := h.held()
 	if !ok {
@@ -258,62 +289,199 @@ func (h *crewHost) Stopped() {
 	_, _ = h.c.Call(ctx, "crew.release", scope, h.run, epoch)
 	h.scope = ""
 	for id, s := range h.sessions { // released: every session has ended, and its credential with it
-		_ = crew.RemoveContext(s.Dir)
+		_ = crew.RemoveContextOf(s.Dir, s.ID)
 		delete(h.sessions, id)
 	}
+	clear(h.pending)
+	clear(h.owed)
 }
 
-// register starts codename's session under the window's scope (ADR 1793271500 §4.4, §4.5): a
-// secret made here, kept only until the context is written; the call off the loop; then, on the
-// loop, the context written in dir (0600, through a rename) before then is told. A registration
-// whose context can't be written is ended (start_failed), so then's error leaves nothing behind.
-// workspace is the workspace's id in the store; instance the host's spawn id.
+var (
+	// errCrewStale is a registration answered once the window no longer held its scope and epoch,
+	// or was connected to another daemon or store: its session is ended, never started.
+	errCrewStale = errors.New("the window's crew scope or daemon changed while the session was registered")
+	// errCrewResolving is a start while the codename's lost registration is being asked again.
+	errCrewResolving = errors.New("its last registration's answer was lost and is being asked again; start it again in a moment")
+)
+
+// crewRefused reports whether err is the daemon's definite refusal of a crew verb: nothing took
+// effect, and sending it again changes nothing. Any other failure (a lost connection, a timeout, a
+// store failure) may have committed, or may pass, so the verb stays owed.
+func crewRefused(err error) bool {
+	switch code(err) {
+	case crew.CodeScopeBusy, crew.CodeStaleEpoch, crew.CodeCodenameBusy, crew.CodeInstanceReused, crew.CodeBadCredential,
+		golibrpc.CodeMethodNotFound, golibrpc.CodeInvalidParams:
+		return true
+	}
+	return false
+}
+
+func newSecret() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// register starts codename's session under the window's scope (ADR 1793271500 §4.4, §4.5), off
+// the loop; then is told on it. Nothing is written here: the caller, once it knows the session is
+// still wanted, publishes its context and starts its process, or ends it. A registration whose
+// answer was lost is kept, since the daemon may have committed it, and replayed as it was by the
+// codename's next start (or by settle, which ends it); one the daemon refused is dropped. A lost
+// one with other arguments (its profile edited since) is ended first. workspace is the workspace's
+// id in the store; instance the host's spawn id.
 func (h *crewHost) register(codename, kind string, workspace int64, instance, dir string, then func(crewSession, error)) {
 	scope, epoch, ok := h.held()
 	if !ok {
 		then(crewSession{}, errNoCrewScope)
 		return
 	}
-	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	secret := hex.EncodeToString(b)
-	h.c.Go(func(ctx context.Context) any {
-		v, err := h.c.Call(ctx, "crew.register", scope, h.run, epoch, codename, kind, strconv.FormatInt(workspace, 10), instance, secret)
-		if err != nil {
-			return err
-		}
-		m, _ := v.(map[string]any)
-		return crewSession{ID: str(m, "session"), Profile: str(m, "profile"), Scope: scope, Epoch: epoch, Dir: dir}
-	}, func(v any) {
-		s, ok := v.(crewSession)
-		if !ok {
-			err, _ := v.(error)
-			if err == nil {
-				err = errors.New("the registration did not finish")
-			}
-			then(crewSession{}, err)
-			return
-		}
-		c := crew.Context{Store: h.c.StoreID(), Socket: h.c.DaemonAddress(), Scope: scope, Profile: s.Profile,
-			Session: s.ID, Credential: crew.Credential(s.ID, secret), Kind: kind}
-		if err := crew.WriteContext(dir, c); err != nil {
-			h.exit(s, crew.EndedStartFailed)
-			then(crewSession{}, err)
-			return
-		}
-		h.sessions[s.ID] = s
-		then(s, nil)
+	store, socket := h.c.StoreID(), h.c.DaemonAddress()
+	r := h.pending[codename]
+	if r != nil && r.inflight {
+		then(crewSession{}, errCrewResolving)
+		return
+	}
+	if r != nil && (r.scope != scope || r.epoch != epoch || r.store != store) {
+		delete(h.pending, codename) // the claim that changed the epoch ended its session; another store has none
+		r = nil
+	}
+	if r != nil && (r.kind != kind || r.workspace != workspace) {
+		h.resolve(r)
+		then(crewSession{}, errCrewResolving)
+		return
+	}
+	if r == nil {
+		r = &crewRegistration{codename: codename, kind: kind, workspace: workspace, instance: instance, secret: newSecret(),
+			scope: scope, epoch: epoch, store: store}
+		h.pending[codename] = r
+	}
+	r.socket, r.dir = socket, dir // a replay names the daemon that answers it
+	r.inflight = true
+	h.c.Go(func(ctx context.Context) any { return h.send(ctx, r) }, func(v any) {
+		r.inflight = false
+		then(h.registered(r, v))
 	})
 }
 
-// exit ends s, why: its context file is removed at once, on the loop, so no later process reads its
-// credential; the daemon is told off the loop. A refusal (the window lost its scope meanwhile) has
-// ended the session already.
-func (h *crewHost) exit(s crewSession, why string) {
-	_ = crew.RemoveContext(s.Dir)
-	delete(h.sessions, s.ID)
-	h.c.Go(func(ctx context.Context) any {
-		_, err := h.c.Call(ctx, "crew.exit", s.Scope, h.run, s.Epoch, s.ID, why)
+// send is r's crew.register, off the loop.
+func (h *crewHost) send(ctx context.Context, r *crewRegistration) any {
+	v, err := h.c.Call(ctx, "crew.register", r.scope, h.run, r.epoch, r.codename, r.kind, strconv.FormatInt(r.workspace, 10), r.instance, r.secret)
+	if err != nil {
 		return err
-	}, func(any) {})
+	}
+	m, _ := v.(map[string]any)
+	return crewSession{ID: str(m, "session"), Profile: str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir, reg: r}
+}
+
+// registered is r's answer v, on the loop: a session, now counted live, or why there is none. r
+// stays pending only when the answer was lost.
+func (h *crewHost) registered(r *crewRegistration, v any) (crewSession, error) {
+	s, ok := v.(crewSession)
+	if !ok {
+		err, _ := v.(error)
+		if err == nil {
+			err = errors.New("the registration did not finish")
+		}
+		if crewRefused(err) {
+			h.forget(r)
+		}
+		return crewSession{}, err
+	}
+	h.forget(r)
+	h.sessions[s.ID] = s
+	return s, nil
+}
+
+func (h *crewHost) forget(r *crewRegistration) {
+	if h.pending[r.codename] == r {
+		delete(h.pending, r.codename)
+	}
+}
+
+// resolve ends lost registration r, which nobody is starting: replayed as it was, the session the
+// daemon committed comes back and is ended (start_failed), so its codename is free.
+func (h *crewHost) resolve(r *crewRegistration) {
+	if r.inflight {
+		return
+	}
+	r.inflight = true
+	h.c.Go(func(ctx context.Context) any { return h.send(ctx, r) }, func(v any) {
+		r.inflight = false
+		if s, err := h.registered(r, v); err == nil {
+			h.exit(s, crew.EndedStartFailed)
+		}
+	})
+}
+
+// publish writes s's context in its folder (0600, through a rename) for the process about to start,
+// once s is still this window's: registered here and not ended, under the scope and epoch the window
+// holds, on the daemon and store it was registered with. The context names that daemon, and its
+// credential the registration's secret, which is then dropped. A session no longer the window's is
+// refused (errCrewStale), and the caller ends it.
+func (h *crewHost) publish(s crewSession) error {
+	r := s.reg
+	if _, live := h.sessions[s.ID]; !live || r == nil || r.secret == "" || s.Scope != h.scope || s.Epoch != h.epoch ||
+		r.store != h.c.StoreID() || r.socket != h.c.DaemonAddress() {
+		return errCrewStale
+	}
+	err := crew.WriteContext(s.Dir, crew.Context{Store: r.store, Socket: r.socket, Scope: s.Scope, Profile: s.Profile,
+		Session: s.ID, Credential: crew.Credential(s.ID, r.secret), Kind: r.kind})
+	r.secret = "" // kept no longer than it is needed
+	return err
+}
+
+// exit ends s, why: its context file, when it still names s, is removed at once on the loop, so no
+// later process reads its credential and a newer session's context in the folder stays. The daemon
+// is told off the loop; until it answers, the exit is owed, and settle asks again.
+func (h *crewHost) exit(s crewSession, why string) {
+	_ = crew.RemoveContextOf(s.Dir, s.ID)
+	delete(h.sessions, s.ID)
+	h.owed[s.ID] = crewOwedExit{s: s, why: why}
+	h.sendExit(s.ID)
+}
+
+func (h *crewHost) sendExit(id string) {
+	o, ok := h.owed[id]
+	if !ok || o.inflight {
+		return
+	}
+	o.inflight = true
+	h.owed[id] = o
+	h.c.Go(func(ctx context.Context) any {
+		_, err := h.c.Call(ctx, "crew.exit", o.s.Scope, h.run, o.s.Epoch, o.s.ID, o.why)
+		return err
+	}, func(v any) {
+		o, ok := h.owed[id]
+		if !ok {
+			return
+		}
+		if err, _ := v.(error); v == nil || crewRefused(err) { // ended, or ended already by the scope changing hands
+			delete(h.owed, id)
+			return
+		}
+		o.inflight = false
+		h.owed[id] = o
+	})
+}
+
+// settle asks the daemon again for what the window owes it, each time it answers a renewal or a
+// claim: every exit not yet confirmed, and every lost registration nobody is starting, replayed and
+// ended. One under a scope or epoch the window no longer holds was ended by the claim that changed it.
+func (h *crewHost) settle() {
+	for id, o := range h.owed {
+		if o.s.Scope != h.scope || o.s.Epoch != h.epoch {
+			delete(h.owed, id)
+			continue
+		}
+		h.sendExit(id)
+	}
+	for codename, r := range h.pending {
+		if r.scope != h.scope || r.epoch != h.epoch {
+			if !r.inflight {
+				delete(h.pending, codename)
+			}
+			continue
+		}
+		h.resolve(r)
+	}
 }

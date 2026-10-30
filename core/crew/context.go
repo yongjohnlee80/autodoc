@@ -50,10 +50,23 @@ func WriteContext(dir string, c Context) error {
 	return os.Rename(tmp, filepath.Join(dir, ContextFile))
 }
 
-// RemoveContext removes dir's context file, once its session has ended: no later process reads a
-// dead session's credential. One already gone is no error.
-func RemoveContext(dir string) error {
-	if err := os.Remove(filepath.Join(dir, ContextFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+// RemoveContextOf removes dir's context file when it names session, once that session has ended:
+// no later process reads a dead session's credential, and a newer session's context in the same
+// folder is never taken with it. One already gone, or naming another session, is no error.
+func RemoveContextOf(dir, session string) error {
+	path := filepath.Join(dir, ContextFile)
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var c Context
+	if json.Unmarshal(b, &c) == nil && c.Session != session {
+		return nil // a newer session's
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

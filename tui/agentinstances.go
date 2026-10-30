@@ -275,7 +275,9 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	instance.profile, instance.workspace = p, ws
 	if crewed {
 		// registered first (ADR 1793271500 §4.4): the process starts only once its session's context
-		// is written, and a refused registration starts nothing
+		// is written, and a refused registration starts nothing. The answer is checked before either:
+		// a tab closed or restarted meanwhile, or a window whose scope, epoch or daemon changed, ends
+		// the session instead
 		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
 		instance.starting = true
 		token := instance.token
@@ -288,31 +290,42 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 				a.listAgents()
 				return
 			}
+			if err == nil {
+				if err = a.crew.publish(s); err != nil {
+					a.crew.exit(s, crew.EndedStartFailed)
+				}
+			}
 			if err != nil {
 				a.c.Notify(fmt.Sprintf("%s did not start: its crew session was not registered: %s", p.Name, wireMessage(err)))
 				a.listAgents()
 				return
 			}
-			if err := a.launch(panel, instance); err != nil {
+			if err := a.start(panel, instance); err != nil {
 				a.crew.exit(s, crew.EndedStartFailed)
 				a.c.Notify(fmt.Sprintf("%s did not start: %s", p.Name, err.Error()))
 				a.listAgents()
 				return
 			}
-			instance.session = s
+			instance.session = s // it runs: its exit ends the session, whatever showing it does
+			if err := a.showStarted(instance); err != nil {
+				a.c.Notify(fmt.Sprintf("%s started, but its tab could not be shown: %s", p.Name, err.Error()))
+			}
 		})
 		a.listAgents()
 		return instance, nil
 	}
 	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
-	if err := a.launch(panel, instance); err != nil {
+	if err := a.start(panel, instance); err != nil {
+		return nil, err
+	}
+	if err := a.showStarted(instance); err != nil {
 		return nil, err
 	}
 	return instance, nil
 }
 
-// launch starts instance's process in its tab, and shows it running and selected.
-func (a *agents) launch(panel TerminalPanel, instance *agentInstance) error {
+// start starts instance's process in its tab: whether it started is this, never whether it is shown.
+func (a *agents) start(panel TerminalPanel, instance *agentInstance) error {
 	if err := panel.Start(instance.tab); err != nil {
 		return err
 	}
@@ -322,11 +335,14 @@ func (a *agents) launch(panel TerminalPanel, instance *agentInstance) error {
 			instance.generation = tab.Generation
 		}
 	}
-	if err := a.selectInstance(instance); err != nil {
-		return err
-	}
-	a.listAgents()
 	return nil
+}
+
+// showStarted shows a started instance running and selected; failing to select it stops nothing.
+func (a *agents) showStarted(instance *agentInstance) error {
+	err := a.selectInstance(instance)
+	a.listAgents()
+	return err
 }
 
 func (a *agents) instanceExited(instance *agentInstance, code int) {
