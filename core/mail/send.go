@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -37,12 +38,21 @@ type Item struct {
 
 // fromAddress is sender as an address the receiver (in scope) can send to: the bare codename in the
 // same scope; codename@project in another AutoVim scope; codename@<scope id> otherwise; "user" for
-// the human; "autodoc" for the daemon's notices. A profile no longer on record is its id.
+// the human; "autodoc" for the daemon's notices. The sender is resolved as a new delivery to it
+// would be (resolveRecipient), so a profile merged since it sent names its survivor, and a reply
+// to the address reaches it; the message keeps the original sender for its history. A sender that
+// resolves to nothing (gone, missing, a chain too long) is still named, for display, as it was.
 func fromAddress(tx Tx, scope, sender string) (string, error) {
 	if sender == DaemonProfile {
 		return "autodoc", nil
 	}
-	p, ok, err := tx.Profile(sender)
+	who := sender
+	if to, err := resolveRecipient(tx, sender); err == nil {
+		who = to
+	} else if !errors.Is(err, errRecipientGone) {
+		return "", err
+	}
+	p, ok, err := tx.Profile(who)
 	if err != nil || !ok {
 		return sender, err
 	}
