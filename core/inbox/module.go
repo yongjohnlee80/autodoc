@@ -2,8 +2,9 @@ package inbox
 
 import (
 	"context"
-	"encoding/json"
 	"time"
+
+	"github.com/yongjohnlee80/golib/msgpack"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -124,12 +125,16 @@ func toWireAttention(a Attention) wireAttention {
 		Text: a.Text, Raised: stamp(a.Raised)}
 }
 
-// wireSize is an entry's size as the wire carries it, every field included: its JSON encoding,
-// an upper bound on its msgpack (JSON's quotes, escapes and decimal numbers are never shorter).
+// wireSize is an entry's size exactly as the RPC writes it: the host's wire form (module.Wire) in
+// the same msgpack encoding (golib's msgpack, which the RPC codec uses), every field included.
 func wireSize(entry any) int {
-	b, err := json.Marshal(entry)
+	w, err := module.Wire(entry)
 	if err != nil {
 		return pageBytes + 1 // can't happen for these structs; never let it pass as small
+	}
+	b, err := msgpack.Marshal(w)
+	if err != nil {
+		return pageBytes + 1
 	}
 	return len(b)
 }
