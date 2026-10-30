@@ -92,6 +92,8 @@ func (g *guard) RaisePending(tx crew.Tx, profile string) error {
 
 func (g *guard) Received(tx crew.Tx, session string) error { return g.crew.Received(tx, session) }
 
+func (g *guard) Watch() (<-chan struct{}, func()) { return g.crew.Watch() }
+
 type rig struct {
 	t     *testing.T
 	ctx   context.Context
@@ -751,6 +753,8 @@ func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
 }
 
 func (c *lazyCrew) Received(tx crew.Tx, session string) error { return c.m.Received(tx, session) }
+
+func (c *lazyCrew) Watch() (<-chan struct{}, func()) { return c.m.Watch() }
 
 // The real crew.Adopt over mail's real effects, on one store (Zen's #62 r0 F3): a profile of the
 // adopted scope sent itself and its namesake in the adopting scope a message, and the namesake's
