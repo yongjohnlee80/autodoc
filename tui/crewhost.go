@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -74,6 +76,7 @@ func (h *crewHost) Connected() { h.claim() }
 type claimed struct {
 	scope string
 	epoch int64
+	none  bool  // the daemon has no crew (one before protocol 37): the window simply has none, said nowhere
 	err   error // no scope: a daemon or store failure, shown, never a new identity minted silently
 	warn  error // the scope is held, but its id could not be listed for a successor
 }
@@ -87,8 +90,8 @@ func (h *crewHost) claim() {
 	h.c.Go(func(ctx context.Context) any { return h.claimOff(ctx, held) }, func(v any) {
 		h.claiming = false
 		r, ok := v.(claimed)
-		if !ok {
-			return // the work panicked: kept and said where it happened (work.go)
+		if !ok || r.none {
+			return // panicked (kept and said where it happened, work.go), or a daemon with no crew
 		}
 		if r.err != nil {
 			h.c.Notify("This window's agents have no crew scope: " + r.err.Error())
@@ -109,6 +112,15 @@ func (h *crewHost) claim() {
 
 // claimOff reattaches held when it is set, else claims a listed scope or a new one. Off the loop.
 func (h *crewHost) claimOff(ctx context.Context, held string) claimed {
+	r := h.claimAny(ctx, held)
+	if code(r.err) == golibrpc.CodeMethodNotFound {
+		return claimed{none: true} // the next connection, perhaps to a newer daemon, asks again
+	}
+	return r
+}
+
+// claimAny is claimOff's claim: held reattached, else a listed scope or a new one.
+func (h *crewHost) claimAny(ctx context.Context, held string) claimed {
 	if held != "" {
 		epoch, err := h.claimOne(ctx, held)
 		if err == nil {
