@@ -126,8 +126,9 @@ type Store interface {
 
 // Crew is what the mail module needs of the crew module, inside mail's own transaction.
 type Crew interface {
-	// GuardSession passes a live session whose host still holds its scope at its epoch (§4.4).
-	GuardSession(tx crew.Tx, id string) (crew.Session, error)
+	// Authenticate is the live session a credential names, its secret checked and the session
+	// guarded (§4.4, §4.5), in tx: a takeover committed meanwhile fails the verb.
+	Authenticate(tx crew.Tx, credential string) (crew.Session, error)
 	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it (§4.7).
 	RaisePending(tx crew.Tx, profile string) error
 }
