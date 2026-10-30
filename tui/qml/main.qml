@@ -1071,5 +1071,6 @@ Window {
     TodoFolder { id: todoFolderNew; title: qsTrId("autodoc.main.todos_a_new_store_the_project_s_folder") }
     TodoFolder { id: todoFolderMove; title: qsTrId("autodoc.main.todos_move_the_store_its_new_folder") }
     Notifications { id: notifications }
+    Reply { id: crewReply }
     Confirm { id: confirm }
 }
