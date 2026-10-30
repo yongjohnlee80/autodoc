@@ -301,27 +301,44 @@ func testAReplyWinsOnceAndReplaysExactly(t *testing.T, h Harness) {
 	}
 }
 
-// §5 case 7: a reply racing the request's expiry gets one committed outcome. Answer runs expire
-// first in its own write: past the deadline, the request ends expired (journaled, the sender
-// told) and the reply is refused; a snapshot no longer shows it.
+// §5 case 7: a reply racing the request's expiry gets one committed outcome. Past the deadline,
+// each of the human's operations is refused, and the refusal itself leaves the expiry real: the
+// request ends expired and journaled (every window's toast ends), with no answer, and a snapshot no
+// longer shows it. Each operation is checked on its own message, so one's expiry can't stand in for
+// another's.
 func testAReplyRacingExpiryGetsOneOutcome(t *testing.T, h Harness) {
 	r := newRig(t, h)
-	q := r.ask("s-jarvis", mail.KindRequest, "decide", time.Minute)
-	r.clock.Advance(2 * time.Minute)
-	if _, err := r.in.Reply(r.ctx, q.ID, "yes", "r1"); !errors.Is(err, mail.ErrExpired) {
-		t.Fatalf("a reply past the deadline: %v, want ErrExpired", err)
+	last := func() string {
+		t.Helper()
+		var ch []inbox.Change
+		r.read(func(tx inbox.Tx) error { var err error; ch, err = tx.Changes(0, 0); return err })
+		if len(ch) == 0 {
+			return ""
+		}
+		return kinds(ch[len(ch)-1:])[0]
 	}
-	if err := r.in.Dismiss(r.ctx, q.ID); !errors.Is(err, mail.ErrExpired) {
-		t.Fatalf("a dismiss past the deadline: %v, want ErrExpired", err)
+	for _, c := range []struct {
+		name string
+		kind string
+		op   func(id string) error
+		want error
+	}{
+		{"a reply", mail.KindRequest, func(id string) error { _, err := r.in.Reply(r.ctx, id, "yes", "r-"+id); return err }, mail.ErrExpired},
+		{"a dismiss", mail.KindRequest, func(id string) error { return r.in.Dismiss(r.ctx, id) }, mail.ErrExpired},
+		{"an ack", "", func(id string) error { return r.in.Ack(r.ctx, id) }, mail.ErrExpired},
+	} {
+		msg := r.ask("s-jarvis", c.kind, "late "+c.name, time.Minute)
+		r.clock.Advance(2 * time.Minute)
+		if err := c.op(msg.ID); !errors.Is(err, c.want) {
+			t.Fatalf("%s past the deadline: %v, want %v", c.name, err, c.want)
+		}
+		if got := last(); got != "expired:"+msg.ID {
+			t.Fatalf("the journal's last change after %s was refused: %q, want the expiry, committed by the refusal", c.name, got)
+		}
 	}
 	w := r.watch(0, 0)
 	if w.Snapshot == nil || len(w.Snapshot.Items) != 0 {
-		t.Fatalf("a snapshot after the expiry: %+v, want nothing open", w)
-	}
-	var ch []inbox.Change
-	r.read(func(tx inbox.Tx) error { var err error; ch, err = tx.Changes(0, 0); return err })
-	if !slices.Equal(kinds(ch), []string{"request:" + q.ID, "expired:" + q.ID}) {
-		t.Fatalf("the journal: %v, want the request then its expiry, and no answer", kinds(ch))
+		t.Fatalf("a snapshot after the expiries: %+v, want nothing open", w)
 	}
 	if got := r.responses("p-jarvis"); len(got) != 0 {
 		t.Fatalf("jarvis's responses: %v, want none", got)
