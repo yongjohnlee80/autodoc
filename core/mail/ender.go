@@ -42,7 +42,9 @@ func (m *Manager) EndSessionDeliveries(ctx crew.Tx, s crew.Session, why string) 
 
 // MergeDeliveries is adoption's mail half for one profile of the scope adopted (§4.3), in crew's
 // write: from's unhandled deliveries move to into, or stay from's when into is "" (the profile
-// moves whole). Session-bound ones fail (session_ended). Where into already has the message, from's
+// moves whole). crew calls it after it has made from's forwarding real (from merged into into, or
+// moved), so every notice this generates, to from as a sender too, resolves to where from's mail
+// now goes; nothing is generated onto a profile about to stop receiving. Session-bound ones fail (session_ended). Where into already has the message, from's
 // copy is merged, and a failed copy of into's is reopened, its sender told. Every surviving row is
 // normalized: profile-bound, queued, no lease.
 func (m *Manager) MergeDeliveries(ctx crew.Tx, from, into string) error {
@@ -119,28 +121,20 @@ func (m *Manager) normalize(tx Tx, d Delivery, to string) error {
 	return tx.PutDelivery(d)
 }
 
-// HasEligible reports whether profile has a delivery a new session of it may receive now: queued,
-// unbound, and its message not past its expiry. crew.register seeds the session's wake with it (§4.4).
+// HasEligible reports whether profile has a delivery a new session of it may receive now: queued
+// and unbound. crew.register seeds the session's wake with it (§4.4), in its own write. expire runs
+// first in that write, as in every write that reads eligibility, so no delivery past its message's
+// expiry is left queued to answer for a live one behind it.
 func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	tx, err := mailTx(ctx)
 	if err != nil {
 		return false, err
 	}
-	ds, err := tx.Eligible(profile, "", expireBatch)
-	if err != nil {
+	if err := m.expire(tx); err != nil {
 		return false, err
 	}
-	now := tx.Now().UnixNano()
-	for _, d := range ds {
-		msg, ok, err := tx.Message(d.Message)
-		if err != nil {
-			return false, err
-		}
-		if ok && d.Session == "" && (msg.Expires == nil || *msg.Expires > now) {
-			return true, nil
-		}
-	}
-	return false, nil
+	ds, err := tx.Eligible(profile, "", 1)
+	return len(ds) > 0, err
 }
 
 // UnhandledCount is how many of profile's deliveries are queued or leased, for crew.orphans.

@@ -122,7 +122,10 @@ func sendDigest(p Send) []byte {
 type address struct{ profile, session string }
 
 // addresses resolves every address once, in s's scope; any that resolves to nothing is
-// ErrNoRecipient, and the daemon's own profile is never a recipient.
+// ErrNoRecipient, and the daemon's own profile is never a recipient. A message has one delivery per
+// recipient profile (mail_delivery's UNIQUE (message, recipient)): the same address twice is one,
+// and two addresses binding one profile differently (gold and session:<gold's>, or two of its
+// sessions) are refused, never silently narrowed or widened.
 func (m *Manager) addresses(tx Tx, s crew.Session, to []string) ([]address, error) {
 	from, ok, err := tx.Profile(s.Profile)
 	if err != nil {
@@ -132,16 +135,20 @@ func (m *Manager) addresses(tx Tx, s crew.Session, to []string) ([]address, erro
 		return nil, crew.ErrBadCredential
 	}
 	var out []address
-	seen := map[address]bool{}
+	bound := map[string]string{} // profile → the session its address binds ("" for any)
 	for _, t := range to {
 		a, err := resolveAddress(tx, from.Scope, t)
 		if err != nil {
 			return nil, err
 		}
-		if !seen[a] {
-			seen[a] = true
-			out = append(out, a)
+		if s, ok := bound[a.profile]; ok {
+			if s != a.session {
+				return nil, fmt.Errorf("%w: two addresses name one recipient differently (%s)", ErrInvalid, t)
+			}
+			continue
 		}
+		bound[a.profile] = a.session
+		out = append(out, a)
 	}
 	return out, nil
 }

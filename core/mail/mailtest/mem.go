@@ -5,6 +5,7 @@ package mailtest
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -121,7 +122,22 @@ func (t *memTx) Response(replyTo, sender string) (mail.Message, bool, error) {
 	return mail.Message{}, false, nil
 }
 
-func (t *memTx) PutMessage(msg mail.Message) error { t.st.messages[msg.ID] = msg; return nil }
+// PutMessage holds the schema's UNIQUE (sender, idem_key) and mail_one_reply, as SQLite does.
+func (t *memTx) PutMessage(msg mail.Message) error {
+	for id, o := range t.st.messages {
+		if id == msg.ID {
+			continue
+		}
+		if o.Sender == msg.Sender && o.IdemKey == msg.IdemKey {
+			return fmt.Errorf("mailtest: UNIQUE (sender, idem_key) on %s/%s", msg.Sender, msg.IdemKey)
+		}
+		if msg.Kind == mail.KindResponse && o.Kind == mail.KindResponse && o.ReplyTo == msg.ReplyTo && o.Sender == msg.Sender {
+			return fmt.Errorf("mailtest: mail_one_reply on %s/%s", msg.ReplyTo, msg.Sender)
+		}
+	}
+	t.st.messages[msg.ID] = msg
+	return nil
+}
 
 func (t *memTx) NextSeq(recipient string) (int64, error) {
 	n := max(t.st.nextSeq[recipient], 1)
@@ -143,7 +159,22 @@ func (t *memTx) DeliveryOf(message, recipient string) (mail.Delivery, bool, erro
 	return mail.Delivery{}, false, nil
 }
 
-func (t *memTx) PutDelivery(d mail.Delivery) error { t.st.deliveries[d.ID] = d; return nil }
+// PutDelivery holds the schema's UNIQUE (recipient, seq) and UNIQUE (message, recipient).
+func (t *memTx) PutDelivery(d mail.Delivery) error {
+	for id, o := range t.st.deliveries {
+		if id == d.ID {
+			continue
+		}
+		if o.Recipient == d.Recipient && o.Seq == d.Seq {
+			return fmt.Errorf("mailtest: UNIQUE (recipient, seq) on %s/%d", d.Recipient, d.Seq)
+		}
+		if o.Message == d.Message && o.Recipient == d.Recipient {
+			return fmt.Errorf("mailtest: UNIQUE (message, recipient) on %s/%s", d.Message, d.Recipient)
+		}
+	}
+	t.st.deliveries[d.ID] = d
+	return nil
+}
 
 func (t *memTx) DeliveriesOf(message string) ([]mail.Delivery, error) {
 	return t.where(func(d mail.Delivery) bool { return d.Message == message }, 0), nil
