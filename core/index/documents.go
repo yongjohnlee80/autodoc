@@ -375,12 +375,12 @@ func (s *Store) keysUnset(tx *store.Tx) (bool, error) {
 var (
 	orderOf = map[string]noSort{SortPath: byPath, SortUpdated: byUpdatedKey, SortIndexed: byIndexedKey}
 	seekOf  = map[string]func(k docKey) dao.Predicate{
-		SortPath: func(k docKey) dao.Predicate { return dao.Raw(`"document"."path" > ?`, k.path) },
+		SortPath: func(k docKey) dao.Predicate { return store.RowAfter([]string{`"document"."path"`}, k.path) },
 		SortUpdated: func(k docKey) dao.Predicate {
-			return dao.Raw(`("document"."k_upd_s", "document"."k_upd_ns", "document"."path") > (?, ?, ?)`, k.a, k.b, k.path)
+			return store.RowAfter([]string{`"document"."k_upd_s"`, `"document"."k_upd_ns"`, `"document"."path"`}, k.a, k.b, k.path)
 		},
 		SortIndexed: func(k docKey) dao.Predicate {
-			return dao.Raw(`("document"."k_indexed", "document"."path") > (?, ?)`, k.a, k.path)
+			return store.RowAfter([]string{`"document"."k_indexed"`, `"document"."path"`}, k.a, k.path)
 		},
 	}
 )
@@ -397,8 +397,7 @@ func filtersSQL(f filters) (ps []dao.Predicate, none bool) {
 		ps = append(ps, dao.Or(ors...))
 	}
 	for _, t := range f.Tags {
-		ps = append(ps, dao.Raw(`EXISTS (SELECT 1 FROM "doc_tag" WHERE "doc_tag"."workspace_id" = "document"."workspace_id"`+
-			` AND "doc_tag"."doc_id" = "document"."id" AND "doc_tag"."tag" = ?)`, t))
+		ps = append(ps, store.MatchIn("doc_tag", "doc_id", "document", "id", dao.Eq(`"doc_tag"."tag"`, t)))
 	}
 	fieldNames := make([]string, 0, len(f.Facets))
 	for field := range f.Facets {
@@ -410,17 +409,15 @@ func filtersSQL(f filters) (ps []dao.Predicate, none bool) {
 		if len(values) == 0 {
 			return nil, true
 		}
-		args := []any{field}
-		for _, v := range values {
-			args = append(args, v)
+		vals := make([]any, len(values))
+		for i, v := range values {
+			vals[i] = v
 		}
-		ps = append(ps, dao.Raw(`EXISTS (SELECT 1 FROM "doc_facet" WHERE "doc_facet"."workspace_id" = "document"."workspace_id"`+
-			` AND "doc_facet"."doc_id" = "document"."id" AND "doc_facet"."field" = ? AND "doc_facet"."value" IN (?`+
-			strings.Repeat(", ?", len(values)-1)+`))`, args...))
+		ps = append(ps, store.MatchIn("doc_facet", "doc_id", "document", "id", dao.Eq(`"doc_facet"."field"`, field),
+			dao.In(`"doc_facet"."value"`, vals)))
 	}
 	if f.Diagnosed {
-		ps = append(ps, dao.Raw(`EXISTS (SELECT 1 FROM "doc_diagnostic" WHERE "doc_diagnostic"."workspace_id" = "document"."workspace_id"`+
-			` AND "doc_diagnostic"."doc_id" = "document"."id")`))
+		ps = append(ps, store.MatchIn("doc_diagnostic", "doc_id", "document", "id"))
 	}
 	return ps, false
 }
