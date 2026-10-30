@@ -20,3 +20,6 @@ func Classify(err error) Outcome { return classify(err) }
 
 // SetRoots points the Codex waker at a test's own socket folders.
 func (w *CodexWaker) SetRoots(roots ...string) { w.roots = roots }
+
+// SetRoots points the OpenCode waker at a test's own socket folders.
+func (w *OpenCodeWaker) SetRoots(roots ...string) { w.roots = roots }
