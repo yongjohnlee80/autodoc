@@ -17,10 +17,11 @@ var errNoWaker = errors.New("crew: no waker for the endpoint's kind")
 // wakeRetry is how soon a look that met a store error, or left an end unrecorded, looks again.
 const wakeRetry = 5 * time.Second
 
-// Scheduler is the wake scheduler (§4.7): one loop, woken by pokes (a send, an expiry, an endpoint,
-// a reattach), by a timer on the earliest deadline, and by a retry timer after a store error,
-// reserving attempts for due sessions under wakePermits permits. A permit is held by an attempt's
-// goroutine until its call returns: resetting a row never frees one.
+// Scheduler is the wake scheduler (docs/decisions/crew.md#wakers-and-the-wake-scheduler): one loop,
+// woken by pokes (a send, an expiry, an endpoint, a reattach), by a timer on the earliest deadline,
+// and by a retry timer after a store error, reserving attempts for due sessions under wakePermits
+// permits. A permit is held by an attempt's goroutine until its call returns: resetting a row never
+// frees one.
 type Scheduler struct {
 	m   *Manager
 	run string

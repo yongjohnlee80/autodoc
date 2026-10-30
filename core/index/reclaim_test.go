@@ -106,9 +106,9 @@ func TestARetargetedSwitchReclaimsTheOneLeft(t *testing.T) {
 	c.unhold()
 }
 
-// TestASweepKeepsTheActiveAndTheTarget (§2.3, item 3): a workspace's indexer sweeps its leftovers
-// and keeps what it answers with; a workspace with no indexer is swept by the store alone, keeping
-// its recorded active model and target.
+// TestASweepKeepsTheActiveAndTheTarget (docs/decisions/store.md#the-start-sweep): a workspace's
+// indexer sweeps its leftovers and keeps what it answers with; a workspace with no indexer is swept
+// by the store alone, keeping its recorded active model and target.
 func TestASweepKeepsTheActiveAndTheTarget(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -147,8 +147,9 @@ func TestASweepKeepsTheActiveAndTheTarget(t *testing.T) {
 	}
 }
 
-// TestAReclaimTakesBatches (§2.2): a model's vectors go a batch at a time, each its own write,
-// then its row in a write of its own; a write by anyone else can commit between them.
+// TestAReclaimTakesBatches (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a
+// model's vectors go a batch at a time, each its own write, then its row in a write of its own; a
+// write by anyone else can commit between them.
 func TestAReclaimTakesBatches(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -175,8 +176,9 @@ func TestAReclaimTakesBatches(t *testing.T) {
 	}
 }
 
-// TestAReclaimLeavesAModelSwitchedBack (§2.2): a model made the target again while it is being
-// reclaimed keeps what is left: the next batch finds it in use, and stops.
+// TestAReclaimLeavesAModelSwitchedBack
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a model made the target again
+// while it is being reclaimed keeps what is left: the next batch finds it in use, and stops.
 func TestAReclaimLeavesAModelSwitchedBack(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -202,8 +204,9 @@ func TestAReclaimLeavesAModelSwitchedBack(t *testing.T) {
 	}
 }
 
-// TestASweepFinishesAReclaimCutShort (§2.2, restart-safety): a reclaim that fails part-way leaves an
-// inactive model with fewer vectors and its row; the next sweep finishes it.
+// TestASweepFinishesAReclaimCutShort
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a reclaim that fails part-way
+// leaves an inactive model with fewer vectors and its row; the next sweep finishes it.
 func TestASweepFinishesAReclaimCutShort(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -232,9 +235,9 @@ func TestASweepFinishesAReclaimCutShort(t *testing.T) {
 	}
 }
 
-// TestAReadOpenAcrossTheFlipKeepsTheOldVectors (§2.3, item 1): a read transaction opened before a
-// switch's flip still reads the superseded model's vectors after the reclaim has deleted them: its
-// snapshot is its own, and the reclaim comes after the publish.
+// TestAReadOpenAcrossTheFlipKeepsTheOldVectors (docs/decisions/store.md#when-a-model-is-reclaimed):
+// a read transaction opened before a switch's flip still reads the superseded model's vectors after
+// the reclaim has deleted them: its snapshot is its own, and the reclaim comes after the publish.
 func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -260,8 +263,10 @@ func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	}
 }
 
-// TestPurgeSaysWhatToDoInstead (§2.4): purging the active model is refused, pointing at Search models,
-// and deletes nothing; an inactive model is reclaimed at once.
+// TestPurgeSaysWhatToDoInstead
+// (docs/decisions/store.md#purging-refuses-the-active-model-and-the-target): purging the active
+// model is refused, pointing at Search models, and deletes nothing; an inactive model is reclaimed
+// at once.
 func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

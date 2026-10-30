@@ -234,9 +234,9 @@ func TestTheSwitchIsCoalesced(t *testing.T) {
 	}
 }
 
-// TestAPeersRenameIsToldAsARename (§4.1): a peer's workspace.renamed of the workspace in use, through
-// applyEvents, lists it under its new name at once, so an agent of it is told renamed, its root on
-// both sides, before the relisting answers.
+// TestAPeersRenameIsToldAsARename (docs/decisions/crew.md#one-coalesced-switch-per-agent): a peer's
+// workspace.renamed of the workspace in use, through applyEvents, lists it under its new name at
+// once, so an agent of it is told renamed, its root on both sides, before the relisting answers.
 func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
@@ -253,10 +253,11 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	}
 }
 
-// TestTheNoticeHookIsMergedIntoTheUsersSettings (§4.3): the hook is written into a new file; into one
-// the user wrote it is added once, every key, hook, number and group of theirs kept (an empty one
-// too), however often the agent starts; a file that isn't one JSON object (a second value or text
-// after it included), or whose hooks aren't Claude's shape, is left as it is.
+// TestTheNoticeHookIsMergedIntoTheUsersSettings (docs/decisions/crew.md#the-workspace-notice-hook):
+// the hook is written into a new file; into one the user wrote it is added once, every key, hook,
+// number and group of theirs kept (an empty one too), however often the agent starts; a file that
+// isn't one JSON object (a second value or text after it included), or whose hooks aren't Claude's
+// shape, is left as it is.
 func TestTheNoticeHookIsMergedIntoTheUsersSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")

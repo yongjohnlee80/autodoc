@@ -1,14 +1,16 @@
--- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate (docs/decisions/crew.md#one-shared-kb-layout,
+-- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate
+-- (docs/decisions/crew.md#one-shared-kb-layout,
 -- docs/decisions/crew.md#migrating-a-kb-to-the-layout).
 --
 -- Run (tests/run-all.sh does this inside an XDG sandbox):
 --   AUTO_CORE=<auto-core.nvim checkout> nvim --headless -u NONE -l tests/kb_spec.lua
 --
--- Every §9 mutant has a cell here. The fixture KB is built in a temp dir and exercises every
--- reference class: path-qualified wikilinks (root, ../../ relative, suffix), relative Markdown links,
--- bare paths in prose and inline code, $KB_ROOT and absolute KB paths, frontmatter paths under
--- arbitrary keys, todo YAML adr/review and a second --- block, fenced code, archive-bound files,
--- raw/, a collision, an external todo store, and a non-git and a git variant.
+-- Every mutant of the migration's rules (docs/decisions/crew.md#migrating-a-kb-to-the-layout) has a
+-- cell here. The fixture KB is built in a temp dir and exercises every reference class:
+-- path-qualified wikilinks (root, ../../ relative, suffix), relative Markdown links, bare paths in
+-- prose and inline code, $KB_ROOT and absolute KB paths, frontmatter paths under arbitrary keys,
+-- todo YAML adr/review and a second --- block, fenced code, archive-bound files, raw/, a collision,
+-- an external todo store, and a non-git and a git variant.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.runtimepath:append(here)
@@ -670,7 +672,7 @@ if r_apply then
   ok("P10: the external todo store's reference was rewritten",
     read(EXT_A, "open/task-b.md"):find(A .. "/adrs/0001-first.md", 1, true) ~= nil
     and read(EXT_A, "open/task-b.md"):find("$KB_ROOT/conventions/naming.md", 1, true) ~= nil)
-  ok("P11: a new AGENTS.md (the §2 contract) and ABOUT.md files exist; .todo-list/ was not scaffolded anew",
+  ok("P11: a new AGENTS.md (the agent contract) and ABOUT.md files exist; .todo-list/ was not scaffolded anew",
     read(A, "AGENTS.md"):find("Agent contract") ~= nil and util.isfile(A .. "/notes/ABOUT.md")
     and #util.walk(A .. "/.todo-list") == 1)
   ok("P12: the script kept its executable mode", (vim.uv.fs_stat(A .. "/scripts/run.sh").mode % 512) == 493)

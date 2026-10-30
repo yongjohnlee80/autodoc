@@ -458,9 +458,10 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
 }
 
-// A session whose endpoint no waker serves is watch-only (§4.7, phase 3 brings the wakers one kind
-// at a time): never reserved, never failed, never reported unreachable, while a served kind is
-// woken. Its row recovered from an earlier run (next_at = now, past at once) never sets Run's timer
+// A session whose endpoint no waker serves is watch-only
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler, phase 3 brings the wakers one kind at a
+// time): never reserved, never failed, never reported unreachable, while a served kind is woken.
+// Its row recovered from an earlier run (next_at = now, past at once) never sets Run's timer
 // either: a deadline on a row no look can act on would have Run look again at once, forever.
 func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
 	clock := crewtest.NewClock()

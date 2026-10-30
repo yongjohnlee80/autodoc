@@ -32,8 +32,9 @@ var (
 )
 
 // EnsureReserved makes the reserved profiles a fresh store lacks: the daemon's, which sends every
-// generated notice, and the human's, codename user in the global scope (§4.6). It is idempotent,
-// and a store that already has an active user profile keeps it.
+// generated notice, and the human's, codename user in the global scope
+// (docs/decisions/crew.md#durable-mail). It is idempotent, and a store that already has an active
+// user profile keeps it.
 func (m *Manager) EnsureReserved(ctx context.Context) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		now := tx.Now().UnixNano()
@@ -126,10 +127,11 @@ func closeDelivery(tx Tx, d Delivery) error {
 	return tx.PutDelivery(d)
 }
 
-// Answer is inbox.reply: the human's response to request message, in one write (§4.8). Any window
-// may answer any request, and the first answer wins. key is bound to the request and the body: an
-// exact replay after a lost answer returns the same response (even once the request is answered),
-// and the key with another body or request is ErrKeyReused.
+// Answer is inbox.reply: the human's response to request message, in one write
+// (docs/decisions/crew.md#the-human-inbox). Any window may answer any request, and the first answer
+// wins. key is bound to the request and the body: an exact replay after a lost answer returns the
+// same response (even once the request is answered), and the key with another body or request is
+// ErrKeyReused.
 func (m *Manager) Answer(ctx context.Context, message, body, key string) (Message, error) {
 	switch {
 	case len(body) > MaxBody:
@@ -190,7 +192,8 @@ func answerDigest(message, body string) []byte {
 }
 
 // Dismiss is inbox.dismiss: the human declines request message, and its sender is told, in one
-// write (§4.8). A second dismiss of a dismissed request is a replay, and answers ok.
+// write (docs/decisions/crew.md#the-human-inbox). A second dismiss of a dismissed request is a
+// replay, and answers ok.
 func (m *Manager) Dismiss(ctx context.Context, message string) error {
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
@@ -224,8 +227,8 @@ func (m *Manager) Dismiss(ctx context.Context, message string) error {
 	return m.keepExpiry(ctx, err)
 }
 
-// Read is inbox.ack: the human has read report message (§4.8). A request is answered or
-// dismissed, never acked; a second ack is a replay, and answers ok.
+// Read is inbox.ack: the human has read report message (docs/decisions/crew.md#the-human-inbox). A
+// request is answered or dismissed, never acked; a second ack is a replay, and answers ok.
 func (m *Manager) Read(ctx context.Context, message string) error {
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {

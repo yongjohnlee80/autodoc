@@ -70,8 +70,8 @@ func newCrewDaemon(t *testing.T) *crewDaemon {
 }
 
 // agent registers codename and writes its session context into an agent folder of its own, as a
-// host does before the agent starts (§4.5), and answers the context file's path, which the agent is
-// told; store is the context's store id.
+// host does before the agent starts (docs/decisions/crew.md#the-session-context), and answers the
+// context file's path, which the agent is told; store is the context's store id.
 func (d *crewDaemon) agent(codename, instance, store string) string {
 	d.t.Helper()
 	secret := strings.Repeat("s", 32) + instance
@@ -163,10 +163,11 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 	}
 }
 
-// TestContextsNeverMix (§5 case 5): an env context whose session the working directory's contexts
-// don't hold is refused before any call; without the env, the working directory's one context is
-// the agent's, and several are refused, never one guessed; a context for another store is refused
-// by the daemon (crew.context_mismatch); with none, the command says this process is no crew agent.
+// TestContextsNeverMix (docs/decisions/crew.md#the-session-context): an env context whose session
+// the working directory's contexts don't hold is refused before any call; without the env, the
+// working directory's one context is the agent's, and several are refused, never one guessed; a
+// context for another store is refused by the daemon (crew.context_mismatch); with none, the
+// command says this process is no crew agent.
 func TestContextsNeverMix(t *testing.T) {
 	d := newCrewDaemon(t)
 	gold, jarvis := d.agent("gold", "agent-1", "store-1"), d.agent("jarvis", "agent-2", "store-1")
@@ -441,10 +442,10 @@ func TestASnapshotMeasuresMetadataThroughRPC(t *testing.T) {
 	}
 }
 
-// TestTheLongPollCapIsPerConnectionAcrossReHellos (§4.6): a connection holds at most two long-polls.
-// A third is refused, and still is after the client says sys.hello again on the same socket, which
-// mints it a new client token: the cap counts the connection, not the token. Another connection
-// has its own.
+// TestTheLongPollCapIsPerConnectionAcrossReHellos (docs/decisions/crew.md#durable-mail): a
+// connection holds at most two long-polls. A third is refused, and still is after the client says
+// sys.hello again on the same socket, which mints it a new client token: the cap counts the
+// connection, not the token. Another connection has its own.
 func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
 	d := newCrewDaemon(t)
 	dial := func() *golibrpc.Client {

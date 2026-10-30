@@ -38,10 +38,11 @@ func results(t *testing.T, logs, name string) []string {
 	return slices.DeleteFunc(said(t, logs, name), func(s string) bool { return !strings.HasPrefix(s, "result ") })
 }
 
-// TestAPluginCallsTheCatalog (§5.7, §5.8): a declared call runs, a Lua entry on the attached
-// editor, and answers ok; the entry's error is failed; an undeclared id, and a plugin's, refused;
-// an id declared that no entry has, unknown. Each from inside the plugin's own Command and Key
-// handlers, which wait for the answer without a deadlock; each answered once.
+// TestAPluginCallsTheCatalog (docs/decisions/plugins.md#plugin-calls,
+// docs/decisions/plugins.md#lua-runs-catalog-entries): a declared call runs, a Lua entry on the
+// attached editor, and answers ok; the entry's error is failed; an undeclared id, and a plugin's,
+// refused; an id declared that no entry has, unknown. Each from inside the plugin's own Command and
+// Key handlers, which wait for the answer without a deadlock; each answered once.
 func TestAPluginCallsTheCatalog(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin3(t, dir, "caller", "dialog", "caller", `calls = ["lua.mark", "lua.boom", "lua.nope"]
@@ -162,8 +163,9 @@ func TestACallReusingAWaitingNumberIsNeverAnswered(t *testing.T) {
 	}
 }
 
-// TestPastSixtyFourWaitingCallsTheHostIsBusy (§4.5): with 64 calls waiting, a 65th, a new number,
-// is answered refused busy and runs nothing; every call is answered exactly once.
+// TestPastSixtyFourWaitingCallsTheHostIsBusy (docs/decisions/plugins.md#plugin-calls): with 64
+// calls waiting, a 65th, a new number, is answered refused busy and runs nothing; every call is
+// answered exactly once.
 func TestPastSixtyFourWaitingCallsTheHostIsBusy(t *testing.T) {
 	r, logs, run := rawTUI(t, 3)
 	heldLoop(t, r, run, "busy", func(waiting, _, busy int) bool { return waiting == plugin.MaxPendingCalls && busy == 6 })
@@ -208,9 +210,10 @@ func TestAProtocolTwoPluginsCallIsDropped(t *testing.T) {
 	}
 }
 
-// TestProtocolThreesCalls (§4.5): calls needs protocol = 3, exact ids, never a plugin's, each once;
-// a protocol this AutoDoc does not speak is refused, as an older AutoDoc refuses protocol 3; a
-// later protocol keeps the calls. The install question lists the calls.
+// TestProtocolThreesCalls (docs/decisions/plugins.md#plugin-calls): calls needs protocol = 3, exact
+// ids, never a plugin's, each once; a protocol this AutoDoc does not speak is refused, as an older
+// AutoDoc refuses protocol 3; a later protocol keeps the calls. The install question lists the
+// calls.
 func TestProtocolThreesCalls(t *testing.T) {
 	const head = "name = \"p\"\nkind = \"dialog\"\ncommand = [\"x\"]\n"
 	for _, c := range []struct{ toml, reason string }{

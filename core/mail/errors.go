@@ -28,7 +28,8 @@ var (
 	// params.
 	ErrInvalid = errs.Sentinel(errs.ErrInvalidArgument, "mail: invalid")
 
-	// errRecipientGone is a disposition, never a verb's failure (§4.6): the delivery is inserted
-	// failed, why=recipient_gone, and the operation that made it still commits.
+	// errRecipientGone is a disposition, never a verb's failure
+	// (docs/decisions/crew.md#durable-mail): the delivery is inserted failed, why=recipient_gone,
+	// and the operation that made it still commits.
 	errRecipientGone = errs.Sentinel(errs.ErrPrecondition, "mail: the recipient is gone")
 )

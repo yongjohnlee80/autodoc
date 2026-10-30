@@ -9,10 +9,11 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 )
 
-// Changes is an edit of a workspace's settings, all of them saved together by Configure (ADR
-// 0214 §3). A nil field is left as it is; a set one replaces the stored value. The TUI's Edit and
-// Advanced tabs fill one Changes, so a save is one transaction: every field is checked before any
-// is written, and a refused field leaves the workspace exactly as it was.
+// Changes is an edit of a workspace's settings, all of them saved together by Configure
+// (docs/decisions/store.md#workspace-settings-saved-together). A nil field is left as it is; a set
+// one replaces the stored value. The TUI's Edit and Advanced tabs fill one Changes, so a save is
+// one transaction: every field is checked before any is written, and a refused field leaves the
+// workspace exactly as it was.
 type Changes struct {
 	// Edit
 	Name             *string

@@ -83,10 +83,11 @@ func (m Mode) version() string {
 	return b.String()
 }
 
-// varsVersion is what a document whose $NAME refs name names adds to its indexer version (ADR
-// 1792132105 §2.5): the names, and a fingerprint of their values in vars ("nil" for none given), so a
-// change of the workspace's variables re-indexes exactly the documents that name a changed one. ""
-// for a document that names none. A variable name holds no ',', ':' or ';'.
+// varsVersion is what a document whose $NAME refs name names adds to its indexer version
+// (docs/decisions/todos.md#resolving-refs-in-every-document): the names, and a fingerprint of their
+// values in vars ("nil" for none given), so a change of the workspace's variables re-indexes
+// exactly the documents that name a changed one. "" for a document that names none. A variable name
+// holds no ',', ':' or ';'.
 func varsVersion(names []string, vars *Vars) string {
 	if len(names) == 0 {
 		return ""

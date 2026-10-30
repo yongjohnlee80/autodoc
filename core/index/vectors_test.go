@@ -153,8 +153,9 @@ func TestADeadChunksVectorStaysUntilGC(t *testing.T) {
 	}
 }
 
-// TestARemovedDocumentsVectorsGoWithIt (§2.3, item 2): a document's removal deletes its own texts'
-// vectors in its commit (gc is off: nothing else could), and keeps a text another document has.
+// TestARemovedDocumentsVectorsGoWithIt (docs/decisions/store.md#vectors-follow-their-chunks): a
+// document's removal deletes its own texts' vectors in its commit (gc is off: nothing else could),
+// and keeps a text another document has.
 func TestARemovedDocumentsVectorsGoWithIt(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a, noGC: true})
@@ -174,8 +175,8 @@ func TestARemovedDocumentsVectorsGoWithIt(t *testing.T) {
 	}
 }
 
-// TestALateVectorForAReplacedTextIsNotStored (§2.3, item 3): a batch of vectors stores those whose
-// text a chunk has, and none for a text no chunk has.
+// TestALateVectorForAReplacedTextIsNotStored (docs/decisions/store.md#vectors-follow-their-chunks):
+// a batch of vectors stores those whose text a chunk has, and none for a text no chunk has.
 func TestALateVectorForAReplacedTextIsNotStored(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -196,9 +197,9 @@ func TestALateVectorForAReplacedTextIsNotStored(t *testing.T) {
 	a.unhold()
 }
 
-// TestTheStartPassSweepsOrphansInBatches (§2.4): 5,000 orphans under the active model and the target
-// go in batches, each a writer turn, a document committing between two of them before the last; the
-// vectors chunks use stay.
+// TestTheStartPassSweepsOrphansInBatches (docs/decisions/store.md#the-orphan-pass-at-start): 5,000
+// orphans under the active model and the target go in batches, each a writer turn, a document
+// committing between two of them before the last; the vectors chunks use stay.
 func TestTheStartPassSweepsOrphansInBatches(t *testing.T) {
 	orphanBatchOf(t, 1000)
 	a := newFake("m", "a")
@@ -326,9 +327,10 @@ func TestThePassReachesAWorkspaceWithNoIndexer(t *testing.T) {
 	}
 }
 
-// TestAQueryHeldAcrossTheDeletionRescoresFromWhatItRead (§2.1, Lector r0/r1): a semantic query whose
-// read transaction is open while an edit replaces its hit's text, gc deletes the dead chunk, and the
-// chunk's vector goes, still validates and rescores that hit from its own snapshot.
+// TestAQueryHeldAcrossTheDeletionRescoresFromWhatItRead
+// (docs/decisions/store.md#vectors-follow-their-chunks): a semantic query whose read transaction is
+// open while an edit replaces its hit's text, gc deletes the dead chunk, and the chunk's vector
+// goes, still validates and rescores that hit from its own snapshot.
 func TestAQueryHeldAcrossTheDeletionRescoresFromWhatItRead(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -419,9 +421,10 @@ func TestTheLookupsUseChunkText(t *testing.T) {
 	}
 }
 
-// TestABatchsReadinessLooksUpOnlyItsTexts (§2.6): setReady for a few documents, looking their texts
-// up by key, marks them as setReady for every document does, with the model's vectors read whole.
-// Some texts have a vector only under another model, which must not count.
+// TestABatchsReadinessLooksUpOnlyItsTexts (docs/decisions/store.md#readiness-follows-the-batch):
+// setReady for a few documents, looking their texts up by key, marks them as setReady for every
+// document does, with the model's vectors read whole. Some texts have a vector only under another
+// model, which must not count.
 func TestABatchsReadinessLooksUpOnlyItsTexts(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -497,10 +500,10 @@ func TestABatchsReadinessLooksUpOnlyItsTexts(t *testing.T) {
 	}
 }
 
-// TestAFailedVectorDeleteRollsBackItsChunks (§2.3): the vectors go in the transaction that deletes
-// their last chunk, so a refused vector delete keeps the chunk too: gc's dead chunk stays dead and
-// counted, a removed document stays indexed, both with their vectors. Once the failure lifts, both
-// go with their vectors.
+// TestAFailedVectorDeleteRollsBackItsChunks (docs/decisions/store.md#vectors-follow-their-chunks):
+// the vectors go in the transaction that deletes their last chunk, so a refused vector delete keeps
+// the chunk too: gc's dead chunk stays dead and counted, a removed document stays indexed, both
+// with their vectors. Once the failure lifts, both go with their vectors.
 func TestAFailedVectorDeleteRollsBackItsChunks(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

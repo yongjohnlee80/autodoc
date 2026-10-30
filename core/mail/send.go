@@ -74,9 +74,9 @@ func receiverScope(tx Tx, s crew.Session) (string, error) {
 	return p.Scope, err
 }
 
-// Send stores a message and its deliveries in one write, from credential's session (§4.6). A key the sender
-// already used answers that send while its message is retained, when the content is the same, and
-// ErrKeyReused when it is not.
+// Send stores a message and its deliveries in one write, from credential's session
+// (docs/decisions/crew.md#durable-mail). A key the sender already used answers that send while its
+// message is retained, when the content is the same, and ErrKeyReused when it is not.
 func (m *Manager) Send(ctx context.Context, credential string, p Send) (Sent, error) {
 	if err := checkSend(p); err != nil {
 		return Sent{}, err
@@ -213,7 +213,7 @@ func resolveAddress(tx Tx, scope, to string) (address, error) {
 	case cross && strings.Contains(in, ":"):
 		scope = in
 	case cross:
-		scope = "autovim:" + in // jarvis@mcat: an AutoVim project by name (§4.3)
+		scope = "autovim:" + in // jarvis@mcat: an AutoVim project by name (docs/decisions/crew.md#scopes-and-fenced-ownership)
 	}
 	p, ok, err := tx.ActiveProfile(scope, name)
 	if err != nil {
@@ -238,7 +238,8 @@ type Received struct {
 }
 
 // Receive leases the credential's session's next eligible deliveries, at most ReceiveMax, in seq order, each for
-// LeaseFor (§4.6). More is true while eligible mail remains: the guide drains until it is false.
+// LeaseFor (docs/decisions/crew.md#durable-mail). More is true while eligible mail remains: the
+// guide drains until it is false.
 func (m *Manager) Receive(ctx context.Context, credential string) (Received, error) {
 	var out Received
 	err := m.store.Write(ctx, func(tx Tx) error {
@@ -368,9 +369,9 @@ type Reply struct {
 	Key     string
 }
 
-// Reply acks a request's delivery under its lease and sends its response, in one write (§4.6). A
-// replier's response to a request is one: a retry with the same content answers it, even after
-// the lease is gone, and other content is ErrKeyReused.
+// Reply acks a request's delivery under its lease and sends its response, in one write
+// (docs/decisions/crew.md#durable-mail). A replier's response to a request is one: a retry with the
+// same content answers it, even after the lease is gone, and other content is ErrKeyReused.
 func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string, p Reply) (Message, error) {
 	switch {
 	case len(p.Body) > MaxBody:

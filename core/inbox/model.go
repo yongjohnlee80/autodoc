@@ -2,8 +2,9 @@
 // (docs/decisions/crew.md#the-human-inbox): one feed every window and Neovim watch (inbox.watch),
 // the history (inbox.list), and the human's answers (inbox.reply, inbox.dismiss, inbox.ack) and
 // focus requests (inbox.focus). Its verbs take no credential: they run under the same-UID trust the
-// daemon's socket already has (rationale §R19). The answers are mail's state transitions
-// (mail.Manager's Answer, Dismiss and Read); this package serves them, and reads the feed.
+// daemon's socket already has (docs/decisions/crew.md#the-human-inbox). The answers are mail's
+// state transitions (mail.Manager's Answer, Dismiss and Read); this package serves them, and reads
+// the feed.
 package inbox
 
 import (
@@ -45,7 +46,7 @@ type Tx interface {
 	// newest), at most limit.
 	ToUser(user string, before int64, limit int) ([]mail.Item, error)
 	// FailedNotices is the failed deliveries of generated notices (events), newest done_at first,
-	// at most limit: the notices nobody could receive (§4.6, r9).
+	// at most limit: the notices nobody could receive (docs/decisions/crew.md#durable-mail).
 	FailedNotices(limit int) ([]mail.Item, error)
 }
 

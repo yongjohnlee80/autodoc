@@ -144,7 +144,8 @@ func toWireItems(items []Item) []wireItem {
 	return out
 }
 
-// Verbs are the mail module's verbs: an agent's, on its own credential (§4.6).
+// Verbs are the mail module's verbs: an agent's, on its own credential
+// (docs/decisions/crew.md#durable-mail).
 func (m *Manager) Verbs() []module.Verb {
 	agent := func(verb string, effect module.Effect, result, doc string, codes ...int64) module.Contract {
 		return module.Contract{Verb: verb, Since: protocol, Audience: module.AudienceAgent, Effect: effect,

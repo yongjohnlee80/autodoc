@@ -70,8 +70,9 @@ func allPages(t *testing.T, s *Store, kinds []string, limit int) (Map, int) {
 	}
 }
 
-// TestAPagedMapIsTheOneReplyMap (§5.2): paged to the end at limits 1, 7, 500 and the most, the
-// pages' nodes and links joined are the one-reply map's, in its order, for every kinds filter.
+// TestAPagedMapIsTheOneReplyMap (docs/decisions/search.md#unrooted-maps-in-pages): paged to the end
+// at limits 1, 7, 500 and the most, the pages' nodes and links joined are the one-reply map's, in
+// its order, for every kinds filter.
 func TestAPagedMapIsTheOneReplyMap(t *testing.T) {
 	e := pagesEnv(t)
 	for name, kinds := range mapKinds {
@@ -113,8 +114,9 @@ func slicesContains(es []Edge, e Edge) bool {
 // sameEdges is a and b equal, none and an empty list alike.
 func sameEdges(a, b []Edge) bool { return len(a) == 0 && len(b) == 0 || reflect.DeepEqual(a, b) }
 
-// TestEachLinkComesOnce (§5.3): across a whole paged map, no link comes twice (a.md links b.md
-// twice: one edge, as the one-reply map has it) and every link comes, on its source's page.
+// TestEachLinkComesOnce (docs/decisions/search.md#unrooted-maps-in-pages): across a whole paged
+// map, no link comes twice (a.md links b.md twice: one edge, as the one-reply map has it) and every
+// link comes, on its source's page.
 func TestEachLinkComesOnce(t *testing.T) {
 	e := pagesEnv(t)
 	want, err := e.store.Map(context.Background(), MapOpts{})
@@ -155,9 +157,9 @@ func TestEachLinkComesOnce(t *testing.T) {
 	}
 }
 
-// TestAMapCursorIsForItsOwnKinds (§5.4): a cursor from other kinds (every kind and a list differ, as
-// do two lists) is refused, as is one not a cursor; the same kinds in another order are the same
-// map; no after starts it.
+// TestAMapCursorIsForItsOwnKinds (docs/decisions/search.md#unrooted-maps-in-pages): a cursor from
+// other kinds (every kind and a list differ, as do two lists) is refused, as is one not a cursor;
+// the same kinds in another order are the same map; no after starts it.
 func TestAMapCursorIsForItsOwnKinds(t *testing.T) {
 	e := pagesEnv(t)
 	ctx := context.Background()

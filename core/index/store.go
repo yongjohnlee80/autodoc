@@ -77,7 +77,8 @@ func (s *Store) sectionTokens(ctx context.Context) (int, error) {
 	return s.db.SectionTokens(ctx, s.sc.ID())
 }
 
-// ErrCursorExpired is a change cursor older than the retained log: the client re-lists (0203 §4.5).
+// ErrCursorExpired is a change cursor older than the retained log: the client re-lists
+// (docs/decisions/contract.md#one-rpc-api-for-every-client).
 var ErrCursorExpired = errs.Sentinel(errs.ErrPrecondition, "index: the change cursor is older than the retained log")
 
 // Store is one workspace's index in the store.
@@ -122,7 +123,8 @@ func (s *Store) outdated(ctx context.Context, want func(path string, tokens int,
 }
 
 // Version is the Version a path was indexed at, and whether it is indexed. It is what the
-// follower compares with the file's Version (0203 §4.3). A path not indexed is no error; a read
+// follower compares with the file's Version
+// (docs/decisions/contract.md#the-index-follows-the-files). A path not indexed is no error; a read
 // that failed is.
 func (s *Store) Version(ctx context.Context, path string) (vfs.Version, bool, error) {
 	var v string
@@ -190,7 +192,8 @@ type DocInfo struct {
 	Version    string
 }
 
-// List pages the documents in path order after the path after (0203 §4.5).
+// List pages the documents in path order after the path after
+// (docs/decisions/contract.md#one-rpc-api-for-every-client).
 func (s *Store) List(ctx context.Context, after string, limit int) ([]DocInfo, bool, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 1000
@@ -313,10 +316,10 @@ type Status struct {
 	// Embeddings is the embedding tier's status: nil without a provider (Store.Status never has one;
 	// Indexer.Status does when it has a provider).
 	Embeddings *EmbeddingStatus
-	// Held counts the documents this daemon holds, made by a chunker or a format it lacks (ADR
-	// 0216 §1.4): searchable, never reinterpreted. HeldStale are those whose files changed since,
-	// HeldUnchecked those the scan or the watcher has not seen yet; both are counted in Held.
-	// Store.Status never has them; Indexer.Status does.
+	// Held counts the documents this daemon holds, made by a chunker or a format it lacks
+	// (docs/decisions/search.md#held-documents): searchable, never reinterpreted. HeldStale are
+	// those whose files changed since, HeldUnchecked those the scan or the watcher has not seen
+	// yet; both are counted in Held. Store.Status never has them; Indexer.Status does.
 	Held, HeldStale, HeldUnchecked int64
 }
 
