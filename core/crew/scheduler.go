@@ -12,11 +12,10 @@ const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
 
 // The scheduler's bounds (§4.7).
 const (
-	wakePermits     = 4                // calls out at once, whatever the sessions
-	wakeCallLimit   = 10 * time.Second // one waker call's deadline
-	wakeUnanswered  = 2 * time.Minute  // an accepted notice with no receive after it times out
-	wakeLookBatch   = 64               // rows one look reserves from, before it looks again
-	wakeUnreachable = 5                // consecutive failures past which the session is unreachable
+	wakePermits    = 4                // calls out at once, whatever the sessions
+	wakeCallLimit  = 10 * time.Second // one waker call's deadline
+	wakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out
+	wakeLookBatch  = 64               // rows one look reserves from, before it looks again
 )
 
 // ChangeReachability is the human feed's change when a session stops (or starts again) being
@@ -24,12 +23,12 @@ const (
 const ChangeReachability = "reachability"
 
 // failed counts one more consecutive failure of w and backs it off from now; the failure that
-// crosses wakeUnreachable journals the loss in the same write, once.
+// crosses unreachableAfter journals the loss in the same write, once.
 func failed(tx Tx, w *Wake, now time.Time) error {
 	w.Failures++
 	at := now.Add(backoff(w.Failures)).UnixNano()
 	w.State, w.Token, w.NextAt = WakeIdle, "", &at
-	if w.Failures == wakeUnreachable {
+	if w.Failures == unreachableAfter {
 		return tx.AddInboxChange(ChangeReachability, w.Session)
 	}
 	return nil
@@ -245,7 +244,7 @@ func (m *Manager) Received(tx Tx, session string) error {
 	if err != nil || !found {
 		return err
 	}
-	if w.Failures >= wakeUnreachable { // reachable again: the feed hears that too
+	if w.Failures >= unreachableAfter { // reachable again: the feed hears that too
 		if err := tx.AddInboxChange(ChangeReachability, session); err != nil {
 			return err
 		}
