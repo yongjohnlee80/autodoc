@@ -355,20 +355,13 @@ func crewModules(d *moduleDeps) {
 	port := &crewPort{}
 	d.mail = mail.New(st.Mail(), port)
 	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID))
-	port.m = d.crew
+	port.Manager = d.crew
 	d.inbox = inbox.New(st.Inbox(), d.mail, feed)
 }
 
-// crewPort is mail's port to crew, set once crew is built: the two depend on each other.
-type crewPort struct{ m *crew.Manager }
-
-func (p *crewPort) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
-	return p.m.Authenticate(tx, credential)
-}
-
-func (p *crewPort) RaisePending(tx crew.Tx, profile string) error {
-	return p.m.RaisePending(tx, profile)
-}
+// crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each
+// other. It embeds the crew Manager, so the port follows whatever mail.Crew asks of crew.
+type crewPort struct{ *crew.Manager }
 
 // todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
 // ambiguous change, a blocked store move, a consumer dropped, a root registered, a daily refresh
