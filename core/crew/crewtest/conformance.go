@@ -38,12 +38,13 @@ func (c *Clock) Advance(d time.Duration) { c.mu.Lock(); c.at = c.at.Add(d); c.mu
 
 // Enders records the sessions the crew module ended, as the mail module would hear of them.
 type Enders struct {
-	mu        sync.Mutex
-	Ended     []EndedSession
-	Merged    [][2]string     // (from, into) profiles
-	Discarded []string        // profiles
-	Pending   map[string]bool // profiles with eligible mail, for HasEligible
-	Unhandled map[string]int  // profiles' unhandled deliveries, for UnhandledCount
+	mu         sync.Mutex
+	Ended      []EndedSession
+	Merged     [][2]string     // (from, into) profiles
+	MergedSeen []crew.Profile  // from's row when MergeDeliveries ran
+	Discarded  []string        // profiles
+	Pending    map[string]bool // profiles with eligible mail, for HasEligible
+	Unhandled  map[string]int  // profiles' unhandled deliveries, for UnhandledCount
 }
 
 // EndedSession is one call of EndSessionDeliveries.
@@ -57,10 +58,16 @@ func (e *Enders) EndSessionDeliveries(_ crew.Tx, s crew.Session, why string) err
 	return nil
 }
 
-// MergeDeliveries records adoption's mail half (crew.SessionEnder).
-func (e *Enders) MergeDeliveries(_ crew.Tx, from, into string) error {
+// MergeDeliveries records adoption's mail half (crew.SessionEnder), and from's profile row as the
+// mail module would read it then: the forwarding must already be in place.
+func (e *Enders) MergeDeliveries(tx crew.Tx, from, into string) error {
+	p, _, err := tx.Profile(from)
+	if err != nil {
+		return err
+	}
 	e.mu.Lock()
 	e.Merged = append(e.Merged, [2]string{from, into})
+	e.MergedSeen = append(e.MergedSeen, p)
 	e.mu.Unlock()
 	return nil
 }
@@ -705,6 +712,15 @@ func Run(t *testing.T, h Harness) {
 		enders.mu.Unlock()
 		if wantM := [][2]string{{oldJarvis.Profile, newJarvis.Profile}, {oldVision.Profile, ""}}; !reflect.DeepEqual(merged, wantM) {
 			t.Fatalf("mail's merges: %v, want %v (jarvis into w2's jarvis, vision moved whole)", merged, wantM)
+		}
+		// the forwarding was real before mail moved anything: a notice the merge makes to the
+		// profile, as a sender, resolves to the survivor
+		enders.mu.Lock()
+		seen := slices.Clone(enders.MergedSeen)
+		enders.mu.Unlock()
+		if len(seen) != 2 || seen[0].Status != crew.ProfileMerged || seen[0].MergedInto != newJarvis.Profile ||
+			seen[1].Status != crew.ProfileActive || seen[1].Scope != w2 {
+			t.Fatalf("the profiles as MergeDeliveries saw them: %+v; want jarvis merged into w2's, vision already in w2", seen)
 		}
 		if err := store.Read(ctx, func(tx crew.Tx) error {
 			j, _, err := tx.Profile(oldJarvis.Profile)

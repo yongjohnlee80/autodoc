@@ -109,9 +109,10 @@ func (m *Manager) fenceOrphan(tx Tx, from, to, run string, epoch int64) ([]Profi
 
 // Adopt fences the orphan scope from and moves its mail to the caller's scope to (crew.adopt,
 // §4.3), in one write. For each active profile p of from: if to has an active profile of the same
-// codename, p's deliveries merge into it and p becomes 'merged' into it, so every later delivery to
-// p follows; otherwise p moves to to whole, keeping its mail and order. from ends 'gone'. The mail
-// module does the deliveries' half (MergeDeliveries), and raises the survivors' pending_gen.
+// codename, p becomes 'merged' into it, so every later delivery to p follows; otherwise p moves to to
+// whole, keeping its mail and order. Only then does the mail module move p's deliveries
+// (MergeDeliveries), and raise the survivors' pending_gen: a delivery the merge itself makes to p
+// already resolves to the survivor. from ends 'gone'.
 func (m *Manager) Adopt(ctx context.Context, from, to, run string, epoch int64) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		profiles, err := m.fenceOrphan(tx, from, to, run, epoch)
@@ -123,22 +124,23 @@ func (m *Manager) Adopt(ctx context.Context, from, to, run string, epoch int64) 
 			if err != nil {
 				return err
 			}
+			// the forwarding first: once p is merged into q (or moved to to), any delivery the merge
+			// itself makes to p, a notice to p as a sender say, resolves to the survivor. Merging
+			// first queued such a notice on p, which then stopped receiving.
 			into := ""
 			if merge {
 				into = q.ID
-			}
-			if m.ender != nil {
-				if err := m.ender.MergeDeliveries(tx, p.ID, into); err != nil {
-					return err
-				}
-			}
-			if merge {
 				p.Status, p.MergedInto = ProfileMerged, q.ID
 			} else {
 				p.Scope = to
 			}
 			if err := tx.PutProfile(p); err != nil {
 				return err
+			}
+			if m.ender != nil {
+				if err := m.ender.MergeDeliveries(tx, p.ID, into); err != nil {
+					return err
+				}
 			}
 		}
 		return goneScope(tx, from)
