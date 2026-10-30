@@ -66,7 +66,7 @@ func WithWakeErrors(report func(error)) SchedulerOption {
 func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) { s.retry = d } }
 
 // NewScheduler is the wake scheduler for this daemon run (a fresh random id made once at start),
-// calling the wakers by endpoint kind.
+// calling the wakers by endpoint kind. It is the Manager's from then on: Watch hears its pokes.
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
 	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
 		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
@@ -74,6 +74,7 @@ func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...Sche
 	for _, o := range opts {
 		o(s)
 	}
+	m.sched.Store(s) // the long-polls watch its pokes (Manager.Watch)
 	return s
 }
 

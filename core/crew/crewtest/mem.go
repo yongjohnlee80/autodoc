@@ -206,7 +206,7 @@ func (t *memTx) Wake(session string) (crew.Wake, bool, error) {
 
 func (t *memTx) PutWake(w crew.Wake) error {
 	t.st.wakes[w.Session] = copyWake(w)
-	t.wake = t.wake || crew.WakeDue(w)
+	t.wake = true
 	return nil
 }
 

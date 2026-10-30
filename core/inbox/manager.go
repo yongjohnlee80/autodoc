@@ -11,10 +11,10 @@ import (
 
 // The feed's limits (§4.8).
 const (
-	MaxWait     = 25 * time.Second // the longest inbox.watch waits
-	changesMax  = 256              // changes one watch returns; the next takes the rest
-	snapshotMax = 500              // open items one snapshot shows
-	listMax     = 200              // items one list returns
+	MaxWait     = crew.MaxWait // the longest inbox.watch waits
+	changesMax  = 256          // changes one watch returns; the next takes the rest
+	snapshotMax = 500          // open items one snapshot shows
+	listMax     = 200          // items one list returns
 )
 
 // List filters.
@@ -28,15 +28,27 @@ type Manager struct {
 	store Store
 	mail  Mail
 	feed  *Feed
+	polls *crew.LongPolls // the connections' long-polls (inbox.watch's cap); nil caps nothing
 }
+
+// Option configures a Manager.
+type Option func(*Manager)
+
+// WithLongPolls sets the daemon's long-poll limiter, which inbox.watch enters: the same one the
+// other modules' long-polls share.
+func WithLongPolls(l *crew.LongPolls) Option { return func(m *Manager) { m.polls = l } }
 
 // New is the inbox module over store, answering through mail, its watches woken by feed. A nil
 // store builds a Manager that only answers Name, Verbs and Errors, as --contracts needs.
-func New(store Store, mail Mail, feed *Feed) *Manager {
+func New(store Store, mail Mail, feed *Feed, opts ...Option) *Manager {
 	if feed == nil {
 		feed = NewFeed()
 	}
-	return &Manager{store: store, mail: mail, feed: feed}
+	m := &Manager{store: store, mail: mail, feed: feed}
+	for _, o := range opts {
+		o(m)
+	}
+	return m
 }
 
 // Item is a message to the human, or a notice nobody received, with its delivery and its sender

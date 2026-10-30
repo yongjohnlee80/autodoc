@@ -3,6 +3,7 @@ package crew
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
@@ -33,6 +34,8 @@ func (m *Manager) Errors() []module.PublicError {
 			Message: "two session contexts disagree, or one is for another store", Next: "fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew"},
 		{Err: ErrBadEndpoint, Code: CodeBadEndpoint, Name: "crew.bad_endpoint", Message: "the daemon refuses that endpoint",
 			Next: "register an endpoint of a known kind, with its locator"},
+		{Err: ErrLongPollsBusy, Code: CodeLongPollsBusy, Name: "crew.long_polls_busy",
+			Message: "a connection holds at most two long-polls", Next: "finish one first, or open another connection"},
 	}
 }
 
@@ -73,6 +76,13 @@ type (
 		Kind       string `param:"kind" doc:"claude, codex, agy or opencode: the session's own"`
 		Locator    string `param:"locator" doc:"JSON, kind-specific; never a secret"`
 	}
+	waitParams struct {
+		Scope    string   `param:"scope"`
+		Run      string   `param:"run"`
+		Epoch    int64    `param:"epoch"`
+		Sessions []string `param:"sessions" doc:"the host's tier-3 sessions to wait on"`
+		Timeout  int64    `param:"timeout,optional" doc:"milliseconds to wait for mail, at most 25000"`
+	}
 	attentionParams struct {
 		Credential string `param:"credential"`
 		Op         string `param:"op" doc:"raise or clear"`
@@ -88,6 +98,18 @@ type (
 		Epoch   int64  `param:"epoch"`
 		Session string `param:"session"`
 		Why     string `param:"why,optional" doc:"exit (the default) or start_failed"`
+	}
+)
+
+// pendingJSON and waitedResult are crew.wait's answer.
+type (
+	pendingJSON struct {
+		Session   string `json:"session"`
+		Unhandled int    `json:"unhandled"` // its profile's queued and leased deliveries
+	}
+	waitedResult struct {
+		Ready    []pendingJSON `json:"ready"`
+		TimedOut bool          `json:"timed_out"`
 	}
 )
 
@@ -161,6 +183,23 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p endpointParams) (generationResult, error) {
 				g, err := m.SetEndpoint(ctx, p.Credential, p.Kind, p.Locator)
 				return generationResult{g}, err
+			}),
+		module.Handle(module.Contract{Verb: "crew.wait", Since: Protocol, Scope: module.ScopeLocalPeer,
+			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "{ready[{session, unhandled}], timed_out}",
+			Errors: []int64{CodeStaleEpoch, CodeLongPollsBusy},
+			Doc:    "One long-poll for the host's tier-3 sessions (at most 25 s): which have mail waiting. A connection holds at most two long-polls."},
+			func(ctx context.Context, p waitParams) (waitedResult, error) {
+				leave, err := m.polls.Enter(module.ClientFrom(ctx))
+				if err != nil {
+					return waitedResult{}, err
+				}
+				defer leave()
+				w, err := m.Wait(ctx, p.Scope, p.Run, p.Epoch, p.Sessions, time.Duration(p.Timeout)*time.Millisecond)
+				out := waitedResult{Ready: []pendingJSON{}, TimedOut: w.TimedOut}
+				for _, r := range w.Ready {
+					out.Ready = append(out.Ready, pendingJSON{Session: r.Session, Unhandled: r.Unhandled})
+				}
+				return out, err
 			}),
 		module.Handle(module.Contract{Verb: "crew.attention", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectWrite, Result: "{}", Errors: []int64{CodeBadCredential, CodeStaleEpoch},
