@@ -237,3 +237,31 @@ func TestTheBridgesAddressIsLoopback(t *testing.T) {
 		t.Error("a bridge for a claude session was made")
 	}
 }
+
+// TestTheBridgesFilesAreBesideTheContexts: the bridge's lock and log are in the agent folder that
+// holds the context file $AUTODOC_CREW_CONTEXT names, never in the contexts' folder, where each
+// would be taken for another session's context: with the bridge's lock held, the agent folder
+// still has its one context.
+func TestTheBridgesFilesAreBesideTheContexts(t *testing.T) {
+	t.Parallel()
+	agent := t.TempDir()
+	path, err := crew.WriteContext(agent, crew.Context{Store: "store-1", Socket: "/x.sock", Session: "s1",
+		Credential: "s1.secret", Kind: "agy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := bridgeDir(path, "/elsewhere"); got != agent {
+		t.Errorf("the bridge's folder for %s is %s, want the agent folder %s", path, got, agent)
+	}
+	if got := bridgeDir("", "/here"); got != "/here" {
+		t.Errorf("with no $AUTODOC_CREW_CONTEXT the bridge's folder is %s, want the working directory", got)
+	}
+	unlock, err := lockBridge(bridgeDir(path, "/elsewhere"), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if c, err := findSessionContext("", agent); err != nil || c.Session != "s1" {
+		t.Errorf("the agent folder's context with the bridge's lock held: %+v %v, want s1's alone", c, err)
+	}
+}

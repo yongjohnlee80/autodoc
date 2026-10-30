@@ -51,8 +51,8 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	envDir := os.Getenv("AUTODOC_CREW_CONTEXT")
-	c, err := findSessionContext(envDir, cwd)
+	envFile := os.Getenv("AUTODOC_CREW_CONTEXT")
+	c, err := findSessionContext(envFile, cwd)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
@@ -62,10 +62,7 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	dir := cwd
-	if envDir != "" {
-		dir = envDir
-	}
+	dir := bridgeDir(envFile, cwd)
 	if !*foreground {
 		pid, logPath, err := detachBridge(dir, c.Session, args)
 		if err != nil {
@@ -231,6 +228,20 @@ func ended(err error) bool {
 
 // errBridgeRunning is lockBridge's answer when the session's bridge already holds its lock.
 var errBridgeRunning = errors.New("the agy bridge is already running")
+
+// bridgeDir is the agent folder a bridge keeps its lock and log in: the one holding the context
+// file $AUTODOC_CREW_CONTEXT names (envFile, <agent folder>/.autodoc-crew/<session>), else the
+// working directory. Never the contexts' own folder, where every plain file is taken for a context.
+func bridgeDir(envFile, cwd string) string {
+	if envFile == "" {
+		return cwd
+	}
+	dir := filepath.Dir(envFile)
+	if filepath.Base(dir) == crewContextDir {
+		dir = filepath.Dir(dir)
+	}
+	return dir
+}
 
 // bridgeFiles are the session's bridge lock and log in dir, named by the session, so a later session
 // in the same folder has its own.
