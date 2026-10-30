@@ -118,10 +118,28 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
-	"crew endpoint": {usage: "<kind> <locator JSON>: register how this session is woken",
-		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
+	"crew endpoint": {usage: "--claude | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it)",
+		flags: func(fs *flag.FlagSet) {
+			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
+		},
+		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
+			if fs.Lookup("claude").Value.(flag.Getter).Get().(bool) {
+				if len(args) != 0 {
+					return "", nil, nil, errors.New("crew endpoint --claude takes no arguments")
+				}
+				if f, ok := stdin.(*os.File); ok {
+					if fi, err := f.Stat(); err != nil || fi.Mode()&os.ModeCharDevice != 0 {
+						stdin = nil // a terminal: no hook input to wait for
+					}
+				}
+				loc, err := claudeLocator(stdin, os.Getenv, os.Getuid())
+				if err != nil {
+					return "", nil, nil, err
+				}
+				return "crew.endpoint", []any{c.Credential, "claude", loc}, nil, nil
+			}
 			if len(args) != 2 {
-				return "", nil, nil, errors.New("crew endpoint takes a kind and a locator")
+				return "", nil, nil, errors.New("crew endpoint takes --claude, or a kind and a locator")
 			}
 			return "crew.endpoint", []any{c.Credential, args[0], args[1]}, nil, nil
 		}},
