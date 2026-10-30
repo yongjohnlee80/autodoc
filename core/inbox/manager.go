@@ -97,6 +97,8 @@ func (m *Manager) Watch(ctx context.Context, cursor int64, wait time.Duration) (
 	wait = min(max(wait, 0), MaxWait)
 	heard, stop := m.feed.Watch() // before the read: a commit after it is heard
 	defer stop()
+	// NOTE: timed by the caller's long-poll: inbox.watch answers "nothing new" once wait passes, so
+	// a host's loop comes back with its cursor; the feed and ctx end the wait sooner.
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	for {
