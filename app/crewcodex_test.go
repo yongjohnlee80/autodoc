@@ -3,10 +3,12 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -25,7 +27,7 @@ func script(t *testing.T, body string) string {
 // queue subcommand takes --thread; any other, or none, leaves Codex sessions watch-only.
 func TestServeWakesCodexOnlyWithItsQueue(t *testing.T) {
 	queue := script(t, `echo "Usage: codex queue [OPTIONS] --thread <THREAD> --message <TEXT>"`)
-	if _, ok := codexWaker(os.Getuid(), queue).(*crew.CodexWaker); !ok {
+	if _, ok := codexWaker(context.Background(), os.Getuid(), queue).(*crew.CodexWaker); !ok {
 		t.Fatal("a codex with `queue --thread`: no waker")
 	}
 	for name, bin := range map[string]string{
@@ -33,7 +35,7 @@ func TestServeWakesCodexOnlyWithItsQueue(t *testing.T) {
 		"a codex that fails":                   script(t, "exit 2"),
 		"no codex at all":                      "",
 	} {
-		if w := codexWaker(os.Getuid(), bin); w != nil {
+		if w := codexWaker(context.Background(), os.Getuid(), bin); w != nil {
 			t.Errorf("%s: a waker %T, want none (watch-only)", name, w)
 		}
 	}
@@ -78,4 +80,51 @@ func TestCrewEndpointCodexThreadNamesItsServer(t *testing.T) {
 	if _, err := codexLocator("t", func(string) string { return t.TempDir() }); err == nil {
 		t.Error("no control socket: registered, rather than refused")
 	}
+}
+
+// TestACapabilityProbeEndsWithinItsBounds: a probe whose CLI leaves a child holding its output (as a
+// shim or a wrapper can) still ends at its deadline plus probeWaitDelay, never when the child does.
+func TestACapabilityProbeEndsWithinItsBounds(t *testing.T) {
+	bin := script(t, "(sleep 5) &\nsleep 5")
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	began := time.Now()
+	if _, err := probeOutput(ctx, bin); err == nil {
+		t.Fatal("a probe killed at its deadline answered no error")
+	}
+	if took := time.Since(began); took > 200*time.Millisecond+probeWaitDelay+time.Second {
+		t.Fatalf("the probe ended after %v: a child holding its output kept it past its deadline and probeWaitDelay", took)
+	}
+}
+
+// TestServeAnswersBeforeALateWakerIsFound: serve starts and answers at once while a late waker's
+// probe is still running, so an installed CLI's capability never delays a daemon's start.
+func TestServeAnswersBeforeALateWakerIsFound(t *testing.T) {
+	release := make(chan struct{})
+	probing := make(chan struct{}, 1)
+	lateWakers = map[string]func(context.Context) crew.Waker{"slow": func(ctx context.Context) crew.Waker {
+		probing <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		return nil
+	}}
+	t.Cleanup(func() { lateWakers = nil })
+	defer close(release)
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	began := time.Now()
+	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
+	answered := time.Since(began)
+	select {
+	case <-probing:
+	default:
+		t.Fatal("the late waker's probe never started: this cell checks nothing")
+	}
+	call(t, dial(t, sock), "workspace.list")
+	if answered > 5*time.Second {
+		t.Errorf("serve answered after %v, with a late waker's probe still running", answered)
+	}
+	d.stop()
 }

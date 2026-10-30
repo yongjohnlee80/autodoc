@@ -22,10 +22,13 @@ const wakeRetry = 5 * time.Second
 // reserving attempts for due sessions under wakePermits permits. A permit is held by an attempt's
 // goroutine until its call returns: resetting a row never frees one.
 type Scheduler struct {
-	m       *Manager
-	run     string
+	m   *Manager
+	run string
+	// wakers and the kinds they serve (sorted: the only ones reserved), under wmu: a waker found
+	// after the start (AddWaker) joins them while the loop runs
+	wmu     sync.RWMutex
 	wakers  map[string]Waker
-	kinds   []string // the endpoint kinds wakers serves, sorted: the only ones reserved
+	kinds   []string
 	clock   func() time.Time
 	report  func(error)
 	retry   time.Duration
@@ -71,11 +74,12 @@ func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) 
 // NewScheduler is the wake scheduler for this daemon run (a fresh random id made once at start),
 // calling the wakers by endpoint kind. It is the Manager's from then on: Watch hears its pokes.
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
-	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
+	s := &Scheduler{m: m, run: run, wakers: map[string]Waker{}, clock: time.Now, report: func(error) {}, retry: wakeRetry,
 		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
 		watchers: map[chan struct{}]struct{}{}, owed: map[owedKey]owedEnd{}}
 	for kind, w := range wakers {
 		if w != nil {
+			s.wakers[kind] = w
 			s.kinds = append(s.kinds, kind)
 		}
 	}
@@ -85,6 +89,37 @@ func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...Sche
 	}
 	m.sched.Store(s) // the long-polls watch its pokes (Manager.Watch)
 	return s
+}
+
+// AddWaker serves kind with w from now on, as when a CLI's waker is found only after the daemon
+// started (its capability probed in the background): its sessions, watch-only until then, are
+// reserved from the next look, which this pokes. A nil w adds nothing.
+func (s *Scheduler) AddWaker(kind string, w Waker) {
+	if w == nil {
+		return
+	}
+	s.wmu.Lock()
+	if _, ok := s.wakers[kind]; !ok {
+		s.kinds = append(s.kinds, kind)
+		slices.Sort(s.kinds)
+	}
+	s.wakers[kind] = w
+	s.wmu.Unlock()
+	s.Poke()
+}
+
+// served is the kinds wakers serve, a copy safe to keep while AddWaker runs.
+func (s *Scheduler) served() []string {
+	s.wmu.RLock()
+	defer s.wmu.RUnlock()
+	return slices.Clone(s.kinds)
+}
+
+// wakerFor is kind's waker, or nil.
+func (s *Scheduler) wakerFor(kind string) Waker {
+	s.wmu.RLock()
+	defer s.wmu.RUnlock()
+	return s.wakers[kind]
 }
 
 // Poke asks the loop to look again, and tells every watcher something may have changed. It never
@@ -153,7 +188,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// a deadline already past is one this look could not process, and acting on it at once
 		// would spin on the store's error. Otherwise the earliest deadline decides.
 		wait, armed := s.retry, again
-		if at, ok, err := s.m.nextAt(ctx, s.kinds); err != nil {
+		if at, ok, err := s.m.nextAt(ctx, s.served()); err != nil {
 			s.report(err)
 			armed = true
 		} else if ok && !again {
@@ -180,7 +215,8 @@ func (s *Scheduler) Look(ctx context.Context) { s.look(ctx) }
 // still owed.
 func (s *Scheduler) look(ctx context.Context) bool {
 	again := s.payOwed(ctx)
-	due, err := s.m.sweep(ctx, s.kinds)
+	kinds := s.served() // one set of kinds for the whole look, whatever AddWaker does meanwhile
+	due, err := s.m.sweep(ctx, kinds)
 	if err != nil {
 		s.report(err)
 		return true
@@ -191,7 +227,7 @@ func (s *Scheduler) look(ctx context.Context) bool {
 		default:
 			return again // none free: a returning call pokes the loop
 		}
-		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run, s.kinds)
+		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run, kinds)
 		if err != nil || !ok {
 			if err != nil {
 				s.report(err)
@@ -256,7 +292,7 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 		return
 	}
 	werr := errNoWaker
-	if w := s.wakers[ep.Kind]; w != nil {
+	if w := s.wakerFor(ep.Kind); w != nil {
 		cctx, cancel := context.WithTimeout(ctx, wakeCallLimit)
 		werr = w.Wake(cctx, ep, WakeNotice)
 		cancel()
