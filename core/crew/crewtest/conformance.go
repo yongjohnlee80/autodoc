@@ -38,13 +38,14 @@ func (c *Clock) Advance(d time.Duration) { c.mu.Lock(); c.at = c.at.Add(d); c.mu
 
 // Enders records the sessions the crew module ended, as the mail module would hear of them.
 type Enders struct {
-	mu         sync.Mutex
-	Ended      []EndedSession
-	Merged     [][2]string     // (from, into) profiles
-	MergedSeen []crew.Profile  // from's row when MergeDeliveries ran
-	Discarded  []string        // profiles
-	Pending    map[string]bool // profiles with eligible mail, for HasEligible
-	Unhandled  map[string]int  // profiles' unhandled deliveries, for UnhandledCount
+	mu          sync.Mutex
+	Ended       []EndedSession
+	Merged      [][2]string     // (from, into) profiles
+	MergedSeen  []crew.Profile  // from's row when MergeDeliveries ran
+	Discarded   []string        // profiles
+	DiscardSeen []string        // the profile's scope state when DiscardDeliveries ran
+	Pending     map[string]bool // profiles with eligible mail, for HasEligible
+	Unhandled   map[string]int  // profiles' unhandled deliveries, for UnhandledCount
 }
 
 // EndedSession is one call of EndSessionDeliveries.
@@ -86,10 +87,20 @@ func (e *Enders) HasEligible(_ crew.Tx, profile string) (bool, error) {
 	return e.Pending[profile], nil
 }
 
-// DiscardDeliveries records discard's mail half (crew.SessionEnder).
-func (e *Enders) DiscardDeliveries(_ crew.Tx, profile string) error {
+// DiscardDeliveries records discard's mail half (crew.SessionEnder), and the profile's scope state
+// as the mail module would read it then: the scope must already be gone.
+func (e *Enders) DiscardDeliveries(tx crew.Tx, profile string) error {
+	p, _, err := tx.Profile(profile)
+	if err != nil {
+		return err
+	}
+	sc, _, err := tx.Scope(p.Scope)
+	if err != nil {
+		return err
+	}
 	e.mu.Lock()
 	e.Discarded = append(e.Discarded, profile)
+	e.DiscardSeen = append(e.DiscardSeen, sc.State)
 	e.mu.Unlock()
 	return nil
 }
@@ -823,10 +834,13 @@ func Run(t *testing.T, h Harness) {
 			t.Fatalf("discard: %v", err)
 		}
 		enders.mu.Lock()
-		discarded := slices.Clone(enders.Discarded)
+		discarded, states := slices.Clone(enders.Discarded), slices.Clone(enders.DiscardSeen)
 		enders.mu.Unlock()
 		if !slices.Equal(discarded, []string{gone.Profile}) {
 			t.Fatalf("mail's discards: %v, want [%s]", discarded, gone.Profile)
+		}
+		if !slices.Equal(states, []string{crew.ScopeGone}) {
+			t.Fatalf("the scope's state as mail's discard saw it: %v, want [gone] (a notice queued on a live scope's profile waits forever)", states)
 		}
 		if err := m.Discard(ctx, w2, w2, "run-b", e2); !errors.Is(err, crew.ErrInvalid) {
 			t.Fatalf("a scope discarding itself: %v, want ErrInvalid", err)

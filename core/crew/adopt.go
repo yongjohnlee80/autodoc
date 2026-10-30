@@ -148,11 +148,16 @@ func (m *Manager) Adopt(ctx context.Context, from, to, run string, epoch int64) 
 }
 
 // Discard fences the orphan scope from and fails its unhandled mail, telling each sender
-// (crew.discard, §4.3), in one write. The caller proves it owns to, as for Adopt.
+// (crew.discard, §4.3), in one write. The caller proves it owns to, as for Adopt. The scope goes
+// gone BEFORE the mail half runs: a profile that mailed itself gets its discard notice queued
+// on it, and only a gone scope makes mail fail that notice rather than leave it waiting forever.
 func (m *Manager) Discard(ctx context.Context, from, to, run string, epoch int64) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		profiles, err := m.fenceOrphan(tx, from, to, run, epoch)
 		if err != nil {
+			return err
+		}
+		if err := goneScope(tx, from); err != nil {
 			return err
 		}
 		for _, p := range profiles {
@@ -162,7 +167,7 @@ func (m *Manager) Discard(ctx context.Context, from, to, run string, epoch int64
 				}
 			}
 		}
-		return goneScope(tx, from)
+		return nil
 	})
 }
 
