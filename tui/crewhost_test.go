@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 		reg, err := d.m.Register(ctx, crew.Registration{Scope: p[0].(string), Run: p[1].(string), Epoch: p[2].(int64),
 			Codename: p[3].(string), Kind: p[4].(string), Workspace: p[5].(string), Instance: p[6].(string), Secret: p[7].(string)})
 		if err != nil {
-			return nil, err
+			return nil, crewWire(err)
 		}
 		return map[string]any{"session": reg.Session, "profile": reg.Profile}, nil
 	case "crew.exit":
@@ -61,15 +62,24 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 	default:
 		return nil, errors.New("no verb " + verb)
 	}
-	switch {
-	case errors.Is(err, crew.ErrScopeBusy):
-		return nil, &golibrpc.Error{Code: crew.CodeScopeBusy, Message: err.Error()}
-	case errors.Is(err, crew.ErrStaleEpoch):
-		return nil, &golibrpc.Error{Code: crew.CodeStaleEpoch, Message: err.Error()}
-	case err != nil:
-		return nil, err
+	if err != nil {
+		return nil, crewWire(err)
 	}
 	return map[string]any{"epoch": epoch}, nil
+}
+
+// crewWire is err as the daemon answers it: a crew refusal by its code, as the module maps it.
+func crewWire(err error) error {
+	for _, m := range []struct {
+		err  error
+		code int64
+	}{{crew.ErrScopeBusy, crew.CodeScopeBusy}, {crew.ErrStaleEpoch, crew.CodeStaleEpoch}, {crew.ErrCodenameBusy, crew.CodeCodenameBusy},
+		{crew.ErrInstanceReused, crew.CodeInstanceReused}, {crew.ErrBadCredential, crew.CodeBadCredential}} {
+		if errors.Is(err, m.err) {
+			return &golibrpc.Error{Code: m.code, Message: err.Error()}
+		}
+	}
+	return err
 }
 
 // crewWindow is one window's crewCore: work runs at once, timers wait until fired, notices are kept.
@@ -78,13 +88,35 @@ type crewWindow struct {
 	timers  []func()
 	notices []string
 	hold    bool     // work waits in held until release, as a call in flight does
+	late    bool     // with hold, the work runs at once and only its answer waits, as a lost-then-late reply
 	held    []func() // the held work's answers
+	store   string   // the store the daemon serves, "store-1" when unset
+	socket  string   // the daemon's address, "/run/test/d.sock" when unset
+	calls   []string // the verbs called, in order
+	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
+	// dropped connection loses them; down how many of its next calls fail before reaching it
+	lost, down map[string]int
 }
 
 func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
-	return w.d.call(ctx, verb, p...)
+	w.calls = append(w.calls, verb)
+	if w.down[verb] > 0 {
+		w.down[verb]--
+		return nil, io.ErrUnexpectedEOF
+	}
+	v, err := w.d.call(ctx, verb, p...)
+	if err == nil && w.lost[verb] > 0 {
+		w.lost[verb]--
+		return nil, io.ErrUnexpectedEOF
+	}
+	return v, err
 }
 func (w *crewWindow) Go(fn func(context.Context) any, then func(any)) {
+	if w.hold && w.late {
+		v := fn(context.Background())
+		w.held = append(w.held, func() { then(v) })
+		return
+	}
 	if w.hold {
 		w.held = append(w.held, func() { then(fn(context.Background())) })
 		return
@@ -102,8 +134,18 @@ func (w *crewWindow) release() {
 }
 func (w *crewWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
 func (w *crewWindow) Notify(msg string)                { w.notices = append(w.notices, msg) }
-func (w *crewWindow) DaemonAddress() string            { return "/run/test/d.sock" }
-func (w *crewWindow) StoreID() string                  { return "store-1" }
+func (w *crewWindow) DaemonAddress() string {
+	if w.socket != "" {
+		return w.socket
+	}
+	return "/run/test/d.sock"
+}
+func (w *crewWindow) StoreID() string {
+	if w.store != "" {
+		return w.store
+	}
+	return "store-1"
+}
 
 // fire runs the timers set so far, as their time coming would.
 func (w *crewWindow) fire() {

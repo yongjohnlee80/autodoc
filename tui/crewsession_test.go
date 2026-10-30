@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -87,10 +90,10 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 }
 
 // TestARefusedRegistrationStartsNothing: a registration the daemon refuses starts no process, writes
-// no context, and says why.
+// no context, says why, and is not kept to be replayed.
 func TestARefusedRegistrationStartsNothing(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	w.d.refuse = errors.New("the codename is busy")
+	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename is busy"}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -104,6 +107,9 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 	}
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "did not start") {
 		t.Fatalf("notices %v, want one saying the agent did not start", c.notes)
+	}
+	if len(a.crew.pending) != 0 {
+		t.Fatalf("a refused registration is kept to be replayed: %v", a.crew.pending)
 	}
 }
 
@@ -201,5 +207,212 @@ func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
 	c.fireAfters()
 	if calls != 1 || outcome != nil || len(c.panel.pastes) != 1 || !instance.running {
 		t.Fatalf("after the registration: calls %d, outcome %v, pastes %d, running %v; want the task delivered once", calls, outcome, len(c.panel.pastes), instance.running)
+	}
+}
+
+func calledTimes(w *crewWindow, verb string) int {
+	n := 0
+	for _, v := range w.calls {
+		if v == verb {
+			n++
+		}
+	}
+	return n
+}
+
+// TestALostRegistrationReplyIsReplayed: a registration the daemon committed whose answer was lost
+// starts nothing, and the codename's next start replays it as it was: the session the daemon
+// committed comes back, its credential the one the daemon holds, never a fresh registration that
+// the first would leave busy.
+func TestALostRegistrationReplyIsReplayed(t *testing.T) {
+	a, c, w := crewAgents(t, oneTwo)
+	w.lost = map[string]int{"crew.register": 1}
+	p, _ := a.profile("one")
+	first, err := a.startInstance(p)
+	if err != nil || first.running || first.starting {
+		t.Fatalf("a lost answer: %v, running %v, starting %v", err, first.running, first.starting)
+	}
+	if len(a.crew.pending) != 1 {
+		t.Fatalf("the lost registration is not kept: %v", a.crew.pending)
+	}
+	again, err := a.startInstance(p)
+	if err != nil || !again.running || again.session.ID == "" {
+		t.Fatalf("its next start: %v, running %v, notices %v", err, again.running, c.notes)
+	}
+	ctx, _, ok := readContext(t, c.panel.configs[again.tab].Dir)
+	if !ok || ctx.Session != again.session.ID {
+		t.Fatalf("the context: present %v, %+v; want session %s", ok, ctx, again.session.ID)
+	}
+	if id, err := w.d.m.Whoami(context.Background(), ctx.Credential, ""); err != nil || id.Session != again.session.ID {
+		t.Fatalf("the replayed credential: %+v, %v", id, err)
+	}
+	if len(a.crew.pending) != 0 {
+		t.Fatalf("still pending after its replay: %v", a.crew.pending)
+	}
+}
+
+// TestALostRegistrationNobodyStartsIsEnded: a lost registration whose codename is not started again
+// is replayed and ended once the daemon answers again (the next renewal), so its codename is free.
+func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
+	a, _, w := crewAgents(t, oneTwo)
+	w.lost = map[string]int{"crew.register": 1}
+	p, _ := a.profile("one")
+	if first, err := a.startInstance(p); err != nil || first.running {
+		t.Fatalf("a lost answer: %v", err)
+	}
+	w.fire() // the renewal: the daemon answers
+	if len(a.crew.pending) != 0 || len(a.crew.owed) != 0 || calledTimes(w, "crew.register") != 2 || calledTimes(w, "crew.exit") != 1 {
+		t.Fatalf("after the renewal: pending %v, owed %v, calls %v; want it replayed and ended", a.crew.pending, a.crew.owed, w.calls)
+	}
+	again, err := a.startInstance(p)
+	if err != nil || !again.running {
+		t.Fatalf("a start after it was ended: %v, running %v (its codename still busy?)", err, again.running)
+	}
+}
+
+// TestALateRegistrationStartsNothing: a registration answered once the window no longer holds the
+// scope and epoch it was made under, or is connected to another daemon or store, writes no context
+// and starts nothing; its session is ended.
+func TestALateRegistrationStartsNothing(t *testing.T) {
+	for name, change := range map[string]func(t *testing.T, a *agents, w *crewWindow){
+		"the scope taken over": func(t *testing.T, a *agents, w *crewWindow) {
+			if _, err := w.d.m.Takeover(context.Background(), a.crew.scope, "replacement-owner", ""); err != nil {
+				t.Fatal(err)
+			}
+			a.crew.scope, a.crew.epoch = "autodoc:0000000000000001", 1 // the window claimed another
+		},
+		"a new epoch":    func(_ *testing.T, a *agents, _ *crewWindow) { a.crew.epoch++ },
+		"another store":  func(_ *testing.T, _ *agents, w *crewWindow) { w.store = "store-2" },
+		"another daemon": func(_ *testing.T, _ *agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, c, w := crewAgents(t, oneTwo)
+			w.hold, w.late = true, true // the daemon commits the registration; its answer comes after the change
+			p, _ := a.profile("one")
+			instance, err := a.startInstance(p)
+			if err != nil || !instance.starting {
+				t.Fatalf("start: %v", err)
+			}
+			change(t, a, w)
+			w.release()
+			if instance.running || c.panel.tabs[0].Running || instance.session.ID != "" {
+				t.Fatalf("a late registration started the agent: running %v", instance.running)
+			}
+			if _, _, ok := readContext(t, instance.dir); ok {
+				t.Fatal("a late registration wrote its context")
+			}
+			if len(a.crew.sessions) != 0 || calledTimes(w, "crew.exit") != 1 {
+				t.Fatalf("its session: live %v, exits sent %d; want it ended", a.crew.sessions, calledTimes(w, "crew.exit"))
+			}
+		})
+	}
+}
+
+// TestAnEndedSessionLeavesAReplacementsContext: ending a session removes its context only while it
+// names that session: a newer session's context in the same folder stays.
+func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil || !instance.running {
+		t.Fatalf("start: %v", err)
+	}
+	dir := c.panel.configs[instance.tab].Dir
+	if err := crew.WriteContext(dir, crew.Context{Session: "newer", Scope: instance.session.Scope}); err != nil {
+		t.Fatal(err)
+	}
+	a.crew.exit(instance.session, crew.EndedExit)
+	if ctx, _, ok := readContext(t, dir); !ok || ctx.Session != "newer" {
+		t.Fatalf("the replacement's context: present %v, %+v", ok, ctx)
+	}
+}
+
+// TestALostExitIsAskedAgain: an exit whose call fails before the daemon answers is owed, its context
+// gone at once; the codename stays busy at the daemon until the exit is asked again on its next
+// answer, and is free after. An exit the daemon refuses as stale is owed no longer.
+func TestALostExitIsAskedAgain(t *testing.T) {
+	a, c, w := crewAgents(t, oneTwo)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil || !instance.running {
+		t.Fatalf("start: %v", err)
+	}
+	dir := c.panel.configs[instance.tab].Dir
+	w.down = map[string]int{"crew.exit": 1}
+	c.panel.exit(instance.tab, 0)
+	if len(a.crew.owed) != 1 {
+		t.Fatalf("a lost exit is not owed: %v", a.crew.owed)
+	}
+	if _, _, ok := readContext(t, dir); ok {
+		t.Fatal("the context outlived the exit")
+	}
+	if busy, _ := a.startInstance(p); busy.running {
+		t.Fatal("precondition: the daemon never heard the exit, so the codename is busy")
+	}
+	w.fire()
+	if len(a.crew.owed) != 0 {
+		t.Fatalf("the exit is still owed after the daemon answered: %v", a.crew.owed)
+	}
+	again, err := a.startInstance(p)
+	if err != nil || !again.running {
+		t.Fatalf("a start after the exit was asked again: %v, notices %v", err, c.notes)
+	}
+}
+
+// TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown: a process that started is running, under
+// its session and with its context, whatever selecting its tab answers: that failure is said, and
+// the session ends with the process.
+func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
+	a, c, _ := crewAgents(t, oneTwo)
+	c.panel = &modelPanel{owner: c, selectErr: errors.New("the panel is not mounted")}
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := c.panel.configs[instance.tab].Dir
+	if !instance.running || instance.session.ID == "" || len(a.crew.sessions) != 1 {
+		t.Fatalf("a started agent whose tab can't be shown: running %v, session %q, live %v", instance.running, instance.session.ID, a.crew.sessions)
+	}
+	if ctx, _, ok := readContext(t, dir); !ok || ctx.Session != instance.session.ID {
+		t.Fatalf("its context: present %v, %+v", ok, ctx)
+	}
+	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "could not be shown") {
+		t.Fatalf("notices %v, want the tab's failure said", c.notes)
+	}
+	c.panel.exit(instance.tab, 0)
+	if len(a.crew.sessions) != 0 {
+		t.Fatal("its session outlived the process")
+	}
+}
+
+// TestAgentKindReadsTheShellsWords: an agent's kind is the program its command runs, its words read
+// as the shell reads them, past assignments and the wrappers named; an unknown wrapper is its kind.
+func TestAgentKindReadsTheShellsWords(t *testing.T) {
+	for command, want := range map[string]string{
+		"claude --model haiku":                   "claude",
+		"NOTE='two words' claude --model haiku":  "claude",
+		`A=1 B="x y" /usr/local/bin/codex`:       "codex",
+		`'/opt/my tools/claude' --resume`:        "claude",
+		`"cla"ude`:                               "claude",
+		`claude\ code`:                           "claude code",
+		"env -i HOME=/tmp claude":                "claude",
+		"env -u FOO -C /tmp NOTE='a b' codex":    "codex",
+		"/usr/bin/env -- codex":                  "codex",
+		"env -S 'X=1 claude --model haiku'":      "claude",
+		"exec -a name claude":                    "claude",
+		"nohup codex":                            "codex",
+		"command -- claude":                      "claude",
+		"mise exec node@22 -- codex --full-auto": "codex",
+		"mise x -- claude":                       "claude",
+		"mise exec node@22":                      "mise",
+		"'NOTE=x' claude":                        "NOTE=x", // a quoted NAME is no assignment: the shell runs it
+		"firejail claude":                        "firejail",
+		"":                                       "agent",
+		"A=1":                                    "agent",
+	} {
+		if got := agentKind(command); got != want {
+			t.Errorf("agentKind(%q) = %q, want %q", command, got, want)
+		}
 	}
 }
