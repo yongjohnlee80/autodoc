@@ -183,6 +183,51 @@ func (t *memTx) Wake(session string) (crew.Wake, bool, error) {
 
 func (t *memTx) PutWake(w crew.Wake) error { t.st.wakes[w.Session] = copyWake(w); return nil }
 
+// wakesWhere is the wake rows keep admits, by session, at most limit (0: all).
+func (t *memTx) wakesWhere(keep func(crew.Wake) bool, limit int) []crew.Wake {
+	var out []crew.Wake
+	for _, w := range t.st.wakes {
+		if keep(w) {
+			out = append(out, copyWake(w))
+		}
+	}
+	slices.SortFunc(out, func(a, b crew.Wake) int { return strings.Compare(a.Session, b.Session) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func (t *memTx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
+	return t.wakesWhere(func(w crew.Wake) bool {
+		return w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen && (w.NextAt == nil || *w.NextAt <= now)
+	}, limit), nil
+}
+
+func (t *memTx) WakesTimedOut(now int64, limit int) ([]crew.Wake, error) {
+	return t.wakesWhere(func(w crew.Wake) bool {
+		return w.State == crew.WakeAwaiting && w.NextAt != nil && *w.NextAt <= now
+	}, limit), nil
+}
+
+func (t *memTx) WakesInFlight() ([]crew.Wake, error) {
+	return t.wakesWhere(func(w crew.Wake) bool { return w.State == crew.WakeInFlight }, 0), nil
+}
+
+func (t *memTx) NextWakeAt() (int64, bool, error) {
+	var at int64
+	has := false
+	for _, w := range t.st.wakes {
+		if w.NextAt == nil || !(w.State == crew.WakeAwaiting || (w.State == crew.WakeIdle && w.PendingGen > w.AnnouncedGen)) {
+			continue
+		}
+		if !has || *w.NextAt < at {
+			at, has = *w.NextAt, true
+		}
+	}
+	return at, has, nil
+}
+
 func (t *memTx) Endpoint(session string) (crew.Endpoint, bool, error) {
 	e, ok := t.st.ends[session]
 	return e, ok, nil

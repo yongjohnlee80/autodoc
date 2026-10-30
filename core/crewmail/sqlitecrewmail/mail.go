@@ -29,7 +29,9 @@ const (
 	cDoneAt        col = "done_at"
 	cWhy           col = "why"
 
-	bySeq sort = "seq"
+	bySeq        sort = "seq"
+	byLease      sort = "lease_until"
+	byMsgExpires sort = "message_expires"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -75,7 +77,9 @@ func newMailTables(c dao.DataConn) *mailTables {
 			dao.Table[*mail.Delivery, col, sort, string]("mail_delivery"),
 			dao.Fields[*mail.Delivery, col, sort, string](dfs),
 			dao.SortMap[*mail.Delivery, col, sort, string](map[sort]string{
-				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`}),
+				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
+				byLease:      `"mail_delivery"."lease_until"`,
+				byMsgExpires: `(SELECT "mail_message"."expires" FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message")`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
 	}
@@ -206,6 +210,44 @@ func (t *Tx) Expiring(now int64, limit int) ([]mail.Delivery, error) {
 	return deliveries(t.m.deliveries.On(t.tx).WithPredicate(unhandled).WithPredicate(expiredBy(now)).
 		OrderBy(dao.Asc(bySeq)).Limit(uint64(limit)).Select())
 }
+
+// NextDeadline is the earliest lease_until of a leased delivery and the earliest expiry of a message
+// with an unhandled delivery: one ordered, one-row read each.
+func (t *Tx) NextDeadline() (int64, bool, error) {
+	var at int64
+	has := false
+	take := func(v *int64) {
+		if v != nil && (!has || *v < at) {
+			at, has = *v, true
+		}
+	}
+	lease, err := deliveries(t.m.deliveries.On(t.tx).With(cState, mail.Leased).
+		WithPredicate(dao.Raw(`"mail_delivery"."lease_until" IS NOT NULL`)).OrderBy(dao.Asc(byLease)).Limit(1).Select())
+	if err != nil {
+		return 0, false, err
+	}
+	if len(lease) > 0 {
+		take(lease[0].LeaseUntil)
+	}
+	exp, err := deliveries(t.m.deliveries.On(t.tx).WithPredicate(unhandled).WithPredicate(expiredBy(maxInt64)).
+		OrderBy(dao.Asc(byMsgExpires)).Limit(1).Select())
+	if err != nil {
+		return 0, false, err
+	}
+	if len(exp) > 0 {
+		msg, ok, err := t.Message(exp[0].Message)
+		if err != nil {
+			return 0, false, err
+		}
+		if ok {
+			take(msg.Expires)
+		}
+	}
+	return at, has, nil
+}
+
+// maxInt64 is every expiry: expiredBy(maxInt64) is "has an expiry".
+const maxInt64 = int64(^uint64(0) >> 1)
 
 func deliveries(rows []*mail.Delivery, err error) ([]mail.Delivery, error) {
 	if err != nil {

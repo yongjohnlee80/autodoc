@@ -73,6 +73,12 @@ func (e *Enders) MergeDeliveries(tx crew.Tx, from, into string) error {
 	return nil
 }
 
+// Expire does nothing: this fake mail module has no time-driven state (crew.SessionEnder).
+func (e *Enders) Expire(crew.Tx) error { return nil }
+
+// NextDeadline has none (crew.SessionEnder).
+func (e *Enders) NextDeadline(crew.Tx) (int64, bool, error) { return 0, false, nil }
+
 // UnhandledCount reports the counts Unhandled holds (crew.SessionEnder).
 func (e *Enders) UnhandledCount(_ crew.Tx, profile string) (int, error) {
 	e.mu.Lock()

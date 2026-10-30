@@ -115,6 +115,9 @@ type Tx interface {
 	LeasesDue(now int64, limit int) ([]Delivery, error)
 	// Expiring is the queued or leased deliveries whose message expires at or before now.
 	Expiring(now int64, limit int) ([]Delivery, error)
+	// NextDeadline is the earliest instant a delivery changes by time alone: a lease's lease_until,
+	// or the expiry of a message with an unhandled delivery; false when there is none.
+	NextDeadline() (int64, bool, error)
 
 	// AddInboxChange (the human feed's journal) comes with crew.Tx.
 }
@@ -132,4 +135,7 @@ type Crew interface {
 	Authenticate(tx crew.Tx, credential string) (crew.Session, error)
 	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it (§4.7).
 	RaisePending(tx crew.Tx, profile string) error
+	// Received is a receive's half of the wake, in the receive's write: the session has seen what is
+	// pending (§4.7).
+	Received(tx crew.Tx, session string) error
 }

@@ -207,6 +207,9 @@ func (m *Manager) Receive(ctx context.Context, credential string) (Received, err
 		if err := m.expire(tx); err != nil {
 			return err
 		}
+		if err := m.crew.Received(tx, s.ID); err != nil {
+			return err
+		}
 		ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), ReceiveMax+1)
 		if err != nil {
 			return err

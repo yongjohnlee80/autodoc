@@ -85,8 +85,13 @@ type (
 	}
 )
 
-// WakeIdle is a wake row's state with no attempt out.
-const WakeIdle = "idle"
+// A wake row's states (§4.7): no attempt out; an attempt's call out; a notice accepted (or
+// sent with an unknown outcome) and the session not yet received.
+const (
+	WakeIdle     = "idle"
+	WakeInFlight = "in_flight"
+	WakeAwaiting = "awaiting_receive"
+)
 
 // Scope states, host and session end reasons, and profile statuses.
 const (
@@ -132,6 +137,16 @@ type Tx interface {
 
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
+	// WakesDue is the idle rows with pending_gen past announced_gen whose next_at is unset or at or
+	// before now: the sessions a wake may be reserved for.
+	WakesDue(now int64, limit int) ([]Wake, error)
+	// WakesTimedOut is the awaiting_receive rows whose next_at is at or before now.
+	WakesTimedOut(now int64, limit int) ([]Wake, error)
+	// WakesInFlight is every in_flight row, for a daemon start's recovery.
+	WakesInFlight() ([]Wake, error)
+	// NextWakeAt is the earliest next_at among the rows that have work: idle with pending_gen past
+	// announced_gen, or awaiting_receive; false when none has a deadline.
+	NextWakeAt() (int64, bool, error)
 
 	Endpoint(session string) (Endpoint, bool, error)
 	PutEndpoint(Endpoint) error
