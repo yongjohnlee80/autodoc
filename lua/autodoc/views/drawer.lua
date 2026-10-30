@@ -15,7 +15,7 @@
 ---    ● bge  BAAI/bge-reranker-v2-m3 · in use · window 50
 ---    ○ none   search is not re-ranked
 ---  ▼ Relations (3)          the KB file in the editor's (autodoc.relations, the TUI's SPC l)
----    global-kb · adrs/0203.md
+---    global-kb · adrs/0007.md
 ---    superseded by (1)
 ---      adrs/1791.md
 ---
