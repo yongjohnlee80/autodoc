@@ -497,10 +497,11 @@ return {
       since = 37, scope = "local-peer", audience = "user",
       params = {
         { name = "cursor", type = "int" },
-        { name = "timeout", type = "int", optional = true }
+        { name = "timeout", type = "int", optional = true },
+        { name = "page", type = "int", optional = true }
       },
-      result = "{cursor, snapshot?, changes[]}",
-      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained. Never leases.",
+      result = "{cursor, snapshot?{items, attention, next}, changes[]}",
+      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, at most 500 items a page (page = next for the rest). Never leases.",
     },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",
