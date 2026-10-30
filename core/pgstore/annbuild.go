@@ -112,6 +112,9 @@ func (a *ANN) Tick(ctx context.Context) error {
 	if err := a.recoverLapsed(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("recovery: %w", err))
 	}
+	if err := a.wantNamed(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("wanting the tenants' models: %w", err))
+	}
 	if err := a.verifyReady(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("checking the ready indexes: %w", err))
 	}
@@ -127,6 +130,45 @@ func (a *ANN) Tick(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// wantNamed wants the index of every model a tenant has active or targeted that has no row: a
+// deployment's from before approximate search, one whose Want was lost after its models were
+// written, or one an operator cleared to retry. The builder row is held first, as in every D5
+// transaction; a row Want inserts meanwhile is kept as it is.
+func (a *ANN) wantNamed(ctx context.Context) error {
+	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		if _, err := a.builderRow(ctx, tx); err != nil {
+			return err
+		}
+		metas, err := a.rwMeta.On(tx, a.opts(ctx)...).Select(mActive, mTarget)
+		if err != nil {
+			return err
+		}
+		rows, err := a.rwIndex.On(tx, a.opts(ctx)...).Select(aiModel)
+		if err != nil {
+			return err
+		}
+		have := map[string]bool{"": true}
+		for _, r := range rows {
+			have[r.Model] = true
+		}
+		for _, m := range metas {
+			for _, model := range []string{m.Active, m.Target} {
+				t, reason := annType(model)
+				if have[model] || reason != "" {
+					continue
+				}
+				have[model] = true
+				d := a.rwIndex.On(tx, a.opts(ctx)...).Set(aiModel, model).Set(aiName, annIndexName(model)).
+					Set(aiDims, t.Dims).Set(aiState, annWanted)
+				if err := d.(dao.SelectiveUpserter[annIndexField]).UpsertOnly(aiModel); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // claim takes the builder row for one wanted index, or a failed one whose retry is due, when the
@@ -156,7 +198,7 @@ func (a *ANN) claim(ctx context.Context) (*annJob, error) {
 		}
 		j := annJob{model: model, owner: a.run, gen: b.Generation + 1, t: t}
 		if err := a.rwBuilder.On(tx, a.opts(ctx)...).With(abID, 1).Set(abModel, model).Set(abOwner, j.owner).
-			Set(abGen, j.gen).Set(abLease, now.Add(annLease)).Set(abPID, nil).Set(abStart, nil).Set(abToken, "").Update(); err != nil {
+			Set(abGen, j.gen).Set(abLease, now.Add(a.leaseFor)).Set(abPID, nil).Set(abStart, nil).Set(abToken, "").Update(); err != nil {
 			return err
 		}
 		if err := a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, model).Set(aiState, annBuilding).Set(aiUpdated, now).Update(); err != nil {
@@ -188,6 +230,22 @@ func (a *ANN) build(ctx context.Context, job annJob) (err error) {
 	}, nil); err != nil {
 		return err // fenced: the DDL never starts
 	}
+	// the lease is renewed from here on, through the drop of an older index as well as the
+	// CREATE: either can wait on another transaction for longer than a lease
+	buildCtx, cancel := context.WithCancel(ctx)
+	renewed := make(chan error, 1)
+	go func() { renewed <- a.renew(buildCtx, job, cancel) }()
+	err = a.makeIndex(buildCtx, job, p)
+	cancel()
+	if rerr := <-renewed; errors.Is(rerr, errFenced) {
+		return errFenced // recovery took the row; it drops what this left
+	}
+	return err
+}
+
+// makeIndex is build's work on its registered session p, under the renewed lease: the declared
+// index adopted or made, then completed.
+func (a *ANN) makeIndex(ctx context.Context, job annJob, p postgres.PinnedConn) error {
 	spec, err := annSpec(job.model, job.t)
 	if err != nil {
 		return a.fail(ctx, job, err)
@@ -206,15 +264,7 @@ func (a *ANN) build(ctx context.Context, job annJob) (err error) {
 				return a.fail(ctx, job, err)
 			}
 		}
-		buildCtx, cancel := context.WithCancel(ctx)
-		renewed := make(chan error, 1)
-		go func() { renewed <- a.renew(buildCtx, job, cancel) }()
-		err := postgres.CreateIndexConcurrently(buildCtx, p, spec, postgres.BuildOptions{})
-		cancel()
-		if rerr := <-renewed; errors.Is(rerr, errFenced) {
-			return errFenced // recovery took the row; it drops what this left
-		}
-		if err != nil {
+		if err := postgres.CreateIndexConcurrently(ctx, p, spec, postgres.BuildOptions{}); err != nil {
 			return a.fail(ctx, job, err)
 		}
 		if st, err = postgres.ReadIndexState(ctx, a.conn, "", spec.Name); err != nil {
@@ -238,11 +288,11 @@ func (a *ANN) renew(ctx context.Context, job annJob, stop context.CancelFunc) er
 		// NOTE: the build's lease renewal: CREATE INDEX CONCURRENTLY runs for minutes on one
 		// statement, and the lease must outlive it while this server lives, by a renewal on a
 		// clock, since nothing else happens meanwhile to renew it on.
-		if !acclock.Sleep(ctx, annRenew) {
+		if !acclock.Sleep(ctx, a.renewEvery) {
 			return nil
 		}
 		err := a.owned(ctx, job, func(d dao.DAO[*annBuilderRow, annBuilderField, int]) dao.DAO[*annBuilderRow, annBuilderField, int] {
-			return d.Set(abLease, a.now().Add(annLease))
+			return d.Set(abLease, a.now().Add(a.leaseFor))
 		}, nil)
 		if errors.Is(err, errFenced) {
 			stop()
@@ -312,7 +362,7 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 		}
 		j := annJob{model: *b.Model, owner: "recovering:" + a.run, gen: b.Generation + 1}
 		if err := a.rwBuilder.On(tx, a.opts(ctx)...).With(abID, 1).Set(abOwner, j.owner).Set(abGen, j.gen).
-			Set(abLease, a.now().Add(annLease)).Update(); err != nil {
+			Set(abLease, a.now().Add(a.leaseFor)).Update(); err != nil {
 			return err
 		}
 		rec = &j
@@ -335,7 +385,7 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 			}
 			if err == nil {
 				err = a.owned(ctx, *rec, func(d dao.DAO[*annBuilderRow, annBuilderField, int]) dao.DAO[*annBuilderRow, annBuilderField, int] {
-					return d.Set(abLease, a.now().Add(annLease))
+					return d.Set(abLease, a.now().Add(a.leaseFor))
 				}, nil)
 			}
 			return err
@@ -349,8 +399,16 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 	if !a.stillOwns(ctx, *rec) {
 		return nil
 	}
-	if err := postgres.DropIndexConcurrently(ctx, p, "", annIndexName(rec.model), postgres.BuildOptions{}); err != nil {
+	// an invalid index is the lapsed build's leftover; a valid one is kept for the next build to
+	// adopt, or to drop if its definition isn't the declared one
+	st, err := postgres.ReadIndexState(ctx, a.conn, "", annIndexName(rec.model))
+	if err != nil {
 		return err
+	}
+	if st.Exists && !st.Valid {
+		if err := postgres.DropIndexConcurrently(ctx, p, "", annIndexName(rec.model), postgres.BuildOptions{}); err != nil {
+			return err
+		}
 	}
 	err = a.owned(ctx, *rec, freed, func(tx *dao.Transaction) error {
 		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, rec.model).Set(aiState, annWanted).Set(aiUpdated, a.now()).Update()

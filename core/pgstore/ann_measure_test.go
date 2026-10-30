@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -123,9 +124,38 @@ func TestANN_RecallSweep(t *testing.T) {
 					r := recall(got, want)
 					sum += r
 					worst = min(worst, r)
+					if r < 0.5 {
+						// a tie group (equal distances) would show the same distances on both sides
+						t.Logf("factor %d, %s, n=%d, a query at recall %.2f: exact distances %v; ann distances %v",
+							f, tenant, n, r, distancesOf(t, exact, want, q), distancesOf(t, exact, got, q))
+					}
 				}
 				t.Logf("factor %d, %s, n=%d: recall %.4f (worst query %.2f), ann mean %s", f, tenant, n, sum/float64(len(qs)), worst, (took / time.Duration(len(qs))).Round(10*time.Microsecond))
 			}
 		}
 	}
+}
+
+// distancesOf is each document's cosine distance from q, read from its first chunk's embedding.
+func distancesOf(t *testing.T, st *Store, docs []int64, q []float32) []string {
+	t.Helper()
+	out := make([]string, 0, len(docs))
+	for _, d := range docs {
+		c, err := st.rw.chunk.DAO().With(cTenant, st.tenant).With(cDoc, d).With(cOrd, 0).Get(cHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := st.rw.emb.DAO().With(eTenant, st.tenant).With(eHash, c.TextHash).Get(eVec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dot, na, nb float64
+		for i := range q {
+			dot += float64(q[i]) * float64(e.Vec[i])
+			na += float64(q[i]) * float64(q[i])
+			nb += float64(e.Vec[i]) * float64(e.Vec[i])
+		}
+		out = append(out, strconv.FormatFloat(1-dot/math.Sqrt(na*nb), 'f', 6, 64))
+	}
+	return out
 }
