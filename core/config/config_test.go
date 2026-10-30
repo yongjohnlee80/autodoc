@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/logger"
+
 	"github.com/yongjohnlee80/autodoc/core/config"
 )
 
@@ -32,6 +34,9 @@ func TestLoadFillsDefaults(t *testing.T) {
 	if c.EmbeddingQueue.MaxInflight != 1 {
 		t.Errorf("embedding concurrency = %d, want 1", c.EmbeddingQueue.MaxInflight)
 	}
+	if c.Log.Severity() != "" {
+		t.Errorf("log level = %q, want none: every record logged", c.Log.Severity())
+	}
 }
 
 func TestLoadReadsEverySetting(t *testing.T) {
@@ -44,6 +49,8 @@ data_dir = "/tmp/autodoc-data"
 poll_interval = "500ms"
 [embedding_queue]
 max_inflight = 2
+[log]
+level = "Notice"
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +58,9 @@ max_inflight = 2
 	if c.Server.Socket != "/tmp/a.sock" || c.Server.StateDir != "/tmp/autodoc-state" || c.Server.DataDir != "/tmp/autodoc-data" ||
 		c.Follow.PollInterval.Duration != 500*time.Millisecond || c.EmbeddingQueue.MaxInflight != 2 {
 		t.Errorf("server/follow = %+v %+v", c.Server, c.Follow)
+	}
+	if c.Log.Severity() != logger.SeverityNotice {
+		t.Errorf("log level = %q, want Notice (any case)", c.Log.Severity())
 	}
 }
 
@@ -62,6 +72,7 @@ func TestLoadRejects(t *testing.T) {
 		{"a negative poll", "[follow]\npoll_interval = \"-1s\"\n", "must be positive"},
 		{"too many embedding calls", "[embedding_queue]\nmax_inflight = 3\n", "must be 1 or 2"},
 		{"not TOML", "[[server\n", "invalid"},
+		{"an unknown log level", "[log]\nlevel = \"loud\"\n", `log.level "loud": want debug, info, notice, warning, error or critical`},
 		{"an [embedding] section", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n", "kept in the store"},
 	} {
 		_, err := load(t, c.body)
