@@ -40,8 +40,9 @@ type (
 	Stopper interface{ Stopped() }
 	// ThemeSink hears that the screen wears another theme; it reads which from its host.
 	ThemeSink interface{ ThemeChanged() }
-	// LanguageSink hears that the UI speaks another language (ADR 1792451618): it composes again the
-	// text it keeps on screen, reading the language from its host (Tr, Trf).
+	// LanguageSink hears that the UI speaks another language
+	// (docs/decisions/editor.md#six-languages): it composes again the text it keeps on screen,
+	// reading the language from its host (Tr, Trf).
 	LanguageSink interface{ LanguageChanged() }
 	// PreferenceSink projects the preferences currently in effect on the loop.
 	// It also runs when preference dialogs resync; this is not a change-only event.

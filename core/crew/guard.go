@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 )
 
-// The guards (ADR 1793271500 §4.4). Every state-changing verb, a host's and an agent's alike, calls
-// one inside its OWN write transaction, before it reads or changes anything else. golib's rpc runs a
-// connection's handlers concurrently, so a check before the write would let a takeover commit in
-// between; inside the write, the takeover and the verb are serialized and the loser sees the other.
+// The guards (docs/decisions/crew.md#sessions-and-the-guard). Every state-changing verb, a host's
+// and an agent's alike, calls one inside its OWN write transaction, before it reads or changes
+// anything else. golib's rpc runs a connection's handlers concurrently, so a check before the write
+// would let a takeover commit in between; inside the write, the takeover and the verb are
+// serialized and the loser sees the other.
 
 // sha is the digest the tables keep of a run token or a secret; neither is ever stored.
 func sha(s string) []byte {

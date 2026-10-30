@@ -8,12 +8,13 @@ import (
 	"slices"
 )
 
-// Format is a deriver's identity for one format: its id and version (ADR 0216 §1.8).
+// Format is a deriver's identity for one format: its id and version
+// (docs/decisions/search.md#derived-document-formats).
 type Format struct{ ID, Version string }
 
-// Tables are a build's frozen registrations as a client compares them (ADR 0216 §1.4): a chunker's
-// version by extension, and a deriver's identity by format. sys.capabilities reports the daemon's;
-// a TUI's binary has its own.
+// Tables are a build's frozen registrations as a client compares them
+// (docs/decisions/search.md#held-documents): a chunker's version by extension, and a deriver's
+// identity by format. sys.capabilities reports the daemon's; a TUI's binary has its own.
 type Tables struct {
 	Chunkers map[string]string
 	Formats  map[string]Format

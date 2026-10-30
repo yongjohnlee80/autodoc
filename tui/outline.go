@@ -12,7 +12,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/outline"
 )
 
-// THE OUTLINE AND THE BREADCRUMB (ADR 0212 §6), a feature of its own.
+// THE OUTLINE AND THE BREADCRUMB (docs/decisions/search.md#outline-breadcrumbs-and-previews), a
+// feature of its own.
 //
 // Both read the page's text, saved or not: a heading typed a moment ago is in the outline and is
 // where Enter jumps, and the breadcrumb on the page's frame follows the cursor. The text is outlined

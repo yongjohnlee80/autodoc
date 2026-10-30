@@ -1,6 +1,6 @@
 # core/module
 
-How an AutoDoc feature offers verbs (ADR 1791719881). A feature's core package has a `module.go`
+How an AutoDoc feature offers verbs ([the decision](../../docs/decisions/contract.md#features-as-modules-with-verb-contracts)). A feature's core package has a `module.go`
 that implements `module.Module`:
 
 ```go

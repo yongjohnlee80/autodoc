@@ -20,7 +20,8 @@ var moreLink = regexp.MustCompile(`\]\((?:\.\./)+reference/([^)]+)\)`)
 // none) each keep the rules of both books (checkBookPage), open with their heading, draw each
 // mermaid fence (it parses, and the HTML export draws it), and end with a "More:" line whose links
 // reach Reference Book chapters. The index lists every page. Each translation
-// (docs/tutorials/<tag>/, ADR 1792451618) keeps the same rules, its "More:" in its language.
+// (docs/tutorials/<tag>/, docs/decisions/editor.md#six-languages) keeps the same rules, its "More:"
+// in its language.
 func TestTheTutorialsAreShortWithDiagramsThatDraw(t *testing.T) {
 	checkTutorialPages(t, "../../docs/tutorials", "More: ", "../reference/")
 	langs, err := os.ReadDir("../../docs/tutorials")

@@ -5,7 +5,8 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// BUFFERS — the host's open documents, as a script sees them (ADR 1792076688 §4.5).
+// BUFFERS — the host's open documents, as a script sees them
+// (docs/decisions/editor.md#buffers-in-lua-and-the-editor-socket).
 //
 //	<global>.buffers()    { {n, path, workspace, kind, modified, active}, … } in opening order
 //	<global>.buffer(n)    an editor object for buffer n, shown or not, or nil, "no buffer n"

@@ -16,10 +16,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A PLUGIN'S PIXEL SURFACE, THE HOST'S SIDE (ADR 1792797354 §4.2–4.4): the side channel's buffer
-// registry and its one owner. The owner allocates each generation's pool (sealed memfds the host
-// maps read-only), admits the plugin's frames into a sink (the window's gui.Stream), and answers
-// each frame's outcome and then its buffer's reuse credit. Everything else posts to it: the reader,
+// A PLUGIN'S PIXEL SURFACE, THE HOST'S SIDE
+// (docs/decisions/plugins.md#surface-buffers-and-generations): the side channel's buffer registry
+// and its one owner. The owner allocates each generation's pool (sealed memfds the host maps
+// read-only), admits the plugin's frames into a sink (the window's gui.Stream), and answers each
+// frame's outcome and then its buffer's reuse credit. Everything else posts to it: the reader,
 // receipt waiters, extimage release callbacks and the loop. No window is needed to run it: a test's
 // sink stands in for the stream.
 

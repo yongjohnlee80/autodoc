@@ -25,11 +25,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/lab"
 )
 
-// A LAB NOTE'S CELLS IN THE RENDERED VIEW (ADR 1792457255). In a lab note (lab.Is), a whole fence off
-// the cursor is drawn with the outputs a run left for it under it (lab.Outputs): text as a text fence,
-// a diagram, a chart or a table as an embed of that file is drawn, an image as the image. The
-// fence's own lines stay the editor's (its source, clicks and cursor); the outputs are the block's
-// picture. An image a note embeds alone on its line is drawn as the image too.
+// A LAB NOTE'S CELLS IN THE RENDERED VIEW (docs/decisions/plugins.md#lab-notes). In a lab note
+// (lab.Is), a whole fence off the cursor is drawn with the outputs a run left for it under it
+// (lab.Outputs): text as a text fence, a diagram, a chart or a table as an embed of that file is
+// drawn, an image as the image. The fence's own lines stay the editor's (its source, clicks and
+// cursor); the outputs are the block's picture. An image a note embeds alone on its line is drawn
+// as the image too.
 
 // closedFence is block b's info string and code when b is a whole fence, its closing fence written:
 // one being typed, or clipped, is not. A backtick fence's info string holds no backtick

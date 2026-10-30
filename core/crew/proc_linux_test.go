@@ -41,7 +41,7 @@ func fakeProc(t *testing.T, boot, ns string, procs map[int]string) linuxProcs {
 
 // TestProcDeadTellsAGoneHolderFromALiveOne: procDead answers dead only when it knows (another
 // boot, no such pid, or the pid now a later process's), and unknown otherwise, which the lease
-// then decides (ADR 1793271500 §4.3).
+// then decides (docs/decisions/crew.md#scopes-and-fenced-ownership).
 func TestProcDeadTellsAGoneHolderFromALiveOne(t *testing.T) {
 	sys := fakeProc(t, "boot-1", "4026531836", map[int]string{421: "9000"})
 	ref, err := sys.ref(421)

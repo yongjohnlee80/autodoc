@@ -53,7 +53,7 @@ type rig struct {
 // serve runs a daemon's worth of core over memfs, in one store: workspace kb (followed and
 // indexed), flaky (its writes land and then fail), and broken (its root could not be opened).
 // rigModes are the rig's workspaces' modes: tasks/ is a todo store, graph-only, whose $X is outside
-// every workspace (ADR 1792015212).
+// every workspace (docs/decisions/todos.md#graph-only-indexing).
 func rigModes(p string) index.Mode {
 	if strings.HasPrefix(p, "tasks/") {
 		return index.Mode{GraphOnly: true, Store: &index.TodoStore{ID: "S"}, Vars: index.NewVars(map[string]string{"X": "/elsewhere"})}

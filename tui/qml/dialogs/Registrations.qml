@@ -1,6 +1,7 @@
-// Registrations.qml — the backend lacks file types this build reads (ADR 0216): asked once a
-// session. Restart Now stops it and starts this build in its place; Not Now keeps it, and System ›
-// Restart backend… can still restart it later.
+// Registrations.qml — the backend lacks file types this build reads
+// (docs/decisions/search.md#registered-chunkers-and-derivers): asked once a session. Restart Now
+// stops it and starts this build in its place; Not Now keeps it, and System › Restart backend… can
+// still restart it later.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80

@@ -2,8 +2,8 @@ package tui
 
 import "testing"
 
-// TestTheDaemonsReclaimIsANotice (ADR 1791284787): what the daemon's start sweep reclaimed, and
-// what its compaction did or could not do, reach the TUI as notices.
+// TestTheDaemonsReclaimIsANotice (docs/decisions/store.md#the-start-sweep): what the daemon's start
+// sweep reclaimed, and what its compaction did or could not do, reach the TUI as notices.
 func TestTheDaemonsReclaimIsANotice(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})

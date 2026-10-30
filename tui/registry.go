@@ -14,13 +14,14 @@ import (
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
 
-// THE REGISTRY — AutoDoc's list of plugins, Lua packages and KB types (ADR 1792351195 §4.5–§4.7):
-// one index.json, its format core/registry's, fetched from the registry's Pages site only when a
-// list opens (never at startup, never in the background), conditionally on the cached ETag and at
-// most once a day. A fetch or a validation that fails keeps the cached list, then the built-in KB
-// types, and says which. Plugins › Browse the registry… lists the plugins and packages to install;
-// the add dialog's KB type field lists the KB types; :lua-install and Add from a git URL take a
-// name as well as a URL. An install card says whether the commit it would install was audited.
+// THE REGISTRY — AutoDoc's list of plugins, Lua packages and KB types
+// (docs/decisions/plugins.md#the-registry): one index.json, its format core/registry's, fetched
+// from the registry's Pages site only when a list opens (never at startup, never in the
+// background), conditionally on the cached ETag and at most once a day. A fetch or a validation
+// that fails keeps the cached list, then the built-in KB types, and says which. Plugins › Browse
+// the registry… lists the plugins and packages to install; the add dialog's KB type field lists the
+// KB types; :lua-install and Add from a git URL take a name as well as a URL. An install card says
+// whether the commit it would install was audited.
 
 // registryURL is the index; a test points it elsewhere, as latestURL.
 var registryURL = regindex.PagesURL + "index.json"

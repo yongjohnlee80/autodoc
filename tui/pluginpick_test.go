@@ -10,8 +10,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
-// THE SPC p CHOOSER (ADR 1792132889 §5) — SPC p lists the plugins with commands; a plugin's letter,
-// the user's, or the cursor then Enter shows its card; * gives the plugin under the cursor a letter.
+// THE SPC p CHOOSER (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser) — SPC p lists
+// the plugins with commands; a plugin's letter, the user's, or the cursor then Enter shows its
+// card; * gives the plugin under the cursor a letter.
 
 func backspace() tuicore.Event {
 	return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyBackspace}

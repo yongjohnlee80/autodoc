@@ -129,7 +129,8 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	if surfaceChild != nil {
-		cmd.ExtraFiles = []*os.File{surfaceChild} // fd 3: the side channel (ADR 1792797354 §4.2)
+		// fd 3: the side channel (docs/decisions/plugins.md#the-surface-side-channel)
+		cmd.ExtraFiles = []*os.File{surfaceChild}
 		cmd.Env = append(cmd.Env, plugin.SurfaceFDEnv+"=3")
 	}
 	cmd.SysProcAttr = pluginProcAttr()

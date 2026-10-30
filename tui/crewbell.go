@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
-// THE CREW BELL (ADR 1793271500 §4.8): off unless the user turns it on (:agent-bell, the
-// tui.agents.bell preference). Then a decision request or a permission prompt newly open rings, at
-// most once every crewBellEvery, so a burst is one ring. The terminal build rings the terminal's own
-// bell (BEL, through golib's App.Bell), which the terminal turns into the alert its user chose; the
-// window plays the desktop's message sound: canberra-gtk-play, else pw-play, else paplay.
+// THE CREW BELL (docs/decisions/crew.md#the-human-inbox): off unless the user turns it on
+// (:agent-bell, the tui.agents.bell preference). Then a decision request or a permission prompt
+// newly open rings, at most once every crewBellEvery, so a burst is one ring. The terminal build
+// rings the terminal's own bell (BEL, through golib's App.Bell), which the terminal turns into the
+// alert its user chose; the window plays the desktop's message sound: canberra-gtk-play, else
+// pw-play, else paplay.
 
 const prefAgentBell = "tui.agents.bell"
 

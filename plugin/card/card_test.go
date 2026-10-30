@@ -573,7 +573,7 @@ func TestATreesAncestryBelongsToItsCurrentSelection(t *testing.T) {
 
 // TestEveryButtonIsATabStop: Tab walks a Buttons bar a button at a time before it goes on, and
 // Shift+Tab (or Up from the control after) enters it at its last button, as a sign-in's Sign in
-// and Cancel are each reached by Tab (found by the autodb port, ADR 1792254331 §4.12).
+// and Cancel are each reached by Tab (found by the autodb port; docs/decisions/plugins.md#the-native-card-kit).
 func TestEveryButtonIsATabStop(t *testing.T) {
 	name, pass := &Input{}, &Input{}
 	btns := &Buttons{Labels: []string{"Sign in", "Cancel"}}

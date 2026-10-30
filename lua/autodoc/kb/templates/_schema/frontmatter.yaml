@@ -1,5 +1,5 @@
 # autodoc_version: {{autodoc_version}}
-# The KB's one frontmatter schema (ADR 1791209946 §4). Managed by AutoDoc: it is replaced when a
+# The KB's one frontmatter schema (docs/decisions/crew.md#one-frontmatter-schema). Managed by AutoDoc: it is replaced when a
 # newer AutoDoc ships a newer copy, so a KB's own rules go in AGENTS.md, not here.
 # `type` picks the document type; its fields are added to `common`. Diagnostics never block a write.
 version: 2

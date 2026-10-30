@@ -12,7 +12,8 @@ import (
 
 // seedLeftover adds model fp to workspace ws with n vectors, active as given, through a raw
 // connection to the store's file. Each vector's text is a chunk's, of a document seeded with them,
-// so the orphan pass (ADR 1791329335) keeps them: only the model sweep decides.
+// so the orphan pass (docs/decisions/store.md#the-orphan-pass-at-start) keeps them: only the model
+// sweep decides.
 func seedLeftover(t *testing.T, db *store.Store, ws int64, fp string, n, active int) {
 	t.Helper()
 	seedVectors(t, db, ws, fp, n, active, true)
@@ -91,10 +92,11 @@ func modelsOf(t *testing.T, db *store.Store, ws int64) map[string]int {
 	return out
 }
 
-// TestTheStartSweepReclaimsAndCompacts (ADR 1791284787 §2.3, item 3; §2.5): after the workspaces are
-// open, every stored workspace keeps only its active (and target) models: one an indexer runs,
-// through it, and one with no indexer, through the store. Then the store is in incremental
-// auto-vacuum mode, each step said once as an event; a second start compacts nothing again.
+// TestTheStartSweepReclaimsAndCompacts (docs/decisions/store.md#the-start-sweep): after the
+// workspaces are open, every stored workspace keeps only its active (and target) models: one an
+// indexer runs, through it, and one with no indexer, through the store. Then the store is in
+// incremental auto-vacuum mode, each step said once as an event; a second start compacts nothing
+// again.
 func TestTheStartSweepReclaimsAndCompacts(t *testing.T) {
 	ctx := context.Background()
 	m, db := openWith(t, Options{Provider: namedProvider{name: "a"}})
@@ -142,9 +144,9 @@ func TestTheStartSweepReclaimsAndCompacts(t *testing.T) {
 	}
 }
 
-// TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept (ADR 1791284787 §2.5): a start whose sweep of
-// a workspace fails compacts nothing, so that workspace's leftovers are not left out of the one
-// rewrite; the next start sweeps it, then compacts.
+// TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept (docs/decisions/store.md#the-store-compacts):
+// a start whose sweep of a workspace fails compacts nothing, so that workspace's leftovers are not
+// left out of the one rewrite; the next start sweeps it, then compacts.
 func TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept(t *testing.T) {
 	ctx := context.Background()
 	m, db := openWith(t, Options{})
@@ -180,9 +182,10 @@ func TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept(t *testing.T) {
 	}
 }
 
-// TestTheStoreIsCompactedOnlyOnceEveryOrphanPassSucceeded (ADR 1791329335 §2.4, Lector r0): the
-// orphan pass runs after a workspace's model sweep, and its failure defers the compaction as a failed
-// model sweep does; the next start finishes the pass, then compacts.
+// TestTheStoreIsCompactedOnlyOnceEveryOrphanPassSucceeded
+// (docs/decisions/store.md#the-orphan-pass-at-start): the orphan pass runs after a workspace's
+// model sweep, and its failure defers the compaction as a failed model sweep does; the next start
+// finishes the pass, then compacts.
 func TestTheStoreIsCompactedOnlyOnceEveryOrphanPassSucceeded(t *testing.T) {
 	ctx := context.Background()
 	m, db := openWith(t, Options{})

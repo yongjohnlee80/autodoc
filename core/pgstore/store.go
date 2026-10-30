@@ -645,9 +645,10 @@ func (s *Store) Models(ctx context.Context) (active, target string, err error) {
 var reclaimBatch uint64 = 2000
 
 // ReclaimModels deletes the tenant's embeddings under any model but its active one and its target
-// (ADR 1791284787 §2.6), in batches, each its own transaction that reads the two models again: one
-// set active or the target meanwhile keeps what is left. pgstore's writer calls it after a flip, a
-// change of target, and at its start. It returns how many it deleted.
+// (docs/decisions/store.md#pgstore-reclaims-models-too), in batches, each its own transaction that
+// reads the two models again: one set active or the target meanwhile keeps what is left. pgstore's
+// writer calls it after a flip, a change of target, and at its start. It returns how many it
+// deleted.
 func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 	total := 0
 	for {

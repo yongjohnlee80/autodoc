@@ -18,9 +18,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// A LUA SHELL IN THE TERMINAL PANEL (ADR 1792256103) — a tab whose program is in this process: the
-// terminal draws what the shell writes and sends it the keys; the shell edits its line, and the UI
-// loop runs each chunk in the shell's own environment (script.Engine.Eval).
+// A LUA SHELL IN THE TERMINAL PANEL (docs/decisions/editor.md#a-lua-shell-in-the-terminal-panel) —
+// a tab whose program is in this process: the terminal draws what the shell writes and sends it the
+// keys; the shell edits its line, and the UI loop runs each chunk in the shell's own environment
+// (script.Engine.Eval).
 //
 // Two owners, nothing else shared. The shell's goroutine, run, owns the screen and every editing
 // state: the line, the cursor, the pending lines, the history, the prompt, the phase. The loop owns

@@ -29,7 +29,8 @@ type Embeddings interface {
 // WithEmbeddings serves the daemon's embedding providers.
 func WithEmbeddings(e Embeddings) Option { return func(o *options) { o.embeddings = e } }
 
-// ErrPulling is embedding.pull while another pull runs or unwinds (ADR 1793005098 §4.3).
+// ErrPulling is embedding.pull while another pull runs or unwinds
+// (docs/decisions/search.md#embedding-setup).
 var ErrPulling = errors.New("rpc: a model is being pulled")
 
 // ErrNoPull is embedding.pull_status or embedding.pull_cancel naming a job that is not the current

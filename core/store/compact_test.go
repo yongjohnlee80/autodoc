@@ -33,10 +33,10 @@ func filled(t *testing.T, n int) *Store {
 	return s
 }
 
-// TestCompactConvertsAndShrinksOnline (ADR 1791284787 §2.5): through the writer's own connection,
-// outside a transaction, with a read held open across it, Compact puts the store in incremental
-// mode and gives the space of a large delete back; the held read still answers from its snapshot.
-// After it, an incremental vacuum returns what a later delete frees.
+// TestCompactConvertsAndShrinksOnline (docs/decisions/store.md#the-store-compacts): through the
+// writer's own connection, outside a transaction, with a read held open across it, Compact puts the
+// store in incremental mode and gives the space of a large delete back; the held read still answers
+// from its snapshot. After it, an incremental vacuum returns what a later delete frees.
 func TestCompactConvertsAndShrinksOnline(t *testing.T) {
 	ctx := context.Background()
 	s := filled(t, 5000)

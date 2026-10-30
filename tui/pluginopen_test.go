@@ -13,10 +13,11 @@ import (
 // openerManifest is a protocol-9 plugin whose [open] claims .ipynb for its import command.
 const openerManifest = "[[commands]]\nid = \"import\"\ntitle = \"Import\"\n[open]\nextensions = [\".ipynb\"]\ncommand = \"import\"\n"
 
-// A file a plugin opens (its manifest's [open], ADR 1792457255) goes to that plugin's command, by
-// its absolute path, from File › Open file… (and so file.open_path) and from any open the
-// choke point serves; it never opens as text. Another file opens as it did. A second plugin claiming
-// the extension is shadowed: never sent the file, and Manage plugins… says so on its row alone.
+// A file a plugin opens (its manifest's [open],
+// docs/decisions/plugins.md#plugins-that-open-file-types) goes to that plugin's command, by its
+// absolute path, from File › Open file… (and so file.open_path) and from any open the choke point
+// serves; it never opens as text. Another file opens as it did. A second plugin claiming the
+// extension is shadowed: never sent the file, and Manage plugins… says so on its row alone.
 func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 	dir := t.TempDir()
 	installPluginAt(t, dir, "nb", "dialog", "session", openerManifest, 9)
@@ -66,8 +67,8 @@ func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 }
 
 // A plugin's document names its workspace's root, so the plugin finds the note on disk
-// (plugin.Document.File; ADR 1792457255): the Jupyter plugin starts a kernel in the note's folder
-// and keeps its outputs beside it.
+// (plugin.Document.File; docs/decisions/plugins.md#lab-notes): the Jupyter plugin starts a kernel
+// in the note's folder and keeps its outputs beside it.
 func TestAPluginsDocumentNamesItsWorkspacesRoot(t *testing.T) {
 	r, _ := pluginTUI(t, t.TempDir())
 	r.ready(t)

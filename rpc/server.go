@@ -1,4 +1,5 @@
-// Package rpc is AutoDoc's msgpack-RPC API (ADR 0203 §4.4): a projection of core, with no business
+// Package rpc is AutoDoc's msgpack-RPC API
+// (docs/decisions/contract.md#one-rpc-api-for-every-client): a projection of core, with no business
 // logic of its own. Every client speaks it: the TUI, the GUI, AutoVim's auto-core.
 //
 // A session must say sys.hello with a protocol this build serves (MinProtocol through Protocol)
@@ -48,65 +49,81 @@ import (
 // index.status's diagnosed), doc.outline, workspace.set_text_extensions with workspace.list's
 // text_extensions, sys.events (sys.hello answers the client's token and the log's head), and
 // workspace.set_provider with workspace.list's provider. Protocol 9 adds workspace.configure, every
-// setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214). Protocol 10
-// adds a build's registrations (ADR 0216): workspace.list's text_collisions; the documents a daemon
-// holds, index.status's held, held_stale and held_unchecked, search.query's hold on a hit, and
-// index.reindex's refusal of a held document; sys.capabilities' registrations, always there. Protocol
-// 11 adds the ranker models (ADR 0215): the ranker.* verbs, search.query's rank and a ranked hit's
-// rank_score, and sys.capabilities' ranker. Protocol 12 adds search.query's stages: the
-// stages a search runs, asked for in place of a mode, and how its answer was made. Protocol 13
-// adds index.documents, search.query's line_start and line_end on a hit, sys.capabilities' verbs,
-// and sys.hello's server_protocol, min_protocol and store_id. Protocol 14 adds links from frontmatter
-// relations (the kinds supersedes, superseded_by, amends, related, sources and adr) to graph.links,
-// graph.backlinks, graph.neighborhood and graph.unresolved, and their kinds option; a session below 14
-// sees the body links alone, its graph unchanged. It also adds graph.unresolved's reason cycle (a
-// supersession loop), workspace.configure's abstract_chunk and demote_superseded with
-// workspace.list's, search.query's retrieval option and a hit's superseded_by.
+// setting saved at once, sys.capabilities, and workspace.list's databases
+// (docs/decisions/store.md#workspace-settings-saved-together). Protocol 10 adds a build's
+// registrations (docs/decisions/search.md#registered-chunkers-and-derivers): workspace.list's
+// text_collisions; the documents a daemon holds, index.status's held, held_stale and
+// held_unchecked, search.query's hold on a hit, and index.reindex's refusal of a held document;
+// sys.capabilities' registrations, always there. Protocol 11 adds the ranker models
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker): the ranker.* verbs, search.query's
+// rank and a ranked hit's rank_score, and sys.capabilities' ranker. Protocol 12 adds search.query's
+// stages: the stages a search runs, asked for in place of a mode, and how its answer was made.
+// Protocol 13 adds index.documents, search.query's line_start and line_end on a hit,
+// sys.capabilities' verbs, and sys.hello's server_protocol, min_protocol and store_id. Protocol 14
+// adds links from frontmatter relations (the kinds supersedes, superseded_by, amends, related,
+// sources and adr) to graph.links, graph.backlinks, graph.neighborhood and graph.unresolved, and
+// their kinds option; a session below 14 sees the body links alone, its graph unchanged. It also
+// adds graph.unresolved's reason cycle (a supersession loop), workspace.configure's abstract_chunk
+// and demote_superseded with workspace.list's, search.query's retrieval option and a hit's
+// superseded_by.
 // Protocol 15 adds index.documents' diagnosed: the documents whose frontmatter the schema
-// diagnoses, each with its diagnostics; a session below 15 is refused the option. Protocol 16 is
-// ADR 1791284787: embedding.cancel_switch deletes the partial target's vectors and embedding.remove
-// the removed provider's model's, so a session below 16 is refused those two verbs; index.purge_model
-// refuses the active model and the target saying what to do instead. Protocol 17 is ADR 1791430651:
-// file.read, file.write and file.locate, a local peer's files outside every workspace. Protocol 18
-// adds graph.resolve: where a link as written reaches, for an editor following one not yet indexed.
-// Protocol 19 is ADR 1791474356: doc.read_raw, doc.write_raw, file.read_raw and file.write_raw, an
-// HTML file's own bytes where doc.read and file.read give its derived text; a session below 19 sees
-// them as unknown methods. Protocol 20 is ADR 1791719881 and ADR 1791532020: sys.contracts, and the
-// todos.* verbs. Protocol 21 makes file.write and file.write_raw on a file a workspace indexes that
-// workspace's doc.write and doc.write_raw, indexed at once, where they wrote round it through "/";
-// file.locate resolves symlinks. No verb is added, and every session gets the new behaviour: the
-// old one was the bypass. Protocol 22 is ADR 1792015069: todos.migrate_refs, which a session below
-// 22 sees as an unknown method; todos.set_var's optional {at, scope}; todos.vars' derived, source and
-// machine. Every session resolves a todo store's variables from the store, whichever route it names,
-// and todos.open ignores a kb_root: the per-route values were the bug. Protocol 23 is ADR 1792015212:
+// diagnoses, each with its diagnostics; a session below 15 is refused the option. Protocol 16
+// (docs/decisions/store.md#protocol-16-gates-the-deleting-verbs): embedding.cancel_switch deletes
+// the partial target's vectors and embedding.remove the removed provider's model's, so a session
+// below 16 is refused those two verbs; index.purge_model refuses the active model and the target
+// saying what to do instead. Protocol 17 is files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace): file.read, file.write and file.locate,
+// a local peer's files outside every workspace. Protocol 18 adds graph.resolve: where a link as
+// written reaches, for an editor following one not yet indexed.
+// Protocol 19 is raw HTML (docs/decisions/editor.md#html-files-open-raw-or-simplified):
+// doc.read_raw, doc.write_raw, file.read_raw and file.write_raw, an HTML file's own bytes where
+// doc.read and file.read give its derived text; a session below 19 sees them as unknown methods.
+// Protocol 20 is verb contracts
+// (docs/decisions/contract.md#features-as-modules-with-verb-contracts) and the todo system
+// (docs/decisions/todos.md#the-daemon-owns-the-todo-system): sys.contracts, and the todos.* verbs.
+// Protocol 21 makes file.write and file.write_raw on a file a workspace indexes that workspace's
+// doc.write and doc.write_raw, indexed at once, where they wrote round it through "/"; file.locate
+// resolves symlinks. No verb is added, and every session gets the new behaviour: the old one was
+// the bypass. Protocol 22 is one answer from every route to a store
+// (docs/decisions/todos.md#one-answer-from-every-route-to-a-store): todos.migrate_refs, which a
+// session below 22 sees as an unknown method; todos.set_var's optional {at, scope}; todos.vars'
+// derived, source and machine. Every session resolves a todo store's variables from the store,
+// whichever route it names, and todos.open ignores a kb_root: the per-route values were the bug.
+// Protocol 23 is graph-only indexing (docs/decisions/todos.md#graph-only-indexing):
 // workspace.configure's graph_only and todo_search, with workspace.list's; the review and blocked
 // relations, and a todo task's external links (graph.links' external), which a session below 23
-// does not see, its graph unchanged. Every session gets a todo store's tasks indexed graph-only: out
-// of search, in the graph.
-// Protocol 24 is ADR 1792132105: variables belong to the workspace. It adds workspace.vars,
-// workspace.set_var, workspace.of and todos.set_kb, and a variable's conflict; a session below 24
-// reads a KB-file value's source as "store", as before.
-// Protocol 25 is ADR 1792256101: sys.stats, the daemon's own process (its memory, its CPU so far,
-// its goroutines and its start), which a session below 25 does not have.
-// Protocol 26 is ADR 1792347044: graph.map, a workspace's documents (each one's title, type and
-// whether another supersedes it) and the resolved links among them, or a root's neighbourhood.
-// Protocol 27 is ADR 1792349867: workspace.scaffold, a KB type's files created under a workspace's
-// root, which a session below 27 does not have.
-// Protocol 28 is ADR 1792347044 r9: graph.map's nodes carry their tags, for the GlobeMap's colour
-// rules, and its answer the schema's document types, a node's type its discriminator's value, for
-// the Mindmap's shapes; a session below 28 reads its answer as before.
-// Protocol 29 is ADR 1791532020 r13: a todo store is AutoDoc's from its first write, todos.add
-// making it if it is missing, and todos.resolve, todos.stores, todos.set_dir and todos.move_store
-// say whether todos.release gave it back (released); todos.unclaimed now means only that. A session
-// below 29 ignores released. Every session gets the claim at the first write: the refusal was the
-// bug. So does every session's read of a registered root's store not made yet: an empty store's
-// answer, where not_a_store was.
-// Protocol 30 is ADR 1791532020 r15 §2.5a: todos.assign's optional scope, the assigner's, kept on
-// the assign change (todos.changes' scope) and the task's snapshot row (a resync's), and never read
-// by AutoDoc. A session below 30 sends none and ignores the key; its assignments have no scope.
-// Protocol 31 is ADR 1793005098: the embedding setup's host.probe, embedding.catalog,
-// embedding.estimate, embedding.pull, embedding.pull_status and embedding.pull_cancel, which a
-// session below 31 sees as unknown methods.
+// does not see, its graph unchanged. Every session gets a todo store's tasks indexed graph-only:
+// out of search, in the graph.
+// Protocol 24 (docs/decisions/todos.md#variables-belong-to-the-workspace): variables belong to the
+// workspace. It adds workspace.vars, workspace.set_var, workspace.of and todos.set_kb, and a
+// variable's conflict; a session below 24 reads a KB-file value's source as "store", as before.
+// Protocol 25 is process stats (docs/decisions/editor.md#process-stats): sys.stats, the daemon's
+// own process (its memory, its CPU so far, its goroutines and its start), which a session below 25
+// does not have.
+// Protocol 26 is the workspace map (docs/decisions/search.md#the-workspace-map): graph.map, a
+// workspace's documents (each one's title, type and whether another supersedes it) and the resolved
+// links among them, or a root's neighbourhood.
+// Protocol 27 is the KB type scaffold
+// (docs/decisions/contract.md#the-daemon-writes-the-scaffold-create-only): workspace.scaffold, a KB
+// type's files created under a workspace's root, which a session below 27 does not have.
+// Protocol 28 (docs/decisions/search.md#the-workspace-map): graph.map's nodes carry their tags, for
+// the GlobeMap's colour rules, and its answer the schema's document types, a node's type its
+// discriminator's value, for the Mindmap's shapes; a session below 28 reads its answer as before.
+// Protocol 29 is the claim at the first write
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): a todo store is AutoDoc's from
+// its first write, todos.add making it if it is missing, and todos.resolve, todos.stores,
+// todos.set_dir and todos.move_store say whether todos.release gave it back (released);
+// todos.unclaimed now means only that. A session below 29 ignores released. Every session gets the
+// claim at the first write: the refusal was the bug. So does every session's read of a registered
+// root's store not made yet: an empty store's answer, where not_a_store was.
+// Protocol 30 is the assigner's scope
+// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope): todos.assign's optional
+// scope, the assigner's, kept on the assign change (todos.changes' scope) and the task's snapshot
+// row (a resync's), and never read by AutoDoc. A session below 30 sends none and ignores the key;
+// its assignments have no scope.
+// Protocol 31 (docs/decisions/search.md#embedding-setup): the embedding setup's host.probe,
+// embedding.catalog, embedding.estimate, embedding.pull, embedding.pull_status and
+// embedding.pull_cancel, which a session below 31 sees as unknown methods.
 // Protocol 32 is sys.profile: the daemon's memory monitor (--profile's) started, stopped or asked
 // about at runtime, for a local peer; a session below 32 sees an unknown method.
 // Protocol 33 is todos.changes' optional scoped: a consumer that reads each assignment's scope and
@@ -115,32 +132,39 @@ import (
 // meaning", for every session alike and Johno's ruling (2026-10-29): a notifier that predates the
 // scope, still running in a Neovim after auto-core's upgrade, delivered every bare assignee in
 // every project. Without the assignee it delivers none; an unscoped assignment is as before.
-// Protocol 34 is ADR 1792004705 §4.2a.1: a gated Lua script's bounds, {within, protect?}, one
-// parameter past any verb's own, which the TUI's gate sets on every call a gated script makes. The
-// daemon holds every file the call reaches to them (core/fsbounds): inside the workspace, none of it
-// hidden or AutoDoc's own, a write in within's workspace only. A session below 34 sends none, and
-// every call of any session without them is unbounded, as before.
-// Protocol 35 is ADR 1793312720: index.documents orders and filters in the store and pages by a
-// key, so its next is an opaque cursor (a string; "" when no more follow) and after takes it back.
-// It is the second exception to "a result keeps its meaning", for every session alike and Johno's
-// ruling (Q1, 2026-10-30): the integer offset is retired at once, not kept for a protocol window,
-// so a session that declared an older protocol gets the cursor too, and a non-zero integer after is
-// refused saying what replaced it. Every known client echoes next without reading it.
-// Protocol 36 is ADR 1793321612: a graph.map without a root comes a page at a time (opts.after and
-// opts.limit, and next), each page with the links whose source is on it, since the whole map in one
-// reply fails past the transport's message limit. Unlike 35, a session below 36 keeps the one reply
-// (Johno's ruling, Q2), and is refused after and limit.
-// Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
-// their verbs' Since is set), after 34 above, and the 35 and 36 that AP-5 and AP-6 claim. A
-// session below 37 sees their verbs as unknown methods.
-// Protocol 38 is ADR 1793271500 §4.7's agy waker: crew.endpoint's optional secret, an agy session's
-// language-server token, which the daemon holds in memory alone for that endpoint (never stored),
-// and which any other kind refuses. A session below 38 sends none, and its crew.endpoint is as before.
+// Protocol 34 (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): a gated Lua
+// script's bounds, {within, protect?}, one parameter past any verb's own, which the TUI's gate sets
+// on every call a gated script makes. The daemon holds every file the call reaches to them
+// (core/fsbounds): inside the workspace, none of it hidden or AutoDoc's own, a write in within's
+// workspace only. A session below 34 sends none, and every call of any session without them is
+// unbounded, as before.
+// Protocol 35 is document listing in the store
+// (docs/decisions/search.md#document-listing-in-the-store): index.documents orders and filters in
+// the store and pages by a key, so its next is an opaque cursor (a string; "" when no more follow)
+// and after takes it back. It is the second exception to "a result keeps its meaning", for every
+// session alike and Johno's ruling (Q1, 2026-10-30): the integer offset is retired at once, not
+// kept for a protocol window, so a session that declared an older protocol gets the cursor too, and
+// a non-zero integer after is refused saying what replaced it. Every known client echoes next
+// without reading it.
+// Protocol 36 is unrooted maps in pages (docs/decisions/search.md#unrooted-maps-in-pages): a
+// graph.map without a root comes a page at a time (opts.after and opts.limit, and next), each page
+// with the links whose source is on it, since the whole map in one reply fails past the transport's
+// message limit. Unlike 35, a session below 36 keeps the one reply (Johno's ruling, Q2), and is
+// refused after and limit.
+// Protocol 37 is the crew (docs/decisions/crew.md#the-crew-registry-and-durable-mail): the crew,
+// mail and inbox modules (crew.Protocol, the one place their verbs' Since is set), after 34 above,
+// and the 35 and 36 that AP-5 and AP-6 claim. A session below 37 sees their verbs as unknown
+// methods.
+// Protocol 38 is the agy waker (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+// crew.endpoint's optional secret, an agy session's language-server token, which the daemon holds
+// in memory alone for that endpoint (never stored), and which any other kind refuses. A session
+// below 38 sends none, and its crew.endpoint is as before.
 // Protocol 39 is AM-4's sys.check: the store's whole check, run by the daemon that serves it, so
 // --check-store never stops a window.
-// Protocol 40 is ADR 1793271500's OpenCode waker: crew.endpoint's opencode locator is the AutoDoc
-// plugin's socket, its opencode process and the session ({socket, pid, start, session}); the shape
-// before it, without the socket, is refused. No client registered one before.
+// Protocol 40 is the OpenCode waker (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+// crew.endpoint's opencode locator is the AutoDoc plugin's socket, its opencode process and the
+// session ({socket, pid, start, session}); the shape before it, without the socket, is refused. No
+// client registered one before.
 const Protocol int64 = 40
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
@@ -199,18 +223,22 @@ type WorkspaceInfo struct {
 	Warming        func() []string
 	Searched       func() // any client searched this workspace
 	EmbeddingQueue func() (state, behind string)
-	// FrontmatterSchema is the workspace's frontmatter schema (ADR 0212 §5): the active one, nil for
-	// none, and how its file stands. nil when the server keeps no schemas.
+	// FrontmatterSchema is the workspace's frontmatter schema
+	// (docs/decisions/search.md#frontmatter-schemas): the active one, nil for none, and how its file
+	// stands. nil when the server keeps no schemas.
 	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
-	// TextExtensions are the workspace's own plain-text extensions (ADR 0212 §3); nil for none.
+	// TextExtensions are the workspace's own plain-text extensions
+	// (docs/decisions/search.md#a-workspaces-own-text-types); nil for none.
 	TextExtensions func() []string
 	// TextCollisions are those of its text extensions a registration of the build reads instead
-	// (ADR 0216 §1.3); nil for none.
+	// (docs/decisions/search.md#file-kinds-and-their-precedence); nil for none.
 	TextCollisions func() []string
-	// Databases are the workspace's identity, destination and database connections (ADR 0214),
-	// read from the store when listed; nil when the server keeps none.
+	// Databases are the workspace's identity, destination and database connections
+	// (docs/decisions/store.md#databases-attach-to-a-workspace), read from the store when listed; nil
+	// when the server keeps none.
 	Databases func() Databases
-	// Provider is the workspace's own embedding provider, when it has one (ADR 0212 §7).
+	// Provider is the workspace's own embedding provider, when it has one
+	// (docs/decisions/search.md#workspace-providers-and-peer-changes).
 	Provider ProviderChoice
 }
 
@@ -362,8 +390,8 @@ func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } 
 // WithPreferences keeps clients' preferences in p (the daemon's store).
 func WithPreferences(p Preferences) Option { return func(o *options) { o.preferences = p } }
 
-// WithRegistrations reports the build's registrations in sys.capabilities (ADR 0216 §1.4); without
-// it, the empty ones of the community build.
+// WithRegistrations reports the build's registrations in sys.capabilities
+// (docs/decisions/search.md#held-documents); without it, the empty ones of the community build.
 func WithRegistrations(t registrations.Tables) Option { return func(o *options) { o.reg = t } }
 
 // decodeLimits bound what a peer may send: a document (docs.MaxSize) and little else.

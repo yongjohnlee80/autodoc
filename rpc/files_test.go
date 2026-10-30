@@ -72,7 +72,8 @@ func callErr(cli *golibrpc.Client, method string, params ...any) error {
 
 // TestFileVerbsEditAFileOutsideEveryWorkspace: file.write creates a file in a folder that does not
 // exist yet, file.read returns it with its version, a write at that version lands, and a stale
-// write or a second create is a conflict that leaves the file as it is (ADR 1791430651 §5.1–2).
+// write or a second create is a conflict that leaves the file as it is
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestFileVerbsEditAFileOutsideEveryWorkspace(t *testing.T) {
 	cli := filesRig(t, "unix", Protocol)
 	abs := filepath.Join(t.TempDir(), "notes", "deep", "a.md")
@@ -128,7 +129,7 @@ func TestFileVerbsRefuseWhatIsNotAnAbsoluteTextFile(t *testing.T) {
 }
 
 // TestFileVerbsAreForLocalPeers: over TCP — a token's reach — every file.* verb is access denied
-// and touches nothing (ADR 1791430651 §5.5, rationale §R2).
+// and touches nothing (docs/decisions/editor.md#files-outside-every-workspace).
 func TestFileVerbsAreForLocalPeers(t *testing.T) {
 	cli := filesRig(t, "tcp", Protocol)
 	abs := filepath.Join(t.TempDir(), "a.md")
@@ -171,7 +172,8 @@ func TestFileVerbsOnAServerWithoutFiles(t *testing.T) {
 
 // TestFileLocateFindsTheWorkspaceThatServesAPath: the most specific root holding the path wins; a
 // path outside every root, a root itself, a sibling sharing a root's prefix, a file the workspace
-// excludes, and a workspace that could not open (Err, whatever else it has) are in none (ADR 1791430651 §5.4).
+// excludes, and a workspace that could not open (Err, whatever else it has) are in none
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestFileLocateFindsTheWorkspaceThatServesAPath(t *testing.T) {
 	base := t.TempDir()
 	ws := func(name, root string) Workspace {

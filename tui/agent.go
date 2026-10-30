@@ -164,10 +164,11 @@ func (a *agents) PreferencesChanged() {
 	a.syncAgentDialog()
 }
 
-// THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page (ADR 1791213400):
-// SPC g, Go › Agent. The user keeps profiles, each a name and the command that starts the agent
-// (claude, codex --model o4, agy, opencode, …), and marks one the default: the key opens it. Each
-// running agent has a tab of its own (agenttabs.go); they keep running while hidden. The agent works in AutoDoc's own folder for
+// THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page
+// (docs/decisions/crew.md#an-agent-terminal-inside-autodoc): SPC g, Go › Agent. The user keeps
+// profiles, each a name and the command that starts the agent (claude, codex --model o4, agy,
+// opencode, …), and marks one the default: the key opens it. Each running agent has a tab of its
+// own (agenttabs.go); they keep running while hidden. The agent works in AutoDoc's own folder for
 // the workspace (Options.AgentDir), never the workspace's: there AutoDoc writes AGENTS.md and
 // CLAUDE.md, telling it the workspace and how to call AutoDoc, and its environment names them too.
 // The command is the user's, as written; {root} and {workspace} in it are filled in.
@@ -480,7 +481,8 @@ func (h *agents) agentEnv(ws wsInfo, dir, codename string) []string {
 		"AUTODOC_CONFIG=" + h.agentConfig,
 		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}
-	// the page in this TUI's editor, for `autodoc --editor` (ADR 1792014854)
+	// the page in this TUI's editor, for `autodoc --editor`
+	// (docs/decisions/crew.md#the-editor-socket)
 	if h.editorPath != nil {
 		if path := h.editorPath(); path != "" {
 			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+h.editorToken(codename))
@@ -636,7 +638,8 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	return b.String()
 }
 
-// editorGuide is the agents' guide to the page in the editor (editorsocket.go, ADR 1792014854).
+// editorGuide is the agents' guide to the page in the editor (editorsocket.go,
+// docs/decisions/crew.md#the-editor-socket).
 const editorGuide = "## The page the user is writing\n\n" +
 	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
 	"included (`$AUTODOC_EDITOR`; it knows you by `$AUTODOC_EDITOR_TOKEN`, which `autodoc --editor` passes). Positions are 1-based lines and columns (a column is a character).\n\n" +

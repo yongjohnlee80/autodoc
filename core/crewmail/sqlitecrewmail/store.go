@@ -1,7 +1,8 @@
 // Package sqlitecrewmail is the crew, mail and inbox modules' tables on the daemon's SQLite store
-// (ADR 1793271500 §4.2, migration 000026): one Store whose every transaction is a crew.Tx (and,
-// with the mail module, a mail.Tx), so a verb's guard, crew's change and mail's effect commit as
-// one. The crew_* half is here; the mail_* and inbox_* half lives beside it.
+// (docs/decisions/crew.md#the-crew-and-mail-tables, migration 000026): one Store whose every
+// transaction is a crew.Tx (and, with the mail module, a mail.Tx), so a verb's guard, crew's change
+// and mail's effect commit as one. The crew_* half is here; the mail_* and inbox_* half lives
+// beside it.
 package sqlitecrewmail
 
 import (

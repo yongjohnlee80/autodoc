@@ -20,23 +20,26 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// TodoStore is a todo store as the workspaces read the todo registry (ADR 1792015212 §2.2).
+// TodoStore is a todo store as the workspaces read the todo registry
+// (docs/decisions/todos.md#which-paths-are-graph-only).
 type TodoStore struct {
 	ID  string // its stable id in the registry
 	Dir string // its directory, absolute
-	KB  string // the root of the workspace it belongs to (ADR 1792132105 §2.4); "" for none
+	KB  string // the root of the workspace it belongs to (docs/decisions/todos.md#which-workspace-a-store-belongs-to); "" for none
 }
 
 // TodoRegistry is what the workspaces read of the todo system: its stores, and the variables of
-// every workspace (ADR 1792132105 §2.5), by root, "" holding a path's in no workspace. A name
-// without a value is left out. Files are where the variables are read from: an edit to one, by hand
-// or a git pull, is polled for (varsPoll) and reads the registry again.
+// every workspace (docs/decisions/todos.md#resolving-refs-in-every-document), by root, "" holding a
+// path's in no workspace. A name without a value is left out. Files are where the variables are
+// read from: an edit to one, by hand or a git pull, is polled for (varsPoll) and reads the registry
+// again.
 type TodoRegistry struct {
 	Stores []TodoStore
 	Vars   map[string]map[string]string
 	Files  []string
-	// Check is how the todo system judges a task file's frontmatter (ADR 1792015212 amendment 2):
-	// a store's documents are checked by it, never by their workspace's KB schema. nil for none.
+	// Check is how the todo system judges a task file's frontmatter
+	// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format): a store's documents are checked
+	// by it, never by their workspace's KB schema. nil for none.
 	Check func(src []byte) schema.Result
 }
 
@@ -77,8 +80,9 @@ func (g *registry) same(o *registry) bool {
 }
 
 // varsOf are the variables a document at abs, in store st (nil for none), resolves with: its store's
-// workspace's, or the deepest workspace's holding it, or those of no workspace (ADR 1792132105 §2.5,
-// the owner rule workspace.of answers). nil when the registry gives no variables.
+// workspace's, or the deepest workspace's holding it, or those of no workspace
+// (docs/decisions/todos.md#resolving-refs-in-every-document, the owner rule workspace.of answers).
+// nil when the registry gives no variables.
 func (g *registry) varsOf(abs string, st *TodoStore) *index.Vars {
 	if g.vars == nil {
 		return nil
@@ -154,7 +158,7 @@ func (m *Workspaces) TodoStoresChanged() {
 
 // rereadTodoStores reads the registry again. When what the workspaces see changed, every served
 // workspace re-indexes the documents whose mode or store changed: their indexer version tells
-// them, no file changed (ADR 1792015212 §2.2).
+// them, no file changed (docs/decisions/todos.md#which-paths-are-graph-only).
 func (m *Workspaces) rereadTodoStores() {
 	if !m.readTodoStores() {
 		return
@@ -215,8 +219,9 @@ func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
 	return nil, g.varsOf(abs, nil)
 }
 
-// modes are one workspace's graph_only settings (ADR 1792015212 §2.2), read by its indexer for each
-// path. They outlive its restarts, like its schema.
+// modes are one workspace's graph_only settings
+// (docs/decisions/todos.md#which-paths-are-graph-only), read by its indexer for each path. They
+// outlive its restarts, like its schema.
 type modes struct {
 	m    *Workspaces
 	root string
@@ -253,11 +258,12 @@ func newModeConfig(list []string, search bool) *modeConfig {
 // set replaces the workspace's settings.
 func (h *modes) set(list []string, search bool) { h.cfg.Store(newModeConfig(list, search)) }
 
-// mode is path p's mode, first match deciding (ADR 1792015212 §2.2): exclude is the indexer's own
-// Match, before this is asked; a user's graph_only pattern makes it graph-only; a todo store's path,
-// by the registry or the default entry, is graph-only when todo_search is off (it is on unless the
-// workspace turned it off); anything else is full. A path in a store has the store, whatever its
-// mode, and every path the variables of the workspace it belongs to.
+// mode is path p's mode, first match deciding (docs/decisions/todos.md#which-paths-are-graph-only):
+// exclude is the indexer's own Match, before this is asked; a user's graph_only pattern makes it
+// graph-only; a todo store's path, by the registry or the default entry, is graph-only when
+// todo_search is off (it is on unless the workspace turned it off); anything else is full. A path
+// in a store has the store, whatever its mode, and every path the variables of the workspace it
+// belongs to.
 func (h *modes) mode(p string) index.Mode {
 	c := h.cfg.Load()
 	var md index.Mode
@@ -288,9 +294,10 @@ func (m *Workspaces) modesFor(id int64, root string, list []string, search bool)
 	return h
 }
 
-// todoExcluded are the exclude patterns that keep a todo store under root out of the index (ADR
-// 1792015212 §2.3): its tasks open in no workspace, with no relations. A store the registry knows is
-// checked by a task file in it; one no route has resolved yet is not known.
+// todoExcluded are the exclude patterns that keep a todo store under root out of the index
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported): its tasks open in no workspace, with
+// no relations. A store the registry knows is checked by a task file in it; one no route has
+// resolved yet is not known.
 func (m *Workspaces) todoExcluded(root string, exclude []string) []string {
 	g := m.stores.Load()
 	if g == nil {
@@ -313,8 +320,9 @@ func (m *Workspaces) todoExcluded(root string, exclude []string) []string {
 }
 
 // noteTodoExcluded logs, for each served workspace whose excludes keep a todo store out, an event
-// and a warning naming the workspace and the patterns (ADR 1792015212 §2.3); its settings offer to
-// index the tasks graph-only instead. Logged at every start while the exclusion stands.
+// and a warning naming the workspace and the patterns
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported); its settings offer to index the
+// tasks graph-only instead. Logged at every start while the exclusion stands.
 func (m *Workspaces) noteTodoExcluded() {
 	m.mu.Lock()
 	type ws struct {

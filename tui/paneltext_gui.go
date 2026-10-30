@@ -13,8 +13,8 @@ import (
 var textPanels = []string{"agentView", "terminalView"}
 
 // panelText gives the agent and terminal panels' terminals their text at a share of the window's
-// (ADR 1792350322): golib's TerminalViews on each panel's TerminalTabs, one set of views a panel. A
-// reload's new panel gets the views again.
+// (docs/decisions/editor.md#the-terminal-text-size): golib's TerminalViews on each panel's
+// TerminalTabs, one set of views a panel. A reload's new panel gets the views again.
 type panelText struct {
 	panels map[string]*panelViews
 }

@@ -16,11 +16,11 @@ func (e *env) storesChanged() int {
 	return n
 }
 
-// TestTheRegistrySaysWhenItsStoresChange (ADR 1792015212 §2.2): a write that changes the stores the
-// registry holds, their paths, or the variables they resolve tells WithStoresChanged (the daemon
-// reads the stores once for every call made while it reads); one that changes none of them (a
-// store's last use, a task) does not. The workspaces read the stores
-// again on it.
+// TestTheRegistrySaysWhenItsStoresChange (docs/decisions/todos.md#which-paths-are-graph-only): a
+// write that changes the stores the registry holds, their paths, or the variables they resolve
+// tells WithStoresChanged (the daemon reads the stores once for every call made while it reads);
+// one that changes none of them (a store's last use, a task) does not. The workspaces read the
+// stores again on it.
 func TestTheRegistrySaysWhenItsStoresChange(t *testing.T) {
 	e := newEnv(t)
 	e.must(e.m.Claim(ctx, kb))

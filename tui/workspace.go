@@ -23,7 +23,8 @@ type wsInfo struct {
 	provider, providerErr              string   // its own embedding provider ("" the daemon's), and why it is not set up
 	db                                 databasesInfo
 	// graphOnly are its graph_only patterns, todoSearch whether its todo tasks are in search, and
-	// todoExcluded the exclude patterns that keep a todo store of it out of the index (ADR 1792015212)
+	// todoExcluded the exclude patterns that keep a todo store of it out of the index
+	// (docs/decisions/todos.md#graph-only-indexing)
 	graphOnly, todoExcluded []string
 	todoSearch              bool
 }
@@ -344,8 +345,8 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 }
 
 // noteTodoExcluded says once a session, for each workspace whose excludes keep a todo store out of
-// the index, which patterns do (ADR 1792015212 §2.3): its tasks open with no relations, and its
-// settings offer to index them graph-only instead.
+// the index, which patterns do (docs/decisions/todos.md#excluded-todo-stores-are-reported): its
+// tasks open with no relations, and its settings offer to index them graph-only instead.
 func (h *Host) noteTodoExcluded(list []wsInfo) {
 	for _, w := range list {
 		key := w.name + "\x00" + strings.Join(w.todoExcluded, ";")

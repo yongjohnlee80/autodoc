@@ -25,9 +25,10 @@ import (
 
 var match = workspace.NewMatcher([]string{"**/*.md"}, []string{".git/**"}).Match
 
-// model is an indexer reduced to the rules ADR 0203 gives it: for a touched path it Stats the
-// entry, deletes the document if the entry is gone or no longer eligible, and records its Version
-// otherwise. A Stat that fails for another reason (permissions) leaves the document alone.
+// model is an indexer reduced to the rules docs/decisions/contract.md#the-index-follows-the-files
+// gives it: for a touched path it Stats the entry, deletes the document if the entry is gone or no
+// longer eligible, and records its Version otherwise. A Stat that fails for another reason
+// (permissions) leaves the document alone.
 type model struct {
 	fsys    vfs.FS
 	mu      sync.Mutex

@@ -10,7 +10,7 @@ import (
 	"github.com/yuin/gopher-lua/parse"
 )
 
-// eval_test.go: a shell's environment and Eval (ADR 1792256103 §4.3, §5 cells 5-8).
+// eval_test.go: a shell's environment and Eval (docs/decisions/editor.md#the-shells-environment).
 
 func shellEval(t *testing.T, e *Engine, sh *Shell, chunk string) []string {
 	t.Helper()

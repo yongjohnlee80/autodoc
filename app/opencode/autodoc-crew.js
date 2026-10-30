@@ -1,6 +1,7 @@
-// AutoDoc's crew plugin for OpenCode (ADR 1793271500 §4.7). AutoDoc writes it (`autodoc crew plugin
-// --opencode`) and its host loads it through $OPENCODE_CONFIG_CONTENT; it writes nothing into the
-// project. In the agent's own opencode process it:
+// AutoDoc's crew plugin for OpenCode (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
+// AutoDoc writes it (`autodoc crew plugin --opencode`) and its host loads it through
+// $OPENCODE_CONFIG_CONTENT; it writes nothing into the project. In the agent's own opencode process
+// it:
 //   - registers the session it chats in with AutoDoc (`autodoc crew endpoint --opencode <session>`),
 //     at its first message and at each new top-level session (a subagent's is not one);
 //   - listens on a unix socket, named by its pid, in a folder of its own that no one else can reach;

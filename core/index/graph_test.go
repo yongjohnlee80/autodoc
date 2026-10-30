@@ -151,7 +151,8 @@ func TestAnImageTiesAResourceToItsDocument(t *testing.T) {
 	eq(t, "resource back", e.targets("docs/plan.md"), []string{"![The flow](plan/flow.mmd) -> docs/plan/flow.mmd"})
 }
 
-// TestResolutionRules: each rule of ADR 0204 §4.6, and the markdown forms.
+// TestResolutionRules: each rule of docs/decisions/search.md#link-resolution, and the markdown
+// forms.
 func TestResolutionRules(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put(

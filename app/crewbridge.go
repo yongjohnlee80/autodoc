@@ -33,12 +33,13 @@ const bridgeLook = 20 * time.Second
 // the bridge takes it as gone: one refusal may be a restart in progress.
 const bridgeRefusals = 3
 
-// crewBridgeMain runs `autodoc crew bridge --agy` (ADR 1793271500 §4.7). An Antigravity agent runs
-// it once from its shell, the only place its language server's address and token are (its hooks get
-// neither): it registers the session's agy endpoint with the token, and stays, detached, to register
-// again whenever the daemon restarts (which forgets the token). It is the bridge of one session, the
-// one whose context it read as it started; it never reads another, and it exits when that session
-// ends or its language server is gone.
+// crewBridgeMain runs `autodoc crew bridge --agy`
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). An Antigravity agent runs it once from
+// its shell, the only place its language server's address and token are (its hooks get neither): it
+// registers the session's agy endpoint with the token, and stays, detached, to register again
+// whenever the daemon restarts (which forgets the token). It is the bridge of one session, the one
+// whose context it read as it started; it never reads another, and it exits when that session ends
+// or its language server is gone.
 func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("autodoc crew bridge", flag.ContinueOnError)
 	fs.SetOutput(stderr)

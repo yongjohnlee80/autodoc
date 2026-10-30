@@ -92,9 +92,9 @@ func TestIndexDocumentsListsByUpdatedWithFrontmatter(t *testing.T) {
 }
 
 // TestAnOlderSessionGetsTheCursor: from protocol 35, index.documents' next is an opaque cursor for
-// every session, whatever protocol it declared (ADR 1793312720 D3, Johno's Q1: the offset is
-// retired at once), and a session that declared 33 gets a string next and has its integer after
-// refused, the refusal saying what replaced it. 0 still starts the listing.
+// every session, whatever protocol it declared (docs/decisions/search.md#cursors-not-offsets: the
+// offset is retired at once), and a session that declared 33 gets a string next and has its integer
+// after refused, the refusal saying what replaced it. 0 still starts the listing.
 func TestAnOlderSessionGetsTheCursor(t *testing.T) {
 	r := serve(t)
 	writer := r.dial(true)

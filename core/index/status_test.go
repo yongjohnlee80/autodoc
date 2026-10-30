@@ -33,9 +33,9 @@ func (e *env) freshStatus() Status {
 // sameStatus compares two statuses' every field.
 func sameStatus(a, b Status) bool { return reflect.DeepEqual(a, b) }
 
-// TestStatusIsComputedOncePerCommit (ADR 1791329335 §2.5): a status at an unchanged commit_seq is
-// the kept one; after each kind of write it is what a computation from scratch says, with the
-// write's effect in it.
+// TestStatusIsComputedOncePerCommit (docs/decisions/store.md#status-is-computed-once-per-commit): a
+// status at an unchanged commit_seq is the kept one; after each kind of write it is what a
+// computation from scratch says, with the write's effect in it.
 func TestStatusIsComputedOncePerCommit(t *testing.T) {
 	var computed atomic.Int64
 	a := newFake("m", "a")

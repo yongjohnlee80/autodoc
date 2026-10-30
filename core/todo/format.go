@@ -42,7 +42,7 @@ var activeBuckets = []string{"open", "in-progress", "deferred", "completed"}
 func validStatus(s string) bool { return slices.Contains(Statuses, s) }
 
 // automationRemoved is the reason a file using removed automation is malformed.
-const automationRemoved = "automation was removed (ADR 1791532020)"
+const automationRemoved = "automation was removed (docs/decisions/todos.md#a-versioned-format-without-automation)"
 
 var removedFields = map[string]bool{"condition": true, "execute": true, "origin": true, "last_fired_at": true, "exit_code": true}
 

@@ -438,7 +438,8 @@ func changed(t *testing.T, cli *golibrpc.Client, since int64, want ...string) in
 
 // TestFollowsTheFiles: on a real root, an external write, an editor's atomic save (a temporary file
 // renamed over the file), a delete, a move within the root and a populated directory moved in each
-// reach the index, and index.changes reports them (ADR 0203 §5.1).
+// reach the index, and index.changes reports them
+// (docs/decisions/contract.md#the-index-follows-the-files).
 func TestFollowsTheFiles(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
@@ -486,7 +487,8 @@ func TestFollowsTheFiles(t *testing.T) {
 }
 
 // TestWrittenLikeAnExternalEdit: a file written through doc.write and the same file written from
-// outside index the same (ADR 0203 §5.5): the one engine path.
+// outside index the same (docs/decisions/contract.md#autodocs-own-writes-take-the-same-path): the
+// one engine path.
 func TestWrittenLikeAnExternalEdit(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
@@ -925,7 +927,7 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 
 // TestACallsEventsAreTheCLIs: --call says hello as autodoc-cli, not as the TUI, so what it changes is
 // attributed to it in sys.events, with who ran it: its pid and cwd, and its agent when it has one
-// (ADR 1792015069 §2.6).
+// (docs/decisions/todos.md#a-cli-call-says-who-runs-it).
 func TestACallsEventsAreTheCLIs(t *testing.T) {
 	dir := short(t)
 	sock := filepath.Join(dir, "a.sock")

@@ -6,8 +6,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The rows the mail module reads and writes (ADR 1793271500 §4.2). Times are Unix nanoseconds; a
-// nil *int64 is SQL NULL. Each engine's adapter maps them onto its tables.
+// The rows the mail module reads and writes (docs/decisions/crew.md#the-crew-and-mail-tables).
+// Times are Unix nanoseconds; a nil *int64 is SQL NULL. Each engine's adapter maps them onto its
+// tables.
 type (
 	// Message is what a sender sent, once, whatever its recipients.
 	Message struct {

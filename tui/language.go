@@ -15,12 +15,13 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// LANGUAGES — AutoDoc's UI in six languages (ADR 1792451618), on golib's localization: AutoDoc's
-// catalogs (tui/qml/i18n/autodoc_<tag>.xml) over golib's, a QML label's qsTrId and a Go row's or
-// notice's tuicore.Msg resolved by golib in the App's language, which one store-wide preference
-// (tui.language) chooses. A switch relabels everything in one frame (App.ApplyLanguage); the text
-// AutoDoc composes in Go is composed again (languageChanged). A stored language this build does not
-// offer is English, and the store keeps it (prefspec's readRows).
+// LANGUAGES — AutoDoc's UI in six languages (docs/decisions/editor.md#six-languages), on golib's
+// localization: AutoDoc's catalogs (tui/qml/i18n/autodoc_<tag>.xml) over golib's, a QML label's
+// qsTrId and a Go row's or notice's tuicore.Msg resolved by golib in the App's language, which one
+// store-wide preference (tui.language) chooses. A switch relabels everything in one frame
+// (App.ApplyLanguage); the text AutoDoc composes in Go is composed again (languageChanged). A
+// stored language this build does not offer is English, and the store keeps it (prefspec's
+// readRows).
 
 // prefLanguage is the UI's language: store-wide, as the theme is, and the same in both builds.
 const prefLanguage = "tui.language"

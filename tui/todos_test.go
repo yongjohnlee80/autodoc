@@ -126,11 +126,12 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "Write the view") })
 }
 
-// TestTodosAddsAFreshWorkspacesFirstTask: AutoDoc on its own (ADR 1791532020 r13): a workspace that
-// never had a store, nothing claimed or scaffolded first. The todos panel opens on it writable, no
-// note of read-only, and a adds its first task on the first try: the task lands, its store made
-// and claimed by that write, marker and all. Nothing on the way is a notice or a toast: the view's
-// reads of the store not made yet answer it empty.
+// TestTodosAddsAFreshWorkspacesFirstTask: AutoDoc on its own
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): a workspace that never had a
+// store, nothing claimed or scaffolded first. The todos panel opens on it writable, no note of
+// read-only, and a adds its first task on the first try: the task lands, its store made and claimed
+// by that write, marker and all. Nothing on the way is a notice or a toast: the view's reads of the
+// store not made yet answer it empty.
 func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)

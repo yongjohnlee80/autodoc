@@ -8,7 +8,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// BUFFERS — the open files, one shown in the editor (ADR 1792076688).
+// BUFFERS — the open files, one shown in the editor (docs/decisions/editor.md#multiple-buffers).
 //
 // Each open file, and the untitled draft, is a buffer: its openedFile and its golib Buffer (the
 // text, undo, marks and revision). The editor shows one, the active buffer; h.file points at the

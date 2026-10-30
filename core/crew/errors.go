@@ -2,7 +2,8 @@ package crew
 
 import "github.com/yongjohnlee80/golib/errs"
 
-// The crew.* verbs' public codes, in the module's range (core/module codes.go), ADR 1793271500 §4.1.
+// The crew.* verbs' public codes, in the module's range (core/module codes.go),
+// docs/decisions/crew.md#three-modules-and-one-protocol.
 const (
 	CodeScopeBusy       int64 = -32090 // another live owner holds the scope: wait, or crew.takeover after the user agrees
 	CodeStaleEpoch      int64 = -32091 // the scope changed hands since the epoch was issued: claim it again

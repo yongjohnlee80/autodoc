@@ -15,7 +15,7 @@ import (
 // Preferences does, each at once; Ctrl+= and Ctrl+- step the zoom, Ctrl+0 resets it, and the
 // page's right-click menu has the steps. They are kept in the store as gui.font.cell,
 // gui.font.size, gui.font.prose and gui.zoom. A terminal draws in its own font: there, none of
-// this shows (ADR 1791500773).
+// this shows (docs/decisions/editor.md#fonts-zoom-and-floating-panels).
 
 // FontControl is a window's fonts: --gui's backend (golib gui.Backend) has them, a terminal does not.
 type FontControl interface {
@@ -34,8 +34,9 @@ const (
 	prefFontSize  = "gui.font.size"
 	prefProseFont = "gui.font.prose"
 	prefZoom      = "gui.zoom"
-	// prefAgentScale is the agent and terminal panels' text, in percent of the window's (ADR
-	// 1792350322); the key keeps its first name, the agents', so a stored choice carries over
+	// prefAgentScale is the agent and terminal panels' text, in percent of the window's
+	// (docs/decisions/editor.md#the-terminal-text-size); the key keeps its first name, the agents',
+	// so a stored choice carries over
 	prefAgentScale = "tui.agent.text.scale"
 )
 

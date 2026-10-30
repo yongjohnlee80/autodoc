@@ -34,12 +34,12 @@ import (
 // find, copy and the outline work, edits and saves do not. File › Open with Default App opens the
 // original with the desktop's default app.
 //
-// A FILE OUTSIDE EVERY WORKSPACE (ADR 1791430651) is opened by File › Open file… (SPC f) or made by
-// File › New file… (SPC n): its workspace is "" and its path absolute, and the daemon reads and
-// writes it with file.read and file.write, versions and conflicts as a workspace file's. A file
-// inside a workspace's root opens as that workspace's (file.locate). An outside file stays open
-// when the workspace changes, and has no search, links, backlinks or frontmatter check: the
-// status line badges it.
+// A FILE OUTSIDE EVERY WORKSPACE (docs/decisions/editor.md#files-outside-every-workspace) is opened
+// by File › Open file… (SPC f) or made by File › New file… (SPC n): its workspace is "" and its
+// path absolute, and the daemon reads and writes it with file.read and file.write, versions and
+// conflicts as a workspace file's. A file inside a workspace's root opens as that workspace's
+// (file.locate). An outside file stays open when the workspace changes, and has no search, links,
+// backlinks or frontmatter check: the status line badges it.
 //
 // THE PAGE IS ALWAYS WRITABLE. With no file open, what is typed is an untitled draft: unsaved work
 // like a file's, guarded the same way; saving it asks for its path in the new-file picker, creates
@@ -54,8 +54,9 @@ type openedFile struct {
 	gen     uint64 // numbers the opens; the latest wins
 	// derived is the kind of a derived document ("PDF"), open read-only; "" for a file of text
 	derived string
-	// raw is an HTML file opened Raw (ADR 1791474356): its own bytes, editable, read and written
-	// through the *_raw verbs; false for one opened Simplified, as its derived text
+	// raw is an HTML file opened Raw (docs/decisions/editor.md#html-files-open-raw-or-simplified):
+	// its own bytes, editable, read and written through the *_raw verbs; false for one opened
+	// Simplified, as its derived text
 	raw bool
 	// hint is the draft's suggested name (buffer.new's "public.users.sql"): what it is called, and
 	// read as, until a save names it. Not a path: nothing is written under it. "" for none
@@ -64,7 +65,7 @@ type openedFile struct {
 	then func()
 	// thenAuth is who the unsaved question's Save writes as, and saveAuth who the conflict's
 	// Overwrite does: the invocation that raised the question, whose step the answer continues
-	// (ADR 1792004705 §4.2a.2c), never the user's by default
+	// (docs/decisions/contract.md#who-an-invocation-acts-for), never the user's by default
 	thenAuth, saveAuth authority
 	// disk is how the file stands on disk, as its last check found it (diskwatch.go): diskVersion
 	// the newer version a change found, diskAsked the one the user was last asked about
@@ -229,8 +230,9 @@ func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landi
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
 func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
-	// a file a plugin opens (its manifest's [open], ADR 1792457255) goes to that plugin's command, by
-	// its absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
+	// a file a plugin opens (its manifest's [open],
+	// docs/decisions/plugins.md#plugins-that-open-file-types) goes to that plugin's command, by its
+	// absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
 	if h.plugins != nil {
 		if e, ok := h.plugins.opener(ref.path); ok {
 			if abs := h.pathOnDisk(ref.ws, ref.path); abs != "" {
@@ -317,9 +319,10 @@ func (h *Host) reload() {
 // Reading the open file again yields to a save that lands while it is read: the page is then what
 // the disk holds, and the read is older.
 //
-// An HTML file it is not reading again asks first how to open it (ADR 1791474356): Simplified, its
-// derived text read-only as any derived document, or Raw, its own bytes, editable. Read again (a
-// reload, a conflict's), it keeps the way it was opened.
+// An HTML file it is not reading again asks first how to open it
+// (docs/decisions/editor.md#html-files-open-raw-or-simplified): Simplified, its derived text
+// read-only as any derived document, or Raw, its own bytes, editable. Read again (a reload, a
+// conflict's), it keeps the way it was opened.
 func (h *Host) load(ws, p string, prev *widget.JumpPos) { h.loadTo(ws, p, prev, nil) }
 
 // loadTo is load, the cursor landing as land says once the document is shown.
@@ -566,8 +569,9 @@ func (h *Host) setRendered(on bool) {
 }
 
 // redrawRendered lays the Rendered view out again: what it draws from beside the note changed, which
-// no edit of the note's text says, as a lab note's cell outputs do when a plugin runs a cell (ADR
-// 1792457255). Only an editor with a Rendered view answers (the GUI's); elsewhere it does nothing.
+// no edit of the note's text says, as a lab note's cell outputs do when a plugin runs a cell
+// (docs/decisions/plugins.md#lab-notes). Only an editor with a Rendered view answers (the GUI's);
+// elsewhere it does nothing.
 func (h *Host) redrawRendered() {
 	if h.relaid != nil {
 		h.relaid()
@@ -758,10 +762,11 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 }
 
 // writeAs is write as who acts. A gated script's save (file.save, :w, a key or row's) is held to its
-// workspace (ADR 1792004705 §4.2a.2b): a document of the workspace it began in goes out as that
-// workspace's doc.write, a file outside every workspace as file.write, each with its bounds, which
-// the daemon holds the write to; a document of another workspace is refused here. A queued gated
-// save whose workspace is no longer the current one is dropped, never re-aimed at the new one.
+// workspace (docs/decisions/contract.md#path-commands-run-within-the-workspace): a document of the
+// workspace it began in goes out as that workspace's doc.write, a file outside every workspace as
+// file.write, each with its bounds, which the daemon holds the write to; a document of another
+// workspace is refused here. A queued gated save whose workspace is no longer the current one is
+// dropped, never re-aimed at the new one.
 func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after func()) {
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
 	if err := who.check("save " + p); err != nil {

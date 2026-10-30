@@ -29,7 +29,7 @@ var ErrUnknownMode = errs.Sentinel(errs.ErrInvalidArgument, "index: unknown sear
 // or the daemon is still setting one up after it started. It is an ErrUnsupported.
 var ErrNoProvider = errs.Sentinel(errs.ErrUnsupported, "index: semantic search: no embedding provider in use")
 
-// The search's constants (ADR 0204 §4.4).
+// The search's constants (docs/decisions/search.md#hybrid-search-and-rank-fusion).
 const (
 	defaultLimit = 20
 	maxLimit     = 200
@@ -79,18 +79,21 @@ type Hit struct {
 	// (1/(rrfK+1) each), before boosts; boosts past it stay at 1.
 	Relevance float64
 	Via       []string // the retrievers that found it
-	// Hold is "" for a document this daemon interprets; for one it holds (ADR 0216 §1.4),
-	// HoldCurrent, HoldStale (its file changed since: the span may have moved) or HoldUnchecked.
+	// Hold is "" for a document this daemon interprets; for one it holds
+	// (docs/decisions/search.md#held-documents), HoldCurrent, HoldStale (its file changed since:
+	// the span may have moved) or HoldUnchecked.
 	Hold string `json:",omitempty"` // the goldens' hits are interpreted: their JSON never names it
-	// RankScore is the ranker's score for the hit, nil when no ranker scored it (ADR 0215);
-	// comparable only within one Result.
+	// RankScore is the ranker's score for the hit, nil when no ranker scored it
+	// (docs/decisions/search.md#re-ranking-with-one-global-ranker); comparable only within one
+	// Result.
 	RankScore *float64 `json:",omitempty"`
 	// SupersededBy is a successor of the hit's document, when its frontmatter relations say it was
 	// superseded and the search demoted superseded documents; "" otherwise.
 	SupersededBy string `json:",omitempty"`
 }
 
-// Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
+// Result is search.query's answer: the hits, and what the search could use
+// (docs/decisions/search.md#hybrid-search-and-rank-fusion).
 type Result struct {
 	Hits     []Hit
 	ModeUsed string // ModeLexical, ModeSemantic or ModeHybrid
@@ -98,8 +101,9 @@ type Result struct {
 	// SemanticError is the constant message of SemanticError: a provider's own error text is not
 	// passed to clients.
 	SemanticError string
-	// Rank is what the re-ranking stage did (ADR 0215): off, ready (the ranker's order) or error
-	// (recall order), with the model that ranked and a constant message.
+	// Rank is what the re-ranking stage did
+	// (docs/decisions/search.md#re-ranking-with-one-global-ranker): off, ready (the ranker's order)
+	// or error (recall order), with the model that ranked and a constant message.
 	Rank RankState `json:",omitzero"` // a search with no stage: the goldens never name it
 	// Stages is how the answer was made: the stages asked for, those that ran, and why the others
 	// did not. It follows from the rest, so the goldens never name it.

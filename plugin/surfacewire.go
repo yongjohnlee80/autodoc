@@ -6,7 +6,8 @@ import (
 	"image"
 )
 
-// THE SIDE CHANNEL'S OPS — what a surface's datagrams carry beside stdout (ADR 1792797354 §4.2):
+// THE SIDE CHANNEL'S OPS — what a surface's datagrams carry beside stdout
+// (docs/decisions/plugins.md#the-surface-side-channel):
 // the host's buffer pools, the plugin's frames, and each frame's outcome and its buffer's reuse
 // credit. One datagram is one msgpack map {op, ...}; the fds it names ride on it as SCM_RIGHTS.
 

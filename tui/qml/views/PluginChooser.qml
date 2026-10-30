@@ -1,10 +1,10 @@
-// PluginChooser.qml — SPC p (ADR 1792132889): the plugins with commands, each with the letter the user
-// gave it, the host's cursor (›) on one; a plugin's letter, or Enter, shows its card in the same
-// dialog: its commands by their letters, Backspace back to the list. j/k move; * asks for a letter for
-// the plugin under the cursor, and the next key is it (Backspace removes it). It is a card, as the
-// leader's is: text, with nothing focusable in it, so every key reaches a Shortcut, and each is the
-// host's to read (pluginpick.go): a focused list would take j, k, g, G and Enter before them. Esc
-// closes it.
+// PluginChooser.qml — SPC p (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): the
+// plugins with commands, each with the letter the user gave it, the host's cursor (›) on one; a
+// plugin's letter, or Enter, shows its card in the same dialog: its commands by their letters,
+// Backspace back to the list. j/k move; * asks for a letter for the plugin under the cursor, and
+// the next key is it (Backspace removes it). It is a card, as the leader's is: text, with nothing
+// focusable in it, so every key reaches a Shortcut, and each is the host's to read (pluginpick.go):
+// a focused list would take j, k, g, G and Enter before them. Esc closes it.
 Dialog {
     id: pluginChooser
     title: App.pluginChooserTitle

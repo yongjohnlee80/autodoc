@@ -16,9 +16,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
-// The file.* verbs read and write a local peer's files outside every workspace (ADR 1791430651
-// §4.1): an absolute path, no workspace. They run on Files, core/docs over a vfs rooted at "/", so
-// versions, conflicts, the size limit and derived kinds are a workspace file's.
+// The file.* verbs read and write a local peer's files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace): an absolute path, no workspace. They
+// run on Files, core/docs over a vfs rooted at "/", so versions, conflicts, the size limit and
+// derived kinds are a workspace file's.
 //
 // A write on a file a workspace indexes (file.locate's answer) is that workspace's doc.write: its
 // rules apply and its indexer hears of it at once, where a write through "/" would go round both.
@@ -27,9 +28,10 @@ import (
 
 var errNoFiles = errors.New("rpc: this server serves no files outside its workspaces")
 
-// Under a gated script's bounds (ADR 1792004705 §4.2a.1), file.* never reaches the "/" vfs: the
-// path is routed into the served workspace that holds it (the guard's Locate), and runs on that
-// workspace's files behind the guard, which checks it again for the operation.
+// Under a gated script's bounds
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), file.* never reaches
+// the "/" vfs: the path is routed into the served workspace that holds it (the guard's Locate), and
+// runs on that workspace's files behind the guard, which checks it again for the operation.
 
 // boundedFile is the workspace and name a bounded file.* path is routed to; bounded is false for
 // the user's call, which keeps the "/" vfs.
@@ -55,13 +57,14 @@ var errNotText = invalid("not a text file: AutoDoc opens UTF-8 text files")
 // daemon's own disk). Without it they answer that the server serves no outside files.
 func WithFiles(d *docs.Docs) Option { return func(o *options) { o.files = d } }
 
-// WithGuard holds a bounded file.* to g (ADR 1792004705 §4.2a.1): the guard the workspaces' files
-// are wrapped in, which routes a bounded path into its workspace.
+// WithGuard holds a bounded file.* to g
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): the guard the
+// workspaces' files are wrapped in, which routes a bounded path into its workspace.
 func WithGuard(g *fsbounds.Guard) Option { return func(o *options) { o.guard = g } }
 
 // local is verb for a peer on the unix socket only: the daemon's own user (the socket is 0600),
 // for whom a path on its disk is nothing new. Over TCP a token would reach any file the daemon can
-// read (rationale §R2).
+// read (docs/decisions/editor.md#files-outside-every-workspace).
 func (s *Server) local(method string, lo, hi int, h func(context.Context, Workspace, []any) (any, error)) golibrpc.Handler {
 	inner := s.verb(lo, hi, h, false)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {

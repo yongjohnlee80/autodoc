@@ -1,8 +1,9 @@
-// LuaKeys.qml — SPC u's card: every Lua leader key with its letter (ADR 1792004705 §4.5). The
-// letters are the scripts', bound by autodoc.map as they load (luakeys.go), so the card has a
-// Shortcut for every letter it may hold and App.luaKey runs the one bound, if any. As the
-// leader's card, it holds nothing focusable, so every letter reaches a Shortcut; each closes the
-// card before its command runs. q or Esc closes it.
+// LuaKeys.qml — SPC u's card: every Lua leader key with its letter
+// (docs/decisions/contract.md#script-keys-and-menu-rows). The letters are the scripts', bound by
+// autodoc.map as they load (luakeys.go), so the card has a Shortcut for every letter it may hold
+// and App.luaKey runs the one bound, if any. As the leader's card, it holds nothing focusable, so
+// every letter reaches a Shortcut; each closes the card before its command runs. q or Esc closes
+// it.
 Dialog {
     id: luaKeys
     closeOnQ: true

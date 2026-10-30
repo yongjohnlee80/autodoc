@@ -8,10 +8,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// PLUGINS (ADR 0209) — a plugin is a directory in the plugins folder with a plugin.toml. A dialog
-// plugin is a program the Plugins menu starts: the TUI draws a dialog over the page holding the
-// plugin's latest frame, and passes it every key but Esc, which closes it. The two speak package
-// plugin's protocol over the plugin's stdin and stdout.
+// PLUGINS (docs/decisions/plugins.md#plugins-are-separate-programs) — a plugin is a directory in
+// the plugins folder with a plugin.toml. A dialog plugin is a program the Plugins menu starts: the
+// TUI draws a dialog over the page holding the plugin's latest frame, and passes it every key but
+// Esc, which closes it. The two speak package plugin's protocol over the plugin's stdin and stdout.
 //
 // The dialog is the host's: the plugin only draws into it. A plugin that exits, fails to answer, or
 // speaks another protocol costs its dialog and a toast, and nothing else.

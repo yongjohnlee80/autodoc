@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 )
 
-// THE WORKSPACE NOTICE HOOK (ADR 1792988759 r2 §4.3) — a Claude agent hears of a workspace switch
-// with the user's next message, never through its terminal: the agent's folder's
-// .claude/settings.json runs `autodoc --workspace-notice` on UserPromptSubmit, and Claude Code adds
-// what it prints, the switch's one line or nothing, to that message's context. The folder is the
-// agent's (agentFolder); only Claude Code reads the file. mergeClaudeSettings writes AutoDoc's other
-// hooks and settings there the same way.
+// THE WORKSPACE NOTICE HOOK (docs/decisions/crew.md#the-workspace-notice-hook) — a Claude agent
+// hears of a workspace switch with the user's next message, never through its terminal: the agent's
+// folder's .claude/settings.json runs `autodoc --workspace-notice` on UserPromptSubmit, and Claude
+// Code adds what it prints, the switch's one line or nothing, to that message's context. The folder
+// is the agent's (agentFolder); only Claude Code reads the file. mergeClaudeSettings writes
+// AutoDoc's other hooks and settings there the same way.
 
 // noticeCommand is the hook's command: dir's own autodoc (agentWrapper), so the TUI's build and
 // config answer.
@@ -115,11 +115,12 @@ func endpointCommand(dir string) string {
 	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew endpoint --claude >/dev/null"
 }
 
-// writeWakeAcceptance configures only what lets the crew's fixed notice start a turn (ADR 1793271500
-// §4.9), for a crew session's CLI of kind in dir: for Claude Code, the SessionStart hook that
-// registers its endpoint and crossSessionInbound "accept"; for the others nothing yet (Codex's
-// queue starts turns as it is). It never writes approval policies, permission modes, or allow or
-// deny rules: a turn a wake starts runs under the profile's own tool policy.
+// writeWakeAcceptance configures only what lets the crew's fixed notice start a turn
+// (docs/decisions/crew.md#wake-acceptance-not-tool-approvals), for a crew session's CLI of kind in
+// dir: for Claude Code, the SessionStart hook that registers its endpoint and crossSessionInbound
+// "accept"; for the others nothing yet (Codex's queue starts turns as it is). It never writes
+// approval policies, permission modes, or allow or deny rules: a turn a wake starts runs under the
+// profile's own tool policy.
 func writeWakeAcceptance(dir, kind string) error {
 	if kind != "claude" {
 		return nil

@@ -208,7 +208,7 @@ func pluginQuestion(trf func(string, ...any) string, c *candidate, title string)
 }
 
 // pluginDeclares is what a manifest's protocol-2 and -3 keys say the plugin does, for the install
-// confirmation (ADR 1791268009 §2.1): "" for a 0209 dialog.
+// confirmation (docs/decisions/plugins.md#declared-contributions): "" for a 0209 dialog.
 func pluginDeclares(m *manifest) string { return strings.Join(m.Declares(), " · ") }
 
 // pluginConfirmed is PluginConfirm's Yes: the candidate on the card, installed once.

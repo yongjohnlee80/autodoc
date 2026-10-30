@@ -13,12 +13,13 @@ import (
 	"time"
 )
 
-// A gated script's work is bounded however it runs (ADR 1792004705 §4.2a.2–2c): its user-only
-// entries refused, the rights and commands among the preferences the user's, its opens and saves
-// held to the workspace, its keys and rows run as itself long after it bound them. The daemon these
-// cells run against serves its workspaces from memory with no guard: every bounded file.* is
-// refused there, so a refusal here is the TUI's half (the bounds sent, the path entries' checks);
-// the daemon's own enforcement is app/bounds_test.go's.
+// A gated script's work is bounded however it runs
+// (docs/decisions/contract.md#who-an-invocation-acts-for): its user-only entries refused, the
+// rights and commands among the preferences the user's, its opens and saves held to the workspace,
+// its keys and rows run as itself long after it bound them. The daemon these cells run against
+// serves its workspaces from memory with no guard: every bounded file.* is refused there, so a
+// refusal here is the TUI's half (the bounds sent, the path entries' checks); the daemon's own
+// enforcement is app/bounds_test.go's.
 
 // grantedLua is a package granted everything but its rights: each command tries one thing and
 // writes what it answered into the page.

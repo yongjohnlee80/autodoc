@@ -10,12 +10,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// GATED LUA SCRIPTS' GRANTS (ADR 1792004705 §4.3): a gated script (a package, M8) declares what it
-// needs as it loads, autodoc.requires{…}; the program asks once, and remembers a yes in the
-// lua.grants preference. Only a yes is kept: Confirm.qml's every other way out (No, Esc, closing,
-// another question, quitting) runs OnCancel alike, so a refusal asks again at the next start rather
-// than ever being a dismissal remembered. A call without its grant answers nil and why
-// (script.Grants, script/gate.go); a grant given later works at once.
+// GATED LUA SCRIPTS' GRANTS (docs/decisions/contract.md#grants-are-remembered-as-a-yes): a gated
+// script (a package, M8) declares what it needs as it loads, autodoc.requires{…}; the program asks
+// once, and remembers a yes in the lua.grants preference. Only a yes is kept: Confirm.qml's every
+// other way out (No, Esc, closing, another question, quitting) runs OnCancel alike, so a refusal
+// asks again at the next start rather than ever being a dismissal remembered. A call without its
+// grant answers nil and why (script.Grants, script/gate.go); a grant given later works at once.
 
 // luaAsk is one script's requires{…}, waiting to be asked.
 type luaAsk struct {

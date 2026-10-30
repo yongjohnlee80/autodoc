@@ -2,10 +2,11 @@
 // the documents the indexer hands on. It joins the two, so neither imports the other.
 //
 // A batch is one PostgreSQL transaction (pgstore.Batch): a crash keeps none of it. pgstore keeps
-// the columns ADR 0217 reconciled; the fields it does not keep yet are Deferred, and a workspace
-// needing one may not be served by a PostgreSQL destination until it does (the destination ADR
-// enforces that when a workspace is configured). Ordering a batch here against the local store's
-// queue and change log is the destination wiring's, not this package's.
+// the columns docs/decisions/store.md#one-postgres-destination-store reconciled; the fields it does
+// not keep yet are Deferred, and a workspace needing one may not be served by a PostgreSQL
+// destination until it does (the destination ADR enforces that when a workspace is configured).
+// Ordering a batch here against the local store's queue and change log is the destination wiring's,
+// not this package's.
 //
 // Concurrency: a Writer is safe for concurrent use; a Batch belongs to one goroutine.
 package pgwriter

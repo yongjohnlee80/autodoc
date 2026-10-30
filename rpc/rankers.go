@@ -11,10 +11,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// THE RANKER MODELS — the store's rankers search's second stage can use (ADR 0215), the one in use
-// and the window it ranks, what each serves, and each one's usage and recent calls. A key goes in
-// (ranker.add, update) and never comes out. A build that supplies its own ranker refuses changes to
-// the one in use, and to the stored selection kept for a build that does not.
+// THE RANKER MODELS — the store's rankers search's second stage can use
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker), the one in use and the window it
+// ranks, what each serves, and each one's usage and recent calls. A key goes in (ranker.add,
+// update) and never comes out. A build that supplies its own ranker refuses changes to the one in
+// use, and to the stored selection kept for a build that does not.
 
 // RankerList is ranker.list's answer: the stored rankers, the one in use, its window, why the one
 // named is not in use, and the build's own ranker's model when it supplies one.

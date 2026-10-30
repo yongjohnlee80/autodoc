@@ -8,7 +8,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// The inbox.* verbs' public codes, in the module's range (core/module codes.go), ADR 1793271500 §4.1.
+// The inbox.* verbs' public codes, in the module's range (core/module codes.go),
+// docs/decisions/crew.md#three-modules-and-one-protocol.
 const (
 	CodeAlreadyAnswered int64 = -32130 // the request was answered or dismissed first
 	CodeNotARequest     int64 = -32131 // no request to the user

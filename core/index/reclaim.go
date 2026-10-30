@@ -11,12 +11,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// RECLAIMING MODELS (ADR 1791284787) — a workspace keeps vectors for its active model and its
-// target (the model its indexer fills; the active one outside a switch), and no other. Every other
-// model is reclaimed: its vectors in batches, each its own write transaction so other writes go on
-// between them, then its row. A batch first checks that the model is still neither active nor the
-// target, so one switched back to keeps what is left. A reclaim cut short leaves an inactive model
-// with fewer vectors, which the next sweep finishes.
+// RECLAIMING MODELS (docs/decisions/store.md#a-workspace-keeps-two-models-vectors) — a workspace
+// keeps vectors for its active model and its target (the model its indexer fills; the active one
+// outside a switch), and no other. Every other model is reclaimed: its vectors in batches, each its
+// own write transaction so other writes go on between them, then its row. A batch first checks that
+// the model is still neither active nor the target, so one switched back to keeps what is left. A
+// reclaim cut short leaves an inactive model with fewer vectors, which the next sweep finishes.
 //
 // When: a superseded model once the flip is published, a model no longer targeted once setupModels
 // has moved the target, and every reclaimable model at the daemon's start (Sweep, or SweepStore for

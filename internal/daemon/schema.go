@@ -19,9 +19,10 @@ import (
 // outside the root (or be excluded from it), so the follower does not see it.
 const schemaPoll = 2 * time.Second
 
-// schemaHolder is one workspace's frontmatter schema (ADR 0212 §5): the stored path, the last valid
-// schema read from it, and why the file as it is now is not one. It outlives the workspace's
-// restarts (a pattern or provider change), so the last valid schema is kept across them.
+// schemaHolder is one workspace's frontmatter schema
+// (docs/decisions/search.md#frontmatter-schemas): the stored path, the last valid schema read from
+// it, and why the file as it is now is not one. It outlives the workspace's restarts (a pattern or
+// provider change), so the last valid schema is kept across them.
 type schemaHolder struct {
 	root     string
 	onChange func() // the active schema changed: revalidate the workspace's files

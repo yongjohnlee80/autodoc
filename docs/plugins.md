@@ -16,8 +16,11 @@ menu and the SPC p card. A protocol-3 plugin can also run AutoDoc's own commands
 manifest declares (`calls`). A protocol-4 plugin can also show a table of rows in AutoDoc's own
 results panel (`[table]`), and its commands carry the note they were chosen on. A protocol-5 plugin
 can also say each cell's kind, so AutoDoc tells a NULL from the text `NULL`, sorts numbers as
-numbers and writes JSON with its nulls, numbers and booleans. ADR 0209, ADR
-1791268009, ADR 1791762474 and ADR 1792078052 are the decisions behind it.
+numbers and writes JSON with its nulls, numbers and booleans. The decisions behind it are
+[plugins are separate programs](decisions/plugins.md#plugins-are-separate-programs),
+[protocol versions and strict manifests](decisions/plugins.md#protocol-versions-and-strict-manifests),
+[one command catalog](decisions/plugins.md#one-command-catalog) and
+[plugin tables in the results panel](decisions/plugins.md#plugin-tables-in-the-results-panel).
 
 [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris) is a complete protocol-1 example.
 [`examples/python/echo_plugin.py`](../examples/python/echo_plugin.py) speaks the protocol with no
@@ -28,7 +31,7 @@ AutoDoc code at all.
 Users install a plugin from **Plugins › Browse the registry…**, or from **Add from a git URL…** by its
 URL or by its name in the registry. A Lua package installs the same way with `:lua-install <name or
 git-url>`. The registry ([autodoc-plugin-registry](https://github.com/yongjohnlee80/autodoc-plugin-registry),
-ADR 1792351195) lists plugins, Lua packages and KB types, each with the audits run on its commits.
+[the registry decision](decisions/plugins.md#the-registry)) lists plugins, Lua packages and KB types, each with the audits run on its commits.
 
 Every install asks first. The card names the commit it would install, and says whether that exact
 commit was audited ("✓ audited by <model> on <date> at this commit"), or when the entry was last
@@ -580,7 +583,7 @@ command    = "import"     # one of its [[commands]]: run with the file's absolut
 ### Pixel surfaces (`[surface]`, protocol 10)
 
 A card or dialog can draw pixels instead of cells: a picture of its own, a canvas, a web page
-(ADR 1792797354). In AutoDoc's GUI the surface fills the card's area; in the terminal the plugin
+([pixel surfaces](decisions/plugins.md#pixel-surfaces)). In AutoDoc's GUI the surface fills the card's area; in the terminal the plugin
 draws cells, as any plugin does.
 
 ```text
