@@ -292,12 +292,11 @@ func bufferCardHost(name func(n int) string) *Host {
 	return h
 }
 
-// TestTheBufferCardNamesEachSlotsBuffer (v0.3.2, Johno: "a file name attached to the numbers and
-// the ones not attached not shown"): SPC b's card has a row per open buffer, its slot key and its
-// tab's label, [+] on a modified one, 0 the 10th, and none for a slot with no buffer; a base name
-// two buffers share is told apart as the tabs tell it. Ten names too long for the card are cut in
-// the middle, each row within the 80 × 20 screen's card, its file's name kept. The other keys
-// follow; F1 lists the card as declared.
+// TestTheBufferCardNamesEachSlotsBuffer (v0.3.2): SPC b's card has a row per open buffer, its slot
+// key and its tab's label, [+] on a modified one, 0 the 10th, and none for a slot with no buffer; a
+// base name two buffers share is told apart as the tabs tell it. Ten names too long for the card
+// are cut in the middle, each row within the 80 × 20 screen's card, its file's name kept. The other
+// keys follow; F1 lists the card as declared.
 func TestTheBufferCardNamesEachSlotsBuffer(t *testing.T) {
 	h := bufferCardHost(func(n int) string { return fmt.Sprintf("n%d.md", n) })
 	text := h.bufferCardText()

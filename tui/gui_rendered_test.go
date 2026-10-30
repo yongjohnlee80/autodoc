@@ -205,7 +205,7 @@ func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 }
 
 // TestCtrlWInTheGUIsVimInsert: in the native window too, Ctrl+W in Vim's Insert is the editor's
-// (a word back) and opens no picker; in Normal mode it switches workspace (Johno, 2026-10-13).
+// (a word back) and opens no picker; in Normal mode it switches workspace.
 func TestCtrlWInTheGUIsVimInsert(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n"}}, daemonOpts{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})

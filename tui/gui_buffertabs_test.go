@@ -70,7 +70,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 
 // TestTheGUITabsKeepOneWidth: a buffer tab is never wider than bufferTabWidth, a longer name cut in
 // its middle, and keeps its width however many tabs are open and however wide the window is: tabs
-// that do not fit scroll between ← and →, none re-fitted (Johno: consistent, never re-flowed). The
+// that do not fit scroll between ← and →, none re-fitted (consistent, never re-flowed). The
 // window is never narrower than the TUI's 80 columns, under which nothing is laid out.
 func TestTheGUITabsKeepOneWidth(t *testing.T) {
 	long := []string{"a-long-file-name-for-the-first-tab.md", "another-long-file-name-for-a-tab.md", "a-third-long-file-name-to-overflow.md"}

@@ -8,4 +8,4 @@ amends,YAML Frontmatter,"amends: [0009-sqlite-wal]",Amends,Amended by,"Links inc
 sources,YAML Frontmatter,"sources: [adrs/0009-sqlite-wal.md]",Sources,Cited by,"Connects synthesis and benchmark records to primary evidence documents"
 related,YAML Frontmatter,"related: [conventions/code-review.md]",Related,Related,"Symmetric cross-reference edge surfaced in Relations panel (SPC l)"
 adr,YAML Frontmatter,"adr: 0009-sqlite-wal (or list in todo task)",ADR,Referenced by,"Binds code reviews, rationale docs, and .todo-list tasks to governing ADRs"
-review,YAML Frontmatter,"review: [$KB_ROOT/reviews/lector/pr249-r1.md]",Review,Reviewed in,"Binds .todo-list tasks and PR records to durable review verdicts"
+review,YAML Frontmatter,"review: [$KB_ROOT/reviews/pr249-r1.md]",Review,Reviewed in,"Binds .todo-list tasks and PR records to durable review verdicts"

@@ -7,8 +7,7 @@ import (
 )
 
 // TestThePagesScrollbarReachesTheEnd: a file read to its end has the page's scrollbar thumb on the
-// page's last row, not halfway (Johno, 2026-10-02: "The scrollbar on the right goes down only to
-// the halfway, and by the time it's there we are already at the end"; golib v0.6.20).
+// page's last row, not halfway (golib v0.6.20).
 func TestThePagesScrollbarReachesTheEnd(t *testing.T) {
 	var b strings.Builder
 	for i := range 200 {

@@ -591,8 +591,7 @@ func TestATableFitsItsView(t *testing.T) {
 }
 
 // The cells bound a table's rows at the width it is drawn: a 64-column table fitted to one column
-// shows its 1000 rows, as one column's cells allow, not the 311 that 64 columns would (Lector, #173
-// r1).
+// shows its 1000 rows, as one column's cells allow, not the 311 that 64 columns would.
 func TestAFittedTableShowsTheRowsItsCellsAllow(t *testing.T) {
 	csv := strings.TrimSuffix(strings.Repeat("h,", 64), ",") + "\n" + strings.Repeat("x\n", 1000)
 	doc := embedDoc(t, map[string]string{"docs/wide.csv": csv})

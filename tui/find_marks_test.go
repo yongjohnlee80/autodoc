@@ -12,7 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE PAGE'S FIND, marked and cleared (Johno, 2026-10-02): the page marks a find's words,
+// THE PAGE'S FIND, marked and cleared: the page marks a find's words,
 // "finding …" at the page window's top right clears it with its X, and the Search menu reaches the find from the
 // Text mode.
 

@@ -486,7 +486,7 @@ func TestFileTypesOpenTheEditTab(t *testing.T) {
 	r.s.WaitFor(t, "the Edit tab", func(sc string) bool {
 		return strings.Contains(sc, "workspace settings · kb") && strings.Contains(sc, "Markdown (.md)") &&
 			strings.Contains(sc, "Plain text (.txt)") && strings.Contains(sc, "YAML (.yaml, .yml)") &&
-			!strings.Contains(sc, "not read here") // the line Johno had removed (2026-10-19)
+			!strings.Contains(sc, "not read here") // the line that was removed
 	})
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// Johno, 2026-10-13: in the Vim editor mode's Insert, Vim wins. Ctrl+W there deletes the word
+// In the Vim editor mode's Insert, Vim wins. Ctrl+W there deletes the word
 // before the cursor and Ctrl+O runs one Normal-mode command; in Normal mode, and in the Text
 // editor mode, Ctrl+W switches workspace.
 

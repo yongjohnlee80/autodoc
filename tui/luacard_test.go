@@ -107,7 +107,7 @@ func waitTicks(t *testing.T, r *running, n int) {
 	r.s.WaitFor(t, fmt.Sprintf("%d ticks", n), func(string) bool { return r.ticks() == n })
 }
 
-// Lector r0 R1: open, take the pending timer, close, reopen, then run the old timer. Only the new
+// Open, take the pending timer, close, reopen, then run the old timer. Only the new
 // opening's chain ticks or schedules; a chain without the opening epoch would tick twice here.
 func TestACardsTicksAreOneOpeningsChain(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -228,7 +228,7 @@ func TestACardsTicksHaveAFloor(t *testing.T) {
 			t.Errorf("every %s: %v, want %v", every, d, cardEveryMin)
 		}
 	}
-	// a tick and no every: no tick at all, and no timer (Lector PR r0 R2); then no tick and no every
+	// a tick and no every: no tick at all, and no timer; then no tick and no every
 	r.luaLoad(t, `autodoc.command{ name = "noevery", run = function()
   autodoc.ui.card{ text = "no every", tick = function(card) ticks = ticks + 100; card:set("ticked") end }
 end }
