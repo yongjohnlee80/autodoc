@@ -53,16 +53,13 @@ func (m *Manager) EndpointSecret(session string, gen int64) (string, bool) {
 }
 
 // keepSecret holds secret for session's endpoint generation gen, called in the write that stores
-// that generation (writes are one at a time, so in their order): an empty secret drops the
-// session's, and one older than the secret held changes nothing. A write that rolls back after it
-// leaves a secret for a generation never stored, which no wake reads (it reads the stored
-// generation's) and the next registration replaces.
+// that generation: writes are one at a time, so secrets are kept in the generations' own order, and
+// an empty secret drops the session's. A write that rolls back after it leaves a secret for a
+// generation never stored, which no wake reads (it reads the stored generation's) and the next
+// registration replaces.
 func (m *Manager) keepSecret(session string, gen int64, secret string) {
 	m.secretsMu.Lock()
 	defer m.secretsMu.Unlock()
-	if s, ok := m.secrets[session]; ok && s.generation > gen {
-		return
-	}
 	if secret == "" {
 		delete(m.secrets, session)
 		return
