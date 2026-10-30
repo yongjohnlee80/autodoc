@@ -221,31 +221,31 @@ func TestASendsAddresses(t *testing.T) {
 }
 
 // A lapsed lease is queued again, an attempt counted and the recipient woken; after MaxAttempts it
-// fails, and its sender gets one event.
+// fails, and its sender gets one event. A refused verb's write commits nothing, its expiry
+// included: the next write that commits makes the lapse real.
 func TestALapsedLeaseIsRedeliveredThenFails(t *testing.T) {
 	r := newRig(t)
 	sent := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k"})
 	id := sent.Deliveries[0].ID
-	for i := 1; i < mail.MaxAttempts; i++ {
-		if got := r.receive("s-gold"); len(got.Items) != 1 {
-			t.Fatalf("receive %d: %+v", i, got)
+	for i := range mail.MaxAttempts {
+		got := r.receive("s-gold")
+		if len(got.Items) != 1 || got.Items[0].Delivery.Attempts != int64(i) {
+			t.Fatalf("receive %d: %+v, want one delivery after %d lapses", i+1, got, i)
 		}
 		r.clock.Advance(mail.LeaseFor + time.Second)
-		if err := r.m.Renew(r.ctx, "s-gold", id, r.delivery(id).Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		if err := r.m.Renew(r.ctx, "s-gold", id, got.Items[0].Delivery.Lease); !errors.Is(err, mail.ErrLeaseLost) {
 			t.Fatalf("a renew after the lease lapsed: %v", err)
 		}
-		if d := r.delivery(id); d.State != mail.Queued || d.Attempts != int64(i) || d.Lease != "" {
-			t.Fatalf("after lapse %d: %+v", i, d)
-		}
 	}
+	if got := r.receive("s-gold"); len(got.Items) != 0 {
+		t.Fatalf("received after %d lapses: %+v", mail.MaxAttempts, got)
+	}
+	if d := r.delivery(id); d.State != mail.Failed || d.Why != mail.WhyAttempts || d.DoneAt == nil || d.Lease != "" {
+		t.Fatalf("after %d lapses: %+v", mail.MaxAttempts, d)
+	}
+	// the send's wake, then one per redelivery; the last lapse fails it instead
 	if r.g.woken("p-gold") != mail.MaxAttempts {
 		t.Fatalf("gold woken %d times, want %d", r.g.woken("p-gold"), mail.MaxAttempts)
-	}
-	r.receive("s-gold")
-	r.clock.Advance(mail.LeaseFor + time.Second)
-	r.receive("s-gold")
-	if d := r.delivery(id); d.State != mail.Failed || d.Why != mail.WhyAttempts || d.DoneAt == nil {
-		t.Fatalf("after %d lapses: %+v", mail.MaxAttempts, d)
 	}
 	if ev := r.events("p-jarvis"); len(ev) != 1 || ev[0] != mail.WhyAttempts+":"+sent.Message.ID {
 		t.Fatalf("the sender's events: %v", ev)
@@ -353,7 +353,7 @@ func TestMergedProfilesForwardToTheirSurvivor(t *testing.T) {
 	r.write(func(tx mail.Tx) error {
 		return tx.PutSession(crew.Session{ID: "s-c0", Profile: "p-c0", Host: "autovim:old"})
 	})
-	q := r.send("s-c0", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "q", Key: "k1"})
+	q := r.send("s-c0", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k1"})
 	gd := r.receive("s-gold").Items[0].Delivery
 	resp, err := r.m.Reply(r.ctx, "s-gold", gd.ID, gd.Lease, mail.Reply{Body: "a", Key: "r"})
 	if err != nil {
@@ -377,7 +377,7 @@ func TestMergedProfilesForwardToTheirSurvivor(t *testing.T) {
 	r.write(func(tx mail.Tx) error {
 		return tx.PutSession(crew.Session{ID: "s-short", Profile: "p-short", Host: "autovim:old"})
 	})
-	q2 := r.send("s-short", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "q", Key: "k2"})
+	q2 := r.send("s-short", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k2"})
 	gd2 := r.receive("s-gold").Items[0].Delivery
 	resp2, err := r.m.Reply(r.ctx, "s-gold", gd2.ID, gd2.Lease, mail.Reply{Body: "a", Key: "r2"})
 	if err != nil {
