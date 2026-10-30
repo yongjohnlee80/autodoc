@@ -105,12 +105,16 @@ func AgyHosts(ctx context.Context, c *http.Client, address, token, conversation 
 //	no connection made (the dial refused, unreachable, or not loopback)  failed: nothing left
 //	connected, then any error (a write, EOF, a reset, the deadline)      ErrWakeUnknown: a byte may have gone
 //	a complete 200                                                       accepted
-//	a complete 401 or 404, or Connect's error JSON ({"code": ...})       failed: a parsed refusal
+//	Connect's error JSON whose code is a refusal (agyRefusals)          failed: refused before it ran
+//	Connect's error JSON with any other code (deadline_exceeded, ...)   ErrWakeUnknown: it may have run
+//	a complete 401 or 404 without Connect's error JSON                  failed: a refusal
 //	any other complete answer (5xx, a status without Connect's error)    ErrWakeUnknown
 //	an answer cut short, or over agyMaxAnswer                            ErrWakeUnknown
 //
 // Only a failure before any connection proves the request never left: a write failing part-way is
-// no proof it did not.
+// no proof it did not. Of the answers, only a refusal of who sent it, what it says or where it is
+// addressed proves the message was not carried out; any other error (a deadline, an internal error,
+// unavailable) may follow it, and the answer's code, when it has one, is read over its status.
 func (w *AgyWaker) send(ctx context.Context, l agyLocator, token, notice string) error {
 	var connected atomic.Bool // set on the transport's goroutine
 	trace := &httptrace.ClientTrace{GotConn: func(httptrace.GotConnInfo) { connected.Store(true) }}
@@ -123,28 +127,44 @@ func (w *AgyWaker) send(ctx context.Context, l agyLocator, token, notice string)
 		return fmt.Errorf("%w: sending to the agy conversation: %v", ErrWakeUnknown, err)
 	case code == http.StatusOK:
 		return nil
-	case code == http.StatusUnauthorized || code == http.StatusNotFound || connectError(answer):
+	}
+	if c, ok := connectCode(answer); ok {
+		if agyRefusals[c] {
+			return fmt.Errorf("crew: the agy language server refused the message (status %d, %s)", code, c)
+		}
+		return fmt.Errorf("%w: the agy language server answered status %d, %s", ErrWakeUnknown, code, c)
+	}
+	if code == http.StatusUnauthorized || code == http.StatusNotFound {
 		return fmt.Errorf("crew: the agy language server refused the message (status %d)", code)
 	}
 	return fmt.Errorf("%w: the agy language server answered status %d", ErrWakeUnknown, code)
 }
 
-// connectError reports whether answer is a Connect protocol error: a JSON object whose code is one
-// of Connect's names, which a server sends for a request it did not carry out.
-func connectError(answer []byte) bool {
+// agyRefusals are the Connect codes that prove a message was refused before it was carried out: who
+// sent it (the token), what it says, or where it is addressed (the conversation, the method). Any
+// other code may follow a message carried out, so it proves nothing (ErrWakeUnknown).
+var agyRefusals = map[string]bool{
+	"unauthenticated": true, "permission_denied": true, "invalid_argument": true, "not_found": true, "unimplemented": true,
+}
+
+// connectCodes are the Connect protocol's error codes.
+var connectCodes = map[string]bool{
+	"canceled": true, "unknown": true, "invalid_argument": true, "deadline_exceeded": true, "not_found": true,
+	"already_exists": true, "permission_denied": true, "resource_exhausted": true, "failed_precondition": true,
+	"aborted": true, "out_of_range": true, "unimplemented": true, "internal": true, "unavailable": true,
+	"data_loss": true, "unauthenticated": true,
+}
+
+// connectCode is answer's code when answer is a Connect protocol error: a JSON object whose code is
+// one of Connect's.
+func connectCode(answer []byte) (string, bool) {
 	var e struct {
 		Code string `json:"code"`
 	}
-	if json.Unmarshal(answer, &e) != nil {
-		return false
+	if json.Unmarshal(answer, &e) != nil || !connectCodes[e.Code] {
+		return "", false
 	}
-	switch e.Code {
-	case "canceled", "unknown", "invalid_argument", "deadline_exceeded", "not_found", "already_exists",
-		"permission_denied", "resource_exhausted", "failed_precondition", "aborted", "out_of_range",
-		"unimplemented", "internal", "unavailable", "data_loss", "unauthenticated":
-		return true
-	}
-	return false
+	return e.Code, true
 }
 
 // agyCall POSTs body as Connect-JSON to method on the server at address, with token, and answers
