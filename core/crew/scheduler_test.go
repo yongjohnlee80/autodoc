@@ -476,9 +476,13 @@ func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
 	r.epoch = e
 	gold, tifa := r.session("gold"), r.session("tifa")
 	r.write(func(tx crew.Tx) error {
-		if err := tx.PutEndpoint(crew.Endpoint{Session: tifa.Session, Generation: 1, Kind: "other"}); err != nil {
-			return err
-		}
+		return tx.PutEndpoint(crew.Endpoint{Session: tifa.Session, Generation: 1, Kind: "other"})
+	})
+	// idle and pending, due but for its kind: the reservation itself refuses it
+	if _, _, ok, err := m.Reserve(r.ctx, tifa.Session, "run1", []string{"fake"}); err != nil || ok {
+		t.Fatalf("reserving tifa, whose kind no waker serves: %v %v, want nothing reserved", ok, err)
+	}
+	r.write(func(tx crew.Tx) error {
 		wk, _, err := tx.Wake(tifa.Session) // an attempt an earlier run left in flight
 		if err != nil {
 			return err
@@ -486,9 +490,6 @@ func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
 		wk.State, wk.Token, wk.AttemptGen, wk.DaemonRun = crew.WakeInFlight, "t", wk.PendingGen, "run0"
 		return tx.PutWake(wk)
 	})
-	if _, _, ok, err := m.Reserve(r.ctx, tifa.Session, "run1", []string{"fake"}); err != nil || ok {
-		t.Fatalf("reserving tifa, whose kind no waker serves: %v %v, want nothing reserved", ok, err)
-	}
 	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(20*time.Millisecond))
 	ctx, cancel := context.WithCancel(r.ctx)
 	done := make(chan error, 1)
