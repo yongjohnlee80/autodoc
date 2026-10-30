@@ -114,6 +114,7 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 	h = bounded(h, hi, v.Verb, v.Root)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		ctx = context.WithValue(ctx, sessionKey{}, req.Session)
+		ctx = module.WithConn(ctx, req.Session) // the connection's own: one Session per connection, whatever its hellos
 		return h(module.WithClient(ctx, clientOf(req.Session)), req)
 	}
 }
