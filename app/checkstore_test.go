@@ -170,3 +170,103 @@ func TestCheckStoreClearsTheMarkOfASoundStore(t *testing.T) {
 	}
 	start(t, cfg, sock)
 }
+
+// TestAStoreWhoseSecretsDoNotOpenIsServed (Lector #101 r0 F3, Jarvis's (A)): a sound store marked
+// damaged, restored without its key, has a connection whose DSN does not open. --check-store reports
+// that secret (a problem) but clears the mark, since the file is sound; the daemon serves the store,
+// and lists that connection as sealed and the others as they are.
+func TestAStoreWhoseSecretsDoNotOpenIsServed(t *testing.T) {
+	dir := short(t)
+	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir(), "kb2="+t.TempDir())
+	path := filepath.Join(state, config.StoreName)
+	ctx := context.Background()
+	db, err := store.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.Workspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range ws {
+		if err := db.Configure(ctx, w.ID, store.Changes{Source: &store.ConnectionSpec{Engine: store.EngineSQLite, DSN: "/data/" + w.Name + ".db"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = db.Close()
+	raw, err := sqlite.Open(ctx, "file:"+path+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, "UPDATE workspace_connection SET dsn = randomblob(48) WHERE workspace_id = (SELECT id FROM workspace WHERE name = 'kb')"); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	if err := os.WriteFile(path+".damaged", []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := runCheckStore(ctx, cfg, &out); !errors.Is(err, errStoreProblems) {
+		t.Fatalf("--check-store with a secret that does not open: %v, want it reported as a problem", err)
+	}
+	if r := checkReport(t, &out); !r.MarkCleared || len(r.Secrets) != 1 || !strings.Contains(r.Secrets[0], "source connection") {
+		t.Fatalf("the report: %+v; want the mark cleared and the one secret named", r)
+	}
+	start(t, cfg, sock)
+	out.Reset()
+	if err := runCall(ctx, cfg, "workspace.list", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &list); err != nil {
+		t.Fatalf("workspace.list: %v: %s", err, out.String())
+	}
+	seen := map[string]map[string]any{}
+	for _, w := range list {
+		dbs, _ := w["databases"].(map[string]any)
+		src, _ := dbs["source"].(map[string]any)
+		seen[w["name"].(string)] = src
+	}
+	if seen["kb"]["sealed"] != true || seen["kb2"]["sealed"] != nil || seen["kb2"]["database"] != "/data/kb2.db" {
+		t.Fatalf("the connections listed: kb %v, kb2 %v; want kb's sealed and kb2's as it is", seen["kb"], seen["kb2"])
+	}
+}
+
+// TestADamageEventThatCannotBeWrittenNeverHoldsTheStop (Lector #101 r0 F4): damage found after the
+// start stops the daemon even when the store.damaged event cannot be written (its one writer held):
+// the event's write is bounded, and asked only after the stop.
+func TestADamageEventThatCannotBeWrittenNeverHoldsTheStop(t *testing.T) {
+	dir := short(t)
+	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
+	path := filepath.Join(state, config.StoreName)
+	fillStore(t, path, 300)
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spoilPage(t, path, fi.Size()/4096)
+	wasWait, wasEvent, wasStart := damageEventWait, appendDamageEvent, startCheckWait
+	t.Cleanup(func() { damageEventWait, appendDamageEvent, startCheckWait = wasWait, wasEvent, wasStart })
+	startCheckWait, damageEventWait = time.Nanosecond, 50*time.Millisecond
+	held := make(chan error, 1)
+	appendDamageEvent = func(ctx context.Context, _ *store.Store, _ store.Event) error {
+		<-ctx.Done() // the writer never comes free
+		held <- ctx.Err()
+		return ctx.Err()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := runServe(ctx, cfg, io.Discard, testBuild, nil); err != nil || ctx.Err() != nil {
+		t.Fatalf("the daemon with its event write held: %v (ctx %v); want it stopped regardless", err, ctx.Err())
+	}
+	select {
+	case err := <-held:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("the event's write ended with %v, want its bound", err)
+		}
+	default:
+		t.Fatal("the event's write was never asked")
+	}
+}

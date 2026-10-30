@@ -110,6 +110,11 @@ func (k *keyslot) open(sealed []byte, aad string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openSealed(gcm, sealed, aad)
+}
+
+// openSealed decrypts sealed for what aad names with gcm.
+func openSealed(gcm cipher.AEAD, sealed []byte, aad string) ([]byte, error) {
 	if len(sealed) < gcm.NonceSize() {
 		return nil, ErrSealed
 	}
@@ -125,6 +130,11 @@ func (k *keyslot) aead() (cipher.AEAD, error) {
 	if err != nil {
 		return nil, err
 	}
+	return aeadOf(key)
+}
+
+// aeadOf is AES-256-GCM under key.
+func aeadOf(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
