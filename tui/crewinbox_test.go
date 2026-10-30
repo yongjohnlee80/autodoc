@@ -15,25 +15,35 @@ import (
 type inboxWindow struct {
 	answers []any   // map[string]any or error, one per inbox.watch, in order
 	calls   [][]any // each inbox.watch's params
-	pending []func()
-	timers  []func()
-	notes   []string
-	shown   map[string]string // the ongoing toasts, by id
-	clicks  map[string]func()
-	ended   map[string]string // the ended toasts' last messages, by id
-	raised  []string          // the sessions raise was asked for
-	here    map[string]bool   // the sessions whose agents are this window's
+	pending []inboxWork
+	// block, when set, holds each inbox.watch until its context ends, telling block the context
+	// first: a long-poll the daemon holds
+	block  chan context.Context
+	timers []func()
+	notes  []string
+	shown  map[string]string // the ongoing toasts, by id
+	clicks map[string]func()
+	ended  map[string]string // the ended toasts' last messages, by id
+	raised []string          // the sessions raise was asked for
+	here   map[string]bool   // the sessions whose agents are this window's
 }
 
 func newInboxWindow() *inboxWindow {
 	return &inboxWindow{shown: map[string]string{}, clicks: map[string]func(){}, ended: map[string]string{}, here: map[string]bool{}}
 }
 
-func (w *inboxWindow) Call(_ context.Context, verb string, p ...any) (any, error) {
+// Call answers inbox.watch from the script. A next page's answer echoes the cursor it was asked
+// at, as the daemon's does (inbox.Manager.snapshotPage), whatever the script says.
+func (w *inboxWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
 	if verb != "inbox.watch" {
 		return nil, errors.New("no verb " + verb)
 	}
 	w.calls = append(w.calls, p)
+	if w.block != nil {
+		w.block <- ctx
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if len(w.answers) == 0 {
 		return nil, errors.New("the script has no answer left")
 	}
@@ -42,10 +52,20 @@ func (w *inboxWindow) Call(_ context.Context, verb string, p ...any) (any, error
 	if err, ok := a.(error); ok {
 		return nil, err
 	}
+	if m, ok := a.(map[string]any); ok && p[2] != "" {
+		m["cursor"] = p[0]
+	}
 	return a, nil
 }
+
+// inboxWork is one Go: its work, off the loop, and its answer, on it.
+type inboxWork struct {
+	fn   func(context.Context) any
+	then func(any)
+}
+
 func (w *inboxWindow) Go(fn func(context.Context) any, then func(any)) {
-	w.pending = append(w.pending, func() { then(fn(context.Background())) })
+	w.pending = append(w.pending, inboxWork{fn, then})
 }
 func (w *inboxWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
 func (w *inboxWindow) Notify(msg string)                { w.notes = append(w.notes, msg) }
@@ -66,7 +86,7 @@ func (w *inboxWindow) step(t *testing.T) {
 	}
 	f := w.pending[0]
 	w.pending = w.pending[1:]
-	f()
+	f.then(f.fn(context.Background()))
 }
 
 func snapshot(cursor int64, next string, items, attention []any) map[string]any {
@@ -125,8 +145,9 @@ func TestTheToastsFollowTheOpenSet(t *testing.T) {
 	}
 }
 
-// TestASnapshotIsReadToItsLastPage: a snapshot in parts is read through its next pages, at the same
-// cursor, before any toast follows it.
+// TestASnapshotIsReadToItsLastPage: a snapshot in parts is read through its next pages, at its first
+// page's cursor (the journal's high-water, which a next page echoes), before any toast follows it;
+// the watch then goes on from that cursor.
 func TestASnapshotIsReadToItsLastPage(t *testing.T) {
 	w := newInboxWindow()
 	w.answers = []any{
@@ -140,8 +161,12 @@ func TestASnapshotIsReadToItsLastPage(t *testing.T) {
 		t.Fatalf("toasts %v before the snapshot's last page", w.shown)
 	}
 	w.step(t)
-	if w.calls[1][0] != int64(0) || w.calls[1][2] != "a:s1" || len(w.shown) != 2 {
-		t.Fatalf("the next page: %v, toasts %v; want page a:s1 at the same cursor, both requests shown", w.calls[1], w.shown)
+	if w.calls[1][0] != int64(9) || w.calls[1][2] != "a:s1" || len(w.shown) != 2 {
+		t.Fatalf("the next page: %v, toasts %v; want page a:s1 at the first page's cursor, both requests shown", w.calls[1], w.shown)
+	}
+	w.step(t) // the watch after the snapshot: at its high-water, never a snapshot again
+	if got := w.calls[2]; got[0] != int64(9) || got[2] != "" {
+		t.Fatalf("the watch after the snapshot asked %v; want the changes after cursor 9", got)
 	}
 }
 
@@ -245,5 +270,62 @@ func TestAReadReportIsForgotten(t *testing.T) {
 	w.step(t) // the snapshot again
 	if len(x.reports) != 0 {
 		t.Fatalf("a read report is still remembered: %v", x.reports)
+	}
+}
+
+// TestAnEarlierConnectionsWatchHoldsNothing: a reconnect cancels the earlier connection's watch: one
+// not sent yet sends nothing, and one the daemon holds is let go at once, so the window never holds
+// a long-poll past its own (the daemon allows two a connection); the window's stop cancels its watch.
+func TestAnEarlierConnectionsWatchHoldsNothing(t *testing.T) {
+	w := newInboxWindow()
+	x := newCrewInbox(w, w.raise)
+	x.Connected()
+	x.Connected() // before the first watch was sent
+	w.answers = []any{snapshot(1, "", nil, nil)}
+	w.step(t) // the first connection's: sends nothing
+	if len(w.calls) != 0 {
+		t.Fatalf("the earlier connection's watch sent %v", w.calls)
+	}
+	w.block = make(chan context.Context, 1)
+	held := w.pending[0]
+	w.pending = w.pending[1:]
+	done := make(chan any, 1)
+	go func() { done <- held.fn(context.Background()) }()
+	select {
+	case <-w.block:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch never reached the daemon")
+	}
+	x.Connected() // a reconnect while the daemon holds it
+	select {
+	case v := <-done:
+		held.then(v)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the earlier connection's watch still holds its long-poll")
+	}
+	w.block = nil
+	x.Stopped()
+	w.step(t) // the newest connection's, after the stop: sends nothing
+	if len(w.calls) != 1 {
+		t.Fatalf("calls %v; want the one held watch alone", w.calls)
+	}
+}
+
+// TestAnEmptyJournalClosesWhatWasShown: a watch at cursor 0 answered with no snapshot (a new store,
+// its journal empty) has nothing open: the toasts shown from before end.
+func TestAnEmptyJournalClosesWhatWasShown(t *testing.T) {
+	w := newInboxWindow()
+	w.answers = []any{snapshot(4, "", []any{request("r1", "gold", "old", "s1")}, nil), map[string]any{"cursor": int64(0), "changes": []any{}}}
+	x := newCrewInbox(w, w.raise)
+	x.Connected()
+	w.step(t)
+	if len(w.shown) != 1 {
+		t.Fatalf("shown %v", w.shown)
+	}
+	x.Connected() // to a daemon whose store is new
+	w.step(t)
+	w.step(t)
+	if len(w.shown) != 0 || w.ended["crew:r1"] == "" {
+		t.Fatalf("after an empty journal: shown %v, ended %v; want the old request's toast ended", w.shown, w.ended)
 	}
 }
