@@ -4265,6 +4265,10 @@ WHAT A KEY NEEDS
         <source>a Lua callback failed: %1</source>
         <translation>Lua 回调失败：%1</translation>
     </message>
+    <message id="autodoc.notice.luahost.a_send_to_the_agent_failed">
+        <source>the send to %1 failed: %2</source>
+        <translation>发送给 %1 失败：%2</translation>
+    </message>
     <message id="autodoc.notice.luakeys.its_keys_and_menu_rows_need_commands_not_granted">
         <source>%1: its keys and menu rows need commands: not granted</source>
         <translation>%1：其按键和菜单行需要命令权限：未授予</translation>
