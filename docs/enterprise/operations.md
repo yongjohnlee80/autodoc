@@ -104,6 +104,7 @@ metrics scope=tenant tenant=music lock=held documents=120344 ready=120344 quaran
 - **They're logfmt,** for your log pipeline to parse.
 - **The HTTP counts cover the interval:** requests by status class, and the slowest.
 - **No line holds a token, a query's text or a client's name.** Each request's own log line names its client.
+- **They're logged at `Info`:** a `[log] level` of `notice` or above leaves them out.
 
 ## Metrics for a scraper: `GET /v1/metrics`
 

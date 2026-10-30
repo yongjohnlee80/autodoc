@@ -18,6 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
+	"github.com/yongjohnlee80/golib/logger"
 )
 
 // The defaults of the fields that have one.
@@ -132,6 +133,8 @@ type Metrics struct {
 type Log struct {
 	// MetricsInterval is how often the metrics lines are logged; 0 logs none.
 	MetricsInterval time.Duration
+	// Level is the least severe record the server logs; "" logs every record.
+	Level logger.Severity
 }
 
 // Operator is one reader of the API's status (/v1/status), for the tenants it names: a role of
@@ -240,6 +243,7 @@ type file struct {
 	} `toml:"http"`
 	Log *struct {
 		MetricsInterval *duration `toml:"metrics_interval"`
+		Level           string    `toml:"level"`
 	} `toml:"log"`
 	Metrics *struct {
 		Enabled bool `toml:"enabled"`
@@ -661,14 +665,25 @@ func (v *validator) tenants(field string, tenants []string, access map[string][]
 	}
 }
 
-// log reads [log]: the metrics lines' interval, at least MinMetricsInterval, or 0 for none.
+// log reads [log]: the metrics lines' interval, at least MinMetricsInterval, or 0 for none; and
+// the level, one of the logger's six severities, or none.
 func (v *validator) log(f file) Log {
 	l := Log{MetricsInterval: DefaultMetricsInterval}
-	if f.Log != nil && f.Log.MetricsInterval != nil {
+	if f.Log == nil {
+		return l
+	}
+	if f.Log.MetricsInterval != nil {
 		l.MetricsInterval = f.Log.MetricsInterval.Duration
 		if l.MetricsInterval != 0 && l.MetricsInterval < MinMetricsInterval {
 			v.refuse("log.metrics_interval", "%v: want 0 (none) or at least %v", l.MetricsInterval, MinMetricsInterval)
 		}
+	}
+	if f.Log.Level != "" {
+		s, err := logger.ParseSeverity(f.Log.Level)
+		if err != nil {
+			v.refuse("log.level", "%q: want debug, info, notice, warning, error or critical", f.Log.Level)
+		}
+		l.Level = s
 	}
 	return l
 }

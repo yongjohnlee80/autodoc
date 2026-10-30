@@ -366,6 +366,11 @@ func TestTheServersRefusals(t *testing.T) {
 		{[]string{"--server", "--check", write("since2.toml", cfg("since.view"))}, 2, "source[0].view"},
 		{[]string{"--server", write("down.toml", cfg("track.view"))}, 1, "schema:"},
 		{[]string{"--server", "--check", write("down2.toml", cfg("track.view"))}, 1, "autodoc:"},
+		// an unknown level: the flag's before the file is read, the key's by the file's validation,
+		// which --check runs too
+		{[]string{"--server", "--log-level", "loud", filepath.Join(dir, "missing.toml")}, 2, `--log-level "loud": want debug`},
+		{[]string{"--server", write("level.toml", cfg("track.view")+"[log]\nlevel = \"loud\"\n")}, 2, "log.level"},
+		{[]string{"--server", "--check", write("level2.toml", cfg("track.view")+"[log]\nlevel = \"loud\"\n")}, 2, "log.level"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, testOptions, &stdout, &stderr)
