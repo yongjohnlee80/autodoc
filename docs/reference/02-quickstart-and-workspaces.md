@@ -297,7 +297,7 @@ setting leaves every setting as it was, and the dialog opens again as it was typ
 
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, and `[embedding_queue]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]` and `[log]` settings:
 
 ```toml
 # $XDG_CONFIG_HOME/autodoc/config.toml
@@ -311,9 +311,17 @@ poll_interval = "2s"        # the listing interval when a root cannot be watched
 
 [embedding_queue]
 max_inflight = 1            # requests to the shared provider, 1 or 2
+
+[log]
+level = ""                  # the least severe record logged; "" (the default) logs every one
 ```
 
 A missing file is every default.
+
+`[log] level` is one of `debug`, `info`, `notice`, `warning`, `error` or `critical`, in any case:
+the daemon's log (in the state directory) then leaves out every record less severe. Any other
+value is refused when the daemon starts, as a misspelled setting is. `autodoc --serve
+--log-level warning` sets it for one run, over the file's.
 
 The embedding providers are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's Search models dialog (see [Semantic search](06-configuring-embeddings-and-rerankers.md)).

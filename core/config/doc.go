@@ -12,6 +12,8 @@
 //	poll_interval = "2s"        # the watch fallback's listing interval
 //	[embedding_queue]
 //	max_inflight = 1            # requests to the shared provider, 1 or 2
+//	[log]
+//	level = ""                  # the least severe record logged: debug ... critical; "" logs all
 //
 // Load fills the defaults and checks what it can without the filesystem. A missing file is every
 // default. A file that does not parse, or names a setting the package does not know, is ErrInvalid,

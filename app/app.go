@@ -47,6 +47,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
@@ -181,6 +182,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
+	logLevel := fs.String("log-level", "", "--serve and --server: the least severe record logged, over the config's [log] level: debug, info, notice, warning, error or critical")
 	health := fs.Bool("health", false, "--server: ask the running server for its health (GET /v1/health); exit 0 when ok or degraded, 1 otherwise")
 	debug := &debugFlag{}
 	fs.Var(debug, "debug", "--ui and --gui: record the input and event stream to one JSONL file for an input or IME bug report; =PATH names the file (default autodoc-debug-<date>.jsonl in the working directory). The file contains everything typed, passwords included")
@@ -269,16 +271,24 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 0
 		}},
 		{flag: "serve", run: func(string) int {
+			level, err := logLevelFlag(*logLevel)
+			if err != nil {
+				return failed(err, 2)
+			}
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			prof, err := startProfile(ctx, profile, "serve", stderr)
 			if err != nil {
 				return failed(err, 1)
 			}
-			return serveExit(stderr, runServe(ctx, *configPath, stderr, b, prof.p), prof)
+			return serveExit(stderr, runServe(ctx, *configPath, stderr, b, prof.p, level), prof)
 		}},
 		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
-			return serverMode(ctx, cfg, *check, *health, stdout, stderr, b.version, failed)
+			level, err := logLevelFlag(*logLevel)
+			if err != nil {
+				return failed(err, 2)
+			}
+			return serverMode(ctx, cfg, *check, *health, level, stdout, stderr, b.version, failed)
 		}},
 		{flag: "call", asked: func() bool { return *call != "" }, arg: true, run: func(params string) int {
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -335,6 +345,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"check", "health"}, modes: []string{"server"}},
 		{flags: []string{"debug"}, modes: []string{"ui", "gui"}},
 		{flags: []string{"profile"}, modes: []string{"ui", "gui", "serve"}},
+		{flags: []string{"log-level"}, modes: []string{"serve", "server"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
@@ -354,4 +365,17 @@ func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, 
 		return 1
 	}
 	return 0
+}
+
+// logLevelFlag is --log-level as the logger's severity, "" when it is not given: the config's
+// [log] level then applies.
+func logLevelFlag(v string) (logger.Severity, error) {
+	if v == "" {
+		return "", nil
+	}
+	s, err := logger.ParseSeverity(v)
+	if err != nil {
+		return "", fmt.Errorf("--log-level %q: want debug, info, notice, warning, error or critical", v)
+	}
+	return s, nil
 }

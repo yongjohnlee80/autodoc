@@ -27,7 +27,7 @@ func TestAGuardThatCannotBeBuiltStopsTheStart(t *testing.T) {
 	sock := filepath.Join(dir, "a.sock")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // a daemon that serves anyway stops here
 	defer cancel()
-	err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), io.Discard, testBuild, nil)
+	err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, failed) {
 		t.Fatalf("a daemon whose guard failed: %v, want %v", err, failed)
 	}
