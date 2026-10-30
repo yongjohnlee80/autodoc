@@ -11,7 +11,7 @@ graph.neighborhood ["kb", "plan.md", int(1)]
 graph.neighborhood ["kb", "plan.md", int(1), {}]
   {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], nodes: ["plan.md", "target.md"]}
 graph.map ["kb"]
-  {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], nodes: [{path: "plan.md", superseded: bool(false), tags: ["kb"], title: "Plan", type: "adr"}, {path: "target.md", superseded: bool(false), title: "Target", type: ""}]}
+  {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], next: <str>, nodes: [{path: "plan.md", superseded: bool(false), tags: ["kb"], title: "Plan", type: "adr"}, {path: "target.md", superseded: bool(false), title: "Target", type: ""}]}
 graph.map ["kb", {depth: int(2), kinds: ["wikilink"], root: "plan.md"}]
   {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], nodes: [{path: "plan.md", superseded: bool(false), tags: ["kb"], title: "Plan", type: "adr"}, {path: "target.md", superseded: bool(false), title: "Target", type: ""}]}
 graph.map ["kb", {depth: int(3)}]
