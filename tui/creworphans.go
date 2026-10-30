@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -54,7 +53,7 @@ func (h *crewHost) offerOrphans() {
 		orphans, ok := v.([]crewOrphan)
 		if !ok {
 			if err, _ := v.(error); err != nil && code(err) != golibrpc.CodeMethodNotFound {
-				h.c.Notify("The crew's orphaned mail could not be listed: " + wireMessage(err))
+				h.c.Notify(h.c.Trf("autodoc.crew.orphans_unlisted", wireMessage(err)))
 			}
 			return
 		}
@@ -67,13 +66,11 @@ func (h *crewHost) offerOrphans() {
 // offer offers o once the card is free.
 func (h *crewHost) offer(o crewOrphan) {
 	h.c.AskWhenFree(Question{
-		Title: "Mail for a window that is gone",
-		Text: fmt.Sprintf("%d unhandled message(s) wait for %s, agents of a window that is gone (%s). "+
-			"Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; "+
-			"Keep leaves them for that window, or a later one.", o.unread, strings.Join(o.profiles, ", "), o.scope),
-		Yes:     "&Adopt",
-		No:      "&Keep",
-		Other:   "&Discard",
+		Title:   h.c.Tr("autodoc.crew.orphan_title"),
+		Text:    h.c.Trf("autodoc.crew.orphan_text", o.unread, strings.Join(o.profiles, ", "), o.scope),
+		Yes:     h.c.Tr("autodoc.crew.orphan_adopt"),
+		No:      h.c.Tr("autodoc.crew.orphan_keep"),
+		Other:   h.c.Tr("autodoc.crew.orphan_discard"),
 		OnYes:   func() { h.settleOrphan(o, "crew.adopt") },
 		OnOther: func() { h.settleOrphan(o, "crew.discard") },
 		// Keep: no OnCancel, nothing done
@@ -93,11 +90,11 @@ func (h *crewHost) settleOrphan(o crewOrphan, verb string) {
 		err, _ := v.(error)
 		switch {
 		case v != nil:
-			h.c.Notify(fmt.Sprintf("%s's mail was not settled: %s", o.scope, wireMessage(err)))
+			h.c.Notify(h.c.Trf("autodoc.crew.orphan_not_settled", o.scope, wireMessage(err)))
 		case verb == "crew.adopt":
-			h.c.Notify(fmt.Sprintf("Adopted %d message(s) for %s.", o.unread, strings.Join(o.profiles, ", ")))
+			h.c.Notify(h.c.Trf("autodoc.crew.adopted", o.unread, strings.Join(o.profiles, ", ")))
 		default:
-			h.c.Notify(fmt.Sprintf("Discarded %d message(s) for %s; each sender is told.", o.unread, strings.Join(o.profiles, ", ")))
+			h.c.Notify(h.c.Trf("autodoc.crew.discarded", o.unread, strings.Join(o.profiles, ", ")))
 		}
 	})
 }

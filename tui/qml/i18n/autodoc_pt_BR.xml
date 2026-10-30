@@ -1191,6 +1191,146 @@
         <source>switch workspace</source>
         <translation>trocar de espaço de trabalho</translation>
     </message>
+    <message id="autodoc.crew.adopted">
+        <source>Adopted %1 message(s) for %2.</source>
+        <translation>%1 mensagem(ns) adotada(s) para %2.</translation>
+    </message>
+    <message id="autodoc.crew.answering_closed">
+        <source>The request you were answering was answered, dismissed or expired.</source>
+        <translation>A solicitação que você respondia foi respondida, dispensada ou expirou.</translation>
+    </message>
+    <message id="autodoc.crew.asks">
+        <source>%1 asks: %2</source>
+        <translation>%1 pergunta: %2</translation>
+    </message>
+    <message id="autodoc.crew.bell_off">
+        <source>The agent bell is off.</source>
+        <translation>O sino dos agentes está desligado.</translation>
+    </message>
+    <message id="autodoc.crew.bell_on">
+        <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
+        <translation>O sino dos agentes está ligado: uma solicitação ou um pedido de permissão toca, no máximo uma vez a cada 10 s.</translation>
+    </message>
+    <message id="autodoc.crew.did_not_start">
+        <source>%1 did not start: %2</source>
+        <translation>%1 não iniciou: %2</translation>
+    </message>
+    <message id="autodoc.crew.discarded">
+        <source>Discarded %1 message(s) for %2; each sender is told.</source>
+        <translation>%1 mensagem(ns) descartada(s) para %2; cada remetente é avisado.</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_failed">
+        <source>%1's request was not dismissed: %2.</source>
+        <translation>A solicitação de %1 não foi dispensada: %2.</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_too_late">
+        <source>%1's request was already answered, dismissed or expired.</source>
+        <translation>A solicitação de %1 já foi respondida, dispensada ou expirou.</translation>
+    </message>
+    <message id="autodoc.crew.no_longer_waits">
+        <source>%1 no longer waits on you</source>
+        <translation>%1 não está mais esperando por você</translation>
+    </message>
+    <message id="autodoc.crew.no_scope">
+        <source>This window's agents have no crew scope: %1</source>
+        <translation>Os agentes desta janela não têm escopo de equipe: %1</translation>
+    </message>
+    <message id="autodoc.crew.not_registered">
+        <source>%1 did not start: its crew session was not registered: %2</source>
+        <translation>%1 não iniciou: sua sessão de equipe não foi registrada: %2</translation>
+    </message>
+    <message id="autodoc.crew.not_shown">
+        <source>%1 could not be shown: %2.</source>
+        <translation>Não foi possível mostrar %1: %2.</translation>
+    </message>
+    <message id="autodoc.crew.orphan_adopt">
+        <source>&amp;Adopt</source>
+        <translation>&amp;Adotar</translation>
+    </message>
+    <message id="autodoc.crew.orphan_discard">
+        <source>&amp;Discard</source>
+        <translation>&amp;Descartar</translation>
+    </message>
+    <message id="autodoc.crew.orphan_keep">
+        <source>&amp;Keep</source>
+        <translation>Manter (&amp;k)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_not_settled">
+        <source>%1's mail was not settled: %2</source>
+        <translation>O correio de %1 não foi resolvido: %2</translation>
+    </message>
+    <message id="autodoc.crew.orphan_text">
+        <source>%1 unhandled message(s) wait for %2, agents of a window that is gone (%3). Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; Keep leaves them for that window, or a later one.</source>
+        <translation>%1 mensagem(ns) não tratada(s) aguardam %2, agentes de uma janela que não existe mais (%3). Adotar as move para os agentes desta janela com os mesmos nomes; Descartar as dá como falhas e avisa cada remetente; Manter as deixa para aquela janela, ou uma posterior.</translation>
+    </message>
+    <message id="autodoc.crew.orphan_title">
+        <source>Mail for a window that is gone</source>
+        <translation>Correio para uma janela que não existe mais</translation>
+    </message>
+    <message id="autodoc.crew.orphans_unlisted">
+        <source>The crew's orphaned mail could not be listed: %1</source>
+        <translation>Não foi possível listar o correio órfão da equipe: %1</translation>
+    </message>
+    <message id="autodoc.crew.other_window">
+        <source>%1 runs in another window: that window shows it.</source>
+        <translation>%1 roda em outra janela: aquela janela o mostra.</translation>
+    </message>
+    <message id="autodoc.crew.replied">
+        <source>Replied to %1.</source>
+        <translation>Resposta enviada a %1.</translation>
+    </message>
+    <message id="autodoc.crew.reply_closed_meanwhile">
+        <source>Your reply to %1 was not sent (%2), and the request has closed meanwhile.</source>
+        <translation>Sua resposta a %1 não foi enviada (%2), e enquanto isso a solicitação foi encerrada.</translation>
+    </message>
+    <message id="autodoc.crew.reply_earlier_failed">
+        <source>An earlier reply to %1 was not sent: %2.</source>
+        <translation>Uma resposta anterior a %1 não foi enviada: %2.</translation>
+    </message>
+    <message id="autodoc.crew.reply_failed">
+        <source>Your reply to %1 was not sent: %2. Open the request again to send it.</source>
+        <translation>Sua resposta a %1 não foi enviada: %2. Abra a solicitação de novo para enviá-la.</translation>
+    </message>
+    <message id="autodoc.crew.reply_too_late">
+        <source>%1's request was already answered, dismissed or expired: your reply was not sent.</source>
+        <translation>A solicitação de %1 já foi respondida, dispensada ou expirou: sua resposta não foi enviada.</translation>
+    </message>
+    <message id="autodoc.crew.reports">
+        <source>%1 reports: %2</source>
+        <translation>%1 informa: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_closed">
+        <source>%1's request is closed: %2</source>
+        <translation>A solicitação de %1 foi encerrada: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_gone">
+        <source>That request is closed.</source>
+        <translation>Essa solicitação foi encerrada.</translation>
+    </message>
+    <message id="autodoc.crew.scope_lost">
+        <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
+        <translation>Esta janela perdeu seu escopo de equipe %1 enquanto estava ausente; seus agentes agora ficam em %2.</translation>
+    </message>
+    <message id="autodoc.crew.scope_unlisted">
+        <source>This window's crew scope is held, but not listed for a successor: %1</source>
+        <translation>O escopo de equipe desta janela está retido, mas não registrado para um sucessor: %1</translation>
+    </message>
+    <message id="autodoc.crew.tab_not_shown">
+        <source>%1 started, but its tab could not be shown: %2</source>
+        <translation>%1 iniciou, mas sua aba não pôde ser mostrada: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits">
+        <source>%1 waits on you (%2): %3</source>
+        <translation>%1 está esperando por você (%2): %3</translation>
+    </message>
+    <message id="autodoc.crew.waits_blocked">
+        <source>%1 is blocked and waits on you: %2</source>
+        <translation>%1 está bloqueado e esperando por você: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits_permission">
+        <source>%1 waits on you (a permission prompt): %2</source>
+        <translation>%1 está esperando por você (um pedido de permissão): %2</translation>
+    </message>
     <message id="autodoc.dialog.aIModels.add">
         <source>&amp;Add…</source>
         <translation>&amp;Adicionar…</translation>
