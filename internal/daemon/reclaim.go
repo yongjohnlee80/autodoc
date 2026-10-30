@@ -12,8 +12,9 @@ import (
 )
 
 // THE START SWEEP AND THE CONVERSION (ADR 1791284787 §2.3, item 3; §2.5) — once the workspaces are
-// open, every stored workspace keeps only its active model's and its target's vectors: a workspace
-// an indexer runs is swept through it (its Sweep waits for setupModels, so the target it fills is
+// open, each workspace's documents that have no sort keys get them first (ADR 1793312720 D2); then
+// every stored workspace keeps only its active model's and its target's vectors: a workspace an
+// indexer runs is swept through it (its Sweep waits for setupModels, so the target it fills is
 // recorded first); one with no indexer (no provider, or its root unavailable) through the store.
 // It runs in the background, while the daemon serves. Each workspace's vectors whose text no chunk
 // has go next (ADR 1791329335 §2.4). Then, once, a store not yet in incremental
@@ -31,6 +32,17 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 	}
 	swept := true
 	for _, w := range ws {
+		// the documents' sort keys first (ADR 1793312720 D2): index.documents lists by the slow Go
+		// fallback until they are all there. A failure leaves the rest to the next start.
+		keyed, err := m.backfillKeysOne(ctx, w.ID, w.Name)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			logger.Warning(m.opts.Log, err, logger.Fields{"event": "documents.keys.backfill_failed", "workspace": w.Name})
+		} else if keyed > 0 {
+			logger.Info(m.opts.Log, logger.Fields{"event": "documents.keys.backfilled", "workspace": w.Name, "documents": keyed})
+		}
 		got, err := m.sweepOne(ctx, w.ID, w.Name)
 		if ctx.Err() != nil {
 			return
@@ -99,6 +111,22 @@ func (m *Workspaces) sweepOne(ctx context.Context, id int64, name string) ([]ind
 		return s.ix.Sweep(sctx)
 	}
 	return index.SweepStore(ctx, m.db, id)
+}
+
+// backfillKeysOne gives workspace id's documents that have no sort keys theirs: through its
+// indexer when one runs, else through the store.
+func (m *Workspaces) backfillKeysOne(ctx context.Context, id int64, name string) (int, error) {
+	m.mu.Lock()
+	s := m.served[name]
+	m.mu.Unlock()
+	if s != nil && s.ix != nil && s.ctx != nil {
+		sctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(s.ctx, cancel)
+		defer stop()
+		return s.ix.BackfillKeys(sctx)
+	}
+	return index.BackfillKeysStore(ctx, m.db, id)
 }
 
 // sweepOrphansOne deletes workspace id's vectors whose text no chunk has (ADR 1791329335 §2.4):
