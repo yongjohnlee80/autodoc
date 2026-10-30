@@ -120,6 +120,8 @@ type Tx interface {
 	ActiveProfile(scope, codename string) (Profile, bool, error)
 	// ActiveProfiles are every active profile, by scope then codename.
 	ActiveProfiles() ([]Profile, error)
+	// Scopes are the scopes of kind, by id.
+	Scopes(kind string) ([]Scope, error)
 	PutProfile(Profile) error
 
 	Session(id string) (Session, bool, error)

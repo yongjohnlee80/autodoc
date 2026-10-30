@@ -210,6 +210,18 @@ func (t *Tx) ActiveProfile(scope, codename string) (crew.Profile, bool, error) {
 	return *r, true, nil
 }
 
+func (t *Tx) Scopes(kind string) ([]crew.Scope, error) {
+	rows, err := t.t.scopes.On(t.tx).With(cKind, kind).OrderBy(dao.Asc(byID)).Select()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]crew.Scope, len(rows))
+	for i, r := range rows {
+		out[i] = *r
+	}
+	return out, nil
+}
+
 func (t *Tx) ActiveProfiles() ([]crew.Profile, error) {
 	rows, err := t.t.profiles.On(t.tx).With(cStatus, crew.ProfileActive).OrderBy(dao.Asc(byCodename)).Select()
 	if err != nil {

@@ -3,6 +3,7 @@ package crewtest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ type Enders struct {
 	Merged    [][2]string     // (from, into) profiles
 	Discarded []string        // profiles
 	Pending   map[string]bool // profiles with eligible mail, for HasEligible
+	Unhandled map[string]int  // profiles' unhandled deliveries, for UnhandledCount
 }
 
 // EndedSession is one call of EndSessionDeliveries.
@@ -59,6 +61,13 @@ func (e *Enders) MergeDeliveries(_ crew.Tx, from, into string) error {
 	e.Merged = append(e.Merged, [2]string{from, into})
 	e.mu.Unlock()
 	return nil
+}
+
+// UnhandledCount reports the counts Unhandled holds (crew.SessionEnder).
+func (e *Enders) UnhandledCount(_ crew.Tx, profile string) (int, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Unhandled[profile], nil
 }
 
 // HasEligible reports the profiles Pending names (crew.SessionEnder).
@@ -627,6 +636,134 @@ func Run(t *testing.T, h Harness) {
 		}
 		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable {
 			t.Fatalf("an exited agent: %+v, want ended and unreachable", got[1])
+		}
+	})
+
+	t.Run("orphans, adopt and discard", func(t *testing.T) {
+		clock, enders := NewClock(), &Enders{Unhandled: map[string]int{}}
+		store := h.New(t, clock.Now)
+		m := crew.New(store, crew.WithSessionEnder(enders))
+		const w1, w2 = "autodoc:aaaa", "autodoc:bbbb"
+		regIn := func(sc, run string, epoch int64, codename, instance string) crew.Registered {
+			t.Helper()
+			r := crew.Registration{Scope: sc, Run: run, Epoch: epoch, Codename: codename, Kind: "claude",
+				Workspace: "ws-1", Instance: instance, Secret: strings.Repeat("s", 32) + instance}
+			got, err := m.Register(ctx, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return got
+		}
+		e1, err := m.Claim(ctx, w1, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldJarvis := regIn(w1, "run-a", e1, "jarvis", "a-1")
+		oldVision := regIn(w1, "run-a", e1, "vision", "a-2")
+		enders.mu.Lock()
+		enders.Unhandled[oldJarvis.Profile], enders.Unhandled[oldVision.Profile] = 2, 1
+		enders.mu.Unlock()
+		if o, err := m.Orphans(ctx); err != nil || len(o) != 0 {
+			t.Fatalf("orphans while w1's holder is live: %+v, %v; want none", o, err)
+		}
+		clock.Advance(91 * time.Second) // w1's window closed without releasing
+		e2, err := m.Claim(ctx, w2, "run-b", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newJarvis := regIn(w2, "run-b", e2, "jarvis", "b-1")
+		o, err := m.Orphans(ctx)
+		want := []crew.Orphan{{Scope: w1, Profiles: []string{"jarvis", "vision"}, Unread: 3}}
+		if err != nil || !reflect.DeepEqual(o, want) {
+			t.Fatalf("orphans: %+v, %v; want %+v", o, err, want)
+		}
+		if err := m.Adopt(ctx, w1, w2, "run-b", e2+1); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("an adopt from a stale epoch: %v, want ErrStaleEpoch", err)
+		}
+		if err := m.Adopt(ctx, w1, w2, "run-b", e2); err != nil {
+			t.Fatalf("adopt: %v", err)
+		}
+		enders.mu.Lock()
+		merged := slices.Clone(enders.Merged)
+		enders.mu.Unlock()
+		if wantM := [][2]string{{oldJarvis.Profile, newJarvis.Profile}, {oldVision.Profile, ""}}; !reflect.DeepEqual(merged, wantM) {
+			t.Fatalf("mail's merges: %v, want %v (jarvis into w2's jarvis, vision moved whole)", merged, wantM)
+		}
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			j, _, err := tx.Profile(oldJarvis.Profile)
+			if err != nil {
+				return err
+			}
+			v, _, err := tx.Profile(oldVision.Profile)
+			if err != nil {
+				return err
+			}
+			sc, _, err := tx.Scope(w1)
+			if err != nil {
+				return err
+			}
+			s, _, err := tx.Session(oldVision.Session)
+			if err != nil {
+				return err
+			}
+			if j.Status != crew.ProfileMerged || j.MergedInto != newJarvis.Profile {
+				t.Errorf("w1's jarvis: %+v, want merged into w2's", j)
+			}
+			if v.Scope != w2 || v.Status != crew.ProfileActive {
+				t.Errorf("w1's vision: %+v, want moved to w2, active", v)
+			}
+			if sc.State != crew.ScopeGone {
+				t.Errorf("w1: %s, want gone", sc.State)
+			}
+			if s.Ended == nil || s.EndedWhy != crew.EndedAdopted {
+				t.Errorf("w1's session: ended %v %q, want adopted", s.Ended != nil, s.EndedWhy)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Release(ctx, w1, "run-a", e1); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("w1's old owner after adoption: %v, want ErrStaleEpoch", err)
+		}
+		if _, err := m.Claim(ctx, w1, "run-a", proc); !errors.Is(err, crew.ErrScopeBusy) {
+			t.Fatalf("a claim of the adopted scope: %v, want ErrScopeBusy", err)
+		}
+		if err := m.Adopt(ctx, w1, w2, "run-b", e2); !errors.Is(err, crew.ErrScopeBusy) {
+			t.Fatalf("a second adopt: %v, want ErrScopeBusy", err)
+		}
+		if o, _ := m.Orphans(ctx); len(o) != 0 {
+			t.Fatalf("orphans after adoption: %+v, want none", o)
+		}
+
+		// discard: a third window's scope, held and then lapsed
+		const w3 = "autodoc:cccc"
+		e3, err := m.Claim(ctx, w3, "run-c", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gone := regIn(w3, "run-c", e3, "tifa", "c-1")
+		if err := m.Discard(ctx, w3, w2, "run-b", e2); !errors.Is(err, crew.ErrScopeBusy) {
+			t.Fatalf("discarding a held scope: %v, want ErrScopeBusy", err)
+		}
+		if err := m.Renew(ctx, w2, "run-b", e2); err != nil { // w2 stays live while w3 lapses
+			t.Fatal(err)
+		}
+		clock.Advance(91 * time.Second)
+		// w2 lapsed too, but nobody replaced its owner: it still holds w2 at e2, and renews
+		if err := m.Renew(ctx, w2, "run-b", e2); err != nil {
+			t.Fatalf("a lapsed owner nobody replaced, renewing: %v", err)
+		}
+		if err := m.Discard(ctx, w3, w2, "run-b", e2); err != nil {
+			t.Fatalf("discard: %v", err)
+		}
+		enders.mu.Lock()
+		discarded := slices.Clone(enders.Discarded)
+		enders.mu.Unlock()
+		if !slices.Equal(discarded, []string{gone.Profile}) {
+			t.Fatalf("mail's discards: %v, want [%s]", discarded, gone.Profile)
+		}
+		if err := m.Discard(ctx, w2, w2, "run-b", e2); !errors.Is(err, crew.ErrInvalid) {
+			t.Fatalf("a scope discarding itself: %v, want ErrInvalid", err)
 		}
 	})
 }

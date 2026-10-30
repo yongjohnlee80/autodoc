@@ -31,6 +31,8 @@ type SessionEnder interface {
 	// HasEligible: profile has a delivery a new session of it may receive now. crew.register
 	// seeds the new session's pending_gen from it, so queued mail wakes it (§4.4).
 	HasEligible(tx Tx, profile string) (bool, error)
+	// UnhandledCount: how many of profile's deliveries are queued or leased, for crew.orphans.
+	UnhandledCount(tx Tx, profile string) (int, error)
 }
 
 // Option configures a Manager.
