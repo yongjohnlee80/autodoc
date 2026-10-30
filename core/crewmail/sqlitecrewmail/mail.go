@@ -29,9 +29,9 @@ const (
 	cDoneAt        col = "done_at"
 	cWhy           col = "why"
 
-	bySeq        sort = "seq"
-	byLease      sort = "lease_until"
-	byMsgExpires sort = "message_expires"
+	bySeq     sort = "seq"
+	byLease   sort = "lease_until"
+	byExpires sort = "expires"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -62,7 +62,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 		dfs[n] = store.Col("mail_delivery", n, scan)
 	}
 	return &mailTables{
-		messages: table(c, "mail_message", map[col]func(*mail.Message) any{
+		messages: sortedTable(c, "mail_message", map[sort]string{byExpires: `"mail_message"."expires"`}, map[col]func(*mail.Message) any{
 			cID: func(r *mail.Message) any { return &r.ID }, cSender: func(r *mail.Message) any { return &r.Sender },
 			cSenderSession: func(r *mail.Message) any { return &r.SenderSession }, cIdemKey: func(r *mail.Message) any { return &r.IdemKey },
 			cDigest: func(r *mail.Message) any { return &r.Digest }, cKind: func(r *mail.Message) any { return &r.Kind },
@@ -78,8 +78,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 			dao.Fields[*mail.Delivery, col, sort, string](dfs),
 			dao.SortMap[*mail.Delivery, col, sort, string](map[sort]string{
 				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
-				byLease:      `"mail_delivery"."lease_until"`,
-				byMsgExpires: `(SELECT "mail_message"."expires" FROM "mail_message" WHERE "mail_message"."id" = "mail_delivery"."message")`}),
+				byLease: `"mail_delivery"."lease_until"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
 	}
@@ -231,25 +230,19 @@ func (t *Tx) NextDeadline() (int64, bool, error) {
 	if len(lease) > 0 {
 		take(lease[0].LeaseUntil)
 	}
-	exp, err := deliveries(t.m.deliveries.On(t.tx).WithPredicate(unhandled).WithPredicate(expiredBy(maxInt64)).
-		OrderBy(dao.Asc(byMsgExpires)).Limit(1).Select())
+	// the earliest expiry of a message that still has an unhandled delivery: read from mail_message
+	// itself, ordered by its own column
+	msg, ok, err := one(t.m.messages.On(t.tx).WithPredicate(dao.IsNotNull(`"mail_message"."expires"`)).
+		WithPredicate(store.Correlated(false, "mail_delivery", "message", "mail_message", "id", unhandled)).
+		OrderBy(dao.Asc(byExpires)).Limit(1).Select())
 	if err != nil {
 		return 0, false, err
 	}
-	if len(exp) > 0 {
-		msg, ok, err := t.Message(exp[0].Message)
-		if err != nil {
-			return 0, false, err
-		}
-		if ok {
-			take(msg.Expires)
-		}
+	if ok {
+		take(msg.Expires)
 	}
 	return at, has, nil
 }
-
-// maxInt64 is every expiry: expiredBy(maxInt64) is "has an expiry".
-const maxInt64 = int64(^uint64(0) >> 1)
 
 func deliveries(rows []*mail.Delivery, err error) ([]mail.Delivery, error) {
 	if err != nil {
