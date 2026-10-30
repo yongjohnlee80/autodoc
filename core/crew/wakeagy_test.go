@@ -184,9 +184,17 @@ func TestTheAgyWakerFollowsNoRedirect(t *testing.T) {
 }
 
 // TestTheAgyWakerReachesOnlyLoopback: a locator whose address is not a loopback IP is refused before
-// any dial, and the client's own dial refuses any address that is not loopback.
+// any dial (a name too, though it would resolve to one: here, to the stand-in server), and the
+// client's own dial refuses any address that is not loopback.
 func TestTheAgyWakerReachesOnlyLoopback(t *testing.T) {
 	t.Parallel()
+	s := newAgyServer(t)
+	_, sport, _ := net.SplitHostPort(strings.TrimPrefix(s.URL, "http://"))
+	named := crew.Endpoint{Session: "s1", Generation: 1, Kind: "agy",
+		Locator: `{"address":"localhost:` + sport + `","conversation":"` + agyConv + `"}`}
+	if err := crew.NewAgyWaker(tokenFor).Wake(context.Background(), named, crew.WakeNotice); crew.Classify(err) != crew.OutcomeFailed || s.sends.Load() != 0 {
+		t.Errorf("localhost, naming the stand-in server: %v and %d sends, want refused before any dial", err, s.sends.Load())
+	}
 	for _, addr := range []string{"10.0.0.1:4000", "192.0.2.1:80", "localhost:4000"} {
 		ep := crew.Endpoint{Session: "s1", Generation: 1, Kind: "agy", Locator: `{"address":"` + addr + `","conversation":"c"}`}
 		err := crew.NewAgyWaker(tokenFor).Wake(context.Background(), ep, crew.WakeNotice)
