@@ -122,10 +122,11 @@ update alongside its code: the help, all six language catalogs, the reference bo
 
 ### What CI checks
 
-Pull requests merge into `canary`, and `canary` merges into `main` when a milestone is done. CI runs
-on each merge into `canary` and on the milestone pull request into `main`, not on a pull request
-into `canary`: run the checks above before you push, and a maintainer runs the full set before
-merging. CI runs:
+Pull requests merge into `canary`. A release promotes `canary` into `main`: a `release/YYYY-MM-DD`
+branch, `canary` rebased onto `main`, merged into `main` by a pull request with **Rebase and
+merge**, after which `canary` is reset to `main`'s new head. CI runs on each merge into `canary` and
+on the release pull request into `main`, not on a pull request into `canary`: run the checks above
+before you push, and a maintainer runs the full set before merging. CI runs:
 
 - `gofmt`, `go vet` (untagged, `-tags server`, `-tags gui`) and the builds;
 - the tests under `-race`, twice, against a pgvector service;
@@ -135,7 +136,7 @@ merging. CI runs:
 - on macOS, the builds with and without the GUI for both architectures, and the core and RPC tests
   under `-race` (FSEvents through cgo);
 - the untagged build reaching no server code, and no private module in the dependency graph;
-- on the milestone pull request, **the coverage policy**: changed code at least 70% covered, and no
+- on the release pull request, **the coverage policy**: changed code at least 70% covered, and no
   file and no total dropping more than 1 point. The report is in the job's summary, and on the pull
   request as a comment.
 
