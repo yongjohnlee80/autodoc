@@ -210,7 +210,8 @@ func (s *Server) indexVerbs() []module.Verb {
 				case errors.Is(err, index.ErrBadSort):
 					return nil, invalid("index.documents: opts.sort is updated, path or indexed")
 				case errors.Is(err, index.ErrBadCursor):
-					return nil, invalid("index.documents: opts.after " + strings.TrimPrefix(err.Error(), "index: after "))
+					_, why, _ := strings.Cut(err.Error(), "index: after ") // past the sentinel's "invalid argument: " too
+					return nil, invalid("index.documents: opts.after " + why)
 				case err != nil:
 					return nil, err
 				}
