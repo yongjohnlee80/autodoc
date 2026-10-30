@@ -85,6 +85,8 @@ Rather than hardcoding one search strategy, `KB_OPERATIONS.md` teaches agents to
 
 ![Adaptive AI Agent Retrieval Ladder and Validation Protocol](agent-retrieval-ladder.mmd)
 
+The binary carries the manual, so an install without the Neovim plugin (Homebrew, mise, `go install`) can read it with no daemon: `autodoc --kb-operations` prints it as a KB's scaffold writes it, stamped with the build's version. `autodoc --tutorial` lists the short tutorial's pages, and `autodoc --tutorial 6` prints page 6, on the search models.
+
 ### Step 1: Known Target vs. Topic Lookup
 
 - **Known Target? Go Straight to It.** If the agent already holds an exact file path, a task ID, an ADR number from a task's `adr:` field, or a literal error string, it reads the file directly or runs a targeted `rg`. Searching for a file you can already name wastes a round-trip.
