@@ -15,9 +15,9 @@ const protocol = crew.Protocol
 // The verbs' params, in their positional order.
 type (
 	watchParams struct {
-		Cursor  int64 `param:"cursor" doc:"the last answer's cursor; 0 for a snapshot"`
-		Timeout int64 `param:"timeout,optional" doc:"milliseconds to wait for a change, at most 25000"`
-		Page    int64 `param:"page,optional" doc:"a snapshot's next: the rest of that snapshot, answered at once, its cursor echoed"`
+		Cursor  int64  `param:"cursor" doc:"the last answer's cursor; 0 for a snapshot"`
+		Timeout int64  `param:"timeout,optional" doc:"milliseconds to wait for a change, at most 25000"`
+		Page    string `param:"page,optional" doc:"a snapshot's next: the rest of that snapshot, answered at once, its cursor echoed"`
 	}
 	listParams struct {
 		Filter string `param:"filter,optional" doc:"\"\" for the history, or undeliverable"`
@@ -74,7 +74,7 @@ type (
 	wireSnapshot struct {
 		Items     []wireItem      `json:"items"`
 		Attention []wireAttention `json:"attention"`
-		Next      int64           `json:"next"` // not 0: more open items; watch again with page = next
+		Next      string          `json:"next"` // not "": more of the snapshot; watch again with page = next
 	}
 	watchResult struct {
 		Cursor   int64         `json:"cursor"`
@@ -141,7 +141,7 @@ func (m *Manager) Verbs() []module.Verb {
 	}
 	return []module.Verb{
 		module.Handle(user("inbox.watch", module.EffectRead, "{cursor, snapshot?{items, attention, next}, changes[]}",
-			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, at most 500 items a page (page = next for the rest). Never leases."),
+			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases."),
 			func(ctx context.Context, p watchParams) (watchResult, error) {
 				w, err := m.Watch(ctx, p.Cursor, time.Duration(p.Timeout)*time.Millisecond, p.Page)
 				return toWireWatched(w), err
