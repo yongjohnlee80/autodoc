@@ -138,15 +138,20 @@ func Run(t *testing.T, h Harness) {
 			w        crew.Wake
 			ended    bool
 			endpoint bool
+			kind     string // the endpoint's, "fake" when ""
 		}{
-			{crew.Wake{Session: "s1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // due
-			{crew.Wake{Session: "s2", PendingGen: 1, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // nothing pending
-			{crew.Wake{Session: "s3", PendingGen: 2, State: crew.WakeIdle, NextAt: at(10 * time.Second)}, false, true},             // backing off
-			{crew.Wake{Session: "s4", PendingGen: 2, State: crew.WakeIdle}, true, true},                                            // ended
-			{crew.Wake{Session: "s5", PendingGen: 2, State: crew.WakeIdle}, false, false},                                          // no endpoint
-			{crew.Wake{Session: "s6", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(-time.Second)}, false, true}, // timed out
-			{crew.Wake{Session: "s7", PendingGen: 1, State: crew.WakeInFlight, Token: "t"}, false, true},                           // a call out
-			{crew.Wake{Session: "s8", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(time.Minute)}, false, true},  // waiting
+			{crew.Wake{Session: "s1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, ""},                          // due
+			{crew.Wake{Session: "s2", PendingGen: 1, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, ""},                          // nothing pending
+			{crew.Wake{Session: "s3", PendingGen: 2, State: crew.WakeIdle, NextAt: at(10 * time.Second)}, false, true, ""},             // backing off
+			{crew.Wake{Session: "s4", PendingGen: 2, State: crew.WakeIdle}, true, true, ""},                                            // ended
+			{crew.Wake{Session: "s5", PendingGen: 2, State: crew.WakeIdle}, false, false, ""},                                          // no endpoint
+			{crew.Wake{Session: "s6", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(-time.Second)}, false, true, ""}, // timed out
+			{crew.Wake{Session: "s7", PendingGen: 1, State: crew.WakeInFlight, Token: "t"}, false, true, ""},                           // a call out
+			{crew.Wake{Session: "s8", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(time.Minute)}, false, true, ""},  // waiting
+			// due but for their endpoint's kind, which no waker serves under kinds {"fake"}; u2 past a
+			// deadline earlier than any other row's (a recovered attempt's next_at = now)
+			{crew.Wake{Session: "u1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, "other"},
+			{crew.Wake{Session: "u2", PendingGen: 2, State: crew.WakeIdle, NextAt: at(-2 * time.Second)}, false, true, "other"},
 		}
 		if err := store.Write(ctx, func(tx crew.Tx) error {
 			for _, r := range rows {
@@ -159,7 +164,11 @@ func Run(t *testing.T, h Harness) {
 					return err
 				}
 				if r.endpoint {
-					if err := tx.PutEndpoint(crew.Endpoint{Session: r.w.Session, Generation: 1, Kind: "fake"}); err != nil {
+					kind := r.kind
+					if kind == "" {
+						kind = "fake"
+					}
+					if err := tx.PutEndpoint(crew.Endpoint{Session: r.w.Session, Generation: 1, Kind: kind}); err != nil {
 						return err
 					}
 				}
@@ -179,9 +188,16 @@ func Run(t *testing.T, h Harness) {
 			return strings.Join(out, ",")
 		}
 		if err := store.Read(ctx, func(tx crew.Tx) error {
-			due, err := tx.WakesDue(now, 64)
+			fake, both := []string{"fake"}, []string{"fake", "other"}
+			due, err := tx.WakesDue(now, fake, 64)
 			if err != nil || ids(due) != "s1" {
-				t.Errorf("WakesDue: %s %v, want s1 (not ended s4, not endpoint-less s5)", ids(due), err)
+				t.Errorf("WakesDue: %s %v, want s1 (not ended s4, not endpoint-less s5, not u1 or u2 of a kind no waker serves)", ids(due), err)
+			}
+			if due, err := tx.WakesDue(now, both, 64); err != nil || ids(due) != "s1,u1,u2" {
+				t.Errorf("WakesDue with a waker for both kinds: %s %v, want s1,u1,u2", ids(due), err)
+			}
+			if due, err := tx.WakesDue(now, nil, 64); err != nil || len(due) != 0 {
+				t.Errorf("WakesDue with no wakers: %s %v, want none", ids(due), err)
 			}
 			if out, err := tx.WakesTimedOut(now, 64); err != nil || ids(out) != "s6" {
 				t.Errorf("WakesTimedOut: %s %v, want s6", ids(out), err)
@@ -189,10 +205,16 @@ func Run(t *testing.T, h Harness) {
 			if out, err := tx.WakesInFlight(); err != nil || ids(out) != "s7" {
 				t.Errorf("WakesInFlight: %s %v, want s7", ids(out), err)
 			}
-			if next, ok, err := tx.NextWakeAt(); err != nil || !ok || next != *at(-time.Second) {
-				t.Errorf("NextWakeAt: %d %v %v, want s6's deadline", next, ok, err)
+			if next, ok, err := tx.NextWakeAt(fake); err != nil || !ok || next != *at(-time.Second) {
+				t.Errorf("NextWakeAt: %d %v %v, want s6's deadline, not u2's (no waker serves it: a timer on it would fire forever)", next, ok, err)
 			}
-			if _, err := tx.WakesDue(now, 0); err == nil {
+			if next, ok, err := tx.NextWakeAt(both); err != nil || !ok || next != *at(-2 * time.Second) {
+				t.Errorf("NextWakeAt with a waker for both kinds: %d %v %v, want u2's deadline", next, ok, err)
+			}
+			if next, ok, err := tx.NextWakeAt(nil); err != nil || !ok || next != *at(-time.Second) {
+				t.Errorf("NextWakeAt with no wakers: %d %v %v, want s6's (an awaiting row's timeout counts whatever its kind)", next, ok, err)
+			}
+			if _, err := tx.WakesDue(now, fake, 0); err == nil {
 				t.Error("WakesDue with limit 0 answered, rather than refusing")
 			}
 			return nil

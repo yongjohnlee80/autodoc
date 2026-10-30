@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -245,7 +246,7 @@ func TestARestartRecoversAndALateOutcomeIsDropped(t *testing.T) {
 func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	r := newWakeRig(t, "run1")
 	s := r.session("gold")
-	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1")
+	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
 	if err != nil || !ok {
 		t.Fatalf("reserve: %v %v", ok, err)
 	}
@@ -391,7 +392,7 @@ func TestRunLooksAgainAfterAStoreError(t *testing.T) {
 func TestEachAttemptOwesItsOwnEnd(t *testing.T) {
 	r := newWakeRig(t, "run1")
 	s := r.session("gold")
-	tok, _, ok, err := r.m.Reserve(r.ctx, s.Session, "run1")
+	tok, _, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
 	if err != nil || !ok {
 		t.Fatalf("reserve: %v %v", ok, err)
 	}
@@ -455,4 +456,62 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 		t.Fatalf("the wait moved while every sweep was refused: %+v", still)
 	}
 	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
+}
+
+// A session whose endpoint no waker serves is watch-only (§4.7, phase 3 brings the wakers one kind
+// at a time): never reserved, never failed, never reported unreachable, while a served kind is
+// woken. Its row recovered from an earlier run (next_at = now, past at once) never sets Run's timer
+// either: a deadline on a row no look can act on would have Run look again at once, forever.
+func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	gold, tifa := r.session("gold"), r.session("tifa")
+	r.write(func(tx crew.Tx) error {
+		if err := tx.PutEndpoint(crew.Endpoint{Session: tifa.Session, Generation: 1, Kind: "other"}); err != nil {
+			return err
+		}
+		wk, _, err := tx.Wake(tifa.Session) // an attempt an earlier run left in flight
+		if err != nil {
+			return err
+		}
+		wk.State, wk.Token, wk.AttemptGen, wk.DaemonRun = crew.WakeInFlight, "t", wk.PendingGen, "run0"
+		return tx.PutWake(wk)
+	})
+	if _, _, ok, err := m.Reserve(r.ctx, tifa.Session, "run1", []string{"fake"}); err != nil || ok {
+		t.Fatalf("reserving tifa, whose kind no waker serves: %v %v, want nothing reserved", ok, err)
+	}
+	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(20*time.Millisecond))
+	ctx, cancel := context.WithCancel(r.ctx)
+	done := make(chan error, 1)
+	fs.mu.Lock()
+	base := fs.writes
+	fs.mu.Unlock()
+	go func() { done <- sched.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	within(t, "gold, of a served kind, woken", func() bool { return w.count() == 1 })
+	time.Sleep(300 * time.Millisecond) // a cell's own window, measuring how often Run looks
+	fs.mu.Lock()
+	writes := fs.writes - base
+	fs.mu.Unlock()
+	if writes > 40 { // the recovery, gold's attempt and a few looks; a spin on tifa's deadline is thousands
+		t.Fatalf("%d writes in 300 ms: Run spun on a deadline of a row no look can act on", writes)
+	}
+	w.mu.Lock()
+	calls := slices.Clone(w.calls)
+	w.mu.Unlock()
+	if len(calls) != 1 || calls[0] != gold.Session {
+		t.Fatalf("calls %v, want gold's alone", calls)
+	}
+	if tw := r.wake(tifa.Session); tw.State != crew.WakeIdle || tw.Failures != 0 || tw.PendingGen <= tw.AnnouncedGen {
+		t.Fatalf("tifa's row: %+v, want idle, pending, never failed (watch-only)", tw)
+	}
 }
