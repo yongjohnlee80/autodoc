@@ -120,9 +120,11 @@ runs it for at most a second:
 - The check runs whole, however long it takes, where a write could otherwise
   land on a damaged store first:
   - schema scripts are pending (a new AutoDoc's first start on the store);
-  - `autodoc.db-wal` is there before the daemon opens the store. A clean close
-    removes it, so it is the sign of a crash. (A `sqlite3` shell holding the
-    store open leaves it too; that costs only the whole check);
+  - `autodoc.db-wal` is there, and not empty, before the daemon opens the
+    store. A clean close removes it, so it is the sign of a crash. (A `sqlite3`
+    shell holding the store open leaves it too; that costs only the whole
+    check. An empty one, which a checkpoint or a read-only open can leave, is
+    no sign of anything);
   - the store is marked damaged (below).
 
 ### The damage mark
