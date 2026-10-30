@@ -318,15 +318,18 @@ func (t *memTx) InboxBounds() (int64, int64) {
 	return 1, int64(len(t.st.inbox))
 }
 
-// Raised is every attention row not cleared, by session.
-func (t *memTx) Raised() ([]crew.Attention, error) {
+// Raised is the attention rows not cleared, by session, past after, at most limit (0: all).
+func (t *memTx) Raised(after string, limit int) ([]crew.Attention, error) {
 	var out []crew.Attention
 	for _, a := range t.st.attn {
-		if a.Cleared == nil {
+		if a.Cleared == nil && a.Session > after {
 			out = append(out, a)
 		}
 	}
 	slices.SortFunc(out, func(a, b crew.Attention) int { return strings.Compare(a.Session, b.Session) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
 }
 

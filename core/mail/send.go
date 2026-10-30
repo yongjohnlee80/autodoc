@@ -132,6 +132,8 @@ func checkSend(p Send) error {
 	switch {
 	case len(p.Body) > MaxBody:
 		return fmt.Errorf("%w: %d bytes, at most %d", ErrTooLarge, len(p.Body), MaxBody)
+	case len(p.Subject) > MaxSubject:
+		return fmt.Errorf("%w: a subject of %d bytes, at most %d", ErrInvalid, len(p.Subject), MaxSubject)
 	case p.Kind != "" && p.Kind != KindMessage && p.Kind != KindRequest:
 		return fmt.Errorf("%w: kind %q is not message or request", ErrInvalid, p.Kind)
 	case p.Key == "":
@@ -373,6 +375,8 @@ func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string,
 	switch {
 	case len(p.Body) > MaxBody:
 		return Message{}, fmt.Errorf("%w: %d bytes, at most %d", ErrTooLarge, len(p.Body), MaxBody)
+	case len(p.Subject) > MaxSubject:
+		return Message{}, fmt.Errorf("%w: a subject of %d bytes, at most %d", ErrInvalid, len(p.Subject), MaxSubject)
 	case p.Key == "":
 		return Message{}, fmt.Errorf("%w: an empty key", ErrInvalid)
 	}
