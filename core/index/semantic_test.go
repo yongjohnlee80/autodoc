@@ -244,9 +244,11 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 			rows, _ := e.raw.QueryContext(context.Background(), `SELECT c.id, e.bits FROM chunk c JOIN embedding e
 				ON e.text_hash = c.text_hash AND e.model_fp = ? WHERE c.doc_id = ?`, cur.Model(), cID)
 			for rows.Next() {
-				var c code
+				c := code{Chunk: chunkKey{Doc: cID}}
 				var b []byte
-				_ = rows.Scan(&c.Chunk, &b)
+				if err := rows.Scan(&c.Chunk.ID, &b); err != nil {
+					t.Fatal(err)
+				}
 				c.Bits = vector.DecodeBits(b)
 				chunks = append(chunks, c)
 			}
