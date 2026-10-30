@@ -251,6 +251,29 @@ func (s *Store) filtered(tx *store.Tx, d dao.DAO[*Chunk, ChunkField, int64], opt
 	return d, true, nil
 }
 
+// admittedDocs is the documents opts' tags, paths and facets admit, of the alive chunks: nil when
+// it filters by none of them (every document), and ok false when it admits none. It applies the
+// filters as filtered does, so a semantic query narrows its codes by the same rules its fetch then
+// checks.
+func (s *Store) admittedDocs(tx *store.Tx, opts QueryOpts) (map[int64]bool, bool, error) {
+	if len(opts.Tags) == 0 && len(opts.Paths) == 0 && len(opts.Facets) == 0 {
+		return nil, true, nil
+	}
+	d, ok, err := s.filtered(tx, alive(s.chunks(tx)), opts)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	rows, err := d.Select(ChunkDoc)
+	if err != nil {
+		return nil, false, err
+	}
+	docs := make(map[int64]bool, len(rows))
+	for _, r := range rows {
+		docs[r.DocID] = true
+	}
+	return docs, len(docs) > 0, nil
+}
+
 func (s *Store) tagsOf(tx *store.Tx, docID int64) ([]string, error) {
 	rows, err := s.tags(tx).With(DocValueDoc, docID).OrderBy(dao.Asc(byKey)).Select(DocValueValue)
 	if err != nil {
