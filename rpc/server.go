@@ -124,6 +124,10 @@ import (
 // ruling (Q1, 2026-10-30): the integer offset is retired at once, not kept for a protocol window,
 // so a session that declared an older protocol gets the cursor too, and a non-zero integer after is
 // refused saying what replaced it. Every known client echoes next without reading it.
+// Protocol 36 is ADR 1793321612: a graph.map without a root comes a page at a time (opts.after and
+// opts.limit, and next), each page with the links whose source is on it, since the whole map in one
+// reply fails past the transport's message limit. Unlike 35, a session below 36 keeps the one reply
+// (Johno's ruling, Q2), and is refused after and limit.
 // Protocol 37 is ADR 1793271500: the crew, mail and inbox modules (crew.Protocol, the one place
 // their verbs' Since is set), after 34 above, and the 35 and 36 that AP-5 and AP-6 claim. A
 // session below 37 sees their verbs as unknown methods.
