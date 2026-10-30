@@ -33,6 +33,7 @@ const (
 	bySeq     sort = "seq"
 	byLease   sort = "lease_until"
 	byExpires sort = "expires"
+	byDone    sort = "done_at"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -79,7 +80,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 			dao.Fields[*mail.Delivery, col, sort, string](dfs),
 			dao.SortMap[*mail.Delivery, col, sort, string](map[sort]string{
 				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
-				byLease: `"mail_delivery"."lease_until"`}),
+				byLease: `"mail_delivery"."lease_until"`, byDone: `"mail_delivery"."done_at"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
 	}
