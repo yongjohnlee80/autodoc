@@ -84,16 +84,7 @@ var tables = store.Declare("crewmail", newCrewTables)
 
 // table declares one table: its columns, the key an upsert conflicts on, and its id order.
 func table[R any](c dao.DataConn, name string, fields map[col]func(R) any, key ...col) *schema[R] {
-	fs := map[col]dao.Field[R]{}
-	for n, scan := range fields {
-		fs[n] = store.Col(name, n, scan)
-	}
-	return dao.New(c,
-		dao.Table[R, col, sort, string](name),
-		dao.Fields[R, col, sort, string](fs),
-		dao.SortMap[R, col, sort, string](map[sort]string{byID: `"` + name + `"."` + string(key[0]) + `"`}),
-		dao.Conflict[R, col, sort, string](key...),
-	)
+	return sortedTable(c, name, nil, fields, key...)
 }
 
 // sortedTable is table with orders beyond its id's: each sort its own column.
