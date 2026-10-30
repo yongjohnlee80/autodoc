@@ -9,6 +9,7 @@ import (
 // The module's limits (§4.6).
 const (
 	MaxBody     = 64 << 10         // a body past it is ErrTooLarge
+	MaxSubject  = 4 << 10          // a subject past it is refused: it travels in the human's feed
 	LeaseFor    = 10 * time.Minute // a receive's lease
 	ReceiveMax  = 8                // deliveries one receive leases
 	MaxAttempts = 5                // leases a delivery may lapse before it fails

@@ -39,8 +39,8 @@ type Tx interface {
 	// kind but a generated event), with seq past after, in seq order, at most limit (0: all): a
 	// snapshot's page.
 	OpenToUser(user string, after int64, limit int) ([]mail.Item, error)
-	// Raised is every attention row not yet cleared, by session.
-	Raised() ([]crew.Attention, error)
+	// Raised is the attention rows not yet cleared, by session, past after, at most limit (0: all).
+	Raised(after string, limit int) ([]crew.Attention, error)
 	// ToUser is user's deliveries with their messages, newest first: below seq before (0: from the
 	// newest), at most limit.
 	ToUser(user string, before int64, limit int) ([]mail.Item, error)

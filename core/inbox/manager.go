@@ -17,11 +17,12 @@ const (
 	changesMax  = 256              // changes one watch returns; the next takes the rest
 	listMax     = 200              // items one list returns
 	snapshotMax = 500              // entries one snapshot page carries; Next pages in the rest
-	// pageBytes bounds the text one snapshot page or list answer carries (attention texts, subjects and bodies, plus
-	// itemOverhead each), well under the transport's 4 MiB message: 65 bodies of mail's 64 KiB
-	// already pass it. A page always carries at least one item, so paging makes progress.
-	pageBytes    = 2 << 20
-	itemOverhead = 512 // an item's ids, names, states and times, as the wire carries them
+	// pageBytes bounds the wire size one snapshot page or list answer carries, every entry measured
+	// whole (wireSize), with half the transport's 4 MiB message left for the envelope: 65 bodies of
+	// mail's 64 KiB already pass the message. Admission bounds every variable field (crew's names,
+	// mail's subject and body, attention's text), so one entry always fits; a page always carries
+	// at least one, so paging makes progress.
+	pageBytes = 2 << 20
 )
 
 // List filters.
@@ -183,8 +184,8 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("%w: page %q is no snapshot's next", ErrInvalid, next)
 	}
 	n, size := 0, 0
-	fits := func(text int) bool {
-		size += text + itemOverhead
+	fits := func(entry int) bool { // entry: its whole wire size
+		size += entry
 		if n == snapshotMax || (n > 0 && size > pageBytes) {
 			return false
 		}
@@ -193,18 +194,11 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 	}
 	afterSeq := int64(0)
 	if phase == "a" {
-		raised, err := tx.Raised()
+		raised, err := tx.Raised(after, snapshotMax+1)
 		if err != nil {
 			return Snapshot{}, err
 		}
 		for _, a := range raised {
-			if a.Session <= after {
-				continue
-			}
-			if !fits(len(a.Text)) {
-				snap.Next = "a:" + snap.Attention[len(snap.Attention)-1].Session
-				return snap, nil
-			}
 			c, sc := a.Session, ""
 			if s, ok, err := tx.Session(a.Session); err != nil {
 				return Snapshot{}, err
@@ -213,7 +207,12 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 					return Snapshot{}, err
 				}
 			}
-			snap.Attention = append(snap.Attention, Attention{Attention: a, Codename: c, Scope: sc})
+			at := Attention{Attention: a, Codename: c, Scope: sc}
+			if !fits(wireSize(toWireAttention(at))) {
+				snap.Next = "a:" + snap.Attention[len(snap.Attention)-1].Session
+				return snap, nil
+			}
+			snap.Attention = append(snap.Attention, at)
 		}
 	} else {
 		var err error
@@ -229,28 +228,30 @@ func snapshotFrom(tx Tx, next string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	var page []mail.Item
 	for _, it := range open {
-		if !fits(len(it.Message.Subject) + len(it.Message.Body)) {
-			if len(page) > 0 {
-				snap.Next = fmt.Sprintf("m:%d", page[len(page)-1].Delivery.Seq)
+		named, err := named(tx, []mail.Item{it})
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if !fits(wireSize(toWireItem(named[0]))) {
+			if len(snap.Items) > 0 {
+				snap.Next = fmt.Sprintf("m:%d", snap.Items[len(snap.Items)-1].Delivery.Seq)
 			} else {
 				snap.Next = fmt.Sprintf("m:%d", afterSeq) // the page filled with attention
 			}
 			break
 		}
-		page = append(page, it)
+		snap.Items = append(snap.Items, named[0])
 	}
-	snap.Items, err = named(tx, page)
-	return snap, err
+	return snap, nil
 }
 
-// fitPage is the first of items that fit one answer: at most limit of them, and their text within
-// pageBytes, but never none while there is one.
-func fitPage(items []mail.Item, limit int) []mail.Item {
+// fitPage is the first of items that fit one answer: at most limit of them, and their whole wire
+// size within pageBytes, but never none while there is one.
+func fitPage(items []Item, limit int) []Item {
 	size := 0
 	for i, it := range items {
-		size += len(it.Message.Subject) + len(it.Message.Body) + itemOverhead
+		size += wireSize(toWireItem(it))
 		if i == limit || (i > 0 && size > pageBytes) {
 			return items[:i]
 		}
@@ -284,8 +285,8 @@ func (m *Manager) List(ctx context.Context, filter string, before int64, limit i
 		default:
 			return fmt.Errorf("%w: filter %q is not \"\" or %q", ErrInvalid, filter, ListUndeliverable)
 		}
-		var err error
-		out, err = named(tx, fitPage(items, limit))
+		all, err := named(tx, items)
+		out = fitPage(all, limit)
 		return err
 	})
 	return out, err

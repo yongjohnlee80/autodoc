@@ -270,7 +270,7 @@ func sorted(ds []mail.Delivery) []mail.Delivery {
 type journal interface {
 	InboxRows(after int64, limit int) []crewtest.InboxRow
 	InboxBounds() (int64, int64)
-	Raised() ([]crew.Attention, error)
+	Raised(after string, limit int) ([]crew.Attention, error)
 }
 
 func (t *memTx) Changes(after int64, limit int) ([]inbox.Change, error) {
@@ -286,7 +286,9 @@ func (t *memTx) ChangeBounds() (int64, int64, error) {
 	return oldest, newest, nil
 }
 
-func (t *memTx) Raised() ([]crew.Attention, error) { return t.Tx.(journal).Raised() }
+func (t *memTx) Raised(after string, limit int) ([]crew.Attention, error) {
+	return t.Tx.(journal).Raised(after, limit)
+}
 
 // items pairs each delivery with its message.
 func (t *memTx) items(ds []mail.Delivery) []mail.Item {
