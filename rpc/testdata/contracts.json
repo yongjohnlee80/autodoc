@@ -1845,6 +1845,11 @@
       ]
     },
     {
+      "code": -32064,
+      "name": "rpc.long_polls_busy",
+      "next": "a connection holds at most two long-polls (crew.wait, mail.wait, inbox.watch): finish one first, or open another connection"
+    },
+    {
       "code": -32065,
       "name": "rpc.unsupported",
       "next": "this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages",

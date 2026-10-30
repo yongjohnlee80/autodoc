@@ -182,6 +182,19 @@ func (r *wakeRig) wake(session string) crew.Wake {
 	return w
 }
 
+// settled waits until session's wake row satisfies ok: an attempt's end is written after its call
+// returns, so a test that moves the clock between the two would start the backoff from the moved
+// clock.
+func (r *wakeRig) settled(session string, ok func(crew.Wake) bool) {
+	r.t.Helper()
+	// NOTE: a bound on a failing run only.
+	for deadline := time.Now().Add(10 * time.Second); !ok(r.wake(session)); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			r.t.Fatalf("session %s's wake row never settled: %+v", session, r.wake(session))
+		}
+	}
+}
+
 // advance moves the store's clock and pokes the scheduler, whose timers run on real time.
 func (r *wakeRig) advance(d time.Duration) {
 	r.clock.Advance(d)
@@ -210,6 +223,7 @@ func TestNoMailIsStranded(t *testing.T) {
 		gold, goldCred := r.agent("gold")
 		r.send(jarvis, "gold", "one")
 		r.woken(gold) // the failed attempt
+		r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeIdle && w.Failures == 1 })
 		r.advance(6 * time.Second)
 		r.woken(gold) // its retry, after the first backoff
 		if got := r.drain(goldCred); len(got) != 1 {
@@ -223,7 +237,8 @@ func TestNoMailIsStranded(t *testing.T) {
 		gold, goldCred := r.agent("gold")
 		r.send(jarvis, "gold", "one")
 		r.woken(gold) // accepted; gold never receives
-		stop()        // the daemon restarts while everyone is idle
+		r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeAwaiting })
+		stop() // the daemon restarts while everyone is idle
 		r.start(r.withWaker())
 		r.advance(2*time.Minute + time.Second) // the unanswered wake times out
 		r.advance(6 * time.Second)             // and its backoff passes
@@ -387,11 +402,14 @@ func TestNoWakerNoAttemptButTheWaitsWork(t *testing.T) {
 	if err != nil || len(cw.Ready) != 1 || cw.Ready[0].Session != gold || cw.Ready[0].Unhandled != 1 {
 		t.Fatalf("the host's crew.wait: %+v, %v; want gold ready with 1 unhandled", cw, err)
 	}
-	for range 3 {
+	// A running loop reserves an attempt within milliseconds of a poke (it stamps the row's
+	// daemon_run and attempt_gen). Poke for half a second, past backoffs, and the row stays untouched.
+	for range 10 {
 		r.advance(10 * time.Minute)
+		time.Sleep(50 * time.Millisecond)
 	}
-	if w := r.wake(gold); w.State != crew.WakeIdle || w.Token != "" || w.Failures != 0 {
-		t.Fatalf("gold's wake row with no waker: %+v, want idle, never attempted", w)
+	if w := r.wake(gold); w.State != crew.WakeIdle || w.DaemonRun != "" || w.AttemptGen != 0 || w.Failures != 0 {
+		t.Fatalf("gold's wake row with no waker: %+v, want never reserved (no daemon_run, attempt_gen 0)", w)
 	}
 	var ch []inbox.Change
 	if err := r.st.Inbox().Read(r.ctx, func(tx inbox.Tx) error { var err error; ch, err = tx.Changes(0, 0); return err }); err != nil {
