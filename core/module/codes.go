@@ -8,6 +8,7 @@ import "fmt"
 var codeRanges = map[string][2]int64{
 	"todos": {-32089, -32071},
 	"crew":  {-32109, -32090}, // ADR 1793271500 §4.1
+	"mail":  {-32129, -32110}, // ADR 1793271500 §4.1
 }
 
 // Shared reports whether code is one of the daemon's shared codes (-32060 to -32070: no such
