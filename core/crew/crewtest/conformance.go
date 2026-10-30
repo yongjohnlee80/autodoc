@@ -3,6 +3,7 @@ package crewtest
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -461,6 +462,100 @@ func Run(t *testing.T, h Harness) {
 		}
 		if _, err := m.Whoami(ctx, cred, "store-1"); !errors.Is(err, crew.ErrBadCredential) {
 			t.Fatalf("whoami of an ended session: %v, want ErrBadCredential", err)
+		}
+	})
+
+	t.Run("endpoints: checked, canonical, and a fresh wake", func(t *testing.T) {
+		clock, enders := NewClock(), &Enders{}
+		store := h.New(t, clock.Now)
+		m := crew.New(store, crew.WithSessionEnder(enders), crew.WithUID(1000))
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := reg(e, "jarvis", "agent-1")
+		got, err := m.Register(ctx, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cred := crew.Credential(got.Session, r.Secret)
+		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`
+		// a wake row mid-backoff, as a failed attempt leaves it
+		if err := store.Write(ctx, func(tx crew.Tx) error {
+			w, _, err := tx.Wake(got.Session)
+			if err != nil {
+				return err
+			}
+			next := tx.Now().Add(30 * time.Second).UnixNano()
+			w.State, w.Token, w.Failures, w.NextAt = "awaiting_receive", "tok", 2, &next
+			return tx.PutWake(w)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		gen, err := m.SetEndpoint(ctx, cred, "claude", "  "+claude+"\n")
+		if err != nil || gen != 1 {
+			t.Fatalf("a claude endpoint: generation %d, %v; want 1", gen, err)
+		}
+		w := wakeOf(t, store, got.Session)
+		if w.State != crew.WakeIdle || w.Token != "" || w.Failures != 0 || w.NextAt != nil {
+			t.Fatalf("the wake row after a new endpoint: %+v; want idle, no token, no failures, no deadline", w)
+		}
+		if gen, err := m.SetEndpoint(ctx, cred, "claude", claude); err != nil || gen != 2 {
+			t.Fatalf("a second endpoint: generation %d, %v; want 2", gen, err)
+		}
+		var ep crew.Endpoint
+		if err := store.Read(ctx, func(tx crew.Tx) error { var err error; ep, _, err = tx.Endpoint(got.Session); return err }); err != nil {
+			t.Fatal(err)
+		}
+		if ep.Locator != claude || ep.Kind != "claude" {
+			t.Fatalf("stored endpoint %+v; want the canonical locator %s", ep, claude)
+		}
+		for name, c := range map[string][2]string{
+			"another user's socket":     {"claude", `{"socket":"/run/user/1001/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`},
+			"a socket outside the root": {"claude", `{"socket":"/tmp/elsewhere/a.sock","pid":42,"start":"9000","session":"c-1"}`},
+			"a path climbing out":       {"claude", `{"socket":"/run/user/1000/cc-socks/../../x.sock","pid":42,"start":"9000","session":"c-1"}`},
+			"an unknown field":          {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1","token":"x"}`},
+			"no pid":                    {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","start":"9000","session":"c-1"}`},
+			"a non-loopback agy":        {"agy", `{"address":"10.0.0.5:4000","conversation":"x"}`},
+			"an unknown kind":           {"vim", `{}`},
+			"not JSON":                  {"claude", `socket=/run/user/1000/cc-socks/a.sock`},
+		} {
+			if _, err := m.SetEndpoint(ctx, cred, c[0], c[1]); !errors.Is(err, crew.ErrBadEndpoint) {
+				t.Errorf("%s: %v, want ErrBadEndpoint", name, err)
+			}
+		}
+		if _, err := m.SetEndpoint(ctx, cred, "codex", `{"server":"/tmp/codex-daemon-1000/s.sock","thread":"t-1"}`); !errors.Is(err, crew.ErrBadEndpoint) {
+			t.Fatalf("a codex endpoint for a claude session: %v, want ErrBadEndpoint", err)
+		}
+		if _, err := m.SetEndpoint(ctx, crew.Credential(got.Session, strings.Repeat("q", 40)), "claude", claude); !errors.Is(err, crew.ErrBadCredential) {
+			t.Fatalf("an endpoint with a bad credential: %v, want ErrBadCredential", err)
+		}
+		if err := m.RaiseAttention(ctx, cred, crew.AttentionPermission, "edit main.go?"); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.RaiseAttention(ctx, cred, "nudge", "x"); !errors.Is(err, crew.ErrInvalid) {
+			t.Fatalf("an unknown attention kind: %v, want ErrInvalid", err)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			if _, ok, err := tx.Endpoint(got.Session); err != nil || ok {
+				t.Errorf("an ended session's endpoint: kept %v, %v; want it gone", ok, err)
+			}
+			a, ok, err := tx.Attention(got.Session)
+			if err != nil || !ok || a.Cleared == nil || a.Kind != crew.AttentionPermission || a.Owner != scope {
+				t.Errorf("an ended session's attention: %+v, %v, %v; want it cleared", a, ok, err)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if mem, ok := store.(*Mem); ok {
+			want := []InboxChange{{"attention", got.Session}, {"cleared", got.Session}}
+			if got := mem.Inbox(); !slices.Equal(got, want) {
+				t.Fatalf("the human feed's journal: %v, want %v", got, want)
+			}
 		}
 	})
 }

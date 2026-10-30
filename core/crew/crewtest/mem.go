@@ -28,19 +28,27 @@ type memState struct {
 	profiles map[string]crew.Profile
 	sessions map[string]crew.Session
 	wakes    map[string]crew.Wake
+	ends     map[string]crew.Endpoint
+	attn     map[string]crew.Attention
+	inbox    []InboxChange
 }
+
+// InboxChange is one row of the human feed's journal, as Mem keeps it.
+type InboxChange struct{ Kind, Ref string }
 
 // NewMem is an empty store whose transactions read the time from now.
 func NewMem(now func() time.Time) *Mem {
 	return &Mem{now: now, st: memState{
 		hosts: map[string]crew.Host{}, scopes: map[string]crew.Scope{},
 		profiles: map[string]crew.Profile{}, sessions: map[string]crew.Session{}, wakes: map[string]crew.Wake{},
+		ends: map[string]crew.Endpoint{}, attn: map[string]crew.Attention{},
 	}}
 }
 
 func (s memState) clone() memState {
 	return memState{hosts: maps.Clone(s.hosts), scopes: maps.Clone(s.scopes),
-		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions), wakes: maps.Clone(s.wakes)}
+		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions), wakes: maps.Clone(s.wakes),
+		ends: maps.Clone(s.ends), attn: maps.Clone(s.attn), inbox: slices.Clone(s.inbox)}
 }
 
 // Write runs fn on a copy of the state and commits the copy if fn succeeds.
@@ -147,6 +155,45 @@ func (t *memTx) Wake(session string) (crew.Wake, bool, error) {
 }
 
 func (t *memTx) PutWake(w crew.Wake) error { t.st.wakes[w.Session] = copyWake(w); return nil }
+
+func (t *memTx) Endpoint(session string) (crew.Endpoint, bool, error) {
+	e, ok := t.st.ends[session]
+	return e, ok, nil
+}
+
+func (t *memTx) PutEndpoint(e crew.Endpoint) error { t.st.ends[e.Session] = e; return nil }
+
+func (t *memTx) DeleteEndpoint(session string) error { delete(t.st.ends, session); return nil }
+
+func (t *memTx) Attention(session string) (crew.Attention, bool, error) {
+	a, ok := t.st.attn[session]
+	if a.Cleared != nil {
+		c := *a.Cleared
+		a.Cleared = &c
+	}
+	return a, ok, nil
+}
+
+func (t *memTx) PutAttention(a crew.Attention) error {
+	if a.Cleared != nil {
+		c := *a.Cleared
+		a.Cleared = &c
+	}
+	t.st.attn[a.Session] = a
+	return nil
+}
+
+func (t *memTx) AddInboxChange(kind, ref string) error {
+	t.st.inbox = append(t.st.inbox, InboxChange{kind, ref})
+	return nil
+}
+
+// Inbox is the human feed's journal so far, in order.
+func (m *Mem) Inbox() []InboxChange {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.st.inbox)
+}
 
 // copyWake keeps a stored wake row from sharing a caller's pointer.
 func copyWake(w crew.Wake) crew.Wake {

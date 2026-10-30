@@ -136,13 +136,28 @@ func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
 	return nil
 }
 
-// endSession ends s in tx and applies what follows from it: the mail module's effect on the
-// session's deliveries (SessionEnder), in the same transaction.
+// endSession ends s in tx and applies what follows from it, in the same transaction: its
+// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline), and the mail
+// module's effect on its deliveries (SessionEnder).
 func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	at := tx.Now().UnixNano()
 	s.Ended, s.EndedWhy = &at, why
 	if err := tx.PutSession(s); err != nil {
 		return err
+	}
+	if err := tx.DeleteEndpoint(s.ID); err != nil {
+		return err
+	}
+	if err := clearAttention(tx, s.ID); err != nil {
+		return err
+	}
+	if w, ok, err := tx.Wake(s.ID); err != nil {
+		return err
+	} else if ok {
+		w.State, w.Token, w.NextAt = WakeIdle, "", nil
+		if err := tx.PutWake(w); err != nil {
+			return err
+		}
 	}
 	if m.ender != nil {
 		return m.ender.EndSessionDeliveries(tx, s, why)

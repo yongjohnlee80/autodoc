@@ -42,6 +42,16 @@ const (
 	cFailures    col = "failures"
 	cDaemonRun   col = "daemon_run"
 	cNextAt      col = "next_at"
+	cGeneration  col = "generation"
+	cLocator     col = "locator"
+	cRegistered  col = "registered"
+	cOwner       col = "owner"
+	cText        col = "text"
+	cRaised      col = "raised"
+	cCleared     col = "cleared"
+	cSeq         col = "seq"
+	cRef         col = "ref"
+	cAt          col = "at"
 
 	byID sort = "id"
 )
@@ -55,6 +65,17 @@ type crewTables struct {
 	profiles *schema[*crew.Profile]
 	sessions *schema[*crew.Session]
 	wakes    *schema[*crew.Wake]
+	ends     *schema[*crew.Endpoint]
+	attn     *schema[*crew.Attention]
+	inbox    *dao.Schema[*inboxRow, col, sort, int64] // int64 ids: seq is the table's own
+}
+
+// inboxRow is one row of the human feed's journal (inbox_change).
+type inboxRow struct {
+	Seq  int64
+	Kind string
+	Ref  string
+	At   int64
 }
 
 var tables = store.Declare("crewmail", newCrewTables)
@@ -104,6 +125,27 @@ func newCrewTables(c dao.DataConn) *crewTables {
 			cFailures: func(r *crew.Wake) any { return &r.Failures }, cDaemonRun: func(r *crew.Wake) any { return &r.DaemonRun },
 			cNextAt: func(r *crew.Wake) any { return &r.NextAt },
 		}, cSession),
+		ends: table(c, "crew_endpoint", map[col]func(*crew.Endpoint) any{
+			cSession: func(r *crew.Endpoint) any { return &r.Session }, cGeneration: func(r *crew.Endpoint) any { return &r.Generation },
+			cKind: func(r *crew.Endpoint) any { return &r.Kind }, cLocator: func(r *crew.Endpoint) any { return &r.Locator },
+			cRegistered: func(r *crew.Endpoint) any { return &r.Registered },
+		}, cSession),
+		attn: table(c, "crew_attention", map[col]func(*crew.Attention) any{
+			cSession: func(r *crew.Attention) any { return &r.Session }, cOwner: func(r *crew.Attention) any { return &r.Owner },
+			cKind: func(r *crew.Attention) any { return &r.Kind }, cText: func(r *crew.Attention) any { return &r.Text },
+			cRaised: func(r *crew.Attention) any { return &r.Raised }, cCleared: func(r *crew.Attention) any { return &r.Cleared },
+		}, cSession),
+		inbox: dao.New(c,
+			dao.Table[*inboxRow, col, sort, int64]("inbox_change"),
+			dao.Fields[*inboxRow, col, sort, int64](map[col]dao.Field[*inboxRow]{
+				cSeq:  store.Col("inbox_change", cSeq, func(r *inboxRow) any { return &r.Seq }),
+				cKind: store.Col("inbox_change", cKind, func(r *inboxRow) any { return &r.Kind }),
+				cRef:  store.Col("inbox_change", cRef, func(r *inboxRow) any { return &r.Ref }),
+				cAt:   store.Col("inbox_change", cAt, func(r *inboxRow) any { return &r.At }),
+			}),
+			dao.SortMap[*inboxRow, col, sort, int64](map[sort]string{byID: `"inbox_change"."seq"`}),
+			dao.ID[*inboxRow, col, sort, int64](cSeq),
+		),
 	}
 }
 
@@ -211,4 +253,40 @@ func (t *Tx) PutWake(w crew.Wake) error {
 	return t.t.wakes.On(t.tx).SetMap(map[col]any{cSession: w.Session, cPendingGen: w.PendingGen,
 		cAnnounced: w.AnnouncedGen, cState: w.State, cToken: w.Token, cAttemptGen: w.AttemptGen,
 		cFailures: w.Failures, cDaemonRun: w.DaemonRun, cNextAt: w.NextAt}).Upsert()
+}
+
+func (t *Tx) Endpoint(session string) (crew.Endpoint, bool, error) {
+	r, ok, err := got(t.t.ends.On(t.tx).With(cSession, session).Get())
+	if !ok {
+		return crew.Endpoint{}, false, err
+	}
+	return *r, true, nil
+}
+
+func (t *Tx) PutEndpoint(e crew.Endpoint) error {
+	return t.t.ends.On(t.tx).SetMap(map[col]any{cSession: e.Session, cGeneration: e.Generation, cKind: e.Kind,
+		cLocator: e.Locator, cRegistered: e.Registered}).Upsert()
+}
+
+func (t *Tx) DeleteEndpoint(session string) error {
+	return t.t.ends.On(t.tx).With(cSession, session).Delete()
+}
+
+func (t *Tx) Attention(session string) (crew.Attention, bool, error) {
+	r, ok, err := got(t.t.attn.On(t.tx).With(cSession, session).Get())
+	if !ok {
+		return crew.Attention{}, false, err
+	}
+	return *r, true, nil
+}
+
+func (t *Tx) PutAttention(a crew.Attention) error {
+	return t.t.attn.On(t.tx).SetMap(map[col]any{cSession: a.Session, cOwner: a.Owner, cKind: a.Kind, cText: a.Text,
+		cRaised: a.Raised, cCleared: a.Cleared}).Upsert()
+}
+
+// AddInboxChange journals one change of the human feed; its seq is the table's own.
+func (t *Tx) AddInboxChange(kind, ref string) error {
+	_, err := t.t.inbox.On(t.tx).SetMap(map[col]any{cKind: kind, cRef: ref, cAt: t.now.UnixNano()}).Insert()
+	return err
 }

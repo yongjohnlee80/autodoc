@@ -51,6 +51,25 @@ type (
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
 	}
 
+	// Endpoint is how a session is woken (§4.7): its CLI's channel, never a secret.
+	Endpoint struct {
+		Session    string
+		Generation int64  // raised by every crew.endpoint
+		Kind       string // claude | codex | agy | opencode
+		Locator    string // JSON, kind-specific
+		Registered int64
+	}
+
+	// Attention is a session waiting on the user: a permission prompt, or blocked (§4.8).
+	Attention struct {
+		Session string
+		Owner   string // the host whose terminal shows the prompt
+		Kind    string // permission | blocked
+		Text    string
+		Raised  int64
+		Cleared *int64
+	}
+
 	// Wake is a session's row of the wake scheduler's state machine (§4.7). The crew module
 	// raises PendingGen; the scheduler owns the rest.
 	Wake struct {
@@ -109,6 +128,17 @@ type Tx interface {
 
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
+
+	Endpoint(session string) (Endpoint, bool, error)
+	PutEndpoint(Endpoint) error
+	DeleteEndpoint(session string) error
+
+	Attention(session string) (Attention, bool, error)
+	PutAttention(Attention) error
+
+	// AddInboxChange journals one change of the human's feed (inbox_change, §4.8), in the same
+	// transaction as the change itself.
+	AddInboxChange(kind, ref string) error
 }
 
 // Store runs transactions over the crew tables, each one atomic: Write commits fn's changes or
