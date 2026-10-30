@@ -48,8 +48,8 @@ func TestArguments(t *testing.T) {
 	}{
 		{[]string{"--version"}, 0, "autodoc " + testOptions.Version},
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
-		{[]string{"--serve", "kb"}, 2, "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
-		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		{[]string{"--serve", "kb"}, 2, "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
 		// refused before anything is dialled: exit 1, saying why
 		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
@@ -123,7 +123,7 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
-		{[]string{"--gui", "kb", "extra"}, 2, "", "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
 		// --editor outside an agent AutoDoc started: no page to reach, and it says what is missing
 		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},
 		{[]string{"--editor", "editor.read", "[1]", "extra"}, 2, "", "take one argument"},
