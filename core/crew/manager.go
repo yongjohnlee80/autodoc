@@ -2,6 +2,7 @@ package crew
 
 import (
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -16,6 +17,60 @@ type Manager struct {
 	started time.Time
 	sched   atomic.Pointer[Scheduler] // the daemon's scheduler, once NewScheduler made it: Watch hears its pokes
 	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
+
+	// secrets are the endpoint secrets a waker needs and the store never holds (an agy session's
+	// language-server token, §4.7), by session, each for the endpoint generation it came with: a
+	// daemon restart forgets them all, and the session's bridge registers again.
+	secretsMu sync.Mutex
+	secrets   map[string]endpointSecret
+}
+
+// forgetSecret drops session's endpoint secret, whatever its generation: the session has ended
+// (endSession, in its write). An end that rolls back loses the secret of a session still live: its
+// wakes fail, safely, until its bridge registers again.
+func (m *Manager) forgetSecret(session string) {
+	m.secretsMu.Lock()
+	defer m.secretsMu.Unlock()
+	delete(m.secrets, session)
+}
+
+// endpointSecret is a session's endpoint secret and the generation it belongs to.
+type endpointSecret struct {
+	generation int64
+	value      string
+}
+
+// EndpointSecret is the secret registered with session's endpoint generation gen, if that is still
+// the one registered: never an older endpoint's.
+func (m *Manager) EndpointSecret(session string, gen int64) (string, bool) {
+	m.secretsMu.Lock()
+	defer m.secretsMu.Unlock()
+	s, ok := m.secrets[session]
+	if !ok || s.generation != gen {
+		return "", false
+	}
+	return s.value, true
+}
+
+// keepSecret holds secret for session's endpoint generation gen, called in the write that stores
+// that generation (writes are one at a time, so in their order): an empty secret drops the
+// session's, and one older than the secret held changes nothing. A write that rolls back after it
+// leaves a secret for a generation never stored, which no wake reads (it reads the stored
+// generation's) and the next registration replaces.
+func (m *Manager) keepSecret(session string, gen int64, secret string) {
+	m.secretsMu.Lock()
+	defer m.secretsMu.Unlock()
+	if s, ok := m.secrets[session]; ok && s.generation > gen {
+		return
+	}
+	if secret == "" {
+		delete(m.secrets, session)
+		return
+	}
+	if m.secrets == nil {
+		m.secrets = map[string]endpointSecret{}
+	}
+	m.secrets[session] = endpointSecret{generation: gen, value: secret}
 }
 
 // SessionEnder is the mail module's half of crew's lifecycle changes, run in crew's own write

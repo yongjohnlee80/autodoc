@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 37,
+  protocol = 38,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -53,7 +53,8 @@ return {
       params = {
         { name = "credential", type = "string" },
         { name = "kind", type = "string" },
-        { name = "locator", type = "string" }
+        { name = "locator", type = "string" },
+        { name = "secret", type = "string", optional = true }
       },
       result = "{generation}",
       doc = "How to wake the calling session (§4.7).",
