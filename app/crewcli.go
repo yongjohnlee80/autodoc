@@ -22,26 +22,19 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/rpc"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // The agent's commands (ADR 1793271500 §4.5, §4.11): `autodoc crew …` and `autodoc mail …`, each
 // one call to the daemon on the session context's credential, its answer printed as JSON. They are
 // what the agent guide (crew.guide) tells an agent to run.
 
-// crewContextFile is the session context's file name, in the folder $AUTODOC_CREW_CONTEXT names or
-// in the working directory.
-const crewContextFile = ".autodoc-crew"
+// crewContextFile is the session context's file name (crew.ContextFile).
+const crewContextFile = crew.ContextFile
 
 // sessionContext is a session's context file, written by its host before the agent starts (§4.5).
-type sessionContext struct {
-	Store      string `json:"store"`  // the daemon's store id (sys.hello's store_id)
-	Socket     string `json:"socket"` // its address
-	Scope      string `json:"scope"`
-	Profile    string `json:"profile"`
-	Session    string `json:"session"`
-	Credential string `json:"credential"` // "<session id>.<secret>"
-	Kind       string `json:"kind"`
-}
+type sessionContext = crew.Context
 
 var (
 	errNoContext       = errors.New("no session context: neither $AUTODOC_CREW_CONTEXT nor ./" + crewContextFile + " names one; this process was not started as a crew agent")

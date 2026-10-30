@@ -12,6 +12,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // AgentRef identifies a profile and, optionally, its exact running incarnation.
@@ -40,8 +42,12 @@ var (
 var agentIncarnation atomic.Uint64
 
 type agentInstance struct {
-	profile          agentProfile
-	dir              string // the folder its tab's process runs in (agentFolder)
+	profile agentProfile
+	dir     string // the folder its tab's process runs in (agentFolder)
+	// starting is a start whose crew session is being registered: the process starts once the
+	// session's context is written. session is the crew session it runs under, when it has one.
+	starting         bool
+	session          crewSession
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -225,7 +231,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if instance != nil && (instance.workspace.name != ws.name || instance.workspace.root != ws.root) {
 		return nil, fmt.Errorf("close the old workspace's agent tab before starting in another workspace: %w", ErrAgentStale)
 	}
-	if instance != nil && instance.running {
+	if instance != nil && (instance.running || instance.starting) {
 		return instance, a.selectInstance(instance)
 	}
 	if instance != nil && instance.profile.Command != p.Command {
@@ -239,7 +245,19 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), a.agentEnv(ws, dir, p.Codename))
+	// a crew session needs the window's scope and the workspace's id (a daemon before it has none)
+	crewed := false
+	if a.crew != nil {
+		_, _, held := a.crew.held()
+		crewed = held && ws.id > 0
+	}
+	env := a.agentEnv(ws, dir, p.Codename)
+	if crewed {
+		// a wake reaches it only with these: without them it still starts, and receives when it asks
+		a.c.Keep(writeWakeAcceptance(dir, agentKind(p.Command)))
+		env = append(env, "AUTODOC_CREW_CONTEXT="+dir) // the folder the session's context is written in
+	}
+	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
 	if err != nil {
 		return nil, err
 	}
@@ -254,11 +272,50 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.instances[p.Codename] = instance
 		a.instanceOrder = append(a.instanceOrder, p.Codename)
 	}
-	if err := panel.Start(instance.tab); err != nil {
+	instance.profile, instance.workspace = p, ws
+	if crewed {
+		// registered first (ADR 1793271500 §4.4): the process starts only once its session's context
+		// is written, and a refused registration starts nothing
+		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+		instance.starting = true
+		token := instance.token
+		a.crew.register(p.Codename, agentKind(p.Command), ws.id, token, dir, func(s crewSession, err error) {
+			instance.starting = false
+			if a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token {
+				if err == nil {
+					a.crew.exit(s, crew.EndedStartFailed) // nobody starts it now
+				}
+				a.listAgents()
+				return
+			}
+			if err != nil {
+				a.c.Notify(fmt.Sprintf("%s did not start: its crew session was not registered: %s", p.Name, wireMessage(err)))
+				a.listAgents()
+				return
+			}
+			if err := a.launch(panel, instance); err != nil {
+				a.crew.exit(s, crew.EndedStartFailed)
+				a.c.Notify(fmt.Sprintf("%s did not start: %s", p.Name, err.Error()))
+				a.listAgents()
+				return
+			}
+			instance.session = s
+		})
+		a.listAgents()
+		return instance, nil
+	}
+	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+	if err := a.launch(panel, instance); err != nil {
 		return nil, err
 	}
-	instance.profile, instance.workspace = p, ws
-	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+	return instance, nil
+}
+
+// launch starts instance's process in its tab, and shows it running and selected.
+func (a *agents) launch(panel TerminalPanel, instance *agentInstance) error {
+	if err := panel.Start(instance.tab); err != nil {
+		return err
+	}
 	instance.running = true
 	for _, tab := range panel.Tabs() {
 		if tab.ID == instance.tab {
@@ -266,13 +323,17 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		}
 	}
 	if err := a.selectInstance(instance); err != nil {
-		return nil, err
+		return err
 	}
 	a.listAgents()
-	return instance, nil
+	return nil
 }
 
 func (a *agents) instanceExited(instance *agentInstance, code int) {
+	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
+		a.crew.exit(instance.session, crew.EndedExit)
+		instance.session = crewSession{}
+	}
 	if a.stopping || a.instances[instance.profile.Codename] != instance {
 		return
 	}
@@ -501,7 +562,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			return ErrAgentStale
 		}
 		current := a.instances[to.Codename]
-		if instance != current || (instance != nil && (instance.closing || (to.Instance != "" && (!instance.running || instance.token != to.Instance)))) {
+		if instance != current || (instance != nil && (instance.closing || (to.Instance != "" && ((!instance.running && !instance.starting) || instance.token != to.Instance)))) {
 			return ErrAgentStale
 		}
 		if saved {
@@ -522,6 +583,14 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		a.syncInstances()
 		if err := validate(); err != nil {
 			finish(err)
+			return
+		}
+		if instance.starting { // its crew session is being registered: its process starts after
+			if tries > 0 {
+				c.After(agentReadyPoll, func() { attempt(tries - 1) })
+				return
+			}
+			finish(ErrAgentStale)
 			return
 		}
 		panel, err := a.runtime()
