@@ -30,40 +30,64 @@ import (
 // one call to the daemon on the session context's credential, its answer printed as JSON. They are
 // what the agent guide (crew.guide) tells an agent to run.
 
-// crewContextFile is the session context's file name (crew.ContextFile).
-const crewContextFile = crew.ContextFile
+// crewContextDir is an agent folder's folder of session contexts (crew.ContextDir), one file per
+// session, named by its id.
+const crewContextDir = crew.ContextDir
 
 // sessionContext is a session's context file, written by its host before the agent starts (§4.5).
 type sessionContext = crew.Context
 
 var (
-	errNoContext       = errors.New("no session context: neither $AUTODOC_CREW_CONTEXT nor ./" + crewContextFile + " names one; this process was not started as a crew agent")
-	errContextMismatch = errors.New("the session contexts disagree: $AUTODOC_CREW_CONTEXT and ./" + crewContextFile + " name different sessions; you may be running with another agent's context, so stop and tell the user")
+	errNoContext       = errors.New("no session context: neither $AUTODOC_CREW_CONTEXT nor ./" + crewContextDir + "/ names one; this process was not started as a crew agent")
+	errSeveralContexts = errors.New("several session contexts in ./" + crewContextDir + "/ and no $AUTODOC_CREW_CONTEXT to say which is yours: run as the agent your host started, never with a guess")
+	errContextMismatch = errors.New("the session contexts disagree: $AUTODOC_CREW_CONTEXT names a session ./" + crewContextDir + "/ does not hold; you may be running with another agent's context, so stop and tell the user")
 )
 
-// findSessionContext is the session context (§4.5): the one in the folder envDir names, else the
-// one in cwd. Both present and naming different sessions is refused; it never picks one.
-func findSessionContext(envDir, cwd string) (sessionContext, error) {
-	var found []sessionContext
-	if envDir != "" {
-		c, err := readSessionContext(filepath.Join(envDir, crewContextFile))
+// findSessionContext is the session context (§4.5): the file $AUTODOC_CREW_CONTEXT names (envFile).
+// Without one, the working directory's ./.autodoc-crew/ when it holds exactly one; several are
+// refused, never one guessed. With both, a working directory whose folder holds contexts, none of
+// them the env's session, is refused: the env may be another agent's.
+func findSessionContext(envFile, cwd string) (sessionContext, error) {
+	here, err := folderContexts(filepath.Join(cwd, crewContextDir))
+	if err != nil {
+		return sessionContext{}, err
+	}
+	if envFile != "" {
+		c, err := readSessionContext(envFile)
 		if err != nil {
 			return sessionContext{}, fmt.Errorf("$AUTODOC_CREW_CONTEXT: %w", err)
 		}
-		found = append(found, c)
+		if len(here) > 0 && !slices.Contains(here, c.Session) {
+			return sessionContext{}, errContextMismatch
+		}
+		return c, nil
 	}
-	if c, err := readSessionContext(filepath.Join(cwd, crewContextFile)); err == nil {
-		found = append(found, c)
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return sessionContext{}, err
-	}
-	switch {
-	case len(found) == 0:
+	switch len(here) {
+	case 0:
 		return sessionContext{}, errNoContext
-	case len(found) == 2 && found[0].Session != found[1].Session:
-		return sessionContext{}, errContextMismatch
+	case 1:
+		return readSessionContext(filepath.Join(cwd, crewContextDir, here[0]))
 	}
-	return found[0], nil
+	return sessionContext{}, errSeveralContexts
+}
+
+// folderContexts is the sessions whose contexts dir holds: its regular files, a dot file (a write
+// in progress) aside. None when dir is no folder.
+func folderContexts(dir string) ([]string, error) {
+	if fi, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.IsDir()) {
+		return nil, nil
+	}
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range es {
+		if e.Type().IsRegular() && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
 }
 
 func readSessionContext(path string) (sessionContext, error) {
