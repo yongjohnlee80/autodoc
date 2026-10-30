@@ -5821,6 +5821,10 @@ WHAT A KEY NEEDS
         <source>reading %1…</source>
         <translation>%1 を読み込み中…</translation>
     </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>%1 を読み込み中: %2 件の文書…</translation>
+    </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
         <translation>関連</translation>

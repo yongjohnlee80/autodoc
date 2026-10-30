@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 35; the daemon serves sessions from protocol 12.
+Verbs at protocol 36; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -273,7 +273,7 @@ Verbs at protocol 35; the daemon serves sessions from protocol 12.
 | --- | --- | --- | --- | --- | --- |
 | `graph.backlinks` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved, external?}]` — The files that link to it. Codes: -32060, -32061. | 1 | agent | read |
 | `graph.links` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved, external?}]` — The links the file makes. Codes: -32060, -32061. | 1 | agent | read |
-| `graph.map` | `workspace` string, `options`? map ({root, depth, kinds}) | `{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}` — The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one). Codes: -32060, -32061. | 26 | agent | read |
+| `graph.map` | `workspace` string, `options`? map ({root, depth, kinds}) | `{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28), next? (protocol 36)}` — The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one). From protocol 36, a map without a root comes a page at a time: opts.limit documents (default 500, at most 2000) in path order after opts.after (the previous page's next, an opaque cursor), the links whose source is among them (to any document, one on a later page included), and next, "" at the end. Each link comes once; drop one whose document never came. A cursor from other kinds is invalid params. A session below 36 gets the whole map in one reply. Codes: -32060, -32061. | 26 | agent | read |
 | `graph.neighborhood` | `workspace` string, `path` string, `depth` int, `options`? map ({kinds} (protocol 14)) | `{nodes, edges: [{src, dst, kind}]}` — The files within depth links. Codes: -32060, -32061. | 1 | agent | read |
 | `graph.resolve` | `workspace` string, `from` string (the file the link is written in), `raw` string (the link as written) | `{path, reason}` — Where one link reaches now, saved or not, as the index resolves links: path "" with reason missing or ambiguous, or "" when raw is no link the index keeps (a URL, a heading of from). Codes: -32060. | 18 | agent | read |
 | `graph.unresolved` | `workspace` string, `options`? map ({kinds} (protocol 14)) | `[{src, raw, reason}]` — Links that name no file. Codes: -32060. | 1 | agent | read |

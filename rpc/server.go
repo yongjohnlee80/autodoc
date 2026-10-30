@@ -124,7 +124,11 @@ import (
 // ruling (Q1, 2026-10-30): the integer offset is retired at once, not kept for a protocol window,
 // so a session that declared an older protocol gets the cursor too, and a non-zero integer after is
 // refused saying what replaced it. Every known client echoes next without reading it.
-const Protocol int64 = 35
+// Protocol 36 is ADR 1793321612: a graph.map without a root comes a page at a time (opts.after and
+// opts.limit, and next), each page with the links whose source is on it, since the whole map in one
+// reply fails past the transport's message limit. Unlike 35, a session below 36 keeps the one reply
+// (Johno's ruling, Q2), and is refused after and limit.
+const Protocol int64 = 36
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
