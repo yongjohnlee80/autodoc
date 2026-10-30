@@ -77,7 +77,7 @@ var releasedScripts = map[string]int{
 	"sql/deployments/postgres/000025_revert_todo_assign_scope.sql":          1,
 	"sql/deployments/postgres/000025_update_todo_assign_scope.sql":          1,
 	"sql/deployments/postgres/000026_update_crew_mail_inbox.sql":            2,
-	"sql/deployments/postgres/000027_update_document_sort_keys.sql":         1,
+	"sql/deployments/postgres/000027_update_document_sort_keys.sql":         2,
 	"sql/deployments/sqlite/000007_update_frontmatter_schema.sql":           1,
 	"sql/deployments/sqlite/000008_update_text_extensions.sql":              1,
 	"sql/deployments/sqlite/000009_update_events.sql":                       1,
