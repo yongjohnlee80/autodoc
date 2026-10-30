@@ -6873,6 +6873,10 @@ The last connect failed:
         <source>schema %1</source>
         <translation>schema %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>sealed under another key: enter it again</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</translation>

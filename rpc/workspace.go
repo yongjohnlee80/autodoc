@@ -129,12 +129,13 @@ type connectionJSON struct {
 	User        string `json:"user"`
 	Schema      string `json:"schema"`
 	HasPassword bool   `json:"has_password"`
+	Sealed      bool   `json:"sealed,omitempty"` // its DSN does not open with the store's key: enter it again
 }
 
 func databasesOf(d Databases) *databasesJSON {
 	out := &databasesJSON{UID: d.UID, Destination: d.Destination, VectorIndex: d.VectorIndex, ViewArgs: d.ViewArgs}
 	for _, c := range d.Connections {
-		conn := &connectionJSON{Engine: c.Engine, Host: c.Host, Database: c.Database, User: c.User, Schema: c.Schema, HasPassword: c.HasPassword}
+		conn := &connectionJSON{Engine: c.Engine, Host: c.Host, Database: c.Database, User: c.User, Schema: c.Schema, HasPassword: c.HasPassword, Sealed: c.Sealed}
 		if c.Role == store.RoleDestination {
 			out.DestinationConnection = conn
 		} else {
@@ -234,7 +235,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 	return []module.Verb{
 		module.Handle(module.Contract{Verb: "workspace.list", Effect: module.EffectRead, Since: 1, Audience: module.AudienceAgent,
 			Result: "[{id, name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
-			Doc:    "Every workspace. Search only one whose state is ready. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."},
+			Doc:    "Every workspace. Search only one whose state is ready. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password, sealed?}, never its DSN; sealed is a connection whose DSN does not open with the store's key (a store restored without its key): enter it again."},
 			func(context.Context, struct{}) ([]workspaceJSON, error) {
 				out := []workspaceJSON{}
 				for _, w := range s.workspaces.List() {

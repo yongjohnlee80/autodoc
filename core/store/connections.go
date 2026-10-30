@@ -54,7 +54,10 @@ type ConnectionInfo struct {
 type ConnectionSummary struct {
 	Role, Engine, Host, Database, User, Schema string
 	HasPassword                                bool
-	UpdatedAt                                  int64
+	// Sealed is a connection whose DSN does not open with the store's key (a store restored
+	// without its own): listed so it can be entered again, never failing the rest of the listing
+	Sealed    bool
+	UpdatedAt int64
 }
 
 // newUID is a workspace's identity in a shared destination: 128 random bits in hex, the form
@@ -117,11 +120,16 @@ func (s *Store) Connections(ctx context.Context, id int64) ([]ConnectionSummary,
 			return err
 		}
 		for _, c := range rows {
+			var sum ConnectionSummary
 			dsn, err := s.keys.open(c.DSN, dsnAAD(id, c.Role))
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrSealed):
+				sum = ConnectionSummary{Engine: c.Engine, Sealed: true} // enter it again; the rest list as they are
+			case err != nil:
 				return err
+			default:
+				sum = Summarize(c.Engine, string(dsn))
 			}
-			sum := Summarize(c.Engine, string(dsn))
 			sum.Role, sum.UpdatedAt = c.Role, c.UpdatedAt
 			if c.Schema != nil {
 				sum.Schema = *c.Schema

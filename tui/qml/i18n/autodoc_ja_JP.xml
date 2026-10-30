@@ -6867,6 +6867,10 @@ The last connect failed:
         <source>schema %1</source>
         <translation>スキーマ %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>別のキーで封印されています。もう一度入力してください</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown でタブを切り替え · 保存 ですべての変更を一度に送信。拒否された場合は何も変更されません</translation>
