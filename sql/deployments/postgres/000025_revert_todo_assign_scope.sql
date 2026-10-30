@@ -1,0 +1,2 @@
+-- 000025 revert on PostgreSQL: nothing to undo. This engine's 000001 holds what SQLite's 000025 added,
+-- and a revert to before 000026 leaves the schema as 000001 created it (ADR 1793319634).

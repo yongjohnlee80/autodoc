@@ -1,0 +1,2 @@
+-- 000015 on PostgreSQL: folded into this engine's 000001, which creates the schema as SQLite's
+-- 000001 to 000025 leave it (ADR 1793319634). Nothing to do; the script keeps the two ledgers' names alike.
