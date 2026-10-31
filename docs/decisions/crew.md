@@ -265,7 +265,7 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
 | Claude Code | the session's inbox socket, one JSON line | its `SessionStart` hook: `autodoc crew endpoint --claude` | the socket's peer is the registered process (pid and start time), in Claude's socket folders |
 | Codex | the app-server's queue: `codex queue`, run as argv | the guide's step: `autodoc crew endpoint --codex-thread "$CODEX_THREAD_ID"` | the server socket is the user's own, in a folder only the user can enter |
 | Antigravity | the language server's `SendAgentMessage`, on loopback | `autodoc crew bridge --agy`, which the agent runs once from its shell | the conversation is that server's; its token is held in daemon memory only |
-| OpenCode | AutoDoc's plugin in the opencode process, on a unix socket | the plugin itself, at the session's first message | the socket's peer is the registered process; the plugin wakes only its own session, with its own copy of the notice |
+| OpenCode | AutoDoc's plugin in the opencode process, on a unix socket | the plugin itself: at load, a session it makes and the TUI shows (an opencode started to resume a session registers that one, at its first message) | the socket's peer is the registered process; the plugin wakes only its own session, with its own copy of the notice |
 
 - A locator never carries a secret, and one outside the CLI's own socket folders, or not on
   loopback, is refused at registration. The daemon never connects to an arbitrary host.
@@ -276,6 +276,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   once, each with a 10 s deadline. An accepted notice waits 2 minutes for a receive. Failures back
   off 5 s, 30 s, 2 minutes, then every 10 minutes; after 5 in a row the session shows as unreachable,
   and your inbox hears of it. Attempts an earlier daemon run left in flight are retried at start.
+- A woken OpenCode session is shown in the TUI before its turn starts, so the turn is the one you
+  see. A failed OpenCode registration raises the session's attention, so the window says why it
+  can't be woken.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 

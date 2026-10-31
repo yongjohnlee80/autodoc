@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -50,8 +51,14 @@ func TestThePluginWakesWithTheFixedNoticeAlone(t *testing.T) {
 	if m := regexp.MustCompile(`req(\?)?\.(notice|text|message|content|parts)`).FindString(src); m != "" {
 		t.Errorf("the plugin reads %s from a request", m)
 	}
-	if strings.Contains(src, "/tui/") || strings.Contains(src, "appendPrompt") {
-		t.Error("the plugin types into the TUI")
+	// the TUI is asked to show a session, never typed into: select-session is its one route
+	for _, typing := range []string{"appendPrompt", "submitPrompt", "append-prompt", "submit-prompt"} {
+		if strings.Contains(src, typing) {
+			t.Errorf("the plugin types into the TUI (%s)", typing)
+		}
+	}
+	if routes := regexp.MustCompile(`/tui/[a-z/-]+`).FindAllString(src, -1); len(slices.DeleteFunc(routes, func(r string) bool { return r == "/tui/select-session" })) > 0 {
+		t.Errorf("the plugin calls the TUI's %v, beyond select-session", routes)
 	}
 }
 
