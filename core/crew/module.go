@@ -57,7 +57,7 @@ type (
 		Epoch     int64  `param:"epoch"`
 		Codename  string `param:"codename"`
 		Kind      string `param:"kind" doc:"claude, codex, agy, opencode …"`
-		Workspace string `param:"workspace" doc:"the workspace's uid"`
+		Workspace string `param:"workspace" doc:"the workspace's id; empty when no workspace serves the agent's folder"`
 		Instance  string `param:"instance" doc:"the host's spawn id"`
 		Secret    string `param:"secret" doc:"host-generated, 32+ random bytes; only its hash is kept"`
 	}

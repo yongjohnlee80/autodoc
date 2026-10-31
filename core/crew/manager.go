@@ -80,12 +80,19 @@ func (m *Manager) write(ctx context.Context, fn func(tx Tx, after *afterCommit) 
 		return nil
 	}
 	m.secretsMu.Lock()
-	defer m.secretsMu.Unlock()
 	for _, p := range after.secrets {
 		m.publishSecret(p)
 	}
 	for _, id := range after.ended {
 		m.forgetSecret(id)
+	}
+	m.secretsMu.Unlock()
+	if len(after.ended) > 0 { // an ended session's reporter has nothing more to report
+		m.aliveMu.Lock()
+		for _, id := range after.ended {
+			delete(m.alive, id)
+		}
+		m.aliveMu.Unlock()
 	}
 	return nil
 }

@@ -24,11 +24,13 @@ import (
 //
 //	a prompt shown      PermissionRequest (tool_name, tool_input; no tool_use_id), and Notification
 //	                    (notification_type permission_prompt); several queue, one per tool use
-//	approved            that tool's PostToolUse (the same tool_name and tool_input), then Stop
-//	                    once the turn ends; another tool's PostToolUse may come while a prompt shows
+//	approved            that tool's PostToolUse (the same tool_name and tool_input), or its
+//	                    PostToolUseFailure when it fails, then Stop once the turn ends; another
+//	                    tool's PostToolUse may come while a prompt shows
 //	denied              nothing until the user's next message (UserPromptSubmit)
 //
-// So each prompt shown is an open prompt, named by its tool and input; its own PostToolUse closes it,
+// So each prompt shown is an open prompt, named by its tool and input, counted (two identical calls
+// that both prompt are two); its own PostToolUse or PostToolUseFailure closes one,
 // and UserPromptSubmit and Stop, past every prompt, close them all. The attention is raised while any
 // is open. Another Notification (idle, elicitation) proves nothing about a prompt, so it changes
 // nothing.
@@ -103,7 +105,7 @@ func claudeHook(ctx context.Context, stdin io.Reader, envFile string, call func(
 		return fmt.Errorf("the hook's input: %w", err)
 	}
 	switch in.Event {
-	case "PermissionRequest", "Notification", "PostToolUse", "UserPromptSubmit", "Stop":
+	case "PermissionRequest", "Notification", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop":
 	default:
 		return nil
 	}
@@ -129,7 +131,7 @@ func claudeHook(ctx context.Context, stdin io.Reader, envFile string, call func(
 	switch {
 	case in.Event == "PermissionRequest":
 		asks = claudeAsks(in)
-		if err := os.WriteFile(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), []byte(asks), 0o600); err != nil {
+		if err := countPrompt(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), asks, 1); err != nil {
 			return err
 		}
 		_ = os.Remove(filepath.Join(dir, claudeNotified)) // its Notification stood for this one
@@ -140,12 +142,12 @@ func claudeHook(ctx context.Context, stdin io.Reader, envFile string, call func(
 		}
 		if len(open) == 0 { // its PermissionRequest names it, when there is one
 			asks = claudeAsks(in)
-			if err := os.WriteFile(filepath.Join(dir, claudeNotified), []byte(asks), 0o600); err != nil {
+			if err := countPrompt(filepath.Join(dir, claudeNotified), asks, 1); err != nil {
 				return err
 			}
 		}
-	case in.Event == "PostToolUse":
-		if err := os.Remove(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput))); err != nil && !errors.Is(err, os.ErrNotExist) {
+	case in.Event == "PostToolUse", in.Event == "PostToolUseFailure": // the tool ran: approved, done or failed
+		if err := countPrompt(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), "", -1); err != nil {
 			return err
 		}
 	case in.Event == "UserPromptSubmit", in.Event == "Stop":
@@ -186,11 +188,11 @@ func reportPrompts(ctx context.Context, c sessionContext, dir, asks string, call
 	}
 	if want == "raised" {
 		if asks == "" { // a retry: what an open prompt asks
-			b, err := os.ReadFile(filepath.Join(dir, open[len(open)-1]))
+			p, err := readPrompt(filepath.Join(dir, open[len(open)-1]))
 			if err != nil {
 				return err
 			}
-			asks = string(b)
+			asks = p.Asks
 		}
 		if _, err := call(ctx, c, "crew.attention", []any{c.Credential, "raise", crew.AttentionPermission, asks}); err != nil {
 			_ = os.Remove(filepath.Join(dir, claudeReported)) // unknown now: the next hook raises again
@@ -201,6 +203,46 @@ func reportPrompts(ctx context.Context, c sessionContext, dir, asks string, call
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, claudeReported), []byte(want), 0o600)
+}
+
+// openPrompt is one open prompt's file: how many of its tool use are asking (two identical calls
+// that both prompt are two), and what it asks.
+type openPrompt struct {
+	N    int    `json:"n"`
+	Asks string `json:"asks"`
+}
+
+func readPrompt(path string) (openPrompt, error) {
+	var p openPrompt
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return p, err
+	}
+	return p, json.Unmarshal(b, &p)
+}
+
+// countPrompt adds by (1: one more asking, -1: one closed) to the open prompt at path, asking asks
+// when given; at 0 it is closed (its file gone). Closing one that isn't open changes nothing.
+func countPrompt(path, asks string, by int) error {
+	p, err := readPrompt(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		p = openPrompt{} // unreadable: as if new
+	}
+	p.N += by
+	if asks != "" {
+		p.Asks = asks
+	}
+	if p.N <= 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
 }
 
 // openPrompts are dir's open prompts, by file name, oldest first.
