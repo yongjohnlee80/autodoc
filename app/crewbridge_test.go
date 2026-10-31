@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -429,5 +431,71 @@ func TestTheDetachedBridgeIsPinnedToItsSession(t *testing.T) {
 	}
 	if c, err := pinnedContext(envFile, agent, "sb"); err == nil {
 		t.Errorf("a bridge started for sb took up %s", c.Session)
+	}
+}
+
+// TestTheBridgeReportsTheAgentsPermissionPrompts: at each prompt tick the bridge reads the
+// conversation's prompt from the offset its last read answered; a prompt showing raises the
+// session's permission attention once, saying what it asks, again when another takes its place, a
+// failed read changes nothing (logged once), and none showing clears what it raised, once.
+func TestTheBridgeReportsTheAgentsPermissionPrompts(t *testing.T) {
+	f := newFakeBridge()
+	type read struct {
+		p    crew.AgyPrompt
+		next int
+		err  error
+	}
+	script := []read{
+		{crew.AgyPrompt{}, 4, nil},
+		{crew.AgyPrompt{Showing: true, Asks: "command: touch x"}, 5, nil},
+		{crew.AgyPrompt{Showing: true, Asks: "command: touch x"}, 5, nil}, // the same prompt: raised already
+		{crew.AgyPrompt{}, 5, errors.New("busy")},                         // a failed read: nothing changes
+		{crew.AgyPrompt{}, 5, errors.New("busy")},
+		{crew.AgyPrompt{Showing: true, Asks: "command: rm y"}, 6, nil}, // another took its place
+		{crew.AgyPrompt{}, 7, nil},                                     // answered: cleared
+		{crew.AgyPrompt{}, 7, nil},                                     // still none: nothing
+	}
+	var mu sync.Mutex
+	var offsets []string
+	var attention []string
+	i := 0
+	f.prompt = func(_ context.Context, offset int) (crew.AgyPrompt, int, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		offsets = append(offsets, strconv.Itoa(offset))
+		r := script[i]
+		i++
+		return r.p, r.next, r.err
+	}
+	call := f.call
+	f.call = func(ctx context.Context, method string, params ...any) (any, error) {
+		if method == "crew.attention" {
+			mu.Lock()
+			attention = append(attention, fmt.Sprint(params[1:]...))
+			mu.Unlock()
+		}
+		return call(ctx, method, params...)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	tick := make(chan time.Time)
+	var log bytes.Buffer
+	done := make(chan struct{})
+	go func() { defer close(done); f.watchPrompts(ctx, tick, &log) }()
+	for range script {
+		tick <- time.Now()
+	}
+	cancel() // the last look runs to its end: its stand-ins don't heed ctx
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(offsets, ","); got != "0,4,5,5,5,5,6,7" {
+		t.Fatalf("the reads' offsets %s, want each the last read's answer", got)
+	}
+	want := []string{"raise" + crew.AttentionPermission + "command: touch x", "raise" + crew.AttentionPermission + "command: rm y", "clear"}
+	if strings.Join(attention, "|") != strings.Join(want, "|") {
+		t.Fatalf("the attention calls %q, want %q", attention, want)
+	}
+	if n := strings.Count(log.String(), "looking for the agent's permission prompt"); n != 1 {
+		t.Fatalf("two failed reads in a row logged %d times, want once:\n%s", n, log.String())
 	}
 }
