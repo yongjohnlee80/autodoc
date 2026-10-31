@@ -80,6 +80,10 @@ func TestAFailedCommitWritesNothingAndIsRetried(t *testing.T) {
 			func() { e.write("keep.md", "---\ntags: [fresh]\n---\n# Keep\n\nfourth words\n"); e.ix.Touch("keep.md") },
 			func() bool { return len(e.match("fourth")) == 0 },
 			func() { e.indexedAt("keep.md") }},
+		{"its old tags' removal", "doc_tag", "DELETE",
+			func() { e.write("keep.md", "---\ntags: [newer]\n---\n# Keep\n\nsixth words\n"); e.ix.Touch("keep.md") },
+			func() bool { return len(e.match("sixth")) == 0 },
+			func() { e.indexedAt("keep.md") }},
 		{"its links", "link", "INSERT",
 			func() { e.write("keep.md", "# Keep\n\nfifth words [[gone]]\n"); e.ix.Touch("keep.md") },
 			func() bool { return len(e.match("fifth")) == 0 },
@@ -92,6 +96,10 @@ func TestAFailedCommitWritesNothingAndIsRetried(t *testing.T) {
 			func() { e.write("new4.md", "counted\n"); e.ix.Touch("new4.md") },
 			func() bool { _, ok, _ := e.store.Version(context.Background(), "new4.md"); return !ok },
 			func() { e.indexedAt("new4.md") }},
+		{"its job's completion", "index_job", "DELETE",
+			func() { e.write("new5.md", "finished\n"); e.ix.Touch("new5.md") },
+			func() bool { _, ok, _ := e.store.Version(context.Background(), "new5.md"); return !ok },
+			func() { e.indexedAt("new5.md") }},
 		{"a removed document's row", "document", "DELETE",
 			func() { _ = e.fsys.Remove(context.Background(), "gone.md"); e.ix.Touch("gone.md") },
 			func() bool { return version("gone.md") != "" },
@@ -288,6 +296,83 @@ func TestAFrontmatterWriteFailsAsItsStatements(t *testing.T) {
 			t.Errorf("%s on %s refused, and the replacement succeeded", op.op, op.table)
 		}
 		undo()
+	}
+	// a document's put writes its frontmatter: refused, the put writes nothing, and lands once it is not
+	c := search.Chunk{Breadcrumb: "B", Body: "faceted words"}
+	th := c.TextHash()
+	b := Doc{Path: "b.md", Version: "1", Indexer: "test", Meta: chunk.Meta{Title: "B"}, Frontmatter: r,
+		Chunks: []DocChunk{{Chunk: c, Hash: []byte("b1"), TextHash: th[:], Kind: ChunkSection}}}
+	put := func() error {
+		batch, err := BufferedWriter(s).Begin(ctx)
+		if err != nil {
+			return err
+		}
+		if err := batch.Put(ctx, b); err != nil {
+			return err
+		}
+		return batch.Commit()
+	}
+	facets := func() (n int) {
+		t.Helper()
+		if err := scanOne(ctx, e.raw, &n, "SELECT count(*) FROM doc_facet"); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := facets()
+	undo := e.failWrites("doc_facet", "INSERT")
+	err = put()
+	undo()
+	if err == nil {
+		t.Error("b.md's facets refused, and its put succeeded")
+	}
+	if _, ok, _ := s.Version(ctx, "b.md"); ok {
+		t.Error("b.md's put failed on its facets, and its row was written")
+	}
+	if err := put(); err != nil {
+		t.Fatal(err)
+	}
+	if n := facets(); n != before+1 {
+		t.Errorf("after b.md's put: %d facets, want %d", n, before+1)
+	}
+}
+
+// TestAGCFailsAsItsChangeLogPrune: the gc prunes the change log in the transaction that deletes the
+// dead chunks; the prune failing fails the gc, and the chunks stay; once it lifts, the gc deletes them.
+func TestAGCFailsAsItsChangeLogPrune(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, options{})
+	e.put("a.md", "zebra\n")
+	e.stop() // the gc is the test's own from here on
+	db, err := store.Open(ctx, e.db.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	x := newIndexer(NewStore(db, e.ws), e.fault, options{})
+	e.exec("UPDATE chunk SET gen_to = gen_from") // every chunk dead at the generation it was born in
+	dead := func() (n int) {
+		t.Helper()
+		if err := scanOne(ctx, e.raw, &n, "SELECT count(*) FROM chunk WHERE gen_to IS NOT NULL"); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := dead()
+	if before == 0 {
+		t.Fatal("no dead chunks to collect")
+	}
+	undo := e.renamed("change")
+	_, err = x.gc(ctx)
+	undo()
+	if err == nil {
+		t.Error("the gc succeeded with the change log unreadable")
+	}
+	if n := dead(); n != before {
+		t.Errorf("a failed gc left %d dead chunks of %d", n, before)
+	}
+	if _, err := x.gc(ctx); err != nil || dead() != 0 {
+		t.Fatalf("the gc after: %v, %d dead chunks left", err, dead())
 	}
 }
 
