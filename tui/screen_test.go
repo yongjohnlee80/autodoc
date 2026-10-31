@@ -150,6 +150,23 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 	})
 }
 
+// TestSPCmEnterTypedAtOnceOpensTheMenu: SPC m then Enter, typed at once (no wait between the keys,
+// as a fast hand does), opens the File menu on the bar SPC m showed, and the Enter never reaches the
+// page: the bar takes the keyboard before any key after it is read.
+func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "aaa\n"}}, daemonOpts{prefs: map[string]string{}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	// the file's state, not waitFile's status-line text: the store's preferences hide the status line
+	r.s.WaitFor(t, "a.md open", func(string) bool { n := r.file(); return n.open && n.path == "a.md" && !n.dirty })
+	before := r.editorText()
+	r.keys(t, key(' '), key('m'), enter())
+	r.s.WaitForText(t, "New file")
+	if after := r.editorText(); after != before {
+		t.Fatalf("SPC m Enter typed at once: the page went from %q to %q", before, after)
+	}
+}
+
 // TestAMenuTitleIsClickedUnderTheToasts: a click on a menu bar title opens its menu while the
 // toasts are up. The toasts are an always-shown float over the whole screen, and its empty layer
 // took every click, the menu bar's among them; golib's
