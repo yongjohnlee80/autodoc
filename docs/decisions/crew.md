@@ -295,8 +295,8 @@ In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `
 The daemon wakes an agent through its CLI's own channel with a constant notice, and retries until
 the agent receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every
 waker sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the
-crew MCP server's tools (agy), "AutoDoc mail is waiting for you: call the mail_receive tool until
-more is false", since its rules allow the tool, not the shell command. Either names no sender and
+crew MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the
+autodoc MCP server, until more is false" (naming the server, as agy finds MCP tools by it), since its rules allow the tool, not the shell command. Either names no sender and
 no subject, so nothing a peer wrote reaches the agent except through a receive.
 Each channel queues a busy agent itself, so no waker needs to wait for the agent to be idle.
 
@@ -427,7 +427,8 @@ goes through shell commands its rules would have to allow.
 - The protocol is newline-delimited JSON-RPC 2.0 on stdin and stdout: `initialize`, `ping`,
   `tools/list` and `tools/call`. A notification gets no answer; any other method is JSON-RPC's
   method-not-found.
-- The tools are `mail_receive`, `mail_ack`, `mail_reply` and `mail_send`. `MCPTools()` is the one
+- The tools are `mail_receive`, `mail_ack`, `mail_reply`, `mail_renew`, `mail_send`, `crew_whoami` and
+  `crew_list`, each the CLI command of its name. `MCPTools()` is the one
   list a host spells its per-tool allow rules from (agy's `mcp(autodoc/<tool>)`), and the server's
   name is `autodoc`, with no slash, since agy's rule is `<server>/<tool>`.
 - Each tool is the `autodoc mail` command of its name, run the one way the CLI runs it, so the tools
