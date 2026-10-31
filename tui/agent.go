@@ -28,7 +28,8 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
-	crew                   *crewHost // the window's crew scope; nil in a program without one
+	crew                   *crewHost  // the window's crew scope; nil in a program without one
+	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
 	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
 	// tab's own start is
 	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
