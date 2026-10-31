@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/msgpack"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -130,6 +131,10 @@ type crewWindow struct {
 
 func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
 	w.calls = append(w.calls, verb)
+	// the params as the real client sends them: one the wire can't carry fails here, as it does there
+	if _, err := msgpack.Marshal(p); err != nil {
+		return nil, fmt.Errorf("rpc: encode: %w", err)
+	}
 	if w.down[verb] > 0 {
 		w.down[verb]--
 		return nil, io.ErrUnexpectedEOF
