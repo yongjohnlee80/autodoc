@@ -176,6 +176,10 @@ func (t *todos) handedOver(name, assignee string, err error) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_sent", name))
 		return
 	}
+	if errors.Is(err, ErrAgentTypedNotSent) { // typed, left for the user's Enter (agentmessaging.go)
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input", name))
+		return
+	}
 	if errors.Is(err, widget.ErrTerminalPasteUnbracketed) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste", name))
 		return

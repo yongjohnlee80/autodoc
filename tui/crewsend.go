@@ -2,67 +2,74 @@ package tui
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"time"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
-// The user's own sends to the window's agents go through the crew when a wake reaches the agent
+// The user's own sends to the window's agents go through the crew when the agent's doorbell rings
 // (docs/decisions/crew.md#the-users-own-sends): a mail from `user` that starts the agent's turn with
-// no key pressed, nothing typed into its terminal. An agent no wake reaches is typed to instead, as
-// before, with a notice that says why.
+// no key pressed, nothing typed into its terminal.
 
-// errCrewUnreachable is a user's send the daemon refused because no wake reaches the agent now:
-// nothing was sent, so the caller types the text instead.
-var errCrewUnreachable = errors.New("no wake reaches the agent now")
+// userSendTries is how many times a user's send whose outcome is unknown (a lost answer, a dropped
+// connection) is asked again, with the same key, userSendGap apart: the daemon answers a repeat
+// with the first send's answer, so a doorbell that rang is never rung or typed twice.
+const (
+	userSendTries = 3
+	// NOTE: can't announce: a lost answer or a dropped connection says nothing about when to ask
+	// again, so the send is asked again after a fixed gap.
+	userSendGap = time.Second
+)
 
-// userSend sends body to codename's session in the window's scope as the user (inbox.send), kind
-// "message" or "request" with subject, asking for a wake that reaches it. then hears nil once it was
-// sent, errCrewUnreachable when nothing was sent because no wake reaches the agent (or the window
-// holds no scope), or the daemon's other refusal. A fresh key per send: the user's sends never
-// repeat one another.
+// userSend sends body to codename's session in the window's scope as the user (inbox.send with
+// fire: rung, or nothing sent). then hears, on the loop:
+//   - nil: it rang;
+//   - an error wrapping errDoorbellNotSent: the daemon refused it for certain (no wake reaches
+//     the agent, no scope or session, a stale epoch, a refused body, an older daemon), so the
+//     caller may type it instead;
+//   - any other error: its outcome is unknown after userSendTries asks, and the caller types
+//     nothing, since it may have rung.
 func (h *crewHost) userSend(codename, kind, subject, body string, then func(error)) {
 	scope, epoch, ok := h.held()
 	if !ok || codename == "" {
-		then(errCrewUnreachable)
+		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
 		return
 	}
-	key := newSecret()
-	h.c.Go(func(ctx context.Context) any {
-		_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []string{codename}, body, key, kind, subject, true)
-		return err
-	}, func(v any) {
-		err, _ := v.(error)
-		if code(err) == inbox.CodeUnreachable {
-			err = errCrewUnreachable
-		}
-		then(err)
-	})
+	key := newSecret() // one key for every ask of this send
+	var ask func(left int)
+	ask = func(left int) {
+		h.c.Go(func(ctx context.Context) any {
+			_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []string{codename}, body, key, kind, subject, true)
+			return err
+		}, func(v any) {
+			err, _ := v.(error)
+			switch {
+			case err == nil:
+				then(nil)
+			case doorbellNotSent(err):
+				then(fmt.Errorf("%w: %v", errDoorbellNotSent, err))
+			case left > 1:
+				h.c.After(userSendGap, func() { ask(left - 1) })
+			default:
+				then(err)
+			}
+		})
+	}
+	ask(userSendTries)
 }
 
-// reachable tells then whether codename has a live session in the window's scope that a wake
-// reaches now (crew.list's reachable), false when the window holds no scope or the daemon can't say.
-func (h *crewHost) reachable(codename string, then func(bool)) {
-	scope, _, ok := h.held()
-	if !ok || codename == "" {
-		then(false)
-		return
+// doorbellNotSent reports whether err is the daemon's certain refusal of a user's send: nothing was
+// stored, so nothing can arrive.
+func doorbellNotSent(err error) bool {
+	switch code(err) {
+	case inbox.CodeUnreachable, inbox.CodeTooLarge, mail.CodeNoRecipient, mail.CodeTooLarge,
+		crew.CodeStaleEpoch, crew.CodeScopeBusy, golibrpc.CodeInvalidParams, golibrpc.CodeMethodNotFound:
+		return true
 	}
-	h.c.Go(func(ctx context.Context) any {
-		v, err := h.c.Call(ctx, "crew.list")
-		if err != nil {
-			return false
-		}
-		for _, e := range asList(v) {
-			m := asMap(e)
-			if str(m, "codename") == codename && str(m, "scope") == scope {
-				r, _ := m["reachable"].(bool)
-				return r
-			}
-		}
-		return false
-	}, func(v any) {
-		r, _ := v.(bool)
-		then(r)
-	})
+	return false
 }
