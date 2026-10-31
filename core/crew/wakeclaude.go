@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // ClaudeWaker wakes a Claude Code session through its inbox socket
@@ -21,10 +19,13 @@ import (
 // session's next SessionStart registers its new socket.
 type ClaudeWaker struct {
 	roots []string // the socket folders a locator must lie in
+	peer  PeerProc // the process at a socket's other end
 }
 
-// NewClaudeWaker is the Claude waker for the daemon's user uid.
-func NewClaudeWaker(uid int) *ClaudeWaker { return &ClaudeWaker{roots: ClaudeSocketDirs(uid)} }
+// NewClaudeWaker is the Claude waker for the daemon's user uid, binding sockets with peer.
+func NewClaudeWaker(uid int, peer PeerProc) *ClaudeWaker {
+	return &ClaudeWaker{roots: ClaudeSocketDirs(uid), peer: peer}
+}
 
 // claudeLine is the one line a wake writes: a user message with the notice, from autodoc.
 type claudeLine struct {
@@ -75,21 +76,17 @@ func (w *ClaudeWaker) Wake(ctx context.Context, ep Endpoint, notice string) erro
 
 // bound checks that c's other end is the session's process (boundTo).
 func (w *ClaudeWaker) bound(c net.Conn, l claudeLocator) error {
-	return boundTo(c, l.Start, "claude's inbox socket")
+	return boundTo(c, w.peer, l.Start, "claude's inbox socket")
 }
 
 // boundTo checks that the other end of c, a unix socket, is the process start names: the daemon's
 // user, and the pid start names, still the process it named at registration. A socket a dead
 // process left, or one its pid's later holder binds, is refused alike.
-func boundTo(c net.Conn, start, what string) error {
-	if err := peercred.Check(c); err != nil {
-		return err
+func boundTo(c net.Conn, peer PeerProc, start, what string) error {
+	if peer == nil {
+		return fmt.Errorf("crew: no way to check the process at %s", what) // never trust an unchecked socket
 	}
-	pid, err := peercred.PeerPID(c)
-	if err != nil {
-		return err
-	}
-	ref, err := ProcRef(pid)
+	ref, err := peer(c)
 	if err != nil {
 		return err
 	}

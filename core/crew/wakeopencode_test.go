@@ -96,7 +96,7 @@ func TestTheOpenCodeWakersOutcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir, sock, got := pluginSocket(t, tc.answer)
-			w := crew.NewOpenCodeWaker(os.Getuid())
+			w := crew.NewOpenCodeWaker(os.Getuid(), selfPeer)
 			w.SetRoots(dir)
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 			defer cancel()
@@ -132,13 +132,13 @@ func TestTheOpenCodeWakerBindsToTheSessionsProcess(t *testing.T) {
 		"a later process at the pid": opencodeEndpoint(t, sock, os.Getpid(), later),
 		"a socket gone":              opencodeEndpoint(t, filepath.Join(dir, "1.sock"), 1, self),
 	} {
-		w := crew.NewOpenCodeWaker(os.Getuid())
+		w := crew.NewOpenCodeWaker(os.Getuid(), selfPeer)
 		w.SetRoots(dir)
 		if err := w.Wake(context.Background(), ep, crew.WakeNotice); crew.Classify(err) != crew.OutcomeGone {
 			t.Errorf("%s: %v, want a failure as gone: the session's process is not there", name, err)
 		}
 	}
-	w := crew.NewOpenCodeWaker(os.Getuid()) // its own folders: the stand-in's is not one
+	w := crew.NewOpenCodeWaker(os.Getuid(), selfPeer) // its own folders: the stand-in's is not one
 	if err := w.Wake(context.Background(), opencodeEndpoint(t, sock, os.Getpid(), self), crew.WakeNotice); crew.Classify(err) != crew.OutcomeFailed {
 		t.Errorf("a socket outside the plugin's folders: %v, want a failure", err)
 	}

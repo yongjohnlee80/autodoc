@@ -70,7 +70,7 @@ func claudeEndpoint(t *testing.T, socket string, pid int, start string) crew.End
 func TestTheClaudeWakerBindsToTheSessionsProcess(t *testing.T) {
 	ctx := context.Background()
 	dir, sock, got := inboxSocket(t)
-	w := crew.NewClaudeWaker(os.Getuid())
+	w := crew.NewClaudeWaker(os.Getuid(), selfPeer)
 	w.SetRoots(dir)
 	self, err := crew.ProcRef(os.Getpid()) // this test holds the socket: its process is the session's
 	if err != nil {
@@ -182,7 +182,7 @@ func TestAKilledAgentIsUnreachableAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	cw := crew.NewClaudeWaker(os.Getuid())
+	cw := crew.NewClaudeWaker(os.Getuid(), selfPeer)
 	cw.SetRoots(dir)
 	r := newWakeRigWith(t, "run1", map[string]crew.Waker{"claude": cw})
 	reg, err := r.m.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: r.epoch, Codename: "gold",
