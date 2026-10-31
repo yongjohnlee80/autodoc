@@ -15,6 +15,10 @@ var (
 	// ErrNoRecipient is an address that resolves to nothing: no active profile, or no live session.
 	ErrNoRecipient = errs.Sentinel(errs.ErrInvalidArgument, "mail: no such recipient")
 
+	// ErrUnreachable is a send to fire (Send.Fire) whose recipient's doorbell didn't ring: nothing
+	// was stored, or its delivery was withdrawn.
+	ErrUnreachable = errs.Sentinel(errs.ErrPrecondition, "mail: the recipient's doorbell didn't ring")
+
 	// ErrKeyReused is a send or reply whose key a different message already holds.
 	ErrKeyReused = errs.Sentinel(errs.ErrPrecondition, "mail: the key names another message")
 

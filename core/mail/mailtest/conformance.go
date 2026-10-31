@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +62,7 @@ func Run(t *testing.T, h Harness) {
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
 		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
 		{"AnItemNamesItsSenderAsAnAddress", testAnItemNamesItsSenderAsAnAddress},
+		{"TheUsersSendIsTheWindowsHostsAndFiredOrNothing", testTheUsersSendIsTheWindowsHostsAndFiredOrNothing},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -85,6 +87,21 @@ func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error
 		return crew.Session{}, crew.ErrBadCredential
 	}
 	return s, nil
+}
+
+// Fire is crew's own: with no scheduler, nothing fires.
+func (g *guard) Fire(ctx context.Context, profile string) (bool, error) {
+	return g.crew.Fire(ctx, profile)
+}
+
+// Reachable is crew's own, against the rig's session, endpoint and wake rows.
+func (g *guard) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return g.crew.Reachable(tx, profile)
+}
+
+// GuardHost is crew's own check, against the rig's host rows (a cell claims its scope through crew).
+func (g *guard) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return g.crew.GuardHost(tx, scope, run, epoch)
 }
 
 func (g *guard) RaisePending(tx crew.Tx, profile string) error {
@@ -789,6 +806,18 @@ func (c *lazyCrew) Authenticate(tx crew.Tx, credential string) (crew.Session, er
 	return c.m.Authenticate(tx, credential)
 }
 
+func (c *lazyCrew) Fire(ctx context.Context, profile string) (bool, error) {
+	return c.m.Fire(ctx, profile)
+}
+
+func (c *lazyCrew) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return c.m.Reachable(tx, profile)
+}
+
+func (c *lazyCrew) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return c.m.GuardHost(tx, scope, run, epoch)
+}
+
 func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
 	return c.m.RaisePending(tx, profile)
 }
@@ -1027,5 +1056,139 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 		if it.Message.Kind != mail.KindEvent || it.From != "autodoc" {
 			t.Fatalf("the daemon's notice: %+v, want an event from autodoc", it)
 		}
+	}
+}
+
+// fireWaker is a doorbell that answers err, counting its calls.
+type fireWaker struct {
+	mu    sync.Mutex
+	err   error
+	calls int
+}
+
+func (w *fireWaker) Wake(context.Context, crew.Endpoint, string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.calls++
+	return w.err
+}
+
+func (w *fireWaker) answer(err error) (calls int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.err = err
+	return w.calls
+}
+
+// The user's own send (inbox.send), on one store with the real crew and its scheduler: only the
+// window that holds the scope sends it, its run and epoch checked in the write; its sender is the
+// user's profile, so the receiver names it "user". A send to fire is fired or nothing: with no
+// doorbell to ring nothing is stored; a doorbell that fails leaves its delivery withdrawn, never
+// receivable, and the agent's wake settled; one that rings leaves the message to receive. A send
+// without fire is queued as any mail is.
+func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness) {
+	ctx := context.Background()
+	clock := crewtest.NewClock()
+	st := h.New(t, clock.Now)
+	port := &lazyCrew{}
+	mm := mail.New(st.Mail, port)
+	cm := crew.New(st.Crew, crew.WithSessionEnder(mm))
+	port.m = cm
+	if err := mm.EnsureReserved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bell := &fireWaker{}
+	cm.NewScheduler("daemon-run", map[string]crew.Waker{"claude": bell})
+	epoch, err := cm.Claim(ctx, "autodoc:w", "host-run", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := strings.Repeat("s", 40)
+	reg, err := cm.Register(ctx, crew.Registration{Scope: "autodoc:w", Run: "host-run", Epoch: epoch, Codename: "gold",
+		Kind: "claude", Workspace: "w", Instance: "i1", Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := reg.Session + "." + secret
+	send := func(key string, fire bool, to ...string) (mail.Sent, error) {
+		if to == nil {
+			to = []string{"gold"}
+		}
+		return mm.SendAsUser(ctx, "autodoc:w", "host-run", epoch, mail.Send{To: to, Kind: mail.KindRequest,
+			Subject: "Task: a title", Body: "the file, the id, the reason: " + key, Key: key, Fire: fire})
+	}
+	receive := func() []mail.Item {
+		t.Helper()
+		got, err := mm.Receive(ctx, credential)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Items
+	}
+	stored := func() int { return len(st.Inspect.Messages()) }
+
+	// the host's check: another run, or another epoch, sends nothing
+	for _, bad := range []struct {
+		run   string
+		epoch int64
+	}{{"other-run", epoch}, {"host-run", epoch + 1}} {
+		_, err := mm.SendAsUser(ctx, "autodoc:w", bad.run, bad.epoch, mail.Send{To: []string{"gold"}, Body: "x", Key: "k0"})
+		if !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("a send from run %s at epoch %d: %v, want the stale epoch", bad.run, bad.epoch, err)
+		}
+	}
+	if _, err := send("two", true, "gold", "user"); !errors.Is(err, mail.ErrInvalid) {
+		t.Fatalf("a send to fire to two recipients: %v, want invalid", err)
+	}
+	// no endpoint: no doorbell to ring, nothing stored, the waker never called
+	if _, err := send("k1", true); !errors.Is(err, mail.ErrUnreachable) || stored() != 0 || bell.answer(nil) != 0 {
+		t.Fatalf("a send to fire with no endpoint: %v, %d stored, %d rings", err, stored(), bell.answer(nil))
+	}
+	if err := st.Crew.Write(ctx, func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: reg.Session, Generation: 1, Kind: "claude"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// a doorbell that fails: the delivery is withdrawn, nothing to receive, and the wake settled
+	bell.answer(errors.New("the socket refused"))
+	failed, err := send("k2", true)
+	if !errors.Is(err, mail.ErrUnreachable) || bell.answer(nil) != 1 || len(failed.Deliveries) != 1 {
+		t.Fatalf("a send whose doorbell failed: %v, %d rings, %+v", err, bell.answer(nil), failed)
+	}
+	for _, d := range st.Inspect.Deliveries() {
+		if d.Message == failed.Message.ID && (d.State != mail.Withdrawn || d.DoneAt == nil || d.Why != mail.WhyWithdrawn) {
+			t.Fatalf("the failed send's delivery: %+v, want withdrawn", d)
+		}
+	}
+	if got := receive(); len(got) != 0 {
+		t.Fatalf("a withdrawn send was received: %+v", got)
+	}
+	if err := st.Crew.Read(ctx, func(tx crew.Tx) error {
+		w, _, err := tx.Wake(reg.Session)
+		if err == nil && (w.AnnouncedGen != w.PendingGen || w.State != crew.WakeIdle) {
+			t.Errorf("the wake after the withdrawal: %+v, want settled", w)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// its replay is the same refusal, never a send that stands
+	if _, err := send("k2", true); !errors.Is(err, mail.ErrUnreachable) {
+		t.Fatalf("a replay of a withdrawn send: %v, want unreachable", err)
+	}
+	// a doorbell that rings: the send stands, and the agent receives it from the user
+	fired, err := send("k3", true)
+	if err != nil || bell.answer(nil) != 2 || fired.Message.Sender == "" {
+		t.Fatalf("a send whose doorbell rang: %v, %d rings, %+v", err, bell.answer(nil), fired)
+	}
+	got := receive()
+	if len(got) != 1 || got[0].Message.ID != fired.Message.ID || got[0].From != mail.UserCodename || got[0].Message.SenderSession != "" {
+		t.Fatalf("the agent's receive: %+v, want the fired request from user", got)
+	}
+	// without fire: queued as any mail, whatever the doorbell would do
+	bell.answer(errors.New("the socket refused"))
+	queued, err := send("k4", false)
+	if err != nil || len(queued.Deliveries) != 1 || queued.Deliveries[0].State != mail.Queued {
+		t.Fatalf("a send without fire: %v %+v", err, queued)
 	}
 }

@@ -556,3 +556,72 @@ func TestAWakerAddedLaterServesItsKind(t *testing.T) {
 		t.Fatalf("after AddWaker: %d calls on the late waker, %d on the other; want 1 and 0", late.count(), r.w.count())
 	}
 }
+
+// Fire rings at once through the scheduler's own reservation; when the loop's attempt holds the row
+// already, it waits for that attempt's end: accepted, fired; and a caller's bound that ends first
+// is not fired. A failing doorbell is not fired, and backs off as the loop's would.
+func TestFireRingsNowOrWaitsForTheLoopsAttempt(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	if fired, err := r.m.Fire(r.ctx, s.Profile); err != nil || !fired || r.w.count() != 1 {
+		t.Fatalf("a due session: fired %v %v, %d calls", fired, err, r.w.count())
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeAwaiting {
+		t.Fatalf("after its fire: %+v, recorded as the loop's would be", w)
+	}
+	r.received(s.Session)
+
+	// the loop's attempt holds the row: Fire waits for its end
+	r.w.block, r.w.inside = make(chan struct{}), make(chan struct{}, 1)
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	r.s.Look(r.ctx)
+	<-r.w.inside
+	result := make(chan bool, 1)
+	go func() {
+		fired, err := r.m.Fire(r.ctx, s.Profile)
+		if err != nil {
+			t.Error(err)
+		}
+		result <- fired
+	}()
+	select {
+	case <-result:
+		t.Fatal("Fire answered before the loop's attempt ended")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(r.w.block)
+	if !<-result || r.w.count() != 2 {
+		t.Fatalf("Fire after the loop's accepted attempt: not fired, or %d calls", r.w.count())
+	}
+	r.s.Wait()
+	r.received(s.Session)
+
+	// a bound that ends while the loop's attempt is still in flight: not fired
+	r.w.block = make(chan struct{})
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	r.s.Look(r.ctx)
+	<-r.w.inside
+	ctx, cancel := context.WithTimeout(r.ctx, 20*time.Millisecond)
+	if fired, err := r.m.Fire(ctx, s.Profile); fired || err != nil {
+		t.Fatalf("a bound that ended first: fired %v %v", fired, err)
+	}
+	cancel()
+	close(r.w.block)
+	r.s.Wait()
+	r.received(s.Session)
+
+	// a failing doorbell: not fired, and backed off
+	r.w.block, r.w.inside, r.w.answer = nil, nil, errors.New("refused")
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	if fired, err := r.m.Fire(r.ctx, s.Profile); fired || err != nil {
+		t.Fatalf("a failing doorbell: fired %v %v", fired, err)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 1 || w.NextAt == nil {
+		t.Fatalf("after the failed fire: %+v, want backed off", w)
+	}
+	// backing off: nothing rings until the backoff ends
+	calls := r.w.count()
+	if fired, _ := r.m.Fire(r.ctx, s.Profile); fired || r.w.count() != calls {
+		t.Fatalf("a fire during the backoff rang (%d calls)", r.w.count())
+	}
+}
