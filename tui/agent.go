@@ -96,6 +96,7 @@ func (a *agents) State() map[string]any {
 		"App.agentName":           "",
 		"App.agentCodename":       "",
 		"App.agentCommand":        "",
+		"App.agentEnv":            "",
 		"App.agentSwitchQuestion": "",
 	}
 	return st
@@ -145,25 +146,26 @@ func (a *agents) defaultProfile() string {
 }
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
-		"App.toggleAgent":          none(a.toggleAgent),
-		"App.stopAllAgents":        none(a.stopAllAgents),
-		"App.openAgentProfiles":    none(a.openAgentProfiles),
-		"App.startAddAgent":        none(a.startAddAgent),
-		"App.startEditAgent":       oneNumber("a row", a.startEditAgent),
-		"App.saveAgent":            twoStrings("a name and a command", a.saveAgent),
-		"App.saveAgentProfile":     threeStrings("a name, command and codename", a.saveAgentProfile),
-		"App.removeAgent":          oneNumber("a row", a.removeAgent),
-		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
-		"App.openAgentSetup":       none(a.openAgentSetup),
-		"App.agentSetupPicked":     numberAndString("a row and the name", a.agentSetupPicked),
-		"App.agentSetupConfirm":    numberAndString("a row and the name", a.agentSetupConfirm),
-		"App.agentSetupDecline":    none(a.agentSetupDecline),
-		"App.useAgent":             oneNumber("a row", a.useAgent),
-		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
-		"App.agentTabsChanged":     none(a.agentTabsChanged),
-		"App.setAgentEdge":         oneNumber("a row", a.setAgentEdge),
-		"App.setAgentSize":         oneNumber("a row", a.setAgentSize),
-		"App.setAgentLength":       oneNumber("a row", a.setAgentLength),
+		"App.toggleAgent":             none(a.toggleAgent),
+		"App.stopAllAgents":           none(a.stopAllAgents),
+		"App.openAgentProfiles":       none(a.openAgentProfiles),
+		"App.startAddAgent":           none(a.startAddAgent),
+		"App.startEditAgent":          oneNumber("a row", a.startEditAgent),
+		"App.saveAgent":               twoStrings("a name and a command", a.saveAgent),
+		"App.saveAgentProfile":        threeStrings("a name, command and codename", a.saveAgentProfile),
+		"App.saveAgentProfileWithEnv": fourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
+		"App.removeAgent":             oneNumber("a row", a.removeAgent),
+		"App.makeAgentDefault":        oneNumber("a row", a.makeAgentDefault),
+		"App.openAgentSetup":          none(a.openAgentSetup),
+		"App.agentSetupPicked":        numberAndString("a row and the name", a.agentSetupPicked),
+		"App.agentSetupConfirm":       numberAndString("a row and the name", a.agentSetupConfirm),
+		"App.agentSetupDecline":       none(a.agentSetupDecline),
+		"App.useAgent":                oneNumber("a row", a.useAgent),
+		"App.switchAgentConfirmed":    none(a.switchAgentConfirmed),
+		"App.agentTabsChanged":        none(a.agentTabsChanged),
+		"App.setAgentEdge":            oneNumber("a row", a.setAgentEdge),
+		"App.setAgentSize":            oneNumber("a row", a.setAgentSize),
+		"App.setAgentLength":          oneNumber("a row", a.setAgentLength),
 	}
 }
 func (a *agents) Panels() []PanelSpec {
@@ -201,6 +203,9 @@ type agentProfile struct {
 	Name     string `json:"name"`
 	Command  string `json:"command"`
 	Codename string `json:"codename,omitempty"`
+	// Env is set on the agent's process over AutoDoc's environment (agentprofileenv.go): plain text
+	// in the preferences, never for secrets.
+	Env map[string]string `json:"env,omitempty"`
 }
 
 // agentProfilesOf reads the profiles preference; one without a name or a command is dropped.
@@ -212,6 +217,7 @@ func agentProfilesOf(s string) []agentProfile {
 	out := all[:0]
 	for _, p := range all {
 		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
+			p.Env = keptProfileEnv(p.Env) // a key written by hand that a profile can't set is dropped
 			out = append(out, p)
 		}
 	}
@@ -490,19 +496,21 @@ func withEnvArg(args []string, kv string) []string {
 	return slices.Concat(args[:i:i], []string{kv}, args[i:])
 }
 
-// agentEnv are the variables the agent codename is started with, in its folder dir: the workspace,
-// its root, the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose
-// first folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
-// store, not the default config's, and is found when no autodoc is installed; and, with the editor
-// socket, where the page is (AUTODOC_EDITOR) and who the agent is there (AUTODOC_AGENT).
-func (h *agents) agentEnv(ws wsInfo, dir, codename string) []string {
+// agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
+// the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
+// folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
+// store, not the default config's, and is found when no autodoc is installed, the rest p's own
+// (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
+// is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
+func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
+	codename := p.Codename
 	env := []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
-		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + p.agentPath(),
 	}
 	// the page in this TUI's editor, for `autodoc --editor`
 	// (docs/decisions/crew.md#the-editor-socket)

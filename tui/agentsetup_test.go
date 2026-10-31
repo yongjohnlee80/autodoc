@@ -168,7 +168,7 @@ func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.agents.saveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
-	if onLoop(r, func() bool { _, ok := r.h.agents.storeAgentProfile("x", "", ""); return ok }) {
+	if onLoop(r, func() bool { _, ok := r.h.agents.storeAgentProfile("x", "", "", ""); return ok }) {
 		t.Fatal("storeAgentProfile saved a profile with no command")
 	}
 }

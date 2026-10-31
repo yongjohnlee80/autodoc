@@ -35,7 +35,9 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(path) != sockDir {
 		t.Fatalf("the socket %s: %v %v", path, fi, err)
 	}
-	env := strings.Join(onLoop(r, func() []string { return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), "zen") }), "\n")
+	env := strings.Join(onLoop(r, func() []string {
+		return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+	}), "\n")
 	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") ||
 		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
 		t.Fatalf("the agent's environment: %s", env)
