@@ -26,7 +26,7 @@ func annModel(dims int) string { return fmt.Sprintf("test|ann-model||%d", dims) 
 
 // annCorpus writes n ready documents for tenant under model, one chunk and one embedding each,
 // clustered round 40 centers (seeded, so a run is repeatable); every 100th document is tagged
-// rare. The tenant's active model is model.
+// rare, and every 10th tenth. The tenant's active model is model.
 func annCorpus(t testing.TB, conn dao.DataConn, tenant, model string, n, dims int, seed float64) {
 	t.Helper()
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func annCorpus(t testing.TB, conn dao.DataConn, tenant, model string, n, dims in
 		{`TRUNCATE ann_centers`, nil},
 		{`INSERT INTO ann_centers SELECT i, ARRAY(SELECT (random() - 0.5)::real FROM generate_series(1, $1) WHERE i >= 0) FROM generate_series(0, 39) i`, []any{dims}},
 		{`INSERT INTO rag_document (tenant, path, tags, semantic_ready)
-		  SELECT $1, 'doc/' || lpad(g::text, 8, '0'), CASE WHEN g % 100 = 0 THEN ARRAY['rare'] ELSE '{}'::text[] END, true
+		  SELECT $1, 'doc/' || lpad(g::text, 8, '0'), CASE WHEN g % 100 = 0 THEN ARRAY['rare', 'tenth'] WHEN g % 10 = 0 THEN ARRAY['tenth'] ELSE '{}'::text[] END, true
 		    FROM generate_series(1, $2) g`, []any{tenant, n}},
 		{`ANALYZE rag_document`, nil},
 		{`INSERT INTO rag_chunk (tenant, doc, ord, body, text_hash)
