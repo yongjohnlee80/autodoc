@@ -450,6 +450,11 @@ func testAMessagesIDWithItsLeaseNamesTheItem(t *testing.T, h Harness) {
 	if again, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); err != nil || again.ID != resp.ID {
 		t.Fatalf("the reply by the message's id again: %+v %v; want the one response", again, err)
 	}
+	// the message's id names the item only with its lease: a retry by it with another lease isn't
+	// handed the response, as a retry by the delivery's own id is
+	if _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Fatalf("a retry by the message's id with another lease: %v, want lease lost", err)
+	}
 	if got := r.receive("s-jarvis"); len(got.Items) != 1 || got.Items[0].Message.ID != resp.ID {
 		t.Fatalf("the requester's receive: %+v; want the one response", got)
 	}
