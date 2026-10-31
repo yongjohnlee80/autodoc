@@ -14,9 +14,9 @@ import (
 )
 
 // TestCrewSetupPrintsTheAgentsSetup: `autodoc --config F crew setup --kind K` prints crew.SetupFor's
-// answer as JSON, AutoDoc's own files in F's data folder; each --env (the profile's) is set over
-// the environment it runs under and read, never printed back; a missing kind, a stray argument or
-// an unknown host is usage (exit 2).
+// answer as JSON, AutoDoc's own files in F's data folder; the profile's environment is the one it
+// runs under, read and never printed back; a missing kind, a stray argument, an unknown host, or
+// an --env (a profile's variable on the command line, which any user can read) is usage (exit 2).
 func TestCrewSetupPrintsTheAgentsSetup(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
@@ -30,8 +30,9 @@ func TestCrewSetupPrintsTheAgentsSetup(t *testing.T) {
 		code := run(t.Context(), append([]string{"--config", cfg}, args...), Options{Version: "v1.2.3"}, &out, &errOut)
 		return code, strings.TrimSpace(out.String()), errOut.String()
 	}
-	code, out, errOut := run1("crew", "setup", "--kind", "opencode", "--env", `OPENCODE_CONFIG_CONTENT={"theme":"x"}`,
-		"--env", "CLAUDE_CONFIG_DIR=/accounts/work/.claude")
+	t.Setenv("OPENCODE_CONFIG_CONTENT", `{"theme":"x"}`)
+	t.Setenv("CLAUDE_CONFIG_DIR", "/accounts/work/.claude")
+	code, out, errOut := run1("crew", "setup", "--kind", "opencode")
 	if code != 0 {
 		t.Fatalf("crew setup --kind opencode: exit %d, %s", code, errOut)
 	}
@@ -47,7 +48,7 @@ func TestCrewSetupPrintsTheAgentsSetup(t *testing.T) {
 		t.Errorf("the profile's environment was printed back: %s", out)
 	}
 	for _, bad := range [][]string{{"crew", "setup"}, {"crew", "setup", "--kind", "claude", "extra"},
-		{"crew", "setup", "--kind", "claude", "--host", "emacs"}, {"crew", "setup", "--kind", "claude", "--env", "NOEQUALS"}} {
+		{"crew", "setup", "--kind", "claude", "--host", "emacs"}, {"crew", "setup", "--kind", "claude", "--env", "CLAUDE_CONFIG_DIR=/x"}} {
 		if code, out, _ := run1(bad...); code != 2 || out != "" {
 			t.Errorf("%v: exit %d, %q; want usage", bad, code, out)
 		}

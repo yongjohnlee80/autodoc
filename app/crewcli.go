@@ -142,13 +142,14 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
-	"crew endpoint": {usage: "--claude | --codex-thread ID | --codex-here [--since T] | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --codex-here: this folder's Codex session, found on Codex's app-server, which AutoDoc runs as a Codex agent starts; --opencode: AutoDoc's OpenCode plugin runs it)",
+	"crew endpoint": {usage: "--claude | --codex-thread ID | --codex-here [--since T] [--wait D] | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --codex-here: this folder's Codex session, found on Codex's app-server, which AutoDoc runs as a Codex agent starts; --opencode: AutoDoc's OpenCode plugin runs it)",
 		example: "autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
 			fs.String("codex-thread", "", "this Codex session's thread ($CODEX_THREAD_ID), on the app-server its TUI is attached to")
 			fs.Bool("codex-here", false, "this folder's Codex session: the newest thread on Codex's app-server whose folder is this one")
 			fs.Int64("since", 0, "with --codex-here: a thread made at or after this Unix time (seconds), not an earlier session's")
+			fs.Duration("wait", 0, "with --codex-here: look again every 2 s until the thread is found or this has passed, then raise the session's attention, blocked")
 			fs.String("opencode", "", "this OpenCode session (AutoDoc's OpenCode plugin runs it, from the session's own opencode)")
 		},
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
@@ -226,14 +227,13 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
-	"crew setup": {usage: "--kind K [--host window|nvim] [--program P] [--autodoc CMD] [--env K=V]…: print a crew agent's setup as JSON (argv to append, env to merge after the profile's, user-level files, prompts, notices) for a host's agent launch; the profile's env is read, never printed back",
+	"crew setup": {usage: "--kind K [--host window|nvim] [--program P] [--autodoc CMD]: print a crew agent's setup as JSON (argv to append, env to merge after the profile's, user-level files, prompts, notices) for a host's agent launch; the agent's env, the profile's included, is the one it runs under (never its command line), read and never printed back",
 		example: "autodoc crew setup --kind claude --host nvim --autodoc /path/to/autodoc",
 		flags: func(fs *flag.FlagSet) {
 			fs.String("kind", "", "the agent's crew kind")
 			fs.String("host", crew.HostNvim, "nvim or window")
 			fs.String("program", "", "the CLI the agent's command runs")
 			fs.String("autodoc", "autodoc", "the command the hooks run AutoDoc with")
-			fs.Var(envFlag{}, "env", "K=V of the profile's environment (repeatable)")
 		}}, // run by crewSetupMain: it needs no session, so it is no call
 	"crew claude-settings": {usage: "[--claude PATH] [--autodoc CMD] [--prompts]: print a crew Claude agent's settings for `claude --settings`, only the hooks the installed Claude Code knows (for a host's agent launch; nothing is written), or with --prompts whether they report its permission prompts, which its crew.register says",
 		example: "autodoc crew claude-settings --claude ~/.local/bin/claude > crew-claude.json",
@@ -499,6 +499,9 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 	}
 	if name == "crew mcp" {
 		return crewMCPMain(ctx, stdin, stdout, stderr)
+	}
+	if name == "crew endpoint" && containsFlag(args[2:], "--wait") {
+		return crewEndpointWaitMain(ctx, configPath, args[2:], stdout, stderr)
 	}
 	if name == "crew setup" {
 		return crewSetupMain(configPath, args[2:], os.Environ(), stdout, stderr)
