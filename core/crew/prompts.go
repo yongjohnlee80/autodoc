@@ -15,7 +15,7 @@ var reportsPrompts = map[string]bool{
 	KindClaude:   false,
 	KindCodex:    false,
 	KindAgy:      false,
-	KindOpenCode: false,
+	KindOpenCode: true, // AutoDoc's plugin: permission.asked raises, the last permission.replied clears
 }
 
 // ReportsPrompts reports whether kind's sessions report their permission prompts: only into one
