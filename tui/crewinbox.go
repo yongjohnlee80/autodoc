@@ -62,7 +62,11 @@ type crewInbox struct {
 	cursor  int64
 	open    map[string]crewOpen // the toasts shown, by toast id
 	reports map[string]bool     // the open reports a passing toast has announced, by message
-	parts   snapshotParts       // a snapshot's pages read so far
+	// waiting is the codenames of this window's scope with a raised attention: an agent showing a
+	// permission or blocked prompt, which the messaging base never presses Enter into
+	// (agentmessaging.go)
+	waiting map[string]bool
+	parts   snapshotParts // a snapshot's pages read so far
 	// requests is the open requests, by message; replying the one the reply dialog is open on, ""
 	// when it is closed; drafts the replies not sent, by request (crewreply.go)
 	requests map[string]crewRequest
@@ -240,12 +244,15 @@ func (x *crewInbox) show(p snapshotParts) {
 		}
 	}
 	x.reports = reports // one read, so out of the set, is never back: forgotten
+	waiting := map[string]bool{}
 	for _, a := range p.attention {
 		session, codename := a.session, a.codename
+		waiting[codename] = true
 		now["crew-attention:"+session] = crewOpen{text: x.waitText(a), rings: a.kind == "permission",
 			click: func() { x.raiseAttention(session, codename) }, done: x.c.Trf("autodoc.crew.no_longer_waits", codename)}
 	}
 	x.requests = requests
+	x.waiting = waiting
 	for id := range x.drafts {
 		if _, open := requests[id]; !open {
 			delete(x.drafts, id) // answered, dismissed or expired: a draft for it can't be sent
@@ -288,3 +295,8 @@ func (x *crewInbox) waitText(a crewAttention) string {
 	}
 	return x.c.Trf("autodoc.crew.waits", a.codename, a.kind, a.text)
 }
+
+// awaitsUser reports whether codename's agent is showing a prompt it raised attention for (a
+// permission or a blocked prompt), as the last snapshot says: an Enter typed into it would answer
+// the prompt, not send a message.
+func (x *crewInbox) awaitsUser(codename string) bool { return x != nil && x.waiting[codename] }

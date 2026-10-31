@@ -3977,10 +3977,6 @@ WHAT A KEY NEEDS
         <source>%1 is tiled: Layout › Float lets it be arranged</source>
         <translation>%1 is tiled: Layout › Float lets it be arranged</translation>
     </message>
-    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
-        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
-        <translation>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</translation>
-    </message>
     <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
         <source>its program takes no bracketed paste</source>
         <translation>its program takes no bracketed paste</translation>
@@ -5368,10 +5364,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos.todos_the_store_is_now_in">
         <source>todos: the store is now in %1</source>
         <translation>todos: the store is now in %1</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
-        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
-        <translation>todos: assigned to %1, and typed into its input: press Enter there to send it</translation>
     </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
@@ -7764,6 +7756,30 @@ H J K L, Shift+arrows   resize it</translation>
     <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>A setup that was still running changed the workspaces: Check again before Use.</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_but_not_sent">
+        <source>%1: the message was typed, but its Enter wasn't sent: %2</source>
+        <translation>%1: the message was typed, but its Enter wasn't sent: %2</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.no_doorbell_reaches_it">
+        <source>no doorbell reaches it</source>
+        <translation>no doorbell reaches it</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
+        <source>%1's doorbell didn't ring (%2): the message was typed into its input and sent</source>
+        <translation>%1's doorbell didn't ring (%2): the message was typed into its input and sent</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
+        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
+        <translation>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>todos: assigned to %1, and sent to it</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
+        <source>audit of %1 sent to %2; click to install or cancel</source>
+        <translation>audit of %1 sent to %2; click to install or cancel</translation>
     </message>
 </context>
 </TS>

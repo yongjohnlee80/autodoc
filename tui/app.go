@@ -499,6 +499,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
 	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
+	h.agents.inbox = h.crewInbox
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing

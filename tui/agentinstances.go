@@ -632,48 +632,26 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 	}
 }
 
-// HandTask accepts a task for one exact agent incarnation. An immediate error
-// rejects it without calling done; accepted calls return nil and complete done
+// HandTask hands a task to one exact agent incarnation, as a request through the window's agent
+// messaging (agentmessaging.go): rung through the crew when the agent's CLI has a doorbell, else
+// typed and sent. An immediate error rejects it without calling done; accepted calls complete done
 // once on the UI loop, including cancellation and orderly owner shutdown.
-// The task goes as one bracketed paste, or not at all: a program that takes none
-// gets nothing, and done hears widget.ErrTerminalPasteUnbracketed. No Enter
-// follows (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent): the task waits in the
-// agent's input, its panel brought forward ready to type, and the user's Enter sends it. Success
-// means the task typed, not submitted.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
-	check := func() error {
-		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
-			return ErrAgentTask
-		}
-		return nil
+	if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
+		return ErrAgentTask
 	}
-	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s", task.Title, task.Path, task.ID, instruction)
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_task"), deliverOpts{present: true}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendBracketedPaste(tab, payload)
-	}, done)
+	return a.messenger().send(to, taskMessage(task, instruction), done)
 }
 
-// SendText accepts text for one agent incarnation, as HandTask accepts a task, through the same
-// delivery: the same refusals, the same consent to start a stopped agent, the same checks before
-// anything is sent. The text goes as one bracketed paste, whole, waiting at the prompt for Enter;
-// to a program that takes none nothing is sent, and done hears widget.ErrTerminalPasteUnbracketed
-// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste). No Enter is added
-// after it. Success means typed delivery.
+// SendText sends text to one agent incarnation as a plain message through the window's agent
+// messaging, as HandTask sends a task: the same refusals, the same consent to start a stopped agent.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
-	check := func() error {
-		if text == "" || len(text) > widget.TerminalInputLimit {
-			return ErrAgentText
-		}
-		return nil
-	}
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), deliverOpts{}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendBracketedPaste(tab, text)
-	}, done)
+	return a.messenger().send(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
 }
 
-// present brings instance forward for the user's Enter
-// (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent): the agents panel open, its
-// tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is
+// present brings instance forward for a task typed into it, so the user sees it start
+// (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter): the agents panel
+// open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is
 // kept, never the delivery's error.
 func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
 	a.c.OpenDrawer("agent")
@@ -708,7 +686,7 @@ func (a *agents) Resume(to AgentRef) error {
 
 // deliverOpts are a delivery's choices.
 type deliverOpts struct {
-	present bool // once sent, the agent's panel is brought forward for the user's Enter (present)
+	present bool // once sent, the agent's panel is brought forward, so the user sees it start (present)
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal
