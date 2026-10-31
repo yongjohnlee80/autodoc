@@ -119,7 +119,10 @@ type crewWindow struct {
 	// inboxSend, when set, answers inbox.send (the user's doorbell) instead of the daemon: the
 	// messaging cells choose whether it fired (agentmessaging_test.go)
 	inboxSend func(p []any) (any, error)
-	card      *asker // the question card, made at the first question
+	// crewList, when set, answers crew.list instead of the daemon: the messaging cells choose what
+	// it says of a session's prompts
+	crewList func() (any, error)
+	card     *asker // the question card, made at the first question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -133,6 +136,9 @@ func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, erro
 	}
 	if verb == "inbox.send" && w.inboxSend != nil {
 		return w.inboxSend(p)
+	}
+	if verb == "crew.list" && w.crewList != nil {
+		return w.crewList()
 	}
 	v, err := w.d.call(ctx, verb, p...)
 	if err == nil && w.lost[verb] > 0 {
