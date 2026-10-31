@@ -44,7 +44,7 @@ func (h *crewHost) userSend(codename, kind, subject, body string, then func(erro
 	var ask func(left int)
 	ask = func(left int) {
 		h.c.Go(func(ctx context.Context) any {
-			_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []string{codename}, body, key, kind, subject, true)
+			_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []any{codename}, body, key, kind, subject, true) // a list as []any: golib's msgpack encodes no []string
 			return err
 		}, func(v any) {
 			err, _ := v.(error)
