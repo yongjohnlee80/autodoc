@@ -88,13 +88,14 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 	if m.Kind == MessageRequest {
 		what = a.c.Tr("autodoc.text.agentinstances.this_task")
 	}
-	o := deliverOpts{present: m.Kind == MessageRequest, submit: a.submitter(to)}
+	var refused error // the doorbell's certain refusal, told once the base has typed the message
+	o := deliverOpts{present: m.Kind == MessageRequest, submit: a.submitter(to, func() error { return refused })}
 	if a.crew != nil {
 		var bell agentDoorbell = crewDoorbell{crew: a.crew}
 		o.ring = func(answer func(rang bool, err error)) {
 			bell.ring(to, m, func(rang bool, err error) {
 				if !rang && errors.Is(err, errDoorbellNotSent) {
-					a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, err.Error()))
+					refused = err
 				}
 				answer(rang, err)
 			})
@@ -105,14 +106,23 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 	}, done)
 }
 
-// submitter is the base's Enter decision for to, after its paste: submitDelay later, the crew is
-// asked whether to's prompts are reported (crewHost.promptsReported), and Enter is pressed only
-// into an agent whose prompts are and that shows none; otherwise the message stays typed, a notice
-// says why, and the delivery finishes ErrAgentTypedNotSent.
-func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID, func(error)) {
-	return func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error)) {
+// submitter is the base's Enter decision for to, after its paste: a doorbell's refusal (refused) is
+// told now that the message is typed; submitDelay later, the crew is asked whether to's prompts are
+// reported (crewHost.promptsReported), and Enter is pressed only while the delivery still holds
+// (still: not finished, the same workspace, instance and tab) into an agent whose prompts are
+// reported and that shows none; otherwise the message stays typed, a notice says why, and the
+// delivery finishes ErrAgentTypedNotSent (or stale, pressing nothing).
+func (a *agents) submitter(to AgentRef, refused func() error) func(TerminalPanel, widget.TerminalTabID, func() error, func(error)) {
+	return func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error)) {
+		if err := refused(); err != nil { // typed now: the doorbell's refusal is told with it
+			a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, err.Error()))
+		}
 		kind := a.kindOf(to.Codename)
 		decide := func(reported bool) {
+			if err := still(); err != nil { // the wait let it go stale: shut down, switched, restarted
+				finish(err)
+				return
+			}
 			if !a.promptsSeen(kind, reported) {
 				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting", to.Codename))
 				finish(ErrAgentTypedNotSent)

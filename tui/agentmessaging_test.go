@@ -272,3 +272,30 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 		t.Fatalf("one, of no reporting kind: %v", said)
 	}
 }
+
+// The Enter waits (submitDelay, then the crew's answer), and the delivery may go stale meanwhile: a
+// shutdown, or the agent closing. Nothing is pressed then, and done hears it once (the mutant: the
+// Enter not checked again).
+func TestNoEnterIsPressedIntoADeliveryThatWentStale(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		stale func(a *agents)
+	}{
+		{"shut down", func(a *agents) { a.Stopping() }},
+		{"the agent closing", func(a *agents) { a.instances["one"].closing = true }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, cw, w := messagingRig(t)
+			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
+			w.crewList = func() (any, error) { c.stale(a); return []any{}, nil } // stale while the crew answers
+			var heard []error
+			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+				t.Fatal(err)
+			}
+			settleMessaging(cw, w)
+			if len(cw.panel.pastes) != 1 || len(cw.panel.keys) != 0 || len(heard) != 1 || heard[0] == nil {
+				t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter, one stale answer", cw.panel.pastes, cw.panel.keys, heard)
+			}
+		})
+	}
+}
