@@ -132,7 +132,7 @@ func TestANoticeQueuedBeforeAStopPostsNothing(t *testing.T) {
 func TestLuaNotices(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	run := func(src string) error {
 		return onLoop(r, func() error { return r.h.scripts.L.DoString(src) })
 	}

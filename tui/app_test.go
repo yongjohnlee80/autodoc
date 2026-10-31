@@ -365,7 +365,7 @@ func attached(t *testing.T, d *daemon) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
-	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.waitWithin(t, "the notes listed", daemonWait, func() bool { return len(r.listed()) > 0 })
 	return r
 }
 
@@ -374,8 +374,23 @@ func attached(t *testing.T, d *daemon) *running {
 // pressed in between can open a menu on a bar the store's preferences then hide.
 func (r *running) connected(t *testing.T) {
 	t.Helper()
-	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.waitConnected(t)
 	r.prefsIn(t)
+}
+
+// waitConnected waits for the connection's toast: a dial and the hello, the daemon's work, so on
+// daemonWait, never a frame's clock (decltest's WaitTimeout), which a loaded machine under -race
+// outruns.
+func (r *running) waitConnected(t *testing.T) {
+	t.Helper()
+	r.waitWithin(t, "the connection's toast", daemonWait, func() bool { return strings.Contains(r.s.String(), "connected — autodoc v-test") })
+}
+
+// waitAttached waits for the status line to name workspace ws: the connection and its listing, the
+// daemon's work, so on daemonWait (waitConnected).
+func (r *running) waitAttached(t *testing.T, ws string) {
+	t.Helper()
+	r.waitWithin(t, "the status line's · "+ws, daemonWait, func() bool { return strings.Contains(r.s.String(), "· "+ws) })
 }
 
 // prefsIn waits for the store's preferences to be read and applied (loadPrefs). A cell that sets
@@ -383,7 +398,7 @@ func (r *running) connected(t *testing.T) {
 // setting.
 func (r *running) prefsIn(t *testing.T) {
 	t.Helper()
-	r.s.WaitFor(t, "the store's preferences in", func(string) bool { return onLoop(r, func() bool { return r.h.luaPrefsRead }) })
+	r.waitWithin(t, "the store's preferences in", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.luaPrefsRead }) })
 }
 
 // listed is the workspace's files, as the pickers filter them.
@@ -394,7 +409,7 @@ func (r *running) listed() []string {
 // waitListed waits for the workspace's files to be the n listed.
 func (r *running) waitListed(t *testing.T, n int) {
 	t.Helper()
-	r.s.WaitFor(t, fmt.Sprintf("%d notes listed", n), func(string) bool { return len(r.listed()) == n })
+	r.waitWithin(t, fmt.Sprintf("%d notes listed", n), daemonWait, func() bool { return len(r.listed()) == n })
 }
 
 // leader is SPC then k, from the page in Normal mode.
@@ -743,12 +758,12 @@ func TestWorkspaces(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.waitListed(t, 1)
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "beta")
 	r.keys(t, key('j'), enter())
-	r.s.WaitForText(t, "· beta")
+	r.waitAttached(t, "beta")
 	// beta's files not come yet: the pickers have none, not alpha's
 	if got := r.listed(); len(got) != 0 {
 		t.Fatalf("in beta, before its notes came, the pickers had %v", got)
@@ -916,7 +931,7 @@ func TestReconnects(t *testing.T) {
 		return strings.Contains(sc, "reconnecting") || strings.Contains(sc, "connecting to")
 	})
 	startDaemonOn(t, d1.sock, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
-	r.s.WaitForText(t, "connected — autodoc")
+	r.waitWithin(t, "the reconnection's toast", daemonWait, func() bool { return strings.Contains(r.s.String(), "connected — autodoc") })
 	r.waitListed(t, 2)
 }
 
@@ -1089,11 +1104,11 @@ func TestOnePollAfterSwitches(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	time.Sleep(1500 * time.Millisecond) // a poll's timer is pending now
 	for _, ws := range []string{"beta", "alpha"} {
 		r.h.p.Post(func() { r.h.enter(ws) })
-		r.s.WaitForText(t, "· "+ws)
+		r.waitAttached(t, ws)
 		time.Sleep(300 * time.Millisecond)
 	}
 	polls.Store(0)

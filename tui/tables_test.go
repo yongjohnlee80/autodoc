@@ -18,7 +18,7 @@ var tableInclude = []string{"**/*.md", "**/*.csv", "**/*.tsv"}
 func TestACSVFileIsATableInTheTerminal(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n", "b.tsv", "h\tv\nx\t1\n", "c.md", "# Note\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	ed := func() *widget.Editor {
 		return onLoop(r, func() *widget.Editor { e, _ := r.h.editor.(*widget.Editor); return e })
 	}
@@ -125,7 +125,7 @@ func TestThePageViewIsKeptWhileATableIsShown(t *testing.T) {
 func TestTheTableYanksAndPastesInTheTerminal(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n", "c.md", "# Note\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
 	r.waitFile(t, "a.csv")
 	table := func() *widget.TableDocument {

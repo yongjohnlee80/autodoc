@@ -374,7 +374,7 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 	}
 	d := startManaged(t, map[string]string{"kb": kb})
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.waitListed(t, 4) // schema.yaml is listed too: the default patterns admit **/*.yaml
 	if _, err := (core{r.h}).Call(context.Background(), "workspace.set_schema", "kb", "schema.yaml"); err != nil {
 		t.Fatal(err)

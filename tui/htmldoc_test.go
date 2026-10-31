@@ -24,7 +24,7 @@ func runHTML(t *testing.T) (*running, string) {
 	kb := fileDir(t, "a.md", "# A\n")
 	d := startManagedWith(t, map[string]string{"kb": kb}, serving.Options{Registrations: reg})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	return r, kb
 }
 

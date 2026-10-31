@@ -62,7 +62,7 @@ func TestTheRegistryHandsThePageInOrder(t *testing.T) {
 func TestOnePauseIsOneSnapshotForEveryWatcher(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	one, two := &watching{fake: fake{name: "one"}}, &watching{fake: fake{name: "two"}}
 	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, one, two); return true })
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
@@ -99,7 +99,7 @@ func TestOnePauseIsOneSnapshotForEveryWatcher(t *testing.T) {
 func TestTheFrontmatterCheckWaitsFromTheLastKeystroke(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
 	r.waitFile(t, "guide.md")
 	got := onLoop(r, func() []time.Duration {
@@ -120,7 +120,7 @@ func TestTheFrontmatterCheckWaitsFromTheLastKeystroke(t *testing.T) {
 func TestCoreSetPrefFilesAndListings(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if wrap := onLoop(r, func() bool { core{r.h}.SetPref(prefWrap, "false"); return core{r.h}.Prefs().wrap }); wrap {
 		t.Error("SetPref did not reach the live prefs")
 	}
@@ -151,7 +151,7 @@ func TestCoreSetPrefFilesAndListings(t *testing.T) {
 func TestTheNoticesHistoryKeepsAndClears(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	onLoop(r, func() bool { r.h.notify("kestrel landed"); r.h.noticeLog.open(); return true })
 	r.s.WaitForText(t, "kestrel landed")
 	if n := onLoop(r, func() int { return r.h.noticeLog.rows.Len() }); n == 0 {
@@ -168,7 +168,7 @@ func TestTheNoticesHistoryKeepsAndClears(t *testing.T) {
 func TestSetPrefGoesThroughTheRowAlone(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	changed, stated := 0, ""
 	row := ValuePref("test.feature.mode", "a", nil)
 	row.State = func(p prefs) map[string]any { stated = p.Value("test.feature.mode"); return map[string]any{} }
@@ -205,7 +205,7 @@ func TestAKeystrokeAfterThePauseDropsItsCheck(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
 	r.waitFile(t, "guide.md")
 	r.h.p.Post(func() {
@@ -235,7 +235,7 @@ func TestAKeystrokeAfterThePauseDropsItsCheck(t *testing.T) {
 func TestShowingAPageDropsThePendingPause(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	w := &watching{fake: fake{name: "w"}}
 	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, w); return true })
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
@@ -258,7 +258,7 @@ func TestShowingAPageDropsThePendingPause(t *testing.T) {
 func TestAPagesKindFollowsRawAndDerived(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	got := onLoop(r, func() [3]kind.Kind {
 		saved := *r.h.file
 		defer func() { *r.h.file = saved }()

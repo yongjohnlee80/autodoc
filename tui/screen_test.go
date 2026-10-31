@@ -321,7 +321,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 		"beta":  {"c.md", "# C\n"},
 	})
 	r := attached(t, d)
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the workspaces", func(sc string) bool { return strings.Contains(sc, "alpha") && strings.Contains(sc, "beta") })
 	if !r.focused("explorerTree") {
@@ -344,7 +344,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 	r.keys(t, key('G'), enter()) // beta, the last row
 	r.s.WaitForText(t, "c.md")
 	r.keys(t, key('j'), enter())
-	r.s.WaitForText(t, "· beta")
+	r.waitAttached(t, "beta")
 	r.waitFile(t, "c.md")
 }
 
@@ -619,7 +619,7 @@ func TestAModelChangeClearsTheSearch(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)
@@ -649,7 +649,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
@@ -682,7 +682,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
@@ -715,7 +715,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
@@ -748,7 +748,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 		}
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "first"); err != nil {
 		t.Fatal(err)
 	}
@@ -775,7 +775,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() {
 		r.h.showProgress(1, 0, embedProgress{on: true, model: "old", target: "new", semantic: "switching", texts: 2, targetPending: 1}, 1)
 		r.h.showProgress(1, 0, embedProgress{}, 1)
@@ -788,7 +788,7 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	updated := func() {
 		r.h.showProgress(1, 0, embedProgress{on: true, model: "ollama|embedder|sha256:a|4", target: "ollama|embedder|sha256:b|4",
 			semantic: "switching", texts: 2, targetPending: 1}, 1)
@@ -809,7 +809,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 		"bravo": fileDir(t, "b.md", "# B\n\nriver mud\n"),
 	})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
@@ -823,7 +823,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
@@ -2249,7 +2249,7 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() {
 		r.h.searchWaitToast = true // as a search that met texts still embedding leaves it
 		// the state last polled, its model unchanged (a changed one clears the search first), with

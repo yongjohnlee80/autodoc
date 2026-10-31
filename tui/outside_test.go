@@ -44,7 +44,7 @@ func runOutside(t *testing.T) (r *running, kb, notes, abs string) {
 	abs = filepath.Join(fileDir(t, "notes.md", "# Notes\n"), "notes.md")
 	d := startManaged(t, map[string]string{"kb": kb, "notes": notes})
 	r = runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	return r, kb, notes, abs
 }
 
@@ -313,7 +313,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	}
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.exclude = ".git/**; drafts/**" })
 	r.waitNoticed(t, "kb: saved")

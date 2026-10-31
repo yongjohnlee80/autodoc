@@ -188,7 +188,7 @@ func (r *running) addWorkspace(t *testing.T, title, root string) {
 func TestWorkspaceManager(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.waitListed(t, 1)
 
 	r.keys(t, decltest.Ctrl('w'))
@@ -253,7 +253,7 @@ func TestOpensTheNamedWorkspace(t *testing.T) {
 		entered = append(entered, n)
 		mu.Unlock()
 	}})
-	r.s.WaitForText(t, "· beta")
+	r.waitAttached(t, "beta")
 	r.waitListed(t, 2)
 	mu.Lock()
 	defer mu.Unlock()
@@ -265,7 +265,7 @@ func TestOpensTheNamedWorkspace(t *testing.T) {
 func TestWorkspacePickerStartsAtTheCurrentWorkspace(t *testing.T) {
 	d := startManaged(t, map[string]string{"alpha": fileDir(t, "a.md", "alpha\n"), "beta": fileDir(t, "b.md", "beta\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
-	r.s.WaitForText(t, "· beta")
+	r.waitAttached(t, "beta")
 	r.h.p.Post(r.h.pickWorkspace)
 	r.s.WaitForText(t, "workspace")
 	r.keys(t, enter())

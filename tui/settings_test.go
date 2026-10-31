@@ -202,7 +202,7 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 	}
 	d := startManagedWith(t, map[string]string{"kb": root}, serving.Options{Databases: true})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 1)
 	r.s.WaitForText(t, "source database") // the edition offers the databases
 	// Filled on the loop before the keys: they come by the terminal's queue, a Post by another.
@@ -268,7 +268,7 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 	root := fileDir(t, "n.md", "# Notes\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 1)
 	r.saveForm(func(f *settingsForm) { f.name, f.section = "renamed", "9999" })
 	r.s.WaitForText(t, "not saved: section size must be 128–2048")
@@ -296,7 +296,7 @@ func TestTheSettingsSchema(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": root})
 	writeSchema(t, root)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 0)
 	r.s.WaitForText(t, "no schema: files are not checked")
 	r.s.WaitForText(t, suggestedSchema)
@@ -326,7 +326,7 @@ func TestTheSettingsSchema(t *testing.T) {
 func TestTheSettingsTextTypes(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.texts = "log" })
 	r.waitNoticed(t, "kb: saved")
@@ -360,7 +360,7 @@ func TestTheSettingsProvider(t *testing.T) {
 		}
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 1)
 	r.s.WaitForText(t, "uses the daemon's provider")
 	providers := onLoop(r, func() []string { return r.h.settings.providers })
@@ -393,7 +393,7 @@ func TestTheSettingsReopenedAtOnceShowTheSave(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 1)
 	holding.Store(true) // from here every listing waits: the save's relisting cannot land first
 	r.saveForm(func(f *settingsForm) { f.policy = 2 })
@@ -421,7 +421,7 @@ func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, rele
 		}
 	})
 	r = runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.manageWorkspaces() })
 	r.s.WaitForText(t, "Advanced…")
 	return r, func() { armed.Store(true) }, func() bool { return n.Load() >= 1 }, func() { close(ch) }
@@ -481,7 +481,7 @@ func TestALateSettingsOpenNeverOpensAfterTheManagerCloses(t *testing.T) {
 func TestFileTypesOpenTheEditTab(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openActiveSettings)
 	r.s.WaitFor(t, "the Edit tab", func(sc string) bool {
 		return strings.Contains(sc, "workspace settings · kb") && strings.Contains(sc, "Markdown (.md)") &&
@@ -495,7 +495,7 @@ func TestFileTypesOpenTheEditTab(t *testing.T) {
 func TestTheManagerShowsTheSettingsBesideTheList(t *testing.T) {
 	d := startManaged(t, map[string]string{"alpha": fileDir(t, "a.md", "a\n"), "beta": fileDir(t, "b.md", "b\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.h.p.Post(r.h.manageWorkspaces)
 	r.s.WaitForText(t, "DIRECTORY")
 	r.s.WaitForText(t, "alpha · ready")
@@ -509,7 +509,7 @@ func TestTheManagerShowsTheSettingsBesideTheList(t *testing.T) {
 func TestTheSettingsOpenOnTheTabAskedForAfterACancel(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 1)
 	r.s.WaitForText(t, "section size (128–2048")
 	r.keys(t, esc())
@@ -557,7 +557,7 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.manageWorkspaces)
 	r.s.WaitForText(t, "Advanced…")
 	r.openSettings(t, "kb", 0)
@@ -581,7 +581,7 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.s.WaitFor(t, "the page shown and the language applied", func(string) bool {
 		return onLoop(r, func() bool { return r.h.reg.pageShown && r.h.language != "" })
 	})
@@ -593,7 +593,7 @@ func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 func TestFindPreviousWithNothingToFind(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() {
 		if err := r.h.commands()["App.findAgainPrevious"].Run(nil); err != nil {
 			t.Error(err)
@@ -606,7 +606,7 @@ func TestFindPreviousWithNothingToFind(t *testing.T) {
 func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	before := onLoop(r, func() previewing { return r.h.imagePreview })
 	r.h.p.Post(func() {
 		for _, c := range []string{"App.zoomIn", "App.zoomOut"} {
@@ -691,7 +691,7 @@ func TestTheSettingsDocumentTypes(t *testing.T) {
 func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 60) // the stacked Edit tab whole
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	before := storedOnly(t, d).Exclude
 	r.openSettings(t, "kb", 0)
 	onLoop(r, func() bool {
