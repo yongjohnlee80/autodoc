@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/golib/logger"
 )
 
 // mcpClient is a client of `autodoc crew mcp` run as the session whose context path names: it
@@ -238,6 +240,9 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 // and again for mail that comes after a receive.
 func TestTheCrewMCPServerSaysWhenMailWaits(t *testing.T) {
 	d := newCrewDaemon(t)
+	// the daemon's scheduler, as serve makes it: its Watch is what ends mail.wait when mail arrives
+	_, stopScheduler := startScheduler(d.ctx, d.deps.crew, nil, logger.Nop{})
+	t.Cleanup(stopScheduler)
 	t.Chdir(t.TempDir())
 	gold, jarvis := d.agent("gold", "agent-1", "store-1"), d.agent("jarvis", "agent-2", "store-1")
 	j := d.mcp(jarvis)
