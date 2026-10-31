@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -19,8 +18,10 @@ import (
 // session's endpoint, crossSessionInbound "accept", and the hooks that report its permission
 // prompts when that Claude Code knows them; only the events it knows. --prompts prints instead
 // whether those hooks are there (true or false), which the session's crew.register says. It needs
-// no session: a host runs it before one starts.
-func crewClaudeSettingsMain(args []string, stdout, stderr io.Writer) int {
+// no session: a host runs it before one starts. What it learns of a binary is kept in the data
+// folder of the config at configPath ("" for the default config); with no config to read, it is
+// kept nowhere.
+func crewClaudeSettingsMain(configPath string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("autodoc crew claude-settings", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	claude := fs.String("claude", "claude", "the Claude Code to write them for: a path, or a name looked up on PATH")
@@ -39,8 +40,8 @@ func crewClaudeSettingsMain(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	cache := "" // what a binary knows is kept beside the store, so a host's next run costs a stat
-	if store, err := (config.Server{}).StorePath(); err == nil {
-		cache = filepath.Join(filepath.Dir(store), "claude-hooks.json")
+	if data, err := crewDataDir(configPath); err == nil {
+		cache = filepath.Join(data, "claude-hooks.json")
 	}
 	_, k, err := crew.ClaudeOf(*claude, os.Getenv("PATH"), cwd, cache)
 	if err != nil {

@@ -394,22 +394,25 @@ func isCrewCommand(args []string) bool {
 
 // crewCommandArgs is args as crewMain takes them, when they are an agent's `autodoc crew|mail …`:
 // as typed, or after a leading --config, the way an agent's bin/autodoc runs this build
-// (`autodoc --config <file> "$@"`, tui/agent.go's agentWrapper). The config itself is not read:
-// the session's context names the daemon. ok false is any other command line.
-func crewCommandArgs(args []string) (rest []string, ok bool) {
+// (`autodoc --config <file> "$@"`, tui/agent.go's agentWrapper), and that config's path ("" when
+// none is given). The session's context names the daemon: the config is read only by the commands
+// that keep a file in its data folder (crew plugin, crew claude-settings). ok false is any other
+// command line.
+func crewCommandArgs(args []string) (rest []string, configPath string, ok bool) {
 	switch {
 	case len(args) > 0 && (args[0] == "--config" || args[0] == "-config"):
 		if len(args) < 2 {
-			return nil, false
+			return nil, "", false
 		}
-		args = args[2:]
+		configPath, args = args[1], args[2:]
 	case len(args) > 0 && (strings.HasPrefix(args[0], "--config=") || strings.HasPrefix(args[0], "-config=")):
+		_, configPath, _ = strings.Cut(args[0], "=")
 		args = args[1:]
 	}
 	if !isCrewCommand(args) {
-		return nil, false
+		return nil, "", false
 	}
-	return args, true
+	return args, configPath, true
 }
 
 // isHelp is a request for help in place of a command.
@@ -426,10 +429,15 @@ func crewHelp(w io.Writer, domain string) {
 	}
 }
 
-// crewMain runs `autodoc crew|mail <verb> …` and is its exit code: 0 with the answer on stdout; 1
-// with the daemon's refusal as {"error": {code, message}} on stderr, or any other failure as text;
-// 2 for usage.
+// crewMain is crewMainIn under the default config.
 func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return crewMainIn(ctx, "", args, stdin, stdout, stderr)
+}
+
+// crewMainIn runs `autodoc crew|mail <verb> …` and is its exit code: 0 with the answer on stdout; 1
+// with the daemon's refusal as {"error": {code, message}} on stderr, or any other failure as text;
+// 2 for usage. configPath is the --config it was given ("" for the default config).
+func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	usage := func() int {
 		fmt.Fprintln(stderr, "usage: autodoc crew|mail <command> …")
 		for _, name := range slices.Sorted(maps.Keys(crewCommands)) {
@@ -459,10 +467,10 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 		return usage()
 	}
 	if name == "crew plugin" {
-		return crewPluginMain(args[2:], os.Getenv, stdout, stderr)
+		return crewPluginMain(configPath, args[2:], os.Getenv, stdout, stderr)
 	}
 	if name == "crew claude-settings" {
-		return crewClaudeSettingsMain(args[2:], stdout, stderr)
+		return crewClaudeSettingsMain(configPath, args[2:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
