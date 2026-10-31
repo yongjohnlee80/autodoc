@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -367,30 +368,22 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		}
 	}
 	proc, err := a.spawn(c)
-	if err == nil && instance.crewed && agentKind(instance.profile.Command) == "codex" {
-		a.registerCodex(instance.context, c.Dir, instance.profile.environ(os.Environ()), time.Now())
+	if err == nil && instance.crewed {
+		environ := instance.profile.environ(os.Environ())
+		a.runAfterSteps(agentKind(instance.profile.Command), instance.context, c.Dir, environ, time.Now())
 	}
 	return proc, err
 }
 
-// codexRegisterWait and codexRegisterEvery bound the window's registration of a Codex agent: looks
-// 2 s apart, as many as a minute holds, none started a minute or more after its spawn.
-// NOTE: can't announce: Codex starts its thread on its app-server without telling anyone, so the
-// window looks again on a timer (the loop's After) until it is found, the session ends, or the
-// minute is up.
-const (
-	codexRegisterWait  = time.Minute
-	codexRegisterEvery = 2 * time.Second
-)
-
-// registerCodex registers a crew Codex agent's session, started at started in folder dir under
-// the session context file ctxFile with environ (runAgentAutodoc), so it is reachable before anyone types: its own autodoc's
-// `crew endpoint --codex-here`, which finds the folder's thread on Codex's app-server, run off the
-// loop and again until it is found. A session that ended (its context gone) stops it; one never
-// found raises the session's attention, saying why, so the window shows it.
-func (a *agents) registerCodex(ctxFile, dir string, environ []string, started time.Time) {
-	c, ok := a.c.(agentRuntimeHost)
-	if !ok {
+// runAfterSteps runs a crew agent's After steps (crew.SetupFor: a Codex agent's registration of
+// the folder's thread on its app-server), once its process has started at started in folder dir
+// under the session context file ctxFile with environ: each one its own autodoc's command
+// (runAgentAutodoc), detached and off the loop, crew.SetupSince given as the start's Unix seconds.
+// What a step must wait for, it waits for itself (`crew endpoint --codex-here --wait`), raising the
+// session's attention when it can't, so the window shows it.
+func (a *agents) runAfterSteps(kind, ctxFile, dir string, environ []string, started time.Time) {
+	s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow}, "")
+	if err != nil || len(s.After) == 0 {
 		return
 	}
 	run := a.codexHere
@@ -399,25 +392,13 @@ func (a *agents) registerCodex(ctxFile, dir string, environ []string, started ti
 		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, environ, args...) }
 	}
 	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
-	var attempt func(tries int)
-	attempt = func(tries int) {
-		go func() {
-			err := run("crew", "endpoint", "--codex-here", "--since", since)
-			_, gone := os.Stat(ctxFile) // here, never on the loop
-			c.Post(func() {
-				switch {
-				case err == nil, gone != nil: // found, or the session ended: nothing more to register
-				case tries > 1 && time.Since(started)+codexRegisterEvery < codexRegisterWait: // looks slow to answer count too
-					c.After(codexRegisterEvery, func() { attempt(tries - 1) })
-				default:
-					go func() {
-						_ = run("crew", "attention", "raise", "blocked", "AutoDoc can't wake this Codex session: "+attentionText(err.Error()))
-					}()
-				}
-			})
-		}()
+	for _, step := range s.After {
+		args := slices.Clone(step)
+		for i, arg := range args {
+			args[i] = strings.ReplaceAll(arg, crew.SetupSince, since)
+		}
+		go func() { _ = run(args...) }()
 	}
-	attempt(int(codexRegisterWait / codexRegisterEvery))
 }
 
 // runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
@@ -438,15 +419,6 @@ func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ..
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-// attentionText is a reason as the attention's text: one line (oneLine), at most 300 bytes.
-func attentionText(s string) string {
-	s = strings.TrimSpace(oneLine(s))
-	if len(s) > 300 {
-		s = s[:300]
-	}
-	return s
 }
 
 // opencodeTimeout bounds the plugin's setup: one run of the agent's own autodoc, which writes a
@@ -517,9 +489,10 @@ func (a *agents) opencodePluginEnv() (string, error) {
 }
 
 // opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
-// any the TUI was started with: what the agent's own autodoc (bin, on config) prints (`autodoc crew
-// plugin --opencode --print-env`), so the plugin is the build's that the agent runs, the one it
-// calls back into to register. A cell replaces it (agents.pluginEnv).
+// any the TUI was started with: the agent's setup (crew.SetupFor) as the agent's own autodoc (bin,
+// on config) answers it (`autodoc crew setup --kind opencode --host window`), so the plugin is the
+// build's that the agent runs, the one it calls back into to register. A cell replaces it
+// (agents.pluginEnv).
 func opencodeEnv(bin, config string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opencodeTimeout)
 	defer cancel()
@@ -527,16 +500,20 @@ func opencodeEnv(bin, config string) (string, error) {
 	if config != "" {
 		args = append(args, "--config", config)
 	}
-	args = append(args, "crew", "plugin", "--opencode", "--print-env")
+	args = append(args, "crew", "setup", "--kind", crew.KindOpenCode, "--host", crew.HostWindow)
 	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
 		return "", err
 	}
-	line := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(line, "OPENCODE_CONFIG_CONTENT=") || strings.Contains(line, "\n") {
-		return "", fmt.Errorf("unexpected output from crew plugin --print-env: %q", line)
+	var setup crew.Setup
+	if err := json.Unmarshal(out, &setup); err != nil {
+		return "", fmt.Errorf("unexpected output from crew setup: %q", strings.TrimSpace(string(out)))
 	}
-	return line, nil
+	v := setup.Env["OPENCODE_CONFIG_CONTENT"]
+	if v == "" || strings.Contains(v, "\n") {
+		return "", fmt.Errorf("crew setup gave no OPENCODE_CONFIG_CONTENT: %q", strings.TrimSpace(string(out)))
+	}
+	return "OPENCODE_CONFIG_CONTENT=" + v, nil
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.

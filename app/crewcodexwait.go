@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 )
@@ -18,8 +19,9 @@ const codexWaitEvery = 2 * time.Second
 // as its Codex agent starts. It registers the folder's Codex session as `crew endpoint
 // --codex-here` does, looking again every codexWaitEvery until the thread is found or D has passed;
 // then it raises the session's attention, blocked, saying AutoDoc can't wake it (`crew attention
-// raise blocked`), and fails. Every host's Codex agent registers the same way, with nothing to loop
-// itself. A usage error is answered at once.
+// raise blocked`), and fails. A session that ended meanwhile (its context, $AUTODOC_CREW_CONTEXT,
+// gone) stops it with nothing raised. Every host's Codex agent registers the same way, with
+// nothing to loop itself. A usage error is answered at once.
 func crewEndpointWaitMain(ctx context.Context, configPath string, args []string, stdout, stderr io.Writer) int {
 	var rest []string
 	var wait time.Duration
@@ -48,24 +50,42 @@ func crewEndpointWaitMain(ctx context.Context, configPath string, args []string,
 		fmt.Fprintln(stderr, "usage: --wait goes with crew endpoint --codex-here alone")
 		return 2
 	}
+	run := func(args []string, stdout, stderr io.Writer) int {
+		return crewMainIn(context.WithoutCancel(ctx), configPath, args, nil, stdout, stderr)
+	}
+	ctxFile := os.Getenv("AUTODOC_CREW_CONTEXT")
+	return codexWaitLoop(ctx, rest, wait, codexWaitEvery, ctxFile, run, stdout, stderr)
+}
+
+// codexWaitLoop is crewEndpointWaitMain's loop over `crew endpoint <rest>`, each run by run: every
+// every, until it succeeds, is usage, the session's context (ctxFile) is gone, or wait has passed,
+// when the session's attention is raised, blocked. It answers the exit code.
+func codexWaitLoop(ctx context.Context, rest []string, wait, every time.Duration, ctxFile string,
+	run func(args []string, stdout, stderr io.Writer) int, stdout, stderr io.Writer) int {
 	deadline := time.Now().Add(wait)
 	for {
 		var errb bytes.Buffer
-		code := crewMainIn(ctx, configPath, append([]string{"crew", "endpoint"}, rest...), nil, stdout, &errb)
+		code := run(append([]string{"crew", "endpoint"}, rest...), stdout, &errb)
 		if code == 0 || code == 2 {
 			_, _ = stderr.Write(errb.Bytes())
 			return code
 		}
+		if ctxFile != "" {
+			if _, err := os.Stat(ctxFile); err != nil { // the session ended: nothing left to register or raise
+				_, _ = stderr.Write(errb.Bytes())
+				return code
+			}
+		}
 		if !time.Now().Before(deadline) || ctx.Err() != nil {
 			why := strings.TrimSpace(strings.Join(strings.Fields(errb.String()), " "))
-			raise := []string{"crew", "attention", "raise", "blocked", attentionLine("AutoDoc can't wake this Codex session: " + why)}
-			_ = crewMainIn(context.WithoutCancel(ctx), configPath, raise, nil, io.Discard, stderr)
+			text := attentionLine("AutoDoc can't wake this Codex session: " + why)
+			_ = run([]string{"crew", "attention", "raise", "blocked", text}, io.Discard, stderr)
 			_, _ = stderr.Write(errb.Bytes())
 			return code
 		}
 		// NOTE: can't announce: Codex starts its thread on its app-server without telling anyone, so
 		// the folder's thread is looked for again on a timer until it is found or the wait ends.
-		t := time.NewTimer(codexWaitEvery)
+		t := time.NewTimer(every)
 		select {
 		case <-ctx.Done():
 			t.Stop()

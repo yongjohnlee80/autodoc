@@ -108,11 +108,24 @@ func TestSetupForOpenCodeLoadsAutoDocsPlugin(t *testing.T) {
 // TestSetupForAnotherKindIsNothing: a kind with no setup yet answers nothing to add, as a value a
 // host can always merge.
 func TestSetupForAnotherKindIsNothing(t *testing.T) {
-	for _, k := range []string{crew.KindCodex, "agy", "generic"} {
+	for _, k := range []string{"agy", "generic"} {
 		s, err := crew.SetupFor(crew.SetupInput{Kind: k, Host: crew.HostNvim, Env: map[string]string{"PATH": "/x"}}, "")
-		if err != nil || s.Argv == nil || s.Env == nil || s.Files == nil || s.Notices == nil ||
-			len(s.Argv)+len(s.Env)+len(s.Files)+len(s.Notices) != 0 || s.Prompts {
+		if err != nil || s.Argv == nil || s.Env == nil || s.Files == nil || s.Notices == nil || s.After == nil ||
+			len(s.Argv)+len(s.Env)+len(s.Files)+len(s.Notices)+len(s.After) != 0 || s.Prompts {
 			t.Errorf("%s: %+v %v, want empty lists and maps, no prompts", k, s, err)
+		}
+	}
+}
+
+// TestSetupForCodexIsTheWaitingRegistration: a Codex agent's setup is one step after its start, for
+// any host: the agent's autodoc registering the folder's thread, looking until it is found (crew
+// endpoint --codex-here --wait), since the start; nothing on its command line or in its env.
+func TestSetupForCodexIsTheWaitingRegistration(t *testing.T) {
+	for _, host := range []string{crew.HostNvim, crew.HostWindow} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, Env: map[string]string{"PATH": "/x"}}, "")
+		want := []string{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}
+		if err != nil || len(s.After) != 1 || !slices.Equal(s.After[0], want) || len(s.Argv)+len(s.Env) != 0 || s.Prompts {
+			t.Errorf("%s: %+v %v, want the one step %q", host, s, err, want)
 		}
 	}
 }

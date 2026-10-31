@@ -6,6 +6,13 @@ import (
 	"path/filepath"
 )
 
+// SetupSince, in an After step's argument, is the agent's start, as Unix seconds.
+const SetupSince = "{since}"
+
+// codexRegisterWait is how long a Codex agent's step looks for its thread before it raises the
+// session's attention.
+const codexRegisterWait = "60s"
+
 // The hosts a setup is for.
 const (
 	HostWindow = "window" // an AutoDoc window: it writes Claude's settings into the agent's folder
@@ -43,7 +50,11 @@ type Setup struct {
 	Env     map[string]string `json:"env"`     // AutoDoc's own variables, merged after the profile's
 	Files   []SetupFile       `json:"files"`   // user-level files the kind needs, reported, never written here
 	Prompts bool              `json:"prompts"` // the setup reports the session's permission prompts: crew.register's prompts
-	Notices []string          `json:"notices"` // what the host should tell the user, once
+	// After is what the host runs once the agent's CLI has started: each one autodoc's arguments, run
+	// detached by the agent's own autodoc in its environment (its session's context), with
+	// SetupSince in an argument replaced by the start's Unix time in seconds.
+	After   [][]string `json:"after"`
+	Notices []string   `json:"notices"` // what the host should tell the user, once
 }
 
 // SetupFor is a crew agent's setup for in (docs/decisions/crew.md#three-modules-and-one-protocol),
@@ -54,11 +65,13 @@ type Setup struct {
 //     itself, so it gets no Argv.
 //   - OpenCode: AutoDoc's plugin, written into in.DataDir (AutoDoc's own folder, so setup writes
 //     it), and the OPENCODE_CONFIG_CONTENT that loads it, in.Env's own value extended.
+//   - Codex: one step after its start, the agent's autodoc registering the folder's thread, looking
+//     until it is found (crew endpoint --codex-here --wait).
 //   - the other kinds: nothing yet.
 //
 // cache is ClaudeOf's cache of what each binary knows ("" for none).
 func SetupFor(in SetupInput, cache string) (Setup, error) {
-	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}}
+	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{}}
 	switch in.Kind {
 	case KindClaude:
 		program := in.Program
@@ -79,6 +92,10 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 			}
 			s.Argv = append(s.Argv, "--settings", string(b))
 		}
+	case KindCodex:
+		// Codex starts its thread on its app-server without telling anyone: the agent's autodoc looks
+		// for the folder's thread until it is found, then registers it (crew endpoint --codex-here --wait)
+		s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
 	case KindOpenCode:
 		path, err := WriteOpenCodePlugin(filepath.Join(in.DataDir, "opencode"))
 		if err != nil {
