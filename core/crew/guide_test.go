@@ -37,3 +37,27 @@ func TestTheGuideGivesEachCLIItsWakeStep(t *testing.T) {
 		t.Error("Claude's guide carries Codex's step")
 	}
 }
+
+// TestTheGuideAcksRightAfterReceiving: the woken step names the ack with its exact command right
+// after receive, in that order, with the id as receive printed it, and says an unacked delivery
+// comes again: a woken agent neither looks the ack up first nor leaves a message leased.
+func TestTheGuideAcksRightAfterReceiving(t *testing.T) {
+	for _, kind := range []string{"claude", "codex", "agy", "opencode", "aider"} {
+		g := crew.GuideOf(kind).Markdown
+		var step string
+		for _, line := range strings.Split(g, "\n") {
+			if strings.Contains(line, "notice wakes you") {
+				step = line
+			}
+		}
+		receive, ack := strings.Index(step, "`autodoc mail receive`"), strings.Index(step, "`autodoc mail ack <id>`")
+		if receive < 0 || ack < receive {
+			t.Errorf("%s's woken step doesn't give `autodoc mail ack <id>` right after `autodoc mail receive`:\n%s", kind, step)
+		}
+		for _, must := range []string{"exactly as `receive` printed it", "comes to you again"} {
+			if !strings.Contains(step, must) {
+				t.Errorf("%s's woken step lacks %q:\n%s", kind, must, step)
+			}
+		}
+	}
+}
