@@ -30,9 +30,10 @@ type agents struct {
 	agentConfig            string
 	crew                   *crewHost  // the window's crew scope; nil in a program without one
 	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
-	// promptsReported replaces promptsSeen (a cell's: whether the window sees the agent's permission
-	// prompts, so the messaging base may press Enter); nil in production
-	promptsReported func(kind string, live, reachable bool) bool
+	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's
+	// permission prompts, so the messaging base may press Enter, given what the crew said); nil in
+	// production
+	promptsReported func(kind string, reported bool) bool
 	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
 	// tab's own start is
 	spawn        func(pty.Cmd) (widget.TerminalProcess, error)

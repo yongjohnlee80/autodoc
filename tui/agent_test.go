@@ -92,7 +92,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
 	// the test agents' CLIs stand for ones whose adapter reports permission prompts, so the messaging
 	// base sends what it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
-	onLoop(r, func() bool { r.h.agents.promptsReported = func(string, bool, bool) bool { return true }; return true })
+	onLoop(r, func() bool { r.h.agents.promptsReported = func(string, bool) bool { return true }; return true })
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	// The stored preferences carry the profiles and the default, and their answer is not ordered
