@@ -67,9 +67,12 @@ const woken = async (id, extra = {}) => {
   }
 };
 
+// start runs the plugin as opencode would; the cells of registration by message start it without
+// its session made at load (prepare), which the cells of a fresh opencode turn on.
 const start = async (opts = {}) => {
-  plugin = await AutodocCrew({ client }, { registerMs: 400, ...opts });
+  plugin = await AutodocCrew({ client }, { registerMs: 400, prepare: false, ...opts });
 };
+const attentions = () => (existsSync(join(fake, "attention")) ? readFileSync(join(fake, "attention"), "utf8").trim().split("\n") : []);
 const chat = (id) => plugin["chat.message"]({ sessionID: id }, {});
 
 beforeEach(() => {
@@ -78,6 +81,7 @@ beforeEach(() => {
     join(fake, "autodoc"),
     `#!/bin/sh
 d=$(dirname "$0"); id="$4"
+if [ "$2" = attention ]; then echo "$3 $4 $5" >> "$d/attention"; exit 0; fi
 echo "start $id $$" >> "$d/log"
 while [ ! -e "$d/go-$id" ]; do sleep 0.02; done
 code=$(cat "$d/go-$id")
@@ -113,6 +117,15 @@ exit "$code"
       },
     },
     app: { log: ({ body }) => (client.logs.push(body.message), Promise.resolve({})) },
+    // the TUI's routes, through the client's own transport: every ask is recorded
+    shown: [],
+    _client: { post: ({ url, body }) => (client.shown.push(`${url} ${body.sessionID}`), Promise.resolve({ data: true })) },
+  };
+  // a fresh opencode's session, made at load: made answers it (a cell may hold it back)
+  client.made = [];
+  client.session.create = () => {
+    client.made.push(1);
+    return client.createAnswer ?? Promise.resolve({ data: { id: "ses_made" } });
   };
 });
 
@@ -273,4 +286,53 @@ test("outside a crew session, or under the session's own opencode, the plugin do
   process.env.AUTODOC_CREW_WAKER = String(process.ppid); // a live process other than this one
   expect(await AutodocCrew({ client }, {})).toEqual({});
   delete process.env.AUTODOC_CREW_WAKER;
+});
+
+test("a fresh opencode makes a session at load, shows it and registers it: reachable before anyone types", async () => {
+  await start({ prepare: true });
+  await until(() => runs().some((l) => l.startsWith("start ses_made ")));
+  go("ses_made");
+  await until(() => endpoint() === "ses_made");
+  await until(() => client.shown.includes("/tui/select-session ses_made"));
+  expect(client.made.length).toBe(1);
+  expect(await woken("ses_made")).toBe(true); // a wake shows it again, then starts the turn
+  expect(client.prompts.at(-1)).toEqual({ path: { id: "ses_made" }, body: { parts: [{ type: "text", text: NOTICE }] } });
+  expect(client.shown.filter((l) => l === "/tui/select-session ses_made").length).toBeGreaterThan(1);
+});
+
+test("an opencode started to resume a session makes none: its own is registered at its message", async () => {
+  for (const flag of ["--continue", "-c", "--session=ses_old", "-s"]) {
+    process.argv.push(flag);
+    try {
+      await start({ prepare: true });
+      await Bun.sleep(50);
+      expect(client.made.length).toBe(0);
+      await plugin.dispose();
+      plugin = null;
+    } finally {
+      process.argv.pop();
+    }
+  }
+});
+
+test("a session the agent chats in before the made one is answered stays its own; the made one is left", async () => {
+  let answer;
+  client.createAnswer = new Promise((r) => (answer = r));
+  await start({ prepare: true });
+  await chat("ses_typed");
+  answer({ data: { id: "ses_made" } });
+  go("ses_typed");
+  await until(() => endpoint() === "ses_typed");
+  await Bun.sleep(100);
+  expect(runs().some((l) => l.startsWith("start ses_made "))).toBe(false);
+  expect(client.shown).toEqual([]);
+});
+
+test("a failed registration raises the session's attention in AutoDoc, saying why", async () => {
+  await start();
+  await chat("ses_a");
+  await until(() => runs().some((l) => l.startsWith("start ses_a ")));
+  go("ses_a", 1);
+  await until(() => attentions().length > 0);
+  expect(attentions()[0]).toStartWith("raise blocked AutoDoc can't wake this OpenCode session: registering it failed");
 });
