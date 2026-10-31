@@ -25,6 +25,7 @@ type inboxWindow struct {
 	// first: a long-poll the daemon holds
 	block  chan context.Context
 	timers []func()
+	delays []time.Duration // each timer's wait
 	notes  []string
 	shown  map[string]string // the ongoing toasts, by id
 	clicks map[string]func()
@@ -90,8 +91,10 @@ type inboxWork struct {
 func (w *inboxWindow) Go(fn func(context.Context) any, then func(any)) {
 	w.pending = append(w.pending, inboxWork{fn, then})
 }
-func (w *inboxWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
-func (w *inboxWindow) Notify(msg string)                { w.notes = append(w.notes, msg) }
+func (w *inboxWindow) After(d time.Duration, fn func()) {
+	w.timers, w.delays = append(w.timers, fn), append(w.delays, d)
+}
+func (w *inboxWindow) Notify(msg string) { w.notes = append(w.notes, msg) }
 func (w *inboxWindow) NotifyOngoingClick(id, msg string, onClick func()) {
 	w.shown[id], w.clicks[id] = msg, onClick
 }
@@ -282,6 +285,45 @@ func TestTheWatchRecoversAndKeepsQuiet(t *testing.T) {
 	s.step(t)         // the first connection's answer: dropped
 	if len(s.shown) != 0 {
 		t.Fatalf("an earlier connection's answer showed %v", s.shown)
+	}
+}
+
+// TestTheWatchBacksOffAndStopsOnARefusal: failed watches in a row wait 5 s, doubling up to 60 s,
+// and an answer starts the waits over; a watch the daemon refuses (its params, or its gate) is not
+// asked again until the next connection, and the window says so once, however often it is refused.
+func TestTheWatchBacksOffAndStopsOnARefusal(t *testing.T) {
+	w := newInboxWindow()
+	down := errors.New("the connection dropped")
+	w.answers = []any{down, down, down, down, down, down, snapshot(1, "", nil, nil), down}
+	x := newCrewInbox(w, w.raise)
+	x.Connected()
+	for range 6 {
+		w.step(t)
+		w.timers[len(w.timers)-1]()
+	}
+	w.step(t) // the answer
+	w.step(t) // a failure after it
+	want := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 40 * time.Second, time.Minute, time.Minute, 5 * time.Second}
+	if !slices.Equal(w.delays, want) {
+		t.Fatalf("the waits %v, want %v", w.delays, want)
+	}
+	if len(w.notes) != 0 {
+		t.Fatalf("a failing watch said %v; it retries quietly", w.notes)
+	}
+
+	r := newInboxWindow()
+	refused := &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: "inbox.watch: bad params"}
+	r.answers = []any{refused, &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "denied"}}
+	y := newCrewInbox(r, r.raise)
+	y.Connected()
+	r.step(t)
+	if len(r.timers) != 0 || len(r.pending) != 0 || len(r.notes) != 1 {
+		t.Fatalf("a refused watch: %d timers, %d in flight, notes %v; want none, none, one", len(r.timers), len(r.pending), r.notes)
+	}
+	y.Connected() // the next connection asks again, and is refused again: nothing more is said
+	r.step(t)
+	if len(r.calls) != 2 || len(r.timers) != 0 || len(r.notes) != 1 {
+		t.Fatalf("refused again: %d watches, %d timers, notes %v; want two, none, still one", len(r.calls), len(r.timers), r.notes)
 	}
 }
 

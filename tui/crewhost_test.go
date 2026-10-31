@@ -255,8 +255,8 @@ func TestACrashedWindowsScopeComesBack(t *testing.T) {
 }
 
 // TestAStoreFailureMintsNoScope: a claim the daemon fails (not busy) leaves the window without a
-// scope, says so, and tries again later: a failure never mints an identity in place of the listed
-// scope it could not claim.
+// scope, says so once an outage, however often its retries fail, and tries again later: a failure
+// never mints an identity in place of the listed scope it could not claim.
 func TestAStoreFailureMintsNoScope(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	crashed := newCrewHost(&crewWindow{d: d}, dir)
@@ -270,10 +270,20 @@ func TestAStoreFailureMintsNoScope(t *testing.T) {
 	if _, _, ok := h.held(); ok || len(listedScopes(t, dir)) != 1 || len(w.notices) != 1 {
 		t.Fatalf("a failed claim: held %v, listed %v, notices %v; want none, only the crashed window's, one", ok, listedScopes(t, dir), w.notices)
 	}
+	w.fire() // a retry while the store still fails: the outage was told of already
+	if _, _, ok := h.held(); ok || len(w.notices) != 1 {
+		t.Fatalf("a retry that failed again: held %v, notices %v; want none, still the one", ok, w.notices)
+	}
 	d.failing = ""
 	w.fire() // the retry
 	if s, _, ok := h.held(); !ok || s != scope {
 		t.Fatalf("the retry after the store came back: %q (%v), want the listed %s", s, ok, scope)
+	}
+	// a later outage is told of again
+	d.failing = scope
+	h.claim()
+	if len(w.notices) != 2 {
+		t.Fatalf("a claim failing after one held: notices %v, want a second", w.notices)
 	}
 }
 
