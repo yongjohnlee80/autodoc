@@ -130,7 +130,7 @@ func TestCrewPluginPrintsWhatLoadsIt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var out, errOut bytes.Buffer
-	if code := crewPluginMain([]string{"--opencode", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 ||
+	if code := crewPluginMain("", []string{"--opencode", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 ||
 		strings.TrimSpace(out.String()) != filepath.Join(dir, opencodePluginName) {
 		t.Fatalf("exit %d: %q %s", code, out.String(), errOut.String())
 	}
@@ -141,11 +141,11 @@ func TestCrewPluginPrintsWhatLoadsIt(t *testing.T) {
 		}
 		return ""
 	}
-	if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, env, &out, &errOut); code != 0 ||
+	if code := crewPluginMain("", []string{"--opencode", "--print-env", "--dir", dir}, env, &out, &errOut); code != 0 ||
 		strings.TrimSpace(out.String()) != `OPENCODE_CONFIG_CONTENT={"plugin":["file:///u.js","file://`+filepath.Join(dir, opencodePluginName)+`"]}` {
 		t.Errorf("--print-env: exit %d: %q %s", code, out.String(), errOut.String())
 	}
-	if code := crewPluginMain([]string{"--dir", dir}, env, &out, &errOut); code != 2 {
+	if code := crewPluginMain("", []string{"--dir", dir}, env, &out, &errOut); code != 2 {
 		t.Errorf("no --opencode: exit %d, want 2", code)
 	}
 }
@@ -270,12 +270,12 @@ func TestThePluginURLNamesTheFile(t *testing.T) {
 		t.Errorf("a relative path's URL: %s %v, want it absolute", u, err)
 	}
 	var out, errOut bytes.Buffer
-	if code := crewPluginMain([]string{"--opencode", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 ||
+	if code := crewPluginMain("", []string{"--opencode", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 ||
 		strings.TrimSpace(out.String()) != filepath.Join(base, "rel dir", opencodePluginName) {
 		t.Errorf("a relative --dir prints %q (exit %d), want the absolute path", out.String(), code)
 	}
 	out.Reset()
-	if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 {
+	if code := crewPluginMain("", []string{"--opencode", "--print-env", "--dir", "rel dir"}, func(string) string { return "" }, &out, &errOut); code != 0 {
 		t.Fatalf("a relative --dir: exit %d %s", code, errOut.String())
 	}
 	want := (&url.URL{Scheme: "file", Path: filepath.Join(base, "rel dir", opencodePluginName)}).String()
@@ -294,7 +294,7 @@ func TestThePluginLoadsFromItsURL(t *testing.T) {
 	for _, name := range []string{"team#1 50%41 ünï", "plain"} {
 		dir := filepath.Join(t.TempDir(), name)
 		var out, errOut bytes.Buffer
-		if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 {
+		if code := crewPluginMain("", []string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 0 {
 			t.Fatalf("%q: exit %d %s", name, code, errOut.String())
 		}
 		var cfg struct{ Plugin []string }
@@ -319,7 +319,7 @@ func TestThePluginsEnvRefusesAFolderOpenCodeCantLoadFrom(t *testing.T) {
 	t.Parallel()
 	var out, errOut bytes.Buffer
 	dir := filepath.Join(t.TempDir(), "a?b")
-	if code := crewPluginMain([]string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 1 ||
+	if code := crewPluginMain("", []string{"--opencode", "--print-env", "--dir", dir}, func(string) string { return "" }, &out, &errOut); code != 1 ||
 		out.Len() != 0 || !strings.Contains(errOut.String(), "holds a '?'") {
 		t.Errorf("a folder holding '?': exit %d, %q %q, want refused", code, out.String(), errOut.String())
 	}

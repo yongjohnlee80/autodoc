@@ -566,10 +566,10 @@ func TestTheCommandsRunAfterTheWrappersConfig(t *testing.T) {
 		!strings.Contains(errOut.String(), `no command "mail nope"`) {
 		t.Errorf("an unknown mail command after --config: exit %d, %q; want the crew CLI's usage", code, errOut.String())
 	}
-	if rest, ok := crewCommandArgs([]string{"--config", cfg, "--version"}); ok {
+	if rest, _, ok := crewCommandArgs([]string{"--config", cfg, "--version"}); ok {
 		t.Errorf("--version after --config was taken as a crew command: %q", rest)
 	}
-	if _, ok := crewCommandArgs([]string{"--config"}); ok {
+	if _, _, ok := crewCommandArgs([]string{"--config"}); ok {
 		t.Error("a bare --config was taken as a crew command")
 	}
 }
