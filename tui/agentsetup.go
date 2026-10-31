@@ -50,11 +50,11 @@ func agentSetupPending(p prefs) bool {
 // lookAgentCLI is how the card finds the CLIs; a test sets its own.
 var lookAgentCLI = exec.LookPath
 
-// Started warms the OpenCode plugin's env (a crew window's agents may need it), and offers the
-// setup on a first run (startup's About waits for it, startup.go), once the
+// Started warms the OpenCode plugin's env when a crew window has an OpenCode profile (whose spawn
+// needs it), and offers the setup on a first run (startup's About waits for it, startup.go), once the
 // Vim question before it is answered (vimquestion.go opens it then).
 func (a *agents) Started() {
-	if a.crew != nil {
+	if a.crew != nil && slices.ContainsFunc(a.profiles(), func(p agentProfile) bool { return agentKind(p.Command) == "opencode" }) {
 		a.warmPluginEnv() // off the loop now, so an OpenCode agent's spawn never waits on it
 	}
 	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {

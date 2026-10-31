@@ -136,7 +136,8 @@ func TestTheOpenCodePluginEnvIsTheAgentsBuilds(t *testing.T) {
 }
 
 // TestTheOpenCodePluginEnvRunsOnceOffTheLoop: the plugin's env is the process's one run, started
-// off the loop when the agents feature starts (Started returns while it runs); every crew OpenCode
+// off the loop when the agents feature starts with an OpenCode profile (Started returns while it
+// runs; a window with none runs none); every crew OpenCode
 // spawn takes that answer, one waiting for it only while it is on its way; a failure is not kept,
 // so the next spawn runs it again.
 func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
@@ -164,6 +165,15 @@ func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
 	}
 	if runs.Load() != 1 {
 		t.Fatalf("two spawns after the warm-up ran it %d times, want the one", runs.Load())
+	}
+	// a crew window with no OpenCode profile runs none: nothing it starts needs it
+	b, _, _ := crewAgents(t, oneTwo)
+	var others atomic.Int32
+	b.pluginEnv = func() (string, error) { others.Add(1); return env, nil }
+	b.Started()
+	time.Sleep(50 * time.Millisecond)
+	if others.Load() != 0 || b.pluginAnswer != nil {
+		t.Fatalf("a window with no OpenCode profile warmed the plugin's env (%d runs)", others.Load())
 	}
 	// a failure is not kept: the next spawn runs it again, and takes its answer
 	fails := atomic.Int32{}
