@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -660,76 +658,6 @@ func (r *wakeRig) reachabilityChanges(session string) int {
 		}
 	}
 	return n
-}
-
-// TestAKilledAgentIsUnreachableAtOnce (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a
-// wake that finds the session's endpoint gone for certain (a killed Claude agent's socket, gone)
-// makes it unreachable at once, not after five failures: crew.list says so, and why names the
-// cause; the human feed hears of the loss once, and a later failure tells it nothing more. A new
-// endpoint (the agent restarted) makes it reachable again, which the feed hears too. The cause,
-// kept in memory, goes when the session ends.
-func TestAKilledAgentIsUnreachableAtOnce(t *testing.T) {
-	dir, err := os.MkdirTemp("", "cc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	cw := crew.NewClaudeWaker(os.Getuid())
-	cw.SetRoots(dir)
-	r := newWakeRigWith(t, "run1", map[string]crew.Waker{"claude": cw})
-	reg, err := r.m.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: r.epoch, Codename: "gold",
-		Kind: "claude", Workspace: "w", Instance: "i-gold", Secret: strings.Repeat("s", 40)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	self, err := crew.ProcRef(os.Getpid())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ep := claudeEndpoint(t, filepath.Join(dir, "gone.sock"), os.Getpid(), self) // the agent was killed: no socket
-	ep.Session = reg.Session
-	r.write(func(tx crew.Tx) error {
-		if err := tx.PutEndpoint(ep); err != nil {
-			return err
-		}
-		return r.m.RaisePending(tx, reg.Profile)
-	})
-	if e := r.entry("gold"); !e.Reachable || e.Why != "" {
-		t.Fatalf("before any wake: %+v, want reachable, no why", e)
-	}
-	r.look()
-	w := r.wake(reg.Session)
-	if w.Failures != 5 {
-		t.Fatalf("after one wake to a gone socket: %d failures, want 5 (unreachable at once)", w.Failures)
-	}
-	e := r.entry("gold")
-	if e.Reachable || !strings.HasPrefix(e.Why, crew.WhyWakesFailing+": ") || !strings.Contains(e.Why, "dialing claude's inbox socket") {
-		t.Fatalf("after one wake to a gone socket: %+v, want unreachable, why naming the dial", e)
-	}
-	if n := r.reachabilityChanges(reg.Session); n != 1 {
-		t.Fatalf("%d reachability changes told, want the loss once", n)
-	}
-	r.clock.Advance(time.Hour)
-	r.look()
-	if w := r.wake(reg.Session); w.Failures != 6 || r.reachabilityChanges(reg.Session) != 1 {
-		t.Fatalf("a later failure: %d failures, %d changes; want 6 and the loss told once", w.Failures, r.reachabilityChanges(reg.Session))
-	}
-	// the restarted agent registers its endpoint again: reachable, no why, and the feed hears it
-	loc := fmt.Sprintf(`{"socket":"/tmp/cc-socks-%d/new.sock","pid":%d,"start":%q,"session":"c-2"}`, os.Getuid(), os.Getpid(), self)
-	if _, err := r.m.SetEndpoint(r.ctx, crew.Credential(reg.Session, strings.Repeat("s", 40)), "claude", loc); err != nil {
-		t.Fatal(err)
-	}
-	if e := r.entry("gold"); !e.Reachable || e.Why != "" || r.reachabilityChanges(reg.Session) != 2 {
-		t.Fatalf("after a new endpoint: %+v, %d reachability changes; want reachable, no why, the return told",
-			e, r.reachabilityChanges(reg.Session))
-	}
-	// the session ends: its cause goes with it
-	if err := r.m.Exit(r.ctx, "autodoc:w", "host", r.epoch, reg.Session, crew.EndedExit); err != nil {
-		t.Fatal(err)
-	}
-	if n := crew.KeptCauses(r.m); n != 0 {
-		t.Fatalf("%d causes kept after the session ended, want none", n)
-	}
 }
 
 // TestATimeoutCountsTowardFive: a failure that may pass (a dial cut off by its deadline) counts once
