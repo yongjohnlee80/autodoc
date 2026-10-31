@@ -2,9 +2,162 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 34,
+  protocol = 41,
   min_protocol = 12,
   verbs = {
+    ["crew.adopt"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "from", type = "string" },
+        { name = "to", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Fence an orphan scope and move its mail here.",
+    },
+    ["crew.attention"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "op", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "text", type = "string", optional = true }
+      },
+      result = "{}",
+      doc = "Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41).",
+    },
+    ["crew.claim"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "proc", type = "string", optional = true }
+      },
+      result = "{epoch}",
+      doc = "Claim or reattach a scope with the process's run token. Idempotent.",
+    },
+    ["crew.discard"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "from", type = "string" },
+        { name = "to", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Fence an orphan scope and fail its mail, telling senders.",
+    },
+    ["crew.endpoint"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "kind", type = "string" },
+        { name = "locator", type = "string" },
+        { name = "secret", type = "string", optional = true }
+      },
+      result = "{generation}",
+      doc = "How to wake the calling session.",
+    },
+    ["crew.exit"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "session", type = "string" },
+        { name = "why", type = "string", optional = true }
+      },
+      result = "{}",
+      doc = "A session ended; its bound deliveries fail (session_ended).",
+    },
+    ["crew.guide"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "kind", type = "string" }
+      },
+      result = "{markdown, protocol}",
+      doc = "The crew and mail procedure for a CLI kind, for a host's agent guide.",
+    },
+    ["crew.list"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {},
+      result = "[{codename, scope, kind, presence, reachable, prompts_reported, why}]",
+      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
+    },
+    ["crew.orphans"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {},
+      result = "[{scope, profiles, unread}]",
+      doc = "AutoDoc scopes with a free holder and unhandled mail.",
+    },
+    ["crew.register"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "codename", type = "string" },
+        { name = "kind", type = "string" },
+        { name = "workspace", type = "string" },
+        { name = "instance", type = "string" },
+        { name = "secret", type = "string" },
+        { name = "prompts", type = "bool", optional = true }
+      },
+      result = "{session, profile}",
+      doc = "Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret).",
+    },
+    ["crew.release"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "Give a scope back on a clean exit; the run can't reattach.",
+    },
+    ["crew.renew"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" }
+      },
+      result = "{}",
+      doc = "The host still holds its scope: its lease runs another 90 s.",
+    },
+    ["crew.takeover"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "proc", type = "string", optional = true }
+      },
+      result = "{epoch}",
+      doc = "Claim a held scope after the user agreed; the old owner is fenced and its sessions end.",
+    },
+    ["crew.wait"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "sessions", type = "[]string" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{ready[{session, unhandled}], timed_out}",
+      doc = "One long-poll for the host's tier-3 sessions (at most 25 s): which have mail waiting. A connection holds at most two long-polls.",
+    },
+    ["crew.whoami"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "store", type = "string", optional = true }
+      },
+      result = "{codename, scope, profile, session, store}",
+      doc = "Who the credential belongs to.",
+    },
     ["doc.outline"] = {
       since = 8, scope = "workspace", audience = "agent",
       params = {
@@ -269,8 +422,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}",
-      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one).",
+      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28), next? (protocol 36)}",
+      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one). From protocol 36, a map without a root comes a page at a time: opts.limit documents (default 500, at most 2000) in path order after opts.after (the previous page's next, an opaque cursor), the links whose source is among them (to any document, one on a later page included), and next, \"\" at the end. Each link comes once; drop one whose document never came. A cursor from other kinds is invalid params. A session below 36 gets the whole map in one reply.",
     },
     ["graph.neighborhood"] = {
       since = 1, scope = "workspace", audience = "agent",
@@ -310,6 +463,76 @@ return {
       result = "{gpu: {vendor, name, vram, compute}, ram, free, ollama}",
       doc = "What this machine offers an embedding model, read without a network: its GPU, RAM, free space, and the Ollama version (\"\" when none answers); 0 or \"\" is unknown.",
     },
+    ["inbox.ack"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" }
+      },
+      result = "{}",
+      doc = "Mark a report read. Replaying an ack answers ok.",
+    },
+    ["inbox.dismiss"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" }
+      },
+      result = "{}",
+      doc = "Decline a request; its sender is told. Replaying a dismiss answers ok.",
+    },
+    ["inbox.focus"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "session", type = "string" }
+      },
+      result = "{session, owner}",
+      doc = "Ask the session's current owner to raise its agent: the owner's host hears a focus change.",
+    },
+    ["inbox.list"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "filter", type = "string", optional = true },
+        { name = "before", type = "int", optional = true },
+        { name = "limit", type = "int", optional = true }
+      },
+      result = "{items[]}",
+      doc = "The human's history, newest first, or the generated notices nobody could receive (filter undeliverable).",
+    },
+    ["inbox.reply"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "message", type = "string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" }
+      },
+      result = "{message}",
+      doc = "Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response.",
+    },
+    ["inbox.send"] = {
+      since = 41, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true },
+        { name = "fire", type = "bool", optional = true }
+      },
+      result = "{message}",
+      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.unreachable means nothing was left, so the text may be sent some other way; any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
+    },
+    ["inbox.watch"] = {
+      since = 37, scope = "local-peer", audience = "user",
+      params = {
+        { name = "cursor", type = "int" },
+        { name = "timeout", type = "int", optional = true },
+        { name = "page", type = "string", optional = true }
+      },
+      result = "{cursor, snapshot?{items, attention, next}, changes[]}",
+      doc = "The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases. A connection holds at most two long-polls.",
+    },
     ["index.changes"] = {
       since = 1, scope = "workspace", audience = "agent",
       params = {
@@ -327,7 +550,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}",
-      doc = "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100.",
+      doc = "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100. From protocol 35, next is an opaque cursor (a string, \"\" when none follow) for every session, whatever protocol it declared: pass it back as after unread. A cursor from another sort or other filters, or an integer offset, is invalid params.",
     },
     ["index.list"] = {
       since = 1, scope = "workspace", audience = "agent",
@@ -370,6 +593,79 @@ return {
       },
       result = "{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}",
       doc = "diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them.",
+    },
+    ["mail.ack"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" }
+      },
+      result = "{}",
+      doc = "Done with a delivery under its lease. Replaying an ack of the same lease answers ok.",
+    },
+    ["mail.inbox"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "limit", type = "int", optional = true }
+      },
+      result = "{unread, items[]}",
+      doc = "A preview of the caller's eligible mail: never leases.",
+    },
+    ["mail.receive"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" }
+      },
+      result = "{deliveries[], more}",
+      doc = "Lease the caller's next eligible deliveries, at most 8, in seq order; more=true until drained.",
+    },
+    ["mail.renew"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" }
+      },
+      result = "{}",
+      doc = "Extend a lease the caller holds by 10 minutes.",
+    },
+    ["mail.reply"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it.",
+    },
+    ["mail.send"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true },
+        { name = "ttl", type = "int", optional = true }
+      },
+      result = "{message, deliveries[]}",
+      doc = "Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
+    },
+    ["mail.wait"] = {
+      since = 37, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{ready, timed_out}",
+      doc = "Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls.",
     },
     ["preference.list"] = {
       since = 3, scope = "global", audience = "user",
@@ -467,6 +763,12 @@ return {
       params = {},
       result = "{databases, registrations, ranker, verbs}",
       doc = "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}.",
+    },
+    ["sys.check"] = {
+      since = 39, scope = "local-peer", audience = "internal",
+      params = {},
+      result = "{quick, integrity, foreign_keys, secrets}",
+      doc = "The store's whole check: integrity_check, foreign_key_check and every sealed secret opened with the store's key; a sound store answers empty lists. SQLite stores only.",
     },
     ["sys.contracts"] = {
       since = 20, scope = "global", audience = "agent",
@@ -770,8 +1072,8 @@ return {
     ["workspace.list"] = {
       since = 1, scope = "global", audience = "agent",
       params = {},
-      result = "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
-      doc = "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN.",
+      result = "[{id, name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
+      doc = "Every workspace. Search only one whose state is ready. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password, sealed?}, never its DSN; sealed is a connection whose DSN does not open with the store's key (a store restored without its key): enter it again.",
     },
     ["workspace.of"] = {
       since = 24, scope = "global", audience = "agent",
@@ -863,17 +1165,19 @@ return {
         { name = "workspace", type = "string" }
       },
       result = "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
-      doc = "A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with.",
+      doc = "A workspace's variables: the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with.",
     },
   },
   errors = {
     { code = -32001, name = "rpc.access_denied", next = "call it on the unix socket: it is for a local peer" },
     { code = -32020, name = "rpc.protocol_mismatch", next = "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves" },
     { code = -32021, name = "rpc.handshake_required", next = "say sys.hello first" },
+    { code = -32022, name = "rpc.store_damaged", next = "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)" },
     { code = -32060, name = "rpc.no_such_workspace", next = "call workspace.list and use a listed name" },
     { code = -32061, name = "rpc.not_found", next = "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone" },
     { code = -32062, name = "rpc.conflict", next = "doc.read, then merge or retry; for a name, choose another" },
     { code = -32063, name = "rpc.cursor_expired", next = "re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it" },
+    { code = -32064, name = "rpc.long_polls_busy", next = "a connection holds at most two long-polls (crew.wait, mail.wait, inbox.watch): finish one first, or open another connection" },
     { code = -32065, name = "rpc.unsupported", next = "this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages" },
     { code = -32066, name = "rpc.committed", next = "the write landed: doc.read and compare, never re-send" },
     { code = -32067, name = "rpc.embed_failed", next = "retry later, or search with lexical among the stages" },
@@ -887,6 +1191,23 @@ return {
     { code = -32075, name = "todos.exists", next = "pick another id, or another move_store target" },
     { code = -32076, name = "todos.not_writable", next = "todos.register the project's root, or todos.set_dir" },
     { code = -32077, name = "todos.unclaimed", next = "todos.claim it to write it again" },
+    { code = -32090, name = "crew.scope_busy", next = "wait for its lease to lapse, or crew.takeover after the user agrees" },
+    { code = -32091, name = "crew.stale_epoch", next = "claim the scope again; this owner was fenced" },
+    { code = -32092, name = "crew.codename_busy", next = "offer the user to take it over, or pick another codename" },
+    { code = -32093, name = "crew.instance_reused", next = "register a new instance" },
+    { code = -32094, name = "crew.bad_credential", next = "the session ended: its host registers a new one" },
+    { code = -32095, name = "crew.context_mismatch", next = "fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew" },
+    { code = -32096, name = "crew.bad_endpoint", next = "register an endpoint of a known kind, with its locator" },
+    { code = -32110, name = "mail.no_recipient", next = "crew.list the addressbook, and send to a name it shows" },
+    { code = -32111, name = "mail.key_reused", next = "a retry sends the same content; new content takes a new key" },
+    { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },
+    { code = -32113, name = "mail.lease_lost", next = "mail.receive again: the delivery comes back if it is still unhandled" },
+    { code = -32130, name = "inbox.already_answered", next = "inbox.list shows who answered, and when" },
+    { code = -32131, name = "inbox.not_a_request", next = "inbox.ack a report" },
+    { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },
+    { code = -32133, name = "inbox.key_reused", next = "retry the same reply with the same key, or use a new key" },
+    { code = -32134, name = "inbox.too_large" },
+    { code = -32135, name = "inbox.unreachable", next = "type the text into its prompt, or send without fire to leave it queued" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

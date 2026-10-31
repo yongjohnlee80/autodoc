@@ -57,22 +57,31 @@ var ErrSwitching = errs.Sentinel(errs.ErrPrecondition, "index: a new model is fi
 // replaces, offline for the switch.
 var errOffline = errs.Sentinel(errs.ErrPrecondition, "index: the model is offline while a new one fills")
 
-// The semantic tier's constants (ADR 0204 §4.4, §4.5).
+// The semantic tier's constants (docs/decisions/search.md#hybrid-search-and-rank-fusion).
 const (
 	embedBatch   = 64               // texts per provider call
 	refusedFor   = time.Hour        // how long a rejected text is set aside before it is tried again
 	batchTimeout = 2 * time.Minute  // one provider call for a batch
 	queryTimeout = 30 * time.Second // one provider call for a query
 	hammingTop   = 200              // candidates the 1-bit scan passes to float32 rescoring, per window
+	// publishWait bounds how long a query waits for the writer to publish its commit's snapshot
+	// before it scans the stored codes instead (snapshotAt)
+	publishWait = 250 * time.Millisecond
 )
 
+// chunkKey is a code's chunk and the document it belongs to, so a filtered query can narrow the
+// codes to the admitted documents before it orders any.
+type chunkKey struct{ ID, Doc int64 }
+
+func cmpChunkKey(a, b chunkKey) int { return cmp.Compare(a.ID, b.ID) }
+
 // code is one chunk's 1-bit code: the signs of its vector's dimensions.
-type code = vector.Code[int64]
+type code = vector.Code[chunkKey]
 
 // codeIndex is the code index of one model at one commit (its watermark is the commit_seq): the
 // codes of the alive chunks of the semantic-ready documents, by document. It is never changed once
 // published; the next commit publishes another, sharing the documents that did not change.
-type codeIndex = vector.Index[int64, int64]
+type codeIndex = vector.Index[int64, chunkKey]
 
 // vecItem is one vector for the writer to store.
 type vecItem struct {
@@ -108,6 +117,10 @@ type semantic struct {
 	snap    atomic.Pointer[codeIndex]
 	vectors chan vecBatch
 	wake    chan struct{}
+	// pubCh is closed when the writer publishes the next snapshot, and replaced: a query racing
+	// the writer waits on it for its own commit's snapshot (snapshotAt)
+	pubMu sync.Mutex
+	pubCh chan struct{}
 
 	mu       sync.Mutex
 	activeFP string // the writer's view: set at start and at the flip
@@ -170,7 +183,7 @@ func (m *semantic) signal() {
 // model has nothing to keep answering. Another active model keeps answering until the target
 // covers every chunk (commitVectors flips then). The target is recorded as such, and a model that
 // was the target and is no longer, and is not active, is reclaimed: a cancelled switch's, or one
-// switched past (ADR 1791284787 §2.3).
+// switched past (docs/decisions/store.md#when-a-model-is-reclaimed).
 func (x *Indexer) setupModels(ctx context.Context) error {
 	m := x.sem
 	target := m.target.Model()
@@ -276,7 +289,8 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 			chunks = append(chunks, rows...)
 		}
 		// a few documents (a batch of vectors): only their texts, looked up by key, so the cost follows
-		// the batch, not the workspace's vectors (ADR 1791329335 §2.6). Every document, or documents
+		// the batch, not the workspace's vectors
+		// (docs/decisions/store.md#readiness-follows-the-batch). Every document, or documents
 		// with more sections than one lookup list holds (one large file): the model's every vector,
 		// read once through its index, which is then the cheaper read.
 		var have map[string]bool
@@ -386,7 +400,7 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			return nil // a late batch of a retired model: reclaimed, never stored again
 		}
 		// a text no chunk has any more was replaced while the provider embedded it: its vector would
-		// only be an orphan (ADR 1791329335)
+		// only be an orphan (docs/decisions/store.md#vectors-follow-their-chunks)
 		items, err := s.withChunks(tx, vb.items)
 		if err != nil {
 			return err
@@ -482,7 +496,8 @@ func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
 		hashes[i] = it.textHash
 	}
 	// not SELECT DISTINCT doc_id: without statistics SQLite would take chunk_doc for its order, and
-	// scan the workspace's chunks; a plain select looks each text up in chunk_text (ADR 1791329335)
+	// scan the workspace's chunks; a plain select looks each text up in chunk_text
+	// (docs/decisions/store.md#vectors-follow-their-chunks)
 	rows, err := s.chunks(tx).With(ChunkTextHash, hashes...).Select(ChunkDoc)
 	if err != nil {
 		return nil, err
@@ -593,8 +608,62 @@ func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 			next = cur.Next(watermark, changed, fresh)
 		}
 		m.snap.Store(next)
+		m.published()
 		return nil
 	})
+}
+
+// published tells the queries waiting for a snapshot (snapshotAt) that one was published.
+func (m *semantic) published() {
+	m.pubMu.Lock()
+	defer m.pubMu.Unlock()
+	if m.pubCh != nil {
+		close(m.pubCh)
+		m.pubCh = nil
+	}
+}
+
+// nextPublish is a channel closed at the writer's next publish.
+func (m *semantic) nextPublish() <-chan struct{} {
+	m.pubMu.Lock()
+	defer m.pubMu.Unlock()
+	if m.pubCh == nil {
+		m.pubCh = make(chan struct{})
+	}
+	return m.pubCh
+}
+
+// snapshotAt is the code snapshot of model fp at watermark, the query's commit. The writer
+// publishes right after every commit that moves commit_seq, so a query that read the commit
+// before its publish finds the current snapshot one model's, behind it; it waits for that publish
+// (at most publishWait) rather than loading every code from SQL. nil when none comes: another
+// model, a newer snapshot, or a publish slower than the wait. The caller then scans the stored
+// codes.
+func (m *semantic) snapshotAt(fp string, watermark int64) *codeIndex {
+	var deadline <-chan time.Time
+	for {
+		next := m.nextPublish() // before the load: a publish in between closes it
+		snap := m.snap.Load()
+		switch {
+		case snap.Usable(fp, watermark):
+			return snap
+		case snap == nil || snap.Model() != fp || snap.Watermark() > watermark:
+			return nil
+		}
+		if deadline == nil {
+			// NOTE: bounded by publishWait: the writer's publish follows its commit at once, so the
+			// wait is the publish's own few milliseconds; a stalled writer costs the query this long
+			// and then the scan it would have made anyway.
+			t := time.NewTimer(publishWait)
+			defer t.Stop()
+			deadline = t.C
+		}
+		select {
+		case <-next:
+		case <-deadline:
+			return nil
+		}
+	}
 }
 
 // withVectors narrows an alive-chunk query to the chunks of ready documents that have a vector
@@ -610,7 +679,7 @@ func (s *Store) loadCodes(tx *store.Tx, fp string, docs []int64) (map[int64][]co
 	add := func(d dao.DAO[*Chunk, ChunkField, int64]) error {
 		rows, err := withVectors(alive(d), fp).Select(ChunkDoc, ChunkID, ChunkEmbBits)
 		for _, r := range rows {
-			out[r.DocID] = append(out[r.DocID], code{Chunk: r.ID, Bits: vector.DecodeBits(r.EmbBits)})
+			out[r.DocID] = append(out[r.DocID], code{Chunk: chunkKey{ID: r.ID, Doc: r.DocID}, Bits: vector.DecodeBits(r.EmbBits)})
 		}
 		return err
 	}
@@ -1041,9 +1110,9 @@ func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 }
 
 // PurgeModel reclaims a model no longer used, at once rather than at the next start
-// (index.purge_model; ADR 1791284787 §2.4). The active model and the target are refused, saying
-// what to do instead: a workspace's active model goes with its provider, in Search models, and a
-// switch's target with the switch's cancel.
+// (index.purge_model; docs/decisions/store.md#purging-refuses-the-active-model-and-the-target). The
+// active model and the target are refused, saying what to do instead: a workspace's active model
+// goes with its provider, in Search models, and a switch's target with the switch's cancel.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 	var active, target string
 	if x.sem != nil {
@@ -1085,8 +1154,9 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 	if err != nil {
 		return nil, err
 	}
+	snap := m.snapshotAt(fp, watermark)
 	var codes iter.Seq[code]
-	if snap := m.snap.Load(); snap.Usable(fp, watermark) {
+	if snap != nil {
 		m.snapshotScans.Add(1)
 		codes = snap.Codes()
 	} else {
@@ -1095,16 +1165,34 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		if err != nil {
 			return nil, err
 		}
-		codes = vector.NewIndex(fp, watermark, stored).Codes()
+		snap = vector.NewIndex(fp, watermark, stored)
+		codes = snap.Codes()
 	}
-	order := vector.Nearest(codes, vector.SignBits(qvec), cmp.Compare[int64])
-	fetch := func(ids []int64) ([]vector.Vec[search.Candidate[int64]], error) {
+	// a filter narrows the codes to the documents it admits before any is ordered: a restrictive
+	// one no longer walks window after window of codes the fetch then rejects
+	admitted, ok, err := s.admittedDocs(tx, opts)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var order iter.Seq[chunkKey]
+	if admitted == nil {
+		order = snap.NearestSeq(vector.SignBits(qvec), cmpChunkKey)
+	} else {
+		order = vector.NearestSeq(func(yield func(code) bool) {
+			for c := range codes {
+				if admitted[c.Chunk.Doc] && !yield(c) {
+					return
+				}
+			}
+		}, vector.SignBits(qvec), cmpChunkKey)
+	}
+	fetch := func(ids []chunkKey) ([]vector.Vec[search.Candidate[int64]], error) {
 		if m.beforeFetch != nil {
 			m.beforeFetch()
 		}
 		in := make([]any, len(ids))
 		for i, id := range ids {
-			in[i] = id
+			in[i] = id.ID
 		}
 		d, ok, err := s.filtered(tx, withVectors(alive(s.chunks(tx)), fp).With(ChunkID, in...), opts)
 		if err != nil {
@@ -1130,7 +1218,7 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		}
 		return a.Ord < b.Ord
 	}
-	best, err := vector.TwoStage(order, qvec, hammingTop, n, fetch, byPath)
+	best, err := vector.TwoStageSeq(order, qvec, hammingTop, n, fetch, byPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1141,7 +1229,8 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 	return out, nil
 }
 
-// EmbeddingStatus is index.status's embeddings (ADR 0204 §4.7).
+// EmbeddingStatus is index.status's embeddings
+// (docs/decisions/search.md#index-status-and-change-log-retention).
 type EmbeddingStatus struct {
 	Provider string // the target's provider
 	Model    string // the active model's fingerprint

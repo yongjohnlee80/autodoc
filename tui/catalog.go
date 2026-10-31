@@ -10,10 +10,10 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE COMMAND CATALOG (ADR 1791762474) — every command a user can run, wherever it was declared:
-// AutoDoc's own, a feature's, a Lua script's (autodoc.command) and a plugin's ([[commands]]). The
-// editor's ':' prompt, F1's COMMANDS, the keys (Key.Cmd), SPC p and Lua's autodoc.run all read
-// it, so a command declared once is reachable from each.
+// THE COMMAND CATALOG (docs/decisions/plugins.md#one-command-catalog) — every command a user can
+// run, wherever it was declared: AutoDoc's own, a feature's, a Lua script's (autodoc.command) and a
+// plugin's ([[commands]]). The editor's ':' prompt, F1's COMMANDS, the keys (Key.Cmd), SPC p and
+// Lua's autodoc.run all read it, so a command declared once is reachable from each.
 //
 // Only what a person would invoke is here: a menu row, a key, a verb. The App.* handlers stay the
 // document's wiring (commands.go); an entry's Run calls the same function as its App.* twin.
@@ -68,10 +68,12 @@ type Entry struct {
 	Run  func(Invocation) error // on the UI loop
 	// UserOnly is an entry that runs code, launches a path, fetches and writes without asking, or
 	// changes what scripts may do: the user's to run, refused to a gated script however it gets
-	// there (autodoc.run, ed:run, its key or row). ADR 1792004705 §4.2a.2.
+	// there (autodoc.run, ed:run, its key or row). See
+	// docs/decisions/contract.md#user-only-commands.
 	UserOnly bool
 	// Path is an entry that opens or saves a path a gated script names: it holds a gated run to the
-	// workspace itself, through the daemon's bounds (§4.2a.2b).
+	// workspace itself, through the daemon's bounds
+	// (docs/decisions/contract.md#path-commands-run-within-the-workspace).
 	Path bool
 	// Complete is what ':' Tab offers for its arguments (golib's Command.Complete); nil for none
 	Complete func(widget.CompleteContext) []string

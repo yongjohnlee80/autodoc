@@ -1,6 +1,7 @@
-// Package registry is the AutoDoc registry's index format and its rules (ADR 1792351195): the one
-// owner of both. AutoDoc's client decodes and validates the index with it, and the registry's own
-// tools (github.com/yongjohnlee80/autodoc-plugin-registry) build and check it with it, imported at a
+// Package registry is the AutoDoc registry's index format and its rules
+// (docs/decisions/plugins.md#the-registry): the one owner of both. AutoDoc's client decodes and
+// validates the index with it, and the registry's own tools
+// (github.com/yongjohnlee80/autodoc-plugin-registry) build and check it with it, imported at a
 // pinned AutoDoc version as they import core/manifests. It has no UI dependencies.
 package registry
 
@@ -126,9 +127,9 @@ func Decode(b []byte) (Index, error) {
 	return ix, nil
 }
 
-// Validate is the client's check of an index (ADR 1792351195 §4.5): its format; each entry's kind,
-// name and repo, (kind, name) unique; every commit a full SHA; each audit's report under the
-// registry's own Pages origin, at its ReportPath.
+// Validate is the client's check of an index (docs/decisions/plugins.md#the-registry): its format;
+// each entry's kind, name and repo, (kind, name) unique; every commit a full SHA; each audit's
+// report under the registry's own Pages origin, at its ReportPath.
 func Validate(ix Index) error {
 	if ix.Format != Format {
 		return fmt.Errorf("registry index: format %d; this AutoDoc reads format %d", ix.Format, Format)

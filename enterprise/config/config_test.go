@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/config"
 )
 
@@ -129,6 +130,32 @@ access = ["org"]
 	}
 }
 
+// The approximate search's settings load as written, and without them are pgstore's defaults; an
+// [http] table without listen takes the default address; [metrics] enabled with an operator to read
+// it loads enabled, and left out is disabled.
+func TestTheSearchAndMetricsSettingsLoad(t *testing.T) {
+	t.Setenv("TEST_OPS_TOKEN", strings.Repeat("o", 64))
+	s, err := load(t, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Postgres.ANN != pgstore.DefaultANNConfig() || s.Metrics.Enabled {
+		t.Errorf("unset: ANN %+v, metrics %+v; want pgstore's defaults and none", s.Postgres.ANN, s.Metrics)
+	}
+	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16", 1)
+	src = strings.Replace(src, `listen = "127.0.0.1:8730"`, "", 1)
+	src = strings.Replace(src, "[[source]]", "[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]\n\n[[source]]", 1) + "\n[metrics]\nenabled = true\n"
+	if s, err = load(t, src); err != nil {
+		t.Fatal(err)
+	}
+	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16}); s.Postgres.ANN != want {
+		t.Errorf("ANN %+v, want %+v", s.Postgres.ANN, want)
+	}
+	if s.HTTP.Listen != config.DefaultListen || !s.Metrics.Enabled {
+		t.Errorf("listen %q (want the default %q), metrics %+v (want enabled)", s.HTTP.Listen, config.DefaultListen, s.Metrics)
+	}
+}
+
 // Every refusal names its field, and the file is refused whole: a server never starts on a part of
 // it. The grant rules are each here: unique names, exactly one of token_sha256 (64 hex digits) and
 // token_env (set), every granted tenant a source, every access field of it granted and no other
@@ -148,6 +175,16 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		// postgres
 		{"no dsn", sub(`dsn_env = "TEST_SERVER_DSN"`, ""), "postgres.dsn_env", "required"},
 		{"dsn unset", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "TEST_UNSET_DSN"`), "postgres.dsn_env", "TEST_UNSET_DSN is not set"},
+		{"ann threshold 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 0"), "postgres.ann_threshold", "at least 1 embedding"},
+		{"ann scan tuples 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_max_scan_tuples = 0"), "postgres.ann_max_scan_tuples", "1 to 2147483647"},
+		{"ann scan tuples past int32", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_max_scan_tuples = 2147483648"), "postgres.ann_max_scan_tuples", "1 to 2147483647"},
+		{"ann scan memory under 1", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_scan_mem_multiplier = 0.5"), "postgres.ann_scan_mem_multiplier", "1 to 1000"},
+		{"ann scan memory over 1000", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_scan_mem_multiplier = 1001"), "postgres.ann_scan_mem_multiplier", "1 to 1000"},
+		{"ann m 1", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 1"), "postgres.ann_m", "2 to 100"},
+		{"ann m 101", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 101"), "postgres.ann_m", "2 to 100"},
+		{"ann ef_construction 1001", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 1001"), "postgres.ann_ef_construction", "4 to 1000"},
+		{"ann ef_construction under twice m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 40\nann_ef_construction = 79"), "postgres.ann_ef_construction", "at least twice m (40)"},
+		{"ann ef_construction under twice the default m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 31"), "postgres.ann_ef_construction", "at least twice m (16)"},
 		{"dsn not a name", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "postgres://x"`), "postgres.dsn_env", "is not an environment variable name"},
 		{"sealed", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_sealed = "AAAA"`), "postgres.dsn_sealed", "not supported yet"},
 		{"schema", sub(`schema  = "autodoc_search"`, `schema = "Search-1"`), "postgres.schema", "not a plain schema name"},
@@ -197,7 +234,9 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"no access", sub(`access   = ["label_id"]`, ``), "source[0].access", "required"},
 		{"access twice", sub(`access   = ["label_id"]`, `access = ["label_id", "label_id"]`), "source[0].access", "named twice"},
 		{"access with =", sub(`access   = ["label_id"]`, `access = ["label=id"]`), "source[0].access", "not an access field name"},
-		{"unknown", good + "\n[metrics]\nport = 9\n", "metrics", "unknown field"},
+		{"metrics with no operator", good + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [[http.operator]]"},
+		{"metrics with no http", good[:strings.Index(good, "[http]")] + good[strings.Index(good, "[[source]]"):] + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [http] table"},
+		{"unknown", good + "\n[telemetry]\nport = 9\n", "telemetry", "unknown field"}, // [metrics] is a known table
 		{"not toml", good + "\n[[source]\n", "(file)", "line"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

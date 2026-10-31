@@ -14,6 +14,7 @@ import (
 // the daemon serves each while it exists). The settings are one dialog: settings.go.
 
 type wsInfo struct {
+	id                                 int64 // the store's own id, which a rename keeps (0 from a daemon before it)
 	name, root, state, embeddingPolicy string
 	sectionTokens                      int64
 	include, exclude                   []string
@@ -22,7 +23,8 @@ type wsInfo struct {
 	provider, providerErr              string   // its own embedding provider ("" the daemon's), and why it is not set up
 	db                                 databasesInfo
 	// graphOnly are its graph_only patterns, todoSearch whether its todo tasks are in search, and
-	// todoExcluded the exclude patterns that keep a todo store of it out of the index (ADR 1792015212)
+	// todoExcluded the exclude patterns that keep a todo store of it out of the index
+	// (docs/decisions/todos.md#graph-only-indexing)
 	graphOnly, todoExcluded []string
 	todoSearch              bool
 }
@@ -219,7 +221,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 	var out []wsInfo
 	for _, w := range asList(res) {
 		m := asMap(w)
-		out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
+		out = append(out, wsInfo{id: num(m, "id"), name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
 			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
 			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
 			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
@@ -235,7 +237,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 
 // withCurrent runs fn on the loop with the workspace named name as the daemon has it NOW, not as
 // the last listing had it: a dialog opened right after its own save (whose relisting is still on
-// its way) must show what was saved (Lector's review of #30). extra, when set, runs in the same
+// its way) must show what was saved. extra, when set, runs in the same
 // worker, for a dialog that needs more from the daemon. A workspace gone meanwhile says so. Any
 // dialog opened or closed after it (open, closeDialog, the manager's own dismissal) supersedes it:
 // an answer arriving late never replaces what the user went to since.
@@ -343,8 +345,8 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 }
 
 // noteTodoExcluded says once a session, for each workspace whose excludes keep a todo store out of
-// the index, which patterns do (ADR 1792015212 §2.3): its tasks open with no relations, and its
-// settings offer to index them graph-only instead.
+// the index, which patterns do (docs/decisions/todos.md#excluded-todo-stores-are-reported): its
+// tasks open with no relations, and its settings offer to index them graph-only instead.
 func (h *Host) noteTodoExcluded(list []wsInfo) {
 	for _, w := range list {
 		key := w.name + "\x00" + strings.Join(w.todoExcluded, ";")

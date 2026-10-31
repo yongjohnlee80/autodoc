@@ -187,9 +187,10 @@ func TestGraphResolveFollowsALinkAsWritten(t *testing.T) {
 	}
 }
 
-// TestAProtocol22SessionSeesNoTodoRelations (ADR 1792015212 §2.4): from protocol 23 a task's review
-// and blocked relations, and its links to a file outside the workspace (external), are in the graph;
-// a session below 23 sees the graph it knew, without them.
+// TestAProtocol22SessionSeesNoTodoRelations
+// (docs/decisions/todos.md#task-relations-and-external-links): from protocol 23 a task's review and
+// blocked relations, and its links to a file outside the workspace (external), are in the graph; a
+// session below 23 sees the graph it knew, without them.
 func TestAProtocol22SessionSeesNoTodoRelations(t *testing.T) {
 	r := serve(t)
 	if err := r.fsys.MkdirAll(context.Background(), "tasks"); err != nil {

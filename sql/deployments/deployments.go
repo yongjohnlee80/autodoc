@@ -25,8 +25,8 @@ var files embed.FS
 
 // Engines are the engines the store has scripts for: each is a directory,
 // named for its dialect. SQLite is every AutoDoc's store; PostgreSQL is the
-// server component's (ADR 1793319634), whose 000001 folds SQLite's 000001 to
-// 000025, so its 000002 to 000025 are empty and every later script ships for
+// server component's (docs/decisions/store.md#a-postgresql-engine-for-the-store),
+// whose 000001 folds SQLite's 000001 to 000025, so its 000002 to 000025 are empty and every later script ships for
 // both under one name.
 var Engines = []string{dao.DialectSQLite, dao.DialectPostgres}
 

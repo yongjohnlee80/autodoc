@@ -122,9 +122,10 @@ func (p *providers) stop() {
 	p.choose("", func(err error) { p.c.Failed(p.c.Tr("autodoc.notice.providers.turn_semantic_search_off"), err) }, func() {})
 }
 
-// removal asks before removing provider r, and says what its removal deletes (ADR 1791284787 §2.3,
-// item 4): the provider in use, or with none in use, takes its model's vectors in every workspace
-// with it, unless another provider serves the same model.
+// removal asks before removing provider r, and says what its removal deletes
+// (docs/decisions/store.md#removing-a-provider-retires-its-model): the provider in use, or with
+// none in use, takes its model's vectors in every workspace with it, unless another provider serves
+// the same model.
 func (p *providers) removal(r endpointRow, remove func()) {
 	var sibling string
 	for _, o := range p.rows.All() {

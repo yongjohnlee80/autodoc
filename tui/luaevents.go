@@ -7,7 +7,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// LUA EVENTS (ADR 1792004705 §4.4): autodoc.on(event, fn) hears what happens to the page.
+// LUA EVENTS (docs/decisions/contract.md#script-events): autodoc.on(event, fn) hears what happens
+// to the page.
 //
 //	open    a file shown in the editor (show), or the draft after a close: { path, workspace }; path
 //	        nil for the draft. Not readPage's: it runs again on an open page when registrations come
@@ -71,7 +72,8 @@ func (h *Host) changeSoonFor(b *openBuffer) {
 		if gen != b.luaGen || eng != h.luaChangeGen || b.buf.Revision() == b.luaRev {
 			return // a later edit's timer emits; a reloaded engine; or only a handler's own edits since
 		}
-		h.emitLua("change", map[string]any{"buffer": b.n, "revision": b.buf.Revision()}) // as ADR 1792076688 §4.5: {buffer, revision}
-		b.luaRev = b.buf.Revision()                                                      // after the handlers: their own edits are in it
+		// {buffer, revision}, as in docs/decisions/editor.md#buffers-in-lua-and-the-editor-socket
+		h.emitLua("change", map[string]any{"buffer": b.n, "revision": b.buf.Revision()})
+		b.luaRev = b.buf.Revision() // after the handlers: their own edits are in it
 	})
 }

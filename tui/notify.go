@@ -81,8 +81,8 @@ func (h *Host) applyToastPrefs() {
 	h.toasts.SetMargin(h.toastMargin())
 }
 
-// post shows a toast. A click on it opens the notifications' history (Johno: "toast click opens
-// the notification history"), unless the toast says otherwise.
+// post shows a toast. A click on it opens the notifications' history, unless the toast says
+// otherwise.
 func (h *Host) post(t widget.Toast) {
 	if t.OnClick == nil {
 		t.OnClick = h.noticeLog.open
@@ -111,8 +111,8 @@ func (h *Host) notifyDone(id, msg string) {
 	h.keepNotice(msg)
 }
 
-// noticeReq is a notification as a plugin or a Lua script asks for it (ADR 1792351123). notice is
-// the history's entry; this is not it.
+// noticeReq is a notification as a plugin or a Lua script asks for it
+// (docs/decisions/plugins.md#notifications). notice is the history's entry; this is not it.
 type noticeReq struct {
 	id      string // "" for a plain one
 	text    string

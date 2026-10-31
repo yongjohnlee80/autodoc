@@ -230,7 +230,8 @@ func TestTheTodoSearchDefault(t *testing.T) {
 	}
 }
 
-// 000023 records each todo store's workspace (ADR 1792132105 §2.4), empty until the daemon records it,
+// 000023 records each todo store's workspace
+// (docs/decisions/todos.md#which-workspace-a-store-belongs-to), empty until the daemon records it,
 // and keeps this machine's workspace variables, one row per workspace and name. The revert drops both.
 func TestTheWorkspaceVarsScript(t *testing.T) {
 	ctx := context.Background()
@@ -262,7 +263,8 @@ func TestTheWorkspaceVarsScript(t *testing.T) {
 	}
 }
 
-// 000024 records a todo store's release (ADR 1791532020 r13): NULL for a store never released, the
+// 000024 records a todo store's release
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write): NULL for a store never released, the
 // time todos.release gave it back otherwise. The revert drops the column and keeps the stores.
 func TestTheTodoStoreReleasedScript(t *testing.T) {
 	ctx := context.Background()
@@ -305,7 +307,8 @@ func TestTheTodoStoreReleasedScript(t *testing.T) {
 	}
 }
 
-// 000025 gives an assignment its scope (ADR 1791532020 r15 §2.5a): empty for a change or a
+// 000025 gives an assignment its scope
+// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope): empty for a change or a
 // snapshot row written without one, and an index finding a store's row by task id. The revert
 // drops both columns and the index, and keeps the rows.
 func TestTheTodoAssignScopeScript(t *testing.T) {
@@ -681,7 +684,8 @@ func ExampleFS() {
 }
 
 // The PostgreSQL scripts apply on PostgreSQL, a second apply has nothing to do, and the schema
-// they make is SQLite's (ADR 1793319634): the same tables, each with the same columns. The one
+// they make is SQLite's
+// (docs/decisions/store.md#a-postgresql-engine-for-the-store): the same tables, each with the same columns. The one
 // named difference is chunk.tsv, the generated full-text vector that stands where SQLite's FTS5
 // table and its triggers do; SQLite's FTS5 tables and its sequence table have no PostgreSQL twin.
 func TestThePostgresScriptsMakeSQLitesSchema(t *testing.T) {
@@ -793,7 +797,8 @@ func columnsOf(t *testing.T, db dao.DataConn, q, table string) map[string]bool {
 	return out
 }
 
-// 000026 creates the crew registry, mail and the inbox (ADR 1793271500 §4.2): a send is a message
+// 000026 creates the crew registry, mail and the inbox
+// (docs/decisions/crew.md#the-crew-and-mail-tables): a send is a message
 // and its deliveries, an alias is unique among a scope's active profiles only, and a recipient's
 // sequence high-water stands apart from its deliveries. The revert drops every table.
 func TestTheCrewMailInboxScript(t *testing.T) {
@@ -818,5 +823,23 @@ func TestTheCrewMailInboxScript(t *testing.T) {
 		if _, err := first(db, "SELECT count(*) FROM "+table); err == nil {
 			t.Errorf("the revert left %s", table)
 		}
+	}
+}
+
+// 000028 gives a crew session its prompts (docs/decisions/crew.md#the-human-inbox): 0 for one
+// registered without it, or before the script, so its prompts are never assumed reported. The
+// revert drops the column and keeps the sessions.
+func TestTheCrewSessionPromptsScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO crew_session(id, profile, host, epoch, instance, secret_hash, args_digest, started) VALUES ('s1', 'p1', 'autodoc:w', 1, 'agent-1', x'00', x'00', 1)")
+	if got, err := first(db, "SELECT prompts FROM crew_session"); err != nil || got != "0" {
+		t.Fatalf("a session written without prompts: %q, %v; want 0", got, err)
+	}
+	revertDownTo(t, db, 28)
+	if _, err := first(db, "SELECT prompts FROM crew_session"); err == nil {
+		t.Fatal("the revert left crew_session.prompts")
+	}
+	if got, err := first(db, "SELECT count(*) FROM crew_session"); err != nil || got != "1" {
+		t.Fatalf("sessions after the revert: %s, %v; want the one kept", got, err)
 	}
 }

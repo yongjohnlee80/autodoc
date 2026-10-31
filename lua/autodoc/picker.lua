@@ -1,4 +1,4 @@
----`<leader>fk`: search the selected KB (ADR 1791209945 §8).
+---`<leader>fk`: search the selected KB (docs/decisions/neovim.md#searching-the-selected-kb).
 ---
 ---A snacks.picker custom source when snacks is installed: the query is debounced, then
 ---`search.query(selected, q, {stages?})` runs live; each hit is an item

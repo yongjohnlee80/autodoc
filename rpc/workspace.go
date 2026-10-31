@@ -70,13 +70,15 @@ func settersOf(ws Workspaces) setters {
 }
 
 // todoModer is a workspace that reports its graph_only patterns, its todo_search, and the exclude
-// patterns that keep a todo store of it out of the index (ADR 1792015212).
+// patterns that keep a todo store of it out of the index
+// (docs/decisions/todos.md#graph-only-indexing).
 type todoModer interface {
 	TodoModes() (graphOnly []string, todoSearch bool, excluded []string)
 }
 
 // workspaceJSON is a workspace as workspace.list and workspace.add answer it.
 type workspaceJSON struct {
+	ID               int64          `json:"id,omitempty"` // the store's own id, which a rename keeps
 	Name             string         `json:"name"`
 	Root             string         `json:"root"`
 	State            string         `json:"state"`
@@ -128,12 +130,13 @@ type connectionJSON struct {
 	User        string `json:"user"`
 	Schema      string `json:"schema"`
 	HasPassword bool   `json:"has_password"`
+	Sealed      bool   `json:"sealed,omitempty"` // its DSN does not open with the store's key: enter it again
 }
 
 func databasesOf(d Databases) *databasesJSON {
 	out := &databasesJSON{UID: d.UID, Destination: d.Destination, VectorIndex: d.VectorIndex, ViewArgs: d.ViewArgs}
 	for _, c := range d.Connections {
-		conn := &connectionJSON{Engine: c.Engine, Host: c.Host, Database: c.Database, User: c.User, Schema: c.Schema, HasPassword: c.HasPassword}
+		conn := &connectionJSON{Engine: c.Engine, Host: c.Host, Database: c.Database, User: c.User, Schema: c.Schema, HasPassword: c.HasPassword, Sealed: c.Sealed}
 		if c.Role == store.RoleDestination {
 			out.DestinationConnection = conn
 		} else {
@@ -143,10 +146,16 @@ func databasesOf(d Databases) *databasesJSON {
 	return out
 }
 
+// identified is a workspace that knows its id in the store (the daemon's do).
+type identified interface{ ID() int64 }
+
 func listed(w Workspace) workspaceJSON {
 	pc := w.Provider()
 	out := workspaceJSON{Name: w.Name(), Root: w.Root(), State: "ready", Include: w.Include(), Exclude: w.Exclude(),
 		SectionTokens: w.SectionTokens(), EmbeddingPolicy: w.EmbeddingPolicy(), Provider: pc.Override, ProviderError: pc.Err}
+	if i, ok := w.(identified); ok {
+		out.ID = i.ID()
+	}
 	if w.Err() != nil {
 		out.State = "error"
 	}
@@ -226,8 +235,8 @@ func (s *Server) workspaceVerbs() []module.Verb {
 	fixed := []int64{CodeNoSuchWorkspace, CodeUnsupported}
 	return []module.Verb{
 		module.Handle(module.Contract{Verb: "workspace.list", Effect: module.EffectRead, Since: 1, Audience: module.AudienceAgent,
-			Result: "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
-			Doc:    "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."},
+			Result: "[{id, name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
+			Doc:    "Every workspace. Search only one whose state is ready. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password, sealed?}, never its DSN; sealed is a connection whose DSN does not open with the store's key (a store restored without its key): enter it again."},
 			func(context.Context, struct{}) ([]workspaceJSON, error) {
 				out := []workspaceJSON{}
 				for _, w := range s.workspaces.List() {

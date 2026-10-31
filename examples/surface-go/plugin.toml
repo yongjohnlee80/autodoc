@@ -1,7 +1,7 @@
 name     = "surface-go"
 title    = "Pixel surface (spike)"
 kind     = "dialog"
-protocol = 10                      # a pixel surface (ADR 1792797354)
+protocol = 10                      # a pixel surface (docs/decisions/plugins.md#pixel-surfaces)
 command  = ["./bin/autodoc-surface-go"]
 
 [dialog]

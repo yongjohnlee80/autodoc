@@ -102,7 +102,8 @@ func decode(src []byte) (Task, error) {
 	return t, nil
 }
 
-// automation refuses a file using what ADR 1791532020 removed, before its schema says anything.
+// automation refuses a file using what docs/decisions/todos.md#the-daemon-owns-the-todo-system
+// removed, before its schema says anything.
 func automation(m *node) error {
 	for i, k := range m.keys {
 		if removedFields[k] && m.vals[i].kind != nNull {

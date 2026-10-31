@@ -60,8 +60,9 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
    "last_refresh": {"at": "…", "complete": true, "last_complete": "…", "error": ""},
    "quarantine": 0,
    "documents": {"total": 120344, "ready": 120344},
-   "models": {"active": "openai|…", "target": "", "semantic": "ready"},
-   "error": ""}]}
+   "models": {"active": "openai|…", "target": "", "semantic": "ready", "search": "ann"},
+   "error": ""}],
+ "ann": [{"model": "openai|text-embedding-3-small||1536", "mode": "ann", "underfill": 3}]}
 ```
 
 | Field | What it tells you |
@@ -72,6 +73,8 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | `quarantine` | rows that failed to render and wait to be fixed in your data (the log names them) |
 | `documents` | the tenant's documents, and how many can be found by meaning |
 | `models.semantic` | `ready`, `partial` (embedding), `switching` (a model change filling; searches answer by words), or `off` |
+| `models.search`, `models.search_reason` | how the tenant's searches by meaning run: `exact` (below `ann_threshold` embeddings, or a model with no index; the reason says which), `ann` (approximate, through the model's HNSW index), `ann-building` (the index is being built; exact meanwhile), or `ann-failed` (exact; the reason is the build's error) |
+| `ann` | each embedding model's index: its `mode`, the `reason` when it failed, and `underfill`, how many approximate searches came back short (a selective filter, or a scan that hit `ann_max_scan_tuples`) and were answered exactly instead, since the server started. A failed index is retried with a growing wait, up to 5 times, then left for you: fix the cause, and clear the model's row in `rag_ann_index` to retry. |
 
 **`error` is a code, never an error's text,** which stays in the log:
 
@@ -101,6 +104,58 @@ metrics scope=tenant tenant=music lock=held documents=120344 ready=120344 quaran
 - **They're logfmt,** for your log pipeline to parse.
 - **The HTTP counts cover the interval:** requests by status class, and the slowest.
 - **No line holds a token, a query's text or a client's name.** Each request's own log line names its client.
+- **They're logged at `Info`:** a `[log] level` of `notice` or above leaves them out.
+
+## Metrics for a scraper: `GET /v1/metrics`
+
+With `[metrics] enabled = true`, the server serves its figures in Prometheus's text format (0.0.4), for Prometheus, VictoriaMetrics, Grafana Agent or any OpenMetrics-compatible scraper. Off, the path is not found.
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: autodoc
+    scrape_interval: 30s
+    authorization:
+      credentials_file: /etc/autodoc/ops.token   # an operator's token
+    static_configs:
+      - targets: ["127.0.0.1:8730"]
+```
+
+- **An operator's token, as `/v1/status`.** A search client's token is refused (403), and a missing or wrong one is refused (401). An operator sees the server's series, and its own tenants' only.
+- **The series:**
+  - `autodoc_server_info{version}`, `autodoc_provider_up`;
+  - `autodoc_http_requests_total{path, class}` and `autodoc_http_request_duration_seconds{path}` (a histogram). They count since the server started, so take rates of them, and they're never reset by the metrics lines.
+  - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (absent until the cursor first moves), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
+- **`path` is one of search, status, metrics, health and other.** Any other URL is counted as `other`, never by its own name.
+- **A tenant whose state can't be read** shows `autodoc_tenant_errors{kind="tenant"} 1` and its lock, and no document or quarantine figures, never a false 0.
+- **No series holds a token, a query's text, a client's name, an access value or an error's text.** Errors are 0 or 1 by kind; their text is in `/v1/status` and the log.
+- **A scrape is counted once it has answered,** so `path="metrics"` shows the previous scrapes. A scrape interval of 30 s or more is plenty.
+
+## The approximate search's index: what it costs
+
+Each embedding model's HNSW index is built with `postgres.ann_ef_construction` (default 200; see
+[server-config.md](server-config.md)). That decides recall more than any search setting: at
+pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten
+across 20 builds, and 8 builds were below 0.95. At 200, every one of 10 builds found 0.990 or more.
+
+The price is paid when the index is built and by every insert while it exists, never by a search.
+Measured with `TestANN_Measure` (PostgreSQL 18, pgvector 0.8.7, 16-dimension embeddings, 4 CPUs):
+
+| | 100,000 embeddings | | 1,000,000 embeddings | |
+|---|---|---|---|---|
+| `ann_ef_construction` | 64 | 200 | 64 | 200 |
+| index build | 13 s | 32 s | 14 min | 34 min |
+| index size | 35 MB | 35 MB | 351 MB | 351 MB |
+| inserts with the index in place | 1,384/s | 784/s | 500/s | 159/s |
+| approximate search, p50 (n = 10) | 13.5 ms | 13.4 ms | 22.5 ms | 22.1 ms |
+
+So at a million embeddings, ingest with the index in place is about a third as fast at 200 as at
+64. A deployment that values ingest over recall can set a lower `ann_ef_construction`. Changing it
+rebuilds each model's index while the old one keeps serving.
+
+**A large initial import pays the per-insert cost.** A model's index is built as soon as a tenant
+names the model, before most of its embeddings are written, so every embedding of the import goes
+into an existing index. There is no path yet to build the index after a bulk load.
 
 ## Behind a proxy
 

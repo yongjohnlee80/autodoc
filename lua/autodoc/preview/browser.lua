@@ -9,7 +9,7 @@
 ---
 ---runs, and the page opens with the system opener. `--base` makes the
 ---page's relative links point at the original files rather than the
----temp directory (ADR 1791210485 §2a); Mermaid is drawn offline by the
+---temp directory (docs/decisions/neovim.md#the-browser-view-goes-through-the-export); Mermaid is drawn offline by the
 ---page itself. The directory is removed on VimLeavePre (`cleanup`).
 ---@module 'autodoc.preview.browser'
 

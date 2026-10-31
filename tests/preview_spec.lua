@@ -1,4 +1,4 @@
--- tests/preview_spec.lua — headless suite for autodoc.preview (ADR 1791210485).
+-- tests/preview_spec.lua — headless suite for autodoc.preview (docs/decisions/neovim.md#markdown-preview-slots).
 --
 -- Run:   nvim --headless -u NONE -l tests/preview_spec.lua
 -- or:    tests/run-all.sh            (every suite, XDG sandboxed, summary-gated)

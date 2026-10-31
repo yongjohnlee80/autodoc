@@ -14,7 +14,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// EVENTS — what one client changed, for the others to see (ADR 0212 §7).
+// EVENTS — what one client changed, for the others to see
+// (docs/decisions/search.md#workspace-providers-and-peer-changes).
 //
 // Every connection is given a client token at sys.hello. A verb that changes configuration or a
 // workspace's lifecycle logs an event once it succeeds: its kind, the workspace it is about, the

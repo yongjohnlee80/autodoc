@@ -169,9 +169,14 @@ func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assig
 }
 
 // handedOver says how the hand-over went. The assignment stands either way. Delivered, the task
-// waits in the agent's input for the user's Enter (ADR 1792991980 §4.2).
+// reached the agent through the window's agent messaging (agentmessaging.go): rung, or typed and
+// sent (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter).
 func (t *todos) handedOver(name, assignee string, err error) {
 	if err == nil {
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_sent", name))
+		return
+	}
+	if errors.Is(err, ErrAgentTypedNotSent) { // typed, left for the user's Enter (agentmessaging.go)
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input", name))
 		return
 	}

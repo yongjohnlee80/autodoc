@@ -100,7 +100,7 @@ func TestThePreferenceOffGivesTheProgramTheMoveKeys(t *testing.T) {
 	r.s.WaitFor(t, "the keyboard on the page", func(string) bool { return !r.focused("agentView") })
 }
 
-// TestAMoveArrivesReadyToType (Johno, v0.3.1): the agent's tab in Normal mode, a Ctrl-move from the
+// TestAMoveArrivesReadyToType (v0.3.1): the agent's tab in Normal mode, a Ctrl-move from the
 // page arrives in input mode, and the next key is the program's. Arriving another way (a click, SPC,
 // reopening: focusWindow) keeps the tab's mode.
 func TestAMoveArrivesReadyToType(t *testing.T) {

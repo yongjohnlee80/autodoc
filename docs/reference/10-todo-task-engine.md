@@ -11,7 +11,7 @@ abstract: "Deep dive into AutoDoc's built-in .todo-list/ task engine (core/todo)
 
 Engineering teams and AI coding agents work best when tasks live alongside the documents, architecture decision records (ADRs), and code reviews they govern. Historically, keeping task state synchronized across terminal editors, GUI viewers, and background agent processes suffered from split-brain drift: each tool re-implemented YAML serialization, timestamp rules, and directory transitions with subtle incompatibilities.
 
-AutoDoc eliminates this drift by making its daemon (`core/todo`) the single authoritative owner of every `.todo-list/` store (ADR 1791532020). Whether a task is created from the interactive Todos Panel (`SPC x`), updated via the CLI (`autodoc --call todos.update`), scripted from Lua (`autodoc.todos.*`), or sent by another client over the daemon's socket, every operation flows through one pure-Go engine over `golib/vfs` and one crash-recoverable SQLite change log (`core/todo/sqlitejournal`).
+AutoDoc eliminates this drift by making its daemon (`core/todo`) the single authoritative owner of every `.todo-list/` store ([the daemon owns the todo system](../decisions/todos.md#the-daemon-owns-the-todo-system)). Whether a task is created from the interactive Todos Panel (`SPC x`), updated via the CLI (`autodoc --call todos.update`), scripted from Lua (`autodoc.todos.*`), or sent by another client over the daemon's socket, every operation flows through one pure-Go engine over `golib/vfs` and one crash-recoverable SQLite change log (`core/todo/sqlitejournal`).
 
 ---
 
@@ -59,9 +59,9 @@ tags:
   - autodoc
   - storage
 adr:
-  - $KB_ROOT/adrs/1791532020-autodoc-owns-the-todo-system.md
+  - $KB_ROOT/adrs/0012-todo-ownership.md
 review:
-  - $KB_ROOT/reviews/lector/2026-10-11-autodoc-todo-ownership-adr1791532020-r7-review.md
+  - $KB_ROOT/reviews/2026-10-11-todo-ownership-review.md
 blocked:
   - 2026-10-11-autodoc-module-convention-foundation
 ---
@@ -78,7 +78,7 @@ AutoDoc partitions frontmatter fields into three strict categories:
 1. **Daemon-Managed Fields (`managed: true`)**: `id`, `version`, `created`, `updated`, `status_changed`, `completed_at`, `archived_at`, and `errors`. Clients and humans must **never** edit these by hand. `todos.update` rejects patches that include them (`todos.invalid`, `-32073`).
 2. **Verb-Managed Lifecycle Fields**:
    - `status` — Transitioned via `todos.status` (or implicitly from `open` to `in-progress` on `todos.assign`). Moving a task to `completed` stamps `completed_at`; moving it to `archived` stamps `archived_at` (preserving `completed_at` if it came from `completed`) and relocates the file into `archived/YYYY/MM/`.
-   - `assignee` — Mutated via `todos.assign`. Per Decision D1 of ADR 1791532020, assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so a notification consumer (an assignment notifier reading `todos.changes`) can wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
+   - `assignee` — Mutated via `todos.assign`. Per [the task rules](../decisions/todos.md#task-rules-and-the-daily-refresh), assigning an `open` task atomically transitions it to `in-progress` in the same write and records an `assign` journal event so a notification consumer (an assignment notifier reading `todos.changes`) can wake the target agent. Editing `assignee:` directly in YAML is treated as a metadata-only hand edit and never triggers spurious agent notifications.
 3. **Hand-Editable Fields**: `title`, `description` (the Markdown body), `priority` (`low`, `medium`, `high`; `normal` is the legacy spelling of `medium`: a task that has it is valid and reads as `medium`, and its next write writes `medium`), `due` (`YYYY-MM-DD`), `tags`, `adr`, `review`, and `blocked`. Users and agents may edit the Markdown body directly on disk or pass a partial map to `todos.update` with the task's current `rev` token.
 
 A task's frontmatter is the todo format's, not a KB document type's: the editor and `index.documents {diagnosed: true}` check a task against the format, never against the workspace's schema (see the frontmatter-schemas reference).
@@ -89,10 +89,10 @@ A task's frontmatter is the todo format's, not a KB document type's: the editor 
 
 A task's `adr`, `review`, and `blocked` fields link operational work to durable architectural artifacts. Because absolute paths break when a repository or Knowledge Base is synced across machines (for example, `/Users/alice/...` on macOS versus `/home/alice/...` on Linux), AutoDoc automatically rewrites absolute paths into portable symbolic variables on `todos.add`, `todos.update`, and `todos.refresh`.
 
-When you pass an absolute path in `adr` or `review`, the symbolizer checks the owning workspace's variable table (`todos.vars` / `workspace.vars`, ADR 1792132105) and rewrites the path using the **longest matching prefix** among:
+When you pass an absolute path in `adr` or `review`, the symbolizer checks the owning workspace's variable table (`todos.vars` / `workspace.vars`, [variables belong to the workspace](../decisions/todos.md#variables-belong-to-the-workspace)) and rewrites the path using the **longest matching prefix** among:
 
 - `$KB_ROOT` — The Knowledge Base workspace root governing the store.
-- `$PROJECT_ROOT` — The enrolled project root owning a project-scoped store (note: legacy `$WORKSPACE` is retired in ADR 1792132105 and remains unresolved unless explicitly defined).
+- `$PROJECT_ROOT` — The enrolled project root owning a project-scoped store (note: legacy `$WORKSPACE` is retired ([Retiring $WORKSPACE](../decisions/todos.md#retiring-workspace)) and remains unresolved unless explicitly defined).
 - User-defined variables configured via `workspace.set_var` or `todos.set_var` (stored portably in `.autodoc-vars.toml` for workspace-scoped variables or locally for machine-scoped overrides).
 - `$HOME` — Fallback home directory variable.
 
@@ -196,7 +196,7 @@ autodoc --call todos.update '[
   "kb",
   "2026-10-17-implement-sqlite-todo-journal",
   "a94f8c2e1b0d...",
-  {"priority": "high", "adr": ["/home/me/kb/adrs/1791532020-autodoc-owns-the-todo-system.md"]}
+  {"priority": "high", "adr": ["/home/me/kb/adrs/0012-todo-ownership.md"]}
 ]'
 
 # 4. Transition status to completed (moves file to completed/ and stamps completed_at)

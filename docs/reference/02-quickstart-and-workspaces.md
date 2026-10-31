@@ -297,7 +297,7 @@ setting leaves every setting as it was, and the dialog opens again as it was typ
 
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, and `[embedding_queue]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]` and `[log]` settings:
 
 ```toml
 # $XDG_CONFIG_HOME/autodoc/config.toml
@@ -311,9 +311,17 @@ poll_interval = "2s"        # the listing interval when a root cannot be watched
 
 [embedding_queue]
 max_inflight = 1            # requests to the shared provider, 1 or 2
+
+[log]
+level = ""                  # the least severe record logged; "" (the default) logs every one
 ```
 
 A missing file is every default.
+
+`[log] level` is one of `debug`, `info`, `notice`, `warning`, `error` or `critical`, in any case:
+the daemon's log (in the state directory) then leaves out every record less severe. Any other
+value is refused when the daemon starts, as a misspelled setting is. `autodoc --serve
+--log-level warning` sets it for one run, over the file's.
 
 The embedding providers are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's Search models dialog (see [Semantic search](06-configuring-embeddings-and-rerankers.md)).
@@ -325,7 +333,7 @@ added and chosen in the TUI's Search models dialog (see [Semantic search](06-con
 - **`section_tokens` (Default: `0`, which uses the `400`-token default)**: Rather than slicing Markdown files at arbitrary character offsets that sever code blocks or tables in half, AutoDoc's structural chunker splits documents along Markdown heading boundaries (`#`, `##`, `###`). If a single section exceeds `section_tokens`, the chunker subdivides at paragraph or fenced-block boundaries while preserving the full ancestor heading breadcrumb on every chunk.
 - **`abstract_chunk` (Default: `false`)**: When enabled (`true`), AutoDoc synthesizes a dedicated chunk `0` for every document from its YAML frontmatter `abstract`. During hybrid retrieval, matches in the abstract chunk help surface high-level overview documents alongside specific section hits.
 - **`demote_superseded` (Default: `false`)**: Mature engineering knowledge bases keep historical ADRs and retired runbooks for auditability (`status: superseded` / `superseded_by`). With `demote_superseded = true`, these documents remain fully searchable and navigable via `[[wikilinks]]`, while their search hits are ranked below their active successor's hits unless you filter explicitly for `status:superseded`.
-- **`graph_only` (Default: `[]`)**: A list of glob patterns (such as `["archive/**"]`) whose matching files are indexed only for the `[[wikilink]]` and frontmatter relation graph, skipping full-text and vector chunk indexing (ADR 1792015212).
+- **`graph_only` (Default: `[]`)**: A list of glob patterns (such as `["archive/**"]`) whose matching files are indexed only for the `[[wikilink]]` and frontmatter relation graph, skipping full-text and vector chunk indexing ([graph-only indexing](../decisions/todos.md#graph-only-indexing)).
 - **`embedding_policy` (`"always"` | `"when opened"` | `"never"`)**: Controls how the background embedding worker interacts with your workspace (`workspace.embedding_policy`). `"always"` (the default) embeds changed files in the background whenever the daemon is running; `"when opened"` defers background embedding until a client opens the workspace; and `"never"` keeps the workspace strictly lexical and graph-indexed.
 
 ---

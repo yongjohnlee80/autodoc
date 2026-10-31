@@ -3,10 +3,15 @@ package index
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
@@ -18,16 +23,17 @@ import (
 // ErrNoDocument is a path the index does not hold.
 var ErrNoDocument = errs.Sentinel(errs.ErrInvalidArgument, "index: no such document")
 
-// Link is one link of graph.links or graph.backlinks (ADR 0204 §4.6). Path is the other end: the
-// target of a link, the source of a backlink; "" for an unresolved link.
+// Link is one link of graph.links or graph.backlinks (docs/decisions/search.md#link-resolution).
+// Path is the other end: the target of a link, the source of a backlink; "" for an unresolved link.
 type Link struct {
 	Path     string
 	Raw      string // the link as written
 	Anchor   string // the heading, or "^" and the block id; "" for none
 	Kind     string // LinkWikilink, LinkEmbed or LinkMarkdown, or a relation's field
 	Resolved bool
-	// External is a link's file outside the workspace, absolute: a todo task's ref (ADR 1792015212
-	// §2.4). It reaches no document, and is not unresolved. "" for every other link.
+	// External is a link's file outside the workspace, absolute: a todo task's ref
+	// (docs/decisions/todos.md#task-relations-and-external-links). It reaches no document, and is
+	// not unresolved. "" for every other link.
 	External string
 }
 
@@ -199,8 +205,159 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 		return Map{}, err
 	}
 	sort.Slice(m.Nodes, func(i, j int) bool { return m.Nodes[i].Path < m.Nodes[j].Path })
-	sort.Slice(m.Edges, func(i, j int) bool {
-		a, b := m.Edges[i], m.Edges[j]
+	sortEdges(m.Edges)
+	return m, nil
+}
+
+// AN UNROOTED MAP, A PAGE AT A TIME (docs/decisions/search.md#unrooted-maps-in-pages) — the whole
+// workspace's map in one reply fails past the transport's message limit, so a client from protocol
+// 36 reads it in pages: documents in path order after a cursor, through document's (workspace_id,
+// path) key, each page with the links whose source is on it (link_src, the destination's path
+// joined), and those documents' tags and supersession. Every link is sent once, by the page of its
+// source; one to a document of a later page names a node the client has not had yet, and it holds
+// the link until the map ends. No snapshot crosses pages: a document added or removed meanwhile may
+// be missing or extra.
+
+// The pages of an unrooted map: DefaultMapPage documents unless asked, MaxMapPage at most.
+const (
+	DefaultMapPage = 500
+	MaxMapPage     = 2000
+)
+
+// ErrBadMapCursor is a map page's after that is not a cursor of this map: not one at all, or one
+// asked under other kinds.
+var ErrBadMapCursor = errs.Sentinel(errs.ErrInvalidArgument, "index: after is not a cursor of this map")
+
+// MapPageOpts asks for one page of an unrooted map.
+type MapPageOpts struct {
+	Kinds     []string // the links returned (nil: every kind), as MapOpts
+	TypeField string   // as MapOpts
+	After     string   // the previous page's next; "" from the start
+	Limit     int      // documents a page: DefaultMapPage when 0, MaxMapPage at most
+}
+
+// MapPage is one page of an unrooted map: its documents, the links whose source is among them,
+// and the cursor of the next page ("" at the end).
+type MapPage struct {
+	Map
+	Next string
+}
+
+// mapCursorPrefix marks a map cursor's encoding.
+const mapCursorPrefix = "m1."
+
+// mapCursor is a map page's next, decoded: the last document's path and the hash of the kinds.
+type mapCursor struct {
+	Path  string `json:"p"`
+	Kinds string `json:"k"`
+}
+
+// kindsHash fingerprints a map's kinds for its cursor: nil (every kind) and a list differ, and a
+// list is a set (its order and repeats do not matter).
+func kindsHash(kinds []string) string {
+	if kinds == nil {
+		return "*"
+	}
+	b, _ := json.Marshal(sortedSet(kinds))
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
+}
+
+// MapPage gathers one page of the unrooted map: the next documents in path order after o.After,
+// and the resolved links of o.Kinds whose source is one of them, to any document. Superseded and
+// tags are each node's own, as Map answers them.
+func (s *Store) MapPage(ctx context.Context, o MapPageOpts) (MapPage, error) {
+	if o.Limit <= 0 {
+		o.Limit = DefaultMapPage
+	}
+	o.Limit = min(o.Limit, MaxMapPage)
+	kh := kindsHash(o.Kinds)
+	after := ""
+	if o.After != "" {
+		raw, ok := strings.CutPrefix(o.After, mapCursorPrefix)
+		b, err := base64.RawURLEncoding.DecodeString(raw)
+		var c mapCursor
+		if ok && err == nil {
+			err = json.Unmarshal(b, &c)
+		}
+		switch {
+		case !ok || err != nil:
+			return MapPage{}, fmt.Errorf("%w: not a next graph.map answered", ErrBadMapCursor)
+		case c.Kinds != kh:
+			return MapPage{}, fmt.Errorf("%w: it is from other kinds", ErrBadMapCursor)
+		}
+		after = c.Path
+	}
+	var p MapPage
+	err := s.read(ctx, func(tx *store.Tx) error {
+		d := s.documents(tx)
+		if after != "" {
+			d = d.WithPredicate(store.RowAfter([]string{`"document"."path"`}, after))
+		}
+		docs, err := d.OrderBy(dao.Asc(byPath)).Limit(uint64(o.Limit+1)).Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
+		if err != nil {
+			return err
+		}
+		if len(docs) > o.Limit {
+			docs = docs[:o.Limit]
+			b, _ := json.Marshal(mapCursor{Path: docs[len(docs)-1].Path, Kinds: kh})
+			p.Next = mapCursorPrefix + base64.RawURLEncoding.EncodeToString(b)
+		}
+		if len(docs) == 0 {
+			return nil
+		}
+		ids := make([]int64, len(docs))
+		paths := make(map[int64]string, len(docs))
+		for i, doc := range docs {
+			ids[i], paths[doc.ID] = doc.ID, doc.Path
+		}
+		superseded, err := s.superseded(tx, ids)
+		if err != nil {
+			return err
+		}
+		tags, err := s.tagsByDoc(tx, ids)
+		if err != nil {
+			return err
+		}
+		for _, doc := range docs {
+			n := MapNode{Path: doc.Path, Type: frontmatterType(doc.FrontmatterJSON, cmp.Or(o.TypeField, "type")),
+				Superseded: superseded[doc.ID], Tags: tags[doc.ID]}
+			if doc.Title != nil {
+				n.Title = *doc.Title
+			}
+			p.Nodes = append(p.Nodes, n)
+		}
+		// the page's links, by link_src; no "dst_doc IS NOT NULL" (see neighbourhood): an
+		// unresolved link is skipped here, and a link repeated is one edge, as Map has it
+		seen := map[Edge]bool{}
+		for part := range inParts(ids) {
+			rows, err := kindsIn(s.linksOut(tx), o.Kinds).With(LinkSrc, part...).Select(LinkSrc, LinkDst, LinkKind, LinkOtherPath)
+			if err != nil {
+				return err
+			}
+			for _, l := range rows {
+				if l.DstDoc == nil {
+					continue
+				}
+				if e := (Edge{paths[l.SrcDoc], l.OtherPath, l.Kind}); !seen[e] {
+					seen[e] = true
+					p.Edges = append(p.Edges, e)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return MapPage{}, err
+	}
+	sortEdges(p.Edges)
+	return p, nil
+}
+
+// sortEdges orders a map's links by source, destination, then kind.
+func sortEdges(es []Edge) {
+	sort.Slice(es, func(i, j int) bool {
+		a, b := es[i], es[j]
 		if a.Src != b.Src {
 			return a.Src < b.Src
 		}
@@ -209,7 +366,6 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 		}
 		return a.Kind < b.Kind
 	})
-	return m, nil
 }
 
 // neighbourhood walks the resolved links of the given kinds from start, both ways, depth steps: the

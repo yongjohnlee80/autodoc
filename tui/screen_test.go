@@ -150,9 +150,26 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 	})
 }
 
+// TestSPCmEnterTypedAtOnceOpensTheMenu: SPC m then Enter, typed at once (no wait between the keys,
+// as a fast hand does), opens the File menu on the bar SPC m showed, and the Enter never reaches the
+// page: the bar takes the keyboard before any key after it is read.
+func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "aaa\n"}}, daemonOpts{prefs: map[string]string{}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	// the file's state, not waitFile's status-line text: the store's preferences hide the status line
+	r.s.WaitFor(t, "a.md open", func(string) bool { n := r.file(); return n.open && n.path == "a.md" && !n.dirty })
+	before := r.editorText()
+	r.keys(t, key(' '), key('m'), enter())
+	r.s.WaitForText(t, "New file")
+	if after := r.editorText(); after != before {
+		t.Fatalf("SPC m Enter typed at once: the page went from %q to %q", before, after)
+	}
+}
+
 // TestAMenuTitleIsClickedUnderTheToasts: a click on a menu bar title opens its menu while the
 // toasts are up. The toasts are an always-shown float over the whole screen, and its empty layer
-// took every click (Johno: "the autodoc mouse button on the menu not working anymore"); golib's
+// took every click, the menu bar's among them; golib's
 // hit-testing now lets the pointer through a non-modal float wherever its content is not.
 func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
@@ -191,9 +208,8 @@ func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	if sc := r.s.String(); strings.Contains(sc, "NORMAL") {
-		t.Fatalf("the status line shows, connected:\n%s", sc)
-	}
+	// the preferences read is the host's; the frame that hides the line by them may follow it
+	r.s.WaitFor(t, "the status line hidden, connected", func(sc string) bool { return !strings.Contains(sc, "NORMAL") })
 	d.stop()
 	r.s.WaitFor(t, "the status line, disconnected", func(sc string) bool {
 		return strings.Contains(sc, "NORMAL") && (strings.Contains(sc, "reconnecting") || strings.Contains(sc, "connecting to"))
@@ -245,9 +261,9 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 // TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer, on its Explorer and its
 // Links tab, over the page, from the edge its preference names, and the page's text moves only by the menu bar's
 // row: the dock lists the drawer, so the auto-hidden bar shows, and pushes the page down one row
-// (Johno's choice, 2026-10-19, ADR 1792397302); SPC e again closes it, and the page is back. A side
-// panel takes the middle 85% of the rows, one at the top or bottom the middle 80% of the columns:
-// the page shows around it.
+// (docs/decisions/editor.md#the-dock-of-open-widgets); SPC e again
+// closes it, and the page is back. A side panel takes the middle 85% of the rows, one at the top or
+// bottom the middle 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right"}})
@@ -322,7 +338,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 		"beta":  {"c.md", "# C\n"},
 	})
 	r := attached(t, d)
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the workspaces", func(sc string) bool { return strings.Contains(sc, "alpha") && strings.Contains(sc, "beta") })
 	if !r.focused("explorerTree") {
@@ -345,7 +361,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 	r.keys(t, key('G'), enter()) // beta, the last row
 	r.s.WaitForText(t, "c.md")
 	r.keys(t, key('j'), enter())
-	r.s.WaitForText(t, "· beta")
+	r.waitAttached(t, "beta")
 	r.waitFile(t, "c.md")
 }
 
@@ -615,13 +631,12 @@ func TestTheProviderForm(t *testing.T) {
 }
 
 // A provider coming into use is a new embedding model: the picker's query and hits answered by
-// words alone are cleared, the field emptied, and the clearing said (Johno, 2026-10-02: "When the
-// embedding model changes, it should clear the search query, and start afresh").
+// words alone are cleared, the field emptied, and the clearing said, so the search starts afresh.
 func TestAModelChangeClearsTheSearch(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)
@@ -651,7 +666,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
@@ -684,7 +699,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
@@ -717,7 +732,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
@@ -750,7 +765,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 		}
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "first"); err != nil {
 		t.Fatal(err)
 	}
@@ -777,7 +792,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() {
 		r.h.showProgress(1, 0, embedProgress{on: true, model: "old", target: "new", semantic: "switching", texts: 2, targetPending: 1}, 1)
 		r.h.showProgress(1, 0, embedProgress{}, 1)
@@ -786,16 +801,23 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 }
 
 // An updated model, the same name with another digest, says it refills rather than that the search
-// switches to a new model (ADR 1793005098 §4.4).
+// switches to a new model (docs/decisions/search.md#the-setup-dialog).
 func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() {
+	r.waitAttached(t, "kb")
+	updated := func() {
 		r.h.showProgress(1, 0, embedProgress{on: true, model: "ollama|embedder|sha256:a|4", target: "ollama|embedder|sha256:b|4",
 			semantic: "switching", texts: 2, targetPending: 1}, 1)
+	}
+	// the daemon's own progress poll (every second) answers that no switch is under way and ends the
+	// toast; one landing before a frame drew the update hid it (canary CI, c1732c3). The update is
+	// put again at each look, so the poll can't hide it for good: what the cell asserts is the text an
+	// updated model shows, not a race against the poll.
+	r.s.WaitFor(t, "the toast an updated model shows", func(screen string) bool {
+		r.h.p.Post(updated)
+		return strings.Contains(screen, "embedder was updated")
 	})
-	r.s.WaitForText(t, "embedder was updated")
 }
 
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
@@ -804,7 +826,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 		"bravo": fileDir(t, "b.md", "# B\n\nriver mud\n"),
 	})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
@@ -818,7 +840,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
@@ -1622,7 +1644,8 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
 		t.Fatal(err)
 	}
-	// the switch done: other the active model, and embedder, superseded, reclaimed (ADR 1791284787)
+	// the switch done: other the active model, and embedder, superseded, reclaimed
+	// (docs/decisions/store.md#when-a-model-is-reclaimed)
 	r.s.WaitFor(t, "other active, embedder reclaimed", func(string) bool {
 		v, _ := r.h.session.Call(ctx, "index.models", "kb")
 		ms := asList(v)
@@ -1654,10 +1677,11 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	})
 }
 
-// TestRemovingAProviderSaysWhatItDeletes (ADR 1791284787 §2.3, item 4): the removal's question
-// says what goes. The provider in use, its model served by no other: semantic search off, and its
-// vectors counted across the workspaces. Another provider of the same model: its vectors kept.
-// Another provider in use: its vectors go once nothing uses them.
+// TestRemovingAProviderSaysWhatItDeletes
+// (docs/decisions/store.md#removing-a-provider-retires-its-model): the removal's question says what
+// goes. The provider in use, its model served by no other: semantic search off, and its vectors
+// counted across the workspaces. Another provider of the same model: its vectors kept. Another
+// provider in use: its vectors go once nothing uses them.
 func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
@@ -2233,4 +2257,35 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 		c, ok := r.s.Backend.CursorColor()
 		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xb5, G: 0x54, B: 0x1f}
 	})
+}
+
+// TestASearchWaitingOnEmbeddingSaysWhenItFinishes: a search toasted as waiting on texts still
+// embedding is told when the embedding has finished, nothing left working, and only once. Driven on
+// the loop, not by a poll racing the search's own answer, which clears the toast too; asserted on
+// the notifications kept, since a done toast leaves the screen.
+func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	r.h.p.Post(func() {
+		r.h.searchWaitToast = true // as a search that met texts still embedding leaves it
+		// the state last polled, its model unchanged (a changed one clears the search first), with
+		// nothing left embedding
+		emb := r.h.prog.emb
+		emb.pending, emb.refused, emb.targetPending, emb.targetRefused = 0, 0, 0, 0
+		r.h.showProgress(r.h.prog.docs, 0, emb, r.h.prog.cursor)
+	})
+	// read on the loop after the post: a done toast may already be gone from the screen, the
+	// history keeps it
+	said, waiting := onLoop(r, func() (n int) {
+		for _, m := range r.h.noticeLog.items {
+			if m.text == "embedding finished; search is refreshing in kb" {
+				n++
+			}
+		}
+		return n
+	}), onLoop(r, func() bool { return r.h.searchWaitToast })
+	if said != 1 || waiting {
+		t.Errorf("after the embedding finished: said %d times, still waiting %v; want said once, not waiting", said, waiting)
+	}
 }

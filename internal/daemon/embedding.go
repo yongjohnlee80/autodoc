@@ -461,7 +461,8 @@ func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSp
 // only once it is gone does the one in use go out of use, so a remove that fails changes nothing.
 // Removing the provider in use also takes its model out of use in every workspace, in the same
 // transaction as the record, unless another provider could serve it; then semantic search goes
-// off, and the model's vectors are reclaimed in the background (ADR 1791284787 §2.3, item 4).
+// off, and the model's vectors are reclaimed in the background
+// (docs/decisions/store.md#removing-a-provider-retires-its-model).
 //
 // With no provider in use at all (removed, or none chosen), a removal does the same: the model kept
 // active for another provider that could serve it is retired with the last such provider. While

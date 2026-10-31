@@ -4,27 +4,35 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 )
 
-// errNoWaker is an endpoint of a kind no waker serves (phase 3 brings them): a failed attempt,
-// backed off like any other.
+// errNoWaker is an endpoint of a kind no waker serves. A reservation takes only the kinds there are
+// wakers for, so an attempt meets it only if that ever changes under it: a failed attempt, backed
+// off like any other.
 var errNoWaker = errors.New("crew: no waker for the endpoint's kind")
 
 // wakeRetry is how soon a look that met a store error, or left an end unrecorded, looks again.
 const wakeRetry = 5 * time.Second
 
-// Scheduler is the wake scheduler (§4.7): one loop, woken by pokes (a send, an expiry, an endpoint,
-// a reattach), by a timer on the earliest deadline, and by a retry timer after a store error,
-// reserving attempts for due sessions under wakePermits permits. A permit is held by an attempt's
-// goroutine until its call returns: resetting a row never frees one.
+// Scheduler is the wake scheduler (docs/decisions/crew.md#wakers-and-the-wake-scheduler): one loop,
+// woken by pokes (a send, an expiry, an endpoint, a reattach), by a timer on the earliest deadline,
+// and by a retry timer after a store error, reserving attempts for due sessions under wakePermits
+// permits. A permit is held by an attempt's goroutine until its call returns: resetting a row never
+// frees one.
 type Scheduler struct {
-	m       *Manager
-	run     string
+	m   *Manager
+	run string
+	// wakers and the kinds they serve (sorted: the only ones reserved), under wmu: a waker found
+	// after the start (AddWaker) joins them while the loop runs
+	wmu     sync.RWMutex
 	wakers  map[string]Waker
+	kinds   []string
 	clock   func() time.Time
 	report  func(error)
+	failed  func(Endpoint, error)
 	retry   time.Duration
 	permits chan struct{}
 	poke    chan struct{}
@@ -39,6 +47,10 @@ type Scheduler struct {
 	// this run would look at it again.
 	omu  sync.Mutex
 	owed map[owedKey]owedEnd
+
+	// stopped is Run's end: from then no Fire starts a call (stopMu orders it against wg.Add)
+	stopMu  sync.Mutex
+	stopped bool
 }
 
 // owedKey is one attempt: a session can owe the ends of two (an old call that outlived an endpoint
@@ -62,19 +74,65 @@ func WithWakeErrors(report func(error)) SchedulerOption {
 	return func(s *Scheduler) { s.report = report }
 }
 
+// WithWakeFailures sets where a wake that failed, or whose outcome is unknown, is told, with the
+// waker's reason (the daemon's log): the session's row keeps the count and the backoff, never why,
+// so this is the only trace of why a session is not being woken.
+func WithWakeFailures(failed func(ep Endpoint, err error)) SchedulerOption {
+	return func(s *Scheduler) { s.failed = failed }
+}
+
 // WithWakeRetry sets how soon a look that met a store error looks again (tests shorten it).
 func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) { s.retry = d } }
 
 // NewScheduler is the wake scheduler for this daemon run (a fresh random id made once at start),
-// calling the wakers by endpoint kind.
+// calling the wakers by endpoint kind. It is the Manager's from then on: Watch hears its pokes.
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
-	s := &Scheduler{m: m, run: run, wakers: wakers, clock: time.Now, report: func(error) {}, retry: wakeRetry,
-		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
+	s := &Scheduler{m: m, run: run, wakers: map[string]Waker{}, clock: time.Now, report: func(error) {}, retry: wakeRetry,
+		failed: func(Endpoint, error) {}, permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
 		watchers: map[chan struct{}]struct{}{}, owed: map[owedKey]owedEnd{}}
+	for kind, w := range wakers {
+		if w != nil {
+			s.wakers[kind] = w
+			s.kinds = append(s.kinds, kind)
+		}
+	}
+	slices.Sort(s.kinds)
 	for _, o := range opts {
 		o(s)
 	}
+	m.sched.Store(s) // the long-polls watch its pokes (Manager.Watch)
 	return s
+}
+
+// AddWaker serves kind with w from now on, as when a CLI's waker is found only after the daemon
+// started (its capability probed in the background): its sessions, watch-only until then, are
+// reserved from the next look, which this pokes. A nil w adds nothing.
+func (s *Scheduler) AddWaker(kind string, w Waker) {
+	if w == nil {
+		return
+	}
+	s.wmu.Lock()
+	if _, ok := s.wakers[kind]; !ok {
+		s.kinds = append(s.kinds, kind)
+		slices.Sort(s.kinds)
+	}
+	s.wakers[kind] = w
+	s.wmu.Unlock()
+	s.Poke()
+}
+
+// served is the kinds wakers serve, a copy safe to keep while AddWaker runs.
+func (s *Scheduler) served() []string {
+	s.wmu.RLock()
+	defer s.wmu.RUnlock()
+	return slices.Clone(s.kinds)
+}
+
+// wakerFor is kind's waker, or nil.
+func (s *Scheduler) wakerFor(kind string) Waker {
+	s.wmu.RLock()
+	defer s.wmu.RUnlock()
+	return s.wakers[kind]
 }
 
 // Poke asks the loop to look again, and tells every watcher something may have changed. It never
@@ -125,7 +183,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-time.After(s.retry):
 		}
 	}
-	defer s.wg.Wait()
+	defer func() {
+		// no call starts once the loop is done: a Fire after this finds the scheduler stopped
+		s.stopMu.Lock()
+		s.stopped = true
+		s.stopMu.Unlock()
+		s.wg.Wait()
+	}()
 	// NOTE: the times no event announces (a lease's end, a message's expiry, a backoff's next
 	// attempt, the retry after a store error) are waited on with this one timer, reset each turn to
 	// the first of them; a poke or ctx ends the wait before it.
@@ -143,7 +207,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// a deadline already past is one this look could not process, and acting on it at once
 		// would spin on the store's error. Otherwise the earliest deadline decides.
 		wait, armed := s.retry, again
-		if at, ok, err := s.m.nextAt(ctx); err != nil {
+		if at, ok, err := s.m.nextAt(ctx, s.served()); err != nil {
 			s.report(err)
 			armed = true
 		} else if ok && !again {
@@ -170,7 +234,8 @@ func (s *Scheduler) Look(ctx context.Context) { s.look(ctx) }
 // still owed.
 func (s *Scheduler) look(ctx context.Context) bool {
 	again := s.payOwed(ctx)
-	due, err := s.m.sweep(ctx)
+	kinds := s.served() // one set of kinds for the whole look, whatever AddWaker does meanwhile
+	due, err := s.m.sweep(ctx, kinds)
 	if err != nil {
 		s.report(err)
 		return true
@@ -181,7 +246,7 @@ func (s *Scheduler) look(ctx context.Context) bool {
 		default:
 			return again // none free: a returning call pokes the loop
 		}
-		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run)
+		tok, ep, ok, err := s.m.Reserve(ctx, session, s.run, kinds)
 		if err != nil || !ok {
 			if err != nil {
 				s.report(err)
@@ -232,28 +297,42 @@ func (s *Scheduler) payOwed(ctx context.Context) bool {
 	return left
 }
 
-func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoint) {
+func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoint) Outcome {
+	return s.attemptWith(ctx, ctx, session, tok, ep)
+}
+
+// attemptWith is an attempt whose waker call is bounded by call and whose checks and records run
+// on record (Fire's: a caller that stops waiting never leaves the row in flight). It answers what
+// the call came to; an attempt abandoned before its call is a failure to its caller.
+func (s *Scheduler) attemptWith(call, record context.Context, session, tok string, ep Endpoint) Outcome {
 	defer func() { <-s.permits; s.wg.Done(); s.Poke() }() // the permit returns only when this call does
-	current, err := s.m.StillCurrent(ctx, session, tok, ep.Generation)
+	current, err := s.m.StillCurrent(record, session, tok, ep.Generation)
 	if err != nil || !current {
 		if err != nil {
 			s.report(err)
 		}
-		if err := s.m.Abandon(ctx, session, tok); err != nil {
+		if err := s.m.Abandon(record, session, tok); err != nil {
 			s.report(err)
 			s.owe(session, tok, owedEnd{abandon: true})
 		}
-		return
+		return OutcomeFailed
 	}
 	werr := errNoWaker
-	if w := s.wakers[ep.Kind]; w != nil {
-		cctx, cancel := context.WithTimeout(ctx, wakeCallLimit)
+	if w := s.wakerFor(ep.Kind); w != nil {
+		cctx, cancel := context.WithTimeout(call, wakeCallLimit)
 		werr = w.Wake(cctx, ep, WakeNotice)
 		cancel()
 	}
 	o := classify(werr)
-	if err := s.m.Outcome(ctx, session, tok, o); err != nil {
+	if werr != nil {
+		s.failed(ep, werr)
+	}
+	if o == OutcomeFailed || o == OutcomeGone {
+		s.m.noteCause(session, werr.Error())
+	}
+	if err := s.m.Outcome(record, session, tok, o); err != nil {
 		s.report(err)
 		s.owe(session, tok, owedEnd{outcome: o})
 	}
+	return o
 }

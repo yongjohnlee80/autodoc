@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// leaseTTL is how long a host's ownership lasts unrenewed (§4.3); hosts renew every 30 s.
+// leaseTTL is how long a host's ownership lasts unrenewed
+// (docs/decisions/crew.md#scopes-and-fenced-ownership); hosts renew every 30 s.
 const leaseTTL = 90 * time.Second
 
 // free reports whether h's owner may be replaced at now: it released the scope, its lease lapsed,
@@ -32,6 +33,9 @@ func kindOf(scope string) string {
 
 // checkClaim refuses a scope id no host may claim, or an empty run token.
 func checkClaim(scope, run string) error {
+	if len(scope) > MaxIdent {
+		return fmt.Errorf("%w: a scope of %d bytes, at most %d", ErrInvalid, len(scope), MaxIdent)
+	}
 	if kindOf(scope) == "" {
 		return fmt.Errorf("%w: scope %q is not autovim:, nvim: or autodoc:<name>", ErrInvalid, scope)
 	}
@@ -42,7 +46,7 @@ func checkClaim(scope, run string) error {
 }
 
 // Claim claims scope for run's process, or reattaches it when that process already holds it
-// (§4.3). One write:
+// (docs/decisions/crew.md#scopes-and-fenced-ownership). One write:
 //   - the holder is this run and proc: a reattach, the same epoch (a daemon reconnect, or a retry
 //     of a claim whose answer was lost);
 //   - the holder is free: a claim, epoch + 1; every live session of the scope ends ('reclaim');
@@ -54,7 +58,8 @@ func (m *Manager) Claim(ctx context.Context, scope, run, proc string) (int64, er
 }
 
 // Takeover claims scope as Claim does, but from a holder that is not free, after the user agreed
-// (§4.3): the old owner is fenced by the new epoch, and its sessions end ('takeover').
+// (docs/decisions/crew.md#scopes-and-fenced-ownership): the old owner is fenced by the new epoch,
+// and its sessions end ('takeover').
 func (m *Manager) Takeover(ctx context.Context, scope, run, proc string) (int64, error) {
 	return m.claim(ctx, scope, run, proc, true)
 }
@@ -64,7 +69,7 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 		return 0, err
 	}
 	var epoch int64
-	err := m.store.Write(ctx, func(tx Tx) error {
+	err := m.write(ctx, func(tx Tx, after *afterCommit) error {
 		now := tx.Now()
 		sc, scoped, err := tx.Scope(scope)
 		if err != nil {
@@ -94,7 +99,7 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 		if force {
 			why = EndedTakeover
 		}
-		if err := m.endScopeSessions(tx, scope, why); err != nil {
+		if err := m.endScopeSessions(tx, after, scope, why); err != nil {
 			return err
 		}
 		epoch = h.Epoch + 1
@@ -103,14 +108,15 @@ func (m *Manager) claim(ctx context.Context, scope, run, proc string, force bool
 	return epoch, err
 }
 
-// Release gives scope back on a clean exit (§4.3): its sessions end ('exit'), and the incarnation
-// is cleared, so this run can never reattach. The next claim takes a new epoch.
+// Release gives scope back on a clean exit (docs/decisions/crew.md#scopes-and-fenced-ownership):
+// its sessions end ('exit'), and the incarnation is cleared, so this run can never reattach. The
+// next claim takes a new epoch.
 func (m *Manager) Release(ctx context.Context, scope, run string, epoch int64) error {
-	return m.store.Write(ctx, func(tx Tx) error {
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
 			return err
 		}
-		if err := m.endScopeSessions(tx, scope, EndedExit); err != nil {
+		if err := m.endScopeSessions(tx, after, scope, EndedExit); err != nil {
 			return err
 		}
 		h, _, err := tx.Host(scope)
@@ -122,14 +128,14 @@ func (m *Manager) Release(ctx context.Context, scope, run string, epoch int64) e
 	})
 }
 
-// endScopeSessions ends every live session of scope, for why, in tx.
-func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
+// endScopeSessions ends every live session of scope, for why, in tx (after: endSession).
+func (m *Manager) endScopeSessions(tx Tx, after *afterCommit, scope, why string) error {
 	live, err := tx.LiveSessionsOfScope(scope)
 	if err != nil {
 		return err
 	}
 	for _, s := range live {
-		if err := m.endSession(tx, s, why); err != nil {
+		if err := m.endSession(tx, after, s, why); err != nil {
 			return err
 		}
 	}
@@ -138,8 +144,9 @@ func (m *Manager) endScopeSessions(tx Tx, scope, why string) error {
 
 // endSession ends s in tx and applies what follows from it, in the same transaction: its
 // endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left
-// to announce), and the mail module's effect on its deliveries (SessionEnder).
-func (m *Manager) endSession(tx Tx, s Session, why string) error {
+// to announce), and the mail module's effect on its deliveries (SessionEnder). Its endpoint's secret
+// is forgotten once tx has committed (after), never before: an end that rolls back keeps it.
+func (m *Manager) endSession(tx Tx, after *afterCommit, s Session, why string) error {
 	at := tx.Now().UnixNano()
 	s.Ended, s.EndedWhy = &at, why
 	if err := tx.PutSession(s); err != nil {
@@ -148,6 +155,7 @@ func (m *Manager) endSession(tx Tx, s Session, why string) error {
 	if err := tx.DeleteEndpoint(s.ID); err != nil {
 		return err
 	}
+	after.ended = append(after.ended, s.ID)
 	if err := clearAttention(tx, s.ID); err != nil {
 		return err
 	}

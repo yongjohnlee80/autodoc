@@ -18,7 +18,7 @@ type host interface {
 // eventQueue is how many events wait for the App's intake before post blocks.
 const eventQueue = 1024
 
-// frameBackend is a tui.Backend with no terminal (ADR 1792254331 §4.8): its screen is a grid, and
+// frameBackend is a tui.Backend with no terminal (docs/decisions/plugins.md#qml-cards-run-in-the-plugin): its screen is a grid, and
 // each FlushSized sends it to the host, whole, as one host.frame.
 type frameBackend struct {
 	host   host

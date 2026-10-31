@@ -16,7 +16,7 @@ const MaxMessageBytes = 1 << 20
 // MaxDocumentBytes bounds a whole plugin.document as the link encodes it. It is the link's own
 // limit: EncodedSize measures the notification exactly as the link writes it, envelope and all, and
 // the link takes a message of MaxMessageBytes and refuses one byte more. A note whose document is
-// larger is sent as too large, without its text (ADR 1791268009 §2.3).
+// larger is sent as too large, without its text (docs/decisions/plugins.md#the-document-feed).
 const MaxDocumentBytes = MaxMessageBytes
 
 // EncodedSize is the size of the notification method with params, as the link writes it.

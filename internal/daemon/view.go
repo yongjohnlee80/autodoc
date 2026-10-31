@@ -25,6 +25,7 @@ var _ rpc.Workspace = (*view)(nil)
 func (v *view) opened() bool { return v.s.ix != nil }
 
 func (v *view) Name() string          { return v.name }
+func (v *view) ID() int64             { return v.s.id }
 func (v *view) Root() string          { return v.s.root }
 func (v *view) Include() []string     { return v.s.include }
 func (v *view) Exclude() []string     { return v.s.exclude }
@@ -96,8 +97,9 @@ func (v *view) FrontmatterSchema() (*schema.Schema, rpc.SchemaStatus, bool) {
 }
 
 // TodoModes are the workspace's graph_only patterns, the default until it sets its own, its
-// todo_search, and the exclude patterns that keep a todo store of it out of the index (ADR
-// 1792015212 §2.2, §2.3).
+// todo_search, and the exclude patterns that keep a todo store of it out of the index
+// (docs/decisions/todos.md#which-paths-are-graph-only,
+// docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func (v *view) TodoModes() (graphOnly []string, todoSearch bool, excluded []string) {
 	v.m.mu.Lock()
 	h := v.m.modes[v.s.id]

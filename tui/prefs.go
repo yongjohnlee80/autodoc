@@ -115,6 +115,8 @@ type prefs struct {
 	// termPanelKeys: Ctrl+h/j/k/l move between panels from a terminal's or agent's input mode too,
 	// kept from their programs (terminal.go); on by default
 	termPanelKeys bool
+	// agentBell: a crew agent's decision request or permission prompt rings (crewbell.go)
+	agentBell bool
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
@@ -187,7 +189,7 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		choicePref(prefLanguage, "en", languages, func(p *prefs) *string { return &p.language }).
 			chooser("App.languageIndex", "App.setLanguageIndex").
 			shows(func(p prefs) map[string]any { return languageChecks(p.language) }),
-		// the menu bar and the status line show for a new user (Johno, v0.3.3); a stored choice wins
+		// the menu bar and the status line show for a new user (v0.3.3); a stored choice wins
 		boolPref(prefMenuHide, false, func(p *prefs) *bool { return &p.menuHidden }).
 			chooser("App.menuHiddenIndex", "App.setMenuHiddenIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)} }).
@@ -515,12 +517,14 @@ func (h *Host) saidMenuBar(hidden bool) {
 	}
 }
 
+// leaderMenuBar is SPC m: the menu bar shown and focused, or hidden. The bar shown is focused at
+// once: it is laid out after this key, and golib's FocusInto waits for that layout, which runs before
+// the next key is routed, so a key typed right after SPC m (Enter, say) reaches the bar. A focus
+// posted for later lost that race to the keys already typed.
 func (h *Host) leaderMenuBar() {
 	h.toggleMenuBar()
 	if !h.prefs.menuHidden {
-		h.p.Post(func() {
-			h.p.Post(func() { h.keep(h.p.Call("menuBar", "forceActiveFocus")) })
-		})
+		h.keep(h.p.Call("menuBar", "forceActiveFocus"))
 	} else {
 		h.p.Post(func() { h.keep(h.p.Call("editor", "forceActiveFocus")) })
 	}

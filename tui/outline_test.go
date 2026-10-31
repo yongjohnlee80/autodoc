@@ -24,7 +24,7 @@ func (r *running) frameTitle() string {
 func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
 	r.waitFile(t, "guide.md")
 	r.s.WaitFor(t, "the crumb at the first heading", func(string) bool {
@@ -45,7 +45,7 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
 	r.waitFile(t, "guide.md")
 	// a heading added at the top, unsaved: every other heading moves down three lines
@@ -79,7 +79,7 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 		"conf.yaml", "server:\n  database:\n    host: db\n",
 		"notes.txt", "# not a heading\nplain\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() { r.h.openPath("conf.yaml") })
 	r.waitFile(t, "conf.yaml")
 	r.h.p.Post(func() { r.h.core.SetLine(2, 6) })

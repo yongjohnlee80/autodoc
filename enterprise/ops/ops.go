@@ -1,8 +1,9 @@
-// Package ops is what `autodoc --server` tells an operator (ADR 1791762085 M4): its health, public
-// and minimal (GET /v1/health); its status per tenant, for an operator's token (GET /v1/status);
-// and its metrics lines in the log. One Collector serves them all, from the tenants' stores and the
-// states their ingesters and the embedding worker publish. A failure is a code (opcode), never an
-// error's text, which stays in the log.
+// Package ops is what `autodoc --server` tells an operator
+// (docs/decisions/server.md#operator-health-status-and-metrics): its health, public and minimal
+// (GET /v1/health); its status per tenant, for an operator's token (GET /v1/status); and its
+// metrics lines in the log. One Collector serves them all, from the tenants' stores and the states
+// their ingesters and the embedding worker publish. A failure is a code (opcode), never an error's
+// text, which stays in the log.
 package ops
 
 import (
@@ -60,6 +61,13 @@ type Options struct {
 	Version string
 	Started time.Time
 	Clock   clock.Clock // the cache's clock; nil: time.Now
+	// ANN is the approximate search's indexes (pgstore.ANN.Status); nil when the server has none.
+	ANN func(ctx context.Context) ([]pgstore.ANNStatus, error)
+}
+
+// annModer is a Store that reports its tenant's search mode for a model (*pgstore.Store).
+type annModer interface {
+	ANNMode(ctx context.Context, model string) (mode, reason string, err error)
 }
 
 // Collector builds health and status. It is safe for concurrent use.
@@ -165,6 +173,19 @@ type Snapshot struct {
 	AsOf    time.Time      `json:"as_of"`
 	Server  ServerState    `json:"server"`
 	Tenants []TenantStatus `json:"tenants"`
+	// ANN is each embedding model's approximate index: its mode and underfill count. Absent when
+	// the server has no approximate search; Error is set when reading it failed.
+	ANN      []ANNState  `json:"ann,omitempty"`
+	ANNError opcode.Code `json:"ann_error,omitempty"`
+}
+
+// ANNState is one model's approximate index: exact, ann, ann-building or ann-failed (with the
+// reason), and how many searches' candidates came back short and were answered exactly instead.
+type ANNState struct {
+	Model     string `json:"model"`
+	Mode      string `json:"mode"`
+	Reason    string `json:"reason,omitempty"`
+	Underfill int64  `json:"underfill"`
 }
 
 // ServerState is the server's own part of a status.
@@ -227,6 +248,10 @@ type ModelsState struct {
 	Active   string `json:"active"`
 	Target   string `json:"target"`
 	Semantic string `json:"semantic"`
+	// Search is the active model's search mode for this tenant: exact below the threshold or with
+	// no index, else its index's (ANNState.Mode); SearchReason says why when it is exact or failed.
+	Search       string `json:"search,omitempty"`
+	SearchReason string `json:"search_reason,omitempty"`
 }
 
 // Only is s with the tenants named, in s's order; ["*"] is all of them.
@@ -273,6 +298,17 @@ func (c *Collector) read(ctx context.Context) Snapshot {
 	for i, t := range c.o.Tenants {
 		s.Tenants[i] = c.tenant(ctx, t)
 	}
+	if c.o.ANN != nil {
+		actx, cancel := context.WithTimeout(ctx, Deadline)
+		defer cancel()
+		st, err := c.o.ANN(actx)
+		if err != nil {
+			s.ANNError = opcode.Database
+		}
+		for _, a := range st {
+			s.ANN = append(s.ANN, ANNState{Model: a.Model, Mode: a.Mode, Reason: a.Reason, Underfill: a.Underfill})
+		}
+	}
 	return s
 }
 
@@ -317,6 +353,14 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		return ts
 	}
 	ts.Models = ModelsState{Active: active, Target: target, Semantic: semantic(active, target, counts)}
+	if m, ok := t.Store.(annModer); ok && active != "" {
+		mode, reason, err := m.ANNMode(ctx, active)
+		if err != nil {
+			ts.Error = opcode.Database
+			return ts
+		}
+		ts.Models.Search, ts.Models.SearchReason = mode, reason
+	}
 	return ts
 }
 

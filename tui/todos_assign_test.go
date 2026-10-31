@@ -136,13 +136,15 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 		t.Fatalf("the path handed over is not the task's file: %v", err)
 	}
 	r.s.WaitFor(t, "the delivery told", func(string) bool {
-		return r.noticed("assigned to Scribe, and typed into its input: press Enter there to send it")
+		return r.noticed("assigned to Scribe, and sent to it")
 	})
-	// no Enter (ADR 1792991980 §4.2): the task waits in Scribe's input, its panel open and the
-	// keyboard in it; on this small screen it covers the todos' detail: SPC g's toggle hides it,
-	// Scribe running on
-	if raw := heardRaw(heardDir, "scribe"); strings.ContainsRune(raw, '\r') || !strings.HasSuffix(raw, "\x1b[201~") {
-		t.Fatalf("Scribe was sent more than one paste: %q", raw)
+	// sent, with no key pressed (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter):
+	// Scribe has no doorbell here (no crew session), so the base typed the task as one paste and
+	// pressed Enter after it, its panel open and the keyboard in it; on this small screen it covers
+	// the todos' detail: SPC g's toggle hides it, Scribe running on
+	r.s.WaitFor(t, "the task's Enter", func(string) bool { return strings.HasSuffix(heardRaw(heardDir, "scribe"), "\x1b[201~\r") })
+	if raw := heardRaw(heardDir, "scribe"); strings.Count(raw, "\x1b[200~") != 1 || strings.Count(raw, "\r") != 1 {
+		t.Fatalf("Scribe was sent %q, want one paste and one Enter after it", raw)
 	}
 	agentShown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	r.s.WaitFor(t, "the agent's panel open", func(string) bool { return agentShown() })
@@ -190,10 +192,11 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	if got := heard(heardDir, "scribe"); got[4] != "Task: Fix the typos" || got[7] != "Instruction: Read the ADR first" {
 		t.Fatalf("Scribe heard %q", got)
 	}
-	// its hidden panel brought forward for the Enter, none typed
+	// its hidden panel brought forward, and the task sent: one Enter after each of the two pastes
 	r.s.WaitFor(t, "the agent's panel open again", func(string) bool { return agentShown() && r.focused("agentView") })
-	if strings.ContainsRune(heardRaw(heardDir, "scribe"), '\r') {
-		t.Fatalf("an Enter reached Scribe: %q", heardRaw(heardDir, "scribe"))
+	r.s.WaitFor(t, "the second task's Enter", func(string) bool { return strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") == 2 })
+	if raw := heardRaw(heardDir, "scribe"); strings.Count(raw, "\r") != 2 {
+		t.Fatalf("Scribe was sent %q, want an Enter after each task and no other", raw)
 	}
 	if strings.Contains(r.s.String(), "start the agent?") {
 		t.Fatal("a running agent was asked about")
@@ -303,7 +306,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	h.done(nil)
 	h.done(ErrAgentCancelled)                  // as a second A's would: each says how it went
 	h.done(widget.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
-	if len(c.notes) != 3 || c.notes[0] != "todos: assigned to Scribe, and typed into its input: press Enter there to send it" ||
+	if len(c.notes) != 3 || c.notes[0] != "todos: assigned to Scribe, and sent to it" ||
 		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") ||
 		c.notes[2] != "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task" {
 		t.Fatalf("notes %q", c.notes)

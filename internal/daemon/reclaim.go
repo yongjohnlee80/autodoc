@@ -11,15 +11,17 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// THE START SWEEP AND THE CONVERSION (ADR 1791284787 §2.3, item 3; §2.5) — once the workspaces are
-// open, every stored workspace keeps only its active model's and its target's vectors: a workspace
-// an indexer runs is swept through it (its Sweep waits for setupModels, so the target it fills is
-// recorded first); one with no indexer (no provider, or its root unavailable) through the store.
-// It runs in the background, while the daemon serves. Each workspace's vectors whose text no chunk
-// has go next (ADR 1791329335 §2.4). Then, once, a store not yet in incremental
-// auto-vacuum mode is compacted into it, behind its free-space check: refused for want of room, it is
-// said, and tried again at the next start. It is compacted only once every workspace has swept: a
-// compaction while one still holds its leftovers would leave them out of the one rewrite that
+// THE START SWEEP AND THE CONVERSION (docs/decisions/store.md#the-start-sweep) — once the
+// workspaces are open, each workspace's documents that have no sort keys get them first
+// (docs/decisions/search.md#stored-sort-keys); then every stored workspace keeps only its active
+// model's and its target's vectors: a workspace an indexer runs is swept through it (its Sweep
+// waits for setupModels, so the target it fills is recorded first); one with no indexer (no
+// provider, or its root unavailable) through the store. It runs in the background, while the daemon
+// serves. Each workspace's vectors whose text no chunk has go next
+// (docs/decisions/store.md#the-orphan-pass-at-start). Then, once, a store not yet in incremental
+// auto-vacuum mode is compacted into it, behind its free-space check: refused for want of room, it
+// is said, and tried again at the next start. It is compacted only once every workspace has swept:
+// a compaction while one still holds its leftovers would leave them out of the one rewrite that
 // restores the store's layout, so a sweep that failed leaves the compaction to a later start.
 
 // SweepModels runs the start sweep, then the conversion, until ctx ends.
@@ -31,6 +33,18 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 	}
 	swept := true
 	for _, w := range ws {
+		// the documents' sort keys first (docs/decisions/search.md#stored-sort-keys): index.documents
+		// lists by the slow Go fallback until they are all there. A failure leaves the rest to the next
+		// start.
+		keyed, err := m.backfillKeysOne(ctx, w.ID, w.Name)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			logger.Warning(m.opts.Log, err, logger.Fields{"event": "documents.keys.backfill_failed", "workspace": w.Name})
+		} else if keyed > 0 {
+			logger.Info(m.opts.Log, logger.Fields{"event": "documents.keys.backfilled", "workspace": w.Name, "documents": keyed})
+		}
 		got, err := m.sweepOne(ctx, w.ID, w.Name)
 		if ctx.Err() != nil {
 			return
@@ -101,8 +115,25 @@ func (m *Workspaces) sweepOne(ctx context.Context, id int64, name string) ([]ind
 	return index.SweepStore(ctx, m.db, id)
 }
 
-// sweepOrphansOne deletes workspace id's vectors whose text no chunk has (ADR 1791329335 §2.4):
-// through its indexer when one runs, else through the store.
+// backfillKeysOne gives workspace id's documents that have no sort keys theirs: through its
+// indexer when one runs, else through the store.
+func (m *Workspaces) backfillKeysOne(ctx context.Context, id int64, name string) (int, error) {
+	m.mu.Lock()
+	s := m.served[name]
+	m.mu.Unlock()
+	if s != nil && s.ix != nil && s.ctx != nil {
+		sctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(s.ctx, cancel)
+		defer stop()
+		return s.ix.BackfillKeys(sctx)
+	}
+	return index.BackfillKeysStore(ctx, m.db, id)
+}
+
+// sweepOrphansOne deletes workspace id's vectors whose text no chunk has
+// (docs/decisions/store.md#the-orphan-pass-at-start): through its indexer when one runs, else
+// through the store.
 func (m *Workspaces) sweepOrphansOne(ctx context.Context, id int64, name string) (int, error) {
 	m.mu.Lock()
 	s := m.served[name]

@@ -33,9 +33,9 @@ func (e *env) freshStatus() Status {
 // sameStatus compares two statuses' every field.
 func sameStatus(a, b Status) bool { return reflect.DeepEqual(a, b) }
 
-// TestStatusIsComputedOncePerCommit (ADR 1791329335 §2.5): a status at an unchanged commit_seq is
-// the kept one; after each kind of write it is what a computation from scratch says, with the
-// write's effect in it.
+// TestStatusIsComputedOncePerCommit (docs/decisions/store.md#status-is-computed-once-per-commit): a
+// status at an unchanged commit_seq is the kept one; after each kind of write it is what a
+// computation from scratch says, with the write's effect in it.
 func TestStatusIsComputedOncePerCommit(t *testing.T) {
 	var computed atomic.Int64
 	a := newFake("m", "a")
@@ -85,7 +85,7 @@ func TestStatusIsComputedOncePerCommit(t *testing.T) {
 	e.fault.failOpen("z.md", nil)
 }
 
-// TestStatusIsOneSnapshot (Lector r0, required 1): a commit landing between the counts and the
+// TestStatusIsOneSnapshot: a commit landing between the counts and the
 // coverage is in neither: the status is the one at the seq it read.
 func TestStatusIsOneSnapshot(t *testing.T) {
 	var hook func()
@@ -115,8 +115,9 @@ func TestStatusIsOneSnapshot(t *testing.T) {
 	}
 }
 
-// TestStatusIsComputedOnceForItsWaiters (§2.5): callers that wait on a computation at one seq share
-// it; one that waited while a commit landed gets a computation at the newer seq.
+// TestStatusIsComputedOnceForItsWaiters
+// (docs/decisions/store.md#status-is-computed-once-per-commit): callers that wait on a computation
+// at one seq share it; one that waited while a commit landed gets a computation at the newer seq.
 func TestStatusIsComputedOnceForItsWaiters(t *testing.T) {
 	var computed atomic.Int64
 	gate := make(chan struct{})

@@ -6,19 +6,21 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// SETTING UP AN AGENT — the first run's card (ADR 1792395801): when the setup was never answered
-// and no profile exists, AutoDoc offers the agent CLIs it finds on PATH, the first one chosen.
-// Set up saves an ordinary profile through the profiles dialog's own save (storeAgentProfile) and
-// starts it, typing nothing into it; No is remembered. System › Set up an agent… opens the card again
-// at any time.
+// SETTING UP AN AGENT — the first run's card (docs/decisions/crew.md#first-run-agent-setup): when
+// the setup was never answered and no profile exists, AutoDoc offers the agent CLIs it finds on
+// PATH, the first one chosen. Set up saves an ordinary profile through the profiles dialog's own
+// save (storeAgentProfile) and starts it, typing nothing into it; No is remembered. System › Set up
+// an agent… opens the card again at any time.
 
 // agentCLI is one agent CLI AutoDoc knows to offer: the command a profile runs, and the name the
 // card fills in.
 type agentCLI struct{ command, name string }
 
-// agentCLIs are the CLIs the setup offers, in the order Johno set: the first one found is the default.
+// agentCLIs are the CLIs the setup offers, in a fixed order: the first one found is the default.
 var agentCLIs = []agentCLI{{"claude", "Claude"}, {"codex", "Codex"}, {"grok", "Grok"}, {"agy", "Antigravity"}}
 
 // detectAgentCLIs is those of agentCLIs that look finds on PATH, in order. Nothing is run.
@@ -50,9 +52,18 @@ func agentSetupPending(p prefs) bool {
 // lookAgentCLI is how the card finds the CLIs; a test sets its own.
 var lookAgentCLI = exec.LookPath
 
-// Started offers the setup on a first run (startup's About waits for it, startup.go), once the
+// Started warms the OpenCode plugin's env when a crew window has an OpenCode profile (whose spawn
+// needs it), and what each Claude profile's Claude Code knows (warmClaude), and offers the setup on a first run (startup's About waits for it, startup.go), once the
 // Vim question before it is answered (vimquestion.go opens it then).
 func (a *agents) Started() {
+	if a.crew != nil && slices.ContainsFunc(a.profiles(), func(p agentProfile) bool { return agentKind(p.Command) == "opencode" }) {
+		a.warmPluginEnv() // off the loop now, so an OpenCode agent's spawn never waits on it
+	}
+	for _, p := range a.profiles() {
+		if a.crew != nil && agentKind(p.Command) == crew.KindClaude {
+			a.warmClaude(p) // and a Claude agent's on what its Claude Code knows
+		}
+	}
 	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {
 		a.openAgentSetup()
 	}
@@ -111,7 +122,7 @@ func (a *agents) agentSetupConfirm(i int, name string) {
 	}
 	cli := a.setupFound[i]
 	a.editingAgent, a.editingAgentProfile = "", nil // a new profile, never an edit
-	p, ok := a.storeAgentProfile(name, cli.command, "")
+	p, ok := a.storeAgentProfile(name, cli.command, "", "")
 	if !ok {
 		return // refused: storeAgentProfile opened agentEdit with the reason, and nothing is recorded
 	}

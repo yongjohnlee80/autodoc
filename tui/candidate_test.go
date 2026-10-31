@@ -85,6 +85,32 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		}
 		return filepath.Dir(file), copy
 	}
+	// settled waits until the n-th hand-over is over and its notices are gone: the base's notice
+	// (the window holds no crew scope) comes with its paste, and its Enter follows it
+	// (agentmessaging.go). A toast that comes or goes moves the audit's toast, so a click aimed at
+	// it before then can land on another (the notifications history). rung is whether the hand-over
+	// rang the doorbell: a started agent isn't rung (agentmessaging.go), so the first has no notice,
+	// and the second's is certain (no crew scope), so it must be seen, then gone: a look between the
+	// Enter and the notice's first frame sees none yet. It lingers longer than the screen's own waits
+	// (decltest.WaitTimeout), so the wait is its own.
+	settled := func(n int, rung bool) {
+		t.Helper()
+		deadline := time.Now().Add(20 * time.Second)
+		seen := !rung
+		for {
+			sc := r.s.String()
+			showing := strings.Contains(noticeText(sc), "doorbell didn't ring")
+			seen = seen || showing
+			if seen && !showing && strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") >= n &&
+				strings.Contains(sc, "audit of echo sent to Scribe") {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the audit %d not handed over with its notices gone:\n%s", n, sc)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
 
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "audit with an agent")
@@ -93,7 +119,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
-	r.s.WaitForText(t, "audit of echo typed into Scribe's input")
+	settled(1, false) // the agent was started for it: not rung
 	if strings.Contains(r.s.String(), "Yes, at my own risk") || r.card() != nil {
 		t.Fatal("the card stayed up while the audit was handed over")
 	}
@@ -101,7 +127,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.clickText(t, "audit of echo typed")
+	r.clickText(t, "audit of echo sent")
 	r.question(t)
 	if r.card() != c {
 		t.Fatal("the toast reopened another candidate")
@@ -111,11 +137,12 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "running")
 	r.keys(t, enter())
 	root2, copy2 := task(2)
+	settled(2, true)
 	if root2 == root1 || !gone(filepath.Join(copy2, "agent-was-here")) || gone(filepath.Join(copy1, "agent-was-here")) {
 		t.Fatalf("the second audit's copy %s is not fresh beside the first's %s", copy2, copy1)
 	}
 
-	r.clickText(t, "audit of echo typed")
+	r.clickText(t, "audit of echo sent")
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at "+full[:7])

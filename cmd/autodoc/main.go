@@ -1,5 +1,5 @@
 // Command autodoc is AutoDoc's one binary, the community build: app.Main with no registrations
-// (ADR 0216 §1.1). The modes and their flags are app's.
+// (docs/decisions/search.md#one-entry-point-for-every-build). The modes and their flags are app's.
 package main
 
 import (

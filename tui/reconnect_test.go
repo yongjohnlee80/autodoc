@@ -30,7 +30,7 @@ func onARestartableDaemon(t *testing.T, notes map[string][]string) *restarted {
 		}
 	})
 	x.r = runTUI(t, sess, Options{})
-	x.r.s.WaitForText(t, "connected — autodoc v-1")
+	x.r.waitWithin(t, "the connection's toast", daemonWait, func() bool { return strings.Contains(x.r.s.String(), "connected — autodoc v-1") })
 	// connected is not entered: the workspace comes with the listing after, and a file opened
 	// before it is opened in no workspace
 	x.r.s.WaitFor(t, "the files listed", func(string) bool { return len(x.r.listed()) > 0 })

@@ -11,9 +11,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// relations_test.go: the Relations drawer (ADR 1791430651 §4.4) — each relation in its section by
-// kind and direction, depth 2, the unresolved and the cycles; SPC j to the link under the cursor;
-// back; and the editor's right-click rows.
+// relations_test.go: the Relations drawer (docs/decisions/editor.md#the-relations-drawer) — each
+// relation in its section by kind and direction, depth 2, the unresolved and the cycles; SPC j to
+// the link under the cursor; back; and the editor's right-click rows.
 
 // relationsKB is doc.md and what it is connected to: every relation kind out of it, two into it,
 // three body links, one that names nothing, a supersession loop with loop.md, and two links away
@@ -64,7 +64,8 @@ var docRelations = []string{
 // TestTheRelationsDrawerGroupsByKindAndDirection: SPC l lists each relation in its section — a
 // relation into the document under its own side's name — the body's links, then what names
 // nothing and the supersession loop; d adds the second ring under its first-ring document; Enter
-// opens a row and hides the drawer (ADR 1792397302 r3), whose rows follow the document opened (§5.8).
+// opens a row and hides the drawer (docs/decisions/editor.md#dock-clicks-hide-and-show), whose rows
+// follow the document opened.
 func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)

@@ -6,12 +6,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// INDEX.STATUS, ONCE PER COMMIT (ADR 1791329335 §2.5) — a status is computed in one read transaction,
-// which reads the workspace's commit_seq, the store's counts, the coverage of the model measured and
-// whether any document is not ready; it is kept under that seq and model. Every writer transaction
-// bumps commit_seq, so a later call at the same seq gets the same answer from one row read, and an
-// idle workspace polled every second (the drawer, the TUI) costs nothing more. The change log's head
-// and oldest retained seq are read on every call: gc prunes the log without a commit.
+// INDEX.STATUS, ONCE PER COMMIT (docs/decisions/store.md#status-is-computed-once-per-commit) — a
+// status is computed in one read transaction, which reads the workspace's commit_seq, the store's
+// counts, the coverage of the model measured and whether any document is not ready; it is kept
+// under that seq and model. Every writer transaction bumps commit_seq, so a later call at the same
+// seq gets the same answer from one row read, and an idle workspace polled every second (the
+// drawer, the TUI) costs nothing more. The change log's head and oldest retained seq are read on
+// every call: gc prunes the log without a commit.
 //
 // One computation runs at a time. A call that waited for one reads commit_seq again, and computes
 // when it has moved past the result's: no caller is answered for a superseded commit.

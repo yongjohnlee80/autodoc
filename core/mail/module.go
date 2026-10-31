@@ -8,9 +8,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// protocol is the protocol the mail verbs arrive in: crew's, as one change (ADR 1793271500 §4.1),
-// set to the next free number when they merge.
-const protocol = 34
+// protocol is the protocol the mail verbs arrive in: crew's, as one change
+// (docs/decisions/crew.md#three-modules-and-one-protocol).
+const protocol = crew.Protocol
 
 // Name is the module's name: its verbs are mail.*.
 func (m *Manager) Name() string { return "mail" }
@@ -26,6 +26,8 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "send a shorter body, and put the rest in a file the recipient can read"},
 		{Err: ErrLeaseLost, Code: CodeLeaseLost, Name: "mail.lease_lost", Message: "the caller no longer holds the delivery's lease",
 			Next: "mail.receive again: the delivery comes back if it is still unhandled"},
+		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "mail.long_polls_busy",
+			Message: "a connection holds at most two long-polls", Next: "finish one first, or open another connection"},
 	}
 }
 
@@ -55,6 +57,10 @@ type (
 		Body       string `param:"body"`
 		Key        string `param:"key" doc:"the reply's idempotency key"`
 		Subject    string `param:"subject,optional"`
+	}
+	waitParams struct {
+		Credential string `param:"credential"`
+		Timeout    int64  `param:"timeout,optional" doc:"milliseconds to wait for mail, at most 25000"`
 	}
 	inboxParams struct {
 		Credential string `param:"credential"`
@@ -105,6 +111,10 @@ type (
 	replyResult struct {
 		Message wireMessage `json:"message"`
 	}
+	readyResult struct {
+		Ready    bool `json:"ready"`
+		TimedOut bool `json:"timed_out"`
+	}
 )
 
 func stamp(ns int64) string { return time.Unix(0, ns).UTC().Format(time.RFC3339Nano) }
@@ -134,8 +144,8 @@ func toWireItems(items []Item) []wireItem {
 	return out
 }
 
-// Verbs are the mail module's verbs: an agent's, on its own credential (§4.6). mail.wait comes with
-// the wake scheduler (phase 1d).
+// Verbs are the mail module's verbs: an agent's, on its own credential
+// (docs/decisions/crew.md#durable-mail).
 func (m *Manager) Verbs() []module.Verb {
 	agent := func(verb string, effect module.Effect, result, doc string, codes ...int64) module.Contract {
 		return module.Contract{Verb: verb, Since: protocol, Audience: module.AudienceAgent, Effect: effect,
@@ -178,6 +188,18 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p replyParams) (replyResult, error) {
 				msg, err := m.Reply(ctx, p.Credential, p.Delivery, p.Lease, Reply{Subject: p.Subject, Body: p.Body, Key: p.Key})
 				return replyResult{Message: toWireMessage(msg)}, err
+			}),
+		module.Handle(agent("mail.wait", module.EffectRead, "{ready, timed_out}",
+			"Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls.",
+			crew.CodeLongPollsBusy),
+			func(ctx context.Context, p waitParams) (readyResult, error) {
+				leave, err := m.polls.Enter(module.ConnFrom(ctx))
+				if err != nil {
+					return readyResult{}, err
+				}
+				defer leave()
+				r, err := m.Wait(ctx, p.Credential, time.Duration(p.Timeout)*time.Millisecond)
+				return readyResult{Ready: r.Ready, TimedOut: r.TimedOut}, err
 			}),
 		module.Handle(agent("mail.inbox", module.EffectRead, "{unread, items[]}", "A preview of the caller's eligible mail: never leases."),
 			func(ctx context.Context, p inboxParams) (inboxResult, error) {

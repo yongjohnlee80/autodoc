@@ -14,16 +14,16 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// TODOS — the todo stores as AutoDoc's own view (ADR 1791532020 §2.7): Todos › Open todos… or
-// SPC x, a panel in the one dock style, at the left edge unless moved. One store at a time: a
-// dropdown along the top chooses it among the stores the daemon knows (the workspace's first), and
-// icons beside it make a new store, load one from a folder, rename it (its label) and refresh it.
-// Under them a tab per status (Open, In progress, Deferred, Completed, Archived), each a numbered
-// table of its tasks, read when the tab first shows; Archived lists its months, a month's tasks read
-// when it opens. Under the tabs the task under the cursor's details, then one row of the actions
-// that apply. Every read and write is a todos.* verb: the daemon owns the format and the rules, so
-// this file only shows and asks. A store todos.release gave back is read-only here; any other is
-// written, its first write claiming it.
+// TODOS — the todo stores as AutoDoc's own view (docs/decisions/todos.md#autodocs-own-todos-view):
+// Todos › Open todos… or SPC x, a panel in the one dock style, at the left edge unless moved. One
+// store at a time: a dropdown along the top chooses it among the stores the daemon knows (the
+// workspace's first), and icons beside it make a new store, load one from a folder, rename it (its
+// label) and refresh it. Under them a tab per status (Open, In progress, Deferred, Completed,
+// Archived), each a numbered table of its tasks, read when the tab first shows; Archived lists its
+// months, a month's tasks read when it opens. Under the tabs the task under the cursor's details,
+// then one row of the actions that apply. Every read and write is a todos.* verb: the daemon owns
+// the format and the rules, so this file only shows and asks. A store todos.release gave back is
+// read-only here; any other is written, its first write claiming it.
 
 // todoBuckets are the tabs, in order: each one's bucket, and its title.
 var todoBuckets = []struct{ bucket, title string }{

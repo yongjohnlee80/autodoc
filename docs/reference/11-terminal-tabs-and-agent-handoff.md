@@ -22,11 +22,12 @@ AutoDoc organizes embedded PTYs into two distinct, dockable `TerminalTabs` drawe
 1. **The Shell Terminal Panel (`terminalView`)**: General-purpose interactive shells (`bash`, `zsh`, `fish`) for running builds, tests, and Git commands.
 2. **The Dedicated Agent Panel (`agentView`, `SPC g`)**: Long-lived CLI coding agents, each started from an agent profile, identified by a persistent `codename` and scoped to the active workspace.
 
-Agent profiles live in AutoDoc's preferences and are managed in **System › Agent profiles…** (`SPC G`); there is no config-file section for them. The dialog lists each profile (`●` marks the default, `▶` a running one) with **Use**, **Add…**, **Edit…**, **Make default** and **Remove**. A profile has three fields:
+Agent profiles live in AutoDoc's preferences and are managed in **System › Agent profiles…** (`SPC G`); there is no config-file section for them. The dialog lists each profile (`●` marks the default, `▶` a running one) with **Use**, **Add…**, **Edit…**, **Make default** and **Remove**. A profile has four fields:
 
 - **name**: the display label, for example `Claude Code`;
 - **codename**: its routing identity, derived from the name when left empty (lower-case letters or digits, separated by hyphens);
-- **command**: the command line that starts the agent, run through `/bin/sh -c`, for example `claude --model opus` or `codex`. `{root}` and `{workspace}` in it become the workspace's root folder and name, each quoted for the shell.
+- **command**: the command line that starts the agent, run through `/bin/sh -c`, for example `claude --model opus` or `codex`. `{root}` and `{workspace}` in it become the workspace's root folder and name, each quoted for the shell;
+- **environment** (`env` in the preference): `NAME=value` words set on the agent's process, for example `CLAUDE_CONFIG_DIR=~/.claude-work` for Claude Code on another account. `~` and `$VAR` are expanded from AutoDoc's own environment at the spawn, never by a shell; AutoDoc's variables come after the profile's and win, and an `AUTODOC_*` key is refused. A `PATH` is the agent's after its own `bin/` folder. Profiles are plain text in the preferences: not for secrets ([decision](../decisions/crew.md#a-profiles-environment)).
 
 The first profile added becomes the default, which `SPC g` starts; **Make default** chooses another. The shell terminal's tabs need no profile: `+` starts your login shell.
 
@@ -114,8 +115,11 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
      ID: 2026-10-17-implement-sqlite-todo-journal
      Instruction: Task assigned to you.
      ```
-   - It dispatches the payload via `panel.SendBracketedPaste(tab, payload)`: one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact at the prompt. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
-   - **AutoDoc never presses Enter** (ADR 1792991980). An Enter can't tell the agent's input from a permission or select prompt it is showing, so it could answer one. Instead the payload waits in the agent's input, and the agent's panel opens with its tab selected and the keyboard in input mode. The toast says *"assigned to Claude Code, and typed into its input: press Enter there to send it"*, and the user's Enter starts the agent on the task file and its linked `$KB_ROOT` ADRs.
+   - It sends the task through AutoDoc's agent messaging ([the decision](../decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter)), and the user doesn't press Enter wherever AutoDoc can tell it is safe:
+     - **The doorbell first.** When the agent's CLI has a wake channel (Claude Code's socket, agy's bridge, OpenCode's plugin, Codex's app-server), the task is crew mail from `user`. The daemon rings the agent, its turn starts with nothing typed, and it reads the task with `autodoc mail receive`.
+     - **Else typed and sent.** The task is typed as one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact, and Enter follows a moment later. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
+     - **Never into a prompt.** An Enter into a permission prompt approves it, so Enter follows the paste only into an agent whose prompts AutoDoc sees now: a live crew session whose CLI reports them (Claude Code while its session is live; OpenCode and agy while their plugin or bridge is running; Codex not yet), and that shows none. Otherwise the text stays typed, and a toast says why and asks you to press Enter there.
+   - The toast says *"assigned to Claude Code, and sent to it"*, and the agent starts on the task file and its linked `$KB_ROOT` ADRs.
 
 ![Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff](agent-dispatch-latency.chart.json)
 
@@ -123,7 +127,7 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
 
 ## 4. Separation of Concerns: `autodoc:<codename>` vs. Other Tools' Agents
 
-A critical architectural boundary in ADR 1791532020 (§2.7a) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage:
+A critical architectural boundary ([AutoDoc assigns only to its own agents](../decisions/todos.md#autodoc-assigns-only-to-its-own-agents)) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage:
 
 - **Assignee Namespace Isolation**: When you assign a task via `A` in AutoDoc's Todos Panel, the `assignee` field is always prefixed with `autodoc:<codename>` (for example, `autodoc:claude` or `autodoc:gemini`). An assignee written by another tool keeps that tool's own form (for example `agent:<name>`), and AutoDoc never delivers to it.
 - **Durable Record vs. Best-Effort Terminal Delivery**: The `todos.assign` write in `.todo-list/` is the durable record of ownership; `HandTask` is a best-effort UI delivery side effect. If you decline to start a stopped agent (`ErrAgentCancelled`), or if you switch workspaces before the RPC write returns, the task remains durably assigned to `autodoc:<codename>` in `.todo-list/in-progress/` and AutoDoc displays an actionable toast:

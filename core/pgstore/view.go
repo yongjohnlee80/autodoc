@@ -114,7 +114,11 @@ func WithSectionsOnly(ctx context.Context) context.Context {
 
 // retrieved is the chunks a retrieval reads: the tenant's, and its sections only when ctx says so.
 func (v *View) retrieved(ctx context.Context) dao.DAO[*chunkRow, chunkField, int64] {
-	d := v.chunks(ctx)
+	return v.sectioned(ctx, v.chunks(ctx))
+}
+
+// sectioned is d with its sections only when ctx says so (WithSectionsOnly).
+func (v *View) sectioned(ctx context.Context, d dao.DAO[*chunkRow, chunkField, int64]) dao.DAO[*chunkRow, chunkField, int64] {
 	if on, _ := ctx.Value(sectionsOnlyKey{}).(bool); on {
 		d = d.With(cKind, ChunkSection)
 	}
@@ -138,10 +142,21 @@ func hitFields() []chunkField {
 // breadcrumb (B), tags (C) and body (D), then path, then ordinal, with the filters in the same
 // WHERE so they apply before the rank and the limit.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, terms, f, n, query.TSQuery)
+}
+
+// LexicalAny is Lexical with any one term enough (search.LexicalAny), ranked the same way: the
+// engine's fallback when no chunk holds every term (AM-8).
+func (v *View) LexicalAny(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, terms, f, n, query.TSQueryAny)
+}
+
+// lexical is Lexical with the tsquery render picks.
+func (v *View) lexical(ctx context.Context, terms []search.Term, f search.Filter, n int, render func([]search.Term) (string, error)) ([]search.Candidate[int64], error) {
 	if n <= 0 || len(terms) == 0 {
 		return nil, nil
 	}
-	q, err := query.TSQuery(terms)
+	q, err := render(terms)
 	if err != nil {
 		return nil, err
 	}
@@ -173,9 +188,14 @@ func (v *View) models(ctx context.Context) (active, target string, err error) {
 }
 
 // Semantic is the chunks nearest vec by cosine distance (vectors are normalized, so this is dot
-// order), then path, then ordinal, scanned exactly: only chunks of documents ready under the
-// active model, with the filters before the limit. Another model than the active one answers
-// search.ErrModelChanged.
+// order), then path, then ordinal: only chunks of documents ready under the active model, with the
+// filters before the limit. Another model than the active one answers search.ErrModelChanged.
+//
+// It is exact unless the Store has the server's ANN (WithANN), the model's index is ready and the
+// tenant has at least the threshold's embeddings of the model. Then it is approximate in two
+// statements of this View's one snapshot: the k nearest candidates through the index, then their
+// exact order, ties within the candidates. A candidate stage short of k answers exactly instead
+// (semanticANN).
 func (v *View) Semantic(ctx context.Context, model string, vec []float32, f search.Filter, n int) ([]search.Candidate[int64], error) {
 	active, _, err := v.models(ctx)
 	if err != nil {
@@ -186,6 +206,15 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	}
 	if n <= 0 {
 		return nil, nil
+	}
+	if v.s.ann != nil {
+		out, ok, err := v.semanticANN(ctx, model, vec, f, n)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return v.saw(out), nil
+		}
 	}
 	d := v.retrieved(ctx).Join(joinDoc, joinEmb).
 		WithPredicate(dao.Eq(qcol(tEmb, "model"), model)).

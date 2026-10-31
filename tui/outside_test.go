@@ -19,9 +19,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// outside_test.go: files outside every workspace (ADR 1791430651) — File › Open file… and File ›
-// New file… over the whole disk, file.locate's routing into a workspace, and what such a file keeps
-// and lacks.
+// outside_test.go: files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace) — File › Open file… and File › New file…
+// over the whole disk, file.locate's routing into a workspace, and what such a file keeps and
+// lacks.
 
 // diskFiles is the daemon's documents of the whole disk, as app/serve.go serves them.
 func diskFiles(t *testing.T, opts ...docs.Option) *docs.Docs {
@@ -43,7 +44,7 @@ func runOutside(t *testing.T) (r *running, kb, notes, abs string) {
 	abs = filepath.Join(fileDir(t, "notes.md", "# Notes\n"), "notes.md")
 	d := startManaged(t, map[string]string{"kb": kb, "notes": notes})
 	r = runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	return r, kb, notes, abs
 }
 
@@ -62,7 +63,7 @@ func waitDisk(t *testing.T, r *running, abs, want string) {
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line
 // says so, a save writes it, and a change on disk since it was read is a conflict that asks
-// (ADR 1791430651 §5.1, §5.7).
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
@@ -95,7 +96,8 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 }
 
 // TestOpenFileInAWorkspacesRootOpensItThere: a file a workspace indexes opens as that workspace's,
-// entering it when it is not the one in use (§5.4).
+// entering it when it is not the one in use
+// (docs/decisions/editor.md#files-outside-every-workspace).
 func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 	r, kb, notes, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
@@ -109,7 +111,7 @@ func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 
 // TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent: switching workspace keeps
 // it; the plugin feed sends workspace "" and its absolute path; Recent files lists it as in no
-// workspace and opens it again (§5.6).
+// workspace and opens it again (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
@@ -136,8 +138,8 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 }
 
 // TestNewFileInAnyFolder: Ctrl+N's save dialog creates a file in a folder that does not exist yet,
-// outside every workspace (".md" added); one named in a workspace's root is that workspace's
-// file; one that exists is left as it is (§5.2).
+// outside every workspace (".md" added); one named in a workspace's root is that workspace's file;
+// one that exists is left as it is (docs/decisions/editor.md#files-outside-every-workspace).
 func TestNewFileInAnyFolder(t *testing.T) {
 	r, kb, _, abs := runOutside(t)
 	fresh := filepath.Join(filepath.Dir(abs), "fresh", "idea")
@@ -273,8 +275,9 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 	})
 }
 
-// whyOutside (ADR 1792015212 §2.5): the innermost workspace root holding a file, and the exclude
-// pattern that keeps it out ("" when it is only not admitted); none for a file under no root.
+// whyOutside (docs/decisions/todos.md#excluded-todo-stores-are-reported): the innermost workspace
+// root holding a file, and the exclude pattern that keeps it out ("" when it is only not admitted);
+// none for a file under no root.
 func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 	list := []wsInfo{
 		{name: "outer", root: "/src", exclude: []string{".git/**"}},
@@ -298,7 +301,8 @@ func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 }
 
 // A file a workspace's exclude keeps out, opened by its path, says which workspace and which
-// pattern, and offers that workspace's settings (ADR 1792015212 §2.5).
+// pattern, and offers that workspace's settings
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	root := fileDir(t, "a.md", "# A\n")
 	if err := os.MkdirAll(filepath.Join(root, "drafts"), 0o755); err != nil {
@@ -309,7 +313,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	}
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.exclude = ".git/**; drafts/**" })
 	r.waitNoticed(t, "kb: saved")

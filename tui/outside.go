@@ -15,10 +15,10 @@ import (
 )
 
 // FILES ANYWHERE — File › Open file… (SPC f) and File › New file… (Ctrl+N, SPC n), the desktop's
-// file dialogs over the local disk (ADR 1791430651 §4.3). A file chosen is asked of file.locate
-// first: inside a workspace's root it opens as that workspace's file, entering the workspace;
-// elsewhere it opens outside every workspace (files.go). Open document… (SPC o) stays the
-// fast picker over the workspace in use.
+// file dialogs over the local disk (docs/decisions/editor.md#files-outside-every-workspace). A file
+// chosen is asked of file.locate first: inside a workspace's root it opens as that workspace's
+// file, entering the workspace; elsewhere it opens outside every workspace (files.go). Open
+// document… (SPC o) stays the fast picker over the workspace in use.
 
 // errRemote is what a file.* refusal says: the daemon serves another machine's disk, so the files
 // of this one are not its to open.
@@ -110,7 +110,8 @@ func (h *Host) locate(ctx context.Context, abs string) located {
 // openAbsolute opens the file at abs, chosen in the file dialog: as its workspace's file when one
 // indexes it, else outside every workspace. A gated script's open (file.open_path, a link it
 // follows) opens only what the daemon's bounds let it read: a file inside a served workspace, not
-// hidden, not AutoDoc's own (ADR 1792004705 §4.2a.2b); anything else is refused, and nothing opens.
+// hidden, not AutoDoc's own (docs/decisions/contract.md#path-commands-run-within-the-workspace);
+// anything else is refused, and nothing opens.
 func (h *Host) openAbsolute(abs string) { h.openAbsoluteAs(h.authorityNow(), abs) }
 
 // openAbsoluteAs is openAbsolute as a acts: for a continuation, the authority its invocation began
@@ -149,9 +150,10 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 	})
 }
 
-// whyOutside is why abs, under a workspace's root, is in no workspace (ADR 1792015212 §2.5): the
-// workspace whose root holds it, and the exclude pattern that keeps it out, or "" when its include
-// patterns admit no such file. ok is false when no workspace's root holds it.
+// whyOutside is why abs, under a workspace's root, is in no workspace
+// (docs/decisions/todos.md#excluded-todo-stores-are-reported): the workspace whose root holds it,
+// and the exclude pattern that keeps it out, or "" when its include patterns admit no such file. ok
+// is false when no workspace's root holds it.
 func whyOutside(list []wsInfo, abs string) (w wsInfo, pattern string, ok bool) {
 	for _, x := range list {
 		rel, err := filepath.Rel(x.root, abs)

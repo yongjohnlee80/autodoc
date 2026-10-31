@@ -47,8 +47,12 @@ type TerminalPanel interface {
 	Start(widget.TerminalTabID) error
 	// SendBracketedPaste is a paste only to a program that asked for bracketed paste: any other is
 	// refused, nothing sent (widget.ErrTerminalPasteUnbracketed). It is the only paste here: what
-	// AutoDoc sends a tab is text the user didn't type, never keys (ADR 1792991980).
+	// AutoDoc sends a tab is text the user didn't type, never keys
+	// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 	SendBracketedPaste(widget.TerminalTabID, string) error
+	// SendText sends literal keys to the tab's program: the Enter that submits a message the
+	// messaging base pasted (agentmessaging.go), never text a user didn't decide to send.
+	SendText(widget.TerminalTabID, string) error
 	// SetMode puts the tab in a mode; Input needs no program.
 	SetMode(widget.TerminalTabID, widget.TerminalMode) error
 	// Resume sends a SIGCONT to the tab's program (its process group): one stopped by its own Ctrl+Z
@@ -92,6 +96,9 @@ func (p terminalPanel) Select(id widget.TerminalTabID) error { return p.tabs.Sel
 func (p terminalPanel) Start(id widget.TerminalTabID) error  { return p.tabs.Start(id) }
 func (p terminalPanel) SendBracketedPaste(id widget.TerminalTabID, text string) error {
 	return p.tabs.SendBracketedPaste(id, text)
+}
+func (p terminalPanel) SendText(id widget.TerminalTabID, text string) error {
+	return p.tabs.SendText(id, text)
 }
 func (p terminalPanel) SetMode(id widget.TerminalTabID, mode widget.TerminalMode) error {
 	return p.tabs.SetMode(id, mode)

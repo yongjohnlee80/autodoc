@@ -5,6 +5,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -32,6 +33,7 @@ const (
 	bySeq     sort = "seq"
 	byLease   sort = "lease_until"
 	byExpires sort = "expires"
+	byDone    sort = "done_at"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -78,7 +80,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 			dao.Fields[*mail.Delivery, col, sort, string](dfs),
 			dao.SortMap[*mail.Delivery, col, sort, string](map[sort]string{
 				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
-				byLease: `"mail_delivery"."lease_until"`}),
+				byLease: `"mail_delivery"."lease_until"`, byDone: `"mail_delivery"."done_at"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
 	}
@@ -91,7 +93,7 @@ func (st *Store) Mail() mail.Store { return mailStore{st} }
 type mailStore struct{ st *Store }
 
 func (m mailStore) Write(ctx context.Context, fn func(mail.Tx) error) error {
-	return m.st.s.Write(ctx, func(tx *store.Tx) error { return fn(m.st.tx(tx)) })
+	return m.st.Write(ctx, func(tx crew.Tx) error { return fn(tx.(*Tx)) })
 }
 
 func (m mailStore) Read(ctx context.Context, fn func(mail.Tx) error) error {

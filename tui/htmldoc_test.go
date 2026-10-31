@@ -24,7 +24,7 @@ func runHTML(t *testing.T) (*running, string) {
 	kb := fileDir(t, "a.md", "# A\n")
 	d := startManagedWith(t, map[string]string{"kb": kb}, serving.Options{Registrations: reg})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	return r, kb
 }
 
@@ -160,7 +160,7 @@ func TestTheRenderedViewIsToldTheNotesFile(t *testing.T) {
 }
 
 // TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut: the question comes before its workspace is
-// entered, so Cancel leaves the workspace and the open file as they were (Lector, #76 r0).
+// entered, so Cancel leaves the workspace and the open file as they were.
 func TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut(t *testing.T) {
 	r, kb, _, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })

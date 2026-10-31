@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,9 +64,10 @@ func TestSchemaLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
-	// with no schema, type:adr is a word, not a filter: no file has it
-	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || len(got) != 0 {
-		t.Fatalf("before any schema: %v, %v; want no hits and no error", got, err)
+	// with no schema, type:adr is a word, not a filter: no file holds it, so the query falls back to
+	// any of its words (AM-8) and finds both files by alpha, b.md's memo included, never a.md alone
+	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || !reflect.DeepEqual(sorted(got), []string{"a.md", "b.md"}) {
+		t.Fatalf("before any schema: %v, %v; want a.md and b.md (type:adr no filter), and no error", got, err)
 	}
 
 	st, err := m.SetSchema(context.Background(), "kb", ".autodoc/schema.yaml")
@@ -111,8 +113,9 @@ func TestSchemaLifecycle(t *testing.T) {
 	if err != nil || st.Active || st.Path != "" {
 		t.Fatalf("removing the schema = %+v, %v", st, err)
 	}
-	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || len(got) != 0 {
-		t.Fatalf("after the schema was removed: %v, %v; want type:adr back to a word", got, err)
+	// type:adr is a word again, which no file holds: the any-word fallback finds both by alpha
+	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || !reflect.DeepEqual(sorted(got), []string{"a.md", "b.md"}) {
+		t.Fatalf("after the schema was removed: %v, %v; want type:adr back to a word (a.md and b.md)", got, err)
 	}
 }
 
@@ -167,6 +170,13 @@ func TestSchemaV2Loads(t *testing.T) {
 		got, err := searchPaths(t, m, "kb", "alpha verdict:approved")
 		return err == nil && reflect.DeepEqual(got, []string{"a.md"})
 	})
+}
+
+// sorted is paths in order, for a fallback whose ranking is not what a cell asserts.
+func sorted(paths []string) []string {
+	out := slices.Clone(paths)
+	slices.Sort(out)
+	return out
 }
 
 func mustID(t *testing.T, m *Workspaces, name string) int64 {

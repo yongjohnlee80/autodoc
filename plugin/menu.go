@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// PROTOCOL 11 (ADR 1792991184): a plugin's editor menu rows.
+// PROTOCOL 11 (docs/decisions/plugins.md#editor-menu-rows): a plugin's editor menu rows.
 //
 //	plugin → host   host.menu {id, title?, enabled?}
 //

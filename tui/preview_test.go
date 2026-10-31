@@ -69,7 +69,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	skipWithoutUsableBrowser(t)
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	graphics := tuicore.TriYes
 	r.h.p.Post(func() {
 		r.h.graphicsOverride = func() tuicore.Tri { return graphics }
@@ -119,7 +119,7 @@ func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", "# D\n\n```mermaid\n"+block+"```\n")})
 			r := runTUI(t, NewSession(d.sock, nil), Options{})
-			r.s.WaitForText(t, "· kb")
+			r.waitAttached(t, "kb")
 			r.h.p.Post(func() { r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes } })
 			r.h.p.Post(func() { r.h.openPath("f.md") })
 			r.waitFile(t, "f.md")
@@ -141,7 +141,7 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 	long := "# Long page\n\n" + strings.Repeat("A paragraph of the long page, to scroll through.\n\n", 80)
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.h.p.Post(func() {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		r.h.browser = func(context.Context, string) error { return nil }
@@ -205,7 +205,7 @@ func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A long page\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		r.h.browser = func(context.Context, string) error { return nil }
@@ -275,7 +275,7 @@ func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Light page\n\ntext\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	opened := make(chan string, 1)
 	r.h.p.Post(func() {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
@@ -308,7 +308,8 @@ func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 }
 
 // A recovery restart whose installed backend does not come up stays in its dialog, saying why, and
-// Restart Now tries the start again (ADR 0212 §8: a failed restart remains actionable).
+// Restart Now tries the start again (docs/decisions/search.md#protocol-mismatch-recovery: a failed
+// restart remains actionable).
 func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 	dir, err := os.MkdirTemp("", "adf")
 	if err != nil {
@@ -371,7 +372,7 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 }
 
 // On a screen too small for an image the Mermaid preview falls back to the source, saying why,
-// rather than staying a blank image area (Lector's review of #30, finding 1).
+// rather than staying a blank image area.
 func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
 	if _, ok := widget.HTMLRasterizer(); !ok {
 		t.Skip("no headless browser: image mode is never entered")
@@ -471,7 +472,7 @@ func TestTheMismatchDialogsEdges(t *testing.T) {
 	t.Run("connected: nothing to recover", func(t *testing.T) {
 		d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 		r := runTUI(t, NewSession(d.sock, func() (string, error) { return "", errors.New("no spawn") }), Options{})
-		r.s.WaitForText(t, "· kb")
+		r.waitAttached(t, "kb")
 		r.h.p.Post(r.h.restartMismatch)
 		if onLoop(r, func() bool { return r.h.mismatchOpen || r.h.mismatchRecovery }) {
 			t.Fatal("a connected session started a recovery")
@@ -525,7 +526,7 @@ func TestThePreviewSpinsWhileThePageRenders(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A page\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	release := make(chan struct{})
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }

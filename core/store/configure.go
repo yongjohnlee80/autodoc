@@ -9,10 +9,11 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 )
 
-// Changes is an edit of a workspace's settings, all of them saved together by Configure (ADR
-// 0214 §3). A nil field is left as it is; a set one replaces the stored value. The TUI's Edit and
-// Advanced tabs fill one Changes, so a save is one transaction: every field is checked before any
-// is written, and a refused field leaves the workspace exactly as it was.
+// Changes is an edit of a workspace's settings, all of them saved together by Configure
+// (docs/decisions/store.md#workspace-settings-saved-together). A nil field is left as it is; a set
+// one replaces the stored value. The TUI's Edit and Advanced tabs fill one Changes, so a save is
+// one transaction: every field is checked before any is written, and a refused field leaves the
+// workspace exactly as it was.
 type Changes struct {
 	// Edit
 	Name             *string
@@ -29,7 +30,7 @@ type Changes struct {
 	// Retrieval, off until measured
 	AbstractChunk    *bool // each document's abstract as a chunk of its own
 	DemoteSuperseded *bool // a superseded document's hits below its successor's
-	// Todo stores (ADR 1792015212 §2.2)
+	// Todo stores (docs/decisions/todos.md#which-paths-are-graph-only)
 	GraphOnly       *[]string       // the graph_only patterns: indexed for the graph, never for search
 	TodoSearch      *bool           // the workspace's todo tasks in search (the default), or in the graph only
 	Source          *ConnectionSpec // the database the .view files run on

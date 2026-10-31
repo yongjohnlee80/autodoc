@@ -15,8 +15,8 @@ import (
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
-// THE EMBEDDING SETUP (ADR 1793005098 §4.3): host.probe, embedding.catalog, embedding.estimate,
-// and the pull job (embedding.pull, pull_status, pull_cancel). Protocol 31.
+// THE EMBEDDING SETUP (docs/decisions/search.md#embedding-setup): host.probe, embedding.catalog,
+// embedding.estimate, and the pull job (embedding.pull, pull_status, pull_cancel). Protocol 31.
 
 // protocolEmbedSetup is the protocol the setup's verbs arrived in.
 const protocolEmbedSetup = 31
@@ -37,8 +37,9 @@ func setupOf(e Embeddings) embeddingSetup {
 	return s
 }
 
-// The recommendation is AutoDoc's policy, not golib's (ADR 1793005098 §3, Jarvis's ruling): on a
-// GPU the best model that fits, and on a CPU the lightest that still serves many languages.
+// The recommendation is AutoDoc's policy, not golib's
+// (docs/decisions/search.md#model-recommendation): on a GPU the best model that fits, and on a CPU
+// the lightest that still serves many languages.
 var (
 	preferOnGPU = []string{"qwen3-embedding:4b", "qwen3-embedding:0.6b", "bge-m3", "snowflake-arctic-embed2", "nomic-embed-text"}
 	preferOnCPU = []string{"qwen3-embedding:0.6b", "bge-m3", "snowflake-arctic-embed2", "nomic-embed-text", "qwen3-embedding:4b"}
@@ -113,7 +114,7 @@ type workspaceEstimate struct {
 	Why          string   `json:"why,omitempty"`     // why seconds is absent, when it could have been said
 }
 
-// The estimate's bases (ADR 1793005098 §4.3, rationale §R9).
+// The estimate's bases (docs/decisions/search.md#embedding-setup).
 const (
 	basisProvisional = "provisional" // not installed: every distinct alive text, no fingerprint
 	basisInstalled   = "installed"   // installed: the real fingerprint, its pending texts, timed

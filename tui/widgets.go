@@ -9,7 +9,8 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// GOING TO A WIDGET — :go, the Go-to picker (SPC Tab) and F6 / Shift+F6 (ADR 1792256102).
+// GOING TO A WIDGET — :go, the Go-to picker (SPC Tab) and F6 / Shift+F6
+// (docs/decisions/editor.md#going-to-a-widget-by-name).
 //
 // The targets are the places the keyboard can go, listed by the host each time it is asked: the
 // editor, every panel in the registry's order, and each tab of the terminal's and the agent's

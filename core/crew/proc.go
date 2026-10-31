@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// A host's process reference is "<boot id>:<pid ns>:<pid>:<start time>" (ADR 1793271500 §4.3): what
-// tells a dead holder from a live one, and a reused pid from its first owner. ProcRef makes it for
-// a process; procDead reads it back.
+// A host's process reference is "<boot id>:<pid ns>:<pid>:<start time>"
+// (docs/decisions/crew.md#scopes-and-fenced-ownership): what tells a dead holder from a live one,
+// and a reused pid from its first owner. ProcRef makes it for a process; procDead reads it back.
 
 // procRef is a parsed process reference.
 type procRef struct {

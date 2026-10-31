@@ -70,7 +70,8 @@ func New(chunkers map[string]search.Chunker, ds ...Deriver) (*Table, error) {
 }
 
 // ValidVersion reports whether v is a chunker's or a deriver's version as document.indexer records
-// it (ADR 0216 §1.6): 1 to 32 letters, digits, '.', '_', '+' or '-'.
+// it (docs/decisions/search.md#indexer-identity-strings): 1 to 32 letters, digits, '.', '_', '+' or
+// '-'.
 func ValidVersion(v string) bool { return validID(v, 32, false) }
 
 // ValidDeriverID reports whether id is a deriver's id as document.indexer records it: 1 to 64
@@ -143,7 +144,8 @@ func (t *Table) Kinds() kind.Registrations {
 }
 
 // Collisions are the extensions of text, a workspace's own plain-text extensions, that a
-// registration reads instead: the registration wins (ADR 0216 §1.3).
+// registration reads instead: the registration wins
+// (docs/decisions/search.md#file-kinds-and-their-precedence).
 func (t *Table) Collisions(text []string) []string {
 	if t == nil {
 		return nil

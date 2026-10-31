@@ -19,9 +19,10 @@ func mailTx(tx crew.Tx) (Tx, error) {
 	return t, nil
 }
 
-// EndSessionDeliveries is what follows a session's end, in the write that ended it (§4.3): every
-// unhandled delivery bound to it fails (session_ended), and each sender is told. Its profile's
-// unbound leases lapse as any lease does, and go to the profile's next session.
+// EndSessionDeliveries is what follows a session's end, in the write that ended it
+// (docs/decisions/crew.md#scopes-and-fenced-ownership): every unhandled delivery bound to it fails
+// (session_ended), and each sender is told. Its profile's unbound leases lapse as any lease does,
+// and go to the profile's next session.
 func (m *Manager) EndSessionDeliveries(ctx crew.Tx, s crew.Session, why string) error {
 	tx, err := mailTx(ctx)
 	if err != nil {
@@ -40,13 +41,14 @@ func (m *Manager) EndSessionDeliveries(ctx crew.Tx, s crew.Session, why string) 
 	return nil
 }
 
-// MergeDeliveries is adoption's mail half for one profile of the scope adopted (§4.3), in crew's
-// write: from's unhandled deliveries move to into, or stay from's when into is "" (the profile
-// moves whole). crew calls it after it has made from's forwarding real (from merged into into, or
-// moved), so every notice this generates, to from as a sender too, resolves to where from's mail
-// now goes; nothing is generated onto a profile about to stop receiving. Session-bound ones fail (session_ended). Where into already has the message, from's
-// copy is merged, and a failed copy of into's is reopened, its sender told. Every surviving row is
-// normalized: profile-bound, queued, no lease.
+// MergeDeliveries is adoption's mail half for one profile of the scope adopted
+// (docs/decisions/crew.md#orphan-scopes-are-offered-to-the-user), in crew's write: from's unhandled
+// deliveries move to into, or stay from's when into is "" (the profile moves whole). crew calls it
+// after it has made from's forwarding real (from merged into into, or moved), so every notice this
+// generates, to from as a sender too, resolves to where from's mail now goes; nothing is generated
+// onto a profile about to stop receiving. Session-bound ones fail (session_ended). Where into
+// already has the message, from's copy is merged, and a failed copy of into's is reopened, its
+// sender told. Every surviving row is normalized: profile-bound, queued, no lease.
 func (m *Manager) MergeDeliveries(ctx crew.Tx, from, into string) error {
 	tx, err := mailTx(ctx)
 	if err != nil {
@@ -106,9 +108,10 @@ func (m *Manager) adoptOne(tx Tx, d Delivery, into string) error {
 	return tx.PutDelivery(d)
 }
 
-// normalize is the one way a surviving obligation is made receivable again (§4.3): bound to no
-// session, queued, no lease or end; a row that moves takes the new recipient's next seq. Its
-// attempts carry on, and its message's expiry stands.
+// normalize is the one way a surviving obligation is made receivable again
+// (docs/decisions/crew.md#scopes-and-fenced-ownership): bound to no session, queued, no lease or
+// end; a row that moves takes the new recipient's next seq. Its attempts carry on, and its
+// message's expiry stands.
 func (m *Manager) normalize(tx Tx, d Delivery, to string) error {
 	if to != d.Recipient {
 		seq, err := tx.NextSeq(to)
@@ -122,9 +125,10 @@ func (m *Manager) normalize(tx Tx, d Delivery, to string) error {
 }
 
 // HasEligible reports whether profile has a delivery a new session of it may receive now: queued
-// and unbound. crew.register seeds the session's wake with it (§4.4), in its own write. expire runs
-// first in that write, as in every write that reads eligibility, so no delivery past its message's
-// expiry is left queued to answer for a live one behind it.
+// and unbound. crew.register seeds the session's wake with it
+// (docs/decisions/crew.md#sessions-and-the-guard), in its own write. expire runs first in that
+// write, as in every write that reads eligibility, so no delivery past its message's expiry is left
+// queued to answer for a live one behind it.
 func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 	tx, err := mailTx(ctx)
 	if err != nil {
@@ -134,6 +138,21 @@ func (m *Manager) HasEligible(ctx crew.Tx, profile string) (bool, error) {
 		return false, err
 	}
 	ds, err := tx.Eligible(profile, "", tx.Now().UnixNano(), 1)
+	return len(ds) > 0, err
+}
+
+// EligibleFor is whether session, a live session of profile, has a delivery it may receive now:
+// queued, unexpired, and unbound or bound to it, as mail.receive and mail.wait take them
+// (crew.SessionEnder, for crew.wait). expire runs first, as in every write that reads eligibility.
+func (m *Manager) EligibleFor(ctx crew.Tx, profile, session string) (bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := m.expire(tx); err != nil {
+		return false, err
+	}
+	ds, err := tx.Eligible(profile, session, tx.Now().UnixNano(), 1)
 	return len(ds) > 0, err
 }
 
@@ -167,9 +186,10 @@ func (m *Manager) UnhandledCount(ctx crew.Tx, profile string) (int, error) {
 }
 
 // DiscardDeliveries fails every unhandled delivery of profile (discarded), each sender told, in
-// crew.discard's write (§4.3). crew calls it after it has marked the scope gone, so a notice to
-// profile as a sender (a message it sent itself) finds no recipient: it fails recipient_gone and
-// shows in the human's history, never queued where nothing can receive it.
+// crew.discard's write (docs/decisions/crew.md#orphan-scopes-are-offered-to-the-user). crew calls
+// it after it has marked the scope gone, so a notice to profile as a sender (a message it sent
+// itself) finds no recipient: it fails recipient_gone and shows in the human's history, never
+// queued where nothing can receive it.
 func (m *Manager) DiscardDeliveries(ctx crew.Tx, profile string) error {
 	tx, err := mailTx(ctx)
 	if err != nil {

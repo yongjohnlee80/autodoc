@@ -171,9 +171,11 @@ func TestSemanticFindsWhatLexicalCannot(t *testing.T) {
 		mode, used string
 		want       []string
 	}{
-		{ModeAuto, ModeHybrid, []string{"z.md semantic", "b.md semantic"}},
+		// lexically only z.md's "zebra" matches (no file holds "lion"; any one word is enough, AM-8);
+		// b.md shares no word with the query: only the vectors find it
+		{ModeAuto, ModeHybrid, []string{"z.md lexical+semantic", "b.md semantic"}},
 		{ModeSemantic, ModeSemantic, []string{"z.md semantic", "b.md semantic"}},
-		{ModeLexical, ModeLexical, nil},
+		{ModeLexical, ModeLexical, []string{"z.md lexical"}},
 	} {
 		res := e.query("zebra lion", QueryOpts{Mode: c.mode})
 		eq(t, c.mode, via(res), c.want)
@@ -244,9 +246,11 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 			rows, _ := e.raw.QueryContext(context.Background(), `SELECT c.id, e.bits FROM chunk c JOIN embedding e
 				ON e.text_hash = c.text_hash AND e.model_fp = ? WHERE c.doc_id = ?`, cur.Model(), cID)
 			for rows.Next() {
-				var c code
+				c := code{Chunk: chunkKey{Doc: cID}}
 				var b []byte
-				_ = rows.Scan(&c.Chunk, &b)
+				if err := rows.Scan(&c.Chunk.ID, &b); err != nil {
+					t.Fatal(err)
+				}
 				c.Bits = vector.DecodeBits(b)
 				chunks = append(chunks, c)
 			}
@@ -443,12 +447,12 @@ func TestSnapshotAndFallbackAgree(t *testing.T) {
 	if e.ix.sem.fallbackScans.Load() != falls+1 {
 		t.Fatal("a stale snapshot was used")
 	}
-	e.ix.sem.snap.Store(vector.NewIndex[int64, int64](cur.Model(), cur.Watermark()+1, nil))
+	e.ix.sem.snap.Store(vector.NewIndex[int64, chunkKey](cur.Model(), cur.Watermark()+1, nil))
 	withNewer := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+2 {
 		t.Fatal("a newer snapshot was used")
 	}
-	e.ix.sem.snap.Store(vector.NewIndex[int64, int64]("another|model||64", cur.Watermark(), nil))
+	e.ix.sem.snap.Store(vector.NewIndex[int64, chunkKey]("another|model||64", cur.Watermark(), nil))
 	withOther := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+3 {
 		t.Fatal("another model's snapshot was used")
@@ -567,7 +571,8 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().Model() != fpB {
 		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().Model())
 	}
-	// after the flip: b active; a, superseded, is reclaimed (ADR 1791284787), its vectors and its row
+	// after the flip: b active; a, superseded, is reclaimed
+	// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors), its vectors and its row
 	e.eventually("the superseded model reclaimed", func() bool { return len(models()) == 1 })
 	ms := models()
 	if len(ms) != 1 || ms[0].FP != fpB || ms[0].State != ModelActive {
@@ -692,12 +697,12 @@ func sharesCodes(a, b *codeIndex) bool {
 	at := map[int64]*uint64{}
 	for c := range a.Codes() {
 		if len(c.Bits) > 0 {
-			at[c.Chunk] = &c.Bits[0]
+			at[c.Chunk.ID] = &c.Bits[0]
 		}
 	}
 	n := 0
 	for c := range b.Codes() {
-		if len(c.Bits) == 0 || at[c.Chunk] != &c.Bits[0] {
+		if len(c.Bits) == 0 || at[c.Chunk.ID] != &c.Bits[0] {
 			return false
 		}
 		n++
@@ -762,7 +767,8 @@ func (e *env) embStatus() EmbeddingStatus {
 
 // TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch of the old model
 // handed to the writer changes nothing about which model is active, and is not stored: the old
-// model is reclaimed, and a late batch must not leave its vectors behind (ADR 1791284787).
+// model is reclaimed, and a late batch must not leave its vectors behind
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors).
 func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -834,7 +840,8 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 
 // Texts is the workspace's distinct alive texts; Pending is those with no vector under a model: none
 // for the model that filled them, all of them for one never embedded here. VectorBytes is the room
-// index.models reports, vector by vector (ADR 1793005098 §4.3's estimate counts with it).
+// index.models reports, vector by vector (docs/decisions/search.md#embedding-setup's estimate
+// counts with it).
 func TestPendingAndTextsCountWhatAModelWouldEmbed(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})

@@ -116,7 +116,7 @@ func TestADMABufIsAdmittedCreditedOrRefused(t *testing.T) {
 		t.Fatalf("acceptance %d, %v; want buffer.free 1", id, err)
 	}
 	r.present(t, 1, gen, 1)
-	h := r.sink.take(t)
+	h := r.take(t)
 	if d := h.f.Desc(); d.Planes[0].Pitch != 64 {
 		t.Errorf("the frame's pitch is %d", d.Planes[0].Pitch)
 	}

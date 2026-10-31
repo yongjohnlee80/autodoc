@@ -16,11 +16,12 @@ import (
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
 
-// ONE CANDIDATE PER INSTALL OR UPDATE (ADR 1792351195 §4.7) — every add, update and Lua package
-// install stages one candidate: a fresh clone pinned to a full commit. Its card names that commit,
-// Audit… hands a fresh copy of it to an agent, and Install builds it; the installed tree is never
-// audited or installed from. A candidate owns its card, its stage, its audit copies and its toast,
-// and ends exactly once (end). Two live candidates never share a target (kind/name).
+// ONE CANDIDATE PER INSTALL OR UPDATE
+// (docs/decisions/plugins.md#one-candidate-per-install-or-update) — every add, update and Lua
+// package install stages one candidate: a fresh clone pinned to a full commit. Its card names that
+// commit, Audit… hands a fresh copy of it to an agent, and Install builds it; the installed tree is
+// never audited or installed from. A candidate owns its card, its stage, its audit copies and its
+// toast, and ends exactly once (end). Two live candidates never share a target (kind/name).
 
 // opState is where a candidate is.
 type opState int
@@ -55,8 +56,9 @@ func (c *candidate) toastID() string {
 	return "audit:" + c.key() + ":" + c.commit[:min(12, len(c.commit))]
 }
 
-// auditNote is the card's sentence about Audit…, above its buttons (rationale §R3), in English: the
-// audit task file's, as the agent reads it. A card shows it in the UI's language.
+// auditNote is the card's sentence about Audit…, above its buttons
+// (docs/decisions/plugins.md#audits-are-per-commit-and-advisory), in English: the audit task
+// file's, as the agent reads it. A card shows it in the UI's language.
 const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop the agent from running " +
 	"code or changing files: pick an agent you trust, and watch its tab."
 
@@ -354,11 +356,11 @@ func (cs *candidates) auditWith(a AgentEntry) {
 	})
 }
 
-// handOver gives the audit task to a. done(nil) means typed into its input, for the user's Enter
-// (ADR 1792991980 §4.2), never that the audit ran: the toast says so, and no more. A refusal ends
-// the toast and reopens the card.
+// handOver gives the audit task to a through the window's agent messaging: done(nil) means sent (rung,
+// or typed and sent; docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter),
+// never that the audit ran: the toast says so, and no more. A refusal ends the toast and reopens the card.
 func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
-	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
+	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
 			return
@@ -376,7 +378,10 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 	}
 	ref := TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
 	done := func(err error) {
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
+			cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
+		case err != nil:
 			failed(err)
 		}
 	}

@@ -1,5 +1,5 @@
-// Package decl runs a golib QML program (tui/decl) as an AutoDoc card or dialog (ADR 1792254331
-// §4.7–4.10): the program runs inside the plugin on a backend of its own, and every frame it draws
+// Package decl runs a golib QML program (tui/decl) as an AutoDoc card or dialog
+// (docs/decisions/plugins.md#qml-cards-run-in-the-plugin): the program runs inside the plugin on a backend of its own, and every frame it draws
 // is sent to AutoDoc as host.frame. The host never sees QML; the wire is unchanged.
 //
 //	c := decl.New(decl.Options{
@@ -211,7 +211,7 @@ func (c *Card) Key(k plugin.Key) {
 }
 
 // Resize is plugin.resize: the size Size answers moves, and the App takes it on its loop; the grid
-// follows in FlushSized (§4.8).
+// follows in FlushSized (docs/decisions/plugins.md#qml-cards-run-in-the-plugin).
 func (c *Card) Resize(w, h int) {
 	if c.live() {
 		c.be.setWant(w, h)

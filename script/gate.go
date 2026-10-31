@@ -7,13 +7,14 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// GATED SCRIPTS — a script that must ask before it uses what it could misuse (ADR 1792004705 §4.2).
-// A gated script runs in an environment of its own: its globals are its own, its libraries copies,
-// and its global table (autodoc) a proxy over the engine's. A function looked up through the proxy
-// that a host gated (SetGate, SetDomainGate) comes back wrapped: it asks the script's Grants
-// before every call, and a call without the grant answers nil and why. A function the script
-// defines keeps its environment, and so its proxy, wherever it runs later (a callback, a handler,
-// a mapped key): the grants are always the script's own, with nothing to track at call time.
+// GATED SCRIPTS — a script that must ask before it uses what it could misuse
+// (docs/decisions/contract.md#gated-scripts-and-their-capabilities). A gated script runs in an
+// environment of its own: its globals are its own, its libraries copies, and its global table
+// (autodoc) a proxy over the engine's. A function looked up through the proxy that a host gated
+// (SetGate, SetDomainGate) comes back wrapped: it asks the script's Grants before every call, and a
+// call without the grant answers nil and why. A function the script defines keeps its environment,
+// and so its proxy, wherever it runs later (a callback, a handler, a mapped key): the grants are
+// always the script's own, with nothing to track at call time.
 //
 //	eng.SetGate("call", func(_ string, L *lua.LState) string { return capabilityOf(L.CheckString(1)) })
 //	eng.SetDomainGate("clipboard", func(string, *lua.LState) string { return "clipboard" })

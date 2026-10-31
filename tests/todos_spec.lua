@@ -1,6 +1,6 @@
 -- autodoc.todos against a real daemon built from this checkout: the todo verbs at protocol 20,
 -- a workspace's store read as an empty one until its first write, which makes and claims it, then
--- the store's whole life through the client, its release and its claim again (ADR 1791532020 r13).
+-- the store's whole life through the client, its release and its claim again (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write).
 local t = require("helpers")
 
 local bin = assert(os.getenv("AUTODOC_TEST_BIN"), "AUTODOC_TEST_BIN")

@@ -4,14 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // AgentRef identifies a profile and, optionally, its exact running incarnation.
@@ -40,7 +46,17 @@ var (
 var agentIncarnation atomic.Uint64
 
 type agentInstance struct {
-	profile          agentProfile
+	profile agentProfile
+	dir     string // the folder its tab's process runs in (agentFolder)
+	// starting is a start whose crew session is being registered: the process starts once the
+	// session's context is written. session is the crew session it runs under, when it has one;
+	// crewed whether its starts are crew sessions' (its window held a scope when it was started);
+	// context the file of the session its next process runs under, told it at its start
+	// (AUTODOC_CREW_CONTEXT, runAgent), "" while there is none.
+	starting         bool
+	session          crewSession
+	crewed           bool
+	context          string
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -65,8 +81,9 @@ type agentRuntimeHost interface {
 }
 
 // agentReadyWait is how long a delivery to an agent it just started waits for the agent's program
-// to take bracketed pastes, trying again agentReadyPoll apart (ADR 1792991980 §3): a starting
-// program hasn't asked for them yet.
+// to take bracketed pastes, trying again agentReadyPoll apart
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste): a starting program
+// hasn't asked for them yet.
 // NOTE: can't announce: a program says nothing when it enables bracketed paste, so the paste is
 // tried again until it is taken.
 const (
@@ -224,24 +241,47 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if instance != nil && (instance.workspace.name != ws.name || instance.workspace.root != ws.root) {
 		return nil, fmt.Errorf("close the old workspace's agent tab before starting in another workspace: %w", ErrAgentStale)
 	}
-	if instance != nil && instance.running {
+	if instance != nil && (instance.running || instance.starting) {
 		return instance, a.selectInstance(instance)
 	}
-	if instance != nil && instance.profile.Command != p.Command {
+	if instance != nil && !instance.profile.sameLaunch(p) {
 		return nil, fmt.Errorf("close the old agent tab before starting its edited command: %w", ErrAgentStale)
 	}
-	dir, err := a.writeAgentGuide(ws)
+	if instance != nil && instance.dir != a.agentFolder(ws, p.Codename) {
+		// the window's crew scope changed since the tab was made: its process would start in the old one's folder
+		return nil, fmt.Errorf("close the old agent tab before starting it under this window's crew scope: %w", ErrAgentStale)
+	}
+	// a crew session needs the window's scope and the workspace's id (a daemon before it has none)
+	crewed := false
+	if a.crew != nil {
+		_, _, held := a.crew.held()
+		crewed = held && ws.id > 0
+	}
+	crewKind := ""
+	if crewed {
+		crewKind = agentKind(p.Command)
+	}
+	dir, err := a.writeAgentGuide(ws, p.Codename, crewKind)
 	if err != nil {
 		return nil, err
 	}
-	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), a.agentEnv(ws, dir, p.Codename))
+	env := append(p.envList(), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
+	prompts := false
+	if crewed && crewKind == crew.KindClaude {
+		// a wake reaches it only with these: without them it still starts, and receives when it asks
+		var err error
+		prompts, err = writeWakeAcceptance(dir, crewKind, a.claudeHooks(p))
+		a.c.Keep(err)
+	}
+	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
 	if err != nil {
 		return nil, err
 	}
 	if instance == nil {
-		instance = &agentInstance{profile: p, workspace: ws, owner: panel}
+		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
-			Exited: func(code int) { a.instanceExited(instance, code) }})
+			Exited: func(code int) { a.instanceExited(instance, code) },
+			Start:  func(c pty.Cmd) (widget.TerminalProcess, error) { return a.runAgent(instance, c) }})
 		if err != nil {
 			return nil, err
 		}
@@ -249,25 +289,283 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.instances[p.Codename] = instance
 		a.instanceOrder = append(a.instanceOrder, p.Codename)
 	}
-	if err := panel.Start(instance.tab); err != nil {
+	instance.profile, instance.workspace, instance.crewed = p, ws, crewed
+	if crewed {
+		// registered first (docs/decisions/crew.md#sessions-and-the-guard): the process starts only
+		// once its session's context is written, and a refused registration starts nothing. The
+		// answer is checked before either: a tab closed or restarted meanwhile, or a window whose
+		// scope, epoch or daemon changed, ends the session instead
+		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+		instance.starting = true
+		token := instance.token
+		a.crew.register(p.Codename, agentKind(p.Command), prompts, ws.id, token, dir, a.whenStartable(crewKind, func(s crewSession, err error) {
+			instance.starting = false
+			if a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token {
+				if err == nil {
+					a.crew.exit(s, crew.EndedStartFailed) // nobody starts it now
+				}
+				a.listAgents()
+				return
+			}
+			if err == nil {
+				if instance.context, err = a.crew.publish(s); err != nil {
+					a.crew.exit(s, crew.EndedStartFailed)
+				}
+			}
+			if err != nil {
+				a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
+				a.listAgents()
+				return
+			}
+			if err := a.start(panel, instance); err != nil {
+				instance.context = ""
+				a.crew.exit(s, crew.EndedStartFailed)
+				a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
+				a.listAgents()
+				return
+			}
+			instance.session = s // it runs: its exit ends the session, whatever showing it does
+			if err := a.showStarted(instance); err != nil {
+				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
+			}
+		}))
+		a.listAgents()
+		return instance, nil
+	}
+	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+	if err := a.start(panel, instance); err != nil {
 		return nil, err
 	}
-	instance.profile, instance.workspace = p, ws
-	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
+	if err := a.showStarted(instance); err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// errCrewStartHere is a crew agent's tab restarted from the tab itself (Enter after its program
+// exited): its crew session is registered by the agents panel's start, never without one.
+var errCrewStartHere = errors.New("this agent runs as a crew session: start it from the agents panel, which registers one")
+
+// runAgent is an agent tab's TerminalConfig.Start, on the loop: its program, told the context
+// file of the crew session it starts under (AUTODOC_CREW_CONTEXT), that file being this session's
+// own (crew.ContextPath). A crew agent's start with no session published for it is refused. A crew
+// OpenCode agent also loads AutoDoc's OpenCode plugin (OPENCODE_CONFIG_CONTENT, opencodeEnv), which
+// registers its session and wakes it: without it the session is never reachable, so a plugin that
+// can't be had refuses the start.
+func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalProcess, error) {
+	if instance.crewed {
+		if instance.context == "" {
+			return nil, errCrewStartHere
+		}
+		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
+		if agentKind(instance.profile.Command) == "opencode" {
+			env, err := a.opencodePluginEnv()
+			if err != nil {
+				return nil, fmt.Errorf("AutoDoc's OpenCode plugin: %w", err)
+			}
+			c.Args = withEnvArg(c.Args, env)
+		}
+	}
+	proc, err := a.spawn(c)
+	if err == nil && instance.crewed && agentKind(instance.profile.Command) == "codex" {
+		a.registerCodex(instance.context, c.Dir, instance.profile.environ(os.Environ()), time.Now())
+	}
+	return proc, err
+}
+
+// codexRegisterWait and codexRegisterEvery bound the window's registration of a Codex agent: looks
+// 2 s apart, as many as a minute holds, none started a minute or more after its spawn.
+// NOTE: can't announce: Codex starts its thread on its app-server without telling anyone, so the
+// window looks again on a timer (the loop's After) until it is found, the session ends, or the
+// minute is up.
+const (
+	codexRegisterWait  = time.Minute
+	codexRegisterEvery = 2 * time.Second
+)
+
+// registerCodex registers a crew Codex agent's session, started at started in folder dir under
+// the session context file ctxFile with environ (runAgentAutodoc), so it is reachable before anyone types: its own autodoc's
+// `crew endpoint --codex-here`, which finds the folder's thread on Codex's app-server, run off the
+// loop and again until it is found. A session that ended (its context gone) stops it; one never
+// found raises the session's attention, saying why, so the window shows it.
+func (a *agents) registerCodex(ctxFile, dir string, environ []string, started time.Time) {
+	c, ok := a.c.(agentRuntimeHost)
+	if !ok {
+		return
+	}
+	run := a.codexHere
+	if run == nil {
+		bin, config := a.agentBin(), a.agentConfig
+		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, environ, args...) }
+	}
+	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
+	var attempt func(tries int)
+	attempt = func(tries int) {
+		go func() {
+			err := run("crew", "endpoint", "--codex-here", "--since", since)
+			_, gone := os.Stat(ctxFile) // here, never on the loop
+			c.Post(func() {
+				switch {
+				case err == nil, gone != nil: // found, or the session ended: nothing more to register
+				case tries > 1 && time.Since(started)+codexRegisterEvery < codexRegisterWait: // looks slow to answer count too
+					c.After(codexRegisterEvery, func() { attempt(tries - 1) })
+				default:
+					go func() {
+						_ = run("crew", "attention", "raise", "blocked", "AutoDoc can't wake this Codex session: "+attentionText(err.Error()))
+					}()
+				}
+			})
+		}()
+	}
+	attempt(int(codexRegisterWait / codexRegisterEvery))
+}
+
+// runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
+// session (ctxFile, $AUTODOC_CREW_CONTEXT) with environ, its profile's (agentProfile.environ: a
+// CODEX_HOME there is the one it reads), bounded at 15 s; its error carries what it said.
+func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	full := []string{}
+	if config != "" {
+		full = append(full, "--config", config)
+	}
+	cmd := exec.CommandContext(ctx, bin, append(full, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(slices.Clone(environ), "AUTODOC_CREW_CONTEXT="+ctxFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// attentionText is a reason as the attention's text: one line (oneLine), at most 300 bytes.
+func attentionText(s string) string {
+	s = strings.TrimSpace(oneLine(s))
+	if len(s) > 300 {
+		s = s[:300]
+	}
+	return s
+}
+
+// opencodeTimeout bounds the plugin's setup: one run of the agent's own autodoc, which writes a
+// file and prints a line.
+const opencodeTimeout = 10 * time.Second
+
+// pluginEnvAnswer is opencodeEnv's answer for this process, on its way until done closes: its
+// output depends only on the agent's build and config, so it runs once, off the loop, and every
+// crew OpenCode spawn takes the same answer.
+type pluginEnvAnswer struct {
+	done chan struct{}
+	env  string
+	err  error
+}
+
+// warmPluginEnv starts opencodeEnv off the loop, once (on the loop: the agents feature's start, and
+// a spawn that finds none started): the spawn, which runs on the loop, then only reads its answer.
+func (a *agents) warmPluginEnv() *pluginEnvAnswer {
+	if a.pluginAnswer == nil {
+		f := &pluginEnvAnswer{done: make(chan struct{})}
+		a.pluginAnswer = f
+		run, bin, config := a.pluginEnv, a.agentBin(), a.agentConfig // read on the loop
+		go func() {
+			if run != nil {
+				f.env, f.err = run()
+			} else {
+				f.env, f.err = opencodeEnv(bin, config)
+			}
+			close(f.done)
+		}()
+	}
+	return a.pluginAnswer
+}
+
+// whenStartable is then, for a crew session of kind whose start needs what the window warms off
+// the loop: an OpenCode agent's, the plugin's env (warmPluginEnv). Its registration's answer runs
+// then at once when the env's answer is in, and otherwise when that answer posts, so the start
+// (runAgent, which takes the env) never waits on the loop. The instance stays starting meanwhile.
+func (a *agents) whenStartable(kind string, then func(crewSession, error)) func(crewSession, error) {
+	c, ok := a.c.(agentRuntimeHost)
+	if kind != "opencode" || !ok {
+		return then
+	}
+	f := a.warmPluginEnv()
+	return func(s crewSession, err error) {
+		select {
+		case <-f.done:
+			then(s, err)
+		default:
+			go func() {
+				<-f.done
+				c.Post(func() { then(s, err) })
+			}()
+		}
+	}
+}
+
+// opencodePluginEnv is the spawn's OPENCODE_CONFIG_CONTENT=…: the warmed answer. A crew start
+// reaches it only once that answer is in (whenStartable), so it waits on the loop only for a start
+// that came another way. A failure is not kept: the next spawn runs it again.
+func (a *agents) opencodePluginEnv() (string, error) {
+	f := a.warmPluginEnv()
+	<-f.done
+	if f.err != nil && a.pluginAnswer == f {
+		a.pluginAnswer = nil
+	}
+	return f.env, f.err
+}
+
+// opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
+// any the TUI was started with: what the agent's own autodoc (bin, on config) prints (`autodoc crew
+// plugin --opencode --print-env`), so the plugin is the build's that the agent runs, the one it
+// calls back into to register. A cell replaces it (agents.pluginEnv).
+func opencodeEnv(bin, config string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), opencodeTimeout)
+	defer cancel()
+	args := []string{}
+	if config != "" {
+		args = append(args, "--config", config)
+	}
+	args = append(args, "crew", "plugin", "--opencode", "--print-env")
+	out, err := exec.CommandContext(ctx, bin, args...).Output()
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(line, "OPENCODE_CONFIG_CONTENT=") || strings.Contains(line, "\n") {
+		return "", fmt.Errorf("unexpected output from crew plugin --print-env: %q", line)
+	}
+	return line, nil
+}
+
+// start starts instance's process in its tab: whether it started is this, never whether it is shown.
+func (a *agents) start(panel TerminalPanel, instance *agentInstance) error {
+	if err := panel.Start(instance.tab); err != nil {
+		return err
+	}
 	instance.running = true
 	for _, tab := range panel.Tabs() {
 		if tab.ID == instance.tab {
 			instance.generation = tab.Generation
 		}
 	}
-	if err := a.selectInstance(instance); err != nil {
-		return nil, err
-	}
+	return nil
+}
+
+// showStarted shows a started instance running and selected; failing to select it stops nothing.
+func (a *agents) showStarted(instance *agentInstance) error {
+	err := a.selectInstance(instance)
 	a.listAgents()
-	return instance, nil
+	return err
 }
 
 func (a *agents) instanceExited(instance *agentInstance, code int) {
+	instance.context = ""                         // its session ends with it: a next start registers a new one
+	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
+		a.crew.exit(instance.session, crew.EndedExit)
+		instance.session = crewSession{}
+	}
 	if a.stopping || a.instances[instance.profile.Codename] != instance {
 		return
 	}
@@ -359,47 +657,27 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 	}
 }
 
-// HandTask accepts a task for one exact agent incarnation. An immediate error
-// rejects it without calling done; accepted calls return nil and complete done
+// HandTask hands a task to one exact agent incarnation, as a request through the window's agent
+// messaging (agentmessaging.go): rung through the crew when the agent's CLI has a doorbell, else
+// typed and sent. An immediate error rejects it without calling done; accepted calls complete done
 // once on the UI loop, including cancellation and orderly owner shutdown.
-// The task goes as one bracketed paste, or not at all: a program that takes none
-// gets nothing, and done hears widget.ErrTerminalPasteUnbracketed. No Enter
-// follows (ADR 1792991980 §4.2): the task waits in the agent's input, its panel
-// brought forward ready to type, and the user's Enter sends it. Success means
-// the task typed, not submitted.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
-	check := func() error {
-		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
-			return ErrAgentTask
-		}
-		return nil
+	if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
+		return ErrAgentTask
 	}
-	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s", task.Title, task.Path, task.ID, instruction)
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_task"), deliverOpts{present: true}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendBracketedPaste(tab, payload)
-	}, done)
+	return a.sendMessage(to, taskMessage(task, instruction), done)
 }
 
-// SendText accepts text for one agent incarnation, as HandTask accepts a task, through the same
-// delivery: the same refusals, the same consent to start a stopped agent, the same checks before
-// anything is sent. The text goes as one bracketed paste, whole, waiting at the prompt for Enter;
-// to a program that takes none nothing is sent, and done hears widget.ErrTerminalPasteUnbracketed
-// (ADR 1792991980 §6). No Enter is added after it. Success means typed delivery.
+// SendText sends text to one agent incarnation as a plain message through the window's agent
+// messaging, as HandTask sends a task: the same refusals, the same consent to start a stopped agent.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
-	check := func() error {
-		if text == "" || len(text) > widget.TerminalInputLimit {
-			return ErrAgentText
-		}
-		return nil
-	}
-	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), deliverOpts{}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendBracketedPaste(tab, text)
-	}, done)
+	return a.sendMessage(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
 }
 
-// present brings instance forward for the user's Enter (ADR 1792991980 §4.2): the agents panel
-// open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails
-// here is kept, never the delivery's error.
+// present brings instance forward for a task typed into it, so the user sees it start
+// (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter): the agents panel
+// open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is
+// kept, never the delivery's error.
 func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
 	a.c.OpenDrawer("agent")
 	a.c.Keep(a.selectInstance(instance))
@@ -433,7 +711,16 @@ func (a *agents) Resume(to AgentRef) error {
 
 // deliverOpts are a delivery's choices.
 type deliverOpts struct {
-	present bool // once sent, the agent's panel is brought forward for the user's Enter (present)
+	present bool // once sent, the agent's panel is brought forward, so the user sees it start (present)
+	// ring, when set, tries the agent's doorbell before anything is typed, for an agent already
+	// running (agentmessaging.go). Its answer comes on the loop: rang ends the delivery sent;
+	// errDoorbellNotSent goes on to send; any other error ends it unsent, since it may have rung.
+	ring func(answer func(rang bool, err error))
+	// submit, when set, follows a send that succeeded, and the delivery finishes with its answer:
+	// the messaging base's Enter decision (agentmessaging.go). still checks everything again, as an
+	// attempt does (finished, the workspace, the instance, its tab's owner): what submit waits for
+	// lets any of them change, so it presses nothing unless still answers nil.
+	submit func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error))
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal
@@ -496,11 +783,11 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			return ErrAgentStale
 		}
 		current := a.instances[to.Codename]
-		if instance != current || (instance != nil && (instance.closing || (to.Instance != "" && (!instance.running || instance.token != to.Instance)))) {
+		if instance != current || (instance != nil && (instance.closing || (to.Instance != "" && ((!instance.running && !instance.starting) || instance.token != to.Instance)))) {
 			return ErrAgentStale
 		}
 		if saved {
-			if currentProfile, exists := a.profile(to.Codename); !exists || currentProfile != p {
+			if currentProfile, exists := a.profile(to.Codename); !exists || !currentProfile.same(p) {
 				return ErrAgentStale
 			}
 		}
@@ -519,6 +806,14 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			finish(err)
 			return
 		}
+		if instance.starting { // its crew session is being registered: its process starts after
+			if tries > 0 {
+				c.After(agentReadyPoll, func() { attempt(tries - 1) })
+				return
+			}
+			finish(ErrAgentStale)
+			return
+		}
 		panel, err := a.runtime()
 		if err == nil && (!instance.running || !instance.owner.SameOwner(panel)) {
 			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
@@ -532,6 +827,28 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		}
 		if err == nil && o.present {
 			a.present(panel, instance)
+		}
+		if err == nil && o.submit != nil {
+			tab := instance.tab
+			still := func() error {
+				if accepted.finished {
+					return ErrAgentStale
+				}
+				a.syncInstances()
+				if err := validate(); err != nil {
+					return err
+				}
+				now, err := a.runtime()
+				if err != nil {
+					return err
+				}
+				if !instance.running || instance.tab != tab || !instance.owner.SameOwner(now) {
+					return ErrAgentStale // another incarnation, or its tab the old parent's
+				}
+				return nil
+			}
+			o.submit(panel, tab, still, finish)
+			return
 		}
 		finish(err)
 	}
@@ -563,7 +880,26 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		if started {
 			tries = int(agentReadyWait / agentReadyPoll)
 		}
-		attempt(tries)
+		if started || o.ring == nil { // an agent just started has no doorbell registered yet
+			attempt(tries)
+			return
+		}
+		o.ring(func(rang bool, err error) {
+			switch {
+			case accepted.finished: // shutdown finished it while the doorbell rang
+			case rang:
+				if err := validate(); err == nil && o.present {
+					if panel, perr := a.runtime(); perr == nil && instance.running && instance.owner.SameOwner(panel) {
+						a.present(panel, instance)
+					}
+				}
+				finish(nil)
+			case errors.Is(err, errDoorbellNotSent):
+				attempt(tries) // nothing was sent: the base, checked again first
+			default:
+				finish(err)
+			}
+		})
 	}
 	if instance != nil && instance.running {
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
@@ -601,4 +937,21 @@ func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(
 }
 func (c core) SendText(to AgentRef, text string, done func(error)) error {
 	return c.h.agents.SendText(to, text, done)
+}
+
+// raiseSession opens the agent drawer on this window's agent whose crew session is session (a crew
+// toast's click, an inbox focus), and answers false when no agent here has it. One here whose tab
+// can't be selected is still here: that failure is kept, not taken for another window's.
+func (a *agents) raiseSession(session string) bool {
+	if session == "" {
+		return false
+	}
+	for _, instance := range a.instances {
+		if instance.session.ID == session {
+			a.c.OpenDrawer("agent")
+			a.c.Keep(a.selectInstance(instance))
+			return true
+		}
+	}
+	return false
 }

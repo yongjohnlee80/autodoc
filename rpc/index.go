@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -43,7 +44,7 @@ type (
 type documentsJSON struct {
 	Docs []documentJSON `json:"docs"`
 	More bool           `json:"more"`
-	Next int64          `json:"next"`
+	Next string         `json:"next"` // an opaque cursor (protocol 35); "" when no more follow
 }
 
 type documentJSON struct {
@@ -198,20 +199,24 @@ func (s *Server) indexVerbs() []module.Verb {
 		module.Handle(module.Contract{Verb: "index.documents", Effect: module.EffectRead, Since: 13, Scope: ws, Audience: agent,
 			Result: "{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}",
 			Errors: []int64{CodeNoSuchWorkspace},
-			Doc:    "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100."},
+			Doc:    "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100. From protocol 35, next is an opaque cursor (a string, \"\" when none follow) for every session, whatever protocol it declared: pass it back as after unread. A cursor from another sort or other filters, or an integer offset, is invalid params."},
 			func(ctx context.Context, p indexDocuments) (*documentsJSON, error) {
 				o, err := documentsOpts(ctx, p.Opts.raw)
 				if err != nil {
 					return nil, err
 				}
-				docs, more, err := workspaceOf(ctx).Index().Store().Documents(ctx, o)
-				if errors.Is(err, index.ErrBadSort) {
+				page, err := workspaceOf(ctx).Index().Store().Documents(ctx, o)
+				switch {
+				case errors.Is(err, index.ErrBadSort):
 					return nil, invalid("index.documents: opts.sort is updated, path or indexed")
-				}
-				if err != nil {
+				case errors.Is(err, index.ErrBadCursor):
+					_, why, _ := strings.Cut(err.Error(), "index: after ") // past the sentinel's "invalid argument: " too
+					return nil, invalid("index.documents: opts.after " + why)
+				case err != nil:
 					return nil, err
 				}
-				out := &documentsJSON{Docs: make([]documentJSON, len(docs)), More: more, Next: int64(o.After + len(docs))}
+				docs := page.Docs
+				out := &documentsJSON{Docs: make([]documentJSON, len(docs)), More: page.More, Next: page.Next}
 				for i, d := range docs {
 					out.Docs[i] = documentJSON{Path: d.Path, Generation: d.Generation, Title: d.Title, Updated: d.Updated,
 						IndexedAt: d.IndexedAt, Fields: d.Fields}
@@ -294,6 +299,10 @@ func (s *Server) indexVerbs() []module.Verb {
 // diagnosedSince is the protocol index.documents' diagnosed option arrived in.
 const diagnosedSince = 15
 
+// afterIsACursor is the refusal of an after that is not a cursor's string: the integer offset
+// protocol 35 retired, for every session (docs/decisions/search.md#cursors-not-offsets).
+const afterIsACursor = "index.documents: opts.after is the previous page's next, an opaque cursor, since protocol 35: an integer offset is no longer accepted; start with no after, 0 or \"\", then pass each next back unread"
+
 // documentsOpts reads index.documents' options for the request's session: {sort, fields, tags,
 // paths, facets, missing, diagnosed, after, limit}. An option newer than the session's protocol is
 // refused, whatever its value, as the daemon of that protocol refuses it.
@@ -314,16 +323,25 @@ func documentsOpts(ctx context.Context, raw any) (index.DocumentsOpts, error) {
 				return o, invalid("index.documents: opts.sort must be a string")
 			}
 			o.Sort = s
-		case "after", "limit":
+		case "after":
+			// the previous page's next: an opaque cursor since protocol 35, for every session. 0 and ""
+			// start the listing; the offset it replaced is refused, saying so.
+			switch a := v.(type) {
+			case string:
+				o.After = a
+			case int64:
+				if a != 0 {
+					return o, invalid(afterIsACursor)
+				}
+			default:
+				return o, invalid(afterIsACursor)
+			}
+		case "limit":
 			n, ok := v.(int64)
 			if !ok || n < 0 {
-				return o, invalid("index.documents: opts." + k + " must be a non-negative integer")
+				return o, invalid("index.documents: opts.limit must be a non-negative integer")
 			}
-			if k == "after" {
-				o.After = int(n)
-			} else {
-				o.Limit = int(n)
-			}
+			o.Limit = int(n)
 		case "fields", "tags", "paths", "missing":
 			l, err := strList(v, "index.documents: opts."+k)
 			if err != nil {

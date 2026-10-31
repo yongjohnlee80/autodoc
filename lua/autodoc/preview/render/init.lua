@@ -1,5 +1,5 @@
 ---autodoc.preview.render — AutoDoc's own trimmed Markdown renderer for
----the preview floats (ADR 1791210485 §2).
+---the preview floats (docs/decisions/neovim.md#a-trimmed-markdown-renderer).
 ---
 ---Two steps:
 ---

@@ -9,8 +9,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
-// BoundsProtocol is the protocol a gated script's bounds arrive in (ADR 1792004705 §4.2a.1): one
-// parameter past every verb's own. A session below it sends none.
+// BoundsProtocol is the protocol a gated script's bounds arrive in
+// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): one parameter past
+// every verb's own. A session below it sends none.
 const BoundsProtocol int64 = 34
 
 // errBounds is a bounds parameter that is not one.

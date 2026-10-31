@@ -249,7 +249,7 @@ func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
 		t.Fatalf("%d workspaces stored; want kb and zk", len(ws))
 	}
 	// the obstacle gone, the reopened dialog's Save finishes the type on zk: no second add, and
-	// nothing written into kb, the workspace in use (Zen #240 r0 R2)
+	// nothing written into kb, the workspace in use
 	if err := os.Remove(filepath.Join(root, "permanent")); err != nil {
 		t.Fatal(err)
 	}

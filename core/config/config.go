@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/logger"
 )
 
 // ErrInvalid is a configuration that cannot be used; the message says which setting and why.
@@ -24,6 +25,20 @@ type Config struct {
 	Server         Server         `toml:"server"`
 	Follow         Follow         `toml:"follow"`
 	EmbeddingQueue EmbeddingQueue `toml:"embedding_queue"`
+	Log            Log            `toml:"log"`
+}
+
+// Log configures the daemon's log.
+type Log struct {
+	// Level is the least severe record the daemon logs: debug, info, notice, warning, error or
+	// critical, in any case. "" logs every record. normalize checks it; Severity reads it.
+	Level string `toml:"level"`
+}
+
+// Severity is the level as the logger's severity, "" when none is set.
+func (l Log) Severity() logger.Severity {
+	s, _ := logger.ParseSeverity(l.Level)
+	return s
 }
 
 // EmbeddingQueue bounds concurrent provider calls across every workspace.
@@ -125,6 +140,11 @@ func (c *Config) normalize() error {
 	}
 	if c.Follow.PollInterval.Duration < 0 {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
+	}
+	if c.Log.Level != "" {
+		if _, err := logger.ParseSeverity(c.Log.Level); err != nil {
+			return fmt.Errorf("%w: log.level %q: want debug, info, notice, warning, error or critical", ErrInvalid, c.Log.Level)
+		}
 	}
 	return nil
 }

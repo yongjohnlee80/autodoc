@@ -14,8 +14,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// LUA KEYS AND MENU ROWS (ADR 1792004705 §4.5–4.7): a script binds a command line to a key or a
-// menu row.
+// LUA KEYS AND MENU ROWS (docs/decisions/contract.md#script-keys-and-menu-rows): a script binds a
+// command line to a key or a menu row.
 //
 //	autodoc.map{mode = "normal" | "visual", keys = "Q" | "<C-k>", command = "heading"}
 //	autodoc.map{mode = "leader", keys = "t", command = "table 2 3", title = "a table"}  -- SPC u t
@@ -292,8 +292,9 @@ func (s *scripting) chord(kc widget.KeyChord) bool {
 }
 
 // runLuaLine runs a key's or a row's command line as ':' does, as by acts: a gated script's key or
-// row runs as that script, its paths bounded and its user-only entries refused (ADR 1792004705
-// §4.2a.2c), however long ago it was bound. Its error is a notification.
+// row runs as that script, its paths bounded and its user-only entries refused
+// (docs/decisions/contract.md#who-an-invocation-acts-for), however long ago it was bound. Its error
+// is a notification.
 func (s *scripting) runLuaLine(by luaBinder, line string) {
 	if s.line == nil {
 		return

@@ -75,13 +75,25 @@ func candidateOf(r *Chunk, snippet string) search.Candidate[int64] {
 
 // Lexical runs the FTS query over the alive chunks the filters admit, best first (BM25 weighs
 // title 10, breadcrumb 5, tags 5, body 1), at most n. The workspace and the filters are in the same
-// WHERE as the MATCH, so they apply before the rank and the limit.
+// WHERE as the MATCH, so they apply before the rank and the limit. Every term must match.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, query.FTS5(terms), f, n)
+}
+
+// LexicalAny is Lexical with any one term enough (search.LexicalAny): the engine's fallback when no
+// chunk holds every term, so a question typed whole still finds the chunks holding most of its
+// words, which BM25 ranks first (AM-8).
+func (v *View) LexicalAny(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	return v.lexical(ctx, query.FTS5Any(terms), f, n)
+}
+
+// lexical is the chunks matching the FTS5 expression match, as Lexical describes.
+func (v *View) lexical(ctx context.Context, match string, f search.Filter, n int) ([]search.Candidate[int64], error) {
 	d, ok, err := v.s.filtered(v.tx, alive(v.s.chunks(v.tx)), optsOf(ctx, f))
 	if err != nil || !ok {
 		return nil, err
 	}
-	rows, err := d.Join(JoinFTS).WithPredicate(dao.Match(ChunkFTS, query.FTS5(terms))).
+	rows, err := d.Join(JoinFTS).WithPredicate(dao.Match(ChunkFTS, match)).
 		OrderBy(dao.Asc(ChunkByRank), dao.Asc(ChunkByPath)).Limit(uint64(n)).
 		Select(ChunkDoc, ChunkOrd, ChunkDocPath, ChunkBreadcrumb, ChunkByteStart,
 			ChunkByteEnd, ChunkDocActiveGen, ChunkSnippet)

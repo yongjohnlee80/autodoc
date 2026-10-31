@@ -77,7 +77,7 @@ func TestTheProvidersHealthIsPublished(t *testing.T) {
 // The health follows the provider's last call, never a round that called nothing: a query the
 // provider fails publishes it down, and the worker's idle rounds that follow (nothing pending, no
 // provider call) leave it down; the next call that succeeds publishes it up. The mutant, named here:
-// an error-free round publishing the provider up (Lector, #131 r0 P2).
+// an error-free round publishing the provider up.
 func TestAnIdleRoundLeavesAFailedProviderDown(t *testing.T) {
 	st := newStore()
 	st.put("a.md", "alpha")

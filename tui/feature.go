@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	"github.com/yongjohnlee80/golib/decl"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // FEATURES — what the program is made of, each contributing its own state and commands.
@@ -38,8 +40,9 @@ type (
 	Stopper interface{ Stopped() }
 	// ThemeSink hears that the screen wears another theme; it reads which from its host.
 	ThemeSink interface{ ThemeChanged() }
-	// LanguageSink hears that the UI speaks another language (ADR 1792451618): it composes again the
-	// text it keeps on screen, reading the language from its host (Tr, Trf).
+	// LanguageSink hears that the UI speaks another language
+	// (docs/decisions/editor.md#six-languages): it composes again the text it keeps on screen,
+	// reading the language from its host (Tr, Trf).
 	LanguageSink interface{ LanguageChanged() }
 	// PreferenceSink projects the preferences currently in effect on the loop.
 	// It also runs when preference dialogs resync; this is not a change-only event.
@@ -336,7 +339,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
@@ -386,7 +389,8 @@ type Core interface {
 	// AutoVim mailbox. Snapshots carry exact incarnation tokens for delivery.
 	AgentEntries() []AgentEntry
 	HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error
-	// SendText is HandTask's delivery for text: one paste, no Enter added (agentinstances.go)
+	// SendText is HandTask's delivery for text, a plain message through the agent messaging
+	// (agentmessaging.go)
 	SendText(to AgentRef, text string, done func(error)) error
 	Set(name string, v any)
 	Open(id string)
@@ -523,6 +527,7 @@ func (c core) Trf(id string, args ...any) string {
 func (c core) WidgetsChanged()               { c.h.refreshDock() }
 func (c core) HidePanel(id string)           { c.h.hidePanel(id); c.h.focusEditor() }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
+func (c core) AskWhenFree(q Question)        { c.h.asker.askWhenFree(q) }
 func (c core) Workspace() string             { return c.h.ws }
 func (c core) Prefs() prefs                  { return c.h.prefs }
 func (c core) OpenFile(abs string)           { c.h.openAbsolute(abs) }
@@ -532,11 +537,26 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 	return c.h.call(ctx, verb, params...) // the one send path: a gated authority on ctx is bounded there
 }
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
-func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
-func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
-func (c core) OpenAbsolute(abs string)                         { c.h.openAbsolute(abs) }
-func (c core) Say(msg string)                                  { c.h.say(msg) }
-func (c core) Files() FileList                                 { return c.h.files }
+func (c core) Bell()                                           { c.h.ringBell() }
+
+// SetText sets the text of the layout's text area id (an id inside a component's instance is
+// scoped: crewreply.go's crewReplyText). A layout without it is said, never passed over.
+func (c core) SetText(id, text string) {
+	if c.h.p == nil {
+		return
+	}
+	ta, ok := tuidecl.FindAs[*widget.TextArea](c.h.p, id)
+	if !ok {
+		c.h.keep(fmt.Errorf("the layout has no text area %q", id))
+		return
+	}
+	ta.SetValue(text)
+}
+func (c core) Ticket(seq *uint64, scope TicketScope) Ticket { return c.h.ticket(seq, scope) }
+func (c core) OpenRef(ws, path string)                      { c.h.openIn(ws, path) }
+func (c core) OpenAbsolute(abs string)                      { c.h.openAbsolute(abs) }
+func (c core) Say(msg string)                               { c.h.say(msg) }
+func (c core) Files() FileList                              { return c.h.files }
 func (c core) Workspaces() []Workspace {
 	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {

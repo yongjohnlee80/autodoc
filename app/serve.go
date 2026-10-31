@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +12,11 @@ import (
 	"maps"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,10 +24,14 @@ import (
 	"github.com/yongjohnlee80/golib/search/rank"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -39,13 +47,14 @@ import (
 // lease-info names: this process serves nothing, and exits 0.
 var errAlreadyServing = errors.New("autodoc is already serving")
 
-// runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
-// only daemon serving it), open every workspace in it and start its indexer and follower (the
-// follower watches, then reconciles), and serve the API until ctx ends or a client says
-// sys.shutdown. The subsystems start in serveSteps' order, and each pushes how to stop what it
-// started: they stop in reverse, the lease-info first and the socket last, whether serving ended or
-// a later step failed.
-func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler) error {
+// runServe is --serve (docs/decisions/contract.md#the-daemons-start-order): bind the endpoint, open
+// the store (its lease makes this the only daemon serving it), open every workspace in it and start
+// its indexer and follower (the follower watches, then reconciles), and serve the API until ctx
+// ends or a client says sys.shutdown. The subsystems start in serveSteps' order, and each pushes
+// how to stop what it started: they stop in reverse, the lease-info first and the socket last,
+// whether serving ended or a later step failed. level, when not "", is --log-level, over the
+// config's [log] level.
+func runServe(ctx context.Context, configPath string, out io.Writer, b build, prof *profiling.Profiler, level logger.Severity) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
@@ -54,7 +63,10 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build, pr
 	if err != nil {
 		return err
 	}
-	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, prof: prof, log: logger.New(logger.WithWriter(out))}
+	if level == "" {
+		level = e.Config.Log.Severity()
+	}
+	d := &process{ctx: ctx, out: out, b: b, e: e, p: p, prof: prof, log: logger.New(logger.WithWriter(out), logger.WithMinLevel(level))}
 	defer d.stops.unwind()
 	for _, step := range serveSteps {
 		if err := step.start(d); err != nil {
@@ -84,7 +96,7 @@ type process struct {
 	ws      *serving.Workspaces
 	emb     *serving.Embedding
 	files   *docs.Docs
-	guard   *fsbounds.Guard // a gated script's bounds (ADR 1792004705 §4.2a.1), over every workspace's files
+	guard   *fsbounds.Guard // a gated script's bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), over every workspace's files
 	srv     *rpc.Server
 	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
 	mods    []module.Module // the modules, built before any workspace starts
@@ -154,11 +166,25 @@ func (d *process) bind() error {
 	return nil
 }
 
+// startCheckWait bounds the store's quick_check at the daemon's start (store.WithStartCheckWait):
+// a var, so a cell can make a store's check run past it.
+var startCheckWait = store.StartCheckWait
+
+// damageEventWait bounds the store.damaged event's write (verifyStore); appendDamageEvent writes it.
+// Both vars, so a cell can hold the writer.
+var (
+	damageEventWait   = 2 * time.Second
+	appendDamageEvent = func(ctx context.Context, db *store.Store, e store.Event) error {
+		_, err := db.AppendEvent(ctx, e)
+		return err
+	}
+)
+
 // openStore opens the store, taking its lease, and applies its schema scripts.
 func (d *process) openStore() error {
 	storePath := d.p.Store
 	noteOldIndexes(d.p.StateDir, storePath, d.out)
-	db, err := store.Open(d.ctx, storePath)
+	db, err := store.Open(d.ctx, storePath, store.WithStartCheckWait(startCheckWait))
 	if errors.Is(err, store.ErrBusy) {
 		// the store's daemon serves on another endpoint: a config naming another socket for the
 		// same store finds it there, through the lease-info, and leaves it be
@@ -171,6 +197,10 @@ func (d *process) openStore() error {
 		if _, lerr := store.ReadLeaseInfo(storePath); errors.Is(lerr, fs.ErrNotExist) {
 			db, err = openAfterPredecessor(d.ctx, storePath)
 		}
+	}
+	if errors.Is(err, store.ErrDamaged) {
+		// not served: writing on a damaged store spreads the damage (AM-4)
+		return fmt.Errorf("%w; this daemon does not serve it. `autodoc --check-store` reports it whole, and docs/ops/backup-and-restore.md says how to restore it from a backup", err)
 	}
 	if err != nil {
 		return err
@@ -206,8 +236,8 @@ func (d *process) startWorkspaces() error {
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(d.ctx)
 	d.wsCtx = wsCtx
-	// one ranker for the daemon (ADR 0215), set up before any workspace starts, so each first
-	// search is ranked
+	// one ranker for the daemon (docs/decisions/search.md#re-ranking-with-one-global-ranker), set up
+	// before any workspace starts, so each first search is ranked
 	holder := &rank.Holder{}
 	d.ranking = serving.NewRanking(db, holder, serving.Supplied{Ranker: b.rank.Ranker, Window: b.rank.Window}, d.log)
 	d.ranking.Start(wsCtx)
@@ -216,8 +246,10 @@ func (d *process) startWorkspaces() error {
 		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
 		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard})
 	// the modules, the todo system first among them, before any workspace starts: a workspace's
-	// index reads the todo stores, so its first pass indexes their tasks graph-only (ADR 1792015212)
-	d.deps = &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log, onStores: d.ws.TodoStoresChanged}
+	// index reads the todo stores, so its first pass indexes their tasks graph-only
+	// (docs/decisions/todos.md#graph-only-indexing)
+	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
+		onStores: d.ws.TodoStoresChanged}
 	d.mods = modules(d.deps)
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
@@ -226,11 +258,18 @@ func (d *process) startWorkspaces() error {
 	d.stops.push(d.emb.Wait)
 	d.stops.push(stopWorkspaces)
 	d.stops.push(d.ws.StopAll)
+	// the reserved profiles the crew's mail needs (the daemon's, which sends every notice, and the
+	// human's), made once; then the wake scheduler, which phase 1d starts here
+	if err := d.deps.mail.EnsureReserved(d.ctx); err != nil {
+		return err
+	}
+	d.startWakes()
 	if err := d.ws.OpenAll(); err != nil {
 		return err
 	}
 	// every workspace keeps only its active and target models' vectors; the store is compacted
-	// once (ADR 1791284787): in the background, while the daemon serves
+	// once (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): in the background, while
+	// the daemon serves
 	go d.ws.SweepModels(wsCtx)
 	if len(d.ws.List()) == 0 {
 		logger.Warning(d.log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
@@ -238,8 +277,126 @@ func (d *process) startWorkspaces() error {
 	return nil
 }
 
-// openFiles opens a local peer's files outside every workspace (ADR 1791430651): the whole disk,
-// every file.
+// startWakes starts the wake scheduler (docs/decisions/crew.md#wakers-and-the-wake-scheduler) for
+// this daemon run, its stop pushed onto the daemon's.
+func (d *process) startWakes() {
+	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(d.deps.crew), d.log)
+	d.stops.push(stop)
+	d.stops.push(addLateWakers(d.ctx, s, d.log))
+}
+
+// crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's;
+// agy's, which reads each endpoint's token from m (held in memory, never stored); and OpenCode's.
+// Phase 3 brings them one CLI at a time; a session whose kind has none is watch-only, reached by
+// crew.wait and the inbox. A waker that depends on what is installed is a late one (lateWakers).
+func crewWakers(m *crew.Manager) map[string]crew.Waker {
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid()), "agy": crew.NewAgyWaker(m.EndpointSecret),
+		"opencode": crew.NewOpenCodeWaker(os.Getuid())}
+}
+
+// lateWakers find the wakers that depend on what is installed, each by probing its CLI: Codex's,
+// when the codex CLI has the queue it wakes through. They run in the background once the scheduler
+// has started, so serve never waits on a probe and Claude's waker never waits on Codex; each joins
+// the scheduler when found. A variable so the app's tests can empty it and never run the host's
+// tools.
+var lateWakers = map[string]func(context.Context) crew.Waker{
+	"codex": func(ctx context.Context) crew.Waker { return codexWaker(ctx, os.Getuid(), codexBin(ctx)) },
+}
+
+// addLateWakers runs each late waker's probe in the background and adds what it finds to s; the
+// answer waits for the probes (each bounded by probeTimeout and probeWaitDelay, and ended by ctx).
+func addLateWakers(ctx context.Context, s *crew.Scheduler, log logger.Logger) (wait func()) {
+	var wg sync.WaitGroup
+	for kind, find := range lateWakers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if w := find(ctx); w != nil && ctx.Err() == nil {
+				s.AddWaker(kind, w)
+				logger.Info(log, "the wake scheduler wakes "+kind+" sessions too")
+			}
+		}()
+	}
+	return wg.Wait
+}
+
+// The bounds of a capability probe: probeTimeout for the run, then probeWaitDelay for its output
+// once it is killed, so a child that keeps the pipe (a shim, a wrapper) can't hold the probe longer.
+const (
+	probeTimeout   = 5 * time.Second
+	probeWaitDelay = time.Second
+)
+
+// probeOutput runs bin with args, within the probe's bounds, and answers its standard output.
+func probeOutput(ctx context.Context, bin string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.WaitDelay = probeWaitDelay
+	return cmd.Output()
+}
+
+// codexBin is the codex CLI: mise's, as this machine installs its tools, else the first on PATH;
+// "" when there is none.
+func codexBin(ctx context.Context) string {
+	if out, err := probeOutput(ctx, "mise", "which", "codex"); err == nil {
+		if bin := strings.TrimSpace(string(out)); bin != "" {
+			return bin
+		}
+	}
+	bin, _ := exec.LookPath("codex")
+	return bin
+}
+
+// codexWaker is Codex's waker for user uid when bin is a codex CLI with the queue subcommand it wakes
+// through (`codex queue --thread`), else nil: no waker, so Codex sessions stay watch-only.
+func codexWaker(ctx context.Context, uid int, bin string) crew.Waker {
+	if bin == "" {
+		return nil
+	}
+	out, err := probeOutput(ctx, bin, "queue", "--help")
+	if err != nil || !strings.Contains(string(out), "--thread") {
+		return nil
+	}
+	return crew.NewCodexWaker(uid, bin)
+}
+
+// startScheduler makes the wake scheduler for a fresh run id, and answers it and how to stop it.
+// Making it is enough for the long-polls: every committed wake change pokes it, and its Watch serves
+// mail.wait, crew.wait and inbox.watch. Its loop, which reserves and makes wake attempts, runs only
+// when it starts with a waker: it reserves only the kinds wakers serve, so with none it would have
+// nothing to do. A late waker (AddWaker) joins a running loop; serve's always starts with Claude's.
+func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (*crew.Scheduler, func()) {
+	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") }),
+		crew.WithWakeFailures(func(ep crew.Endpoint, err error) {
+			logger.Warning(log, err, fmt.Sprintf("the wake scheduler: waking the %s session %s", ep.Kind, ep.Session))
+		})}, opts...)
+	s := c.NewScheduler(newRunID(), wakers, opts...)
+	if len(wakers) == 0 {
+		logger.Info(log, "the wake scheduler waits for its wakers (phase 3): mail is received when agents ask")
+		return s, func() {}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Warning(log, err, "the wake scheduler stopped")
+		}
+	}()
+	return s, func() { cancel(); <-done }
+}
+
+// newRunID is a fresh random id: this daemon run's, which the scheduler's attempts carry, so the
+// next run recovers what this one left in flight.
+func newRunID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go 1.24+)
+	return hex.EncodeToString(b[:])
+}
+
+// openFiles opens a local peer's files outside every workspace
+// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file.
 func (d *process) openFiles() error {
 	disk, err := local.New("/", local.WithLogger(d.log))
 	if err != nil {
@@ -257,7 +414,7 @@ func (d *process) openFiles() error {
 // the lease-info beside the store: the lease and the socket are both this process's now.
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
-	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
+	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
 		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
@@ -268,11 +425,53 @@ func (d *process) buildServer() error {
 	}
 	instance := d.srv.Instance()
 	d.stops.push(func() { _ = store.RemoveLeaseInfo(d.p.Store, instance) })
+	d.verifyStore()
 	return nil
 }
 
-// refreshTodos runs the todo system's daily refresh of claimed stores (ADR 1791532020 §2.3) for as
-// long as the daemon serves. It stops, its refresh in progress ended, before the store closes.
+// verifyStore finishes the start's quick_check on a reader, for a store whose check did not finish
+// in its wait (store.Unverified, AM-4): the daemon serves meanwhile. Damage found: every write is
+// refused at once, the store is marked so the next start checks it whole and refuses it, the
+// damage is logged and recorded as the store.damaged event, and the daemon stops.
+func (d *process) verifyStore() {
+	if !d.db.Unverified() {
+		return
+	}
+	ctx, cancel := context.WithCancel(d.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r, err := d.db.QuickCheck(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Warning(d.log, err, "the store's start check did not finish: autodoc --check-store checks it")
+			}
+			return
+		}
+		if r.OK() {
+			return
+		}
+		dmg := &store.DamagedError{Path: d.p.Store, Report: r}
+		d.srv.RefuseWrites(fmt.Sprintf("%s; this daemon refuses writes and stops. `autodoc --check-store` reports it, and docs/ops/backup-and-restore.md says how to restore it from a backup", dmg))
+		logger.Error(d.log, dmg, "the store is damaged: refusing writes and stopping")
+		if err := d.db.MarkDamaged(r); err != nil {
+			logger.Warning(d.log, err, "the store's damage was not marked for the next start")
+		}
+		d.srv.RequestShutdown() // first: the event below is best effort, and never holds the stop
+		// NOTE: the event's write waits on the store's one writer, which may be held: it gets
+		// damageEventWait, then the daemon stops without it (the log and the mark say it all)
+		ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), damageEventWait)
+		defer cancel()
+		if err := appendDamageEvent(ectx, d.db, store.Event{Kind: "store.damaged", Detail: dmg.Error()}); err != nil {
+			logger.Warning(d.log, err, "the store.damaged event was not recorded")
+		}
+	}()
+	d.stops.push(func() { cancel(); <-done })
+}
+
+// refreshTodos runs the todo system's daily refresh of claimed stores
+// (docs/decisions/todos.md#task-rules-and-the-daily-refresh) for as long as the daemon serves. It
+// stops, its refresh in progress ended, before the store closes.
 func (d *process) refreshTodos(m *todo.Manager) {
 	ctx, cancel := context.WithCancel(d.ctx)
 	done := make(chan struct{})
@@ -287,13 +486,21 @@ func (d *process) refreshTodos(m *todo.Manager) {
 // (--contracts), which never touch them.
 type moduleDeps struct {
 	store      *store.Store
+	storeID    string // the store's identity, which a session context names (crew.whoami)
 	workspaces rpc.Workspaces
 	journal    todo.Journal // the todos' change log, in the store
 	log        logger.Logger
 
 	todos *todo.Manager // the todo system modules built, for its daily refresh
+	// the crew, its mail and the human's inbox
+	// (docs/decisions/crew.md#the-crew-registry-and-durable-mail), on one store
+	crew  *crew.Manager
+	mail  *mail.Manager
+	inbox *inbox.Manager
+	polls *crew.LongPolls // the three's one long-poll limiter
 	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
-	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
+	// workspaces read the stores again (docs/decisions/todos.md#which-paths-are-graph-only). nil: no
+	// one is.
 	onStores func()
 }
 
@@ -301,18 +508,43 @@ type moduleDeps struct {
 // --contracts and AGENTS.md's tables list them.
 func modules(d *moduleDeps) []module.Module {
 	if d == nil {
-		return []module.Module{todo.New(nil, nil, nil)}
+		return []module.Module{todo.New(nil, nil, nil), crew.New(nil), mail.New(nil, nil), inbox.New(nil, nil, nil)}
 	}
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
 	if d.onStores != nil {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (ADR 1792015069 §2.2)
+		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (docs/decisions/todos.md#where-a-variables-value-comes-from)
 	}
 	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal, opts...)
-	return []module.Module{d.todos}
+	crewModules(d)
+	return []module.Module{d.todos, d.crew, d.mail, d.inbox}
 }
+
+// crewModules builds the crew, mail and inbox modules on one store
+// (docs/decisions/crew.md#three-modules-and-one-protocol): every transaction is crew's, mail's and
+// the inbox's at once, so a verb's guard, crew's change and mail's effect commit together. Mail
+// authenticates through crew, and crew ends a session's mail through mail (its SessionEnder), so
+// mail's port to crew is set once crew exists. A committed write tells the human feed's waiters
+// (inbox.Feed) and, when it changed a wake row, the wake scheduler and every long-poll (crew's
+// Poke). One limiter caps each connection's long-polls across the three modules.
+func crewModules(d *moduleDeps) {
+	feed := inbox.NewFeed()
+	polls := crew.NewLongPolls()
+	d.polls = polls
+	st := sqlitecrewmail.New(d.store, sqlitecrewmail.WithSignals(crew.Signals{Feed: feed.Notify,
+		Wake: func() { d.crew.Poke() }}))
+	port := &crewPort{}
+	d.mail = mail.New(st.Mail(), port, mail.WithLongPolls(polls))
+	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID), crew.WithLongPolls(polls))
+	port.Manager = d.crew
+	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls))
+}
+
+// crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each
+// other. It embeds the crew Manager, so the port follows whatever mail.Crew asks of crew.
+type crewPort struct{ *crew.Manager }
 
 // todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
 // ambiguous change, a blocked store move, a consumer dropped, a root registered, a daily refresh
@@ -367,7 +599,7 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 			// try every 100 ms keeps a restart's handoff quick.
 		case <-time.After(100 * time.Millisecond):
 		}
-		db, err := store.Open(ctx, storePath)
+		db, err := store.Open(ctx, storePath, store.WithStartCheckWait(startCheckWait))
 		if !errors.Is(err, store.ErrBusy) {
 			return db, err
 		}
@@ -407,8 +639,10 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
 }
 
-// todoStores is the todo registry as the workspaces read it (ADR 1792015212 §2.2, ADR 1792132105
-// §2.5): each store's id, directory and workspace, and every workspace's variables.
+// todoStores is the todo registry as the workspaces read it
+// (docs/decisions/todos.md#which-paths-are-graph-only,
+// docs/decisions/todos.md#resolving-refs-in-every-document): each store's id, directory and
+// workspace, and every workspace's variables.
 func todoStores(m *todo.Manager) serving.TodoStores {
 	return func(ctx context.Context) (serving.TodoRegistry, error) {
 		list, err := m.Stores(ctx)

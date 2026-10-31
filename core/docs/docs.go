@@ -44,7 +44,7 @@ var (
 type Docs struct {
 	fsys     vfs.FS
 	eligible func(path string) bool // the workspace's include and exclude; nil: every path
-	kinds    kind.Resolver          // the build's registered extensions (ADR 0216) and the workspace's text ones
+	kinds    kind.Resolver          // the build's registered extensions (docs/decisions/search.md#registered-chunkers-and-derivers) and the workspace's text ones
 	reg      *registrations.Table   // the build's deriver, for its formats' text; nil: none
 }
 

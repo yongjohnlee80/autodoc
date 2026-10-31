@@ -134,9 +134,10 @@ func TestSearchMenuOpensTheCommandLine(t *testing.T) {
 	r.s.WaitForText(t, "VIM Commands")
 }
 
-// TestTheCommandLineKeepsItsParity (ADR 1791762474 §5.3, §5.9): with ':' made from the catalog, a
-// feature's verb runs and completes with its help, :find takes the whole line, a Lua command still
-// gets ed, its words and its raw line, and a Lua w still replaces golib's.
+// TestTheCommandLineKeepsItsParity (docs/decisions/plugins.md#one-owner-per-command-name): with ':'
+// made from the catalog, a feature's verb runs and completes with its help, :find takes the whole
+// line, a Lua command still gets ed, its words and its raw line, and a Lua w still replaces
+// golib's.
 func TestTheCommandLineKeepsItsParity(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "echo.lua"), []byte(`

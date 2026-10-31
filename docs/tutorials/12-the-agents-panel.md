@@ -6,6 +6,8 @@ AutoDoc runs AI agents' command lines (Claude Code, Codex, OpenCode, and others)
 
 **Add a profile.** **System › Agent profiles…** (SPC G), then **Add…**: a name, and the command that starts the agent, such as `claude --model opus` or `codex`. `{root}` and `{workspace}` in the command become the workspace's folder and name. The first profile is the default; **Make default** chooses another.
 
+**Its environment.** A profile's **environment** field sets variables on the agent's process, as `NAME=value` words: `CLAUDE_CONFIG_DIR=~/.claude-work` runs Claude Code on another account, still as a Claude agent. `~` and `$HOME` (or any `$VAR` of AutoDoc's) are expanded when the agent starts, never by a shell. `AUTODOC_*` variables are AutoDoc's own and can't be set. Profiles are kept in plain text, so don't put secrets there.
+
 **SPC g** shows the panel, starting the default agent if none is running, and hides it again. A hidden agent keeps running.
 
 ```mermaid

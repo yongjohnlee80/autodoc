@@ -90,6 +90,9 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
+	// the test agents' CLIs stand for ones whose adapter reports permission prompts, so the messaging
+	// base sends what it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
+	onLoop(r, func() bool { r.h.agents.promptsReported = func(string, bool) bool { return true }; return true })
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	// The stored preferences carry the profiles and the default, and their answer is not ordered
@@ -379,7 +382,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "beta removed", func(string) bool { return count() == 2 })
 	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
-	if got[0] != profiles[0] || got[1] != profiles[2] {
+	if !got[0].same(profiles[0]) || !got[1].same(profiles[2]) {
 		t.Fatalf("Yes removed a changed row instead of beta: %v", got)
 	}
 	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "" {

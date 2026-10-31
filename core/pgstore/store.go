@@ -42,14 +42,27 @@ type Store struct {
 	tenant string
 	rw     schemas // writes: every transaction READ COMMITTED
 	ro     schemas // views: every transaction REPEATABLE READ, READ ONLY
+	ann    *ANN    // the server's approximate search (WithANN); nil is exact only
 }
 
+// Option configures a Store at New.
+type Option func(*Store)
+
+// WithANN gives the Store the server's approximate search: Semantic goes through a model's HNSW
+// index when it is ready and the tenant is past the threshold, and SetModels records the models'
+// indexes as wanted. a must be on the Store's connection.
+func WithANN(a *ANN) Option { return func(s *Store) { s.ann = a } }
+
 // New is tenant's store on conn. It does no I/O: Migrate prepares the database.
-func New(conn dao.DataConn, tenant string) (*Store, error) {
+func New(conn dao.DataConn, tenant string, opts ...Option) (*Store, error) {
 	if tenant == "" {
 		return nil, ErrNoTenant
 	}
-	return &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}, nil
+	s := &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
+	for _, o := range opts {
+		o(s)
+	}
+	return s, nil
 }
 
 // snapshotConn is a connection whose transactions are REPEATABLE READ and READ ONLY: dao's
@@ -622,6 +635,13 @@ func (s *Store) SetModels(ctx context.Context, active, target string) error {
 	if err != nil {
 		return fmt.Errorf("pgstore: set models: %w", err)
 	}
+	if s.ann != nil {
+		for _, m := range []string{active, target} {
+			if err := s.ann.Want(ctx, m); err != nil {
+				return fmt.Errorf("pgstore: set models: the model's index: %w", err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -645,9 +665,10 @@ func (s *Store) Models(ctx context.Context) (active, target string, err error) {
 var reclaimBatch uint64 = 2000
 
 // ReclaimModels deletes the tenant's embeddings under any model but its active one and its target
-// (ADR 1791284787 §2.6), in batches, each its own transaction that reads the two models again: one
-// set active or the target meanwhile keeps what is left. pgstore's writer calls it after a flip, a
-// change of target, and at its start. It returns how many it deleted.
+// (docs/decisions/store.md#pgstore-reclaims-models-too), in batches, each its own transaction that
+// reads the two models again: one set active or the target meanwhile keeps what is left. pgstore's
+// writer calls it after a flip, a change of target, and at its start. It returns how many it
+// deleted.
 func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 	total := 0
 	for {

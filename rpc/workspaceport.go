@@ -22,12 +22,14 @@ type Workspace interface {
 	Index() *index.Indexer
 	Docs() *docs.Docs
 	// Files are every file of its root, admitted by its patterns or not, behind the guard: a bounded
-	// file.*'s (ADR 1792004705 §4.2a.1); nil when it was not opened.
+	// file.*'s (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace); nil when it
+	// was not opened.
 	Files() *docs.Docs
 	// SectionTokens and EmbeddingPolicy are its settings now ("" policy: the default, always).
 	SectionTokens() int
 	EmbeddingPolicy() string
-	// Provider is its own embedding provider, when it has one (ADR 0212 §7).
+	// Provider is its own embedding provider, when it has one
+	// (docs/decisions/search.md#workspace-providers-and-peer-changes).
 	Provider() ProviderChoice
 	// Following is its follower's state.
 	Following() (follow.Status, bool)
@@ -37,14 +39,17 @@ type Workspace interface {
 	Searched()
 	// EmbeddingQueue is its place in the daemon's embedding queue.
 	EmbeddingQueue() (state, behind string, ok bool)
-	// FrontmatterSchema is its schema (ADR 0212 §5): the active one, nil for none, and how its
-	// file stands.
+	// FrontmatterSchema is its schema (docs/decisions/search.md#frontmatter-schemas): the active one,
+	// nil for none, and how its file stands.
 	FrontmatterSchema() (*schema.Schema, SchemaStatus, bool)
-	// TextExtensions are its own plain-text extensions (ADR 0212 §3), and TextCollisions those of
-	// them a registration of the build reads instead (ADR 0216 §1.3); nil for none.
+	// TextExtensions are its own plain-text extensions
+	// (docs/decisions/search.md#a-workspaces-own-text-types), and TextCollisions those of them a
+	// registration of the build reads instead
+	// (docs/decisions/search.md#file-kinds-and-their-precedence); nil for none.
 	TextExtensions() []string
 	TextCollisions() []string
-	// Databases are its identity, destination and database connections (ADR 0214).
+	// Databases are its identity, destination and database connections
+	// (docs/decisions/store.md#databases-attach-to-a-workspace).
 	Databases() (Databases, bool)
 }
 

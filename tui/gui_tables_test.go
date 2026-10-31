@@ -13,11 +13,12 @@ import (
 
 // In the GUI a CSV file opens as its table, drawn in pixels, in the Rendered view the window starts
 // in: a cell kept by its keys is the file's text, undone by the editor's own undo key. A raw HTML
-// file after it gets the page back as the document view (ADR 1792303119 §4.7).
+// file after it gets the page back as the document view
+// (docs/decisions/editor.md#csv-and-tsv-files-as-editable-tables).
 func TestACSVFileIsATableInTheGUI(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	page := onLoop(r, func() *widget.HTMLView { v, _ := r.h.pageView(); return v })
 	if page == nil {
 		t.Fatal("the GUI editor has no page view")
@@ -72,7 +73,7 @@ func TestACSVFileIsATableInTheGUI(t *testing.T) {
 func TestAPasteReachesTheTableInTheGUI(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
 	r.waitFile(t, "a.csv")
 	table := func() *widget.TableDocument {

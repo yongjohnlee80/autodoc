@@ -21,15 +21,18 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// The error codes, chosen by what the client does next (ADR 0203 §4.4). The protocol codes keep
-// AutoDB's numbers.
+// The error codes, chosen by what the client does next
+// (docs/decisions/contract.md#one-rpc-api-for-every-client). The protocol codes keep AutoDB's
+// numbers.
 const (
 	CodeProtocolMismatch  int64 = -32020 // upgrade
 	CodeHandshakeRequired int64 = -32021 // say sys.hello
+	CodeStoreDamaged      int64 = -32022 // the store is damaged: autodoc --check-store, then restore it
 	CodeNoSuchWorkspace   int64 = -32060 // re-list the workspaces
 	CodeNotFound          int64 = -32061 // refresh the listing
 	CodeConflict          int64 = -32062 // doc.read, then merge or retry
 	CodeCursorExpired     int64 = -32063 // re-list, and restart index.changes from the status cursor
+	CodeLongPollsBusy     int64 = -32064 // a connection holds two long-polls: finish one first
 	CodeUnsupported       int64 = -32065 // the workspace's driver cannot
 	CodeCommitted         int64 = -32066 // the write landed: doc.read and compare, never re-send
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later
@@ -51,6 +54,7 @@ var publicErrs = []module.PublicError{
 	{Err: errNoPreferences, Code: CodeUnsupported, Message: "this server keeps no preferences"},
 	{Err: errNoEmbeddings, Code: CodeUnsupported, Message: "this server keeps no embedding providers"},
 	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
+	{Err: errNoCheck, Code: CodeUnsupported, Message: "this server's store has no check here: a PostgreSQL store is checked by its database server"},
 	{Err: errNoProfiler, Code: CodeUnsupported, Message: "this server keeps no profiler"},
 	{Err: errProfileIncomplete, Code: golibrpc.CodeInternal, Message: "the monitor stopped, but its last samples could not be written: the daemon's log says why"},
 	{Err: errProfileRefused, Code: golibrpc.CodeInvalidParams, Message: "the monitor did not start: the daemon's log says why (another monitor owns the directory, or it cannot be written)"},
@@ -131,7 +135,7 @@ func wireErr(err error) error {
 		return re
 	}
 	var refused *fsbounds.Refusal
-	if errors.As(err, &refused) { // a gated script's call past its bounds (ADR 1792004705 §4.2a.1)
+	if errors.As(err, &refused) { // a gated script's call past its bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace)
 		return &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: refused.Error()}
 	}
 	var maxErr *store.ContextMaximumError

@@ -10,9 +10,10 @@ import (
 	"github.com/yongjohnlee80/golib/gui"
 )
 
-// A GlobeMap node pressed opens its document and hides the GlobeMap, not closed (ADR 1792397302
-// r3): its Closed hook does not run, so its load, its view and this opening's filter are kept. It
-// stays in the dock, hidden, and its icon shows it again as it was, the keyboard in it.
+// A GlobeMap node pressed opens its document and hides the GlobeMap, not closed
+// (docs/decisions/editor.md#dock-clicks-hide-and-show): its Closed hook does not run, so its load,
+// its view and this opening's filter are kept. It stays in the dock, hidden, and its icon shows it
+// again as it was, the keyboard in it.
 func TestAGlobeMapNodeHidesItAndTheDockShowsItAsItWas(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)

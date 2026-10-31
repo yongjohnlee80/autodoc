@@ -319,7 +319,8 @@ func exitOf(t *testing.T, done <-chan int, stderr *syncBuffer) int {
 }
 
 // TestServerStepsStartInOrder: Postgres opens, the schema is created before pgstore's migrations
-// run in it, the tenants' policies are recorded, the ingesters start, and the embedding worker
+// run in it, the approximate search's builder starts on the migrated tables before any tenant's
+// store is made (each takes it), the tenants' policies are recorded, the ingesters start, and the embedding worker
 // starts after them, so it stops before them, while they still hold their tenants' locks; the HTTP
 // API starts last, so it stops first, its requests drained while the worker and the pools serve
 // them.
@@ -328,7 +329,7 @@ func TestServerStepsStartInOrder(t *testing.T) {
 	for _, s := range serverSteps {
 		names = append(names, s.name)
 	}
-	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder", "ops", "http"}; !slices.Equal(names, want) {
+	if want := []string{"postgres", "schema", "ann", "policy", "ingesters", "embedder", "ops", "http"}; !slices.Equal(names, want) {
 		t.Fatalf("serverSteps %v, want %v", names, want)
 	}
 }
@@ -365,6 +366,11 @@ func TestTheServersRefusals(t *testing.T) {
 		{[]string{"--server", "--check", write("since2.toml", cfg("since.view"))}, 2, "source[0].view"},
 		{[]string{"--server", write("down.toml", cfg("track.view"))}, 1, "schema:"},
 		{[]string{"--server", "--check", write("down2.toml", cfg("track.view"))}, 1, "autodoc:"},
+		// an unknown level: the flag's before the file is read, the key's by the file's validation,
+		// which --check runs too
+		{[]string{"--server", "--log-level", "loud", filepath.Join(dir, "missing.toml")}, 2, `--log-level "loud": want debug`},
+		{[]string{"--server", write("level.toml", cfg("track.view")+"[log]\nlevel = \"loud\"\n")}, 2, "log.level"},
+		{[]string{"--server", "--check", write("level2.toml", cfg("track.view")+"[log]\nlevel = \"loud\"\n")}, 2, "log.level"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, testOptions, &stdout, &stderr)
@@ -409,7 +415,7 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	done, stderr := f.serve(ctx)
 	f.started(stderr)
 	tables := f.scalar(`SELECT coalesce(string_agg(table_name, ',' ORDER BY table_name), '') FROM information_schema.tables WHERE table_schema = '` + f.schema + `'`)
-	if tables != "autodoc_schema,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy" {
+	if tables != "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy" {
 		t.Errorf("the schema's tables: %s", tables)
 	}
 	if public := f.scalar(`SELECT count(*)::text FROM information_schema.tables WHERE table_schema = 'public'

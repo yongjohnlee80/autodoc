@@ -81,7 +81,7 @@ type pluginView struct {
 }
 
 // NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
-// ok false otherwise, and the cells are painted (ADR 1792797354).
+// ok false otherwise, and the cells are painted (docs/decisions/plugins.md#pixel-surfaces).
 func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
 
 // surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.
@@ -123,7 +123,8 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 		p.Kind = "scroll"
 		if m.ScrollX != 0 || m.ScrollY != 0 || m.Button == tuicore.MouseNone {
 			v.precise = true
-			p.DX, p.DY = m.ScrollX, m.ScrollY // the precise scroll, in dp (§4.10)
+			// The precise scroll, in dp (docs/decisions/plugins.md#pixel-surfaces).
+			p.DX, p.DY = m.ScrollX, m.ScrollY
 			break
 		}
 		if v.precise {

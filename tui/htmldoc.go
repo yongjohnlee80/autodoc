@@ -12,11 +12,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// AN HTML FILE OPENED RAW (ADR 1791474356): its own bytes in the editor, editable and saved through
-// the *_raw verbs. Under --gui the editor's Rendered view is the page itself: golib's HTMLView,
-// declared in main.qml as the Editor's HTMLDocumentView and turned on here for the file, off for any
-// other. Ctrl+T flips between the source and the page; the page's links open as the preview
-// pane's do (htmlLink), and its images load from the file's folder.
+// AN HTML FILE OPENED RAW (docs/decisions/editor.md#html-files-open-raw-or-simplified): its own
+// bytes in the editor, editable and saved through the *_raw verbs. Under --gui the editor's
+// Rendered view is the page itself: golib's HTMLView, declared in main.qml as the Editor's
+// HTMLDocumentView and turned on here for the file, off for any other. Ctrl+T flips between the
+// source and the page; the page's links open as the preview pane's do (htmlLink), and its images
+// load from the file's folder.
 
 // documentSwitch is an editor whose Rendered view can be its document view: golib's gui Editor.
 type documentSwitch interface{ SetRenderedDocument(on bool) }
@@ -86,11 +87,11 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 	}
 }
 
-// resourcesFor is where a page's stylesheets and images are read from (ADR 1791488696 §4.1): a
-// workspace file's from the workspace's folder, its paths read against its own folder, so a corpus
-// reaches its shared ../assets; a file outside every workspace's from its own folder alone, where
-// ../ is refused. Adding a folder as a workspace is how a user lets its pages reach above
-// themselves.
+// resourcesFor is where a page's stylesheets and images are read from
+// (docs/decisions/editor.md#where-a-pages-stylesheets-and-images-come-from): a workspace file's
+// from the workspace's folder, its paths read against its own folder, so a corpus reaches its
+// shared ../assets; a file outside every workspace's from its own folder alone, where ../ is
+// refused. Adding a folder as a workspace is how a user lets its pages reach above themselves.
 func (h *Host) resourcesFor(ws, p string) (root, base string) {
 	if ws == "" {
 		return filepath.Dir(p), ""

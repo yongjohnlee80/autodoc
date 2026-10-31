@@ -3,7 +3,7 @@ name,string,(Required),"Unique identifier for the workspace used in RPC calls an
 root,string,(Required),"Canonical absolute filesystem path to the workspace root directory"
 include,[]string,"[""**/*.md""]","Glob patterns of files to index and watch relative to the workspace root"
 exclude,[]string,"["".git/**"",""node_modules/**"",""vendor/**""]","Glob patterns excluded from document indexing and directory watching"
-graph_only,[]string,"[]","Glob patterns of paths indexed for the link and relation graph only, never chunked for full-text or vector search (ADR 1792015212)"
+graph_only,[]string,"[]","Glob patterns of paths indexed for the link and relation graph only, never chunked for full-text or vector search (docs/decisions/todos.md#graph-only-indexing)"
 section_tokens,int,0 (default 400),"Target maximum token budget per heading-bounded section chunk before splitting at paragraph boundaries (0 uses the default)"
 abstract_chunk,bool,false,"When true, synthesizes a dedicated chunk 0 for each document from its frontmatter abstract"
 demote_superseded,bool,false,"When true, ranks hits from a superseded document below its active successor"

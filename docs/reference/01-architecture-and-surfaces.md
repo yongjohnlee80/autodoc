@@ -205,22 +205,29 @@ While `autodoc --serve` manages its own lifecycle automatically during normal us
 
 AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
 
-- **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), and `[embedding_queue]` (`max_inflight`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
+- **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), `[embedding_queue]` (`max_inflight`) and `[log]` (`level`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
 - **Socket (`autodoc.sock`)**: The `0600` msgpack-RPC Unix domain socket, at `server.socket` if set, else `$XDG_RUNTIME_DIR/autodoc.sock`, else (macOS) `$TMPDIR/autodoc.sock`, else `$XDG_STATE_HOME/autodoc/autodoc.sock` (`~/.local/state/autodoc/autodoc.sock`; resolved via `Server{}.StateDirPath()`).
 - **State Directory (`server.state_dir`, else `$XDG_STATE_HOME/autodoc/`, else `~/.local/state/autodoc/`)**: Where the daemon's log lives.
 - **Store Directory (`server.data_dir`, else `$XDG_DATA_HOME/autodoc/`, else `~/.local/share/autodoc/`)**:
   - `autodoc.db`, `autodoc.db-wal`, `autodoc.db-shm`: The SQLite WAL database files storing workspaces, chunks, links, vectors, and sealed provider configurations.
+  - `autodoc.db.key`: The `0600` key that seals the store's secrets (connection DSNs, provider and ranker API keys). Back it up apart from the database: a store without it keeps everything but those secrets ([backing up and restoring](../ops/backup-and-restore.md)).
   - `.autodoc-lease-<device>-<inode>`: The sidecar file the running daemon holds an exclusive `flock(2)` on — the single-writer lease, named for the store's device and inode (`core/store/lease.go`).
   - `.autodoc-lease-<device>-<inode>.json`: The lease-info record (`store_id`, `store_path`, `addr`, `pid`, `instance`, `version`, `protocol`, `min_protocol`, `since`) a client reads to find the daemon serving this store, even when it was started with a different config and socket.
 
-### Finding, Restarting and Compacting the Daemon (`--print-endpoint`, `--compact`)
+### Finding, Restarting, Checking and Compacting the Daemon (`--print-endpoint`, `--check-store`, `--compact`)
 
 ```sh
 autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
 autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
 autodoc --print-endpoint --restart  # stop the daemon serving the store, start this build in its place
+autodoc --check-store               # check the store (integrity, foreign keys, sealed secrets): JSON, exit 1 on a problem
 autodoc --compact                   # with the daemon stopped: reclaim unused vectors, rewrite the store
 ```
+
+`--check-store` asks the daemon serving the store to check it (`sys.check`), or, with none, opens
+the store to check it without writing. The daemon also runs SQLite's `quick_check` each time it
+opens the store (for a second at most, the rest in the background, and whole after a crash or
+before schema scripts), and does not serve a damaged one; see [backing up and restoring](../ops/backup-and-restore.md).
 
 `--restart` stops whatever daemon serves the store, of any protocol: it says `sys.hello` at that
 daemon's own protocol, then `sys.shutdown`, both frozen across protocols. It waits for the

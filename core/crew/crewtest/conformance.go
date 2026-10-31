@@ -86,6 +86,13 @@ func (e *Enders) UnhandledCount(_ crew.Tx, profile string) (int, error) {
 	return e.Unhandled[profile], nil
 }
 
+// EligibleFor reports the profiles Pending names, for any of their sessions (crew.SessionEnder).
+func (e *Enders) EligibleFor(_ crew.Tx, profile, _ string) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Pending[profile], nil
+}
+
 // HasEligible reports the profiles Pending names (crew.SessionEnder).
 func (e *Enders) HasEligible(_ crew.Tx, profile string) (bool, error) {
 	e.mu.Lock()
@@ -112,7 +119,7 @@ func (e *Enders) DiscardDeliveries(tx crew.Tx, profile string) error {
 }
 
 // Run is the crew module's conformance suite, over the Store h makes: the ownership state machine
-// of ADR 1793271500 §4.3, which every engine's adapter must keep.
+// of docs/decisions/crew.md#scopes-and-fenced-ownership, which every engine's adapter must keep.
 func Run(t *testing.T, h Harness) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (*crew.Manager, crew.Store, *Clock, *Enders) {
@@ -131,15 +138,20 @@ func Run(t *testing.T, h Harness) {
 			w        crew.Wake
 			ended    bool
 			endpoint bool
+			kind     string // the endpoint's, "fake" when ""
 		}{
-			{crew.Wake{Session: "s1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // due
-			{crew.Wake{Session: "s2", PendingGen: 1, AnnouncedGen: 1, State: crew.WakeIdle}, false, true},                          // nothing pending
-			{crew.Wake{Session: "s3", PendingGen: 2, State: crew.WakeIdle, NextAt: at(10 * time.Second)}, false, true},             // backing off
-			{crew.Wake{Session: "s4", PendingGen: 2, State: crew.WakeIdle}, true, true},                                            // ended
-			{crew.Wake{Session: "s5", PendingGen: 2, State: crew.WakeIdle}, false, false},                                          // no endpoint
-			{crew.Wake{Session: "s6", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(-time.Second)}, false, true}, // timed out
-			{crew.Wake{Session: "s7", PendingGen: 1, State: crew.WakeInFlight, Token: "t"}, false, true},                           // a call out
-			{crew.Wake{Session: "s8", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(time.Minute)}, false, true},  // waiting
+			{crew.Wake{Session: "s1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, ""},                          // due
+			{crew.Wake{Session: "s2", PendingGen: 1, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, ""},                          // nothing pending
+			{crew.Wake{Session: "s3", PendingGen: 2, State: crew.WakeIdle, NextAt: at(10 * time.Second)}, false, true, ""},             // backing off
+			{crew.Wake{Session: "s4", PendingGen: 2, State: crew.WakeIdle}, true, true, ""},                                            // ended
+			{crew.Wake{Session: "s5", PendingGen: 2, State: crew.WakeIdle}, false, false, ""},                                          // no endpoint
+			{crew.Wake{Session: "s6", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(-time.Second)}, false, true, ""}, // timed out
+			{crew.Wake{Session: "s7", PendingGen: 1, State: crew.WakeInFlight, Token: "t"}, false, true, ""},                           // a call out
+			{crew.Wake{Session: "s8", PendingGen: 1, State: crew.WakeAwaiting, Token: "t", NextAt: at(time.Minute)}, false, true, ""},  // waiting
+			// due but for their endpoint's kind, which no waker serves under kinds {"fake"}; u2 past a
+			// deadline earlier than any other row's (a recovered attempt's next_at = now)
+			{crew.Wake{Session: "u1", PendingGen: 2, AnnouncedGen: 1, State: crew.WakeIdle}, false, true, "other"},
+			{crew.Wake{Session: "u2", PendingGen: 2, State: crew.WakeIdle, NextAt: at(-2 * time.Second)}, false, true, "other"},
 		}
 		if err := store.Write(ctx, func(tx crew.Tx) error {
 			for _, r := range rows {
@@ -152,7 +164,11 @@ func Run(t *testing.T, h Harness) {
 					return err
 				}
 				if r.endpoint {
-					if err := tx.PutEndpoint(crew.Endpoint{Session: r.w.Session, Generation: 1, Kind: "fake"}); err != nil {
+					kind := r.kind
+					if kind == "" {
+						kind = "fake"
+					}
+					if err := tx.PutEndpoint(crew.Endpoint{Session: r.w.Session, Generation: 1, Kind: kind}); err != nil {
 						return err
 					}
 				}
@@ -172,9 +188,16 @@ func Run(t *testing.T, h Harness) {
 			return strings.Join(out, ",")
 		}
 		if err := store.Read(ctx, func(tx crew.Tx) error {
-			due, err := tx.WakesDue(now, 64)
+			fake, both := []string{"fake"}, []string{"fake", "other"}
+			due, err := tx.WakesDue(now, fake, 64)
 			if err != nil || ids(due) != "s1" {
-				t.Errorf("WakesDue: %s %v, want s1 (not ended s4, not endpoint-less s5)", ids(due), err)
+				t.Errorf("WakesDue: %s %v, want s1 (not ended s4, not endpoint-less s5, not u1 or u2 of a kind no waker serves)", ids(due), err)
+			}
+			if due, err := tx.WakesDue(now, both, 64); err != nil || ids(due) != "s1,u1,u2" {
+				t.Errorf("WakesDue with a waker for both kinds: %s %v, want s1,u1,u2", ids(due), err)
+			}
+			if due, err := tx.WakesDue(now, nil, 64); err != nil || len(due) != 0 {
+				t.Errorf("WakesDue with no wakers: %s %v, want none", ids(due), err)
 			}
 			if out, err := tx.WakesTimedOut(now, 64); err != nil || ids(out) != "s6" {
 				t.Errorf("WakesTimedOut: %s %v, want s6", ids(out), err)
@@ -182,10 +205,16 @@ func Run(t *testing.T, h Harness) {
 			if out, err := tx.WakesInFlight(); err != nil || ids(out) != "s7" {
 				t.Errorf("WakesInFlight: %s %v, want s7", ids(out), err)
 			}
-			if next, ok, err := tx.NextWakeAt(); err != nil || !ok || next != *at(-time.Second) {
-				t.Errorf("NextWakeAt: %d %v %v, want s6's deadline", next, ok, err)
+			if next, ok, err := tx.NextWakeAt(fake); err != nil || !ok || next != *at(-time.Second) {
+				t.Errorf("NextWakeAt: %d %v %v, want s6's deadline, not u2's (no waker serves it: a timer on it would fire forever)", next, ok, err)
 			}
-			if _, err := tx.WakesDue(now, 0); err == nil {
+			if next, ok, err := tx.NextWakeAt(both); err != nil || !ok || next != *at(-2 * time.Second) {
+				t.Errorf("NextWakeAt with a waker for both kinds: %d %v %v, want u2's deadline", next, ok, err)
+			}
+			if next, ok, err := tx.NextWakeAt(nil); err != nil || !ok || next != *at(-time.Second) {
+				t.Errorf("NextWakeAt with no wakers: %d %v %v, want s6's (an awaiting row's timeout counts whatever its kind)", next, ok, err)
+			}
+			if _, err := tx.WakesDue(now, fake, 0); err == nil {
 				t.Error("WakesDue with limit 0 answered, rather than refusing")
 			}
 			return nil
@@ -386,6 +415,7 @@ func Run(t *testing.T, h Harness) {
 			"another codename":  func(r *crew.Registration) { r.Codename = "vision" },
 			"another kind":      func(r *crew.Registration) { r.Kind = "codex" },
 			"another workspace": func(r *crew.Registration) { r.Workspace = "ws-2" },
+			"another prompts":   func(r *crew.Registration) { r.Prompts = true },
 		} {
 			bad := r
 			change(&bad)
@@ -639,7 +669,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		cred := crew.Credential(got.Session, r.Secret)
-		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`
+		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`
 		// a wake row mid-backoff, as a failed attempt leaves it
 		if err := store.Write(ctx, func(tx crew.Tx) error {
 			w, _, err := tx.Wake(got.Session)
@@ -671,11 +701,13 @@ func Run(t *testing.T, h Harness) {
 			t.Fatalf("stored endpoint %+v; want the canonical locator %s", ep, claude)
 		}
 		for name, c := range map[string][2]string{
-			"another user's socket":     {"claude", `{"socket":"/run/user/1001/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"a socket outside the root": {"claude", `{"socket":"/tmp/elsewhere/a.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"a path climbing out":       {"claude", `{"socket":"/run/user/1000/cc-socks/../../x.sock","pid":42,"start":"9000","session":"c-1"}`},
-			"an unknown field":          {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1","token":"x"}`},
-			"no pid":                    {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","start":"9000","session":"c-1"}`},
+			"another user's socket":     {"claude", `{"socket":"/run/user/1001/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"a socket outside the root": {"claude", `{"socket":"/tmp/elsewhere/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"a path climbing out":       {"claude", `{"socket":"/run/user/1000/cc-socks/../../x.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`},
+			"an unknown field":          {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1","token":"x"}`},
+			"start another pid's":       {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:43:9000","session":"c-1"}`},
+			"start as bare ticks":       {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"9000","session":"c-1"}`},
+			"no pid":                    {"claude", `{"socket":"/run/user/1000/cc-socks/a.sock","start":"b:n:42:9000","session":"c-1"}`},
 			"a non-loopback agy":        {"agy", `{"address":"10.0.0.5:4000","conversation":"x"}`},
 			"an unknown kind":           {"vim", `{}`},
 			"not JSON":                  {"claude", `socket=/run/user/1000/cc-socks/a.sock`},
@@ -722,7 +754,7 @@ func Run(t *testing.T, h Harness) {
 		}
 	})
 
-	t.Run("list: presence and reachability", func(t *testing.T) {
+	t.Run("list: presence, reachability and why", func(t *testing.T) {
 		clock, enders := NewClock(), &Enders{}
 		store := h.New(t, clock.Now)
 		started := clock.Now()
@@ -732,6 +764,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		rv, rj := reg(e, "vision", "agent-2"), reg(e, "jarvis", "agent-1")
+		rj.Prompts = true // jarvis's host wrote its prompt hooks; vision's Claude Code had none
 		vision, err := m.Register(ctx, rv)
 		if err != nil {
 			t.Fatal(err)
@@ -741,7 +774,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		if _, err := m.SetEndpoint(ctx, crew.Credential(jarvis.Session, rj.Secret), "claude",
-			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"1","session":"c"}`); err != nil {
+			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`); err != nil {
 			t.Fatal(err)
 		}
 		list := func() []crew.Entry {
@@ -753,8 +786,11 @@ func Run(t *testing.T, h Harness) {
 			return l
 		}
 		want := []crew.Entry{
-			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true},
-			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false},
+			// both live Claude sessions: the hooks report the prompts of the one registered with them,
+			// reachable or not, as the store kept it; the other's are never assumed reported
+			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true},
+			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false,
+				Why: crew.WhyNoEndpoint},
 		}
 		if got := list(); !slices.Equal(got, want) {
 			t.Fatalf("list: %+v\nwant %+v", got, want)
@@ -771,25 +807,35 @@ func Run(t *testing.T, h Harness) {
 		if got, err := young.List(ctx); err != nil || got[0].Presence != crew.PresenceReconnecting {
 			t.Fatalf("a lapsed host on a daemon 10 s old: %+v, %v; want reconnecting", got, err)
 		}
-		if err := store.Write(ctx, func(tx crew.Tx) error {
-			w, _, err := tx.Wake(jarvis.Session)
-			if err != nil {
-				return err
+		setWake := func(failures int64, next *int64) {
+			t.Helper()
+			if err := store.Write(ctx, func(tx crew.Tx) error {
+				w, _, err := tx.Wake(jarvis.Session)
+				if err != nil {
+					return err
+				}
+				w.Failures, w.NextAt = failures, next
+				return tx.PutWake(w)
+			}); err != nil {
+				t.Fatal(err)
 			}
-			w.Failures = 5
-			return tx.PutWake(w)
-		}); err != nil {
-			t.Fatal(err)
 		}
-		if got := list(); got[0].Reachable {
-			t.Fatal("an agent after 5 failed wakes still reads reachable")
+		// one failed wake, its retry still ahead: reachable, and why says when it is tried again
+		next := clock.Now().Add(30 * time.Second).UnixNano()
+		setWake(1, &next)
+		if got := list(); !got[0].Reachable || got[0].Why != crew.WhyBackoffUntil+" "+time.Unix(0, next).UTC().Format(time.RFC3339) {
+			t.Fatalf("an agent backing off: %+v", got[0])
+		}
+		setWake(5, &next) // no cause known in this manager: why names none
+		if got := list(); got[0].Reachable || got[0].Why != crew.WhyWakesFailing {
+			t.Fatalf("an agent after 5 failed wakes: %+v, want unreachable, %s", got[0], crew.WhyWakesFailing)
 		}
 		clock.Advance(-91 * time.Second) // the host back within its lease, to exit cleanly
 		if err := m.Exit(ctx, scope, "run-a", e, vision.Session, crew.EndedExit); err != nil {
 			t.Fatal(err)
 		}
-		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable {
-			t.Fatalf("an exited agent: %+v, want ended and unreachable", got[1])
+		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable || got[1].Why != crew.WhyEnded {
+			t.Fatalf("an exited agent: %+v, want ended and unreachable, why %s", got[1], crew.WhyEnded)
 		}
 	})
 

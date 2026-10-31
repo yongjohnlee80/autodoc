@@ -21,7 +21,7 @@ const (
 	Text                   // UTF-8 plain text: literal paragraphs, no Markdown structure
 	YAML                   // a YAML document: key-path chunks
 	Derived                // a document format read only as its derived text: DOCX, HTML, a Pro build's PDF
-	Registered             // UTF-8 text a chunker the build registered reads, such as source code (ADR 0216)
+	Registered             // UTF-8 text a chunker the build registered reads, such as source code (docs/decisions/search.md#registered-chunkers-and-derivers)
 )
 
 func (k Kind) String() string {

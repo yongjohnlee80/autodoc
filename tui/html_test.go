@@ -16,7 +16,7 @@ func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 	root := fileDir(t, "n.md", "# On disk\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	opened := make(chan string, 1)
 	r.h.p.Post(func() {
 		r.h.browser = func(_ context.Context, path string) error {

@@ -1,6 +1,6 @@
 # todo
 
-AutoDoc's todo system: task stores, their format, the rules, and every write (ADR 1791532020).
+AutoDoc's todo system: task stores, their format, the rules, and every write ([the decision](../../docs/decisions/todos.md#the-daemon-owns-the-todo-system)).
 
 ```go
 import "github.com/yongjohnlee80/autodoc/core/todo"
@@ -25,7 +25,7 @@ project that is not a workspace. A root resolves to its `SetDir` override, else
 
 Writable stores are a workspace's or a `Register`ed root's `.todo-list`, and `SetDir` overrides.
 A store is the daemon's from its first write: the write claims it, as `Claim` does, marker
-included, and `Add` makes a missing store first (ADR 1791532020 r13). `Release` gives a store
+included, and `Add` makes a missing store first ([the decision](../../docs/decisions/todos.md#a-store-is-claimed-by-its-first-write)). `Release` gives a store
 back, and records it: writes are then refused (`ErrUnclaimed`), a write never claiming it again,
 until `Claim`. A new project: `Register(root)`, then its first write (or `Scaffold(at)`). Until
 then its store reads as an empty one (`List`, `Get`, `Changes`), and the reads write nothing; a
@@ -69,8 +69,8 @@ tried again a day later.
 
 ## Variables
 
-A ref's `$NAME/…` resolves with the variables of the workspace (the KB) the store belongs to (ADR
-1792132105), the same from every route to the store, and the index resolves every other document of
+A ref's `$NAME/…` resolves with the variables of the workspace (the KB) the store belongs to
+([the decision](../../docs/decisions/todos.md#variables-belong-to-the-workspace)), the same from every route to the store, and the index resolves every other document of
 the workspace with the same ones (`EffectiveVars`, `AllEffectiveVars`).
 
 - **A store's workspace** is recorded when the store is: the deepest workspace containing it, kept
