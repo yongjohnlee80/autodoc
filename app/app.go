@@ -129,8 +129,8 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
-	if isCrewCommand(args) { // an agent's `autodoc crew|mail …` (docs/decisions/crew.md#the-agent-guide-and-commands), not a mode
-		return crewMain(ctx, args, os.Stdin, stdout, stderr)
+	if rest, ok := crewCommandArgs(args); ok { // an agent's `autodoc crew|mail …` (docs/decisions/crew.md#the-agent-guide-and-commands), not a mode
+		return crewMain(ctx, rest, os.Stdin, stdout, stderr)
 	}
 	chunkers, err := registrations.Builtin(o.Chunkers)
 	var reg *registrations.Table

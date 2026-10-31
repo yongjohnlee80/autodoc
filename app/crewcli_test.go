@@ -501,3 +501,37 @@ func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
 		}
 	}
 }
+
+// An agent's bin/autodoc runs this build as `autodoc --config <file> "$@"` (tui/agent.go's
+// agentWrapper), so its `crew` and `mail` commands arrive after a leading --config: they run as
+// typed (the session's context names the daemon, not the config), in both of the flag's spellings.
+// Any other command after --config is still a mode's.
+func TestTheCommandsRunAfterTheWrappersConfig(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir())
+	gold := d.agent("gold", "agent-1", "store-1")
+	t.Setenv("AUTODOC_CREW_CONTEXT", gold)
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	for _, args := range [][]string{
+		{"--config", cfg, "crew", "whoami"},
+		{"--config=" + cfg, "crew", "whoami"},
+		{"-config", cfg, "crew", "whoami"},
+	} {
+		var out, errOut bytes.Buffer
+		code := run(d.ctx, args, Options{Version: "v1.2.3"}, &out, &errOut)
+		if code != 0 || !strings.Contains(out.String(), `"gold"`) {
+			t.Errorf("%q: exit %d, out %q, err %q; want gold's whoami", args, code, out.String(), errOut.String())
+		}
+	}
+	var out, errOut bytes.Buffer
+	if code := run(d.ctx, []string{"--config", cfg, "mail", "nope"}, Options{Version: "v1.2.3"}, &out, &errOut); code != 2 ||
+		!strings.Contains(errOut.String(), `no command "mail nope"`) {
+		t.Errorf("an unknown mail command after --config: exit %d, %q; want the crew CLI's usage", code, errOut.String())
+	}
+	if rest, ok := crewCommandArgs([]string{"--config", cfg, "--version"}); ok {
+		t.Errorf("--version after --config was taken as a crew command: %q", rest)
+	}
+	if _, ok := crewCommandArgs([]string{"--config"}); ok {
+		t.Error("a bare --config was taken as a crew command")
+	}
+}
