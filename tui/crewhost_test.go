@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -66,6 +67,15 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 		return map[string]any{"session": reg.Session, "profile": reg.Profile}, nil
 	case "crew.orphans":
 		return d.orphans, nil
+	case "crew.list": // as the wire decodes it: a list of objects
+		entries, err := d.m.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := json.Marshal(entries)
+		var out []any
+		err = json.Unmarshal(b, &out)
+		return out, err
 	case "crew.adopt", "crew.discard":
 		d.settled = append(d.settled, append([]any{verb}, p...))
 		return map[string]any{}, d.settleErr
