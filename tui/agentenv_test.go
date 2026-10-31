@@ -34,6 +34,26 @@ func TestAnAgentStartsWithoutItsSpawnersIdentity(t *testing.T) {
 	}
 }
 
+// A profile whose command sets one of the spawner's variables itself (NAME=value before its
+// program) has it, as it set it: only the inherited one is dropped.
+func TestAProfileKeepsWhatItSetsItself(t *testing.T) {
+	pollute(t)
+	dir := t.TempDir()
+	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
+	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := "ENABLE_IDE_INTEGRATION=false " + shellQuote(agent)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: command, Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	env := envReported(t, r, report)
+	if env["ENABLE_IDE_INTEGRATION"] != "false" || env["CLAUDE_CODE_SSE_PORT"] != "" {
+		t.Fatalf("the profile's own ENABLE_IDE_INTEGRATION %q, the inherited CLAUDE_CODE_SSE_PORT %q; want false, none",
+			env["ENABLE_IDE_INTEGRATION"], env["CLAUDE_CODE_SSE_PORT"])
+	}
+}
+
 // A plugin AutoDoc runs is third-party code started on AutoDoc's behalf: the spawner's identity,
 // its session's messaging socket and secret among it, does not reach it either. AutoDoc's
 // AUTODOC_PLUGIN_* do, and so do the user's own settings.
@@ -74,10 +94,17 @@ func pollute(t *testing.T) (polluted, kept map[string]string) {
 		"CLAUDE_PID":                  "4242",
 		"NVIM":                        "/tmp/the-parent-nvim.sock",
 		"NVIM_LISTEN_ADDRESS":         "/tmp/the-parent-nvim.sock",
+		// a Neovim-hosted Claude Code's IDE connection: an agent with them dials the parent's IDE
+		"CLAUDE_CODE_SSE_PORT":   "41234",
+		"ENABLE_IDE_INTEGRATION": "true",
+		"CLAUDE_CODE_ENTRYPOINT": "cli",
+		"CLAUDE_CODE_EXECPATH":   "/the/parent's/claude",
+		"AUTO_AGENTS_MCP_URL":    "http://127.0.0.1:41235/mcp",
 	}
 	kept = map[string]string{
 		"CLAUDE_CODE_USE_BEDROCK": "1",                // the user's own setting, not a session's
 		"NVIM_LOG_FILE":           "/tmp/nvim-log",    // a log's path, no socket
+		"MCP_TIMEOUT":             "30000",            // the user's own MCP tuning, no connection
 		"FAKE_GREETING":           "the user's shell", // any other variable
 	}
 	for k, v := range polluted {
