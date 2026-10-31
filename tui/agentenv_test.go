@@ -99,6 +99,7 @@ func pollute(t *testing.T) (polluted, kept map[string]string) {
 		"ENABLE_IDE_INTEGRATION": "true",
 		"CLAUDE_CODE_ENTRYPOINT": "cli",
 		"CLAUDE_CODE_EXECPATH":   "/the/parent's/claude",
+		"CLAUDE_EFFORT":          "high",
 		"AUTO_AGENTS_MCP_URL":    "http://127.0.0.1:41235/mcp",
 	}
 	kept = map[string]string{
