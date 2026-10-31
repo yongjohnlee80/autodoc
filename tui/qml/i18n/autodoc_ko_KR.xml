@@ -7747,17 +7747,9 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>아직 실행 중이던 설정이 워크스페이스를 바꿨습니다. 사용하기 전에 다시 확인하세요.</translation>
     </message>
-    <message id="autodoc.notice.agentmessaging.typed_but_not_sent">
-        <source>%1: the message was typed, but its Enter wasn't sent: %2</source>
-        <translation>%1: 메시지를 입력했지만 Enter를 보내지 못했습니다: %2</translation>
-    </message>
-    <message id="autodoc.notice.agentmessaging.no_doorbell_reaches_it">
-        <source>no doorbell reaches it</source>
-        <translation>닿는 초인종이 없습니다</translation>
-    </message>
     <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
-        <source>%1's doorbell didn't ring (%2): the message was typed into its input and sent</source>
-        <translation>%1의 초인종이 울리지 않았습니다(%2): 메시지를 입력란에 입력하고 보냈습니다</translation>
+        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
+        <translation>%1의 초인종이 울리지 않았습니다(%2): 대신 메시지를 입력란으로 보냅니다</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
         <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
@@ -7770,6 +7762,18 @@ H J K L, Shift+화살표   크기 조절</translation>
     <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
         <source>audit of %1 sent to %2; click to install or cancel</source>
         <translation>%1 감사를 %2에게 보냈습니다. 클릭하여 설치하거나 취소하세요</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
+        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
+        <translation>할 일: %1에게 할당하고 입력란에 입력했습니다: 그곳에서 Enter를 눌러 보내세요</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
+        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
+        <translation>%1 감사를 %2의 입력란에 입력했습니다: 그곳에서 Enter를 눌러 보내세요. 클릭하여 설치하거나 취소하세요</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
+        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
+        <translation>%1의 CLI는 권한 프롬프트를 알리지 않아 메시지는 입력했지만 보내지 않았습니다: 그곳에서 Enter를 누르세요</translation>
     </message>
 </context>
 </TS>

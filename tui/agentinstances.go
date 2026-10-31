@@ -637,13 +637,13 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 	if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
 		return ErrAgentTask
 	}
-	return a.messenger().send(to, taskMessage(task, instruction), done)
+	return a.sendMessage(to, taskMessage(task, instruction), done)
 }
 
 // SendText sends text to one agent incarnation as a plain message through the window's agent
 // messaging, as HandTask sends a task: the same refusals, the same consent to start a stopped agent.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
-	return a.messenger().send(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
+	return a.sendMessage(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
 }
 
 // present brings instance forward for a task typed into it, so the user sees it start
@@ -684,6 +684,13 @@ func (a *agents) Resume(to AgentRef) error {
 // deliverOpts are a delivery's choices.
 type deliverOpts struct {
 	present bool // once sent, the agent's panel is brought forward, so the user sees it start (present)
+	// ring, when set, tries the agent's doorbell before anything is typed, for an agent already
+	// running (agentmessaging.go). Its answer comes on the loop: rang ends the delivery sent;
+	// errDoorbellNotSent goes on to send; any other error ends it unsent, since it may have rung.
+	ring func(answer func(rang bool, err error))
+	// submit, when set, follows a send that succeeded, and the delivery finishes with its answer:
+	// the messaging base's Enter decision (agentmessaging.go).
+	submit func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error))
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal
@@ -791,6 +798,10 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		if err == nil && o.present {
 			a.present(panel, instance)
 		}
+		if err == nil && o.submit != nil {
+			o.submit(panel, instance.tab, finish)
+			return
+		}
 		finish(err)
 	}
 	deliver := func() {
@@ -821,7 +832,26 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		if started {
 			tries = int(agentReadyWait / agentReadyPoll)
 		}
-		attempt(tries)
+		if started || o.ring == nil { // an agent just started has no doorbell registered yet
+			attempt(tries)
+			return
+		}
+		o.ring(func(rang bool, err error) {
+			switch {
+			case accepted.finished: // shutdown finished it while the doorbell rang
+			case rang:
+				if err := validate(); err == nil && o.present {
+					if panel, perr := a.runtime(); perr == nil && instance.running && instance.owner.SameOwner(panel) {
+						a.present(panel, instance)
+					}
+				}
+				finish(nil)
+			case errors.Is(err, errDoorbellNotSent):
+				attempt(tries) // nothing was sent: the base, checked again first
+			default:
+				finish(err)
+			}
+		})
 	}
 	if instance != nil && instance.running {
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
