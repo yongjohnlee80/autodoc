@@ -233,7 +233,7 @@ func TestTheAgentsGuideHasTheJobs(t *testing.T) {
 		!strings.Contains(autodoc.AgentsGuide, "Proof-read as a professional editor") {
 		t.Fatal("AGENTS.md has no \"What you can do for the user\" section")
 	}
-	guide := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc")
+	guide := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc", "")
 	if strings.Count(guide, "What you can do for the user") != 1 || strings.Contains(guide, "## What to help with") {
 		t.Fatal("the generated guide lists the jobs twice, or keeps its old list")
 	}
