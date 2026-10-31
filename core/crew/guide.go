@@ -16,12 +16,13 @@ type Guide struct {
 
 // endpointSteps are each CLI's step 3, registering how it's woken
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler). Claude's SessionStart hook and OpenCode's
-// plugin register on their own; Codex registers its thread; agy runs a bridge from its shell (only
+// plugin register on their own; AutoDoc's window registers a Codex agent's thread as it starts (the
+// agent's own step is the fallback); agy runs a bridge from its shell (only
 // its tool shells carry its language server's address and token), which detaches, registers, and
 // registers again whenever the daemon restarts.
 var endpointSteps = map[string]string{
 	"claude":   "Claude Code registers how you're woken on its own, from its `SessionStart` hook: nothing to run.",
-	"codex":    "Then register how you're woken, once: `autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"`.",
+	"codex":    "AutoDoc registers how you're woken as Codex starts: nothing to run. Only if `autodoc crew list` shows you unreachable, run once: `autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"`.",
 	"agy":      "Then register how you're woken, once, from your shell: `autodoc crew bridge --agy`. It detaches and stays, and registers again whenever the daemon restarts.",
 	"opencode": "OpenCode's AutoDoc plugin registers how you're woken on its own: nothing to run.",
 }

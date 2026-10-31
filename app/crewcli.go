@@ -141,11 +141,13 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
-	"crew endpoint": {usage: "--claude | --codex-thread ID | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --opencode: AutoDoc's OpenCode plugin runs it)",
+	"crew endpoint": {usage: "--claude | --codex-thread ID | --codex-here [--since T] | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --codex-here: this folder's Codex session, found on Codex's app-server, which AutoDoc runs as a Codex agent starts; --opencode: AutoDoc's OpenCode plugin runs it)",
 		example: "autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
 			fs.String("codex-thread", "", "this Codex session's thread ($CODEX_THREAD_ID), on the app-server its TUI is attached to")
+			fs.Bool("codex-here", false, "this folder's Codex session: the newest thread on Codex's app-server whose folder is this one")
+			fs.Int64("since", 0, "with --codex-here: a thread made at or after this Unix time (seconds), not an earlier session's")
 			fs.String("opencode", "", "this OpenCode session (AutoDoc's OpenCode plugin runs it, from the session's own opencode)")
 		},
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
@@ -167,6 +169,20 @@ var crewCommands = map[string]crewCommand{
 			if thread := strFlag(fs, "codex-thread"); thread != "" {
 				if len(args) != 0 {
 					return "", nil, nil, errors.New("crew endpoint --codex-thread takes no arguments")
+				}
+				loc, err := codexLocator(thread, os.Getenv)
+				if err != nil {
+					return "", nil, nil, err
+				}
+				return "crew.endpoint", []any{c.Credential, "codex", loc}, nil, nil
+			}
+			if fs.Lookup("codex-here").Value.(flag.Getter).Get().(bool) {
+				if len(args) != 0 {
+					return "", nil, nil, errors.New("crew endpoint --codex-here takes no arguments")
+				}
+				thread, err := codexThreadOfThisFolder(fs.Lookup("since").Value.(flag.Getter).Get().(int64))
+				if err != nil {
+					return "", nil, nil, err
 				}
 				loc, err := codexLocator(thread, os.Getenv)
 				if err != nil {
