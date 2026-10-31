@@ -565,6 +565,41 @@ func (a *ANN) verifyReady(ctx context.Context) error {
 			return err
 		}
 	}
+	if first {
+		return a.verifyReplacing(ctx)
+	}
+	return nil
+}
+
+// verifyReplacing checks every replacing row, on the first tick of a run: a replacing index serves
+// from its own name while its replacement is built, so one whose own index is gone or invalid (an
+// index dropped by hand, a restore without it) serves nothing, and is wanted again, its searches
+// exact meanwhile. A row the builder holds is left to it: its replacement may be between the old
+// index's drop and the rename, which the build or its recovery finishes (finishSwap).
+func (a *ANN) verifyReplacing(ctx context.Context) error {
+	rows, err := a.rwIndex.DAO(a.opts(ctx)...).With(aiState, annReplacing).Select(aiModel)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		st, err := postgres.ReadIndexState(ctx, a.conn, "", annIndexName(r.Model))
+		if err != nil {
+			return err
+		}
+		if st.Exists && st.Valid {
+			continue
+		}
+		if err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+			b, err := a.builderRow(ctx, tx)
+			if err != nil || (b.Model != nil && *b.Model == r.Model) {
+				return err
+			}
+			return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).With(aiState, annReplacing).
+				Set(aiState, annWanted).Set(aiAttempts, 0).Set(aiNextAt, nil).Set(aiUpdated, a.now()).Update()
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
