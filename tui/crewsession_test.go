@@ -417,7 +417,8 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 // agent's crew session is registered, and reaches the agent once it runs, never as a stale send.
 func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	c.panel = &modelPanel{owner: c} // takes a bracketed paste at once
+	c.panel = &modelPanel{owner: c}                             // takes a bracketed paste at once
+	a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 	w.hold = true
 	calls := 0
 	var outcome error
