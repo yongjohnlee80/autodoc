@@ -381,3 +381,50 @@ test("the plugin says it is alive while it runs, and stops once disposed", async
   await Bun.sleep(150);
   expect(alive()).toBe(after);
 });
+
+test("a wake names the model opencode was started with, in any of its flag's spellings, and none when it was started on none", async () => {
+  for (const [argv, want] of [
+    [["opencode", "--model", "opencode/big-pickle"], { providerID: "opencode", modelID: "big-pickle" }],
+    [["opencode", "--model=anthropic/claude-x/y"], { providerID: "anthropic", modelID: "claude-x/y" }],
+    [["opencode", "-m", "local/m1"], { providerID: "local", modelID: "m1" }],
+    [["opencode", "--model", "no-slash"], undefined],
+    [["opencode"], undefined],
+  ]) {
+    await plugin?.dispose?.();
+    for (const f of ["log", "endpoint", "go-ses_m"]) rmSync(join(fake, f), { force: true });
+    client.prompts.length = 0;
+    await start({ argv });
+    await chat("ses_m");
+    go("ses_m");
+    expect(await woken("ses_m")).toBe(true);
+    expect(client.prompts.length).toBe(1);
+    expect(client.prompts[0].body.parts[0].text).toBe(NOTICE);
+    expect(client.prompts[0].body.model).toEqual(want);
+  }
+});
+
+test("a woken turn its model refuses raises the session's attention, saying what the model said; the next completed turn clears it", async () => {
+  await start({ argv: ["opencode", "--model", "opencode/big-pickle"] });
+  await chat("ses_w");
+  go("ses_w");
+  expect(await woken("ses_w")).toBe(true);
+  const error = { type: "session.error", properties: { sessionID: "ses_w", error: { name: "APIError", data: { message: "credit balance too low" } } } };
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_other", error: { name: "APIError" } } } });
+  await plugin.event({ event: error });
+  await until(() => attentions().some((l) => l.startsWith("raise blocked") && l.includes("credit balance too low")));
+  expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(1); // not the other session's
+  await plugin.event({ event: error }); // a second error of the same wake raises nothing more
+  await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_w", role: "assistant", time: { completed: 1 } } } } });
+  await until(() => attentions().some((l) => l.trim() === "clear"));
+  expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(1);
+});
+
+test("a session error with no wake before it raises nothing", async () => {
+  await start();
+  await chat("ses_n");
+  go("ses_n");
+  await until(() => endpoint() === "ses_n");
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_n", error: { name: "APIError" } } } });
+  await Bun.sleep(100);
+  expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(0);
+});
