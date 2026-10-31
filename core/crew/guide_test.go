@@ -50,11 +50,18 @@ func TestTheGuideAcksRightAfterReceiving(t *testing.T) {
 				step = line
 			}
 		}
-		receive, ack := strings.Index(step, "`autodoc mail receive`"), strings.Index(step, "`autodoc mail ack <id>`")
-		if receive < 0 || ack < receive {
-			t.Errorf("%s's woken step doesn't give `autodoc mail ack <id>` right after `autodoc mail receive`:\n%s", kind, step)
+		recv, ackCmd, as := "`autodoc mail receive`", "`autodoc mail ack <id>`", "exactly as `receive` printed it"
+		if crew.MailViaOf(kind) == crew.MailViaMCP { // its mail is the crew MCP server's tools
+			recv, ackCmd, as = "`mail_receive`", "`mail_ack` with its `id`", "exactly as `mail_receive` gave it"
+			if strings.Contains(g, "`autodoc mail") || strings.Contains(g, "`autodoc crew whoami`") || strings.Contains(g, "`autodoc crew list`") {
+				t.Errorf("%s's guide names a shell command for its mail or crew, which its rules don't allow:\n%s", kind, g)
+			}
 		}
-		for _, must := range []string{"exactly as `receive` printed it", "comes to you again"} {
+		receive, ack := strings.Index(step, recv), strings.Index(step, ackCmd)
+		if receive < 0 || ack < receive {
+			t.Errorf("%s's woken step doesn't give %s right after %s:\n%s", kind, ackCmd, recv, step)
+		}
+		for _, must := range []string{as, "comes to you again"} {
 			if !strings.Contains(step, must) {
 				t.Errorf("%s's woken step lacks %q:\n%s", kind, must, step)
 			}
