@@ -79,6 +79,8 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
 | `ann_max_scan_tuples` | `1000` | The most index tuples one approximate search scans past its first candidates (pgvector's `hnsw.max_scan_tuples`). It bounds what a filtered search spends before it answers exactly: a selective filter mostly comes back short, and at 1,000,000 embeddings under a 1% filter a budget of 40,000 made the search 7.6× slower than exact, against 1.4× at 1,000. Unfiltered searches are unaffected. | outside 1 to 2147483647 |
 | `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
+| `ann_ef_construction` | `200` | How wide each model's HNSW index is built (pgvector's `ef_construction`). It decides recall more than any search setting: at pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten across 20 builds, and 8 of those builds were below 0.95; at 200, 0.994 to 1.000. A wider build takes longer. | outside 4 to 1000, or below twice `ann_m` |
+| `ann_m` | `16` | The links each node of the index keeps (pgvector's `m`). 32 did no better than 16 at an ef_construction of 200. | outside 2 to 100 |
 
 The server opens three connection pools on the DSN:
 
@@ -98,6 +100,11 @@ background, one index at a time across every server on the database.
 - A model of more than 4,000 dimensions has no index and stays exact.
 - The status reports each model's mode: `exact`, `ann`, `ann-building` or `ann-failed` (with the
   reason).
+- An index built with other parameters than `ann_m` and `ann_ef_construction` (an upgrade's, or a
+  change of them) is rebuilt while it serves. The new index is built concurrently under a second
+  name; once it is valid, the old one is dropped concurrently and the new one renamed. Searches
+  stay approximate throughout, and the status says `ann` with the reason. A rebuild that fails
+  leaves the old index serving, and is retried with a growing wait.
 
 ## `[embedding]`: the enterprise's embedding model (required)
 

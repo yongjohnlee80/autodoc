@@ -35,18 +35,27 @@ type ANNConfig struct {
 	// scan's candidate list, wider than k so a tenant sharing the index with others still finds
 	// its own nearest. 0 is 1.
 	EfFactor int
+	// M and EfConstruction are the index's build parameters (pgvector's m and ef_construction; 0
+	// is pgvector's default, 16 and 64). An index built with others is replaced while it serves.
+	M, EfConstruction int
 }
 
 // DefaultANNConfig is the server's defaults: approximate from 50,000 embeddings of a model, a
-// scan of at most 1,000 tuples past the first ef_search, twice the memory of work_mem.
+// scan of at most 1,000 tuples past the first ef_search, twice the memory of work_mem, and an
+// index built with ef_construction 200 (m pgvector's 16).
 //
 // The budget is what a filtered search spends before it gives up and answers exactly, and a
 // selective filter mostly does give up: at 1,000,000 embeddings under a 1% filter, 40,000 tuples
 // cost 7.6× the exact search, 1,000 cost 1.4×, with the unfiltered search at 0.09× either way
 // (the measured sweep, TestANN_BudgetSweep). An unfiltered search's first ef_search candidates
 // don't count against it.
+//
+// The build's ef_construction decides recall more than any search setting: at pgvector's 64, a
+// tenant sharing the index (TestANN_Recall's skew90) found 0.938 to 0.990 of its exact top ten over
+// 20 builds, 8 of them below 0.95, and no ef_search, scan budget or scan order moved it, since the
+// graph left whole regions unreachable; at 200, 0.994 to 1.000 over 5. m 32 did no better than 16.
 func DefaultANNConfig() ANNConfig {
-	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2}
+	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200}
 }
 
 // annType is the vector type a model's index casts its embeddings to, from its fingerprint's
@@ -75,23 +84,33 @@ func annIndexName(model string) string {
 }
 
 // annSpec is model's index, declared: the embeddings cast to t, cosine, the rows of model only.
-func annSpec(model string, t dao.VectorType) (postgres.IndexSpec, error) {
+func annSpec(model string, t dao.VectorType, cfg ANNConfig) (postgres.IndexSpec, error) {
 	el, err := postgres.HNSWIndexElement("vec", dao.Cosine, t)
 	if err != nil {
 		return postgres.IndexSpec{}, err
 	}
 	return postgres.IndexSpec{Table: tEmb, Name: annIndexName(model), Method: "hnsw", Element: el,
-		WhereEq: []postgres.EqText{{Column: "model", Value: model}}}, nil
+		WhereEq: []postgres.EqText{{Column: "model", Value: model}}, M: cfg.M, EfConstruction: cfg.EfConstruction}, nil
 }
 
-// The states of a model's index (rag_ann_index.state, 000005).
+// annNextName is the second name model's index is rebuilt under while the first still serves.
+func annNextName(model string) string { return annIndexName(model) + "_next" }
+
+// The states of a model's index (rag_ann_index.state, 000005 and 000006). replacing is a valid
+// index built with other parameters than the declared ones: it serves while its replacement is
+// built under a second name and swapped in.
 const (
-	annWanted   = "wanted"
-	annBuilding = "building"
-	annReady    = "ready"
-	annFailed   = "failed"
-	annRetiring = "retiring"
+	annWanted    = "wanted"
+	annBuilding  = "building"
+	annReady     = "ready"
+	annFailed    = "failed"
+	annRetiring  = "retiring"
+	annReplacing = "replacing"
 )
+
+// annServes reports whether an index in state serves searches: ready, or replacing (the old
+// index, valid, until its replacement is swapped in).
+func annServes(state string) bool { return state == annReady || state == annReplacing }
 
 // The modes a model's search is in, as the status reports them.
 const (
@@ -302,6 +321,8 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 		switch r.State {
 		case annReady:
 			s.Mode = ModeANN
+		case annReplacing:
+			s.Mode, s.Reason = ModeANN, replacingReason(r.Error)
 		case annWanted, annBuilding:
 			s.Mode = ModeANNBuilding
 		case annFailed:
@@ -341,7 +362,7 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 		return nil, false, nil
 	}
 	r, err := a.roIndex.On(v.tx, v.opts(ctx)...).With(aiModel, model).Get(aiState)
-	if errors.Is(err, dao.ErrNoRows) || (err == nil && r.State != annReady) {
+	if errors.Is(err, dao.ErrNoRows) || (err == nil && !annServes(r.State)) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -415,10 +436,22 @@ func (s *Store) ANNMode(ctx context.Context, model string) (mode, reason string,
 	switch r.State {
 	case annReady:
 		return ModeANN, "", nil
+	case annReplacing:
+		return ModeANN, replacingReason(r.Error), nil
 	case annFailed:
 		return ModeANNFailed, r.Error, nil
 	case annRetiring:
 		return ModeExact, "the index is being retired", nil
 	}
 	return ModeANNBuilding, "", nil
+}
+
+// replacingReason says why an index in service is replacing: being rebuilt, and the last attempt's
+// error when one failed.
+func replacingReason(lastErr string) string {
+	r := "the index serves while it is rebuilt with the declared build parameters"
+	if lastErr != "" {
+		r += "; the last attempt failed: " + lastErr
+	}
+	return r
 }

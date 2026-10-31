@@ -72,7 +72,7 @@ type Postgres struct {
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
-	// ann_scan_mem_multiplier), pgstore's defaults for any not set.
+	// ann_scan_mem_multiplier, ann_m, ann_ef_construction), pgstore's defaults for any not set.
 	ANN pgstore.ANNConfig
 }
 
@@ -215,6 +215,8 @@ type file struct {
 		ANNThreshold         *int     `toml:"ann_threshold"`
 		ANNMaxScanTuples     *int     `toml:"ann_max_scan_tuples"`
 		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
+		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
+		ANNM                 *int     `toml:"ann_m"`
 	} `toml:"postgres"`
 	Embedding *struct {
 		Provider string `toml:"provider"`
@@ -374,6 +376,22 @@ func (v *validator) postgres(f file) Postgres {
 			v.refuse("postgres.ann_scan_mem_multiplier", "%v: 1 to 1000 (pgvector's hnsw.scan_mem_multiplier)", *x)
 		}
 		p.ANN.ScanMemMultiplier = *x
+	}
+	if n := f.Postgres.ANNM; n != nil {
+		if *n < 2 || *n > 100 {
+			v.refuse("postgres.ann_m", "%d: 2 to 100 (pgvector's m)", *n)
+		}
+		p.ANN.M = *n
+	}
+	if n := f.Postgres.ANNEfConstruction; n != nil {
+		m := p.ANN.M
+		if m == 0 {
+			m = 16 // pgvector's m when unset
+		}
+		if *n < 4 || *n > 1000 || *n < 2*m {
+			v.refuse("postgres.ann_ef_construction", "%d: 4 to 1000, and at least twice m (%d) (pgvector's ef_construction)", *n, m)
+		}
+		p.ANN.EfConstruction = *n
 	}
 	return p
 }
