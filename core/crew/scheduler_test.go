@@ -139,7 +139,7 @@ func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
 	if n := crew.NoticeFor(crew.MailViaCLI); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive") {
 		t.Errorf("the CLI notice: %q", n)
 	}
-	if n := crew.NoticeFor(crew.MailViaMCP); n != crew.WakeNoticeMCP || !strings.Contains(n, "mail_receive tool") || strings.Contains(n, "Run:") {
+	if n := crew.NoticeFor(crew.MailViaMCP); n != crew.WakeNoticeMCP || !strings.Contains(n, "mail_receive, a tool of the autodoc MCP server") || strings.Contains(n, "Run:") {
 		t.Errorf("the MCP notice: %q", n)
 	}
 }
