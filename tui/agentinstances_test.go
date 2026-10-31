@@ -267,8 +267,8 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.opened = nil                                        // the start opened the panel: what the delivery opens is counted from here
-	a.promptsReported = func(string) bool { return true } // a CLI that reports its prompts: the base sends
+	c.opened = nil                                                    // the start opened the panel: what the delivery opens is counted from here
+	a.promptsReported = func(string, bool, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	done := 0
 	task := TaskRef{Title: "original", Path: "/tasks/one.md", ID: "one"}
 	if err := a.HandTask(AgentRef{Codename: "one"}, task, "inspect", func(err error) {
@@ -382,7 +382,7 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 // agentReadyPoll apart: taken once the program takes it, and never sent as keys meanwhile.
 func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	a, c := modelAgents(t)
-	a.promptsReported = func(string) bool { return true } // a CLI that reports its prompts: the base sends
+	a.promptsReported = func(string, bool, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	c.panel = &modelPanel{owner: c, unbracketed: 3}
 	calls := 0
 	var outcome error
@@ -504,7 +504,7 @@ func TestSendTextIsSentWithItsEnter(t *testing.T) {
 	}
 	c.opened = nil // the start opened the panel
 	calls := 0
-	a.promptsReported = func(string) bool { return true } // a CLI that reports its prompts: the base sends
+	a.promptsReported = func(string, bool, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	if err := a.SendText(AgentRef{Codename: "one"}, "draft", func(err error) {
 		if err != nil {
 			t.Error(err)
