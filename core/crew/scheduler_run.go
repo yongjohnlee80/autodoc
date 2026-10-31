@@ -327,6 +327,9 @@ func (s *Scheduler) attemptWith(call, record context.Context, session, tok strin
 	if werr != nil {
 		s.failed(ep, werr)
 	}
+	if o == OutcomeFailed || o == OutcomeGone {
+		s.m.noteCause(session, werr.Error())
+	}
 	if err := s.m.Outcome(record, session, tok, o); err != nil {
 		s.report(err)
 		s.owe(session, tok, owedEnd{outcome: o})

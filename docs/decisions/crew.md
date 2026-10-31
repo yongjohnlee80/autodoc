@@ -276,6 +276,15 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   once, each with a 10 s deadline. An accepted notice waits 2 minutes for a receive. Failures back
   off 5 s, 30 s, 2 minutes, then every 10 minutes; after 5 in a row the session shows as unreachable,
   and your inbox hears of it. Attempts an earlier daemon run left in flight are retried at start.
+- A wake that finds the endpoint gone for certain makes the session unreachable at once: its socket
+  missing (Claude's, OpenCode's, Codex's app-server), nothing listening on it or at agy's address,
+  or another process than the session's holding it. A failure that may pass (a deadline, a
+  refusal, any other error) counts toward the 5. The session's next registered endpoint makes it
+  reachable again.
+- `crew.list` says why a session can't be woken now: `ended`, `no_endpoint`, `wakes_failing` (with
+  the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
+  wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
+  the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
 - A woken OpenCode session is shown in the TUI before its turn starts, so the turn is the one you
   see. A failed OpenCode registration raises the session's attention, so the window says why it
   can't be woken.
