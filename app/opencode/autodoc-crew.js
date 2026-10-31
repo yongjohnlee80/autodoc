@@ -19,7 +19,7 @@
 // connect, and the worst it can do is a spurious "mail is waiting". It does nothing outside an
 // AutoDoc crew session ($AUTODOC_CREW_CONTEXT), nor in an opencode started under one that does
 // ($AUTODOC_CREW_WAKER, which it sets for every process it starts): one plugin per session wakes it.
-import { chmodSync, lstatSync, mkdirSync, unlinkSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 
 // NOTICE is crew.WakeNotice: a cell holds the two the same.
 const NOTICE = "AutoDoc mail is waiting for you. Run: autodoc mail receive";
@@ -67,6 +67,21 @@ const aborted = (signal) =>
 const RESUMES = new Set(["-c", "--continue", "-s", "--session", "--fork"]);
 const resumed = (argv) => argv.some((a) => RESUMES.has(a.split("=")[0]));
 
+// cliArgv is the command line opencode was started with. The plugin runs in the TUI's worker, whose
+// process.argv is the worker's own (["bun", "…/worker.js"]), never the agent's flags, so it reads the
+// process's: /proc/self/cmdline (the worker is a thread of it), else `ps`, else process.argv.
+export const cliArgv = () => {
+  try {
+    const a = readFileSync("/proc/self/cmdline", "utf8").split("\0").filter(Boolean);
+    if (a.length) return a;
+  } catch {}
+  try {
+    const out = Bun.spawnSync(["ps", "-o", "args=", "-p", String(process.pid)]).stdout.toString().trim();
+    if (out) return out.split(/\s+/);
+  } catch {}
+  return process.argv;
+};
+
 // cliModel is the model opencode was started with (`--model provider/model`, `--model=…`, `-m …`), as
 // a prompt names one, or null for none. A wake names it: a session the plugin made at load has had no
 // message, and a prompt that names no model runs on the configured default, which may not be the one
@@ -103,7 +118,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   if (holder && holder !== process.pid && alive(holder)) return {}; // started under the session's own opencode
   process.env.AUTODOC_CREW_WAKER = String(process.pid);
   const registerMs = Number(options.registerMs) || REGISTER_MS;
-  const argv = options.argv ?? process.argv;
+  const argv = options.argv ?? cliArgv();
   const model = cliModel(argv);
   let wokeAt = 0; // when the last wake's turn was started (onWakeTurn)
   let wakeRaised = false; // whether a woken turn's error raised the session's attention
