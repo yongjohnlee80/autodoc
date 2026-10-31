@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -103,7 +105,7 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 		t.Fatalf("the Claude agent's start: %v, plugin setups %d, args %v", err, calls, args)
 	}
 
-	a.pluginEnv = func() (string, error) { return "", errors.New("no data folder") }
+	a.pluginEnv, a.pluginAnswer = func() (string, error) { return "", errors.New("no data folder") }, nil
 	if _, spawned, err := startedEnv(a, c, instance); err == nil || spawned || !strings.Contains(err.Error(), "OpenCode plugin") {
 		t.Fatalf("a plugin that can't be had: %v, spawned %v; want the start refused", err, spawned)
 	}
@@ -121,15 +123,60 @@ func TestTheOpenCodePluginEnvIsTheAgentsBuilds(t *testing.T) {
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	a := &agents{agentBinPath: bin, agentConfig: "/c/autodoc.toml"}
-	env, err := a.opencodeEnv()
+	env, err := opencodeEnv(bin, "/c/autodoc.toml")
 	if err != nil || env != `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}` {
 		t.Fatalf("opencodeEnv: %q %v", env, err)
 	}
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho something else\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.opencodeEnv(); err == nil {
+	if _, err := opencodeEnv(bin, "/c/autodoc.toml"); err == nil {
 		t.Fatal("unexpected output was passed on")
+	}
+}
+
+// TestTheOpenCodePluginEnvRunsOnceOffTheLoop: the plugin's env is the process's one run, started
+// off the loop when the agents feature starts (Started returns while it runs); every crew OpenCode
+// spawn takes that answer, one waiting for it only while it is on its way; a failure is not kept,
+// so the next spawn runs it again.
+func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
+	const env = `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`
+	a, c, _ := crewAgents(t, crewKinds)
+	var runs atomic.Int32
+	release := make(chan struct{})
+	a.pluginEnv = func() (string, error) { runs.Add(1); <-release; return env, nil }
+	a.Started() // returns with the run still held: it is off the loop
+	for deadline := time.Now().Add(2 * time.Second); runs.Load() == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the feature's start never ran it")
+		}
+	}
+	p, _ := a.profile("opencode-one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	for range 2 {
+		if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) {
+			t.Fatalf("an OpenCode spawn: %v, args %v", err, args)
+		}
+	}
+	if runs.Load() != 1 {
+		t.Fatalf("two spawns after the warm-up ran it %d times, want the one", runs.Load())
+	}
+	// a failure is not kept: the next spawn runs it again, and takes its answer
+	fails := atomic.Int32{}
+	a.pluginEnv, a.pluginAnswer = func() (string, error) {
+		if fails.Add(1) == 1 {
+			return "", errors.New("no data folder")
+		}
+		return env, nil
+	}, nil
+	if _, spawned, err := startedEnv(a, c, instance); err == nil || spawned {
+		t.Fatalf("the failing run: %v, spawned %v", err, spawned)
+	}
+	if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) || fails.Load() != 2 {
+		t.Fatalf("after a failure: %v, args %v, %d runs", err, args, fails.Load())
 	}
 }

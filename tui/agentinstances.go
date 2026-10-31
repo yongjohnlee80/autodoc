@@ -354,7 +354,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		}
 		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
 		if agentKind(instance.profile.Command) == "opencode" {
-			env, err := a.opencodeEnv()
+			env, err := a.opencodePluginEnv()
 			if err != nil {
 				return nil, fmt.Errorf("AutoDoc's OpenCode plugin: %w", err)
 			}
@@ -368,22 +368,58 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 // file and prints a line.
 const opencodeTimeout = 10 * time.Second
 
-// opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
-// any the TUI was started with: what the agent's own autodoc prints (`autodoc crew plugin
-// --opencode --print-env`), so the plugin is the build's that the agent runs, the one it calls back
-// into to register. A cell replaces it.
-func (a *agents) opencodeEnv() (string, error) {
-	if a.pluginEnv != nil {
-		return a.pluginEnv()
+// pluginEnvAnswer is opencodeEnv's answer for this process, on its way until done closes: its
+// output depends only on the agent's build and config, so it runs once, off the loop, and every
+// crew OpenCode spawn takes the same answer.
+type pluginEnvAnswer struct {
+	done chan struct{}
+	env  string
+	err  error
+}
+
+// warmPluginEnv starts opencodeEnv off the loop, once (on the loop: the agents feature's start, and
+// a spawn that finds none started): the spawn, which runs on the loop, then only reads its answer.
+func (a *agents) warmPluginEnv() *pluginEnvAnswer {
+	if a.pluginAnswer == nil {
+		f := &pluginEnvAnswer{done: make(chan struct{})}
+		a.pluginAnswer = f
+		run, bin, config := a.pluginEnv, a.agentBin(), a.agentConfig // read on the loop
+		go func() {
+			if run != nil {
+				f.env, f.err = run()
+			} else {
+				f.env, f.err = opencodeEnv(bin, config)
+			}
+			close(f.done)
+		}()
 	}
+	return a.pluginAnswer
+}
+
+// opencodePluginEnv is the spawn's OPENCODE_CONFIG_CONTENT=…: the warmed answer, waited for only
+// while a warm-up already on its way finishes. A failure is not kept: the next spawn runs it again.
+func (a *agents) opencodePluginEnv() (string, error) {
+	f := a.warmPluginEnv()
+	<-f.done
+	if f.err != nil && a.pluginAnswer == f {
+		a.pluginAnswer = nil
+	}
+	return f.env, f.err
+}
+
+// opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
+// any the TUI was started with: what the agent's own autodoc (bin, on config) prints (`autodoc crew
+// plugin --opencode --print-env`), so the plugin is the build's that the agent runs, the one it
+// calls back into to register. A cell replaces it (agents.pluginEnv).
+func opencodeEnv(bin, config string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opencodeTimeout)
 	defer cancel()
 	args := []string{}
-	if a.agentConfig != "" {
-		args = append(args, "--config", a.agentConfig)
+	if config != "" {
+		args = append(args, "--config", config)
 	}
 	args = append(args, "crew", "plugin", "--opencode", "--print-env")
-	out, err := exec.CommandContext(ctx, a.agentBin(), args...).Output()
+	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
 		return "", err
 	}
