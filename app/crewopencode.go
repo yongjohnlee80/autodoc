@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 )
 
 // opencodePlugin is AutoDoc's OpenCode plugin
@@ -55,14 +55,30 @@ func opencodeLocator(session string, pid int, roots []string) (string, error) {
 	return string(b), err
 }
 
-// opencodePluginDir is where AutoDoc keeps its OpenCode plugin: its own data folder, never a
-// project's ($XDG_DATA_HOME/autodoc/opencode).
-func opencodePluginDir() (string, error) {
-	store, err := config.Server{}.StorePath()
+// opencodePluginDir is where AutoDoc keeps its OpenCode plugin: the data folder of the config at
+// configPath ("" for the default config), never a project's (by default
+// $XDG_DATA_HOME/autodoc/opencode).
+func opencodePluginDir(configPath string) (string, error) {
+	data, err := crewDataDir(configPath)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(store), "opencode"), nil
+	return filepath.Join(data, "opencode"), nil
+}
+
+// crewDataDir is the data folder of the config at configPath ("" for the default config): the
+// store's folder, server.data_dir when it is set. A crew command that keeps a file of AutoDoc's own
+// keeps it there, so an AutoDoc run on another config never writes into the default one's folder.
+func crewDataDir(configPath string) (string, error) {
+	e, err := endpoint.Load(configPath)
+	if err != nil {
+		return "", err
+	}
+	store, err := e.Store()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(store), nil
 }
 
 // writeOpenCodePlugin writes the plugin into dir, unless it is there already as it is, and answers
@@ -149,11 +165,12 @@ func opencodeConfigContent(existing, path string) (string, error) {
 }
 
 // crewPluginMain runs `autodoc crew plugin --opencode [--print-env] [--dir D]`: it writes AutoDoc's
-// OpenCode plugin into D (default AutoDoc's data folder) and prints its path; --print-env prints
+// OpenCode plugin into D (default the data folder of the config at configPath, "" for the default
+// config) and prints its path; --print-env prints
 // instead the environment that loads it, OPENCODE_CONFIG_CONTENT=<json>, merged with the value
 // already set, for a host to start the agent with. It needs no session: a host runs it before one
 // starts.
-func crewPluginMain(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+func crewPluginMain(configPath string, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("autodoc crew plugin", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	opencode := fs.Bool("opencode", false, "OpenCode's plugin")
@@ -169,7 +186,7 @@ func crewPluginMain(args []string, getenv func(string) string, stdout, stderr io
 	d := *dir
 	if d == "" {
 		var err error
-		if d, err = opencodePluginDir(); err != nil {
+		if d, err = opencodePluginDir(configPath); err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}
