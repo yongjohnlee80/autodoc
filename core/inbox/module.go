@@ -44,6 +44,9 @@ type (
 		Key     string   `param:"key" doc:"the idempotency key: a retry with the same content answers the first send"`
 		Kind    string   `param:"kind,optional" doc:"message (the default) or request"`
 		Subject string   `param:"subject,optional"`
+		// Reachable is the window's own sends: refused, nothing stored, when a recipient has no
+		// session a wake reaches now, so the window types the text into its prompt instead.
+		Reachable bool `param:"reachable,optional" doc:"refuse, sending nothing, when a recipient can't be woken now"`
 	}
 	messageParams struct {
 		Message string `param:"message"`
@@ -219,9 +222,10 @@ func (m *Manager) Verbs() []module.Verb {
 			}),
 		module.Handle(host("inbox.send", "{message}",
 			"Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
-			crew.CodeStaleEpoch, mail.CodeNoRecipient, CodeKeyReused, CodeTooLarge),
+			crew.CodeStaleEpoch, mail.CodeNoRecipient, CodeUnreachable, CodeKeyReused, CodeTooLarge),
 			func(ctx context.Context, p sendParams) (sentResult, error) {
-				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body, Key: p.Key})
+				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body,
+					Key: p.Key, Reachable: p.Reachable})
 				return sentResult{Message: s.Message.ID}, err
 			}),
 		module.Handle(user("inbox.dismiss", module.EffectWrite, "{}",

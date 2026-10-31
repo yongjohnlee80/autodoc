@@ -21,6 +21,9 @@ type Send struct {
 	Body    string
 	Key     string        // the idempotency key: the same key answers the first send
 	TTL     time.Duration // 0 never expires
+	// Reachable refuses the send, storing nothing, when a recipient has no session a wake reaches
+	// now (ErrUnreachable): the user's sends from a window, which type the text instead.
+	Reachable bool
 }
 
 // Sent is a stored message and its deliveries.
@@ -142,6 +145,16 @@ func (m *Manager) send(tx Tx, sender, senderSession, scope string, p Send) (Sent
 	to, err := addresses(tx, scope, p.To)
 	if err != nil {
 		return Sent{}, err
+	}
+	for _, a := range to {
+		if !p.Reachable {
+			break
+		}
+		if ok, err := m.crew.Reachable(tx, a.profile); err != nil {
+			return Sent{}, err
+		} else if !ok {
+			return Sent{}, ErrUnreachable
+		}
 	}
 	now := tx.Now()
 	msg := Message{ID: m.newID(), Sender: sender, SenderSession: senderSession, IdemKey: p.Key, Digest: sum,

@@ -16,6 +16,7 @@ const (
 	CodeExpired         int64 = -32132 // the message expired first
 	CodeKeyReused       int64 = -32133 // the reply key is bound to another request or body
 	CodeTooLarge        int64 = -32134 // a body past mail.MaxBody
+	CodeUnreachable     int64 = -32135 // inbox.send's recipient can't be woken now: nothing was sent
 	// codeNotFound is the daemon's shared code (rpc's CodeNotFound).
 	codeNotFound int64 = -32061
 )
@@ -45,6 +46,8 @@ func (m *Manager) Errors() []module.PublicError {
 		{Err: mail.ErrKeyReused, Code: CodeKeyReused, Name: "inbox.key_reused",
 			Message: "the key is bound to another request or reply", Next: "retry the same reply with the same key, or use a new key"},
 		{Err: mail.ErrTooLarge, Code: CodeTooLarge, Name: "inbox.too_large", Message: "the body is past 64 KiB"},
+		{Err: mail.ErrUnreachable, Code: CodeUnreachable, Name: "inbox.unreachable",
+			Message: "the agent can't be woken now: nothing was sent", Next: "type the text into its prompt, or send without reachable to leave it queued"},
 		{Err: ErrNotFound, Code: codeNotFound, Name: "inbox.not_found", Message: "no such live session",
 			Next: "the agent exited: nothing to raise"},
 		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "inbox.long_polls_busy",

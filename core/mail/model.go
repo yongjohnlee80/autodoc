@@ -150,6 +150,9 @@ type Crew interface {
 	// (docs/decisions/crew.md#sessions-and-the-guard), in tx: the user's sends from a window
 	// (SendAsUser) are its host's.
 	GuardHost(tx crew.Tx, scope, run string, epoch int64) error
+	// Reachable reports whether profile's live session can be woken now (crew.list's reachable), in
+	// tx.
+	Reachable(tx crew.Tx, profile string) (bool, error)
 	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it
 	// (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	RaisePending(tx crew.Tx, profile string) error

@@ -516,7 +516,8 @@ return {
         { name = "body", type = "string" },
         { name = "key", type = "string" },
         { name = "kind", type = "string", optional = true },
-        { name = "subject", type = "string", optional = true }
+        { name = "subject", type = "string", optional = true },
+        { name = "reachable", type = "bool", optional = true }
       },
       result = "{message}",
       doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
@@ -1205,6 +1206,7 @@ return {
     { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },
     { code = -32133, name = "inbox.key_reused", next = "retry the same reply with the same key, or use a new key" },
     { code = -32134, name = "inbox.too_large" },
+    { code = -32135, name = "inbox.unreachable", next = "type the text into its prompt, or send without reachable to leave it queued" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

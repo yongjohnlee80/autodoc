@@ -88,6 +88,11 @@ func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error
 	return s, nil
 }
 
+// Reachable is crew's own, against the rig's session, endpoint and wake rows.
+func (g *guard) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return g.crew.Reachable(tx, profile)
+}
+
 // GuardHost is crew's own check, against the rig's host rows (a cell claims its scope through crew).
 func (g *guard) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
 	return g.crew.GuardHost(tx, scope, run, epoch)
@@ -795,6 +800,10 @@ func (c *lazyCrew) Authenticate(tx crew.Tx, credential string) (crew.Session, er
 	return c.m.Authenticate(tx, credential)
 }
 
+func (c *lazyCrew) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return c.m.Reachable(tx, profile)
+}
+
 func (c *lazyCrew) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
 	return c.m.GuardHost(tx, scope, run, epoch)
 }
@@ -1058,9 +1067,16 @@ func testTheUsersSendIsTheWindowsHostsAndFromTheUser(t *testing.T, h Harness) {
 			t.Fatalf("a send from run %s at epoch %d: %v, want the stale epoch", bad.run, bad.epoch, err)
 		}
 	}
+	// the window's own sends ask for a reachable agent: gold has no endpoint yet, so nothing is sent
+	// (the window types the text instead), and once it has one the same send goes
+	task.Reachable = true
+	if _, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, task); !errors.Is(err, mail.ErrUnreachable) {
+		t.Fatalf("a send to an agent no wake reaches: %v, want unreachable", err)
+	}
 	if len(r.st.Inspect.Messages()) != 0 || r.woken("p-gold") != 0 {
 		t.Fatal("a refused send stored mail or woke the agent")
 	}
+	r.write(func(tx mail.Tx) error { return tx.PutEndpoint(crew.Endpoint{Session: "s-gold", Generation: 1, Kind: "claude"}) })
 	sent, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, task)
 	if err != nil {
 		t.Fatal(err)
