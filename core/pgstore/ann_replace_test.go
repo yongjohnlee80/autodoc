@@ -225,3 +225,83 @@ func TestANN_SkewedTenantRecallHoldsAcrossBuilds(t *testing.T) {
 		})
 	}
 }
+
+// crashBetweenDropAndRename leaves r's model as a replacement that crashed between its two last
+// steps: the model replacing and claimed by the upgraded server, the replacement built under the
+// second name (with efc), the old index dropped, and the builder's lease lapsed.
+func (r *replaceRig) crashBetweenDropAndRename(t *testing.T, efc int) {
+	t.Helper()
+	ctx := context.Background()
+	if err := r.b.verifyReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if job, err := r.b.claim(ctx); err != nil || job == nil || !job.replace {
+		t.Fatalf("the replacement's claim: %+v %v", job, err)
+	}
+	cfg := r.b.cfg
+	cfg.EfConstruction = efc
+	next, err := annSpec(r.model, dao.VectorType{Kind: dao.VectorFloat32, Dims: annDims}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.Name = annNextName(r.model)
+	p, err := postgres.PinSessionConn(ctx, r.conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Discard()
+	if err := postgres.CreateIndexConcurrently(ctx, p, next, postgres.BuildOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := postgres.DropIndexConcurrently(ctx, p, "", annIndexName(r.model), postgres.BuildOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	lapse(t, r.conn)
+}
+
+// A replacement that crashed after dropping the old index and before the rename leaves the
+// declared index under its second name: recovery finishes the swap, renaming it, and the model is
+// ready, its searches through the index; never a replacing model with no index.
+func TestANNLife_RecoveryFinishesASwapStoppedBeforeTheRename(t *testing.T) {
+	r := newReplaceRig(t)
+	r.crashBetweenDropAndRename(t, 200)
+	c := NewANN(r.conn, r.b.cfg, "recoverer")
+	if err := c.recoverLapsed(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	st := indexState(t, r.conn, r.model)
+	if row := indexOf(t, c, r.model); row.State != annReady || !st.Valid || st.Def.Options != "ef_construction=200" || row.Def == "" {
+		t.Fatalf("after the recovery: %s (def %q), index %+v; want ready, the replacement renamed in", row.State, row.Def, st)
+	}
+	if r.nextExists(t) {
+		t.Fatal("the second name is still there after the recovery")
+	}
+	if b := builderOf(t, c); b.Model != nil {
+		t.Fatalf("the builder row is still held: %v", *b.Model)
+	}
+	r.served(t, "after the recovery")
+}
+
+// A replacement that crashed after dropping the old index, leaving under its second name an index
+// that is not the declared one: recovery drops it, and the model, with no index of its own, is
+// wanted again, its searches exact meanwhile (never replacing with no index).
+func TestANNLife_RecoveryDropsAnUndeclaredReplacementAndWantsTheIndex(t *testing.T) {
+	r := newReplaceRig(t)
+	r.crashBetweenDropAndRename(t, 64) // not the declared 200
+	c := NewANN(r.conn, r.b.cfg, "recoverer")
+	if err := c.recoverLapsed(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if row := indexOf(t, c, r.model); row.State != annWanted {
+		t.Fatalf("after the recovery: %s; want wanted (no index of its own)", row.State)
+	}
+	if st := indexState(t, r.conn, r.model); st.Exists {
+		t.Fatalf("an index of the model's name after the recovery: %+v", st)
+	}
+	if r.nextExists(t) {
+		t.Fatal("the undeclared replacement is still there after the recovery")
+	}
+	if s := r.mode(t); s.Mode != ModeANNBuilding {
+		t.Errorf("the status after the recovery: %+v; want ann-building (exact meanwhile)", s)
+	}
+}
