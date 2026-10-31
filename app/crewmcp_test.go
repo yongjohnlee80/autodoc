@@ -8,16 +8,20 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mcpClient is a client of `autodoc crew mcp` run as the session whose context path names: it
-// writes one request at a time and reads its answer.
+// writes one request at a time and reads its answer; the server's notifications in between are kept.
 type mcpClient struct {
-	t    *testing.T
-	in   *io.PipeWriter
-	out  *bufio.Scanner
-	done chan int
-	n    int
+	t     *testing.T
+	in    *io.PipeWriter
+	lines chan []byte
+	done  chan int
+	n     int
+	notes []map[string]any
+	// waiting is the last tool result's waiting line
+	waiting string
 }
 
 func (d *crewDaemon) mcp(path string) *mcpClient {
@@ -25,8 +29,15 @@ func (d *crewDaemon) mcp(path string) *mcpClient {
 	d.t.Setenv("AUTODOC_CREW_CONTEXT", path)
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
-	c := &mcpClient{t: d.t, in: inW, out: bufio.NewScanner(outR), done: make(chan int, 1)}
-	c.out.Buffer(make([]byte, 64<<10), 4<<20)
+	c := &mcpClient{t: d.t, in: inW, lines: make(chan []byte, 64), done: make(chan int, 1)}
+	go func() {
+		sc := bufio.NewScanner(outR)
+		sc.Buffer(make([]byte, 64<<10), 4<<20)
+		for sc.Scan() {
+			c.lines <- append([]byte(nil), sc.Bytes()...)
+		}
+		close(c.lines)
+	}()
 	go func() {
 		code := crewMainIn(d.ctx, "", []string{"crew", "mcp"}, inR, outW, io.Discard)
 		_ = outW.Close()
@@ -36,7 +47,26 @@ func (d *crewDaemon) mcp(path string) *mcpClient {
 	return c
 }
 
-// call sends method with params and answers the reply's result, or its error.
+// next is the server's next line within bound, as JSON; ok is false at its bound or its end.
+func (c *mcpClient) next(bound time.Duration) (m map[string]any, ok bool) {
+	c.t.Helper()
+	select {
+	case b, open := <-c.lines:
+		if !open {
+			return nil, false
+		}
+		if err := json.Unmarshal(b, &m); err != nil {
+			c.t.Fatalf("the server wrote %q: %v", b, err)
+		}
+		return m, true
+	// NOTE: a bound on a failing run only: an answer that never comes fails here rather than hanging.
+	case <-time.After(bound):
+		return nil, false
+	}
+}
+
+// call sends method with params and answers the reply's result, or its error; notifications that
+// come first are kept in notes.
 func (c *mcpClient) call(method string, params any) (result map[string]any, rpcErr map[string]any) {
 	c.t.Helper()
 	c.n++
@@ -44,18 +74,37 @@ func (c *mcpClient) call(method string, params any) (result map[string]any, rpcE
 	if _, err := c.in.Write(append(b, '\n')); err != nil {
 		c.t.Fatal(err)
 	}
-	if !c.out.Scan() {
-		c.t.Fatalf("%s: no answer (%v)", method, c.out.Err())
+	for {
+		m, ok := c.next(30 * time.Second)
+		if !ok {
+			c.t.Fatalf("%s: no answer", method)
+		}
+		if _, isNote := m["method"]; isNote && m["id"] == nil {
+			c.notes = append(c.notes, m)
+			continue
+		}
+		if m["id"] != float64(c.n) {
+			c.t.Fatalf("%s: answer %v, want id %d", method, m, c.n)
+		}
+		result, _ = m["result"].(map[string]any)
+		rpcErr, _ = m["error"].(map[string]any)
+		return result, rpcErr
 	}
-	var m struct {
-		ID     int            `json:"id"`
-		Result map[string]any `json:"result"`
-		Error  map[string]any `json:"error"`
+}
+
+// note waits within bound for the server's next notification, which nothing asked for.
+func (c *mcpClient) note(bound time.Duration) (map[string]any, bool) {
+	c.t.Helper()
+	if len(c.notes) > 0 {
+		m := c.notes[0]
+		c.notes = c.notes[1:]
+		return m, true
 	}
-	if err := json.Unmarshal(c.out.Bytes(), &m); err != nil || m.ID != c.n {
-		c.t.Fatalf("%s: answer %s (%v), want id %d", method, c.out.Bytes(), err, c.n)
+	m, ok := c.next(bound)
+	if ok && m["id"] != nil {
+		c.t.Fatalf("an answer nobody asked for: %v", m)
 	}
-	return m.Result, m.Error
+	return m, ok
 }
 
 // tool calls a tool and answers its text and whether it failed.
@@ -66,10 +115,11 @@ func (c *mcpClient) tool(name string, args map[string]any) (text string, isError
 		c.t.Fatalf("tools/call %s: %v", name, rpcErr)
 	}
 	content, _ := res["content"].([]any)
-	if len(content) != 1 {
+	if len(content) == 0 {
 		c.t.Fatalf("tools/call %s: content %v", name, res)
 	}
 	text, _ = content[0].(map[string]any)["text"].(string)
+	c.waiting, _ = content[len(content)-1].(map[string]any)["text"].(string)
 	isError, _ = res["isError"].(bool)
 	return text, isError
 }
@@ -169,5 +219,85 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 	back := g.received()
 	if len(back) != 1 || back[0]["message"].(map[string]any)["body"] != "-looks good" || back[0]["message"].(map[string]any)["kind"] != "response" {
 		t.Fatalf("gold's mail_receive of the reply: %v", back)
+	}
+}
+
+// TestTheCrewMCPServerSaysWhenMailWaits (docs/decisions/crew.md#the-crew-mcp-server): every tool
+// result ends with how much mail the session may receive, and when some waits, to receive it once
+// the step is done; initialize's instructions say to act on it. Once initialized, the server tells
+// the client of new mail as it arrives (notifications/message), with no tool call: once per arrival,
+// and again for mail that comes after a receive.
+func TestTheCrewMCPServerSaysWhenMailWaits(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir())
+	gold, jarvis := d.agent("gold", "agent-1", "store-1"), d.agent("jarvis", "agent-2", "store-1")
+	j := d.mcp(jarvis)
+	hello, _ := j.call("initialize", map[string]any{"protocolVersion": "2025-06-18"})
+	if ins, _ := hello["instructions"].(string); !strings.Contains(ins, "waiting above 0") || !strings.Contains(ins, "end of each task") {
+		t.Fatalf("initialize's instructions: %q", ins)
+	}
+	if _, failed := j.tool("mail_ack", map[string]any{"id": "none:none"}); !failed || j.waiting != "waiting: 0" {
+		t.Fatalf("a result with no mail waiting ends %q, want waiting: 0", j.waiting)
+	}
+	if _, ok := j.note(500 * time.Millisecond); ok {
+		t.Fatal("a notice with no mail")
+	}
+	// mail arrives while jarvis works: the server says so, unasked
+	if code, _, errOut := d.as(gold, "", "mail", "send", "jarvis", "--body", "one"); code != 0 {
+		t.Fatalf("gold's send: %s", errOut)
+	}
+	n, ok := j.note(15 * time.Second)
+	if !ok || n["method"] != "notifications/message" || n["params"].(map[string]any)["data"] != mcpWaitingNote {
+		t.Fatalf("after mail arrived: %v %v, want the notice", n, ok)
+	}
+	if code, _, errOut := d.as(gold, "", "mail", "send", "jarvis", "--body", "two"); code != 0 {
+		t.Fatalf("gold's second send: %s", errOut)
+	}
+	// the next tool result counts both
+	text, _ := j.tool("mail_send", map[string]any{"to": []string{"gold"}, "body": "working on it"})
+	if j.waiting != "waiting: 2. "+mcpWaitingNote {
+		t.Fatalf("a result with two waiting ends %q (%s)", j.waiting, text)
+	}
+	items := j.received()
+	if len(items) != 2 || j.waiting != "waiting: 0" {
+		t.Fatalf("mail_receive: %d items, ending %q; want both, waiting 0", len(items), j.waiting)
+	}
+	for _, it := range items {
+		if text, failed := j.tool("mail_ack", map[string]any{"id": it["id"]}); failed {
+			t.Fatalf("ack: %s", text)
+		}
+	}
+	// mail after a receive is told of again
+	for len(j.notes) > 0 { // the second arrival's notice, if the watch saw it apart from the first
+		_, _ = j.note(0)
+	}
+	if code, _, errOut := d.as(gold, "", "mail", "send", "jarvis", "--body", "three"); code != 0 {
+		t.Fatalf("gold's third send: %s", errOut)
+	}
+	if n, ok := j.note(45 * time.Second); !ok || n["params"].(map[string]any)["data"] != mcpWaitingNote {
+		t.Fatalf("mail after a receive: %v %v, want the notice again", n, ok)
+	}
+}
+
+// TestTheCrewMCPServerEndsWithItsInput: closing the server's input ends it promptly, its mail watch
+// too, even while that watch is in a 25-second long-poll: nothing it started outlives it.
+func TestTheCrewMCPServerEndsWithItsInput(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir())
+	jarvis := d.agent("jarvis", "agent-2", "store-1")
+	j := d.mcp(jarvis)
+	j.call("initialize", map[string]any{})
+	j.call("ping", nil)
+	time.Sleep(300 * time.Millisecond) // the watch is in its long-poll by now
+	_ = j.in.Close()
+	select {
+	case code := <-j.done:
+		j.done <- code // for the cleanup
+		if code != 0 {
+			t.Fatalf("the server ended with %d", code)
+		}
+	// NOTE: the bound is the property: a watch left in its long-poll would hold the server 25 s.
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server did not end within 5 s of its input closing: its mail watch outlives it")
 	}
 }

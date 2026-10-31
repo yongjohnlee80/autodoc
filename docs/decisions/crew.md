@@ -298,9 +298,12 @@ In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `
 
 ## Wakers and the wake scheduler
 
-The daemon wakes an agent through its CLI's own channel with one constant notice, "AutoDoc mail is
-waiting for you. Run: autodoc mail receive", and retries until the agent receives. The notice names
-no sender and no subject, so nothing a peer wrote reaches the agent except through `mail receive`.
+The daemon wakes an agent through its CLI's own channel with a constant notice, and retries until
+the agent receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every
+waker sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the
+crew MCP server's tools (agy), "AutoDoc mail is waiting for you: call the mail_receive tool until
+more is false", since its rules allow the tool, not the shell command. Either names no sender and
+no subject, so nothing a peer wrote reaches the agent except through a receive.
 Each channel queues a busy agent itself, so no waker needs to wait for the agent to be idle.
 
 | CLI | Channel | Registered by | Bound by |
@@ -441,8 +444,17 @@ goes through shell commands its rules would have to allow.
   read again for each call.
 - A refused call is the tool's error (`isError`), with the daemon's code and message, never the
   server's.
+- It notices incoming mail for the agent, by itself:
+  - every tool result ends with `waiting: N`, the mail the session may receive (`mail.inbox`'s
+    count, which leases nothing), and when N > 0, to call `mail_receive` once the step is done;
+  - `initialize`'s instructions say to do so whenever a result shows mail waiting, and at the end of
+    each task;
+  - once initialized, it watches the session's mail and sends `notifications/message` when more is
+    waiting than when it last looked. With nothing waiting it waits on `mail.wait`'s long-poll;
+    while mail sits unreceived (when `mail.wait` would answer at once), it looks again after the
+    agent's next tool call or 30 s. The watch ends with the server, which returns only once it has.
 
-In the code: `app/crewmcp.go`, `app/crewcli.go`
+In the code: `app/crewmcp.go`, `app/crewcli.go`, `core/crew/scheduler.go`
 
 ## Wake acceptance not tool approvals
 

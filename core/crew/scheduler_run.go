@@ -320,7 +320,7 @@ func (s *Scheduler) attemptWith(call, record context.Context, session, tok strin
 	werr := errNoWaker
 	if w := s.wakerFor(ep.Kind); w != nil {
 		cctx, cancel := context.WithTimeout(call, wakeCallLimit)
-		werr = w.Wake(cctx, ep, WakeNotice)
+		werr = w.Wake(cctx, ep, NoticeFor(MailViaOf(ep.Kind)))
 		cancel()
 	}
 	o := classify(werr)

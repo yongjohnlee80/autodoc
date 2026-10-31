@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
@@ -180,9 +182,24 @@ type mcpRequest struct {
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
+// mcpInstructions is what initialize tells the client about the server: how mail reaches the agent,
+// and when to look for it (docs/decisions/crew.md#the-crew-mcp-server).
+const mcpInstructions = "AutoDoc's crew mail. When AutoDoc's notice wakes you, call mail_receive until more is false, " +
+	"then answer each item with the tool its answer names. Every tool's result says how much mail is waiting: " +
+	"whenever it shows waiting above 0, call mail_receive once the current step is done, and call it at the end of each task."
+
+// mcpWaitingNote is the line a tool result carries when mail is waiting, and the push notice's text.
+const mcpWaitingNote = "AutoDoc mail is waiting: call mail_receive once this step is done."
+
+// mcpRecheck bounds how long the push waits before looking again while mail sits unreceived: the
+// daemon's mail.wait answers at once while any is waiting, so it can't wait for the next.
+const mcpRecheck = 30 * time.Second
+
 // crewMCPMain runs `autodoc crew mcp`: newline-delimited JSON-RPC 2.0 on stdin and stdout, one
 // request at a time, until stdin closes. A tool's failure is its result (isError, the daemon's or
-// the argument's message), never the server's.
+// the argument's message), never the server's. Once initialized, it also watches the session's
+// mail (mailWatch) and tells the client when new mail arrives (notifications/message); that
+// watch ends with the server, which returns only once it has.
 func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) int {
 	// the server is one session's: the context its start names (the env's path, else its folder's),
 	// read again for each call as the CLI reads it, never another the process's env names later
@@ -191,9 +208,20 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 		cwd = wd
 	}
 	session := func() (sessionContext, error) { return findSessionContext(envPath, cwd) }
+	ctx, cancel := context.WithCancel(ctx)
+	var watching sync.WaitGroup
+	defer func() { cancel(); watching.Wait() }()
 	in := bufio.NewScanner(stdin)
 	in.Buffer(make([]byte, 64<<10), 4<<20)
 	out := bufio.NewWriter(stdout)
+	var writing sync.Mutex // the answers and the watch's notices share stdout
+	write := func(m map[string]any) {
+		b, _ := json.Marshal(m)
+		writing.Lock()
+		defer writing.Unlock()
+		_, _ = out.Write(append(b, '\n'))
+		_ = out.Flush()
+	}
 	say := func(id json.RawMessage, result any, rpcErr map[string]any) {
 		m := map[string]any{"jsonrpc": "2.0", "id": id}
 		if rpcErr != nil {
@@ -201,10 +229,9 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 		} else {
 			m["result"] = result
 		}
-		b, _ := json.Marshal(m)
-		_, _ = out.Write(append(b, '\n'))
-		_ = out.Flush()
+		write(m)
 	}
+	acted := make(chan struct{}, 1) // a tool ran: the watch looks again at once
 	for in.Scan() {
 		var req mcpRequest
 		if err := json.Unmarshal(in.Bytes(), &req); err != nil {
@@ -226,10 +253,18 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 			}
 			say(req.ID, map[string]any{
 				"protocolVersion": version,
-				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"capabilities":    map[string]any{"tools": map[string]any{}, "logging": map[string]any{}},
 				"serverInfo":      map[string]any{"name": MCPServerName, "version": mcpTools},
-				"instructions":    "AutoDoc's crew mail. When AutoDoc's notice wakes you, call mail_receive until more is false, then answer each item with the tool its answer names.",
+				"instructions":    mcpInstructions,
 			}, nil)
+			watching.Add(1)
+			go func() {
+				defer watching.Done()
+				mailWatch(ctx, session, acted, func() {
+					write(map[string]any{"jsonrpc": "2.0", "method": "notifications/message",
+						"params": map[string]any{"level": "info", "logger": MCPServerName, "data": mcpWaitingNote}})
+				})
+			}()
 		case "ping":
 			say(req.ID, map[string]any{}, nil)
 		case "tools/list":
@@ -247,7 +282,15 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 				say(req.ID, nil, map[string]any{"code": -32602, "message": "invalid params"})
 				continue
 			}
-			say(req.ID, callMCPTool(ctx, p.Name, p.Arguments, session), nil)
+			res := callMCPTool(ctx, p.Name, p.Arguments, session)
+			if n, ok := mailWaiting(ctx, session); ok {
+				res["content"] = append(res["content"].([]map[string]any), map[string]any{"type": "text", "text": waitingLine(n)})
+			}
+			say(req.ID, res, nil)
+			select {
+			case acted <- struct{}{}:
+			default:
+			}
 		default:
 			say(req.ID, nil, map[string]any{"code": -32601, "message": "method not found: " + req.Method})
 		}
@@ -257,6 +300,67 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 		return 1
 	}
 	return 0
+}
+
+// waitingLine is a tool result's last line: how much mail is waiting, and when there is some, to
+// receive it once the current step is done.
+func waitingLine(n int) string {
+	if n > 0 {
+		return fmt.Sprintf("waiting: %d. %s", n, mcpWaitingNote)
+	}
+	return "waiting: 0"
+}
+
+// mailWaiting is how much mail the session may receive now (mail.inbox's count: it leases
+// nothing), and false when it can't be counted (no session, no daemon).
+func mailWaiting(ctx context.Context, session func() (sessionContext, error)) (int, bool) {
+	c, err := session()
+	if err != nil {
+		return 0, false
+	}
+	res, err := crewCall(ctx, c, "mail.inbox", []any{c.Credential, int64(0)})
+	if err != nil {
+		return 0, false
+	}
+	n, ok := jsonOf(res).(map[string]any)["unread"].(float64)
+	return int(n), ok
+}
+
+// mailWatch tells the client, through notify, each time more mail waits than when it last looked:
+// mail received since lowers the mark, so the next arrival is told of again. With nothing waiting it
+// waits on the session's mail.wait long-poll, so new mail is told of as it arrives; while mail sits
+// unreceived that long-poll would answer at once, so it waits instead for the agent's next tool
+// call (acted) or mcpRecheck. It returns when ctx ends.
+func mailWatch(ctx context.Context, session func() (sessionContext, error), acted <-chan struct{}, notify func()) {
+	told := 0
+	for ctx.Err() == nil {
+		n, ok := mailWaiting(ctx, session)
+		if ctx.Err() != nil {
+			return
+		}
+		if ok {
+			if n > told {
+				notify()
+			}
+			told = n
+		}
+		if ok && n == 0 {
+			if c, err := session(); err == nil {
+				if _, err := crewCall(ctx, c, "mail.wait", []any{c.Credential, int64(25000)}); err == nil {
+					continue // mail arrived, or the long-poll's bound: count again
+				}
+			}
+		}
+		// NOTE: mail is waiting (mail.wait would answer at once), or the daemon can't be asked: look
+		// again after the agent's next tool call, or after mcpRecheck, never in a spin.
+		t := time.NewTimer(mcpRecheck)
+		select {
+		case <-ctx.Done():
+		case <-acted:
+		case <-t.C:
+		}
+		t.Stop()
+	}
 }
 
 // callMCPTool runs tool name with its arguments, as a tools/call result: the command's answer as
