@@ -323,6 +323,37 @@ func (a *ANN) replaceIndex(ctx context.Context, job annJob, p postgres.PinnedCon
 	return postgres.ReadIndexState(ctx, a.conn, "", spec.Name)
 }
 
+// finishSwap finishes a replacement stopped between its two last steps: with the model's own index
+// gone (own) and the one under the second name valid and the declared one, it renames the
+// replacement and answers its definition, as rag_ann_index.def holds it. Anything else is left as
+// it is (swapped false).
+func (a *ANN) finishSwap(ctx context.Context, p postgres.PinnedConn, model string, own postgres.IndexState) (swapped bool, def string, err error) {
+	if own.Exists {
+		return false, "", nil
+	}
+	next, err := postgres.ReadIndexState(ctx, a.conn, "", annNextName(model))
+	if err != nil || !next.Exists || !next.Valid {
+		return false, "", err
+	}
+	t, reason := annType(model)
+	if reason != "" {
+		return false, "", nil
+	}
+	spec, err := annSpec(model, t, a.cfg)
+	if err != nil {
+		return false, "", err
+	}
+	ref, err := postgres.ReferenceDefinition(ctx, p, spec)
+	if err != nil || next.Def != ref {
+		return false, "", err
+	}
+	if err := postgres.RenameIndex(ctx, p, "", annNextName(model), annIndexName(model), postgres.BuildOptions{}); err != nil {
+		return false, "", err
+	}
+	b, _ := json.Marshal(ref)
+	return true, string(b), nil
+}
+
 // renew extends job's lease every annRenew until ctx ends. Fenced, it cancels the build (stop)
 // and answers errFenced.
 func (a *ANN) renew(ctx context.Context, job annJob, stop context.CancelFunc) error {
@@ -389,8 +420,10 @@ func (a *ANN) stillOwns(ctx context.Context, job annJob) bool {
 // recoverLapsed takes a builder row whose lease lapsed: it fences the old owner at once (a new
 // generation, owner recovering:<this run>), then cancels the old backend and, a tick later,
 // terminates it if it still runs, doing nothing else while it lives. Once it is gone, the invalid
-// index is dropped, the model's row is wanted again and the builder row freed, under the
-// recoverer's own generation.
+// index is dropped and the builder row freed, under the recoverer's own generation. The model's row
+// is wanted again, but for a replacement: one that still has its own index serving stays replacing
+// (due again as it is), and one stopped between the old index's drop and the rename is finished, the
+// replacement renamed and the model ready (finishSwap).
 func (a *ANN) recoverLapsed(ctx context.Context) error {
 	var rec *annJob
 	var old postgres.Backend
@@ -461,15 +494,29 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 			return err
 		}
 	}
-	// a lapsed replacement's leftover goes too; the index it was replacing still serves
-	if err := postgres.DropIndexConcurrently(ctx, p, "", annNextName(rec.model), postgres.BuildOptions{}); err != nil {
+	// a lapsed replacement: one that dropped the old index and left the replacement, valid and the
+	// declared one, under its second name, stopped one step short of the swap, which is finished here
+	// (the rename) and the model ready; any other leftover of the second name goes
+	swapped, def, err := a.finishSwap(ctx, p, rec.model, st)
+	if err != nil {
 		return err
 	}
-	err = a.owned(ctx, *rec, freed, func(tx *dao.Transaction) error {
-		r, err := a.rwIndex.On(tx, a.locked(ctx)...).With(aiModel, rec.model).Get(aiState)
-		if err != nil || r.State == annReplacing {
-			return err // replacing: due again as it is, serving meanwhile
+	if !swapped {
+		if err := postgres.DropIndexConcurrently(ctx, p, "", annNextName(rec.model), postgres.BuildOptions{}); err != nil {
+			return err
 		}
+	}
+	serving := st.Exists && st.Valid // the index of the model's own name, which a replacing row serves from
+	err = a.owned(ctx, *rec, freed, func(tx *dao.Transaction) error {
+		if swapped {
+			return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, rec.model).Set(aiState, annReady).Set(aiDef, def).
+				Set(aiAttempts, 0).Set(aiNextAt, nil).Set(aiError, "").Set(aiUpdated, a.now()).Update()
+		}
+		r, err := a.rwIndex.On(tx, a.locked(ctx)...).With(aiModel, rec.model).Get(aiState)
+		if err != nil || (r.State == annReplacing && serving) {
+			return err // replacing with its index in place: due again as it is, serving meanwhile
+		}
+		// no index of its own to serve from: wanted again, and its searches exact meanwhile
 		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, rec.model).Set(aiState, annWanted).Set(aiUpdated, a.now()).Update()
 	})
 	if errors.Is(err, errFenced) {
