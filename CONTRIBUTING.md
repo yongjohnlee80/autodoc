@@ -137,8 +137,9 @@ before you push, and a maintainer runs the full set before merging. CI runs:
   under `-race` (FSEvents through cgo);
 - the untagged build reaching no server code, and no private module in the dependency graph;
 - on the release pull request, **the coverage policy**: changed code at least 70% covered, and no
-  file and no total dropping more than 1 point. The report is in the job's summary, and on the pull
-  request as a comment.
+  file whose code changed, and no total, dropping more than 1 point (a file whose change touched none
+  of its statements, a comment's, say, is reported as such and not held to it). The report is
+  in the job's summary, and on the pull request as a comment.
 
 A pull request is merged once a maintainer has approved it and the full checks pass. Review
 comments are answered with new commits on the same branch.
