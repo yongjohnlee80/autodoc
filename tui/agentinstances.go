@@ -298,7 +298,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
 		instance.starting = true
 		token := instance.token
-		a.crew.register(p.Codename, agentKind(p.Command), prompts, ws.id, token, dir, func(s crewSession, err error) {
+		a.crew.register(p.Codename, agentKind(p.Command), prompts, ws.id, token, dir, a.whenStartable(crewKind, func(s crewSession, err error) {
 			instance.starting = false
 			if a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token {
 				if err == nil {
@@ -328,7 +328,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 			if err := a.showStarted(instance); err != nil {
 				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
 			}
-		})
+		}))
 		a.listAgents()
 		return instance, nil
 	}
@@ -480,8 +480,32 @@ func (a *agents) warmPluginEnv() *pluginEnvAnswer {
 	return a.pluginAnswer
 }
 
-// opencodePluginEnv is the spawn's OPENCODE_CONFIG_CONTENT=…: the warmed answer, waited for only
-// while a warm-up already on its way finishes. A failure is not kept: the next spawn runs it again.
+// whenStartable is then, for a crew session of kind whose start needs what the window warms off
+// the loop: an OpenCode agent's, the plugin's env (warmPluginEnv). Its registration's answer runs
+// then at once when the env's answer is in, and otherwise when that answer posts, so the start
+// (runAgent, which takes the env) never waits on the loop. The instance stays starting meanwhile.
+func (a *agents) whenStartable(kind string, then func(crewSession, error)) func(crewSession, error) {
+	c, ok := a.c.(agentRuntimeHost)
+	if kind != "opencode" || !ok {
+		return then
+	}
+	f := a.warmPluginEnv()
+	return func(s crewSession, err error) {
+		select {
+		case <-f.done:
+			then(s, err)
+		default:
+			go func() {
+				<-f.done
+				c.Post(func() { then(s, err) })
+			}()
+		}
+	}
+}
+
+// opencodePluginEnv is the spawn's OPENCODE_CONFIG_CONTENT=…: the warmed answer. A crew start
+// reaches it only once that answer is in (whenStartable), so it waits on the loop only for a start
+// that came another way. A failure is not kept: the next spawn runs it again.
 func (a *agents) opencodePluginEnv() (string, error) {
 	f := a.warmPluginEnv()
 	<-f.done
