@@ -165,7 +165,7 @@ func readClaudeHooks(path string) (ClaudeHooks, error) {
 	buf := make([]byte, longest-1+claudeScanChunk)
 	carry := 0
 	for len(k) < len(lits) {
-		n, err := io.ReadFull(f, buf[carry:])
+		n, err := io.ReadFull(f, buf[carry:carry+claudeScanChunk]) // a chunk each time: its end is a multiple of it
 		window := buf[:carry+n]
 		for e, l := range lits {
 			if !k[e] && bytes.Contains(window, l) {
