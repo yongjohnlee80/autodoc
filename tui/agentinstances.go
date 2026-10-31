@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -248,15 +249,19 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		// the window's crew scope changed since the tab was made: its process would start in the old one's folder
 		return nil, fmt.Errorf("close the old agent tab before starting it under this window's crew scope: %w", ErrAgentStale)
 	}
-	dir, err := a.writeAgentGuide(ws, p.Codename)
-	if err != nil {
-		return nil, err
-	}
 	// a crew session needs the window's scope and the workspace's id (a daemon before it has none)
 	crewed := false
 	if a.crew != nil {
 		_, _, held := a.crew.held()
 		crewed = held && ws.id > 0
+	}
+	crewKind := ""
+	if crewed {
+		crewKind = agentKind(p.Command)
+	}
+	dir, err := a.writeAgentGuide(ws, p.Codename, crewKind)
+	if err != nil {
+		return nil, err
 	}
 	env := a.agentEnv(ws, dir, p.Codename)
 	if crewed {
@@ -338,15 +343,55 @@ var errCrewStartHere = errors.New("this agent runs as a crew session: start it f
 
 // runAgent is an agent tab's TerminalConfig.Start, on the loop: its program, told the context
 // file of the crew session it starts under (AUTODOC_CREW_CONTEXT), that file being this session's
-// own (crew.ContextPath). A crew agent's start with no session published for it is refused.
+// own (crew.ContextPath). A crew agent's start with no session published for it is refused. A crew
+// OpenCode agent also loads AutoDoc's OpenCode plugin (OPENCODE_CONFIG_CONTENT, opencodeEnv), which
+// registers its session and wakes it: without it the session is never reachable, so a plugin that
+// can't be had refuses the start.
 func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalProcess, error) {
 	if instance.crewed {
 		if instance.context == "" {
 			return nil, errCrewStartHere
 		}
 		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
+		if agentKind(instance.profile.Command) == "opencode" {
+			env, err := a.opencodeEnv()
+			if err != nil {
+				return nil, fmt.Errorf("AutoDoc's OpenCode plugin: %w", err)
+			}
+			c.Args = withEnvArg(c.Args, env)
+		}
 	}
 	return a.spawn(c)
+}
+
+// opencodeTimeout bounds the plugin's setup: one run of the agent's own autodoc, which writes a
+// file and prints a line.
+const opencodeTimeout = 10 * time.Second
+
+// opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
+// any the TUI was started with: what the agent's own autodoc prints (`autodoc crew plugin
+// --opencode --print-env`), so the plugin is the build's that the agent runs, the one it calls back
+// into to register. A cell replaces it.
+func (a *agents) opencodeEnv() (string, error) {
+	if a.pluginEnv != nil {
+		return a.pluginEnv()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), opencodeTimeout)
+	defer cancel()
+	args := []string{}
+	if a.agentConfig != "" {
+		args = append(args, "--config", a.agentConfig)
+	}
+	args = append(args, "crew", "plugin", "--opencode", "--print-env")
+	out, err := exec.CommandContext(ctx, a.agentBin(), args...).Output()
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(line, "OPENCODE_CONFIG_CONTENT=") || strings.Contains(line, "\n") {
+		return "", fmt.Errorf("unexpected output from crew plugin --print-env: %q", line)
+	}
+	return line, nil
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.
