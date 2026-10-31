@@ -517,12 +517,14 @@ func (h *Host) saidMenuBar(hidden bool) {
 	}
 }
 
+// leaderMenuBar is SPC m: the menu bar shown and focused, or hidden. The bar shown is focused at
+// once: it is laid out after this key, and golib's FocusInto waits for that layout, which runs before
+// the next key is routed, so a key typed right after SPC m (Enter, say) reaches the bar. A focus
+// posted for later lost that race to the keys already typed.
 func (h *Host) leaderMenuBar() {
 	h.toggleMenuBar()
 	if !h.prefs.menuHidden {
-		h.p.Post(func() {
-			h.p.Post(func() { h.keep(h.p.Call("menuBar", "forceActiveFocus")) })
-		})
+		h.keep(h.p.Call("menuBar", "forceActiveFocus"))
 	} else {
 		h.p.Post(func() { h.keep(h.p.Call("editor", "forceActiveFocus")) })
 	}
