@@ -350,6 +350,12 @@ func (m *Manager) Reply(ctx context.Context, message, body, key string) (mail.Me
 	return m.mail.Answer(ctx, message, body, key)
 }
 
+// Send is inbox.send: the user's own message or request from the window that holds scope (run's
+// process at epoch), mail's SendAsUser.
+func (m *Manager) Send(ctx context.Context, scope, run string, epoch int64, p mail.Send) (mail.Sent, error) {
+	return m.mail.SendAsUser(ctx, scope, run, epoch, p)
+}
+
 // Dismiss is inbox.dismiss: mail's Dismiss.
 func (m *Manager) Dismiss(ctx context.Context, message string) error {
 	return m.mail.Dismiss(ctx, message)

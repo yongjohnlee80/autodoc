@@ -21,6 +21,10 @@ type Send struct {
 	Body    string
 	Key     string        // the idempotency key: the same key answers the first send
 	TTL     time.Duration // 0 never expires
+	// Fire is fired or nothing (SendAsUser alone, to one recipient): the send stands once the
+	// recipient's doorbell rang for it, and is withdrawn otherwise (ErrUnreachable), so a window
+	// that then types the text into the agent's prompt leaves nothing in the daemon to come twice.
+	Fire bool
 }
 
 // Sent is a stored message and its deliveries.
@@ -87,45 +91,167 @@ func (m *Manager) Send(ctx context.Context, credential string, p Send) (Sent, er
 		if err != nil {
 			return err
 		}
-		sum := sendDigest(p)
-		if old, ok, err := tx.MessageByKey(s.Profile, p.Key); err != nil {
-			return err
-		} else if ok {
-			if !bytes.Equal(old.Digest, sum) {
-				return ErrKeyReused
-			}
-			ds, err := tx.DeliveriesOf(old.ID)
-			out = Sent{Message: old, Deliveries: ds}
-			return err
-		}
-		to, err := m.addresses(tx, s, p.To)
+		from, ok, err := tx.Profile(s.Profile)
 		if err != nil {
 			return err
 		}
-		now := tx.Now()
-		msg := Message{ID: m.newID(), Sender: s.Profile, SenderSession: s.ID, IdemKey: p.Key, Digest: sum,
-			Kind: p.Kind, Subject: p.Subject, Body: p.Body, State: MessageOpen, Created: now.UnixNano()}
-		if msg.Kind == "" {
-			msg.Kind = KindMessage
+		if !ok {
+			return crew.ErrBadCredential
 		}
-		if p.TTL > 0 {
-			at := now.Add(p.TTL).UnixNano()
-			msg.Expires = &at
-		}
-		if err := tx.PutMessage(msg); err != nil {
-			return err
-		}
-		out = Sent{Message: msg}
-		for _, a := range to {
-			d, err := m.deliver(tx, msg, a.profile, a.session)
-			if err != nil {
-				return err
-			}
-			out.Deliveries = append(out.Deliveries, d)
-		}
-		return nil
+		out, err = m.send(tx, s.Profile, s.ID, from.Scope, p)
+		return err
 	})
 	return out, err
+}
+
+// SendAsUser is inbox.send: the user's own message or request, from the window that holds scope
+// (run's process at epoch, checked in the write, as a host verb is), to addresses resolved in that
+// scope, in one write (docs/decisions/crew.md#the-human-inbox). The sender is the user's profile,
+// which only the daemon sets: no session's credential can send as the user, so an agent tells the
+// user's own instruction from a peer's by the sender alone. Its key is the user's, as Send's is a
+// session's profile's.
+func (m *Manager) SendAsUser(ctx context.Context, scope, run string, epoch int64, p Send) (Sent, error) {
+	if err := checkSend(p); err != nil {
+		return Sent{}, err
+	}
+	if p.Fire && len(p.To) != 1 {
+		return Sent{}, fmt.Errorf("%w: a send to fire names one recipient", ErrInvalid)
+	}
+	var out Sent
+	err := m.store.Write(ctx, func(tx Tx) error {
+		if err := m.crew.GuardHost(tx, scope, run, epoch); err != nil {
+			return err
+		}
+		user, err := userProfile(tx)
+		if err != nil {
+			return err
+		}
+		out, err = m.send(tx, user, "", scope, p)
+		return err
+	})
+	if err != nil || !p.Fire {
+		return out, err
+	}
+	return out, m.fire(ctx, out)
+}
+
+// fireBound is how long a send to fire waits for its doorbell: the call and an attempt the loop
+// already holds alike.
+const fireBound = 5 * time.Second
+
+// fire rings sent's one recipient's doorbell (crew's Fire, bounded by fireBound): fired, the send
+// stands; not, its delivery is withdrawn and the send is ErrUnreachable. A delivery the recipient
+// leased or acked meanwhile was received: the send stands whatever the doorbell did. A replay of a
+// send already withdrawn is ErrUnreachable again, never a send that stands.
+func (m *Manager) fire(ctx context.Context, sent Sent) error {
+	if len(sent.Deliveries) != 1 {
+		return fmt.Errorf("mail: a send to fire has %d deliveries", len(sent.Deliveries))
+	}
+	d := sent.Deliveries[0]
+	if d.State == Withdrawn {
+		return ErrUnreachable
+	}
+	fctx, cancel := context.WithTimeout(ctx, fireBound)
+	fired, ferr := m.crew.Fire(fctx, d.Recipient)
+	cancel()
+	if fired && ferr == nil {
+		return nil
+	}
+	received, err := m.withdraw(context.WithoutCancel(ctx), d)
+	switch {
+	case err != nil:
+		return err
+	case received:
+		return nil
+	case ferr != nil:
+		return ferr
+	}
+	return ErrUnreachable
+}
+
+// withdraw ends delivery d, still queued, as Withdrawn: done, never receivable. received is true,
+// and nothing changes, when the recipient leased or acked it first. When the recipient has nothing
+// else unhandled, its wake is settled as a receive settles it, so no later wake rings for mail that
+// is gone.
+func (m *Manager) withdraw(ctx context.Context, d Delivery) (received bool, err error) {
+	err = m.store.Write(ctx, func(tx Tx) error {
+		cur, ok, err := tx.DeliveryOf(d.Message, d.Recipient)
+		if err != nil {
+			return err
+		}
+		if !ok || cur.State != Queued {
+			received = ok && (cur.State == Leased || cur.State == Acked)
+			return nil
+		}
+		now := tx.Now().UnixNano()
+		cur.State, cur.DoneAt, cur.Why = Withdrawn, &now, WhyWithdrawn
+		if err := tx.PutDelivery(cur); err != nil {
+			return err
+		}
+		left, err := tx.Unhandled(cur.Recipient)
+		if err != nil || len(left) > 0 {
+			return err
+		}
+		s, live, err := tx.LiveSession(cur.Recipient)
+		if err != nil || !live {
+			return err
+		}
+		return m.crew.Received(tx, s.ID)
+	})
+	return received, err
+}
+
+// send is a send's write, in tx, from profile sender (its session senderSession, "" for the user)
+// to addresses resolved in scope: a key sender already used answers that send while its message is
+// retained, when the content is the same, and ErrKeyReused when it is not.
+func (m *Manager) send(tx Tx, sender, senderSession, scope string, p Send) (Sent, error) {
+	sum := sendDigest(p)
+	if old, ok, err := tx.MessageByKey(sender, p.Key); err != nil {
+		return Sent{}, err
+	} else if ok {
+		if !bytes.Equal(old.Digest, sum) {
+			return Sent{}, ErrKeyReused
+		}
+		ds, err := tx.DeliveriesOf(old.ID)
+		return Sent{Message: old, Deliveries: ds}, err
+	}
+	to, err := addresses(tx, scope, p.To)
+	if err != nil {
+		return Sent{}, err
+	}
+	for _, a := range to {
+		if !p.Fire {
+			break
+		}
+		// no doorbell to ring: refused before anything is stored
+		if ok, err := m.crew.Reachable(tx, a.profile); err != nil {
+			return Sent{}, err
+		} else if !ok {
+			return Sent{}, ErrUnreachable
+		}
+	}
+	now := tx.Now()
+	msg := Message{ID: m.newID(), Sender: sender, SenderSession: senderSession, IdemKey: p.Key, Digest: sum,
+		Kind: p.Kind, Subject: p.Subject, Body: p.Body, State: MessageOpen, Created: now.UnixNano()}
+	if msg.Kind == "" {
+		msg.Kind = KindMessage
+	}
+	if p.TTL > 0 {
+		at := now.Add(p.TTL).UnixNano()
+		msg.Expires = &at
+	}
+	if err := tx.PutMessage(msg); err != nil {
+		return Sent{}, err
+	}
+	out := Sent{Message: msg}
+	for _, a := range to {
+		d, err := m.deliver(tx, msg, a.profile, a.session)
+		if err != nil {
+			return Sent{}, err
+		}
+		out.Deliveries = append(out.Deliveries, d)
+	}
+	return out, nil
 }
 
 func checkSend(p Send) error {
@@ -163,23 +289,16 @@ func sendDigest(p Send) []byte {
 
 type address struct{ profile, session string }
 
-// addresses resolves every address once, in s's scope; any that resolves to nothing is
+// addresses resolves every address once, in scope; any that resolves to nothing is
 // ErrNoRecipient, and the daemon's own profile is never a recipient. A message has one delivery per
 // recipient profile (mail_delivery's UNIQUE (message, recipient)): the same address twice is one,
 // and two addresses binding one profile differently (gold and session:<gold's>, or two of its
 // sessions) are refused, never silently narrowed or widened.
-func (m *Manager) addresses(tx Tx, s crew.Session, to []string) ([]address, error) {
-	from, ok, err := tx.Profile(s.Profile)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, crew.ErrBadCredential
-	}
+func addresses(tx Tx, scope string, to []string) ([]address, error) {
 	var out []address
 	bound := map[string]string{} // profile → the session its address binds ("" for any)
 	for _, t := range to {
-		a, err := resolveAddress(tx, from.Scope, t)
+		a, err := resolveAddress(tx, scope, t)
 		if err != nil {
 			return nil, err
 		}

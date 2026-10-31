@@ -52,19 +52,35 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				default:
 					e.Presence = PresenceOffline
 				}
-				_, hasEndpoint, err := tx.Endpoint(s.ID)
-				if err != nil {
+				if e.Reachable, err = sessionReachable(tx, s.ID); err != nil {
 					return err
 				}
-				w, _, err := tx.Wake(s.ID)
-				if err != nil {
-					return err
-				}
-				e.Reachable = hasEndpoint && w.Failures < unreachableAfter
 			}
 			out = append(out, e)
 		}
 		return nil
 	})
 	return out, err
+}
+
+// Reachable reports whether profile's live session can be woken now, in tx: crew.list's reachable,
+// for another module's write (the user's sends from a window, which type the text instead when it
+// can't be).
+func (m *Manager) Reachable(tx Tx, profile string) (bool, error) {
+	s, live, err := tx.LiveSession(profile)
+	if err != nil || !live {
+		return false, err
+	}
+	return sessionReachable(tx, s.ID)
+}
+
+// sessionReachable is whether live session id can be woken: it has an endpoint, and fewer than
+// unreachableAfter consecutive failed wakes.
+func sessionReachable(tx Tx, id string) (bool, error) {
+	_, hasEndpoint, err := tx.Endpoint(id)
+	if err != nil || !hasEndpoint {
+		return false, err
+	}
+	w, _, err := tx.Wake(id)
+	return w.Failures < unreachableAfter, err
 }

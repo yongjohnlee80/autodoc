@@ -165,7 +165,11 @@ import (
 // crew.endpoint's opencode locator is the AutoDoc plugin's socket, its opencode process and the
 // session ({socket, pid, start, session}); the shape before it, without the socket, is refused. No
 // client registered one before.
-const Protocol int64 = 40
+// Protocol 41 is the user's own sends (docs/decisions/crew.md#the-human-inbox): inbox.send, a
+// message or request from the window that holds a scope (its scope, run and epoch, guarded as a
+// host verb is) whose sender is the user, set by the daemon alone. A session below 41 sees it as an
+// unknown method, and its window types the text into the agent's prompt as before.
+const Protocol int64 = 41
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
