@@ -286,7 +286,11 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   (`permission.asked`, `permission.replied`). Claude Code's hooks report them through `autodoc crew
   attention --claude-hook`: `PermissionRequest` and a permission `Notification` raise, and
   `PostToolUse`, `Stop`, the next `UserPromptSubmit` (after a denial) or another `Notification`
-  clear. The hooks print nothing, so they decide nothing. Codex and agy don't report them yet.
+  clear. The hooks print nothing, so they decide nothing. agy's bridge reports them: every 2 s it
+  reads the conversation's trajectory from where its last read ended, and a last step waiting on a
+  permission raises, none clears. A plugin or a bridge is its session's endpoint too, so an
+  OpenCode or agy session that can't be woken reports nothing, and no Enter is pressed into it.
+  Codex doesn't report them yet.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 
