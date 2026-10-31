@@ -8,6 +8,9 @@
 //     shows it in the TUI and registers it, and the agent is reachable before anyone types;
 //   - raises the session's attention in AutoDoc when a registration fails, so the window shows why
 //     the agent can't be woken;
+//   - reports the agent's permission prompts: one showing raises the session's permission attention
+//     in AutoDoc, saying what it asks, and the last one answered clears it, so a window presses
+//     Enter into the agent only when no prompt is there to approve;
 //   - listens on a unix socket, named by its pid, in a folder of its own that no one else can reach;
 //     asked to wake its session, it shows it in the TUI and starts a turn with the fixed notice below
 //     (promptAsync: a busy session takes it in at its next step), and answers one line.
@@ -152,23 +155,49 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       .then(() => http.post({ url: "/tui/select-session", body: { sessionID: id }, headers: { "content-type": "application/json" } }))
       .then((r) => !r?.error && r?.data === true, () => false);
   };
-  // attention tells AutoDoc's window that this session can't be woken, and why (`autodoc crew
-  // attention raise blocked`), bounded as a registration is; its own failure is only logged.
-  const attention = (why) => {
-    let p;
-    try {
-      p = Bun.spawn(["autodoc", "crew", "attention", "raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`], {
-        env: process.env,
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-    } catch (e) {
-      log("warn", `raising the session's attention failed: ${String(e).slice(0, 300)}`);
-      return;
+  // crewAttention runs `autodoc crew attention <args>`, one run after another (so a clear never
+  // overtakes the raise before it), each bounded as a registration is; a run's failure is only
+  // logged.
+  let attentionRuns = Promise.resolve();
+  const crewAttention = (...args) => {
+    attentionRuns = attentionRuns.then(
+      () =>
+        new Promise((done) => {
+          let p;
+          try {
+            p = Bun.spawn(["autodoc", "crew", "attention", ...args], {
+              env: process.env,
+              stdin: "ignore",
+              stdout: "ignore",
+              stderr: "ignore",
+            });
+          } catch (e) {
+            log("warn", `the session's attention (${args[0]}) failed: ${String(e).slice(0, 300)}`);
+            return done();
+          }
+          const timer = setTimeout(() => p.kill(), registerMs);
+          p.exited.finally(() => clearTimeout(timer)).then(done, done);
+        }),
+    );
+    return attentionRuns;
+  };
+  // attention tells AutoDoc's window that this session can't be woken, and why.
+  const attention = (why) => crewAttention("raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`);
+  // asking are the permission prompts the agent shows now, by request: the first raises the
+  // session's permission attention, saying what it asks; the last one answered clears it. A window
+  // presses Enter into this agent only while none is showing (crew.ReportsPrompts).
+  const asking = new Map();
+  const onPermission = (event) => {
+    const p = event?.properties ?? {};
+    if (event?.type === "permission.asked" && p.id && !asking.has(p.id)) {
+      asking.set(p.id, true);
+      if (asking.size === 1) {
+        const what = [p.permission, (p.patterns ?? []).join(" ")].filter(Boolean).join(": ");
+        crewAttention("raise", "permission", what.slice(0, 300) || "a permission");
+      }
+    } else if (event?.type === "permission.replied" && asking.delete(p.requestID) && asking.size === 0) {
+      crewAttention("clear");
     }
-    const timer = setTimeout(() => p.kill(), registerMs);
-    p.exited.finally(() => clearTimeout(timer)).catch(() => {});
   };
   // attempt registers id, within registerMs: "ok", "child" (a subagent's session, never the
   // agent's), or "failed". The child it starts is its own: killed at the bound or on dispose, and
@@ -264,6 +293,9 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       const id = input.sessionID;
       if (disposed || !id || id === session || (worker && id === desired)) return; // coalesced into the running one
       want(id); // in the background: the message never waits on AutoDoc
+    },
+    event: async ({ event }) => {
+      if (!disposed) onPermission(event);
     },
     "shell.env": async (_input, output) => {
       output.env.AUTODOC_CREW_WAKER = String(process.pid);

@@ -336,3 +336,36 @@ test("a failed registration raises the session's attention in AutoDoc, saying wh
   await until(() => attentions().length > 0);
   expect(attentions()[0]).toStartWith("raise blocked AutoDoc can't wake this OpenCode session: registering it failed");
 });
+
+test("permission prompts raise the session's permission attention, and the last one answered clears it", async () => {
+  await start();
+  const asked = (id, command) =>
+    plugin.event({ event: { type: "permission.asked", properties: { id, sessionID: "ses_a", permission: "bash", patterns: [command] } } });
+  const replied = (id) => plugin.event({ event: { type: "permission.replied", properties: { sessionID: "ses_a", requestID: id, reply: "once" } } });
+  const lines = () => attentions().map((l) => l.trimEnd());
+  await asked("per_1", "echo one");
+  await until(() => lines().length === 1);
+  expect(lines()).toEqual(["raise permission bash: echo one"]);
+  await asked("per_2", "echo two"); // a second prompt while one shows: still the one attention
+  await asked("per_2", "echo two"); // the same prompt told twice
+  await replied("per_1");
+  await replied("per_unknown"); // a reply to no prompt of this plugin's changes nothing
+  await Bun.sleep(100);
+  expect(lines()).toEqual(["raise permission bash: echo one"]);
+  await replied("per_2");
+  await until(() => lines().length === 2);
+  expect(lines()).toEqual(["raise permission bash: echo one", "clear"]);
+  // the next prompt raises it again
+  await asked("per_3", "rm -rf build");
+  await until(() => lines().length === 3);
+  expect(lines()[2]).toBe("raise permission bash: rm -rf build");
+});
+
+test("a disposed plugin reports no permission prompt", async () => {
+  await start();
+  await plugin.dispose();
+  await plugin.event({ event: { type: "permission.asked", properties: { id: "per_1", sessionID: "s", permission: "bash", patterns: ["x"] } } });
+  plugin = null;
+  await Bun.sleep(100);
+  expect(attentions()).toEqual([]);
+});

@@ -279,6 +279,11 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
 - A woken OpenCode session is shown in the TUI before its turn starts, so the turn is the one you
   see. A failed OpenCode registration raises the session's attention, so the window says why it
   can't be woken.
+- A kind's adapter reports its agent's permission prompts (`crew.ReportsPrompts`): a prompt raises
+  the session's permission attention, saying what it asks, and the last one answered clears it. A
+  window presses Enter after typing to an agent only when its kind reports prompts and none shows
+  now, since an Enter into a permission prompt approves it. OpenCode's plugin reports them
+  (`permission.asked`, `permission.replied`); the other kinds don't yet.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 
