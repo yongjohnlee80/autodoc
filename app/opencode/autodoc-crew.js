@@ -243,18 +243,23 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   // a woken turn whose model refused it (no credits, no such model) did nothing: the wake was
   // accepted, so AutoDoc would wait on a receive that never comes. The session's error, within
   // WAKE_ERROR_MS of a wake, raises its attention, saying what the model said; the next turn the
-  // model completes clears it, unless a permission prompt shows.
+  // model completes clears it, unless a permission prompt shows. The woken turn's own end ends the
+  // wake: a turn the user stopped (MessageAbortedError) raises nothing, and once the woken turn has
+  // completed, a later turn's error is not the wake's.
   const onWakeTurn = (event) => {
     const p = event?.properties ?? {};
     if (event?.type === "session.error" && p.sessionID && p.sessionID === session && wokeAt && Date.now() - wokeAt < WAKE_ERROR_MS) {
       wokeAt = 0;
-      wakeRaised = true;
       const e = p.error ?? {};
+      if (e.name === "MessageAbortedError") return; // the user stopped it: nothing waits on AutoDoc
+      wakeRaised = true;
       const said = e.data?.message ?? e.message ?? e.name ?? "an error";
       attention(`the woken session's model refused the wake: ${String(said).slice(0, 200)}`);
-    } else if (event?.type === "message.updated" && wakeRaised) {
+    } else if (event?.type === "message.updated") {
       const info = p.info ?? {};
-      if (info.sessionID === session && info.role === "assistant" && info.time?.completed && !info.error && asking.size === 0) {
+      if (info.sessionID !== session || info.role !== "assistant" || !info.time?.completed || info.error) return;
+      wokeAt = 0;
+      if (wakeRaised && asking.size === 0) {
         wakeRaised = false;
         crewAttention("clear");
       }

@@ -406,6 +406,7 @@ test("a woken turn its model refuses raises the session's attention, saying what
   expect(await woken("ses_w")).toBe(true);
   const error = { type: "session.error", properties: { sessionID: "ses_w", error: { name: "APIError", data: { message: "credit balance too low" } } } };
   await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_other", error: { name: "APIError" } } } });
+  await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_w", role: "assistant", time: { created: 1 } } } } }); // the woken turn, still running
   await plugin.event({ event: error });
   await until(() => attentions().some((l) => l.startsWith("raise blocked") && l.includes("credit balance too low")));
   expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(1); // not the other session's
@@ -413,6 +414,37 @@ test("a woken turn its model refuses raises the session's attention, saying what
   await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_w", role: "assistant", time: { completed: 1 } } } } });
   await until(() => attentions().some((l) => l.trim() === "clear"));
   expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(1);
+});
+
+// settled waits for a permission raise behind every attention run the events before it queued (the
+// runs go one after another), so what those runs raised is in the log by then.
+const settled = async (sessionID) => {
+  await plugin.event({ event: { type: "permission.asked", properties: { id: "per_settled", sessionID, permission: "settled" } } });
+  await until(() => attentions().some((l) => l.startsWith("raise permission") && l.includes("settled")));
+};
+
+test("a woken turn the user stops raises nothing, and an error after it is not the wake's", async () => {
+  await start({ argv: ["opencode", "--model", "opencode/big-pickle"] });
+  await chat("ses_x");
+  go("ses_x");
+  expect(await woken("ses_x")).toBe(true);
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_x", error: { name: "MessageAbortedError", data: { message: "Aborted" } } } } });
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_x", error: { name: "APIError", data: { message: "the user's next turn" } } } } });
+  await settled("ses_x");
+  expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(0);
+});
+
+test("once the woken turn completes, a later turn's error within the window is not the wake's", async () => {
+  await start({ argv: ["opencode", "--model", "opencode/big-pickle"] });
+  await chat("ses_c");
+  go("ses_c");
+  expect(await woken("ses_c")).toBe(true);
+  await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_c", role: "assistant", time: { created: 1 } } } } }); // not completed yet
+  await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_c", role: "assistant", time: { created: 1, completed: 2 } } } } });
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_c", error: { name: "APIError", data: { message: "a later turn" } } } } });
+  await settled("ses_c");
+  expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(0);
+  expect(attentions().filter((l) => l.trim() === "clear").length).toBe(0); // nothing was raised, so nothing to clear
 });
 
 test("a session error with no wake before it raises nothing", async () => {
