@@ -311,6 +311,9 @@ func TestANNLife_RestartsCheckTheDefinition(t *testing.T) {
 
 // A killed builder: its build is cut off midway and it never completes; its lease lapses; the
 // restart drops its invalid index, rebuilds it and marks it ready. Search is exact throughout.
+// "Midway" is a known point, not a race against the build's speed: a writer's open transaction on
+// the table holds CREATE INDEX CONCURRENTLY right after it has committed the index's (invalid)
+// catalog entry, waiting for writers; the build is killed once pg_index shows that entry.
 func TestANNLife_AKilledBuilder(t *testing.T) {
 	cfg := DefaultANNConfig()
 	cfg.Threshold = 1000
@@ -323,11 +326,20 @@ func TestANNLife_AKilledBuilder(t *testing.T) {
 	if err != nil || job == nil {
 		t.Fatal(err)
 	}
+	// a writer, its transaction open: the concurrent build waits for it once its entry is in
+	writer, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = writer.Rollback() }()
+	if _, err := writer.ExecContext(ctx, "LOCK TABLE "+tEmb+" IN ROW EXCLUSIVE MODE"); err != nil {
+		t.Fatal(err)
+	}
 	dead, kill := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() { defer close(done); _ = a.build(dead, *job) }()
-	until(t, "the build to run", func() bool {
-		rows, _ := conn.QueryContext(ctx, "SELECT count(*) FROM pg_stat_activity WHERE query LIKE 'CREATE INDEX CONCURRENTLY%'")
+	until(t, "the build's invalid index", func() bool {
+		rows, _ := conn.QueryContext(ctx, "SELECT count(*) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = $1 AND NOT i.indisvalid", annIndexName(model))
 		var n int
 		if rows != nil && rows.Next() {
 			_ = rows.Scan(&n)
@@ -337,6 +349,7 @@ func TestANNLife_AKilledBuilder(t *testing.T) {
 	})
 	kill() // the process dies: its context with it, so nothing it would still write is written
 	<-done
+	_ = writer.Rollback()
 	st, _ := New(conn, "t", WithANN(a))
 	if mode, _, _ := st.ANNMode(ctx, model); mode == ModeANN {
 		t.Fatal("search is approximate before the index is ready")
