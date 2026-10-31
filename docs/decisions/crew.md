@@ -283,7 +283,10 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   the session's permission attention, saying what it asks, and the last one answered clears it. A
   window presses Enter after typing to an agent only when its kind reports prompts and none shows
   now, since an Enter into a permission prompt approves it. OpenCode's plugin reports them
-  (`permission.asked`, `permission.replied`); the other kinds don't yet.
+  (`permission.asked`, `permission.replied`). Claude Code's hooks report them through `autodoc crew
+  attention --claude-hook`: `PermissionRequest` and a permission `Notification` raise, and
+  `PostToolUse`, `Stop`, the next `UserPromptSubmit` (after a denial) or another `Notification`
+  clear. The hooks print nothing, so they decide nothing. Codex and agy don't report them yet.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 

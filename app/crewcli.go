@@ -207,7 +207,7 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
-	"crew attention": {usage: "raise <permission|blocked> [text] | clear: tell the user this session waits on them, or no longer does",
+	"crew attention": {usage: "raise <permission|blocked> [text] | clear | --claude-hook: tell the user this session waits on them, or no longer does (--claude-hook: Claude Code's hooks run it, with their input, for its permission prompts)",
 		example: "autodoc crew attention raise permission \"waiting for your OK to run the migration\"",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
 			switch {
@@ -426,6 +426,9 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 	name := args[0] + " " + args[1]
 	if name == "crew bridge" {
 		return crewBridgeMain(ctx, args[2:], stdout, stderr)
+	}
+	if name == "crew attention" && slices.Contains(args[2:], "--claude-hook") {
+		return crewClaudeHookMain(stdin, stderr) // Claude's hooks run it: it reads their input, and prints nothing
 	}
 	cmd, ok := crewCommands[name]
 	if !ok {
