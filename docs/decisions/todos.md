@@ -145,15 +145,29 @@ answer a select prompt one key at a time. Such a program gets nothing, and the u
 
 In the code: `tui/agentinstances.go`, `tui/terminalpanel.go`, `tui/luahost_test.go`
 
-## AutoDoc never presses Enter for an agent
+## A message to an agent is sent, never left for Enter
 
-AutoDoc does not submit what it types into an agent. An Enter cannot tell the agent's input from a
-permission or select prompt the agent is showing, so it could answer one. The payload waits in the
-agent's input, the agent's panel comes forward with the keyboard in it in input mode, and the user's
-own Enter sends it. A successful hand-over means the task was typed, not that the agent started on
-it, and the notice says so.
+Anything the user sends an agent (a todo's assignment, a candidate's audit, a text through Lua's
+`autodoc.agents.send` or a command built on it) goes through one agent messaging, and arrives sent:
+the user never has to press Enter for it. The messaging has two implementations, tried in order:
 
-In the code: `tui/agentinstances.go`, `tui/todos_assign.go`, `tui/candidate.go`
+- **The doorbell.** When the agent's CLI has a wake channel (Claude's socket, agy's bridge,
+  OpenCode's plugin, Codex's app-server), the message is crew mail from `user`
+  ([the user's own sends](crew.md#the-users-own-sends)), and the daemon rings the agent's CLI. A
+  doorbell that doesn't fire leaves nothing sent and answers an error.
+- **The base: typed and sent.** Otherwise, or when the doorbell didn't fire, the message is typed
+  as one bracketed paste ([above](#text-reaches-an-agent-only-as-a-bracketed-paste)) and Enter
+  follows it, after a short gap so the program reads them apart. A notice says the doorbell didn't
+  ring, and why.
+
+An Enter can't tell the agent's input from a permission or select prompt the agent is showing, so
+the base never presses it into an agent the crew says waits on a prompt: the message stays typed, and
+a notice asks the user to answer the prompt, then press Enter there. An agent with no crew session
+reports no prompt.
+
+A successful hand-over means the message reached the agent, not that it started on it.
+
+In the code: `tui/agentmessaging.go`, `tui/agentinstances.go`, `tui/todos_assign.go`, `tui/candidate.go`
 
 ## Graph-only indexing
 
