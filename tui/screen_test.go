@@ -191,9 +191,8 @@ func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	if sc := r.s.String(); strings.Contains(sc, "NORMAL") {
-		t.Fatalf("the status line shows, connected:\n%s", sc)
-	}
+	// the preferences read is the host's; the frame that hides the line by them may follow it
+	r.s.WaitFor(t, "the status line hidden, connected", func(sc string) bool { return !strings.Contains(sc, "NORMAL") })
 	d.stop()
 	r.s.WaitFor(t, "the status line, disconnected", func(sc string) bool {
 		return strings.Contains(sc, "NORMAL") && (strings.Contains(sc, "reconnecting") || strings.Contains(sc, "connecting to"))
