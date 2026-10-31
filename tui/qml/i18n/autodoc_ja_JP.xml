@@ -7776,8 +7776,8 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <translation>%1 の監査を %2 の入力欄に入力しました: そこで Enter を押して送信してください。クリックしてインストールまたはキャンセル</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
-        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
-        <translation>%1 の CLI は権限プロンプトを報告しないため、メッセージは入力済みですが未送信です: そこで Enter を押してください</translation>
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc は今 %1 の権限プロンプトを確認できないため、メッセージは入力済みですが送信していません: そこで Enter を押してください</translation>
     </message>
 </context>
 </TS>

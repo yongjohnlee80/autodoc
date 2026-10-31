@@ -326,8 +326,9 @@ delivery between agents never waits on you.
   reservation, and waits at most 5 s. Rung, the send stands: the agent's turn starts without your
   pressing a key, and its reply reaches your inbox. Not rung (no live session, no endpoint, a
   backoff, an earlier wake unanswered, the waker's failure), its delivery is withdrawn, never
-  receivable, and the window types the text into the agent's prompt instead, with Enter. Nothing is
-  left to come twice.
+  receivable, and the window types the text into the agent's prompt instead, with Enter where it
+  sees the agent's prompts ([the user's own sends](#the-users-own-sends)). Nothing is left to come
+  twice.
 - The inbox verbs take no credential: they run under the same-user trust the daemon socket already
   has. `inbox.send` is the host's: it takes the window's scope, run token and epoch, checked in its
   write as a host verb's are. Its sender is the user, set by the daemon alone, so no agent can send
@@ -352,7 +353,11 @@ messaging, which tries the agent's doorbell first and falls back to typing
   withdrawn, never receivable, and it answers `inbox.unreachable`. Nothing is left behind, so the
   fallback never delivers twice.
 - **The fallback** types the message into the agent's terminal as one bracketed paste and presses
-  Enter after it. It never presses Enter into an agent waiting on a permission or blocked prompt.
+  Enter after it, only where the window sees the agent's prompts: a live session (`crew.list`'s
+  presence) whose kind reports them (`crew.ReportsPrompts`, with `crew.list`'s `reachable`), showing
+  none. Elsewhere the message stays typed for the user's Enter, and a notice says why. Only a
+  doorbell that answers for certain it didn't ring falls back; one whose answer is lost is asked
+  again with the same key, and the daemon answers a repeat with the first send's answer.
 - A task is a request, subject `Task: <title>`, with its file, id and instruction in the body; a text
   is a plain message. Either way, the agent's guide says that mail from `user` is the user's own
   instruction.
