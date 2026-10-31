@@ -2,11 +2,14 @@ package index
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/search"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // TestTheStoresReadsFailAsThemselves: a read that fails comes back as an error, from the index's own
@@ -115,5 +118,48 @@ func TestAModelOfUnknownDimensionsReadsAsZero(t *testing.T) {
 	d := int64(768)
 	if got := derefInt(&d); got != 768 {
 		t.Errorf("known dimensions read as %d, want 768", got)
+	}
+}
+
+// TestAPreparationFailsAsItsReads: a path's preparation, which writes nothing, fails as the read
+// that failed: its file's stat (an error other than not-exist, which is a deletion), the indexed
+// version's read, and a plain-text file that is not UTF-8. Each lifted, the path prepares.
+func TestAPreparationFailsAsItsReads(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, options{})
+	e.put("a.md", "zebra\n")
+	e.stop() // the preparations are the test's own from here on
+	e.write("bin.txt", "zebra \xff\xfe\n")
+	db, err := store.Open(ctx, e.db.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	x := newIndexer(NewStore(db, e.ws), e.fault, options{}) // no Match: bin.txt is admitted
+	statFailed := errors.New("injected stat failure")
+	e.fault.failStat("a.md", statFailed)
+	p := x.prepare(ctx, workItem{path: "a.md", seq: 1})
+	e.fault.failStat("a.md", nil)
+	if !errors.Is(p.err, statFailed) || p.delete {
+		t.Errorf("a.md's stat failed: err %v, delete %v; want the stat's error, no deletion", p.err, p.delete)
+	}
+	if p := x.prepare(ctx, workItem{path: "bin.txt", seq: 1}); p.err == nil || !strings.Contains(p.err.Error(), "bin.txt: not UTF-8 text") {
+		t.Errorf("bin.txt, not UTF-8: err %v", p.err)
+	}
+	e.write("bin.txt", "zebra\n")
+	if p := x.prepare(ctx, workItem{path: "bin.txt", seq: 1}); p.err != nil {
+		t.Errorf("bin.txt, UTF-8 now: %v", p.err)
+	}
+	if _, err := x.holding(ctx); err != nil { // read once: the version's read is the one that fails below
+		t.Fatal(err)
+	}
+	undo := e.renamed("document")
+	p = x.prepare(ctx, workItem{path: "a.md", seq: 1})
+	undo()
+	if p.err == nil || p.skip || p.delete {
+		t.Errorf("a.md's indexed version unreadable: err %v, skip %v, delete %v; want the read's error", p.err, p.skip, p.delete)
+	}
+	if p := x.prepare(ctx, workItem{path: "a.md", seq: 1}); p.err != nil {
+		t.Errorf("a.md, its version readable: %v", p.err)
 	}
 }
