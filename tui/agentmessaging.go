@@ -20,9 +20,9 @@ import (
 //     nothing sent, goes on to the base; any other error ends the delivery unsent, since the
 //     doorbell may have rung and the message must never arrive twice.
 //   - the base: the message as one bracketed paste into the agent's terminal, then Enter, only into
-//     an agent whose CLI reports its permission prompts (crew.ReportsPrompts) and that shows none
-//     now: an Enter into a permission prompt would approve it. Otherwise it stays typed, and done
-//     hears ErrAgentTypedNotSent.
+//     an agent whose permission prompts the window sees now (a live session whose kind reports
+//     them, crew.ReportsPrompts) and that shows none: an Enter into a permission prompt would
+//     approve it. Otherwise it stays typed, and done hears ErrAgentTypedNotSent.
 //
 // Every user-to-agent path sends through it: SendText (and the Lua autodoc.agents.send), HandTask
 // (a todo's assignment, a candidate's audit). None of them chooses a mechanism.
@@ -47,8 +47,8 @@ func (m AgentMessage) text() string {
 	return m.Subject + "\n" + m.Body
 }
 
-// ErrAgentTypedNotSent is a message the base typed into the agent's input but didn't send: its CLI
-// doesn't report its permission prompts, or it shows one now. The user's Enter there sends it.
+// ErrAgentTypedNotSent is a message the base typed into the agent's input but didn't send: the
+// window can't see its permission prompts now, or it shows one. The user's Enter there sends it.
 var ErrAgentTypedNotSent = errors.New("typed into its input, not sent")
 
 // errDoorbellNotSent is a doorbell that answered, for certain, that nothing was sent: the message
@@ -107,17 +107,19 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 	}, done)
 }
 
-// submitter is the base's Enter decision for to, after its paste: Enter submitDelay later, only
-// into an agent whose CLI reports its permission prompts and that shows none then; otherwise the
-// message stays typed, a notice says why, and the delivery finishes ErrAgentTypedNotSent.
+// submitter is the base's Enter decision for to, after its paste: submitDelay later, the crew is
+// asked about to's session (crewHost.sessionOf), and Enter is pressed only into an agent whose
+// prompts the window can see now (promptsSeen) and that shows none; otherwise the message stays
+// typed, a notice says why, and the delivery finishes ErrAgentTypedNotSent.
 func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID, func(error)) {
 	return func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error)) {
-		if !a.reportsPrompts(a.kindOf(to.Codename)) {
-			a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting", to.Codename))
-			finish(ErrAgentTypedNotSent)
-			return
-		}
-		enter := func() {
+		kind := a.kindOf(to.Codename)
+		decide := func(live, reachable bool) {
+			if !a.promptsSeen(kind, live, reachable) {
+				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting", to.Codename))
+				finish(ErrAgentTypedNotSent)
+				return
+			}
 			if a.inbox.awaitsUser(to.Codename) { // an Enter would answer its permission or blocked prompt
 				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt", to.Codename))
 				finish(ErrAgentTypedNotSent)
@@ -125,20 +127,34 @@ func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID
 			}
 			finish(panel.SendText(tab, "\r"))
 		}
+		look := func() {
+			if a.crew == nil {
+				decide(false, false)
+				return
+			}
+			a.crew.sessionOf(to.Codename, decide)
+		}
 		if c, ok := a.c.(agentRuntimeHost); ok {
-			c.After(submitDelay, enter)
+			c.After(submitDelay, look)
 			return
 		}
-		enter()
+		look()
 	}
 }
 
-// reportsPrompts is crew.ReportsPrompts, or the cell's stand-in.
-func (a *agents) reportsPrompts(kind string) bool {
+// promptsSeen reports whether the window sees a kind session's permission prompts now: it has a
+// live session in the window's scope (a prompt is raised through the session; without one nothing
+// reaches the crew inbox) and its kind reports them (crew.ReportsPrompts, with crew.list's
+// reachable). A cell's promptsReported stands in for it.
+func (a *agents) promptsSeen(kind string, live, reachable bool) bool {
 	if a.promptsReported != nil {
-		return a.promptsReported(kind)
+		return a.promptsReported(kind, live, reachable)
 	}
-	return crew.ReportsPrompts(kind)
+	return promptsSeen(kind, live, reachable)
+}
+
+func promptsSeen(kind string, live, reachable bool) bool {
+	return live && crew.ReportsPrompts(kind, reachable)
 }
 
 // kindOf is the CLI kind of codename's agent (agentKind of its command), "" when it has none here.

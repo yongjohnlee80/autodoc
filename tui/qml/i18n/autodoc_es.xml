@@ -7787,8 +7787,8 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <translation>auditoría de %1 escrita en la entrada de %2: pulsa Enter allí para enviarla; haz clic para instalar o cancelar</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
-        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
-        <translation>la CLI de %1 no informa de sus avisos de permiso, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc no puede ver ahora los avisos de permiso de %1, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>
     </message>
 </context>
 </TS>

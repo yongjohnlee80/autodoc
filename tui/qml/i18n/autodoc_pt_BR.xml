@@ -7786,8 +7786,8 @@ H J K L, Shift+setas   redimensionam</translation>
         <translation>auditoria de %1 digitada na entrada de %2: pressione Enter lá para enviá-la; clique para instalar ou cancelar</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
-        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
-        <translation>a CLI de %1 não informa seus prompts de permissão, então a mensagem foi digitada, mas não enviada: pressione Enter lá</translation>
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>O AutoDoc não consegue ver agora os avisos de permissão de %1, então a mensagem foi digitada mas não enviada: pressione Enter lá</translation>
     </message>
 </context>
 </TS>

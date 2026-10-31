@@ -21,13 +21,13 @@ func messagingRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
 	if instance, err := a.startInstance(p); err != nil || !instance.running {
 		t.Fatalf("start: %v", err)
 	}
-	a.promptsReported = func(string) bool { return true }
+	a.promptsReported = func(string, bool, bool) bool { return true }
 	return a, c, w
 }
 
-// settle runs what the window and the crew host left for later: posted deliveries, the base's Enter,
+// settleMessaging runs what the window and the crew host left for later: posted deliveries, the base's Enter,
 // the doorbell's asks again.
-func settle(c *identityHost, w *crewWindow) {
+func settleMessaging(c *identityHost, w *crewWindow) {
 	for {
 		c.drainPosts()
 		c.fireAfters()
@@ -64,7 +64,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	if err := a.HandTask(AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
-	settle(c, w)
+	settleMessaging(c, w)
 	if len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("done heard %v, want one nil", heard)
 	}
@@ -97,7 +97,7 @@ func TestADoorbellRefusedForCertainIsTypedAndSent(t *testing.T) {
 			if len(c.panel.pastes) != 1 || !strings.Contains(c.panel.pastes[0], "hello one") || len(c.panel.keys) != 0 {
 				t.Fatalf("pasted %q, pressed %q: want the text once, the Enter not with it", c.panel.pastes, c.panel.keys)
 			}
-			settle(c, w)
+			settleMessaging(c, w)
 			if len(c.panel.keys) != 1 || c.panel.keys[0] != "\r" {
 				t.Fatalf("keys %q, want one Enter after the paste", c.panel.keys)
 			}
@@ -112,7 +112,7 @@ func TestADoorbellRefusedForCertainIsTypedAndSent(t *testing.T) {
 }
 
 // A doorbell whose outcome is unknown (a lost answer) may have rung: it is asked again with the same
-// key, userSendTries times in all, and never typed; done hears the failure (Zen #124 B2). A later
+// key, userSendTries times in all, and never typed; done hears the failure. A later
 // ask that answers rang ends it sent (the mutants: a fallback on any error; a fresh key per ask).
 func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 	a, c, w := messagingRig(t)
@@ -122,7 +122,7 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
-	settle(c, w)
+	settleMessaging(c, w)
 	if len(keys) != userSendTries || keys[0] != keys[len(keys)-1] {
 		t.Fatalf("asked with keys %q, want %d asks with one key", keys, userSendTries)
 	}
@@ -143,28 +143,28 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
-	settle(c, w)
+	settleMessaging(c, w)
 	if len(keys) != 2 || keys[0] != keys[1] || len(c.panel.pastes) != 0 || len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("keys %q pasted %q heard %v: want a second ask with the same key, rung, nothing typed", keys, c.panel.pastes, heard)
 	}
 }
 
-// The production default until a kind's adapter lands: a CLI that doesn't report its permission
-// prompts is typed to but never sent, since an Enter could approve a prompt it shows (Johno's
-// "build prompt detection, then Enter"). done hears ErrAgentTypedNotSent, with a notice.
+// The production rule for a kind with no prompt adapter: an agent whose permission prompts the
+// window can't see is typed to but never sent, since an Enter could approve a prompt it shows.
+// done hears ErrAgentTypedNotSent, with a notice.
 func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 	a, c, w := messagingRig(t)
-	a.promptsReported = nil // crew.ReportsPrompts: no kind yet
+	a.promptsReported = nil // promptsSeen: one's command is no kind with an adapter
 	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 	var heard []error
 	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
-	settle(c, w)
+	settleMessaging(c, w)
 	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], ErrAgentTypedNotSent) {
 		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter, ErrAgentTypedNotSent", c.panel.pastes, c.panel.keys, heard)
 	}
-	if !hasNote(c.notes, "one's CLI doesn't report its permission prompts") {
+	if !hasNote(c.notes, "AutoDoc can't see one's permission prompts") {
 		t.Fatalf("notes %q", c.notes)
 	}
 }
@@ -179,7 +179,7 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
-	settle(c, w)
+	settleMessaging(c, w)
 	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], ErrAgentTypedNotSent) {
 		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter", c.panel.pastes, c.panel.keys, heard)
 	}
@@ -192,7 +192,7 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 // doorbell yet, so it is never rung (S1: the doorbell runs inside the one delivery).
 func TestAStartedAgentIsNotRung(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	a.promptsReported = func(string) bool { return true }
+	a.promptsReported = func(string, bool, bool) bool { return true }
 	rang := false
 	w.inboxSend = func([]any) (any, error) { rang = true; return map[string]any{"message": "m"}, nil }
 	if err := a.SendText(AgentRef{Codename: "two"}, "hi", func(error) {}); err != nil {
@@ -202,8 +202,62 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 		t.Fatalf("asked %d questions, want the consent to start two", len(c.questions))
 	}
 	c.questions[0].OnYes()
-	settle(c, w)
+	settleMessaging(c, w)
 	if rang {
 		t.Fatal("an agent just started was rung")
+	}
+}
+
+// The Enter rule: only a live session's prompts are seen, and of the kinds that report them, an
+// endpoint-reported kind (OpenCode's plugin, agy's bridge) only while it is reachable.
+func TestPromptsSeen(t *testing.T) {
+	for _, c := range []struct {
+		kind            string
+		live, reachable bool
+		want            bool
+	}{
+		{crew.KindClaude, true, false, true},
+		{crew.KindClaude, false, false, false},
+		{crew.KindOpenCode, true, true, true},
+		{crew.KindOpenCode, true, false, false},
+		{crew.KindAgy, true, true, true},
+		{crew.KindAgy, true, false, false},
+		{crew.KindCodex, true, true, false},
+		{"", true, true, false},
+	} {
+		if got := promptsSeen(c.kind, c.live, c.reachable); got != c.want {
+			t.Errorf("promptsSeen(%q, live %v, reachable %v) = %v, want %v", c.kind, c.live, c.reachable, got, c.want)
+		}
+	}
+}
+
+// The Enter decision asks the crew about the agent's own session in the window's scope: one,
+// started and registered, is live with no endpoint yet, so not reachable; a codename with no
+// session there is neither (the mutants: the lookup skipped; no session taken as live).
+func TestTheEnterAsksTheCrewForTheSession(t *testing.T) {
+	a, c, w := messagingRig(t)
+	type seen struct{ live, reachable bool }
+	var asked []seen
+	a.promptsReported = func(_ string, live, reachable bool) bool {
+		asked = append(asked, seen{live, reachable})
+		return true
+	}
+	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
+	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(error) {}); err != nil {
+		t.Fatal(err)
+	}
+	settleMessaging(c, w)
+	if len(asked) != 1 || asked[0] != (seen{live: true}) {
+		t.Fatalf("asked %+v, want one live, unreachable", asked)
+	}
+	if len(c.panel.keys) != 1 {
+		t.Fatalf("pressed %q, want the Enter", c.panel.keys)
+	}
+	asked = nil
+	done := false
+	a.crew.sessionOf("two", func(live, reachable bool) { asked = append(asked, seen{live, reachable}); done = true })
+	settleMessaging(c, w)
+	if !done || asked[0] != (seen{}) {
+		t.Fatalf("two, with no session: %+v", asked)
 	}
 }
