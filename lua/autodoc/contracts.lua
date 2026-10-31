@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 40,
+  protocol = 41,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -505,6 +505,22 @@ return {
       },
       result = "{message}",
       doc = "Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response.",
+    },
+    ["inbox.send"] = {
+      since = 41, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true },
+        { name = "fire", type = "bool", optional = true }
+      },
+      result = "{message}",
+      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
     },
     ["inbox.watch"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -1190,6 +1206,7 @@ return {
     { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },
     { code = -32133, name = "inbox.key_reused", next = "retry the same reply with the same key, or use a new key" },
     { code = -32134, name = "inbox.too_large" },
+    { code = -32135, name = "inbox.unreachable", next = "type the text into its prompt, or send without fire to leave it queued" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

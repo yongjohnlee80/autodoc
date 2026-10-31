@@ -287,22 +287,29 @@ func (s *Scheduler) payOwed(ctx context.Context) bool {
 	return left
 }
 
-func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoint) {
+func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoint) Outcome {
+	return s.attemptWith(ctx, ctx, session, tok, ep)
+}
+
+// attemptWith is an attempt whose waker call is bounded by call and whose checks and records run
+// on record (Fire's: a caller that stops waiting never leaves the row in flight). It answers what
+// the call came to; an attempt abandoned before its call is a failure to its caller.
+func (s *Scheduler) attemptWith(call, record context.Context, session, tok string, ep Endpoint) Outcome {
 	defer func() { <-s.permits; s.wg.Done(); s.Poke() }() // the permit returns only when this call does
-	current, err := s.m.StillCurrent(ctx, session, tok, ep.Generation)
+	current, err := s.m.StillCurrent(record, session, tok, ep.Generation)
 	if err != nil || !current {
 		if err != nil {
 			s.report(err)
 		}
-		if err := s.m.Abandon(ctx, session, tok); err != nil {
+		if err := s.m.Abandon(record, session, tok); err != nil {
 			s.report(err)
 			s.owe(session, tok, owedEnd{abandon: true})
 		}
-		return
+		return OutcomeFailed
 	}
 	werr := errNoWaker
 	if w := s.wakerFor(ep.Kind); w != nil {
-		cctx, cancel := context.WithTimeout(ctx, wakeCallLimit)
+		cctx, cancel := context.WithTimeout(call, wakeCallLimit)
 		werr = w.Wake(cctx, ep, WakeNotice)
 		cancel()
 	}
@@ -310,8 +317,9 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 	if werr != nil {
 		s.failed(ep, werr)
 	}
-	if err := s.m.Outcome(ctx, session, tok, o); err != nil {
+	if err := s.m.Outcome(record, session, tok, o); err != nil {
 		s.report(err)
 		s.owe(session, tok, owedEnd{outcome: o})
 	}
+	return o
 }
