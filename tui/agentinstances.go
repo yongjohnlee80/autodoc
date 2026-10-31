@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -361,7 +363,89 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 			c.Args = withEnvArg(c.Args, env)
 		}
 	}
-	return a.spawn(c)
+	proc, err := a.spawn(c)
+	if err == nil && instance.crewed && agentKind(instance.profile.Command) == "codex" {
+		a.registerCodex(instance.context, c.Dir, time.Now())
+	}
+	return proc, err
+}
+
+// codexRegisterTries and codexRegisterEvery bound the window's registration of a Codex agent: a
+// minute, a look each 2 s, from its spawn.
+// NOTE: can't announce: Codex starts its thread on its app-server without telling anyone, so the
+// window looks again on a timer (the loop's After) until it is found, the session ends, or the
+// minute is up.
+const (
+	codexRegisterTries = 30
+	codexRegisterEvery = 2 * time.Second
+)
+
+// registerCodex registers a crew Codex agent's session, started at started in folder dir under
+// the session context file ctxFile, so it is reachable before anyone types: its own autodoc's
+// `crew endpoint --codex-here`, which finds the folder's thread on Codex's app-server, run off the
+// loop and again until it is found. A session that ended (its context gone) stops it; one never
+// found raises the session's attention, saying why, so the window shows it.
+func (a *agents) registerCodex(ctxFile, dir string, started time.Time) {
+	c, ok := a.c.(agentRuntimeHost)
+	if !ok {
+		return
+	}
+	run := a.codexHere
+	if run == nil {
+		bin, config := a.agentBin(), a.agentConfig
+		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, args...) }
+	}
+	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
+	var attempt func(tries int)
+	attempt = func(tries int) {
+		go func() {
+			err := run("crew", "endpoint", "--codex-here", "--since", since)
+			c.Post(func() {
+				if err == nil {
+					return
+				}
+				if _, gone := os.Stat(ctxFile); gone != nil {
+					return // the session ended: nothing to register
+				}
+				if tries > 1 {
+					c.After(codexRegisterEvery, func() { attempt(tries - 1) })
+					return
+				}
+				go func() {
+					_ = run("crew", "attention", "raise", "blocked", "AutoDoc can't wake this Codex session: "+attentionText(err.Error()))
+				}()
+			})
+		}()
+	}
+	attempt(codexRegisterTries)
+}
+
+// runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
+// session (ctxFile, $AUTODOC_CREW_CONTEXT), bounded at 15 s; its error carries what it said.
+func runAgentAutodoc(bin, config, ctxFile, dir string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	full := []string{}
+	if config != "" {
+		full = append(full, "--config", config)
+	}
+	cmd := exec.CommandContext(ctx, bin, append(full, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "AUTODOC_CREW_CONTEXT="+ctxFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// attentionText is a reason as the attention's text: one line (oneLine), at most 300 bytes.
+func attentionText(s string) string {
+	s = strings.TrimSpace(oneLine(s))
+	if len(s) > 300 {
+		s = s[:300]
+	}
+	return s
 }
 
 // opencodeTimeout bounds the plugin's setup: one run of the agent's own autodoc, which writes a
