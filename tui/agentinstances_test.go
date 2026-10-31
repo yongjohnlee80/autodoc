@@ -287,8 +287,9 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	if done != 1 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
 		t.Fatalf("the task goes as one bracketed paste, and done: done=%d pastes=%q", done, c.panel.pastes)
 	}
-	if len(c.delays) != 0 { // and TerminalPanel has no way to type one: no SendText
-		t.Fatalf("something waits to follow the paste, as an Enter did: delays=%v", c.delays)
+	// the Enter that sends it follows the paste after submitDelay (agentmessaging.go), never with it
+	if !slices.Equal(c.delays, []time.Duration{submitDelay}) || len(c.panel.keys) != 0 {
+		t.Fatalf("the Enter isn't the paste's follower: delays=%v keys=%q", c.delays, c.panel.keys)
 	}
 	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, widget.TerminalInput)}) {
 		t.Fatalf("the agent's panel is brought forward for the Enter: opened=%q active=%q modes=%q", c.opened, c.panel.active, c.panel.modes)
@@ -392,8 +393,10 @@ func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 		t.Fatalf("a starting program: pastes=%q calls=%d delays=%v", c.panel.pastes, calls, c.delays)
 	}
 	c.fireAfters()
-	if calls != 1 || outcome != nil || len(c.panel.pastes) != 1 || len(c.delays) != 3 {
-		t.Fatalf("once it takes bracketed pastes: calls=%d outcome=%v pastes=%q delays=%v", calls, outcome, c.panel.pastes, c.delays)
+	// three polls until it takes the paste, then the Enter's gap (agentmessaging.go)
+	if calls != 1 || outcome != nil || len(c.panel.pastes) != 1 ||
+		!slices.Equal(c.delays, []time.Duration{agentReadyPoll, agentReadyPoll, agentReadyPoll, submitDelay}) || !slices.Equal(c.panel.keys, []string{"\r"}) {
+		t.Fatalf("once it takes bracketed pastes: calls=%d outcome=%v pastes=%q delays=%v keys=%q", calls, outcome, c.panel.pastes, c.delays, c.panel.keys)
 	}
 	if want := []string{fmt.Sprintf("%s:%v", a.instances["one"].tab, widget.TerminalInput)}; !slices.Equal(c.panel.modes, want) {
 		t.Errorf("the agent's tab was not put in input mode for the Enter: %q", c.panel.modes)
@@ -489,9 +492,9 @@ func TestHandTaskIsCheckedAgainInTheWait(t *testing.T) {
 	}
 }
 
-// TestSendTextAddsNoEnter: Lua's SendText stays one bracketed paste with no Enter after it, and
-// brings no panel forward.
-func TestSendTextAddsNoEnter(t *testing.T) {
+// TestSendTextIsSentWithItsEnter: Lua's SendText, with no doorbell (no crew scope), is one
+// bracketed paste and the Enter after it, and brings no panel forward.
+func TestSendTextIsSentWithItsEnter(t *testing.T) {
 	a, c := modelAgents(t)
 	p, _ := a.profile("one")
 	if _, err := a.startInstance(p); err != nil {
@@ -509,8 +512,9 @@ func TestSendTextAddsNoEnter(t *testing.T) {
 	}
 	c.drainPosts()
 	c.fireAfters()
-	if calls != 1 || !slices.Equal(c.panel.pastes, []string{"tab-1:[bracketed]draft"}) || len(c.delays) != 0 {
-		t.Fatalf("SendText: calls=%d pastes=%q delays=%v", calls, c.panel.pastes, c.delays)
+	if calls != 1 || !slices.Equal(c.panel.pastes, []string{"tab-1:[bracketed]draft"}) ||
+		!slices.Equal(c.delays, []time.Duration{submitDelay}) || !slices.Equal(c.panel.keys, []string{"\r"}) {
+		t.Fatalf("SendText: calls=%d pastes=%q delays=%v keys=%q, want one paste and its Enter", calls, c.panel.pastes, c.delays, c.panel.keys)
 	}
 	if len(c.opened)+len(c.panel.modes) != 0 {
 		t.Errorf("SendText brought the panel forward: opened=%q modes=%q", c.opened, c.panel.modes)
