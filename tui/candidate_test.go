@@ -88,13 +88,22 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	// settled waits until the n-th hand-over is over and its notices are gone: the base's notice
 	// (the window holds no crew scope) comes with its paste, and its Enter follows it
 	// (agentmessaging.go). A toast that comes or goes moves the audit's toast, so a click aimed at
-	// it before then can land on another (the notifications history).
+	// it before then can land on another (the notifications history). The notice lingers longer
+	// than the screen's own waits (decltest.WaitTimeout), so the wait is its own.
 	settled := func(n int) {
 		t.Helper()
-		r.s.WaitFor(t, "the audit handed over and its notices gone", func(sc string) bool {
-			return strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") >= n &&
-				strings.Contains(sc, "audit of echo sent to Scribe") && !strings.Contains(noticeText(sc), "doorbell didn't ring")
-		})
+		deadline := time.Now().Add(20 * time.Second)
+		for {
+			sc := r.s.String()
+			if strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") >= n &&
+				strings.Contains(sc, "audit of echo sent to Scribe") && !strings.Contains(noticeText(sc), "doorbell didn't ring") {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the audit %d not handed over with its notices gone:\n%s", n, sc)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 
 	r.keys(t, key('a'))
