@@ -38,9 +38,15 @@ type ANNConfig struct {
 }
 
 // DefaultANNConfig is the server's defaults: approximate from 50,000 embeddings of a model, a
-// scan of at most 40,000 tuples, twice the memory of work_mem.
+// scan of at most 1,000 tuples past the first ef_search, twice the memory of work_mem.
+//
+// The budget is what a filtered search spends before it gives up and answers exactly, and a
+// selective filter mostly does give up: at 1,000,000 embeddings under a 1% filter, 40,000 tuples
+// cost 7.6× the exact search, 1,000 cost 1.4×, with the unfiltered search at 0.09× either way
+// (the measured sweep, TestANN_BudgetSweep). An unfiltered search's first ef_search candidates
+// don't count against it.
 func DefaultANNConfig() ANNConfig {
-	return ANNConfig{Threshold: 50000, MaxScanTuples: 40000, ScanMemMultiplier: 2}
+	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2}
 }
 
 // annType is the vector type a model's index casts its embeddings to, from its fingerprint's

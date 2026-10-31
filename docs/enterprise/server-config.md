@@ -77,7 +77,7 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `dsn_sealed` | | A DSN sealed with AutoDoc's keyslot. | always, for now: the keyslot keeps its key beside a local store, which the server doesn't have. Use `dsn_env`. |
 | `schema` | `autodoc_search` | The schema the index lives in. | not a plain identifier: lowercase letters, digits and `_`, not starting with a digit or `pg_`, at most 63 bytes |
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
-| `ann_max_scan_tuples` | `40000` | The most index tuples one approximate search scans (pgvector's `hnsw.max_scan_tuples`). | outside 1 to 2147483647 |
+| `ann_max_scan_tuples` | `1000` | The most index tuples one approximate search scans past its first candidates (pgvector's `hnsw.max_scan_tuples`). It bounds what a filtered search spends before it answers exactly: a selective filter mostly comes back short, and at 1,000,000 embeddings under a 1% filter a budget of 40,000 made the search 7.6× slower than exact, against 1.4× at 1,000. Unfiltered searches are unaffected. | outside 1 to 2147483647 |
 | `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
 
 The server opens three connection pools on the DSN:
