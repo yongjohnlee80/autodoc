@@ -20,10 +20,13 @@ import (
 // can do no more than a spurious wake.
 type OpenCodeWaker struct {
 	roots []string
+	peer  PeerProc // the process at a socket's other end
 }
 
-// NewOpenCodeWaker is the OpenCode waker for the daemon's user uid.
-func NewOpenCodeWaker(uid int) *OpenCodeWaker { return &OpenCodeWaker{roots: OpenCodeSocketDirs(uid)} }
+// NewOpenCodeWaker is the OpenCode waker for the daemon's user uid, binding sockets with peer.
+func NewOpenCodeWaker(uid int, peer PeerProc) *OpenCodeWaker {
+	return &OpenCodeWaker{roots: OpenCodeSocketDirs(uid), peer: peer}
+}
 
 // opencodeMaxAnswer bounds the plugin's answer: one short JSON line.
 const opencodeMaxAnswer = 4 << 10
@@ -62,7 +65,7 @@ func (w *OpenCodeWaker) Wake(ctx context.Context, ep Endpoint, _ string) error {
 		return dialFailure("opencode's plugin socket", err)
 	}
 	defer c.Close()
-	if err := boundTo(c, l.Start, "opencode's plugin socket"); err != nil {
+	if err := boundTo(c, w.peer, l.Start, "opencode's plugin socket"); err != nil {
 		return err
 	}
 	b, err := json.Marshal(map[string]string{"session": l.Session})
