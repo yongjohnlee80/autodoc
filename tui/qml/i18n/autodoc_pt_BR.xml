@@ -3981,10 +3981,6 @@ O QUE UMA TECLA PRECISA
         <source>%1 is tiled: Layout › Float lets it be arranged</source>
         <translation>%1 está lado a lado: Layout › Flutuante permite organizá-lo</translation>
     </message>
-    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
-        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
-        <translation>auditoria de %1 digitada na entrada de %2: pressione Enter lá para enviá-la; clique para instalar ou cancelar</translation>
-    </message>
     <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
         <source>its program takes no bracketed paste</source>
         <translation>o programa dele não aceita colagem entre colchetes</translation>
@@ -5372,10 +5368,6 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.todos.todos_the_store_is_now_in">
         <source>todos: the store is now in %1</source>
         <translation>tarefas: o repositório agora está em %1</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
-        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
-        <translation>tarefas: atribuída a %1, e digitada na entrada dele: pressione Enter lá para enviá-la</translation>
     </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
@@ -7768,6 +7760,30 @@ H J K L, Shift+setas   redimensionam</translation>
     <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>Uma configuração que ainda estava em execução mudou os espaços de trabalho: Verifique de novo antes de Usar.</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_but_not_sent">
+        <source>%1: the message was typed, but its Enter wasn't sent: %2</source>
+        <translation>%1: a mensagem foi digitada, mas o Enter não foi enviado: %2</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.no_doorbell_reaches_it">
+        <source>no doorbell reaches it</source>
+        <translation>nenhuma campainha o alcança</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
+        <source>%1's doorbell didn't ring (%2): the message was typed into its input and sent</source>
+        <translation>a campainha de %1 não tocou (%2): a mensagem foi digitada na entrada e enviada</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
+        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
+        <translation>%1 está aguardando um prompt: a mensagem foi digitada, mas não enviada; responda ao prompt e depois pressione Enter lá</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>tarefas: atribuída a %1, e enviada</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
+        <source>audit of %1 sent to %2; click to install or cancel</source>
+        <translation>auditoria de %1 enviada a %2; clique para instalar ou cancelar</translation>
     </message>
 </context>
 </TS>
