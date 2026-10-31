@@ -1,6 +1,8 @@
 package crew_test
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -120,10 +122,10 @@ func TestWhatAClaudeKnowsIsReadAgainWhenItChanges(t *testing.T) {
 	}
 }
 
-// TestFindClaudeLooksUpLikeTheShell: a name is found on PATH, the first executable one, skipping a
-// folder of that name and a file that isn't executable; a path is taken as given, relative to the
-// agent's folder; a name on no folder of PATH is an error.
-func TestFindClaudeLooksUpLikeTheShell(t *testing.T) {
+// TestClaudeOfLooksUpLikeTheShell: a name is the first executable file on PATH, a folder of that
+// name and a file that isn't executable skipped; a path is taken as given, relative to the agent's
+// folder; a name on no folder of PATH is an error.
+func TestClaudeOfLooksUpLikeTheShell(t *testing.T) {
 	a, b, c, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
 	if err := os.Mkdir(filepath.Join(a, "claude"), 0o755); err != nil {
 		t.Fatal(err)
@@ -132,36 +134,119 @@ func TestFindClaudeLooksUpLikeTheShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := fakeClaude(t, c, "claude", "SessionStart")
-	if got, err := crew.FindClaude("claude", strings.Join([]string{a, b, c}, string(os.PathListSeparator)), work); err != nil || got != want {
+	if got, _, err := crew.ClaudeOf("claude", strings.Join([]string{a, b, c}, string(os.PathListSeparator)), work, ""); err != nil || got != want {
 		t.Fatalf("on PATH: %q, %v; want %q", got, err, want)
 	}
 	rel := fakeClaude(t, work, "my-claude", "SessionStart")
-	if got, err := crew.FindClaude("./my-claude", "", work); err != nil || got != rel {
+	if got, _, err := crew.ClaudeOf("./my-claude", "", work, ""); err != nil || got != rel {
 		t.Fatalf("a relative path: %q, %v; want %q", got, err, rel)
 	}
-	if _, err := crew.FindClaude("claude", a, work); err == nil {
+	if _, _, err := crew.ClaudeOf("claude", a, work, ""); err == nil {
 		t.Fatal("a name on no folder of PATH was found")
 	}
 }
 
-// TestFindClaudeFollowsAMiseShim: a name whose file links to mise itself (a mise shim) is the tool
-// mise runs for it in the agent's folder (`mise which <name>`), not mise.
-func TestFindClaudeFollowsAMiseShim(t *testing.T) {
-	tools, shims, work := t.TempDir(), t.TempDir(), t.TempDir()
-	real := fakeClaude(t, tools, "claude", "SessionStart")
-	mise := filepath.Join(tools, "mise")
+// fakeMise writes a mise at dir/mise whose `which claude`, run in work, answers tool.
+func fakeMise(t *testing.T, dir, work, tool string) string {
+	t.Helper()
 	here, err := filepath.EvalSymlinks(work)
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] && [ \"$(pwd -P)\" = '" + here + "' ] && echo '" + real + "'\n"
+	mise := filepath.Join(dir, "mise")
+	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] && [ \"$(pwd -P)\" = '" + here + "' ] && echo '" + tool + "'\n"
 	if err := os.WriteFile(mise, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(mise, filepath.Join(shims, "claude")); err != nil {
+	return mise
+}
+
+// TestClaudeOfFollowsAMiseShim: a name whose file links to mise itself (a mise shim) is the tool
+// mise runs for it in the agent's folder (`mise which <name>`), not mise.
+func TestClaudeOfFollowsAMiseShim(t *testing.T) {
+	tools, shims, work := t.TempDir(), t.TempDir(), t.TempDir()
+	real := fakeClaude(t, tools, "claude", "SessionStart")
+	if err := os.Symlink(fakeMise(t, tools, work, real), filepath.Join(shims, "claude")); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := crew.FindClaude("claude", shims, work); err != nil || got != real {
+	if got, _, err := crew.ClaudeOf("claude", shims, work, ""); err != nil || got != real {
 		t.Fatalf("a mise shim: %q, %v; want the tool it runs, %q", got, err, real)
+	}
+}
+
+// TestClaudeOfLooksPastAWrapper: a wrapper script first on PATH (as `exec mise x claude -- claude`
+// is) doesn't read as a Claude Code, so the CLI it runs is found: mise's tool for the name when mise
+// is on PATH, else the next file on PATH that reads as one. What it knows is the real binary's.
+func TestClaudeOfLooksPastAWrapper(t *testing.T) {
+	wrappers, tools, later, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(wrappers, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := fakeClaude(t, later, "claude", everyClaudeEvent...)
+	sep := string(os.PathListSeparator)
+	got, k, err := crew.ClaudeOf("claude", wrappers+sep+later, work, "")
+	if err != nil || got != real || !k.Reports() {
+		t.Fatalf("a wrapper, then the real one on PATH: %q, %v, %v; want %q, with its prompt hooks", got, k, err, real)
+	}
+	miseTool := fakeClaude(t, tools, "claude", everyClaudeEvent...)
+	fakeMise(t, tools, work, miseTool)
+	if got, _, err := crew.ClaudeOf("claude", wrappers+sep+later+sep+tools, work, ""); err != nil || got != miseTool {
+		t.Fatalf("a wrapper, with mise on PATH: %q, %v; want mise's tool %q before the later file", got, err, miseTool)
+	}
+	if _, _, err := crew.ClaudeOf("claude", wrappers, work, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(wrappers, "claude")) {
+		t.Fatalf("a wrapper alone: %v; want an error naming the file tried", err)
+	}
+}
+
+// TestALiteralAcrossTwoChunksIsFound: the binary is read a chunk at a time, never whole, and an
+// event's literal split by a chunk's end is still found.
+func TestALiteralAcrossTwoChunksIsFound(t *testing.T) {
+	const chunk = 1 << 20 // claudeScanChunk
+	lit := `"PermissionRequest"`
+	for _, split := range []int{1, len(lit) / 2, len(lit) - 1} {
+		b := bytes.Repeat([]byte{0}, chunk-split)
+		b = append(b, lit...)
+		b = append(b, bytes.Repeat([]byte{0}, 4096)...)
+		for _, e := range everyClaudeEvent {
+			if e != "PermissionRequest" {
+				b = append(b, `"`+e+`" `...)
+			}
+		}
+		path := filepath.Join(t.TempDir(), "claude")
+		if err := os.WriteFile(path, b, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if k, err := crew.ClaudeKnows(path); err != nil || !k["PermissionRequest"] || !k.Reports() {
+			t.Errorf("a literal split %d bytes before a chunk's end: %v, %v; want it found", split, k, err)
+		}
+	}
+}
+
+// TestWhatAClaudeKnowsIsKeptForTheNextRun: ClaudeKnowsIn writes its answer into its cache file,
+// and a later process asking of the same binary (its path, size and time) takes it from there,
+// without reading the binary.
+func TestWhatAClaudeKnowsIsKeptForTheNextRun(t *testing.T) {
+	dir := t.TempDir()
+	cache := filepath.Join(dir, "state", "claude-hooks.json")
+	first := fakeClaude(t, dir, "first", everyClaudeEvent...)
+	if k, err := crew.ClaudeKnowsIn(first, cache); err != nil || !k.Reports() {
+		t.Fatalf("the first read: %v, %v", k, err)
+	}
+	if b, err := os.ReadFile(cache); err != nil || !strings.Contains(string(b), first) {
+		t.Fatalf("the cache after a read: %q, %v; want the binary's answer", b, err)
+	}
+	// another binary, never read in this process: a cache entry for it, saying it knows SessionStart
+	// alone, is believed over its content, which knows every hook
+	other := fakeClaude(t, dir, "other", everyClaudeEvent...)
+	fi, err := os.Stat(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := fmt.Sprintf(`[{"path":%q,"size":%d,"mtime":%d,"knows":{"SessionStart":true}}]`, other, fi.Size(), fi.ModTime().UnixNano())
+	if err := os.WriteFile(cache, []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if k, err := crew.ClaudeKnowsIn(other, cache); err != nil || k.Reports() {
+		t.Fatalf("a binary the cache answers: %v, %v; want the cache's answer, not a read", k, err)
 	}
 }
