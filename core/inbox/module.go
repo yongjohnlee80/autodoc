@@ -7,12 +7,16 @@ import (
 	"github.com/yongjohnlee80/golib/msgpack"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
 // protocol is the protocol the inbox verbs arrive in: crew's and mail's, as one change
 // (docs/decisions/crew.md#three-modules-and-one-protocol).
 const protocol = crew.Protocol
+
+// sendSince is the protocol inbox.send arrives in (rpc's Protocol 41), after the crew's 37.
+const sendSince = 41
 
 // The verbs' params, in their positional order.
 type (
@@ -30,6 +34,19 @@ type (
 		Message string `param:"message" doc:"the request's id"`
 		Body    string `param:"body"`
 		Key     string `param:"key" doc:"the idempotency key: a retry with the same body answers the first reply"`
+	}
+	sendParams struct {
+		Scope   string   `param:"scope" doc:"the window's scope, which its host holds"`
+		Run     string   `param:"run" doc:"the host's run token"`
+		Epoch   int64    `param:"epoch" doc:"the host's epoch"`
+		To      []string `param:"to" doc:"names in the scope, name@scope, or session:<id>"`
+		Body    string   `param:"body" doc:"at most 64 KiB"`
+		Key     string   `param:"key" doc:"the idempotency key: a retry with the same content answers the first send"`
+		Kind    string   `param:"kind,optional" doc:"message (the default) or request"`
+		Subject string   `param:"subject,optional"`
+		// Fire is the window's own sends: fired or nothing. The send stands once the agent's
+		// doorbell rang for it; otherwise nothing is left and the window types the text instead.
+		Fire bool `param:"fire,optional" doc:"one recipient: answer once its doorbell rang for this message, or leave nothing and refuse as unreachable"`
 	}
 	messageParams struct {
 		Message string `param:"message"`
@@ -88,6 +105,9 @@ type (
 	}
 	replyResult struct {
 		Message string `json:"message"` // the response's id
+	}
+	sentResult struct {
+		Message string `json:"message"` // the sent message's id
 	}
 	focusResult struct {
 		Session string `json:"session"`
@@ -164,6 +184,12 @@ func (m *Manager) Verbs() []module.Verb {
 		return module.Contract{Verb: verb, Since: protocol, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,
 			Effect: effect, Result: result, Errors: codes, Doc: doc}
 	}
+	// a host's: the window's scope, run and epoch, guarded in the write as crew's host verbs are
+	host := func(verb, result, doc string, codes ...int64) module.Contract {
+		c := user(verb, module.EffectWrite, result, doc, codes...)
+		c.Since = sendSince
+		return c
+	}
 	return []module.Verb{
 		module.Handle(user("inbox.watch", module.EffectRead, "{cursor, snapshot?{items, attention, next}, changes[]}",
 			"The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases. A connection holds at most two long-polls.",
@@ -193,6 +219,14 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p replyParams) (replyResult, error) {
 				r, err := m.Reply(ctx, p.Message, p.Body, p.Key)
 				return replyResult{Message: r.ID}, err
+			}),
+		module.Handle(host("inbox.send", "{message}",
+			"Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
+			crew.CodeStaleEpoch, mail.CodeNoRecipient, CodeUnreachable, CodeKeyReused, CodeTooLarge),
+			func(ctx context.Context, p sendParams) (sentResult, error) {
+				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body,
+					Key: p.Key, Fire: p.Fire})
+				return sentResult{Message: s.Message.ID}, err
 			}),
 		module.Handle(user("inbox.dismiss", module.EffectWrite, "{}",
 			"Decline a request; its sender is told. Replaying a dismiss answers ok.",
