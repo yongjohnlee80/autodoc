@@ -18,7 +18,7 @@ import (
 func TestACSVFileIsATableInTheGUI(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	page := onLoop(r, func() *widget.HTMLView { v, _ := r.h.pageView(); return v })
 	if page == nil {
 		t.Fatal("the GUI editor has no page view")
@@ -73,7 +73,7 @@ func TestACSVFileIsATableInTheGUI(t *testing.T) {
 func TestAPasteReachesTheTableInTheGUI(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
 	r.waitFile(t, "a.csv")
 	table := func() *widget.TableDocument {

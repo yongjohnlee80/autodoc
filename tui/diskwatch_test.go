@@ -28,7 +28,7 @@ func onDisk(t *testing.T, opt Options) (*running, string) {
 	d := startManaged(t, map[string]string{"alpha": root})
 	opt.Workspace = "alpha"
 	r := runTUI(t, NewSession(d.sock, nil), opt)
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.prefsIn(t) // the cells set h.prefs (diskReload): the store's answer must be in before they do
 	return r, root
 }
@@ -314,7 +314,7 @@ func TestACheckOverlappingASaveIsStale(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	unwatched(r)
 	r.openOnDisk(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -358,7 +358,7 @@ func TestACheckWaitsForASave(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	unwatched(r)
 	r.openOnDisk(t, "a.md")
 	r.typeInEditor(t, "X")
