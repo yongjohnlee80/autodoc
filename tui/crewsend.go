@@ -73,3 +73,32 @@ func doorbellNotSent(err error) bool {
 	}
 	return false
 }
+
+// sessionOf asks the crew about codename's session in the window's scope: live (its host renewing
+// its lease) and reachable (crew.list's: a wake reaches it now). then hears both on the loop; a
+// window holding no scope, a failed ask or no such session hears neither.
+func (h *crewHost) sessionOf(codename string, then func(live, reachable bool)) {
+	scope, _, ok := h.held()
+	if !ok || codename == "" {
+		then(false, false)
+		return
+	}
+	h.c.Go(func(ctx context.Context) any {
+		v, err := h.c.Call(ctx, "crew.list")
+		if err != nil {
+			return nil
+		}
+		return v
+	}, func(v any) {
+		for _, e := range asList(v) {
+			m := asMap(e)
+			if str(m, "scope") == scope && str(m, "codename") == codename {
+				live := str(m, "presence") == crew.PresenceLive
+				reachable, _ := m["reachable"].(bool)
+				then(live, live && reachable)
+				return
+			}
+		}
+		then(false, false)
+	})
+}

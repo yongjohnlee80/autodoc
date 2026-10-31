@@ -148,22 +148,27 @@ In the code: `tui/agentinstances.go`, `tui/terminalpanel.go`, `tui/luahost_test.
 ## A message to an agent is sent, never left for Enter
 
 Anything the user sends an agent (a todo's assignment, a candidate's audit, a text through Lua's
-`autodoc.agents.send` or a command built on it) goes through one agent messaging, and arrives sent:
-the user never has to press Enter for it. The messaging has two implementations, tried in order:
+`autodoc.agents.send` or a command built on it) goes through one agent messaging, and arrives sent
+wherever AutoDoc can tell it is safe: the user doesn't press Enter for it. The messaging has two
+implementations, tried in order:
 
 - **The doorbell.** When the agent's CLI has a wake channel (Claude's socket, agy's bridge,
   OpenCode's plugin, Codex's app-server), the message is crew mail from `user`
   ([the user's own sends](crew.md#the-users-own-sends)), and the daemon rings the agent's CLI. A
-  doorbell that doesn't fire leaves nothing sent and answers an error.
+  doorbell that answers it didn't fire leaves nothing sent, and the base takes over. A doorbell whose
+  answer is lost is asked again with the same key, never typed, since it may have rung.
 - **The base: typed and sent.** Otherwise, or when the doorbell didn't fire, the message is typed
   as one bracketed paste ([above](#text-reaches-an-agent-only-as-a-bracketed-paste)) and Enter
   follows it, after a short gap so the program reads them apart. A notice says the doorbell didn't
   ring, and why.
 
-An Enter can't tell the agent's input from a permission or select prompt the agent is showing, so
-the base never presses it into an agent the crew says waits on a prompt: the message stays typed, and
-a notice asks the user to answer the prompt, then press Enter there. An agent with no crew session
-reports no prompt.
+An Enter can't tell the agent's input from a permission or select prompt the agent is showing, and
+an Enter into a permission prompt approves it. So the base presses Enter only into an agent whose
+prompts the window can see now: it has a live crew session, and its kind reports its prompts
+(`crew.ReportsPrompts`; for OpenCode and agy, only while the session can be woken, since the plugin
+or bridge that reports them is its endpoint). And it shows none: an agent the crew says waits on a
+prompt gets no Enter. Otherwise the message stays typed, and a notice says why and asks the user to
+press Enter there. Codex reports no prompts yet, so a message typed to it is never sent by AutoDoc.
 
 A successful hand-over means the message reached the agent, not that it started on it.
 

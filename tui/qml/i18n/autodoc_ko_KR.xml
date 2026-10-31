@@ -7780,8 +7780,8 @@ H J K L, Shift+화살표   크기 조절</translation>
         <translation>%1 감사를 %2의 입력란에 입력했습니다: 그곳에서 Enter를 눌러 보내세요. 클릭하여 설치하거나 취소하세요</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
-        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
-        <translation>%1의 CLI는 권한 프롬프트를 알리지 않아 메시지는 입력했지만 보내지 않았습니다: 그곳에서 Enter를 누르세요</translation>
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc이 지금 %1의 권한 프롬프트를 볼 수 없어 메시지는 입력했지만 보내지 않았습니다: 그곳에서 Enter를 누르세요</translation>
     </message>
 </context>
 </TS>
