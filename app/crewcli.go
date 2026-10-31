@@ -356,6 +356,26 @@ func isCrewCommand(args []string) bool {
 	return len(args) > 0 && (args[0] == "crew" || args[0] == "mail")
 }
 
+// crewCommandArgs is args as crewMain takes them, when they are an agent's `autodoc crew|mail …`:
+// as typed, or after a leading --config, the way an agent's bin/autodoc runs this build
+// (`autodoc --config <file> "$@"`, tui/agent.go's agentWrapper). The config itself is not read:
+// the session's context names the daemon. ok false is any other command line.
+func crewCommandArgs(args []string) (rest []string, ok bool) {
+	switch {
+	case len(args) > 0 && (args[0] == "--config" || args[0] == "-config"):
+		if len(args) < 2 {
+			return nil, false
+		}
+		args = args[2:]
+	case len(args) > 0 && (strings.HasPrefix(args[0], "--config=") || strings.HasPrefix(args[0], "-config=")):
+		args = args[1:]
+	}
+	if !isCrewCommand(args) {
+		return nil, false
+	}
+	return args, true
+}
+
 // crewMain runs `autodoc crew|mail <verb> …` and is its exit code: 0 with the answer on stdout; 1
 // with the daemon's refusal as {"error": {code, message}} on stderr, or any other failure as text;
 // 2 for usage.
