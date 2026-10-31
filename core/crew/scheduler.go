@@ -15,8 +15,9 @@ import (
 const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
 
 // WakeNoticeMCP is the wake's text for a session that reads its mail with `autodoc crew mcp`'s
-// tools (MailViaMCP): constant too. Its rules allow the tools, not the shell command.
-const WakeNoticeMCP = "AutoDoc mail is waiting for you: call the mail_receive tool until more is false."
+// tools (MailViaMCP): constant too. Its rules allow the tools, not the shell command; it names the
+// server, since a CLI that describes MCP tools by their server (agy) finds no tool by its name alone.
+const WakeNoticeMCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, until more is false."
 
 // MailVia is how a session reads its mail, which decides what its wake says (NoticeFor).
 type MailVia int
