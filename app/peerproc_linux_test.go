@@ -11,10 +11,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// TestPeerProcIsTheProcessAtTheSocketsOtherEnd: the daemon's crew.PeerProc (ADR 1793271500 r15
-// P1) answers the reference of the process at a unix connection's other end, from the kernel's
-// peer credentials: here this test process, on both ends. A connection that is no unix socket's has
-// no peer process to answer, so it is refused, never passed.
+// TestPeerProcIsTheProcessAtTheSocketsOtherEnd: the daemon's crew.PeerProc (the comms module's port,
+// docs/decisions/crew.md#three-modules-and-one-protocol) answers the reference of the process at a
+// unix connection's other end, from the kernel's peer credentials: here this test process, on both
+// ends. A connection that is no unix socket's has no peer process to answer, so it is refused,
+// never passed.
 func TestPeerProcIsTheProcessAtTheSocketsOtherEnd(t *testing.T) {
 	dir, err := os.MkdirTemp("", "pp")
 	if err != nil {

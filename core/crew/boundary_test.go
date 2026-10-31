@@ -8,18 +8,18 @@ import (
 	"testing"
 )
 
-// moduleRoots are the comms module's packages (ADR 1793271500 r15 P1), each with its sub-packages:
-// the registry and wakers, mail, the human inbox, and the verb framework they serve under. The
-// module must be extractable for another product, so nothing in it, tests included, may import
-// any other package of AutoDoc's.
+// moduleRoots are the comms module's packages, each with its sub-packages
+// (docs/decisions/crew.md#three-modules-and-one-protocol): the registry and wakers, mail, the human
+// inbox, and the verb framework they serve under. The module must be extractable for another
+// product, so nothing in it, tests included, may import any other package of AutoDoc's.
 var moduleRoots = []string{"core/module", "core/crew", "core/mail", "core/inbox"}
 
 const autodocModule = "github.com/yongjohnlee80/autodoc"
 
-// TestTheCommsModuleImportsNothingOfAutoDocOutsideIt (ADR 1793271500 r15 P1): every package the
-// module's packages and their tests depend on (go list -deps -test) that is AutoDoc's lies inside
-// the module. An import of core/store, app, tui, rpc or internal/* fails it, naming the package
-// pulled in.
+// TestTheCommsModuleImportsNothingOfAutoDocOutsideIt
+// (docs/decisions/crew.md#three-modules-and-one-protocol): every package the module's packages and
+// their tests depend on (go list -deps -test) that is AutoDoc's lies inside the module. An import
+// of core/store, app, tui, rpc or internal/* fails it, naming the package pulled in.
 func TestTheCommsModuleImportsNothingOfAutoDocOutsideIt(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -49,7 +49,8 @@ func TestTheCommsModuleImportsNothingOfAutoDocOutsideIt(t *testing.T) {
 		outside = append(outside, pkg)
 	}
 	if len(outside) > 0 {
-		t.Errorf("the comms module depends on AutoDoc outside it: %v; it may import only %v (and anything outside AutoDoc)", outside, moduleRoots)
+		t.Errorf("the comms module depends on AutoDoc outside it: %v; it may import only %v "+
+			"(and anything outside AutoDoc)", outside, moduleRoots)
 	}
 }
 
