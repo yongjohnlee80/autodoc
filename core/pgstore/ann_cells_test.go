@@ -103,6 +103,54 @@ func annSetup(t *testing.T, cfg ANNConfig) (dao.DataConn, *ANN) {
 	return conn, NewANN(conn, cfg, "cellrun")
 }
 
+// rebuildFor drops model's index and builds it again on the same corpus, at a's config: a fresh
+// build, checked to be a new index (another relation) at the declared ef_construction, whose
+// relation id it answers.
+func rebuildFor(t *testing.T, conn dao.DataConn, a *ANN, model string) int64 {
+	t.Helper()
+	ctx := context.Background()
+	before := annIndexOID(t, conn, model)
+	p, err := postgres.PinSessionConn(ctx, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = postgres.DropIndexConcurrently(ctx, p, "", annIndexName(model), postgres.BuildOptions{})
+	p.Discard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Tick(ctx); err != nil { // the ready model's index is gone: wanted, claimed and built
+		t.Fatalf("the rebuild: %v", err)
+	}
+	st, err := postgres.ReadIndexState(ctx, conn, "", annIndexName(model))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after := annIndexOID(t, conn, model); after == 0 || after == before || !st.Valid ||
+		st.Def.Options != fmt.Sprintf("ef_construction=%d", a.cfg.EfConstruction) || indexOf(t, a, model).State != annReady {
+		t.Fatalf("the rebuild: index %d (was %d), %+v, %s; want a new valid index, ef_construction=%d, ready",
+			after, before, st, indexOf(t, a, model).State, a.cfg.EfConstruction)
+	}
+	return annIndexOID(t, conn, model)
+}
+
+// annIndexOID is model's index's relation id, 0 when there is none.
+func annIndexOID(t *testing.T, conn dao.DataConn, model string) int64 {
+	t.Helper()
+	rows, err := conn.QueryContext(context.Background(), "SELECT oid::bigint FROM pg_class WHERE relname = $1 AND relkind = 'i'", annIndexName(model))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var oid int64
+	if rows.Next() {
+		if err := rows.Scan(&oid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return oid
+}
+
 func buildFor(t *testing.T, a *ANN, model string) {
 	t.Helper()
 	ctx := context.Background()
@@ -192,7 +240,10 @@ func withViewHook(t *testing.T, h dao.Hook) {
 // 100,000 clustered embeddings, for skewed tenants sharing the model's index (90% and 5% of it,
 // both past the threshold), and under a 1% filter (which mostly falls back: the answer is then
 // exact, and the cell says how many did). Every search is checked to have run the candidate
-// stage, not fallen back unseen.
+// stage, not fallen back unseen. pgvector draws each node's level at random, so one build's
+// recall is not the next's: the skewed tenant's is pinned over three builds of the index at the
+// declared ef_construction, the first one the table's, the others fresh builds on the same corpus
+// (the index dropped and built again), each checked to be a new index.
 func TestANN_Recall(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the recall corpora are large")
@@ -205,6 +256,44 @@ func TestANN_Recall(t *testing.T) {
 	annCorpus(t, conn, "skew90", model, 90000, annDims, 0.2)
 	annCorpus(t, conn, "skew5", model, 5000, annDims, 0.3)
 	buildFor(t, a, model)
+	skew90 := func(t *testing.T, exact, approx *Store, label string) {
+		for _, n := range []int{10, 50} {
+			t.Run(fmt.Sprintf("%s/n=%d", label, n), func(t *testing.T) {
+				h := &annRan{}
+				withViewHook(t, h)
+				sum, qs := 0.0, queryVecs(t, conn, "skew90", model, 50)
+				for _, q := range qs {
+					sum += recall(docsOf(semantic(t, approx, model, q, search.Filter{}, n)), docsOf(semantic(t, exact, model, q, search.Filter{}, n)))
+				}
+				if h.cand != len(qs) {
+					t.Fatalf("%d candidate stages ran for %d searches", h.cand, len(qs))
+				}
+				r := sum / float64(len(qs))
+				t.Logf("%s: recall@%d %.4f", label, n, r)
+				if r < 0.95 {
+					t.Fatalf("%s: recall@%d is %.4f, below 0.95", label, n, r)
+				}
+			})
+		}
+	}
+	rebuilds := func() { // after the table: two more builds, the skewed tenant's recall in each
+		exact, err := New(conn, "skew90")
+		if err != nil {
+			t.Fatal(err)
+		}
+		approx, err := New(conn, "skew90", WithANN(a))
+		if err != nil {
+			t.Fatal(err)
+		}
+		builds := []int64{annIndexOID(t, conn, model)}
+		for b := 1; b < 3; b++ {
+			builds = append(builds, rebuildFor(t, conn, a, model))
+			skew90(t, exact, approx, fmt.Sprintf("skew90/build%d", b))
+		}
+		if slices.Sort(builds); len(slices.Compact(builds)) != 3 {
+			t.Fatalf("the skewed tenant's recall was checked on indexes %v, want three builds", builds)
+		}
+	}
 	for _, tc := range []struct {
 		tenant string
 		f      search.Filter
@@ -248,6 +337,7 @@ func TestANN_Recall(t *testing.T) {
 			})
 		}
 	}
+	rebuilds()
 }
 
 // Cell 2: with the scan budgets lowered until the scan exhausts them under a 1% filter, the search

@@ -2,7 +2,6 @@ package pgstore
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -178,52 +177,6 @@ func TestANNLife_AFailedReplacementLeavesTheIndexServing(t *testing.T) {
 		t.Errorf("the status after the failure: %+v; want ann, with the reason", s)
 	}
 	r.served(t, "after the failed replacement")
-}
-
-// Cell 1's skewed tenant pinned across builds: pgvector draws each node's level at random, so one
-// build's recall is not the next's; at the declared ef_construction, skew90's recall@10 and @50
-// hold ≥ 0.95 over three fresh builds.
-func TestANN_SkewedTenantRecallHoldsAcrossBuilds(t *testing.T) {
-	if testing.Short() {
-		t.Skip("the recall corpora are large")
-	}
-	model := annModel(annDims)
-	for b := range 3 {
-		t.Run(fmt.Sprintf("build%d", b), func(t *testing.T) {
-			cfg := DefaultANNConfig()
-			cfg.Threshold = 1000
-			conn, a := annSetup(t, cfg)
-			annCorpus(t, conn, "big", model, 100000, annDims, 0.1)
-			annCorpus(t, conn, "skew90", model, 90000, annDims, 0.2)
-			annCorpus(t, conn, "skew5", model, 5000, annDims, 0.3)
-			buildFor(t, a, model)
-			exact, err := New(conn, "skew90")
-			if err != nil {
-				t.Fatal(err)
-			}
-			approx, err := New(conn, "skew90", WithANN(a))
-			if err != nil {
-				t.Fatal(err)
-			}
-			qs := queryVecs(t, conn, "skew90", model, 50)
-			for _, n := range []int{10, 50} {
-				h := &annRan{}
-				withViewHook(t, h)
-				sum := 0.0
-				for _, q := range qs {
-					sum += recall(docsOf(semantic(t, approx, model, q, search.Filter{}, n)), docsOf(semantic(t, exact, model, q, search.Filter{}, n)))
-				}
-				if h.cand != len(qs) {
-					t.Fatalf("%d candidate stages ran for %d searches", h.cand, len(qs))
-				}
-				r := sum / float64(len(qs))
-				t.Logf("build %d: recall@%d %.4f", b, n, r)
-				if r < 0.95 {
-					t.Errorf("build %d: recall@%d is %.4f, below 0.95", b, n, r)
-				}
-			}
-		})
-	}
 }
 
 // crashBetweenDropAndRename leaves r's model as a replacement that crashed between its two last
