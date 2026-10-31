@@ -1427,6 +1427,18 @@
         <source>command</source>
         <translation>comando</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.env">
+        <source>environment</source>
+        <translation>entorno</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_not_for_secrets">
+        <source>NAME=value pairs set on the agent's process; ~ and $VAR are expanded when it starts, never by a shell. They are kept in plain text in the preferences: not for secrets. AUTODOC_* variables are AutoDoc's own.</source>
+        <translation>Pares NOMBRE=valor que se fijan en el proceso del agente; ~ y $VAR se expanden al arrancar, nunca mediante una shell. Se guardan en texto plano en las preferencias: no son para secretos. Las variables AUTODOC_* son propias de AutoDoc.</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_placeholder">
+        <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
+        <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>nombre</translation>
@@ -5783,6 +5795,18 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.text.agentprofiles.edit">
         <source>edit %1</source>
         <translation>editar %1</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_is_autodocs_own">
+        <source>%1 is AutoDoc's own variable</source>
+        <translation>%1 es una variable propia de AutoDoc</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_set_twice">
+        <source>%1 is set twice</source>
+        <translation>%1 se fija dos veces</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_word_is_not_name_value">
+        <source>%1 is not NAME=value</source>
+        <translation>%1 no es NOMBRE=valor</translation>
     </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>

@@ -6,6 +6,8 @@ AutoDoc ejecuta las líneas de comandos de agentes de IA (Claude Code, Codex, Op
 
 **Añadir un perfil.** **Sistema › Perfiles de agente…** (SPC G), y luego **Añadir…**: un nombre y el comando que inicia el agente, como `claude --model opus` o `codex`. `{root}` y `{workspace}` en el comando se sustituyen por la carpeta y el nombre del espacio de trabajo. El primer perfil es el predeterminado; **Marcar como predeterminado** elige otro.
 
+**Su entorno.** El campo **entorno** de un perfil fija variables en el proceso del agente, como palabras `NOMBRE=valor`: `CLAUDE_CONFIG_DIR=~/.claude-work` ejecuta Claude Code en otra cuenta, y sigue siendo un agente Claude. `~` y `$HOME` (o cualquier `$VAR` de AutoDoc) se expanden cuando arranca el agente, nunca mediante una shell. Las variables `AUTODOC_*` son propias de AutoDoc y no se pueden fijar. Los perfiles se guardan en texto plano, así que no pongas secretos ahí.
+
 **SPC g** muestra el panel, iniciando el agente predeterminado si no hay ninguno en ejecución, y lo vuelve a ocultar. Un agente oculto sigue ejecutándose.
 
 ```mermaid
