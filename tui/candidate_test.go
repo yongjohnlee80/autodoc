@@ -93,7 +93,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
-	r.s.WaitForText(t, "audit of echo typed into Scribe's input")
+	r.s.WaitForText(t, "audit of echo sent to Scribe")
 	if strings.Contains(r.s.String(), "Yes, at my own risk") || r.card() != nil {
 		t.Fatal("the card stayed up while the audit was handed over")
 	}

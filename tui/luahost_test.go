@@ -99,8 +99,8 @@ end }`)
 	}
 	r.s.WaitFor(t, "the list", func(string) bool { return r.noticed("agents 1 heron running true closing false") })
 	r.s.WaitFor(t, "sent", func(string) bool { return r.noticed("sent true nil") })
-	// one paste, whole: its newline the text's, never an Enter
-	first := "\x1b[200~first-line\nsecond-line\x1b[201~"
+	// one paste, whole: its newline the text's, then the Enter that sends it (agentmessaging.go)
+	first := "\x1b[200~first-line\nsecond-line\x1b[201~\r"
 	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reported(report), first) })
 	r.s.WaitFor(t, "an unknown agent refused", func(string) bool { return r.noticed("nobody unavailable") })
 
@@ -110,7 +110,7 @@ end }`)
 	}
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 	r.s.WaitFor(t, "the page pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~")
+		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~\r")
 	})
 
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
@@ -121,9 +121,9 @@ end }`)
 	if err := r.luaRun("agent-forward"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~") })
-	if got := reported(report); strings.Contains(got, "ignored") || strings.ContainsRune(got, '\r') {
-		t.Errorf("more than the selection, or an Enter, was sent: %q", got)
+	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~\r") })
+	if got := reported(report); strings.Contains(got, "ignored") || strings.Count(got, "\r") != 3 {
+		t.Errorf("more than the selection, or other than one Enter per send, was sent: %q", got)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the long send", func(string) bool { return r.noticed("long true nil") })
 	r.s.WaitFor(t, "2,600 x's pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~"+strings.Repeat("x", 2600)+"\x1b[201~")
+		return strings.HasSuffix(reported(report), "\x1b[200~"+strings.Repeat("x", 2600)+"\x1b[201~\r")
 	})
 
 	var b strings.Builder
@@ -159,7 +159,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the rich send", func(string) bool { return r.noticed("rich true nil") })
 	r.s.WaitFor(t, "the rich text pasted whole", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~"+rich+"\x1b[201~")
+		return strings.HasSuffix(reported(report), "\x1b[200~"+rich+"\x1b[201~\r")
 	})
 
 	// the escapes decoded once too often: a raw newline inside a Lua string no longer parses

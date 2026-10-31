@@ -27,6 +27,7 @@ type modelPanel struct {
 	active    widget.TerminalTabID
 	next      int
 	pastes    []string
+	keys      []string               // each SendText: the messaging base's Enter
 	resumed   []widget.TerminalTabID // each Resume's tab
 	modes     []string               // each SetMode, tab:mode
 	sendErr   error
@@ -92,6 +93,15 @@ func (p *modelPanel) Start(id widget.TerminalTabID) error {
 // Resume keeps the tab it was asked for.
 func (p *modelPanel) Resume(id widget.TerminalTabID) error {
 	p.resumed = append(p.resumed, id)
+	return nil
+}
+
+// SendText records literal keys sent to a tab (the messaging base's Enter).
+func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
+	if p.sendErr != nil {
+		return p.sendErr
+	}
+	p.keys = append(p.keys, text)
 	return nil
 }
 

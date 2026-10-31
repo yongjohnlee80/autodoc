@@ -356,11 +356,11 @@ func (cs *candidates) auditWith(a AgentEntry) {
 	})
 }
 
-// handOver gives the audit task to a. done(nil) means typed into its input, for the user's Enter
-// (docs/decisions/todos.md#autodoc-never-presses-enter-for-an-agent), never that the audit ran: the
-// toast says so, and no more. A refusal ends the toast and reopens the card.
+// handOver gives the audit task to a through the window's agent messaging: done(nil) means sent (rung,
+// or typed and sent; docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter),
+// never that the audit ran: the toast says so, and no more. A refusal ends the toast and reopens the card.
 func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
-	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
+	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
 			return

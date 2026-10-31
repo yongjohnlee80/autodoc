@@ -353,6 +353,27 @@ delivery between agents never waits on you.
 In the code: `core/inbox/manager.go`, `core/mail/human.go`, `core/mail/send.go`, `tui/crewinbox.go`, `tui/crewreply.go`,
 `tui/crewbell.go`
 
+## The user's own sends
+
+What you send an agent from an AutoDoc window reaches it with no key pressed: a todo's assignment,
+a candidate's audit, a text through Lua's `autodoc.agents.send`. They all go through one agent
+messaging, which tries the agent's doorbell first and falls back to typing
+([the todos decision](todos.md#a-message-to-an-agent-is-sent-never-left-for-enter)).
+
+- **The doorbell** is `inbox.send` from the window that holds the scope, with `fire`. It mails the
+  message from `user` (the sender is the daemon's, never written by the window) and rings the
+  agent now, through its kind's waker. If the doorbell rang, it answers the message. If it didn't
+  (no endpoint, the waker's error, a backoff, an unanswered earlier doorbell, or 5 s), the delivery is
+  withdrawn, never receivable, and it answers `inbox.unreachable`. Nothing is left behind, so the
+  fallback never delivers twice.
+- **The fallback** types the message into the agent's terminal as one bracketed paste and presses
+  Enter after it. It never presses Enter into an agent waiting on a permission or blocked prompt.
+- A task is a request, subject `Task: <title>`, with its file, id and instruction in the body; a text
+  is a plain message. Either way, the agent's guide says that mail from `user` is the user's own
+  instruction.
+- An assignment made outside a window (the CLI, or Neovim before its host adopts the same
+  messaging) reaches no agent by itself: assign from a window, or message the agent.
+
 ## Wake acceptance not tool approvals
 
 A host configures only what lets the fixed notice start a turn. For Claude Code, that is the
