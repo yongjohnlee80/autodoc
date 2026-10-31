@@ -73,8 +73,9 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
 	eng.SetFunction("widgets", s.luaWidgets)
 	// autodoc.plugin: a plugin's package's own plugin. The empty-capability gate asks for no grant;
-	// it makes the gated proxy wrap these functions, which is what sets Engine.Caller (ADR 1792300990
-	// §4.5); an ungated user script has no caller and is refused
+	// it makes the gated proxy wrap these functions, which is what sets Engine.Caller
+	// (docs/decisions/plugins.md#a-plugins-lua-package); an ungated user script has no caller and
+	// is refused
 	pt := L.NewTable()
 	L.SetFuncs(pt, map[string]lua.LGFunction{"run": s.luaPluginRun})
 	L.SetField(eng.Global(), "plugin", pt)
@@ -268,14 +269,25 @@ func (s *scripting) luaAgentsSend(L *lua.LState) int {
 		s.later("agents.send", cb, nil, "unavailable")
 		return 0
 	}
+	// a send without a callback that fails is a notice: no failure of it is ever silent
+	failed := func(err error, now bool) {
+		switch {
+		case cb == nil:
+			s.c.Notify(s.c.Trf("autodoc.notice.luahost.a_send_to_the_agent_failed", ref.Codename, agentErr(err)))
+		case now:
+			s.callback("agents.send", cb, nil, agentErr(err))
+		default:
+			s.later("agents.send", cb, nil, agentErr(err))
+		}
+	}
 	if err := s.host.sendText(ref, text, func(err error) {
 		if err != nil {
-			s.callback("agents.send", cb, nil, agentErr(err))
+			failed(err, true)
 			return
 		}
 		s.callback("agents.send", cb, lua.LTrue, "")
 	}); err != nil {
-		s.later("agents.send", cb, nil, agentErr(err))
+		failed(err, false)
 	}
 	return 0
 }

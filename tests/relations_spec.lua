@@ -1,4 +1,4 @@
--- What a KB document is connected to (autodoc.relations, ADR 1791430651 §4.4 — the TUI's Relations
+-- What a KB document is connected to (autodoc.relations, docs/decisions/editor.md#the-relations-drawer — the TUI's Relations
 -- drawer in Neovim): the sections by kind and direction against a real daemon built from this
 -- checkout, depth 2, the unresolved and the loops; the kb drawer's Relations section following
 -- the editor (never another file's rows); <CR>, d and back (<leader>mo), back kept when :edit is
@@ -80,7 +80,7 @@ local function texts(rows)
   return vim.tbl_map(function(r) return r.text end, rows or {})
 end
 
-t.section("rows: a todo task's (ADR 1792015212 §2.4)", function()
+t.section("rows: a todo task's", function()
   local rows = relations.rows("kb", ".todo-list/open/t.md", {
     out = {
       { path = "reviews/r.md", raw = "$KB_ROOT/reviews/r.md", kind = "review", resolved = true },

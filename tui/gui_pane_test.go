@@ -26,7 +26,7 @@ func runGUINote(t *testing.T, note string, setup func(h *Host)) *running {
 	d := startManaged(t, map[string]string{"kb": kb})
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true,
 		ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if err := os.WriteFile(filepath.Join(kb, "a.md"), []byte(note), 0o600); err != nil {
 		t.Fatal(err)
 	}

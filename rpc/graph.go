@@ -2,7 +2,9 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -44,7 +46,8 @@ type linkJSON struct {
 	Anchor   string `json:"anchor"`
 	Kind     string `json:"kind"`
 	Resolved bool   `json:"resolved"`
-	// External is a todo task's link to a file outside the workspace, absolute (ADR 1792015212 §2.4)
+	// External is a todo task's link to a file outside the workspace, absolute
+	// (docs/decisions/todos.md#task-relations-and-external-links)
 	External string `json:"external,omitempty"`
 }
 
@@ -63,6 +66,7 @@ type mapJSON struct {
 	Nodes []mapNodeJSON `json:"nodes"`
 	Edges []edgeJSON    `json:"edges"`
 	Types []string      `json:"types,omitempty"` // protocol 28: the schema's document types, in its order
+	Next  *string       `json:"next,omitempty"`  // protocol 36, unrooted: the next page's cursor, "" at the end
 }
 
 type mapNodeJSON struct {
@@ -135,11 +139,15 @@ func (s *Server) graphVerbs() []module.Verb {
 				return out, nil
 			}),
 		module.Handle(module.Contract{Verb: "graph.map", Effect: module.EffectRead, Since: mapSince, Scope: ws, Audience: agent,
-			Result: "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}",
+			Result: "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28), next? (protocol 36)}",
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
 			Doc: "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. " +
 				"From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), " +
-				"and a node's type is its value of the schema's discriminator field (type without one)."},
+				"and a node's type is its value of the schema's discriminator field (type without one). " +
+				"From protocol 36, a map without a root comes a page at a time: opts.limit documents (default 500, at most 2000) in path order " +
+				"after opts.after (the previous page's next, an opaque cursor), the links whose source is among them (to any document, " +
+				"one on a later page included), and next, \"\" at the end. Each link comes once; drop one whose document never came. " +
+				"A cursor from other kinds is invalid params. A session below 36 gets the whole map in one reply."},
 			func(ctx context.Context, p graphMap) (*mapJSON, error) {
 				o, err := mapOpts(ctx, p.Options.raw)
 				if err != nil {
@@ -152,11 +160,23 @@ func (s *Server) graphVerbs() []module.Verb {
 						o.TypeField, types = sch.Discriminator, sch.Types()
 					}
 				}
-				m, err := workspaceOf(ctx).Index().Store().Map(ctx, o)
-				if err != nil {
+				var m index.Map
+				var next *string
+				if o.Root == "" && protocolOf(ctx) >= mapPagesSince {
+					page, err := workspaceOf(ctx).Index().Store().MapPage(ctx, index.MapPageOpts{Kinds: o.Kinds, TypeField: o.TypeField,
+						After: o.After, Limit: o.Limit})
+					if errors.Is(err, index.ErrBadMapCursor) {
+						_, why, _ := strings.Cut(err.Error(), "index: after ")
+						return nil, invalid("graph.map: opts.after " + why)
+					}
+					if err != nil {
+						return nil, err
+					}
+					m, next = page.Map, &page.Next
+				} else if m, err = workspaceOf(ctx).Index().Store().Map(ctx, o.MapOpts); err != nil {
 					return nil, err
 				}
-				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges)), Types: types}
+				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges)), Types: types, Next: next}
 				for i, n := range m.Nodes {
 					out.Nodes[i] = mapNodeJSON{Path: n.Path, Title: n.Title, Type: n.Type, Superseded: n.Superseded}
 					if tags {
@@ -205,21 +225,33 @@ func (s *Server) graphVerbs() []module.Verb {
 const relationsSince = 14
 
 // todoGraphSince is the protocol the review and blocked relations and external links arrived in
-// (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged, and asking
-// for one of todoKinds by name is refused, not answered.
+// (docs/decisions/todos.md#task-relations-and-external-links). A session below it sees the kinds it
+// knew, its graph unchanged, and asking for one of todoKinds by name is refused, not answered.
 const todoGraphSince = 23
 
-// mapSince is the protocol graph.map came in (ADR 1792347044), and mapTagsSince the one its nodes'
-// tags, the schema's types and the nodes' types by its discriminator came in.
+// mapSince is the protocol graph.map came in (docs/decisions/search.md#the-workspace-map),
+// mapTagsSince the one its nodes' tags, the schema's types and the nodes' types by its
+// discriminator came in, and mapPagesSince the one an unrooted map comes a page at a time
+// (docs/decisions/search.md#unrooted-maps-in-pages): a session below it keeps the one reply, and is
+// refused after and limit.
 const (
-	mapSince     = 26
-	mapTagsSince = 28
+	mapSince      = 26
+	mapTagsSince  = 28
+	mapPagesSince = 36
 )
 
-// mapOpts reads graph.map's options: {root, depth, kinds}. Without a root, the whole workspace and
-// depth is unused; with one, depth defaults to 1. kinds is graphKinds'.
-func mapOpts(ctx context.Context, raw any) (index.MapOpts, error) {
-	o := index.MapOpts{Depth: 1}
+// mapRequest is graph.map's options read: the map's, and an unrooted map's page.
+type mapRequest struct {
+	index.MapOpts
+	After string // the previous page's next
+	Limit int    // documents a page; 0 for the default
+}
+
+// mapOpts reads graph.map's options: {root, depth, kinds, after, limit}. Without a root, the whole
+// workspace and depth is unused; with one, depth defaults to 1. kinds is graphKinds'. after and
+// limit page an unrooted map, from protocol 36.
+func mapOpts(ctx context.Context, raw any) (mapRequest, error) {
+	o := mapRequest{MapOpts: index.MapOpts{Depth: 1}}
 	kinds, err := graphKinds(ctx, raw)
 	if err != nil {
 		return o, err
@@ -239,6 +271,32 @@ func mapOpts(ctx context.Context, raw any) (index.MapOpts, error) {
 			return o, invalid("graph.map: opts.depth must be 1 or 2")
 		}
 		o.Depth = int(n)
+	}
+	for _, k := range []string{"after", "limit"} {
+		v, ok := opts[k]
+		if !ok {
+			continue
+		}
+		switch {
+		case protocolOf(ctx) < mapPagesSince:
+			// refused, not ignored: a daemon of that protocol knows no such option
+			return o, invalid(fmt.Sprintf("graph.map: opts.%s needs protocol %d", k, mapPagesSince))
+		case o.Root != "":
+			return o, invalid("graph.map: opts." + k + " pages a map without a root; a rooted map is one reply")
+		}
+		if k == "after" {
+			s, ok := v.(string)
+			if !ok {
+				return o, invalid("graph.map: opts.after is the previous page's next, a string")
+			}
+			o.After = s
+			continue
+		}
+		n, ok := v.(int64)
+		if !ok || n < 1 || n > index.MaxMapPage {
+			return o, invalid(fmt.Sprintf("graph.map: opts.limit must be 1 to %d", index.MaxMapPage))
+		}
+		o.Limit = int(n)
 	}
 	return o, nil
 }

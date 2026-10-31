@@ -10,12 +10,13 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// THE SPC p CHOOSER (ADR 1792132889) — SPC p lists the plugins whose commands can run, each with the
-// letter the user gave it, if any; a plugin's letter, or j/k then Enter, shows its card in the same
-// dialog: its commands by their letters (plugincmds.go), Backspace back to the list. * asks for a letter for the plugin under ›, and the next key is
-// it (Backspace removes it), as AutoVim's Ctrl+g modal binds a destination. The letters are the
-// user's alone, so a plugin installed never takes or moves one; a command's letter is unique within
-// its plugin only.
+// THE SPC p CHOOSER (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser) — SPC p lists
+// the plugins whose commands can run, each with the letter the user gave it, if any; a plugin's
+// letter, or j/k then Enter, shows its card in the same dialog: its commands by their letters
+// (plugincmds.go), Backspace back to the list. * asks for a letter for the plugin under ›, and the
+// next key is it (Backspace removes it), as AutoVim's Ctrl+g modal binds a destination. The letters
+// are the user's alone, so a plugin installed never takes or moves one; a command's letter is
+// unique within its plugin only.
 //
 // The chooser is a card, as the leader's is: text, with nothing focusable in it. A focused list takes
 // j, k, g, G and Enter before a dialog's Shortcuts see them, so a letter it moves by could be given
@@ -226,10 +227,11 @@ func (pl *plugins) pluginCardKey(k string) {
 }
 
 // bindPluginLetter is the chooser's *: k becomes the plugin's letter, and Backspace removes it. A
-// letter another plugin has moves to this one, and the chooser says so (rationale §R2): every other
-// plugin the preferences give it loses it, so the preferences name one plugin per letter. One of the
-// chooser's own letters, or a key that is no letter or digit, is refused, saying why. It returns
-// what the chooser says.
+// letter another plugin has moves to this one, and the chooser says so
+// (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser): every other plugin the
+// preferences give it loses it, so the preferences name one plugin per letter. One of the chooser's
+// own letters, or a key that is no letter or digit, is refused, saying why. It returns what the
+// chooser says.
 func (pl *plugins) bindPluginLetter(key, k string) string {
 	title := pl.pluginTitle(key)
 	switch {

@@ -343,6 +343,14 @@
         <source>yes</source>
         <translation>是</translation>
     </message>
+    <message id="autodoc.cmd.agent.bell">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>当代理向你提问或等待你时响铃</translation>
+    </message>
+    <message id="autodoc.cmd.agent.bell.help">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>当代理向你提问或等待你时响铃</translation>
+    </message>
     <message id="autodoc.cmd.agent.setup">
         <source>set up an agent</source>
         <translation>设置智能体</translation>
@@ -1183,6 +1191,154 @@
         <source>switch workspace</source>
         <translation>切换工作区</translation>
     </message>
+    <message id="autodoc.crew.adopted">
+        <source>Adopted %1 message(s) for %2.</source>
+        <translation>已为 %2 接管 %1 条消息。</translation>
+    </message>
+    <message id="autodoc.crew.answering_closed">
+        <source>The request you were answering was answered, dismissed or expired.</source>
+        <translation>你正在回复的请求已被回复、驳回或已过期。</translation>
+    </message>
+    <message id="autodoc.crew.asks">
+        <source>%1 asks: %2</source>
+        <translation>%1 询问：%2</translation>
+    </message>
+    <message id="autodoc.crew.bell_off">
+        <source>The agent bell is off.</source>
+        <translation>代理铃声已关闭。</translation>
+    </message>
+    <message id="autodoc.crew.bell_on">
+        <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
+        <translation>代理铃声已开启：有请求或权限确认时响铃，最多每 10 秒一次。</translation>
+    </message>
+    <message id="autodoc.crew.claude_prompts_unreported">
+        <source>%1's permission prompts aren't reported, so a message typed to it isn't sent with Enter: its Claude Code could not be read (%2). Name the Claude Code binary itself in the profile's command to have them reported.</source>
+        <translation>%1 的权限确认不会被报告，因此输入给它的消息不会用 Enter 发送：无法读取它的 Claude Code（%2）。请在配置的命令中直接指定 Claude Code 可执行文件，以便报告。</translation>
+    </message>
+    <message id="autodoc.crew.did_not_start">
+        <source>%1 did not start: %2</source>
+        <translation>%1 未启动：%2</translation>
+    </message>
+    <message id="autodoc.crew.discarded">
+        <source>Discarded %1 message(s) for %2; each sender is told.</source>
+        <translation>已为 %2 丢弃 %1 条消息；会通知每位发送者。</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_failed">
+        <source>%1's request was not dismissed: %2.</source>
+        <translation>%1 的请求未被驳回：%2。</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_too_late">
+        <source>%1's request was already answered, dismissed or expired.</source>
+        <translation>%1 的请求已被回复、驳回或已过期。</translation>
+    </message>
+    <message id="autodoc.crew.no_longer_waits">
+        <source>%1 no longer waits on you</source>
+        <translation>%1 不再等你了</translation>
+    </message>
+    <message id="autodoc.crew.inbox_refused">
+        <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
+        <translation>此窗口的团队收件箱被守护进程拒绝（%1）：请求和提醒会在下次连接时重新显示。</translation>
+    </message>
+    <message id="autodoc.crew.no_scope">
+        <source>This window's agents have no crew scope: %1</source>
+        <translation>此窗口的代理没有团队作用域：%1</translation>
+    </message>
+    <message id="autodoc.crew.not_registered">
+        <source>%1 did not start: its crew session was not registered: %2</source>
+        <translation>%1 未启动：其团队会话未注册：%2</translation>
+    </message>
+    <message id="autodoc.crew.not_shown">
+        <source>%1 could not be shown: %2.</source>
+        <translation>无法显示 %1：%2。</translation>
+    </message>
+    <message id="autodoc.crew.orphan_adopt">
+        <source>&amp;Adopt</source>
+        <translation>接管(&amp;A)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_discard">
+        <source>&amp;Discard</source>
+        <translation>丢弃(&amp;D)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_keep">
+        <source>&amp;Keep</source>
+        <translation>保留(&amp;K)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_not_settled">
+        <source>%1's mail was not settled: %2</source>
+        <translation>%1 的邮件未能处理：%2</translation>
+    </message>
+    <message id="autodoc.crew.orphan_text">
+        <source>%1 unhandled message(s) wait for %2, agents of a window that is gone (%3). Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; Keep leaves them for that window, or a later one.</source>
+        <translation>已关闭窗口（%3）的代理 %2 有 %1 条未处理的消息。接管会把它们移给本窗口中同名的代理；丢弃会将其标为失败并通知每位发送者；保留则把它们留给那个窗口或之后的窗口。</translation>
+    </message>
+    <message id="autodoc.crew.orphan_title">
+        <source>Mail for a window that is gone</source>
+        <translation>发给已关闭窗口的邮件</translation>
+    </message>
+    <message id="autodoc.crew.orphans_unlisted">
+        <source>The crew's orphaned mail could not be listed: %1</source>
+        <translation>无法列出团队的无主邮件：%1</translation>
+    </message>
+    <message id="autodoc.crew.other_window">
+        <source>%1 runs in another window: that window shows it.</source>
+        <translation>%1 在另一个窗口中运行：由那个窗口显示。</translation>
+    </message>
+    <message id="autodoc.crew.replied">
+        <source>Replied to %1.</source>
+        <translation>已回复 %1。</translation>
+    </message>
+    <message id="autodoc.crew.reply_closed_meanwhile">
+        <source>Your reply to %1 was not sent (%2), and the request has closed meanwhile.</source>
+        <translation>你对 %1 的回复未发送（%2），且该请求在此期间已关闭。</translation>
+    </message>
+    <message id="autodoc.crew.reply_earlier_failed">
+        <source>An earlier reply to %1 was not sent: %2.</source>
+        <translation>之前对 %1 的回复未发送：%2。</translation>
+    </message>
+    <message id="autodoc.crew.reply_failed">
+        <source>Your reply to %1 was not sent: %2. Open the request again to send it.</source>
+        <translation>你对 %1 的回复未发送：%2。请重新打开该请求再发送。</translation>
+    </message>
+    <message id="autodoc.crew.reply_too_late">
+        <source>%1's request was already answered, dismissed or expired: your reply was not sent.</source>
+        <translation>%1 的请求已被回复、驳回或已过期：你的回复未发送。</translation>
+    </message>
+    <message id="autodoc.crew.reports">
+        <source>%1 reports: %2</source>
+        <translation>%1 报告：%2</translation>
+    </message>
+    <message id="autodoc.crew.request_closed">
+        <source>%1's request is closed: %2</source>
+        <translation>%1 的请求已关闭：%2</translation>
+    </message>
+    <message id="autodoc.crew.request_gone">
+        <source>That request is closed.</source>
+        <translation>该请求已关闭。</translation>
+    </message>
+    <message id="autodoc.crew.scope_lost">
+        <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
+        <translation>此窗口离开期间失去了团队作用域 %1；其代理现在归属于 %2。</translation>
+    </message>
+    <message id="autodoc.crew.scope_unlisted">
+        <source>This window's crew scope is held, but not listed for a successor: %1</source>
+        <translation>此窗口持有团队作用域，但未为后继窗口登记：%1</translation>
+    </message>
+    <message id="autodoc.crew.tab_not_shown">
+        <source>%1 started, but its tab could not be shown: %2</source>
+        <translation>%1 已启动，但无法显示其标签页：%2</translation>
+    </message>
+    <message id="autodoc.crew.waits">
+        <source>%1 waits on you (%2): %3</source>
+        <translation>%1 正在等你（%2）：%3</translation>
+    </message>
+    <message id="autodoc.crew.waits_blocked">
+        <source>%1 is blocked and waits on you: %2</source>
+        <translation>%1 已受阻，正在等你：%2</translation>
+    </message>
+    <message id="autodoc.crew.waits_permission">
+        <source>%1 waits on you (a permission prompt): %2</source>
+        <translation>%1 正在等你（权限确认）：%2</translation>
+    </message>
     <message id="autodoc.dialog.aIModels.add">
         <source>&amp;Add…</source>
         <translation>添加(&amp;A)…</translation>
@@ -1270,6 +1426,18 @@
     <message id="autodoc.dialog.agentEdit.command">
         <source>command</source>
         <translation>命令</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env">
+        <source>environment</source>
+        <translation>环境变量</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_not_for_secrets">
+        <source>NAME=value pairs set on the agent's process; ~ and $VAR are expanded when it starts, never by a shell. They are kept in plain text in the preferences: not for secrets. AUTODOC_* variables are AutoDoc's own.</source>
+        <translation>设置在智能体进程上的 NAME=value 对；~ 和 $VAR 在启动时展开，从不经过 shell。它们以明文保存在偏好设置中：不要用于机密信息。AUTODOC_* 变量属于 AutoDoc 自身。</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_placeholder">
+        <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
+        <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
@@ -1914,6 +2082,26 @@
     <message id="autodoc.dialog.registryBrowse.the_registry_plugins_and_lua_packages">
         <source>the registry: plugins and Lua packages</source>
         <translation>注册中心：插件和 Lua 包</translation>
+    </message>
+    <message id="autodoc.dialog.reply.cancel">
+        <source>&amp;Cancel</source>
+        <translation>取消(&amp;C)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.dismiss">
+        <source>&amp;Dismiss</source>
+        <translation>驳回(&amp;D)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.send">
+        <source>&amp;Send</source>
+        <translation>发送(&amp;S)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.tab_reaches_the_buttons">
+        <source>Enter breaks the line; Tab reaches the buttons.</source>
+        <translation>Enter 换行；Tab 移到按钮。</translation>
+    </message>
+    <message id="autodoc.dialog.reply.your_answer">
+        <source>Your answer</source>
+        <translation>你的回答</translation>
     </message>
     <message id="autodoc.dialog.searchPicker.lexical">
         <source>Lexical</source>
@@ -3793,10 +3981,6 @@ WHAT A KEY NEEDS
         <source>%1 is tiled: Layout › Float lets it be arranged</source>
         <translation>%1 已平铺：布局 › 浮动后即可排列</translation>
     </message>
-    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
-        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
-        <translation>%1 的审计已输入 %2 的输入框：在那里按 Enter 发送；点击以安装或取消</translation>
-    </message>
     <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
         <source>its program takes no bracketed paste</source>
         <translation>其程序不接受括号粘贴</translation>
@@ -4264,6 +4448,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.luahost.a_lua_callback_failed">
         <source>a Lua callback failed: %1</source>
         <translation>Lua 回调失败：%1</translation>
+    </message>
+    <message id="autodoc.notice.luahost.a_send_to_the_agent_failed">
+        <source>the send to %1 failed: %2</source>
+        <translation>发送给 %1 失败：%2</translation>
     </message>
     <message id="autodoc.notice.luakeys.its_keys_and_menu_rows_need_commands_not_granted">
         <source>%1: its keys and menu rows need commands: not granted</source>
@@ -5181,10 +5369,6 @@ WHAT A KEY NEEDS
         <source>todos: the store is now in %1</source>
         <translation>待办：待办库现位于 %1</translation>
     </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
-        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
-        <translation>待办：已分配给 %1，并已输入其输入框：在那里按 Enter 发送</translation>
-    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
         <translation>待办：已分配给 %1，但未交付：其程序不接受括号粘贴；请打开其面板并粘贴任务</translation>
@@ -5599,6 +5783,18 @@ WHAT A KEY NEEDS
         <source>edit %1</source>
         <translation>编辑 %1</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.env_key_is_autodocs_own">
+        <source>%1 is AutoDoc's own variable</source>
+        <translation>%1 是 AutoDoc 自身的变量</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_set_twice">
+        <source>%1 is set twice</source>
+        <translation>%1 被设置了两次</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_word_is_not_name_value">
+        <source>%1 is not NAME=value</source>
+        <translation>%1 不是 NAME=value 形式</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>“设为默认”标记 SPC g 打开的那一个</translation>
@@ -5810,6 +6006,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.globemap_gui.reading">
         <source>reading %1…</source>
         <translation>正在读取 %1…</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>正在读取 %1：%2 个文档…</translation>
     </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
@@ -6849,6 +7049,10 @@ The last connect failed:
         <source>schema %1</source>
         <translation>架构 %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>已用另一把密钥封存：请重新输入</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown 切换标签页 · “保存”一次性提交所有更改；若被拒绝则不做任何更改</translation>
@@ -7568,6 +7772,34 @@ H J K L, Shift+方向键   调整大小</translation>
     <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>一个仍在运行的设置更改了工作区：使用前请再次检查。</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
+        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
+        <translation>%1 的门铃没有响（%2）：消息改为发往其输入框</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
+        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
+        <translation>%1 正在等待一个提示：消息已输入但未发送；请先回答提示，再在那里按 Enter</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>待办：已分配给 %1 并发送</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
+        <source>audit of %1 sent to %2; click to install or cancel</source>
+        <translation>%1 的审计已发送给 %2；点击以安装或取消</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
+        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
+        <translation>待办：已分配给 %1，并已输入其输入框：在那里按 Enter 发送</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
+        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
+        <translation>%1 的审计已输入 %2 的输入框：在那里按 Enter 发送；点击以安装或取消</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc 目前看不到 %1 的权限提示，因此消息已输入但未发送：请在那里按 Enter</translation>
     </message>
 </context>
 </TS>

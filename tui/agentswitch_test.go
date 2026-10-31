@@ -37,12 +37,13 @@ func recordingAgent(t *testing.T, bracketed bool) (agent, report string) {
 
 func reported(report string) string { b, _ := os.ReadFile(report); return string(b) }
 
-// TestAnAgentIsToldOfAWorkspaceSwitch (ADR 1792988759 r2): an agent started in kb stays in kb when
-// the user switches the editor to notes, and nothing is typed into its terminal. editor.workspace,
-// with no grant, answers spawn_workspace kb, workspace_in_use notes and one switch, with both roots,
-// the open document and its notice, then none: entering notes again is no switch either.
-// editor.document and editor.buffers mark the notes buffer foreign_workspace, and the kb one not. A
-// parameter is refused. The folder's .claude/settings.json runs the notice hook.
+// TestAnAgentIsToldOfAWorkspaceSwitch
+// (docs/decisions/crew.md#workspace-switches-are-told-not-imposed): an agent started in kb stays in
+// kb when the user switches the editor to notes, and nothing is typed into its terminal.
+// editor.workspace, with no grant, answers spawn_workspace kb, workspace_in_use notes and one
+// switch, with both roots, the open document and its notice, then none: entering notes again is no
+// switch either. editor.document and editor.buffers mark the notes buffer foreign_workspace, and
+// the kb one not. A parameter is refused. The folder's .claude/settings.json runs the notice hook.
 func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	dir := t.TempDir()
@@ -165,10 +166,11 @@ func (r *running) switchTo(t *testing.T, ws string) {
 	r.s.WaitFor(t, ws+" entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == ws }) })
 }
 
-// TestTheSwitchIsCoalesced (ADR 1792988759 r2 §4.1): an agent is told one switch from the workspace
-// it last saw to the one in use, however many came between. kb → notes → other is one, kb → other;
-// back to the one it saw is none; a rename (the same root) is renamed; a name the list doesn't hold
-// yet waits; no workspace is left; a restart (a new token) starts again from its own.
+// TestTheSwitchIsCoalesced (docs/decisions/crew.md#one-coalesced-switch-per-agent): an agent is
+// told one switch from the workspace it last saw to the one in use, however many came between. kb →
+// notes → other is one, kb → other; back to the one it saw is none; a rename (the same root) is
+// renamed; a name the list doesn't hold yet waits; no workspace is left; a restart (a new token)
+// starts again from its own.
 func TestTheSwitchIsCoalesced(t *testing.T) {
 	h := &Host{agents: &agents{instances: map[string]*agentInstance{
 		"zen": {token: "t1", workspace: wsInfo{name: "kb", root: "/k"}},
@@ -232,9 +234,9 @@ func TestTheSwitchIsCoalesced(t *testing.T) {
 	}
 }
 
-// TestAPeersRenameIsToldAsARename (§4.1): a peer's workspace.renamed of the workspace in use, through
-// applyEvents, lists it under its new name at once, so an agent of it is told renamed, its root on
-// both sides, before the relisting answers.
+// TestAPeersRenameIsToldAsARename (docs/decisions/crew.md#one-coalesced-switch-per-agent): a peer's
+// workspace.renamed of the workspace in use, through applyEvents, lists it under its new name at
+// once, so an agent of it is told renamed, its root on both sides, before the relisting answers.
 func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
@@ -251,10 +253,11 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	}
 }
 
-// TestTheNoticeHookIsMergedIntoTheUsersSettings (§4.3): the hook is written into a new file; into one
-// the user wrote it is added once, every key, hook, number and group of theirs kept (an empty one
-// too), however often the agent starts; a file that isn't one JSON object (a second value or text
-// after it included), or whose hooks aren't Claude's shape, is left as it is.
+// TestTheNoticeHookIsMergedIntoTheUsersSettings (docs/decisions/crew.md#the-workspace-notice-hook):
+// the hook is written into a new file; into one the user wrote it is added once, every key, hook,
+// number and group of theirs kept (an empty one too), however often the agent starts; a file that
+// isn't one JSON object (a second value or text after it included), or whose hooks aren't Claude's
+// shape, is left as it is.
 func TestTheNoticeHookIsMergedIntoTheUsersSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")

@@ -59,6 +59,10 @@ func (v Vars) render(name string, b []byte) []byte {
 		"{{kb_type.commit}}", v.Commit)
 }
 
+// Operations is KB_OPERATIONS.md (b) as a scaffold writes it, stamped with v: autodoc --kb-operations
+// prints it so.
+func (v Vars) Operations(b []byte) []byte { return v.renderOperations(b) }
+
 // renderOperations renders KB_OPERATIONS.md as scaffold.lua's render does: {{autodoc_version}}
 // anywhere, {{date}} only on the frontmatter's created line (elsewhere it is an editor's variable).
 func (v Vars) renderOperations(b []byte) []byte {

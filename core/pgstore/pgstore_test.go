@@ -303,7 +303,8 @@ func TestPartlyEmbeddedDocumentIsNotReady(t *testing.T) {
 	})
 }
 
-// TestReclaimModelsKeepsTheActiveAndTheTarget (ADR 1791284787 §2.6): the tenant's embeddings under
+// TestReclaimModelsKeepsTheActiveAndTheTarget
+// (docs/decisions/store.md#pgstore-reclaims-models-too): the tenant's embeddings under
 // any model but its active one and its target are deleted, a batch at a time; another tenant's,
 // under the same model, are left.
 func TestReclaimModelsKeepsTheActiveAndTheTarget(t *testing.T) {

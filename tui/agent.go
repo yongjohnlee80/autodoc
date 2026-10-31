@@ -10,11 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/pty"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc"
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // agents owns profile forms and the running agent's identity. Its single panel
@@ -24,8 +28,27 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
-	agentBinPath           string
-	editorPath             func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	crew                   *crewHost  // the window's crew scope; nil in a program without one
+	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
+	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's
+	// permission prompts, so the messaging base may press Enter, given what the crew said); nil in
+	// production
+	promptsReported func(kind string, reported bool) bool
+	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
+	// tab's own start is
+	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
+	agentBinPath string
+	// pluginEnv replaces opencodeEnv's run of the agent's autodoc (a cell's); nil in production
+	pluginEnv func() (string, error)
+	// pluginAnswer is the process's one run of it (warmPluginEnv), on the loop
+	pluginAnswer *pluginEnvAnswer
+	// claudeAnswers are what each Claude Code program knows (warmClaude), by the word that runs it,
+	// on the loop; claudeWarned the programs a failed read was told of
+	claudeAnswers map[string]*claudeAnswer
+	claudeWarned  map[string]bool
+	// codexHere replaces registerCodex's runs of the agent's autodoc (a cell's); nil in production
+	codexHere  func(args ...string) error
+	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
 	editorTokens        map[string]string
@@ -45,7 +68,8 @@ type agents struct {
 
 func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
-		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
+		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)
@@ -72,6 +96,7 @@ func (a *agents) State() map[string]any {
 		"App.agentName":           "",
 		"App.agentCodename":       "",
 		"App.agentCommand":        "",
+		"App.agentEnv":            "",
 		"App.agentSwitchQuestion": "",
 	}
 	return st
@@ -121,25 +146,26 @@ func (a *agents) defaultProfile() string {
 }
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
-		"App.toggleAgent":          none(a.toggleAgent),
-		"App.stopAllAgents":        none(a.stopAllAgents),
-		"App.openAgentProfiles":    none(a.openAgentProfiles),
-		"App.startAddAgent":        none(a.startAddAgent),
-		"App.startEditAgent":       oneNumber("a row", a.startEditAgent),
-		"App.saveAgent":            twoStrings("a name and a command", a.saveAgent),
-		"App.saveAgentProfile":     threeStrings("a name, command and codename", a.saveAgentProfile),
-		"App.removeAgent":          oneNumber("a row", a.removeAgent),
-		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
-		"App.openAgentSetup":       none(a.openAgentSetup),
-		"App.agentSetupPicked":     numberAndString("a row and the name", a.agentSetupPicked),
-		"App.agentSetupConfirm":    numberAndString("a row and the name", a.agentSetupConfirm),
-		"App.agentSetupDecline":    none(a.agentSetupDecline),
-		"App.useAgent":             oneNumber("a row", a.useAgent),
-		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
-		"App.agentTabsChanged":     none(a.agentTabsChanged),
-		"App.setAgentEdge":         oneNumber("a row", a.setAgentEdge),
-		"App.setAgentSize":         oneNumber("a row", a.setAgentSize),
-		"App.setAgentLength":       oneNumber("a row", a.setAgentLength),
+		"App.toggleAgent":             none(a.toggleAgent),
+		"App.stopAllAgents":           none(a.stopAllAgents),
+		"App.openAgentProfiles":       none(a.openAgentProfiles),
+		"App.startAddAgent":           none(a.startAddAgent),
+		"App.startEditAgent":          oneNumber("a row", a.startEditAgent),
+		"App.saveAgent":               twoStrings("a name and a command", a.saveAgent),
+		"App.saveAgentProfile":        threeStrings("a name, command and codename", a.saveAgentProfile),
+		"App.saveAgentProfileWithEnv": fourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
+		"App.removeAgent":             oneNumber("a row", a.removeAgent),
+		"App.makeAgentDefault":        oneNumber("a row", a.makeAgentDefault),
+		"App.openAgentSetup":          none(a.openAgentSetup),
+		"App.agentSetupPicked":        numberAndString("a row and the name", a.agentSetupPicked),
+		"App.agentSetupConfirm":       numberAndString("a row and the name", a.agentSetupConfirm),
+		"App.agentSetupDecline":       none(a.agentSetupDecline),
+		"App.useAgent":                oneNumber("a row", a.useAgent),
+		"App.switchAgentConfirmed":    none(a.switchAgentConfirmed),
+		"App.agentTabsChanged":        none(a.agentTabsChanged),
+		"App.setAgentEdge":            oneNumber("a row", a.setAgentEdge),
+		"App.setAgentSize":            oneNumber("a row", a.setAgentSize),
+		"App.setAgentLength":          oneNumber("a row", a.setAgentLength),
 	}
 }
 func (a *agents) Panels() []PanelSpec {
@@ -156,10 +182,11 @@ func (a *agents) PreferencesChanged() {
 	a.syncAgentDialog()
 }
 
-// THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page (ADR 1791213400):
-// SPC g, Go › Agent. The user keeps profiles, each a name and the command that starts the agent
-// (claude, codex --model o4, agy, opencode, …), and marks one the default: the key opens it. Each
-// running agent has a tab of its own (agenttabs.go); they keep running while hidden. The agent works in AutoDoc's own folder for
+// THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page
+// (docs/decisions/crew.md#an-agent-terminal-inside-autodoc): SPC g, Go › Agent. The user keeps
+// profiles, each a name and the command that starts the agent (claude, codex --model o4, agy,
+// opencode, …), and marks one the default: the key opens it. Each running agent has a tab of its
+// own (agenttabs.go); they keep running while hidden. The agent works in AutoDoc's own folder for
 // the workspace (Options.AgentDir), never the workspace's: there AutoDoc writes AGENTS.md and
 // CLAUDE.md, telling it the workspace and how to call AutoDoc, and its environment names them too.
 // The command is the user's, as written; {root} and {workspace} in it are filled in.
@@ -176,6 +203,9 @@ type agentProfile struct {
 	Name     string `json:"name"`
 	Command  string `json:"command"`
 	Codename string `json:"codename,omitempty"`
+	// Env is set on the agent's process over AutoDoc's environment (agentprofileenv.go): plain text
+	// in the preferences, never for secrets.
+	Env map[string]string `json:"env,omitempty"`
 }
 
 // agentProfilesOf reads the profiles preference; one without a name or a command is dropped.
@@ -187,6 +217,7 @@ func agentProfilesOf(s string) []agentProfile {
 	out := all[:0]
 	for _, p := range all {
 		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
+			p.Env = keptProfileEnv(p.Env) // a key written by hand that a profile can't set is dropped
 			out = append(out, p)
 		}
 	}
@@ -272,6 +303,175 @@ func fillAgentCommand(command string, ws wsInfo) string {
 // shellQuote is s as one shell word.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): the name of
+// the program its first simple command runs, its words read as the shell reads them, past any
+// NAME=value assignments and the wrappers env, exec, command, nohup and mise exec|x … --; "agent"
+// when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
+func agentKind(command string) string {
+	if name := filepath.Base(agentProgram(command)); name != "" && name != "." && name != "/" {
+		return name
+	}
+	return "agent"
+}
+
+// agentProgram is the program command's first simple command runs, as agentKind reads it: the word
+// as written (a name the shell looks up on PATH, or a path), "" when there is none. A mise exec
+// with no -- is mise itself.
+func agentProgram(command string) string {
+	w := shellWords(command)
+	for len(w) > 0 {
+		f := w[0].text
+		switch {
+		case w[0].assignment():
+			w = w[1:]
+		case f == "exec" || f == "command" || f == "nohup":
+			w = skipOptions(w[1:], "-a")
+		case filepath.Base(f) == "env":
+			w = skipEnvOptions(w[1:])
+		case filepath.Base(f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
+			i := slices.IndexFunc(w, func(x shellWord) bool { return x.text == "--" })
+			if i < 0 {
+				return f // its tools run their own default program: none of them guessed
+			}
+			w = w[i+1:]
+		default:
+			return f
+		}
+	}
+	return ""
+}
+
+// skipOptions is w past its leading options and a "--"; an option in valued takes the next word.
+func skipOptions(w []shellWord, valued ...string) []shellWord {
+	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
+		f := w[0].text
+		w = w[1:]
+		if f == "--" {
+			break
+		}
+		if slices.Contains(valued, f) && len(w) > 0 {
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// skipEnvOptions is w, env's arguments, past its options: -S's string is split into the words it
+// runs, as env splits it.
+func skipEnvOptions(w []shellWord) []shellWord {
+	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
+		f := w[0].text
+		switch {
+		case f == "--":
+			return w[1:]
+		case f == "-S" || f == "--split-string":
+			if len(w) < 2 {
+				return nil
+			}
+			return append(shellWords(w[1].text), w[2:]...)
+		case strings.HasPrefix(f, "--split-string="):
+			return append(shellWords(strings.TrimPrefix(f, "--split-string=")), w[1:]...)
+		case strings.HasPrefix(f, "-S"):
+			return append(shellWords(f[2:]), w[1:]...)
+		case f == "-u" || f == "-C" || f == "--unset" || f == "--chdir":
+			if len(w) < 2 {
+				return nil
+			}
+			w = w[2:]
+		default: // -i, -0, -v, -, -uNAME, -CDIR, --unset=NAME, --chdir=DIR, …
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// shellWord is one word of a command as the shell splits it, its quotes and escapes removed; bare
+// is how many of its leading bytes stood unquoted.
+type shellWord struct {
+	text string
+	bare int
+}
+
+// assignment reports whether the word is a NAME=value assignment: its NAME= unquoted, as the shell
+// requires, whatever quoting its value has.
+func (w shellWord) assignment() bool {
+	i := strings.IndexByte(w.text, '=')
+	if i <= 0 || i >= w.bare {
+		return false
+	}
+	for j, c := range w.text[:i] {
+		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || j > 0 && c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// shellWords splits command into words as a POSIX shell does before expanding them: blanks between
+// words, '…' literal, "…" with \ escaping $ ` " \ and a newline, and \ outside quotes escaping the
+// next byte. Expansions are left as written, and an unterminated quote runs to the end; nothing is
+// evaluated.
+func shellWords(command string) []shellWord {
+	var out []shellWord
+	var b strings.Builder
+	in, bare := false, -1
+	quoted := func() { // a quote or an escape: the word's bare prefix ends here
+		in = true
+		if bare < 0 {
+			bare = b.Len()
+		}
+	}
+	end := func() {
+		if !in {
+			return
+		}
+		if bare < 0 {
+			bare = b.Len()
+		}
+		out = append(out, shellWord{text: b.String(), bare: bare})
+		b.Reset()
+		in, bare = false, -1
+	}
+	for i := 0; i < len(command); i++ {
+		switch c := command[i]; c {
+		case ' ', '\t', '\n':
+			end()
+		case '\'':
+			quoted()
+			j := strings.IndexByte(command[i+1:], '\'')
+			if j < 0 {
+				j = len(command) - i - 1
+			}
+			b.WriteString(command[i+1 : i+1+j])
+			i += j + 1
+		case '"':
+			quoted()
+			for i++; i < len(command) && command[i] != '"'; i++ {
+				if command[i] == '\\' && i+1 < len(command) && strings.IndexByte("$`\"\\\n", command[i+1]) >= 0 {
+					i++
+					if command[i] == '\n' {
+						continue
+					}
+				}
+				b.WriteByte(command[i])
+			}
+		case '\\':
+			quoted()
+			if i+1 < len(command) {
+				i++
+				if command[i] != '\n' {
+					b.WriteByte(command[i])
+				}
+			}
+		default:
+			in = true
+			b.WriteByte(c)
+		}
+	}
+	end()
+	return out
+}
+
 // agentArgv is how the terminal runs command: env, dropping the identity another agent host gave
 // the TUI (spawnerIdentity) and setting AutoDoc's variables, running the shell on the command as
 // the user wrote it, so its quoting and arguments are the shell's.
@@ -289,21 +489,31 @@ func agentArgv(command string, env []string) (string, []string, error) {
 	return envPath, args, nil
 }
 
-// agentEnv are the variables the agent codename is started with, in its folder dir: the workspace,
-// its root, the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose
-// first folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
-// store, not the default config's, and is found when no autodoc is installed; and, with the editor
-// socket, where the page is (AUTODOC_EDITOR) and who the agent is there (AUTODOC_AGENT).
-func (h *agents) agentEnv(ws wsInfo, dir, codename string) []string {
+// withEnvArg is agentArgv's args with kv set for the program as well: among its variables, before
+// the shell that runs the command (the args end with the shell, -c and the command).
+func withEnvArg(args []string, kv string) []string {
+	i := max(len(args)-3, 0)
+	return slices.Concat(args[:i:i], []string{kv}, args[i:])
+}
+
+// agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
+// the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
+// folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
+// store, not the default config's, and is found when no autodoc is installed, the rest p's own
+// (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
+// is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
+func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
+	codename := p.Codename
 	env := []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
-		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + p.agentPath(),
 	}
-	// the page in this TUI's editor, for `autodoc --editor` (ADR 1792014854)
+	// the page in this TUI's editor, for `autodoc --editor`
+	// (docs/decisions/crew.md#the-editor-socket)
 	if h.editorPath != nil {
 		if path := h.editorPath(); path != "" {
 			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+h.editorToken(codename))
@@ -355,13 +565,26 @@ func agentWrapper(bin, config string) string {
 	return "#!/bin/sh\n# AutoDoc as the TUI that started this agent runs it: its build, its config.\n" + cmd + ` "$@"` + "\n"
 }
 
-// agentDir is the folder the agent works in for a workspace: AutoDoc's, never the workspace's.
-func (h *agents) agentFolder(ws wsInfo) string {
-	base := h.agentDir
-	if base == "" {
-		base = filepath.Join(os.TempDir(), "autodoc-agent")
+// agentFolder is the folder codename's agent works in for ws: AutoDoc's, never the workspace's. While
+// the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
+// sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
+func (h *agents) agentFolder(ws wsInfo, codename string) string {
+	dir := filepath.Join(agentBase(h.agentDir), safeName(ws.name))
+	if h.crew == nil {
+		return dir
 	}
-	return filepath.Join(base, safeName(ws.name))
+	if scope, _, ok := h.crew.held(); ok {
+		return filepath.Join(dir, safeName(scope), safeName(codename))
+	}
+	return dir
+}
+
+// agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir.
+func agentBase(dir string) string {
+	if dir == "" {
+		return filepath.Join(os.TempDir(), "autodoc-agent")
+	}
+	return dir
 }
 
 // safeName is a workspace's name as a folder's.
@@ -374,15 +597,17 @@ func safeName(s string) string {
 	}, s)
 }
 
-// writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into the agent's folder for ws:
-// most agent CLIs read one of the two from where they start; bin/autodoc, agentWrapper; and the
-// workspace notice hook into .claude/settings.json (agenthook.go). It returns the folder.
-func (h *agents) writeAgentGuide(ws wsInfo) (string, error) {
-	dir := h.agentFolder(ws)
+// writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into codename's folder for ws
+// (agentFolder): most agent CLIs read one of the two from where they start; bin/autodoc,
+// agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). A crew
+// agent's guide (crewKind its CLI's kind, "" for an agent outside a crew scope) holds the crew and
+// mail procedure for that CLI, so it registers how it is woken. It returns the folder.
+func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string) (string, error) {
+	dir := h.agentFolder(ws, codename)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
 	}
-	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"))
+	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"), crewKind)
 	for _, f := range []struct {
 		name, text string
 		mode       os.FileMode
@@ -411,12 +636,21 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 }
 
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
-// (its own AGENTS.md): as wrapper, the build bin on the TUI's config.
-func agentGuide(ws wsInfo, bin, config, wrapper string) string {
+// (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
+// CLI's kind) is also told the crew and mail procedure for its CLI (crew.GuideOf): who it is, how it
+// registers to be woken, and how it handles mail.
+func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
 	fmt.Fprintf(&b, "This folder is AutoDoc's, not the user's: the user's files are in the workspace below.\n\n")
+	// a crew agent's mail comes first, before anything it might read past: an agent told how only
+	// deep in the reference spent its first turn finding out
+	if crewKind != "" {
+		b.WriteString("## Mail and your crew\n\n")
+		b.WriteString(crew.GuideOf(crewKind).Markdown)
+		b.WriteString("\n")
+	}
 	fmt.Fprintf(&b, "## The workspace\n\n")
 	fmt.Fprintf(&b, "- name: `%s` (also `$AUTODOC_WORKSPACE`)\n", ws.name)
 	fmt.Fprintf(&b, "- root: `%s` (also `$AUTODOC_ROOT`): the user's files, by path under it\n", ws.root)
@@ -445,7 +679,8 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	return b.String()
 }
 
-// editorGuide is the agents' guide to the page in the editor (editorsocket.go, ADR 1792014854).
+// editorGuide is the agents' guide to the page in the editor (editorsocket.go,
+// docs/decisions/crew.md#the-editor-socket).
 const editorGuide = "## The page the user is writing\n\n" +
 	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
 	"included (`$AUTODOC_EDITOR`; it knows you by `$AUTODOC_EDITOR_TOKEN`, which `autodoc --editor` passes). Positions are 1-based lines and columns (a column is a character).\n\n" +

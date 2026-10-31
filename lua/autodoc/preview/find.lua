@@ -1,6 +1,6 @@
 ---autodoc.preview.find — pick a Markdown file under the cwd, then a slot.
 ---
----Any Markdown file, in a knowledge base or not (ADR 1791210485 §1):
+---Any Markdown file, in a knowledge base or not (docs/decisions/neovim.md#markdown-preview-slots):
 ---searching the KB itself is `<leader>fk`, elsewhere. The listing walks
 ---the directory with vim.fs.dir and offers it through vim.ui.select, so a
 ---picker that replaces vim.ui.select (snacks, telescope-ui-select, fzf-lua)

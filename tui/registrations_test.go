@@ -284,7 +284,7 @@ func TestARefusedRestartTakesItsHandoffBack(t *testing.T) {
 				dir = filepath.Join(state, "missing")
 			}
 			r := runTUI(t, NewSession(sock, func() (string, error) { return "", nil }).UseHandoffs(dir), Options{})
-			r.s.WaitForText(t, "connected — autodoc v-refusing")
+			r.waitWithin(t, "the connection's toast", daemonWait, func() bool { return strings.Contains(r.s.String(), "connected — autodoc v-refusing") })
 			r.h.p.Post(r.h.restartConfirmed)
 			if !writable {
 				r.waitKept(t, "restart: the handoff to the other clients was not written")

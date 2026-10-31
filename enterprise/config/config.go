@@ -18,6 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
+	"github.com/yongjohnlee80/golib/logger"
 )
 
 // The defaults of the fields that have one.
@@ -57,6 +58,8 @@ type Server struct {
 	HTTP    *HTTP
 	Sources []Source
 	Log     Log
+	// Metrics is [metrics]: whether GET /v1/metrics is served; off by default.
+	Metrics Metrics
 	// Warnings are what is allowed but unwise, such as a short bearer token: --server --check
 	// prints them.
 	Warnings []string
@@ -68,6 +71,9 @@ type Postgres struct {
 	DSNEnv string
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
+	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
+	// ann_scan_mem_multiplier, ann_m, ann_ef_construction), pgstore's defaults for any not set.
+	ANN pgstore.ANNConfig
 }
 
 // DSN is the connection string, read from the environment when called. It is a secret: never log
@@ -117,10 +123,18 @@ type Client struct {
 	Grants map[string]map[string][]string
 }
 
+// Metrics is [metrics]. Enabled serves GET /v1/metrics, behind the operators' tokens, so it needs
+// an [http] table with at least one operator; off by default.
+type Metrics struct {
+	Enabled bool
+}
+
 // Log is what the server logs beyond its events.
 type Log struct {
 	// MetricsInterval is how often the metrics lines are logged; 0 logs none.
 	MetricsInterval time.Duration
+	// Level is the least severe record the server logs; "" logs every record.
+	Level logger.Severity
 }
 
 // Operator is one reader of the API's status (/v1/status), for the tenants it names: a role of
@@ -197,6 +211,12 @@ type file struct {
 		DSNEnv    string `toml:"dsn_env"`
 		DSNSealed string `toml:"dsn_sealed"`
 		Schema    string `toml:"schema"`
+		// the approximate search (pgstore.ANNConfig); nil is the default
+		ANNThreshold         *int     `toml:"ann_threshold"`
+		ANNMaxScanTuples     *int     `toml:"ann_max_scan_tuples"`
+		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
+		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
+		ANNM                 *int     `toml:"ann_m"`
 	} `toml:"postgres"`
 	Embedding *struct {
 		Provider string `toml:"provider"`
@@ -225,7 +245,11 @@ type file struct {
 	} `toml:"http"`
 	Log *struct {
 		MetricsInterval *duration `toml:"metrics_interval"`
+		Level           string    `toml:"level"`
 	} `toml:"log"`
+	Metrics *struct {
+		Enabled bool `toml:"enabled"`
+	} `toml:"metrics"`
 	Sources []struct {
 		Tenant   string    `toml:"tenant"`
 		View     string    `toml:"view"`
@@ -272,6 +296,7 @@ func Load(path string) (*Server, error) {
 	s.Embedding = v.embedding(f)
 	s.HTTP = v.http(f, s.Sources)
 	s.Log = v.log(f)
+	s.Metrics = v.metrics(f)
 	s.Warnings = v.warnings
 	if len(v.errs) > 0 {
 		return nil, &Refusal{Path: path, Errors: v.errs}
@@ -332,6 +357,41 @@ func (v *validator) postgres(f file) Postgres {
 	}
 	if err := pgstore.CheckSchema(p.Schema); err != nil {
 		v.refuse("postgres.schema", "%q is not a plain schema name: lowercase letters, digits and _, not starting with a digit or pg_, at most 63", p.Schema)
+	}
+	p.ANN = pgstore.DefaultANNConfig()
+	if n := f.Postgres.ANNThreshold; n != nil {
+		if *n < 1 {
+			v.refuse("postgres.ann_threshold", "%d: at least 1 embedding of a model before its searches go through its index", *n)
+		}
+		p.ANN.Threshold = *n
+	}
+	if n := f.Postgres.ANNMaxScanTuples; n != nil {
+		if *n < 1 || *n > 2147483647 {
+			v.refuse("postgres.ann_max_scan_tuples", "%d: 1 to 2147483647 (pgvector's hnsw.max_scan_tuples)", *n)
+		}
+		p.ANN.MaxScanTuples = *n
+	}
+	if x := f.Postgres.ANNScanMemMultiplier; x != nil {
+		if *x < 1 || *x > 1000 {
+			v.refuse("postgres.ann_scan_mem_multiplier", "%v: 1 to 1000 (pgvector's hnsw.scan_mem_multiplier)", *x)
+		}
+		p.ANN.ScanMemMultiplier = *x
+	}
+	if n := f.Postgres.ANNM; n != nil {
+		if *n < 2 || *n > 100 {
+			v.refuse("postgres.ann_m", "%d: 2 to 100 (pgvector's m)", *n)
+		}
+		p.ANN.M = *n
+	}
+	if n := f.Postgres.ANNEfConstruction; n != nil {
+		m := p.ANN.M
+		if m == 0 {
+			m = 16 // pgvector's m when unset
+		}
+		if *n < 4 || *n > 1000 || *n < 2*m {
+			v.refuse("postgres.ann_ef_construction", "%d: 4 to 1000, and at least twice m (%d) (pgvector's ef_construction)", *n, m)
+		}
+		p.ANN.EfConstruction = *n
 	}
 	return p
 }
@@ -623,16 +683,42 @@ func (v *validator) tenants(field string, tenants []string, access map[string][]
 	}
 }
 
-// log reads [log]: the metrics lines' interval, at least MinMetricsInterval, or 0 for none.
+// log reads [log]: the metrics lines' interval, at least MinMetricsInterval, or 0 for none; and
+// the level, one of the logger's six severities, or none.
 func (v *validator) log(f file) Log {
 	l := Log{MetricsInterval: DefaultMetricsInterval}
-	if f.Log != nil && f.Log.MetricsInterval != nil {
+	if f.Log == nil {
+		return l
+	}
+	if f.Log.MetricsInterval != nil {
 		l.MetricsInterval = f.Log.MetricsInterval.Duration
 		if l.MetricsInterval != 0 && l.MetricsInterval < MinMetricsInterval {
 			v.refuse("log.metrics_interval", "%v: want 0 (none) or at least %v", l.MetricsInterval, MinMetricsInterval)
 		}
 	}
+	if f.Log.Level != "" {
+		s, err := logger.ParseSeverity(f.Log.Level)
+		if err != nil {
+			v.refuse("log.level", "%q: want debug, info, notice, warning, error or critical", f.Log.Level)
+		}
+		l.Level = s
+	}
 	return l
+}
+
+// metrics reads [metrics]. Enabled with no [http] table, or with no operator, would serve an
+// endpoint nobody can reach: refused.
+func (v *validator) metrics(f file) Metrics {
+	if f.Metrics == nil || !f.Metrics.Enabled {
+		return Metrics{}
+	}
+	switch {
+	case f.HTTP == nil:
+		v.refuse("metrics.enabled", "true with no [http] table: /v1/metrics is served by the HTTP API")
+	case len(f.HTTP.Operators) == 0:
+		v.refuse("metrics.enabled", "true with no [[http.operator]]: /v1/metrics answers only an operator's token")
+	}
+	return Metrics{Enabled: true}
 }
 
 // grant checks one field's grant: ["*"] alone, or distinct, non-empty values.

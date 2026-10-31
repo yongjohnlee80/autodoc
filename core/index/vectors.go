@@ -9,10 +9,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// VECTORS FOLLOW THEIR CHUNKS (ADR 1791329335) — a workspace keeps a vector only while some chunk of
-// it, alive or dead, has its text: the vector of any model, the active one's and a switch's target's.
-// A dead chunk keeps its text's vector until gc deletes the chunk (it is in no published snapshot by
-// then), and a text two documents share keeps it while either has it.
+// VECTORS FOLLOW THEIR CHUNKS (docs/decisions/store.md#vectors-follow-their-chunks) — a workspace
+// keeps a vector only while some chunk of it, alive or dead, has its text: the vector of any model,
+// the active one's and a switch's target's. A dead chunk keeps its text's vector until gc deletes
+// the chunk (it is in no published snapshot by then), and a text two documents share keeps it while
+// either has it.
 //
 // The writer keeps this in the transaction that would break it: gc and a document's removal delete
 // the vectors of the texts whose last chunk they deleted (dropOrphans), and a batch of vectors stores

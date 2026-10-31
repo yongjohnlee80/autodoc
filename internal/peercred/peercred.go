@@ -71,6 +71,22 @@ func Check(c net.Conn) error {
 	return nil
 }
 
+// PeerPID is the process at the other end of a unix connection, from the kernel's record of it
+// when it connected: what binds a socket to the process that was meant to hold it (a waker checks
+// it before every wake). Unlike Check, it never passes for want of a record: a connection that is
+// not a unix socket's, or a platform with no record, answers an error.
+func PeerPID(c net.Conn) (int, error) {
+	uc, ok := c.(*net.UnixConn)
+	if !ok {
+		return 0, errors.New("peercred: not a unix socket's connection: no peer process")
+	}
+	pid, err := peerPID(uc)
+	if err != nil {
+		return 0, fmt.Errorf("peercred: reading the peer's process: %w", err)
+	}
+	return pid, nil
+}
+
 // Dial connects to addr on network, refusing (and closing) a unix connection whose listener runs
 // as another user. Its signature is golib rpc's WithConnDialer's.
 func Dial(ctx context.Context, network, addr string) (net.Conn, error) {

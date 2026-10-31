@@ -10,7 +10,8 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
-// RANKER MODELS — the re-ranking models search's second stage can use (ADR 0215), one of them in
+// RANKER MODELS — the re-ranking models search's second stage can use
+// (docs/decisions/search.md#re-ranking-with-one-global-ranker), one of them in
 // use for every workspace (the preference ranker.in_use), each with its API key sealed by the
 // keyslot, its usage by day and its recent calls, as an embedding provider's.
 

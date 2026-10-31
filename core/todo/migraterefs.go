@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-// MIGRATING LUA-ERA $WORKSPACE REFS (ADR 1792015069 §2.7 step 2). Before the cutover, auto-core
-// wrote $WORKSPACE/… meaning Neovim's project root; the daemon's $WORKSPACE was the store's home. A
-// ref's meaning cannot be told from which files exist today (a target may not exist yet, or exist in
-// both places), so nothing rewrites them by itself: MigrateRefs plans, a person reviews the plan, and
-// the reviewed list is applied, exactly, each rewrite journaled.
+// MIGRATING LUA-ERA $WORKSPACE REFS (docs/decisions/todos.md#retiring-workspace). Before the
+// cutover, auto-core wrote $WORKSPACE/… meaning Neovim's project root; the daemon's $WORKSPACE was
+// the store's home. A ref's meaning cannot be told from which files exist today (a target may not
+// exist yet, or exist in both places), so nothing rewrites them by itself: MigrateRefs plans, a
+// person reviews the plan, and the reviewed list is applied, exactly, each rewrite journaled.
 
 // Ref kinds a migration plans (MigrateOpts.Worktrees chooses).
 const (

@@ -651,6 +651,14 @@ func scratchName(t *testing.T, admin dao.DataConn, prefix string) string {
 	if _, err := admin.ExecContext(context.Background(), "CREATE DATABASE "+name); err != nil {
 		t.Fatalf("create the scratch database: %v", err)
 	}
+	// An HNSW graph that outgrows maintenance_work_mem goes on building on disk, several times
+	// slower: TestANN_Recall's 195,000 embeddings do at PostgreSQL's default 64 MB, which cost each
+	// of its builds about 80 s on a 4-CPU host and pushed core/index past CI's 30 m beside it. Set
+	// before any connection to the database, so each session (the builder's pinned one too) starts
+	// with it.
+	if _, err := admin.ExecContext(context.Background(), "ALTER DATABASE "+name+" SET maintenance_work_mem = '512MB'"); err != nil {
+		t.Fatalf("size the scratch database's index builds: %v", err)
+	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)") })
 	return name
 }

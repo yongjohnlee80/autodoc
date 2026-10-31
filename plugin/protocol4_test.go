@@ -321,8 +321,8 @@ func TestATableFetcherServesItsRows(t *testing.T) {
 	}
 }
 
-// A document carries its workspace's root (ADR 1792457255): in plugin.document at any protocol, in a
-// command's document, and in a document too large to send. File is the note on disk: Root joined
+// A document carries its workspace's root (docs/decisions/plugins.md#lab-notes): in plugin.document
+// at any protocol, in a command's document, and in a document too large to send. File is the note on disk: Root joined
 // with Path, Path itself outside every workspace, and "" for a draft or a root not sent.
 func TestADocumentCarriesItsRoot(t *testing.T) {
 	wire := func(params []any) []any { return one(widen(params[0].(map[string]any)).(map[string]any)) }

@@ -50,7 +50,7 @@ func heardLines(path string) []string {
 	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 }
 
-// The CLIs are offered in Johno's order, absent ones left out; none found is empty. Nothing runs.
+// The CLIs are offered in their fixed order, absent ones left out; none found is empty. Nothing runs.
 func TestDetectAgentCLIsKeepsTheOrder(t *testing.T) {
 	on := func(names ...string) func(string) (string, error) {
 		return func(c string) (string, error) {
@@ -168,7 +168,7 @@ func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.agents.saveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
-	if onLoop(r, func() bool { _, ok := r.h.agents.storeAgentProfile("x", "", ""); return ok }) {
+	if onLoop(r, func() bool { _, ok := r.h.agents.storeAgentProfile("x", "", "", ""); return ok }) {
 		t.Fatal("storeAgentProfile saved a profile with no command")
 	}
 }
@@ -233,7 +233,7 @@ func TestTheAgentsGuideHasTheJobs(t *testing.T) {
 		!strings.Contains(autodoc.AgentsGuide, "Proof-read as a professional editor") {
 		t.Fatal("AGENTS.md has no \"What you can do for the user\" section")
 	}
-	guide := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc")
+	guide := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc", "")
 	if strings.Count(guide, "What you can do for the user") != 1 || strings.Contains(guide, "## What to help with") {
 		t.Fatal("the generated guide lists the jobs twice, or keeps its old list")
 	}

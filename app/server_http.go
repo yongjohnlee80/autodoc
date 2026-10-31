@@ -53,13 +53,14 @@ func (s *server) startHTTP() error {
 	w := s.worker.Load()
 	tenants := make(map[string]api.Searcher, len(s.cfg.Sources))
 	for _, src := range s.cfg.Sources {
-		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant))
+		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), search.WithANN(s.ann))
 		if err != nil {
 			return redact(err, s.cfg.Postgres.DSN())
 		}
 		tenants[src.Tenant] = sr
 	}
-	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators))
+	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
+		api.WithMetrics(s.cfg.Metrics.Enabled))
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
 		return err
@@ -146,14 +147,15 @@ func tokenOf(who, sha, env string) ([sha256.Size]byte, error) {
 func (s *server) startOps() error {
 	tenants := make([]ops.Tenant, len(s.ingesters))
 	for i, in := range s.ingesters {
-		st, err := pgstore.New(s.store, in.Tenant())
+		st, err := s.tenantStore(in.Tenant())
 		if err != nil {
 			return err
 		}
 		tenants[i] = ops.Tenant{Name: in.Tenant(), Store: st, State: in.State}
 	}
 	s.ops = ops.New(ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
-		Now: func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.store) }, Version: s.version, Started: time.Now()})
+		Now: func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.store) }, Version: s.version, Started: time.Now(),
+		ANN: s.ann.Status})
 	if every := s.cfg.Log.MetricsInterval; every > 0 {
 		ctx, cancel := context.WithCancel(s.ctx)
 		done := make(chan struct{})

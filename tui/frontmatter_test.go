@@ -77,7 +77,7 @@ func TestAFileFromAnotherWorkspaceIsCheckedAgainstItsOwnSchema(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "· finance")
+	r.waitAttached(t, "finance")
 	for _, ws := range []string{"finance", "security"} {
 		if _, err := r.h.session.Call(context.Background(), "workspace.configure", ws,
 			map[string]any{"schema": suggestedSchema}); err != nil {
@@ -99,7 +99,7 @@ func TestAFileFromAnotherWorkspaceIsCheckedAgainstItsOwnSchema(t *testing.T) {
 
 	// security in use, its own file shown, then finance's memo shown again
 	r.h.p.Post(func() { r.h.enter("security") })
-	r.s.WaitForText(t, "· security")
+	r.waitAttached(t, "security")
 	r.h.p.Post(func() { r.h.openPath("intro.md") })
 	r.waitOpen(t, "security", "intro.md")
 	r.s.WaitFor(t, "no diagnostic over the valid intro", func(sc string) bool { return !strings.Contains(sc, "⚠ frontmatter") })
@@ -139,7 +139,7 @@ func TestAFileFromAnotherWorkspaceIsCheckedAgainstItsOwnSchema(t *testing.T) {
 
 	// finance in use again, the memo still shown
 	r.h.p.Post(func() { r.h.enter("finance") })
-	r.s.WaitForText(t, "· finance")
+	r.waitAttached(t, "finance")
 	ownShown("finance's diagnostic, finance in use again")
 
 	mu.Lock()
@@ -158,7 +158,7 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": root})
 	writeSchema(t, root)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.schema = suggestedSchema })
 	r.waitNoticed(t, "kb: saved schema")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,11 +56,13 @@ func Run(t *testing.T, h Harness) {
 		{"AGoneScopesProfilesReceiveNothing", testAGoneScopesProfilesReceiveNothing},
 		{"AReceiveIsBoundedAndAPreviewLeasesNothing", testAReceiveIsBoundedAndAPreviewLeasesNothing},
 		{"HasEligibleSeesOnlyWhatANewSessionMayReceive", testHasEligibleSeesOnlyWhatANewSessionMayReceive},
+		{"EligibleForSeesTheSessionsOwnBoundMail", testEligibleForSeesTheSessionsOwnBoundMail},
 		{"APreviewSeesLiveMailBehindExpiredMail", testAPreviewSeesLiveMailBehindExpiredMail},
 		{"AdoptionsNoticesFollowTheMergeThroughCrewsAdopt", testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt},
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
 		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
 		{"AnItemNamesItsSenderAsAnAddress", testAnItemNamesItsSenderAsAnAddress},
+		{"TheUsersSendIsTheWindowsHostsAndFiredOrNothing", testTheUsersSendIsTheWindowsHostsAndFiredOrNothing},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -69,6 +72,10 @@ func Run(t *testing.T, h Harness) {
 // (the rig's credentials are its session ids), and a wake is crew's own, in the transaction, so a
 // write that rolls back raises none.
 type guard struct{ crew *crew.Manager }
+
+// Guard is the rig's crew port, for another module's suite over the same tables: a session's
+// credential is its id, and wakes are crew's own.
+func Guard() mail.Crew { return &guard{crew: crew.New(nil)} }
 
 func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error) {
 	id, _, _ := strings.Cut(credential, ".") // the rig's credentials are the session ids
@@ -82,11 +89,30 @@ func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error
 	return s, nil
 }
 
+// Fire is crew's own: with no scheduler, nothing fires.
+func (g *guard) Fire(ctx context.Context, profile string) (bool, error) {
+	return g.crew.Fire(ctx, profile)
+}
+
+// Reachable is crew's own, against the rig's session, endpoint and wake rows.
+func (g *guard) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return g.crew.Reachable(tx, profile)
+}
+
+// GuardHost is crew's own check, against the rig's host rows (a cell claims its scope through crew).
+func (g *guard) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return g.crew.GuardHost(tx, scope, run, epoch)
+}
+
 func (g *guard) RaisePending(tx crew.Tx, profile string) error {
 	return g.crew.RaisePending(tx, profile)
 }
 
 func (g *guard) Received(tx crew.Tx, session string) error { return g.crew.Received(tx, session) }
+
+func (g *guard) Settled(tx crew.Tx, session string) error { return g.crew.Settled(tx, session) }
+
+func (g *guard) Watch() (<-chan struct{}, func()) { return g.crew.Watch() }
 
 type rig struct {
 	t     *testing.T
@@ -619,7 +645,7 @@ func testDiscardFailsEveryUnhandledDelivery(t *testing.T, h Harness) {
 	}
 }
 
-// A profile of a gone scope receives nothing again (Zen's #62 r2): a discard's notice to the
+// A profile of a gone scope receives nothing again: a discard's notice to the
 // discarded profile as a sender (a message it sent itself) fails recipient_gone and shows in the
 // human's history instead of waiting where nothing can receive it, and a later send into the
 // scope is refused. crew marks the scope gone before the mail effects run.
@@ -686,6 +712,46 @@ func testAReceiveIsBoundedAndAPreviewLeasesNothing(t *testing.T, h Harness) {
 
 // HasEligible sees a queued, unbound, unexpired delivery only, however much expired mail lies
 // before it.
+// EligibleFor is a live session's view, as mail.receive and mail.wait take mail: a delivery bound
+// to the session itself counts, which HasEligible's new-session view leaves out, and one bound to
+// another session doesn't. A bound delivery leased and lapsed is eligible for its session again.
+func testEligibleForSeesTheSessionsOwnBoundMail(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	eligible := func(session string) (bool, bool) {
+		var own, fresh bool
+		r.write(func(tx mail.Tx) error {
+			var err error
+			if own, err = r.m.EligibleFor(tx, "p-gold", session); err != nil {
+				return err
+			}
+			fresh, err = r.m.HasEligible(tx, "p-gold")
+			return err
+		})
+		return own, fresh
+	}
+	if own, _ := eligible("s-gold"); own {
+		t.Fatal("eligible mail before any send")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"session:s-gold"}, Body: "b", Key: "k1"})
+	if own, fresh := eligible("s-gold"); !own || fresh {
+		t.Fatalf("mail bound to s-gold: EligibleFor(s-gold) %v, HasEligible %v; want true, false", own, fresh)
+	}
+	if own, _ := eligible("s-other"); own {
+		t.Fatal("mail bound to s-gold is eligible for another session")
+	}
+	got := r.receive("s-gold") // leased, and never acked
+	if len(got.Items) != 1 {
+		t.Fatalf("receive: %+v", got)
+	}
+	if own, _ := eligible("s-gold"); own {
+		t.Fatal("a leased delivery is eligible")
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	if own, _ := eligible("s-gold"); !own {
+		t.Fatal("a lapsed lease of mail bound to s-gold is not eligible for it again")
+	}
+}
+
 func testHasEligibleSeesOnlyWhatANewSessionMayReceive(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	has := func() bool {
@@ -742,13 +808,29 @@ func (c *lazyCrew) Authenticate(tx crew.Tx, credential string) (crew.Session, er
 	return c.m.Authenticate(tx, credential)
 }
 
+func (c *lazyCrew) Fire(ctx context.Context, profile string) (bool, error) {
+	return c.m.Fire(ctx, profile)
+}
+
+func (c *lazyCrew) Reachable(tx crew.Tx, profile string) (bool, error) {
+	return c.m.Reachable(tx, profile)
+}
+
+func (c *lazyCrew) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return c.m.GuardHost(tx, scope, run, epoch)
+}
+
 func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
 	return c.m.RaisePending(tx, profile)
 }
 
 func (c *lazyCrew) Received(tx crew.Tx, session string) error { return c.m.Received(tx, session) }
 
-// The real crew.Adopt over mail's real effects, on one store (Zen's #62 r0 F3): a profile of the
+func (c *lazyCrew) Settled(tx crew.Tx, session string) error { return c.m.Settled(tx, session) }
+
+func (c *lazyCrew) Watch() (<-chan struct{}, func()) { return c.m.Watch() }
+
+// The real crew.Adopt over mail's real effects, on one store: a profile of the
 // adopted scope sent itself and its namesake in the adopting scope a message, and the namesake's
 // copy had failed. Adoption reopens it, and the reopening notice, to the old profile as the sender,
 // must follow that profile's merge to the survivor: nothing is left on a profile nobody receives.
@@ -831,7 +913,7 @@ func testAdoptionsNoticesFollowTheMergeThroughCrewsAdopt(t *testing.T, h Harness
 
 // The real crew.Discard over mail's real effects: a discarded profile's self-sent message leaves
 // nothing waiting on it, its notice is undeliverable history, and a later send into the scope is
-// refused (Zen's #62 r2). It needs crew to mark the scope gone before DiscardDeliveries.
+// refused. It needs crew to mark the scope gone before DiscardDeliveries.
 func testDiscardLeavesNothingWaitingThroughCrewsDiscard(t *testing.T, h Harness) {
 	ctx := context.Background()
 	clock := crewtest.NewClock()
@@ -978,5 +1060,180 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 		if it.Message.Kind != mail.KindEvent || it.From != "autodoc" {
 			t.Fatalf("the daemon's notice: %+v, want an event from autodoc", it)
 		}
+	}
+}
+
+// fireWaker is a doorbell that answers err, counting its calls.
+type fireWaker struct {
+	mu    sync.Mutex
+	err   error
+	calls int
+}
+
+func (w *fireWaker) Wake(context.Context, crew.Endpoint, string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.calls++
+	return w.err
+}
+
+func (w *fireWaker) answer(err error) (calls int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.err = err
+	return w.calls
+}
+
+// The user's own send (inbox.send), on one store with the real crew and its scheduler: only the
+// window that holds the scope sends it, its run and epoch checked in the write; its sender is the
+// user's profile, so the receiver names it "user". A send to fire is fired or nothing: with no
+// doorbell to ring nothing is stored; a doorbell that fails leaves its delivery withdrawn, never
+// receivable, and the agent's wake settled; one that rings leaves the message to receive. A send
+// without fire is queued as any mail is.
+func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness) {
+	ctx := context.Background()
+	clock := crewtest.NewClock()
+	st := h.New(t, clock.Now)
+	port := &lazyCrew{}
+	mm := mail.New(st.Mail, port)
+	cm := crew.New(st.Crew, crew.WithSessionEnder(mm))
+	port.m = cm
+	if err := mm.EnsureReserved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bell := &fireWaker{}
+	cm.NewScheduler("daemon-run", map[string]crew.Waker{"claude": bell})
+	epoch, err := cm.Claim(ctx, "autodoc:w", "host-run", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := strings.Repeat("s", 40)
+	reg, err := cm.Register(ctx, crew.Registration{Scope: "autodoc:w", Run: "host-run", Epoch: epoch, Codename: "gold",
+		Kind: "claude", Workspace: "w", Instance: "i1", Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := reg.Session + "." + secret
+	send := func(key string, fire bool, to ...string) (mail.Sent, error) {
+		if to == nil {
+			to = []string{"gold"}
+		}
+		return mm.SendAsUser(ctx, "autodoc:w", "host-run", epoch, mail.Send{To: to, Kind: mail.KindRequest,
+			Subject: "Task: a title", Body: "the file, the id, the reason: " + key, Key: key, Fire: fire})
+	}
+	receive := func() []mail.Item {
+		t.Helper()
+		got, err := mm.Receive(ctx, credential)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Items
+	}
+	stored := func() int { return len(st.Inspect.Messages()) }
+
+	// the host's check: another run, or another epoch, sends nothing
+	for _, bad := range []struct {
+		run   string
+		epoch int64
+	}{{"other-run", epoch}, {"host-run", epoch + 1}} {
+		_, err := mm.SendAsUser(ctx, "autodoc:w", bad.run, bad.epoch, mail.Send{To: []string{"gold"}, Body: "x", Key: "k0"})
+		if !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("a send from run %s at epoch %d: %v, want the stale epoch", bad.run, bad.epoch, err)
+		}
+	}
+	if _, err := send("two", true, "gold", "user"); !errors.Is(err, mail.ErrInvalid) {
+		t.Fatalf("a send to fire to two recipients: %v, want invalid", err)
+	}
+	// no endpoint: no doorbell to ring, nothing stored, the waker never called
+	if _, err := send("k1", true); !errors.Is(err, mail.ErrUnreachable) || stored() != 0 || bell.answer(nil) != 0 {
+		t.Fatalf("a send to fire with no endpoint: %v, %d stored, %d rings", err, stored(), bell.answer(nil))
+	}
+	if err := st.Crew.Write(ctx, func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: reg.Session, Generation: 1, Kind: "claude"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// a doorbell that fails: the delivery is withdrawn, nothing to receive, and the wake settled
+	bell.answer(errors.New("the socket refused"))
+	failed, err := send("k2", true)
+	if !errors.Is(err, mail.ErrUnreachable) || bell.answer(nil) != 1 || len(failed.Deliveries) != 1 {
+		t.Fatalf("a send whose doorbell failed: %v, %d rings, %+v", err, bell.answer(nil), failed)
+	}
+	for _, d := range st.Inspect.Deliveries() {
+		if d.Message == failed.Message.ID && (d.State != mail.Withdrawn || d.DoneAt == nil || d.Why != mail.WhyWithdrawn) {
+			t.Fatalf("the failed send's delivery: %+v, want withdrawn", d)
+		}
+	}
+	wake := func() crew.Wake {
+		t.Helper()
+		var w crew.Wake
+		if err := st.Crew.Read(ctx, func(tx crew.Tx) error { var err error; w, _, err = tx.Wake(reg.Session); return err }); err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	// settled: nothing pending is due; but the failure and its backoff stay, as a receive's wouldn't
+	if w := wake(); w.AnnouncedGen != w.PendingGen || w.State != crew.WakeIdle || w.Failures != 1 || w.NextAt == nil {
+		t.Fatalf("the wake after the withdrawal: %+v, want settled, its failure and backoff kept", w)
+	}
+	// its replay is the same refusal, never a send that stands
+	if _, err := send("k2", true); !errors.Is(err, mail.ErrUnreachable) {
+		t.Fatalf("a replay of a withdrawn send: %v, want unreachable", err)
+	}
+	// during the backoff nothing rings: unreachable at once, and withdrawn
+	rings := bell.answer(nil)
+	if _, err := send("k2b", true); !errors.Is(err, mail.ErrUnreachable) || bell.answer(nil) != rings {
+		t.Fatalf("a send during the backoff: %v, %d rings, want unreachable and none", err, bell.answer(nil)-rings)
+	}
+	// withdrawn, neither is received (the receive itself, a sign the agent is there, ends the backoff)
+	if got := receive(); len(got) != 0 {
+		t.Fatalf("a withdrawn send was received: %+v", got)
+	}
+	// a doorbell that rings: the send stands, and the agent receives it from the user
+	fired, err := send("k3", true)
+	if err != nil || bell.answer(nil) != rings+1 || fired.Message.Sender == "" {
+		t.Fatalf("a send whose doorbell rang: %v, %d rings, %+v", err, bell.answer(nil), fired)
+	}
+	got := receive()
+	if len(got) != 1 || got[0].Message.ID != fired.Message.ID || got[0].From != mail.UserCodename || got[0].Message.SenderSession != "" {
+		t.Fatalf("the agent's receive: %+v, want the fired request from user", got)
+	}
+	// without fire: queued as any mail, whatever the doorbell would do
+	bell.answer(errors.New("the socket refused"))
+	queued, err := send("k4", false)
+	if err != nil || len(queued.Deliveries) != 1 || queued.Deliveries[0].State != mail.Queued {
+		t.Fatalf("a send without fire: %v %+v", err, queued)
+	}
+	// a held lease (k4, received and not acked) doesn't keep a withdrawn send's wake due: its lapse
+	// raises pending on its own
+	if got := receive(); len(got) != 1 {
+		t.Fatalf("receiving the queued send: %+v", got)
+	}
+	if _, err := send("k5", true); !errors.Is(err, mail.ErrUnreachable) {
+		t.Fatalf("a send whose doorbell failed, with a lease held: %v", err)
+	}
+	if w := wake(); w.AnnouncedGen != w.PendingGen {
+		t.Fatalf("the wake after a withdrawal with a lease held: %+v, want nothing pending", w)
+	}
+	// failed rings add up: the session is unreachable after five in a row, its withdrawals no help
+	for i := 0; ; i++ {
+		es, err := cm.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(es) == 0 || !es[0].Reachable {
+			if w := wake(); w.Failures < 5 {
+				t.Fatalf("unreachable after %d failures", w.Failures)
+			}
+			break
+		}
+		if i > 10 {
+			t.Fatalf("still reachable after %d failed fires: %+v", i, wake())
+		}
+		clock.Advance(15 * time.Minute) // past any backoff
+		if err := cm.Renew(ctx, "autodoc:w", "host-run", epoch); err != nil {
+			t.Fatal(err) // the window's lease, as it renews it
+		}
+		_, _ = send(fmt.Sprintf("kf%d", i), true)
 	}
 }

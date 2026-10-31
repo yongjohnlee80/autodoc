@@ -11,13 +11,14 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// REGISTRATIONS — a build's chunkers and formats (ADR 0216). Builds share one store and one socket,
-// so the daemon this TUI finds may be another build's. Kinds are always the daemon's: it is the one
-// indexing. A TUI whose binary registers more offers to restart the daemon as its own build, once a
-// session and only forward: never when the daemon's registrations are not a strict subset of its
-// own, so a community TUI never downgrades a Pro daemon, and two builds never flip it back and
-// forth. Tables that are not comparable (a shared extension at another version) get a word on the
-// status line; System › Restart backend… is how a newer build takes over then.
+// REGISTRATIONS — a build's chunkers and formats
+// (docs/decisions/search.md#registered-chunkers-and-derivers). Builds share one store and one
+// socket, so the daemon this TUI finds may be another build's. Kinds are always the daemon's: it is
+// the one indexing. A TUI whose binary registers more offers to restart the daemon as its own
+// build, once a session and only forward: never when the daemon's registrations are not a strict
+// subset of its own, so a community TUI never downgrades a Pro daemon, and two builds never flip it
+// back and forth. Tables that are not comparable (a shared extension at another version) get a word
+// on the status line; System › Restart backend… is how a newer build takes over then.
 
 // checkRegistrations asks the daemon just connected for its registrations, and takes its kinds. The
 // answer is the connection's, whichever workspace is entered meanwhile: a reconnect drops it.
@@ -84,9 +85,9 @@ func (h *Host) restartForRegistrations() {
 	h.restartConfirmed()
 }
 
-// holdLabel is how the hit list marks a hit of a document the daemon holds (ADR 0216 §1.4): one a
-// chunker or a format it lacks made, searchable, never reinterpreted. It is in tr's language (h.tr,
-// a Core's Tr).
+// holdLabel is how the hit list marks a hit of a document the daemon holds
+// (docs/decisions/search.md#held-documents): one a chunker or a format it lacks made, searchable,
+// never reinterpreted. It is in tr's language (h.tr, a Core's Tr).
 func holdLabel(tr func(string) string, hold string) string {
 	switch hold {
 	case "":

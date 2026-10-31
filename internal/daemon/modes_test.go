@@ -14,10 +14,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// TestAPathsModeIsTheFirstRuleItMatches (ADR 1792015212 §2.2): a user's graph_only pattern makes a
-// path graph-only whatever todo_search says; a todo store's path, by the registry or the default
-// entry, is graph-only unless todo_search is on; anything else is full. A store path has its store
-// in every mode.
+// TestAPathsModeIsTheFirstRuleItMatches (docs/decisions/todos.md#which-paths-are-graph-only): a
+// user's graph_only pattern makes a path graph-only whatever todo_search says; a todo store's path,
+// by the registry or the default entry, is graph-only unless todo_search is on; anything else is
+// full. A store path has its store in every mode.
 func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 	m, _ := open(t)
 	m.stores.Store(newRegistry(TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: "/ws/tasks", KB: "/ws"}},
@@ -80,7 +80,8 @@ func (s *stores) setVars(vars map[string]map[string]string) {
 	s.mu.Unlock()
 }
 
-// TestADocumentsVariablesAreItsWorkspaces (ADR 1792132105 §2.5): the owner rule workspace.of answers.
+// TestADocumentsVariablesAreItsWorkspaces
+// (docs/decisions/todos.md#resolving-refs-in-every-document): the owner rule workspace.of answers.
 // A store's path reads its recorded workspace's variables, wherever the store lies; any other path
 // the deepest workspace's holding it; a path in none, those of no workspace. With no variables in
 // the registry, none.
@@ -109,9 +110,10 @@ func TestADocumentsVariablesAreItsWorkspaces(t *testing.T) {
 	}
 }
 
-// TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry (ADR 1792132105 §2.4): a store recorded to a
-// workspace belongs to it while it is served and to none once Workspaces.Remove takes it, and the
-// modes' cached registry follows both changes with no other wake: Remove and Add read it again.
+// TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry
+// (docs/decisions/todos.md#which-workspace-a-store-belongs-to): a store recorded to a workspace
+// belongs to it while it is served and to none once Workspaces.Remove takes it, and the modes'
+// cached registry follows both changes with no other wake: Remove and Add read it again.
 func TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry(t *testing.T) {
 	m, _ := open(t)
 	root, out := t.TempDir(), t.TempDir()
@@ -145,7 +147,8 @@ func TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry(t *testing.T) {
 	eventually(t, "Remove reads the registry again: the store belongs to none", func() bool { return kbRoot() == "" })
 }
 
-// TestAVariableChangeReindexesWithoutAnEdit (ADR 1792132105 §2.5): a note's $NAME relation resolves
+// TestAVariableChangeReindexesWithoutAnEdit
+// (docs/decisions/todos.md#resolving-refs-in-every-document): a note's $NAME relation resolves
 // through its workspace's variables, and a change to them re-resolves it, the note unchanged: one
 // the todo system says, and an edit to a variable file it names, which no call says.
 func TestAVariableChangeReindexesWithoutAnEdit(t *testing.T) {
@@ -216,10 +219,10 @@ func writeAll(t *testing.T, root string, files map[string]string) {
 	}
 }
 
-// TestAStoreChangeReindexesWithoutAnEdit (ADR 1792015212 §5): in a workspace with todo_search off,
-// a crawled directory becomes a todo store (a set_dir to a store not named .todo-list): its tasks
-// leave search, their graph links stay, and no file changed. The store removed, they are back in
-// search.
+// TestAStoreChangeReindexesWithoutAnEdit (docs/decisions/todos.md#which-paths-are-graph-only): in a
+// workspace with todo_search off, a crawled directory becomes a todo store (a set_dir to a store
+// not named .todo-list): its tasks leave search, their graph links stay, and no file changed. The
+// store removed, they are back in search.
 func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 	m, _ := open(t)
 	reg := &stores{}
@@ -259,8 +262,9 @@ func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 }
 
 // TestTodoSearchAndGraphOnlyApplyWithoutARestart: a workspace's todo tasks are in search by default
-// (amendment 1); workspace.configure's todo_search and graph_only re-index the paths whose mode
-// changed, the workspace's indexer as it was, and workspace.list reports them.
+// (docs/decisions/todos.md#tasks-stay-in-search-by-default); workspace.configure's todo_search and
+// graph_only re-index the paths whose mode changed, the workspace's indexer as it was, and
+// workspace.list reports them.
 func TestTodoSearchAndGraphOnlyApplyWithoutARestart(t *testing.T) {
 	m, db := open(t)
 	m.SetTodoStores((&stores{}).read)
@@ -308,8 +312,9 @@ func TestTodoSearchAndGraphOnlyApplyWithoutARestart(t *testing.T) {
 	}
 }
 
-// TestAnExcludedStoreIsSaid (ADR 1792015212 §2.3): a workspace whose exclude keeps a todo store out
-// of the index is reported, with the pattern, by workspace.list and in an event at start.
+// TestAnExcludedStoreIsSaid (docs/decisions/todos.md#excluded-todo-stores-are-reported): a
+// workspace whose exclude keeps a todo store out of the index is reported, with the pattern, by
+// workspace.list and in an event at start.
 func TestAnExcludedStoreIsSaid(t *testing.T) {
 	m, db := open(t)
 	root := t.TempDir()

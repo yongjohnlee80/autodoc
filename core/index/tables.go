@@ -17,8 +17,12 @@ type noSort string
 
 const (
 	byPath noSort = "path"
-	bySeq  noSort = "seq"
-	byKey  noSort = "key"
+	// index.documents' orders, by their stored ascending keys
+	// (docs/decisions/search.md#document-listing-in-the-store)
+	byUpdatedKey noSort = "updated_key"
+	byIndexedKey noSort = "indexed_key"
+	bySeq        noSort = "seq"
+	byKey        noSort = "key"
 )
 
 // Document is one indexed file.
@@ -32,6 +36,9 @@ type Document struct {
 	FrontmatterError *string
 	Indexer          string
 	IndexedAt        int64
+	// the sort keys index.documents orders by (docs/decisions/search.md#stored-sort-keys, docKey);
+	// nil until written
+	KUpdS, KUpdNs, KIndexed *int64
 }
 
 // DocumentField names a document column.
@@ -49,6 +56,9 @@ const (
 	DocFrontmatterError DocumentField = "frontmatter_error"
 	DocIndexer          DocumentField = "indexer"
 	DocIndexedAt        DocumentField = "indexed_at"
+	DocKUpdS            DocumentField = "k_upd_s"
+	DocKUpdNs           DocumentField = "k_upd_ns"
+	DocKIndexed         DocumentField = "k_indexed"
 )
 
 // Chunk is one section of a document, alive in [GenFrom, GenTo).
@@ -237,7 +247,7 @@ type LinkRow struct {
 	DstDoc                  *int64
 	Anchor                  *string
 	Kind                    string
-	Target                  *string // an external link's file, absolute (ADR 1792015212 §2.4); nil otherwise
+	Target                  *string // an external link's file, absolute (docs/decisions/todos.md#task-relations-and-external-links); nil otherwise
 	OtherPath               string  // joined: the path of the document at the other end
 }
 
@@ -371,8 +381,13 @@ func newIndexTables(c dao.DataConn) *indexTables {
 				DocFrontmatterError: store.Col("document", DocFrontmatterError, func(d *Document) any { return &d.FrontmatterError }),
 				DocIndexer:          store.Col("document", DocIndexer, func(d *Document) any { return &d.Indexer }),
 				DocIndexedAt:        store.Col("document", DocIndexedAt, func(d *Document) any { return &d.IndexedAt }),
+				DocKUpdS:            store.Col("document", DocKUpdS, func(d *Document) any { return &d.KUpdS }),
+				DocKUpdNs:           store.Col("document", DocKUpdNs, func(d *Document) any { return &d.KUpdNs }),
+				DocKIndexed:         store.Col("document", DocKIndexed, func(d *Document) any { return &d.KIndexed }),
 			}),
-			dao.SortMap[*Document, DocumentField, noSort, int64](map[noSort]string{byPath: `"document"."path"`})),
+			dao.SortMap[*Document, DocumentField, noSort, int64](map[noSort]string{byPath: `"document"."path"`,
+				byUpdatedKey: `"document"."k_upd_s", "document"."k_upd_ns", "document"."path"`,
+				byIndexedKey: `"document"."k_indexed", "document"."path"`})),
 		chunks: dao.New[*Chunk, ChunkField, ChunkSort, int64](c,
 			dao.Table[*Chunk, ChunkField, ChunkSort, int64]("chunk"),
 			dao.ID[*Chunk, ChunkField, ChunkSort, int64](ChunkID),
@@ -476,7 +491,7 @@ func newIndexTables(c dao.DataConn) *indexTables {
 			}),
 			dao.Conflict[*Embedding, EmbeddingField, noSort, string](EmbWorkspace, EmbTextHash, EmbModel),
 			// a model's vectors in key order, as embedding_workspace_model_text holds them: the
-			// start sweep's cursor (ADR 1791329335 §2.4)
+			// start sweep's cursor (docs/decisions/store.md#the-orphan-pass-at-start)
 			dao.SortMap[*Embedding, EmbeddingField, noSort, string](map[noSort]string{byKey: `"embedding"."text_hash"`})),
 		jobs: dao.New[*Job, JobField, noSort, string](c,
 			dao.Table[*Job, JobField, noSort, string]("index_job"),

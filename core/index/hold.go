@@ -14,7 +14,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// Identity is a document.indexer string read back (ADR 0216 §1.6):
+// Identity is a document.indexer string read back
+// (docs/decisions/search.md#indexer-identity-strings):
 //
 //	built-in   = "c" CHUNKV ".s" SCHEMA ".t" TOKENS [".f" SCHEMAFP]
 //	registered = "c" EXT "@" VERSION ".s" SCHEMA ".t" TOKENS
@@ -182,7 +183,7 @@ const (
 )
 
 // HeldError is a reinterpretation refused: the document was made by a chunker or a format this
-// daemon lacks (ADR 0216 §1.4).
+// daemon lacks (docs/decisions/search.md#held-documents).
 type HeldError struct{ Path, Ext, What string }
 
 func (e *HeldError) Error() string {

@@ -4,11 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The module's limits (§4.6).
+// The module's limits (docs/decisions/crew.md#durable-mail).
 const (
 	MaxBody     = 64 << 10         // a body past it is ErrTooLarge
+	MaxSubject  = 4 << 10          // a subject past it is refused: it travels in the human's feed
 	LeaseFor    = 10 * time.Minute // a receive's lease
 	ReceiveMax  = 8                // deliveries one receive leases
 	MaxAttempts = 5                // leases a delivery may lapse before it fails
@@ -17,12 +20,13 @@ const (
 )
 
 // Manager is the mail module: durable messages and their deliveries, leased and acknowledged
-// (ADR 1793271500 §4.6). Its state machines run on a Store's transactions, so every engine shares
-// them; crew guards each session inside the same write.
+// (docs/decisions/crew.md#durable-mail). Its state machines run on a Store's transactions, so every
+// engine shares them; crew guards each session inside the same write.
 type Manager struct {
 	store Store
 	crew  Crew
 	newID func() string
+	polls *crew.LongPolls // the connections' long-polls (mail.wait's cap); nil caps nothing
 }
 
 // Option configures a Manager.
@@ -30,6 +34,10 @@ type Option func(*Manager)
 
 // WithIDs sets how message, delivery and lease ids are made (tests make them predictable).
 func WithIDs(f func() string) Option { return func(m *Manager) { m.newID = f } }
+
+// WithLongPolls sets the daemon's long-poll limiter, which mail.wait enters: the same one the other
+// modules' long-polls share.
+func WithLongPolls(l *crew.LongPolls) Option { return func(m *Manager) { m.polls = l } }
 
 // New is the mail module over store, guarded by crew. A nil store builds a Manager that only
 // answers Name, Verbs and Errors, as --contracts needs.

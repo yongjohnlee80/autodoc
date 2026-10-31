@@ -119,7 +119,7 @@ func TestARegisteredChunkerCutsItsFiles(t *testing.T) {
 }
 
 // TestAChunkerVersionReachesOnlyItsFiles: a registered chunker's new version re-cuts its own files
-// and no other (ADR 0216 §1.5).
+// and no other (docs/decisions/search.md#per-chunker-versions).
 func TestAChunkerVersionReachesOnlyItsFiles(t *testing.T) {
 	c := &funcChunker{version: "fake-1"}
 	e := newEnv(t, options{Match: goAndMarkdown, Registrations: registered(t, c)})
@@ -167,11 +167,11 @@ func embedTexts(p *fakeProvider) []string {
 	return out
 }
 
-// TestAVectorIsMadeOfWhatItsHashNames: ADR 0216 §1.7's cells, with a registered chunker whose
-// embed text is not its breadcrumb and body. The embedder receives exactly the embed text; a
-// restart over unchanged files embeds nothing; an embedding cut short by a stop resumes from the
-// row; a body change keeping the embed text embeds nothing, an embed text change once; one embed
-// text on two chunks is one call.
+// TestAVectorIsMadeOfWhatItsHashNames: docs/decisions/search.md#stored-embed-text's cells, with a
+// registered chunker whose embed text is not its breadcrumb and body. The embedder receives exactly
+// the embed text; a restart over unchanged files embeds nothing; an embedding cut short by a stop
+// resumes from the row; a body change keeping the embed text embeds nothing, an embed text change
+// once; one embed text on two chunks is one call.
 func TestAVectorIsMadeOfWhatItsHashNames(t *testing.T) {
 	reg := registered(t, &funcChunker{version: "fake-1"})
 	held := newFake("m", "a")

@@ -17,7 +17,7 @@ AutoDoc gives every CLI coding agent direct, zero-configuration access to its hy
 
 ## 1. Self-Describing RPC Contracts (`autodoc --contracts`)
 
-Under the AutoDoc Module Convention (ADR 1791719881, `core/module`), every RPC verb in the daemon is registered from a declarative `module.Contract` struct (`rpc/contracts.go`, `core/todo/module.go`). A contract specifies the verb's name, the protocol version it arrived in (`Since`), its `Scope` (`Global`, `Workspace`, `LocalPeer`), its `Audience` (`Agent`, `User`, `Internal`), its ordered positional `Params`, its `Result` shape, and the numeric `PublicError` codes it may return.
+Under the AutoDoc Module Convention ([features as modules](../decisions/contract.md#features-as-modules-with-verb-contracts), `core/module`), every RPC verb in the daemon is registered from a declarative `module.Contract` struct (`rpc/contracts.go`, `core/todo/module.go`). A contract specifies the verb's name, the protocol version it arrived in (`Since`), its `Scope` (`Global`, `Workspace`, `LocalPeer`), its `Audience` (`Agent`, `User`, `Internal`), its ordered positional `Params`, its `Result` shape, and the numeric `PublicError` codes it may return.
 
 Because `Module.Verbs()` and `Module.Errors()` are pure data functions that perform no I/O, an agent or tool can inspect the complete RPC catalog offline—even when no daemon is running—using `autodoc --contracts`:
 
@@ -85,6 +85,8 @@ Rather than hardcoding one search strategy, `KB_OPERATIONS.md` teaches agents to
 
 ![Adaptive AI Agent Retrieval Ladder and Validation Protocol](agent-retrieval-ladder.mmd)
 
+The binary carries the manual, so an install without the Neovim plugin (Homebrew, mise, `go install`) can read it with no daemon: `autodoc --kb-operations` prints it as a KB's scaffold writes it, stamped with the build's version. `autodoc --tutorial` lists the short tutorial's pages, and `autodoc --tutorial 6` prints page 6, on the search models.
+
 ### Step 1: Known Target vs. Topic Lookup
 
 - **Known Target? Go Straight to It.** If the agent already holds an exact file path, a task ID, an ADR number from a task's `adr:` field, or a literal error string, it reads the file directly or runs a targeted `rg`. Searching for a file you can already name wastes a round-trip.
@@ -113,6 +115,7 @@ Every `search.query` response includes a `stages` diagnostic block:
    - Never pass a full conversational sentence to FTS5 lexical search (which requires every word to appear in the same section and fails on 17 of 18 conversational queries).
    - Instead, pass **2 to 3 distinctive keywords** or a starred prefix (`"--delete-branch stacked*"`).
    - Combine lexical search with `index.documents` (filtering by `facets`, `tags`, `paths`, or `sort: "updated"`), `doc.outline` (for heading hierarchy), and `graph.neighborhood` / `graph.links` / `graph.backlinks` (to follow `supersedes`, `superseded_by`, `amends`, and `adr` relations).
+   - Page `index.documents` by passing each answer's `next` back unread as `after`, until `more` is false. From protocol 35, `next` is an opaque cursor (a string, `""` at the end) for every session, and an integer offset is refused: don't compute `after`, echo it.
    - If one retry with a dropped word or prefix still misses, fall back to scoped `rg -il --glob '!archive/**' --glob '!raw/**'`.
 
 ### Step 3: Read `[line_start, line_end]` Spans, Not Whole Files

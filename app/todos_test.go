@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -32,8 +33,12 @@ func TestTheDaemonServesTheTodosModule(t *testing.T) {
 	kb := t.TempDir()
 	deps := &moduleDeps{store: db, workspaces: rpc.Fixed(rpc.Static(rpc.WorkspaceInfo{Name: "kb", Root: kb})), journal: sqlitejournal.New(db), log: logger.Nop{}}
 	ms := modules(deps)
-	if len(ms) != 1 || ms[0].Name() != "todos" {
-		t.Fatalf("modules %v", ms)
+	var names []string
+	for _, m := range ms {
+		names = append(names, m.Name())
+	}
+	if !slices.Equal(names, []string{"todos", "crew", "mail", "inbox"}) {
+		t.Fatalf("modules %v, want todos, crew, mail and inbox", names)
 	}
 	m := ms[0].(*todo.Manager)
 	// the served workspace resolves through the daemon's roots and disk
@@ -68,9 +73,10 @@ func mustEval(t *testing.T, p string) string {
 }
 
 // TestTheDaemonRefreshesClaimedTodoStores: the daemon runs the daily refresh of claimed todo stores
-// for as long as it serves (ADR 1791532020 §2.3). At its start it refreshes a claimed store never
-// refreshed: a task completed long ago is archived with no client asking, and the todos.changed it
-// logs names the workspace, as the verb's does. It stops with the daemon.
+// for as long as it serves (docs/decisions/todos.md#task-rules-and-the-daily-refresh). At its start
+// it refreshes a claimed store never refreshed: a task completed long ago is archived with no
+// client asking, and the todos.changed it logs names the workspace, as the verb's does. It stops
+// with the daemon.
 func TestTheDaemonRefreshesClaimedTodoStores(t *testing.T) {
 	ctx := context.Background()
 	dir := short(t)
@@ -126,7 +132,8 @@ func TestTheDaemonRefreshesClaimedTodoStores(t *testing.T) {
 
 // TestAFreshWorkspacesStoreReadsEmpty: an agent's first todos call, on a workspace whose store is
 // not made yet, is answered over --call as an empty store's, and makes nothing on disk; a root no
-// one registered is refused, as before (ADR 1791532020 r13).
+// one registered is refused, as before
+// (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write).
 func TestAFreshWorkspacesStoreReadsEmpty(t *testing.T) {
 	dir := short(t)
 	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
@@ -176,9 +183,10 @@ func TestAFreshWorkspacesStoreReadsEmpty(t *testing.T) {
 
 func asSlice(v any) []any { s, _ := v.([]any); return s }
 
-// TestATaskIsCheckedByTheTodoFormatNotTheKBSchema (ADR 1792015212 amendment 2): with a KB schema
-// that requires a type, a task the daemon wrote has no diagnostic, from doc.validate or the index.
-// A file outside the store still has the KB schema's.
+// TestATaskIsCheckedByTheTodoFormatNotTheKBSchema
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format): with a KB schema that requires a
+// type, a task the daemon wrote has no diagnostic, from doc.validate or the index. A file outside
+// the store still has the KB schema's.
 func TestATaskIsCheckedByTheTodoFormatNotTheKBSchema(t *testing.T) {
 	dir := short(t)
 	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")

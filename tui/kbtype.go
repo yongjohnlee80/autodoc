@@ -17,16 +17,17 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// KB TYPES — a workspace scaffolded from a KB type's git repo (ADR 1792349867). The add dialog's KB
-// type field stages a type: a shallow clone, read and validated by core/kbtype, never run. Add
-// then writes its plan through the daemon's workspace.scaffold, between workspace.add and
-// workspace.configure. A choice is fenced by a Ticket, so only the latest choice's stage can land.
+// KB TYPES — a workspace scaffolded from a KB type's git repo
+// (docs/decisions/contract.md#kb-types-are-git-repos-of-files). The add dialog's KB type field
+// stages a type: a shallow clone, read and validated by core/kbtype, never run. Add then writes its
+// plan through the daemon's workspace.scaffold, between workspace.add and workspace.configure. A
+// choice is fenced by a Ticket, so only the latest choice's stage can land.
 
 // kbTypeChoice is one of the KB type field's rows: None has no URL, Custom URL… is asked for.
 type kbTypeChoice struct{ name, title, url string }
 
-// builtinKBTypes are the first-party types, shown until the registry lists them (ADR 1792351195),
-// and kept for offline use after.
+// builtinKBTypes are the first-party types, shown until the registry lists them
+// (docs/decisions/plugins.md#the-registry), and kept for offline use after.
 var builtinKBTypes = []kbTypeChoice{
 	{"autovim.kb", "AutoVim coding KB", "https://github.com/yongjohnlee80/autovim.kb"},
 	{"zettelkasten.kb", "Zettelkasten", "https://github.com/yongjohnlee80/zettelkasten.kb"},
@@ -34,7 +35,7 @@ var builtinKBTypes = []kbTypeChoice{
 	{"slipbox.kb", "Slip-box", "https://github.com/yongjohnlee80/slipbox.kb"},
 }
 
-// noneNote is what None says, in Johno's words for a coding repo (the dialog task): the English of
+// noneNote is what None says, worded for a location that may be a coding repo: the English of
 // noneNoteText, which says it in the UI's language.
 const noneNote = "Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option."
 
@@ -164,7 +165,7 @@ func (h *Host) kbTypeURL(url string) {
 
 // pickKBType stages url for the open add dialog ("" is None). Every pick, and the dialog's opening
 // and closing (dropKBType), bump h.kbTypeSeq, so only the latest pick's stage can land: a stale
-// one is removed unseen (ADR 1792349867 §4.4).
+// one is removed unseen (docs/decisions/contract.md#choosing-a-type-stages-it).
 func (h *Host) pickKBType(url string) {
 	h.dropKBType()
 	h.set("App.kbTypeCustomShown", false)
@@ -208,7 +209,7 @@ func (h *Host) dropKBType() {
 
 // kbResume is a partial add's unfinished type: the workspace it added and the type as staged. The
 // dialog reopened on that workspace finishes the files, create-only, before its Save configures,
-// so a retry never adds again and never writes into another workspace (Zen #240 r0 R2).
+// so a retry never adds again and never writes into another workspace.
 type kbResume struct {
 	ws string
 	s  *stagedKBType

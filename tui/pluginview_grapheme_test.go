@@ -90,7 +90,7 @@ func TestTheHostDrawsAFramesClustersInTheirColumns(t *testing.T) {
 
 // TestTheHostKeepsCellsWrittenApartInTheirColumns: clusters a plugin wrote one at a time, which
 // would join if their text ran together, keep the columns plugin.Frame gave them on the host:
-// what follows lands where Text said it would (Lector #230 c2 r0).
+// what follows lands where Text said it would.
 func TestTheHostKeepsCellsWrittenApartInTheirColumns(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -123,7 +123,7 @@ func TestTheHostKeepsCellsWrittenApartInTheirColumns(t *testing.T) {
 
 // TestTheHostKeepsEveryCellsCharacterAndColumn: through the real renderer, each cluster a plugin
 // wrote one Text at a time is drawn whole, at the column Text gave it, and so is the ASCII after:
-// single and paired regional indicators in both orders and parities (Lector #230 r1), and a seeded
+// single and paired regional indicators in both orders and parities, and a seeded
 // run of random sequences from a pool of clusters that join, re-pair or extend.
 func TestTheHostKeepsEveryCellsCharacterAndColumn(t *testing.T) {
 	const (

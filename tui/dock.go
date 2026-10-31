@@ -8,13 +8,14 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// THE DOCK — the menu bar's corner (ADR 1792397302): one icon per widget that is open, or that
-// runs on with its drawer closed (the terminal's shells, the agents, a plugin card's plugin), the
-// editor first. A click shows or hides (ADR 1792397302 r3): a shown panel's icon hides it, the
-// keyboard back in the editor; a hidden or closed one's is Go-to's own path (goTo), which shows it
-// as it was, or opens it, and gives it the keyboard. The editor's icon hides every shown panel, and
-// its next click shows those again. Hidden is golib's window minimize: the panel stays open, its
-// state kept and its Closed hook not run, and its icon is dimmed. While the dock lists more than the
+// THE DOCK — the menu bar's corner (docs/decisions/editor.md#the-dock-of-open-widgets): one icon
+// per widget that is open, or that runs on with its drawer closed (the terminal's shells, the
+// agents, a plugin card's plugin), the editor first. A click shows or hides
+// (docs/decisions/editor.md#dock-clicks-hide-and-show): a shown panel's icon hides it, the keyboard
+// back in the editor; a hidden or closed one's is Go-to's own path (goTo), which shows it as it
+// was, or opens it, and gives it the keyboard. The editor's icon hides every shown panel, and its
+// next click shows those again. Hidden is golib's window minimize: the panel stays open, its state
+// kept and its Closed hook not run, and its icon is dimmed. While the dock lists more than the
 // editor, the bar stays shown however tui.menu.autohide is set.
 
 // editorIcon is the editor's dock icon.
@@ -69,7 +70,7 @@ func (h *Host) newDockRows() *rows[widgetTarget] {
 	return newRows(tuidecl.NewListModel("key", "icon", "title", "hidden", "flash"), h.dockRowOf)
 }
 
-// A HIDE FLASHES ITS ICON (Johno, 2026-10-24): a panel hidden into the dock, however (the dock's
+// A HIDE FLASHES ITS ICON: a panel hidden into the dock, however (the dock's
 // click, the editor's icon, a strip's _, the terminal's and the agents' toggles, Escape), lights its
 // icon twice, a step apart, so the eye finds where it went: lit, unlit, lit, then its hidden look.
 // A panel closed out of the dock flashes nothing. Shown again mid-flash, its icon is its own at

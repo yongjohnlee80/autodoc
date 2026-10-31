@@ -10,8 +10,9 @@ import (
 )
 
 // THE TUTORIAL — Help › Tutorial…: the short tutorials of docs/tutorials/ (docs.Tutorials, the
-// files the docs site publishes), read in order, in the UI's language (ADR 1792451618): a page a
-// language lacks is English's. The dialog shows one at a time, Rendered under
+// files the docs site publishes), read in order, in the UI's language
+// (docs/decisions/editor.md#six-languages): a page a language lacks is English's. The dialog shows
+// one at a time, Rendered under
 // --gui, its mermaid diagrams drawn, and as text in a terminal, with Previous and Next
 // (views/Tutorial.qml). Neither is ever disabled, so neither disables itself from its own click:
 // Previous on the first page does nothing, and Next on the last is Close.

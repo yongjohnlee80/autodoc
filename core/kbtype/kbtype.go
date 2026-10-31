@@ -17,8 +17,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// The limits a type is read within (ADR 1792349867 §4.1). They bound what is read and applied,
-// not the clone that staged it: that is the git helper's timeout's (rationale §R2).
+// The limits a type is read within (docs/decisions/contract.md#kb-types-are-git-repos-of-files).
+// They bound what is read and applied, not the clone that staged it: that is the git helper's
+// timeout's.
 const (
 	MaxManifestSize = 64 << 10  // kbtype.toml
 	MaxFileSize     = 256 << 10 // one file of tree/
@@ -183,7 +184,8 @@ func readTree(root string) (map[string][]byte, error) {
 	return files, nil
 }
 
-// validate checks t against the ADR's rules (§4.1), once its files are read.
+// validate checks t against the rules in
+// docs/decisions/contract.md#kb-types-are-git-repos-of-files, once its files are read.
 func (t *Type) validate() error {
 	if t.Format != Format {
 		return invalid("%s: format %d; this AutoDoc reads format %d", Manifest, t.Format, Format)

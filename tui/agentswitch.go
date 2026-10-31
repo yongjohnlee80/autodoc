@@ -2,13 +2,14 @@ package tui
 
 import "fmt"
 
-// WORKSPACE SWITCHES, TOLD TO THE AGENTS (ADR 1792988759 r2) — an agent AutoDoc started is bound to
-// the workspace it started in: its env, its folder and its guide name it, and a switch never changes
-// them. A switch is told when the agent asks, never typed into its terminal: each agent instance keeps
-// the workspace it last saw, and editor.workspace answers one switch from that to the TUI's, however
-// many came between (A→B→C is A→C, A→B→A none). A Claude agent asks with each prompt, through the
-// UserPromptSubmit hook in its folder (agenthook.go). editor.document and editor.buffers say when a
-// buffer is in a workspace other than the asking agent's.
+// WORKSPACE SWITCHES, TOLD TO THE AGENTS
+// (docs/decisions/crew.md#workspace-switches-are-told-not-imposed) — an agent AutoDoc started is
+// bound to the workspace it started in: its env, its folder and its guide name it, and a switch
+// never changes them. A switch is told when the agent asks, never typed into its terminal: each
+// agent instance keeps the workspace it last saw, and editor.workspace answers one switch from that
+// to the TUI's, however many came between (A→B→C is A→C, A→B→A none). A Claude agent asks with each
+// prompt, through the UserPromptSubmit hook in its folder (agenthook.go). editor.document and
+// editor.buffers say when a buffer is in a workspace other than the asking agent's.
 
 // wsRef is a workspace as an agent sees it: its name and root. wsInfo's fields are the TUI's own.
 type wsRef struct{ Name, Root string }

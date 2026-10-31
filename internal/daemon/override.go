@@ -10,12 +10,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// A WORKSPACE'S OWN PROVIDER (ADR 0212 §7). A workspace may embed with a stored provider of its
-// own instead of the daemon's: switching it rebuilds that workspace's vectors alone, and a switch
-// of the daemon's provider leaves it as it is. Every provider draws from the daemon's one set of
-// slots, and the shared embedding queue stays the one that decides which workspace fills next. A
-// provider that cannot be set up leaves its workspace searching by words, and says why; it never
-// falls back to the daemon's model, which would re-embed the workspace with another model.
+// A WORKSPACE'S OWN PROVIDER (docs/decisions/search.md#workspace-providers-and-peer-changes). A
+// workspace may embed with a stored provider of its own instead of the daemon's: switching it
+// rebuilds that workspace's vectors alone, and a switch of the daemon's provider leaves it as it
+// is. Every provider draws from the daemon's one set of slots, and the shared embedding queue stays
+// the one that decides which workspace fills next. A provider that cannot be set up leaves its
+// workspace searching by words, and says why; it never falls back to the daemon's model, which
+// would re-embed the workspace with another model.
 
 // SetProviderBuilder gives the workspaces the way to set up a stored provider by name.
 func (m *Workspaces) SetProviderBuilder(build func(ctx context.Context, name string) (embed.Provider, error)) {

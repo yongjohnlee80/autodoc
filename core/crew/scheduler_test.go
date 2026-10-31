@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -54,14 +55,29 @@ type wakeRig struct {
 	w     *fakeWaker
 	s     *crew.Scheduler
 	epoch int64
+
+	fmu    sync.Mutex
+	failed []string // each wake the scheduler told of as failed: "<session>: <reason>"
 }
 
-func newWakeRig(t *testing.T, run string) *wakeRig {
+func newWakeRig(t *testing.T, run string) *wakeRig { return newWakeRigWith(t, run, nil) }
+
+// newWakeRigWith is newWakeRig with more wakers, by kind, beside the fake one.
+func newWakeRigWith(t *testing.T, run string, more map[string]crew.Waker) *wakeRig {
 	r := &wakeRig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), w: &fakeWaker{}}
 	r.mem = crewtest.NewMem(r.clock.Now)
 	r.m = crew.New(r.mem, crew.WithSessionEnder(&crewtest.Enders{}))
-	r.s = r.m.NewScheduler(run, map[string]crew.Waker{"fake": r.w}, crew.WithWakeClock(r.clock.Now),
-		crew.WithWakeErrors(func(err error) { t.Errorf("scheduler: %v", err) }))
+	wakers := map[string]crew.Waker{"fake": r.w}
+	for k, w := range more {
+		wakers[k] = w
+	}
+	r.s = r.m.NewScheduler(run, wakers, crew.WithWakeClock(r.clock.Now),
+		crew.WithWakeErrors(func(err error) { t.Errorf("scheduler: %v", err) }),
+		crew.WithWakeFailures(func(ep crew.Endpoint, err error) {
+			r.fmu.Lock()
+			defer r.fmu.Unlock()
+			r.failed = append(r.failed, ep.Session+": "+err.Error())
+		}))
 	e, err := r.m.Claim(r.ctx, "autodoc:w", "host", "")
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +162,11 @@ func TestFailuresBackOffAndAnUnansweredWakeTimesOut(t *testing.T) {
 	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 1 || *w.NextAt != r.clock.Now().Add(5*time.Second).UnixNano() {
 		t.Fatalf("after one failure: %+v", w)
 	}
+	// the row keeps the count, never the reason: the scheduler tells of it, with the session's
+	if r.fmu.Lock(); !slices.Equal(r.failed, []string{s.Session + ": refused"}) {
+		t.Fatalf("the failure told: %q", r.failed)
+	}
+	r.fmu.Unlock()
 	r.look()
 	if r.w.count() != 1 {
 		t.Fatal("retried before its backoff")
@@ -158,6 +179,10 @@ func TestFailuresBackOffAndAnUnansweredWakeTimesOut(t *testing.T) {
 	r.w.answer = nil
 	r.clock.Advance(30 * time.Second)
 	r.look() // accepted, then unanswered
+	if r.fmu.Lock(); len(r.failed) != 2 {
+		t.Fatalf("an accepted wake was told as failed, or a failure untold: %q", r.failed)
+	}
+	r.fmu.Unlock()
 	r.clock.Advance(2 * time.Minute)
 	r.look()
 	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 3 || *w.NextAt != r.clock.Now().Add(2*time.Minute).UnixNano() {
@@ -245,7 +270,7 @@ func TestARestartRecoversAndALateOutcomeIsDropped(t *testing.T) {
 func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	r := newWakeRig(t, "run1")
 	s := r.session("gold")
-	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1")
+	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
 	if err != nil || !ok {
 		t.Fatalf("reserve: %v %v", ok, err)
 	}
@@ -391,7 +416,7 @@ func TestRunLooksAgainAfterAStoreError(t *testing.T) {
 func TestEachAttemptOwesItsOwnEnd(t *testing.T) {
 	r := newWakeRig(t, "run1")
 	s := r.session("gold")
-	tok, _, ok, err := r.m.Reserve(r.ctx, s.Session, "run1")
+	tok, _, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
 	if err != nil || !ok {
 		t.Fatalf("reserve: %v %v", ok, err)
 	}
@@ -455,4 +480,205 @@ func TestRunBacksOffWhileTheStoreRefuses(t *testing.T) {
 		t.Fatalf("the wait moved while every sweep was refused: %+v", still)
 	}
 	within(t, "the timed-out wait processed once the store is back", func() bool { return r.wake(s.Session).State != crew.WakeAwaiting })
+}
+
+// A session whose endpoint no waker serves is watch-only
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler, phase 3 brings the wakers one kind at a
+// time): never reserved, never failed, never reported unreachable, while a served kind is woken.
+// Its row recovered from an earlier run (next_at = now, past at once) never sets Run's timer
+// either: a deadline on a row no look can act on would have Run look again at once, forever.
+func TestAKindWithNoWakerIsWatchOnly(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	gold, tifa := r.session("gold"), r.session("tifa")
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: tifa.Session, Generation: 1, Kind: "other"})
+	})
+	// idle and pending, due but for its kind: the reservation itself refuses it
+	if _, _, ok, err := m.Reserve(r.ctx, tifa.Session, "run1", []string{"fake"}); err != nil || ok {
+		t.Fatalf("reserving tifa, whose kind no waker serves: %v %v, want nothing reserved", ok, err)
+	}
+	r.write(func(tx crew.Tx) error {
+		wk, _, err := tx.Wake(tifa.Session) // an attempt an earlier run left in flight
+		if err != nil {
+			return err
+		}
+		wk.State, wk.Token, wk.AttemptGen, wk.DaemonRun = crew.WakeInFlight, "t", wk.PendingGen, "run0"
+		return tx.PutWake(wk)
+	})
+	sched := m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now), crew.WithWakeRetry(20*time.Millisecond))
+	ctx, cancel := context.WithCancel(r.ctx)
+	done := make(chan error, 1)
+	fs.mu.Lock()
+	base := fs.writes
+	fs.mu.Unlock()
+	go func() { done <- sched.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	within(t, "gold, of a served kind, woken", func() bool { return w.count() == 1 })
+	time.Sleep(300 * time.Millisecond) // a cell's own window, measuring how often Run looks
+	fs.mu.Lock()
+	writes := fs.writes - base
+	fs.mu.Unlock()
+	if writes > 40 { // the recovery, gold's attempt and a few looks; a spin on tifa's deadline is thousands
+		t.Fatalf("%d writes in 300 ms: Run spun on a deadline of a row no look can act on", writes)
+	}
+	w.mu.Lock()
+	calls := slices.Clone(w.calls)
+	w.mu.Unlock()
+	if len(calls) != 1 || calls[0] != gold.Session {
+		t.Fatalf("calls %v, want gold's alone", calls)
+	}
+	if tw := r.wake(tifa.Session); tw.State != crew.WakeIdle || tw.Failures != 0 || tw.PendingGen <= tw.AnnouncedGen {
+		t.Fatalf("tifa's row: %+v, want idle, pending, never failed (watch-only)", tw)
+	}
+}
+
+// A waker found after the scheduler started (AddWaker) serves its kind from the next look: the
+// kind's sessions, watch-only until then, are reserved and woken; nil adds nothing.
+func TestAWakerAddedLaterServesItsKind(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 1, Kind: "late"})
+	})
+	r.look()
+	if r.w.count() != 0 {
+		t.Fatalf("%d calls before a waker for its kind: want none (watch-only)", r.w.count())
+	}
+	r.s.AddWaker("late", nil)
+	r.look()
+	late := &fakeWaker{}
+	r.s.AddWaker("late", late)
+	r.look()
+	if late.count() != 1 || r.w.count() != 0 {
+		t.Fatalf("after AddWaker: %d calls on the late waker, %d on the other; want 1 and 0", late.count(), r.w.count())
+	}
+}
+
+// Fire rings at once through the scheduler's own reservation; when the loop's attempt holds the row
+// already, it waits for that attempt's end: accepted, fired; and a caller's bound that ends first
+// is not fired. A failing doorbell is not fired, and backs off as the loop's would.
+func TestFireRingsNowOrWaitsForTheLoopsAttempt(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	if fired, err := r.m.Fire(r.ctx, s.Profile); err != nil || !fired || r.w.count() != 1 {
+		t.Fatalf("a due session: fired %v %v, %d calls", fired, err, r.w.count())
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeAwaiting {
+		t.Fatalf("after its fire: %+v, recorded as the loop's would be", w)
+	}
+	r.received(s.Session)
+
+	// the loop's attempt holds the row: Fire waits for its end
+	r.w.block, r.w.inside = make(chan struct{}), make(chan struct{}, 1)
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	r.s.Look(r.ctx)
+	<-r.w.inside
+	result := make(chan bool, 1)
+	go func() {
+		fired, err := r.m.Fire(r.ctx, s.Profile)
+		if err != nil {
+			t.Error(err)
+		}
+		result <- fired
+	}()
+	select {
+	case <-result:
+		t.Fatal("Fire answered before the loop's attempt ended")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(r.w.block)
+	if !<-result || r.w.count() != 2 {
+		t.Fatalf("Fire after the loop's accepted attempt: not fired, or %d calls", r.w.count())
+	}
+	r.s.Wait()
+	r.received(s.Session)
+
+	// a bound that ends while the loop's attempt is still in flight: not fired
+	r.w.block = make(chan struct{})
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	r.s.Look(r.ctx)
+	<-r.w.inside
+	ctx, cancel := context.WithTimeout(r.ctx, 20*time.Millisecond)
+	if fired, err := r.m.Fire(ctx, s.Profile); fired || err != nil {
+		t.Fatalf("a bound that ended first: fired %v %v", fired, err)
+	}
+	cancel()
+	close(r.w.block)
+	r.s.Wait()
+	r.received(s.Session)
+
+	// a failing doorbell: not fired, and backed off
+	r.w.block, r.w.inside, r.w.answer = nil, nil, errors.New("refused")
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	if fired, err := r.m.Fire(r.ctx, s.Profile); fired || err != nil {
+		t.Fatalf("a failing doorbell: fired %v %v", fired, err)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 1 || w.NextAt == nil {
+		t.Fatalf("after the failed fire: %+v, want backed off", w)
+	}
+	// backing off: nothing rings until the backoff ends
+	calls := r.w.count()
+	if fired, _ := r.m.Fire(r.ctx, s.Profile); fired || r.w.count() != calls {
+		t.Fatalf("a fire during the backoff rang (%d calls)", r.w.count())
+	}
+}
+
+// entry is crew.list's row for codename.
+func (r *wakeRig) entry(codename string) crew.Entry {
+	r.t.Helper()
+	es, err := r.m.List(r.ctx)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	for _, e := range es {
+		if e.Codename == codename {
+			return e
+		}
+	}
+	r.t.Fatalf("crew.list has no %s: %+v", codename, es)
+	return crew.Entry{}
+}
+
+// reachabilityChanges counts the human feed's reachability changes for session.
+func (r *wakeRig) reachabilityChanges(session string) int {
+	n := 0
+	for _, c := range r.mem.Inbox() {
+		if c.Kind == crew.ChangeReachability && c.Ref == session {
+			n++
+		}
+	}
+	return n
+}
+
+// TestATimeoutCountsTowardFive: a failure that may pass (a dial cut off by its deadline) counts once
+// and backs off: still reachable, why saying when the next try is; the fifth makes the session
+// unreachable, why naming that failure.
+func TestATimeoutCountsTowardFive(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.w.answer = fmt.Errorf("crew: dialing the socket: %v", context.DeadlineExceeded)
+	r.look()
+	w := r.wake(s.Session)
+	e := r.entry("gold")
+	if w.Failures != 1 || !e.Reachable || e.Why != crew.WhyBackoffUntil+" "+time.Unix(0, *w.NextAt).UTC().Format(time.RFC3339) {
+		t.Fatalf("after one timeout: %d failures, %+v; want 1, reachable, backing off", w.Failures, e)
+	}
+	for i := 2; i <= 5; i++ {
+		r.clock.Advance(time.Hour)
+		r.look()
+	}
+	w, e = r.wake(s.Session), r.entry("gold")
+	if w.Failures != 5 || e.Reachable || e.Why != crew.WhyWakesFailing+": crew: dialing the socket: "+context.DeadlineExceeded.Error() {
+		t.Fatalf("after five timeouts: %d failures, %+v; want 5, unreachable, why naming the timeout", w.Failures, e)
+	}
 }

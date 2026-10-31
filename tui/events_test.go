@@ -17,8 +17,8 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	})
 	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	two := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
-	one.s.WaitForText(t, "· alpha")
-	two.s.WaitForText(t, "· beta")
+	one.waitAttached(t, "alpha")
+	two.waitAttached(t, "beta")
 
 	one.h.p.Post(func() { one.h.openPath("a.md") })
 	one.waitFile(t, "a.md")
@@ -60,7 +60,7 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	two.openSettings(t, "alpha", 0)
 	two.saveForm(func(f *settingsForm) { f.name = "alpha2" })
 	one.s.WaitFor(t, "one on alpha2", func(string) bool { return onLoop(one, func() string { return one.h.ws }) == "alpha2" })
-	one.s.WaitForText(t, "· alpha2")
+	one.waitAttached(t, "alpha2")
 	if n := one.file(); !n.open || !n.dirty || n.path != "a.md" || !strings.Contains(one.editorText(), "edited and unsaved") {
 		t.Fatalf("one's note after a peer's rename: %+v", n)
 	}
@@ -76,8 +76,8 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	})
 	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	two := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
-	one.s.WaitForText(t, "· alpha")
-	two.s.WaitForText(t, "· beta")
+	one.waitAttached(t, "alpha")
+	two.waitAttached(t, "beta")
 	one.h.p.Post(func() { one.h.openPath("conf.yaml") })
 	one.waitFile(t, "conf.yaml")
 	one.h.p.Post(func() {
@@ -94,7 +94,7 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	two.h.p.Post(func() {
 		two.h.removeWorkspaceConfirmed("alpha")
 	})
-	one.s.WaitForText(t, "· beta")
+	one.waitAttached(t, "beta")
 	one.waitNoticed(t, "kept as an untitled draft")
 	if onLoop(one, tk.Current) {
 		t.Fatal("an answer for the file kept as the draft would still land on the draft")
@@ -119,8 +119,8 @@ func TestTheLastWorkspacesRemovalDropsItsFilesAnswers(t *testing.T) {
 	d := startManaged(t, map[string]string{"alpha": fileDir(t, "conf.yaml", "server:\n  host: db\n")})
 	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	two := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
-	one.s.WaitForText(t, "· alpha")
-	two.s.WaitForText(t, "· alpha")
+	one.waitAttached(t, "alpha")
+	two.waitAttached(t, "alpha")
 	one.h.p.Post(func() { one.h.openPath("conf.yaml") })
 	one.waitFile(t, "conf.yaml")
 	one.h.p.Post(func() {

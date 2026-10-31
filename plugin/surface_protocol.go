@@ -6,7 +6,8 @@ import (
 )
 
 // PROTOCOL 10'S MESSAGES ON STDOUT — a pixel surface's geometry, the pointer in dp, paste, and what
-// the plugin tells the host of its caret, its pointer's shape and the clipboard (ADR 1792797354).
+// the plugin tells the host of its caret, its pointer's shape and the clipboard
+// (docs/decisions/plugins.md#pixel-surfaces).
 // The frames themselves cross the side channel (surfacewire.go).
 
 // The notifications of protocol 10.

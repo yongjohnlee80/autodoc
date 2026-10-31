@@ -13,11 +13,12 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// SETTING UP SEMANTIC SEARCH — Search models › Embedding Models › Set up… (ADR 1793005098 §4.4):
-// what this machine runs (host.probe), the models that fit it (embedding.catalog), the room and time
-// each workspace takes (embedding.estimate), the download (embedding.pull, polled once a second),
-// and Use: a plan of existing setters, each workspace's target computed apart (its provider, its
-// policy), applied in order and retried from the start, every step a no-op once done.
+// SETTING UP SEMANTIC SEARCH — Search models › Embedding Models › Set up…
+// (docs/decisions/search.md#the-setup-dialog): what this machine runs (host.probe), the models that
+// fit it (embedding.catalog), the room and time each workspace takes (embedding.estimate), the
+// download (embedding.pull, polled once a second), and Use: a plan of existing setters, each
+// workspace's target computed apart (its provider, its policy), applied in order and retried from
+// the start, every step a no-op once done.
 
 // pollPullEvery is how often a running download's state is read.
 const pollPullEvery = time.Second
@@ -31,7 +32,7 @@ type setupRow struct {
 }
 
 // target is what Use makes of r: the provider it will have ("" clears an own one) and its policy,
-// each with whether it changes (ADR §4.4's table).
+// each with whether it changes (docs/decisions/search.md#the-setup-dialog).
 func (r setupRow) target() (provider string, setProvider bool, policy string, setPolicy bool) {
 	off := r.policy == store.EmbeddingNever
 	switch {
@@ -543,11 +544,12 @@ func (s *embedSetup) retry() {
 	s.apply(s.plan)
 }
 
-// apply runs plan's steps in order (ADR §4.4): the workspaces turned off, the provider found or
-// added, used unless it already is, then the ticked workspaces' targets. Each run reads the
-// workspaces as they are first, and a setter whose target already holds is skipped: the daemon
-// restarts a workspace on every workspace.set_provider, so a Retry must not repeat one that took.
-// A step that fails stops the run there, saying which, and keeps plan for Retry.
+// apply runs plan's steps in order (docs/decisions/search.md#the-setup-dialog): the workspaces
+// turned off, the provider found or added, used unless it already is, then the ticked workspaces'
+// targets. Each run reads the workspaces as they are first, and a setter whose target already holds
+// is skipped: the daemon restarts a workspace on every workspace.set_provider, so a Retry must not
+// repeat one that took. A step that fails stops the run there, saying which, and keeps plan for
+// Retry.
 func (s *embedSetup) apply(plan *setupPlan) {
 	session := s.session
 	var name string
@@ -655,7 +657,7 @@ func (s *embedSetup) apply(plan *setupPlan) {
 // provider is the stored provider equal to the setup's spec (kind ollama, base, model, tokens, no
 // key): the one in use when it is one of them, else the first by name; none, one added under a name
 // made of the model and the context, -2, -3 … past an unequal one's. Another context's provider is
-// left alone (ADR §4.4, rationale §R6a).
+// left alone (docs/decisions/search.md#the-setup-dialog).
 func (s *embedSetup) provider(ctx context.Context, base, model string, tokens int64) (string, error) {
 	v, err := s.c.Call(ctx, "embedding.providers")
 	if err != nil {

@@ -13,9 +13,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// TestCompactReclaimsAndRewritesTheStore (ADR 1791284787 §2.5): --compact, with the daemon stopped,
-// reclaims a workspace's unused model and rewrites the store into incremental auto-vacuum mode; with
-// the store's lease held (a daemon serving it), it is refused, saying how to stop the daemon.
+// TestCompactReclaimsAndRewritesTheStore (docs/decisions/store.md#the-store-compacts): --compact,
+// with the daemon stopped, reclaims a workspace's unused model and rewrites the store into
+// incremental auto-vacuum mode; with the store's lease held (a daemon serving it), it is refused,
+// saying how to stop the daemon.
 func TestCompactReclaimsAndRewritesTheStore(t *testing.T) {
 	ctx := context.Background()
 	state := t.TempDir()

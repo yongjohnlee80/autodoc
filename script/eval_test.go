@@ -10,7 +10,7 @@ import (
 	"github.com/yuin/gopher-lua/parse"
 )
 
-// eval_test.go: a shell's environment and Eval (ADR 1792256103 §4.3, §5 cells 5-8).
+// eval_test.go: a shell's environment and Eval (docs/decisions/editor.md#the-shells-environment).
 
 func shellEval(t *testing.T, e *Engine, sh *Shell, chunk string) []string {
 	t.Helper()
@@ -112,7 +112,8 @@ func TestEvalStopsAtTheDeadline(t *testing.T) {
 	}
 }
 
-// incompleteCases are Lector r1 R4's corpus: chunks a next line can finish, and chunks no line can.
+// incompleteCases are the corpus a review asked for: chunks a next line can finish, and chunks no
+// line can.
 var incompleteCases = []struct {
 	chunk string
 	more  bool
@@ -207,7 +208,7 @@ func TestTailState(t *testing.T) {
 	}
 }
 
-// Lector PR r0 R1: a value's __tostring is the chunk's Lua, written inside its protected call and
+// A value's __tostring is the chunk's Lua, written inside its protected call and
 // deadline: a normal one is the value's text, a raising one an error and never a panic, an endless
 // one stopped; the stack is as it was and the next chunk runs.
 func TestEvalWritesValuesUnderTheDeadline(t *testing.T) {

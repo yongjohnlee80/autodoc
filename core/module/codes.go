@@ -7,8 +7,9 @@ import "fmt"
 // (-32020, -32021) and the daemon's shared ones (-32060 to -32070) belong to rpc.
 var codeRanges = map[string][2]int64{
 	"todos": {-32089, -32071},
-	"crew":  {-32109, -32090}, // ADR 1793271500 §4.1
-	"mail":  {-32129, -32110}, // ADR 1793271500 §4.1
+	"crew":  {-32109, -32090}, // docs/decisions/crew.md#three-modules-and-one-protocol
+	"mail":  {-32129, -32110}, // docs/decisions/crew.md#three-modules-and-one-protocol
+	"inbox": {-32139, -32130}, // docs/decisions/crew.md#three-modules-and-one-protocol
 }
 
 // Shared reports whether code is one of the daemon's shared codes (-32060 to -32070: no such

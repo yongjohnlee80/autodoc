@@ -151,6 +151,8 @@ type Host struct {
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals *terminals
 	agents    *agents
+	crew      *crewHost  // the window's crew scope (crewhost.go)
+	crewInbox *crewInbox // the human's crew inbox in this window (crewinbox.go)
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
@@ -380,8 +382,10 @@ type Options struct {
 	Profiler *profiling.Profiler
 	// Plugins is where the Plugins menu finds plugins (plugins.go); its zero value finds none.
 	Plugins Plugins
-	// Registrations are this binary's own (ADR 0216): a daemon reporting a strict subset of them is
-	// offered a restart as this build (registrations.go). The zero value is the community build's.
+	// Registrations are this binary's own
+	// (docs/decisions/search.md#registered-chunkers-and-derivers): a daemon reporting a strict
+	// subset of them is offered a restart as this build (registrations.go). The zero value is the
+	// community build's.
 	Registrations registrations.Tables
 	// AgentDir is where the agent terminal's agents work, a folder a workspace (agent.go); "" is
 	// one under the system's temporary folder.
@@ -492,6 +496,10 @@ func newHost(session *Session, opt Options) *Host {
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
+	h.crew = newCrewHost(core{h}, opt.AgentDir)
+	h.agents.crew = h.crew
+	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
+	h.agents.inbox = h.crewInbox
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing

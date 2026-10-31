@@ -15,8 +15,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// CONFIGURE — a workspace's settings saved together (ADR 0214 §3): the TUI's Edit and Advanced
-// tabs send every change in one workspace.configure. Configure checks each change the way its
+// CONFIGURE — a workspace's settings saved together
+// (docs/decisions/store.md#workspace-settings-saved-together): the TUI's Edit and Advanced tabs
+// send every change in one workspace.configure. Configure checks each change the way its
 // single-field verb does, saves them all in one store transaction, then does what each one that
 // changed needs, as its verb would: serve the workspace under its new name, re-read the schema and
 // the text extensions, give the queue the policy, restart with new patterns (or a new provider),
@@ -160,8 +161,9 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		m.revalidate(s.id)
 	}
 	if (c.GraphOnly != nil || c.TodoSearch != nil) && c.Include == nil {
-		// a path's mode is in its document's identity (ADR 1792015212 §2.1): revalidating indexes
-		// exactly the paths whose mode changed, their chunks added or dead in one generation
+		// a path's mode is in its document's identity (docs/decisions/todos.md#graph-only-indexing):
+		// revalidating indexes exactly the paths whose mode changed, their chunks added or dead in one
+		// generation
 		if err := m.applyModes(ctx, s.id); err != nil {
 			logger.Warning(m.opts.Log, err, logger.Fields{"event": "workspace.modes.failed", "workspace": name})
 		}

@@ -1,5 +1,6 @@
 // Package api is `autodoc --server`'s HTTP API over enterprise search: POST /v1/search, with a
-// bearer token per client (ADR 1791762085 §4.5). A request is answered, in order:
+// bearer token per client (docs/decisions/server.md#an-http-api-with-a-token-per-client). A request
+// is answered, in order:
 //
 //  1. the method and the path (405, 404);
 //  2. the bearer token, its SHA-256 compared with every client's in constant time (401), so a
@@ -40,9 +41,10 @@ import (
 // The paths the API answers: search (POST, a client's token), health (GET, public) and status
 // (GET, an operator's token).
 const (
-	Path       = "/v1/search"
-	HealthPath = "/v1/health"
-	StatusPath = "/v1/status"
+	Path        = "/v1/search"
+	HealthPath  = "/v1/health"
+	StatusPath  = "/v1/status"
+	MetricsPath = "/v1/metrics" // served only WithMetrics
 )
 
 // The request's bounds.
@@ -97,6 +99,10 @@ func WithLogger(l logger.Logger) Option { return func(h *Handler) { h.log = l } 
 // WithOps serves health and status from c: without it, /v1/health and /v1/status are not found.
 func WithOps(c *ops.Collector) Option { return func(h *Handler) { h.ops = c } }
 
+// WithMetrics serves GET /v1/metrics, behind the operators' tokens as /v1/status
+// is, from the same snapshot. Without it the path is not found, and is counted as any other.
+func WithMetrics(on bool) Option { return func(h *Handler) { h.metrics = on } }
+
 // WithOperators are the tokens that may read /v1/status.
 func WithOperators(o []Operator) Option { return func(h *Handler) { h.operators = slices.Clone(o) } }
 
@@ -127,6 +133,11 @@ type Handler struct {
 
 	// the requests answered since TakeCounts last took them, by status class, and the slowest
 	ok, client4xx, server5xx, slowest atomic.Int64
+
+	metrics bool
+	// the requests answered since the server started, by path: /v1/metrics's, never reset
+	totalsMu sync.Mutex
+	totals   ops.HTTPTotals
 }
 
 // TakeCounts are the requests answered since it was last called, which it starts again from zero:
@@ -136,8 +147,47 @@ func (h *Handler) TakeCounts() ops.HTTPCounts {
 		Slowest: time.Duration(h.slowest.Swap(0))}
 }
 
-// count adds one answered request to the counts.
-func (h *Handler) count(status int, took time.Duration) {
+// Totals are the requests answered since the server started, by path: a copy.
+func (h *Handler) Totals() ops.HTTPTotals {
+	h.totalsMu.Lock()
+	defer h.totalsMu.Unlock()
+	out := make(ops.HTTPTotals, len(h.totals))
+	for p, t := range h.totals {
+		c := ops.PathTotals{ByClass: map[string]uint64{}, Buckets: slices.Clone(t.Buckets), Count: t.Count, Sum: t.Sum}
+		for k, v := range t.ByClass {
+			c.ByClass[k] = v
+		}
+		out[p] = c
+	}
+	return out
+}
+
+// total adds one answered request on path to the totals.
+func (h *Handler) total(path string, status int, took time.Duration) {
+	h.totalsMu.Lock()
+	defer h.totalsMu.Unlock()
+	if h.totals == nil {
+		h.totals = ops.HTTPTotals{}
+	}
+	t := h.totals[path]
+	if t.ByClass == nil {
+		t.ByClass = map[string]uint64{}
+		t.Buckets = make([]uint64, len(ops.DurationBuckets))
+	}
+	t.ByClass[ops.ClassOf(status)]++
+	for i, le := range ops.DurationBuckets {
+		if took.Seconds() <= le {
+			t.Buckets[i]++
+		}
+	}
+	t.Count++
+	t.Sum += took
+	h.totals[path] = t
+}
+
+// count adds one answered request on path to the counts and the totals.
+func (h *Handler) count(path string, status int, took time.Duration) {
+	h.total(path, status, took)
 	switch {
 	case status >= 500:
 		h.server5xx.Add(1)
@@ -234,15 +284,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	switch r.URL.Path {
 	case HealthPath:
-		h.count(h.serveHealth(ctx, w, r), time.Since(start))
+		h.count(ops.PathHealth, h.serveHealth(ctx, w, r), time.Since(start))
 		return
 	case StatusPath:
-		h.count(h.serveStatus(ctx, w, r, start), time.Since(start))
+		h.count(ops.PathStatus, h.serveStatus(ctx, w, r, start), time.Since(start))
 		return
+	case MetricsPath:
+		if h.metrics && h.ops != nil {
+			h.count(ops.PathMetrics, h.serveMetrics(ctx, w, r, start), time.Since(start))
+			return
+		}
+	}
+	// a path the API does not answer is counted as "other": no raw URL path becomes a label
+	counted := ops.PathOther
+	if r.URL.Path == Path {
+		counted = ops.PathSearch
 	}
 	var queryLen int
 	a, res := h.answer(ctx, w, r, &queryLen)
-	defer func() { h.count(a.status, time.Since(start)) }()
+	defer func() { h.count(counted, a.status, time.Since(start)) }()
 	if a.status == http.StatusOK {
 		writeJSON(w, http.StatusOK, res)
 	} else {
@@ -414,6 +474,37 @@ func (h *Handler) serveStatus(ctx context.Context, w http.ResponseWriter, r *htt
 		status = refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
 	}
 	logger.Info(h.log, fmt.Sprintf("status: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
+	return status
+}
+
+// serveMetrics is GET /v1/metrics: the exposition of the snapshot, filtered to the
+// operator's tenants, and of the API's totals. Its auth is /v1/status's: an operator's token, a
+// search client refused, none unauthorized.
+func (h *Handler) serveMetrics(ctx context.Context, w http.ResponseWriter, r *http.Request, start time.Time) int {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		return refuseNow(w, http.StatusMethodNotAllowed, "method_not_allowed", MetricsPath+" takes GET")
+	}
+	client, op := h.holder(r.Header.Get("Authorization"))
+	name, status := "-", http.StatusOK
+	switch {
+	case op != nil:
+		name = op.Name
+		var b strings.Builder
+		if err := ops.WriteMetrics(&b, h.ops.Snapshot(ctx).Only(op.Tenants), h.Totals()); err != nil {
+			status = refuseNow(w, http.StatusInternalServerError, "internal", "the metrics could not be written")
+			break
+		}
+		w.Header().Set("Content-Type", ops.MetricsContentType)
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, b.String())
+	case client != nil:
+		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "metrics are for an operator's token: a search client's grants do not cover it")
+	default:
+		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
+		status = refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+	}
+	logger.Info(h.log, fmt.Sprintf("metrics: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
 	return status
 }
 

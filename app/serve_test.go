@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
@@ -103,11 +104,14 @@ func writeConfig(t *testing.T, sock, state, extra string, workspaces ...string) 
 func start(t *testing.T, cfg, sock string) *daemon { return startAs(t, cfg, sock, testBuild) }
 
 // startAs is start, as build b.
-func startAs(t *testing.T, cfg, sock string, b build) *daemon {
+func startAs(t *testing.T, cfg, sock string, b build) *daemon { return startWith(t, cfg, sock, b, "") }
+
+// startWith is startAs with level as --log-level ("" for the config's).
+func startWith(t *testing.T, cfg, sock string, b build, level logger.Severity) *daemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{t: t, sock: sock, out: &syncBuf{}, cancel: cancel, done: make(chan error, 1)}
-	go func() { d.done <- runServe(ctx, cfg, d.out, b, nil) }()
+	go func() { d.done <- runServe(ctx, cfg, d.out, b, nil, level) }()
 	t.Cleanup(func() { d.stop() })
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -196,7 +200,7 @@ func TestSecondDaemonIsRefused(t *testing.T) {
 	sock := filepath.Join(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir())
 	start(t, cfg, sock)
-	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil)
+	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, "")
 	if !errors.Is(err, errAlreadyServing) {
 		t.Fatalf("a second daemon: %v", err)
 	}
@@ -292,7 +296,7 @@ func TestSecondDaemonOnTheStoreFindsTheFirst(t *testing.T) {
 	a := filepath.Join(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	b := filepath.Join(dir, "b.sock")
-	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil)
+	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, errAlreadyServing) || !strings.Contains(err.Error(), a) {
 		t.Fatalf("a second daemon over the store: %v, want errAlreadyServing naming %s", err, a)
 	}
@@ -318,7 +322,7 @@ func TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := filepath.Join(dir, "b.sock")
-	err = runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil)
+	err = runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, store.ErrBusy) {
 		t.Fatalf("a second daemon over a mismatched lease-info: %v, want store.ErrBusy", err)
 	}
@@ -360,7 +364,23 @@ func TestWorkspaceVerbs(t *testing.T) {
 			t.Errorf("%s: %v, want code %d", name, err, c.code)
 		}
 	}
+	idOf := func(name string) int64 { // workspace.list's id for name, 0 when it is not listed
+		for _, w := range call(t, cli, "workspace.list").([]any) {
+			if m := w.(map[string]any); m["name"] == name {
+				id, _ := m["id"].(int64)
+				return id
+			}
+		}
+		return 0
+	}
+	id := idOf("kb")
+	if id <= 0 {
+		t.Fatalf("workspace.list's id for kb: %d, want the store's id", id)
+	}
 	call(t, cli, "workspace.rename", "kb", "knowledge")
+	if got := idOf("knowledge"); got != id {
+		t.Errorf("the id after a rename: %d, want the same %d (a record keyed on it must not split)", got, id)
+	}
 	if _, err := cli.Call(context.Background(), "index.status", "kb"); !errors.As(err, &re) || re.Code != rpc.CodeNoSuchWorkspace {
 		t.Errorf("the old name after a rename: %v, want NoSuchWorkspace", err)
 	}
@@ -422,7 +442,8 @@ func changed(t *testing.T, cli *golibrpc.Client, since int64, want ...string) in
 
 // TestFollowsTheFiles: on a real root, an external write, an editor's atomic save (a temporary file
 // renamed over the file), a delete, a move within the root and a populated directory moved in each
-// reach the index, and index.changes reports them (ADR 0203 §5.1).
+// reach the index, and index.changes reports them
+// (docs/decisions/contract.md#the-index-follows-the-files).
 func TestFollowsTheFiles(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
@@ -470,7 +491,8 @@ func TestFollowsTheFiles(t *testing.T) {
 }
 
 // TestWrittenLikeAnExternalEdit: a file written through doc.write and the same file written from
-// outside index the same (ADR 0203 §5.5): the one engine path.
+// outside index the same (docs/decisions/contract.md#autodocs-own-writes-take-the-same-path): the
+// one engine path.
 func TestWrittenLikeAnExternalEdit(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
@@ -615,6 +637,8 @@ var (
 // TestMain lets a test run this binary as autodoc: client.SpawnServe starts os.Executable(), which in a
 // test is the test binary, so it runs Main when asked to.
 func TestMain(m *testing.M) {
+	// no late waker probes the host's tools (mise, codex) in a test; a test that wants one sets it
+	lateWakers = nil
 	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
 		// with the arguments the spawn gave: --serve --config <file>
 		os.Exit(Main(context.Background(), os.Args[1:], testOptions))
@@ -896,7 +920,7 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = held.Close() })
 	began := time.Now()
-	err = runServe(context.Background(), writeConfig(t, sock, state, ""), io.Discard, testBuild, nil)
+	err = runServe(context.Background(), writeConfig(t, sock, state, ""), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, store.ErrBusy) {
 		t.Fatalf("a store held throughout: %v, want store.ErrBusy", err)
 	}
@@ -907,7 +931,7 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 
 // TestACallsEventsAreTheCLIs: --call says hello as autodoc-cli, not as the TUI, so what it changes is
 // attributed to it in sys.events, with who ran it: its pid and cwd, and its agent when it has one
-// (ADR 1792015069 §2.6).
+// (docs/decisions/todos.md#a-cli-call-says-who-runs-it).
 func TestACallsEventsAreTheCLIs(t *testing.T) {
 	dir := short(t)
 	sock := filepath.Join(dir, "a.sock")
@@ -947,7 +971,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("not = [toml\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runServe(context.Background(), bad, io.Discard, testBuild, nil); err == nil || !strings.Contains(err.Error(), "config: invalid") {
+	if err := runServe(context.Background(), bad, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), "config: invalid") {
 		t.Errorf("--serve over an invalid config: %v", err)
 	}
 	file := filepath.Join(dir, "file")
@@ -959,7 +983,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 	if err := os.WriteFile(under, []byte(conf), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runServe(context.Background(), under, io.Discard, testBuild, nil); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "data")) {
+	if err := runServe(context.Background(), under, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "data")) {
 		t.Errorf("--serve with a data directory under a file: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "b.sock")); err == nil {
@@ -967,7 +991,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 	}
 	// the socket held by a daemon of another store, and by something that is no autodoc
 	other := writeConfig(t, sock, filepath.Join(dir, "state3"), "")
-	if err := runServe(context.Background(), other, io.Discard, testBuild, nil); err == nil || !strings.Contains(err.Error(), "that is not serving") {
+	if err := runServe(context.Background(), other, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), "that is not serving") {
 		t.Errorf("--serve on another store's daemon's socket: %v", err)
 	}
 	plain := filepath.Join(dir, "p.sock")
@@ -986,7 +1010,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 		}
 	}()
 	squatted := writeConfig(t, plain, filepath.Join(dir, "state4"), "")
-	if err := runServe(context.Background(), squatted, io.Discard, testBuild, nil); err == nil || !strings.Contains(err.Error(), "not an autodoc") {
+	if err := runServe(context.Background(), squatted, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), "not an autodoc") {
 		t.Errorf("--serve on a socket something else holds: %v", err)
 	}
 }

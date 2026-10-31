@@ -1,5 +1,5 @@
--- autodoc.kb.migrate: move a KB to the v2 layout (ADR 1791209946 §8) through a checksummed
--- manifest, with a full pre-image undo.
+-- autodoc.kb.migrate: move a KB to the v2 layout (docs/decisions/crew.md#migrating-a-kb-to-the-layout)
+-- through a checksummed manifest, with a full pre-image undo.
 --
 --   :AutodocKbMigrate [root]            dry run: writes migration-manifest.json, migration.diff and
 --                                       summary.txt to an output directory; changes nothing
@@ -7,7 +7,7 @@
 --   :AutodocKbMigrate --undo [root]     restores the latest apply's pre-image
 --   :AutodocKbMigrate --forget [root]   deletes the latest apply's pre-image
 --
--- The plan (§8.2–8.6):
+-- The plan (docs/decisions/crew.md#migrating-a-kb-to-the-layout):
 --   * every file's old path, new path and sha256, and the sha256 it has after the edits;
 --   * every reference rewrite, resolved against its OLD location and re-relativized from its NEW one,
 --     in the form it was written; fenced code is reported, not rewritten; bare-name wikilinks, URLs and
@@ -36,7 +36,7 @@ local M = {}
 M.MANIFEST_VERSION = 1
 M._issued = {} -- ids handed out by this session's dry runs
 
--- ─── the mapping (§8.2) ─────────────────────────────────────────────
+-- ─── the mapping ────────────────────────────────────────────────────
 
 local TOP_SAME = { adrs = true, conventions = true, playbooks = true }
 local REF_GROUP = { reference = true, glossary = true, routes = true, sources = true }
@@ -93,16 +93,18 @@ function M.dest(rel)
   end
   if ARCHIVE_DIRS[p[1]] and n >= 2 then return "archive/" .. rel, p[1] .. "/->archive" end
   -- the old templates predate the schema; the scaffold writes `_templates/<type>.md` from it after
-  -- the move (§4.6), so the old ones are archived rather than left to shadow the generated ones
+  -- the move (docs/decisions/crew.md#one-frontmatter-schema), so the old ones are archived rather
+  -- than left to shadow the generated ones
   if p[1] == "_templates" and n >= 2 then return "archive/" .. rel, "_templates->archive (regenerated from the schema)" end
   return rel, "stay"
 end
 
 -- references to these old targets keep pointing at the same path: the file there is replaced
--- (AGENTS.md is rewritten to §2; its old text is archived)
+-- (AGENTS.md is rewritten to the one in docs/decisions/crew.md#one-shared-kb-layout; its old text
+-- is archived)
 M.REPLACED_IN_PLACE = { ["AGENTS.md"] = true }
 
--- ─── frontmatter normalization (§8.5) ──────────────────────────────
+-- ─── frontmatter normalization ─────────────────────────────────────
 
 M.TYPE_MAP = {
   ["review-response"] = { "review" }, ["review-fold"] = { "review" }, ["review-verdicts"] = { "review" },
@@ -179,7 +181,7 @@ M.STORES_WAIT_MS = 5000
 ---dir_overrides a Neovim root points elsewhere in auto-core's persisted todo state. The second
 ---result is whether the daemon answered. Before the cutover's end auto-core.todo.known_dirs() was
 ---asked; that module is gone from auto-core v0.4.1, and the daemon has known every store since
----the cutover (ADR 1791532020).
+---the cutover (docs/decisions/todos.md#the-daemon-owns-the-todo-system).
 ---@param list_stores fun(cb: fun(result: table?, err: table?))?  -- for tests; the daemon's todos.stores by default
 ---@return string[] dirs, boolean answered
 function M.known_todo_stores(list_stores)
@@ -362,7 +364,8 @@ function M.plan(opts)
     reserved[util.fold(sf.rel)] = sf.rel
   end
 
-  -- collisions (§8.6): group destinations case-folded
+  -- collisions (docs/decisions/crew.md#migrating-a-kb-to-the-layout): group destinations
+  -- case-folded
   local groups = {}
   for _, f in ipairs(files) do
     local k = util.fold(dest[f])
@@ -442,8 +445,8 @@ function M.plan(opts)
   end
 
   -- directory mapping: a directory maps when every file under it lands under one new directory.
-  -- Its archive/ subfolder going to archive/ (shared/synthesis/archive, §8.2's "except archive/")
-  -- doesn't split it.
+  -- Its archive/ subfolder going to archive/ (shared/synthesis/archive, "except archive/" in
+  -- docs/decisions/crew.md#migrating-a-kb-to-the-layout) doesn't split it.
   local dir_cache = {}
   local function map_dir(d)
     if dir_cache[d] ~= nil then return dir_cache[d] or nil end
@@ -786,7 +789,7 @@ function M.plan(opts)
   end
   table.sort(plan.created_dirs)
 
-  -- ── todo stores outside the KB (§8.3a) ──
+  -- ── todo stores outside the KB ──────────
   local stores = opts.todo_stores
   local from_daemon = false
   if stores == nil then stores, from_daemon = M.known_todo_stores() end
@@ -1102,7 +1105,7 @@ local function restore(pi, opts)
   return problems
 end
 
--- ─── validation (§8.7) ──────────────────────────────────────────────
+-- ─── validation ─────────────────────────────────────────────────────
 
 local function validate(m, plan, root)
   local fails = {}
@@ -1376,7 +1379,7 @@ function M.apply(opts)
       if not ok then error("cannot remove directory " .. d .. ": " .. tostring(e2)) end
     end
     step("removed")
-    -- 7. scaffold (§8.9)
+    -- 7. scaffold
     local planned = {}
     for _, c in ipairs(m.created_files) do planned[c.path] = true end
     scaffold.scaffold(root, {
@@ -1398,7 +1401,7 @@ function M.apply(opts)
 
   if #fails == 0 and m.git.repo and opts.commit ~= false then
     local sha, gerr = git_stage_and_commit(root, git_paths(m),
-      "kb: migrate to the v2 layout (ADR 1791209946 §8)\n\nAutoDoc migration " .. m.id .. ".\n")
+      "kb: migrate to the v2 layout\n\nAutoDoc migration " .. m.id .. ".\n")
     if not sha then
       fails = { gerr }
       util.run({ "git", "-C", root, "reset", "-q" })

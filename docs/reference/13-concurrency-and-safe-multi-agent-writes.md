@@ -24,7 +24,7 @@ AutoDoc eliminates all four failure modes through five defense-in-depth invarian
 
 ## 1. Torn-Free Reads (`stat-read-stat`) and Atomic Conditional Writes (`golib/vfs`)
 
-AutoDoc's core packages (`core/docs`, `core/todo`, `core/index`) never call Go's `os.*` functions directly (ADR 1791719881 §4.9). Instead, every workspace root and `.todo-list/` directory is opened outside `core/` as a confined `golib/vfs/local` filesystem backed by `os.Root`. Every path is resolved relative to the pinned root directory file descriptor, making it impossible for a malformed path, `..` segment, or symlink inside the workspace to escape the root boundary.
+AutoDoc's core packages (`core/docs`, `core/todo`, `core/index`) never call Go's `os.*` functions directly ([core packages reach files through vfs](../decisions/contract.md#core-packages-reach-files-through-vfs)). Instead, every workspace root and `.todo-list/` directory is opened outside `core/` as a confined `golib/vfs/local` filesystem backed by `os.Root`. Every path is resolved relative to the pinned root directory file descriptor, making it impossible for a malformed path, `..` segment, or symlink inside the workspace to escape the root boundary.
 
 ### The `steady` Stat-Read-Stat Loop
 

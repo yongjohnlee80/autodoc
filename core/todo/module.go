@@ -22,12 +22,14 @@ const (
 // protocol is the protocol the todos verbs arrived in.
 const protocol = 20
 
-// protocolMigrateRefs is the protocol todos.migrate_refs arrived in (ADR 1792015069).
+// protocolMigrateRefs is the protocol todos.migrate_refs arrived in
+// (docs/decisions/todos.md#one-answer-from-every-route-to-a-store).
 const protocolMigrateRefs = 22
 
-// protocolWorkspaceVars is the protocol variables moved to the workspace in (ADR 1792132105):
-// workspace.vars, workspace.set_var, workspace.of and todos.set_kb; a variable's source "kb" and its
-// conflict. A session below it reads "store" for "kb".
+// protocolWorkspaceVars is the protocol variables moved to the workspace in
+// (docs/decisions/todos.md#variables-belong-to-the-workspace): workspace.vars, workspace.set_var,
+// workspace.of and todos.set_kb; a variable's source "kb" and its conflict. A session below it
+// reads "store" for "kb".
 const protocolWorkspaceVars = 24
 
 // Name is the module's name: its verbs are todos.*.
@@ -176,9 +178,9 @@ type none = any
 // resolves nothing for them, so they are ScopeGlobal.
 func (m *Manager) Verbs() []module.Verb {
 	// read is a verb that changes no store; quiet, one that changes daemon state the view does not
-	// show, its effect named (ADR 1792004705 §4.1); write, one whose success logs todos.changed, so
-	// every view of the store refreshes. settings marks a write that moves which store the daemon
-	// writes, not a task.
+	// show, its effect named (docs/decisions/contract.md#every-verb-states-its-effect); write, one
+	// whose success logs todos.changed, so every view of the store refreshes. settings marks a
+	// write that moves which store the daemon writes, not a task.
 	read := func(verb, result, doc string, codes ...int64) module.Contract {
 		return module.Contract{Verb: verb, Effect: module.EffectRead, Since: protocol, Audience: module.AudienceAgent, Result: result,
 			Errors: append([]int64{codeNoWorkspace}, codes...), Doc: doc}
@@ -297,7 +299,7 @@ func (m *Manager) Verbs() []module.Verb {
 				return nil, m.SetVar(ctx, p.Name, p.Value, p.Opts)
 			}),
 		module.Handle(read("workspace.vars", "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
-			"A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with."),
+			"A workspace's variables: the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with."),
 			func(ctx context.Context, p wsVarsParams) ([]Var, error) { return m.WorkspaceVars(ctx, p.Workspace) }),
 		module.Handle(quiet("workspace.set_var", module.EffectSettings, "nil",
 			"Sets or removes a workspace's variable: this machine's value (scope machine, absolute) or the KB's (scope kb, relative to the KB root, carried by git); machine_only declares the name machine-only in the KB's file.",

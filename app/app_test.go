@@ -48,8 +48,8 @@ func TestArguments(t *testing.T) {
 	}{
 		{[]string{"--version"}, 0, "autodoc " + testOptions.Version},
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
-		{[]string{"--serve", "kb"}, 2, "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
-		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		{[]string{"--serve", "kb"}, 2, "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
 		// refused before anything is dialled: exit 1, saying why
 		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
@@ -123,7 +123,11 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
-		{[]string{"--gui", "kb", "extra"}, 2, "", "only --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
+		// --log-level is the daemon's and the server's, and an unknown level is refused before any
+		// config is read
+		{[]string{"--ui", "--log-level", "warning"}, 2, "", "autodoc: --log-level is for --serve and --server\n"},
+		{[]string{"--config", bad, "--serve", "--log-level", "loud"}, 2, "", "autodoc: --log-level \"loud\": want debug, info, notice, warning, error or critical\n"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --tutorial, --check-theme, --new-theme, --check-kbtype, --check-keymap, --contracts, --server, --call, --editor, --export, --ui, --gui and --profile-fetch take one argument, and --check-diagram several"},
 		// --editor outside an agent AutoDoc started: no page to reach, and it says what is missing
 		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},
 		{[]string{"--editor", "editor.read", "[1]", "extra"}, 2, "", "take one argument"},
@@ -186,3 +190,24 @@ func TestABuildsDeriverIsReported(t *testing.T) {
 type badDeriver struct{ pdfDeriver }
 
 func (badDeriver) Formats() []string { return []string{".pptx"} }
+
+// The CLI hands an agent's `autodoc crew|mail …` to the crew's commands before any mode (with no
+// command, their help, exit 0; with one that isn't theirs, their usage, exit 2), and
+// --workspace-notice is the hook's: with no editor to ask, nothing, exit 0.
+func TestTheCLIRoutesTheCrewAndTheWorkspaceNotice(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"crew"}, Options{Version: "v-test"}, &stdout, &stderr); code != 0 ||
+		!strings.Contains(stdout.String(), "usage: autodoc crew <command>") || !strings.Contains(stdout.String(), "autodoc crew whoami") {
+		t.Errorf("autodoc crew: exit %d, stdout %q, stderr %q; want 0 and the crew's help", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(context.Background(), []string{"crew", "nope"}, Options{Version: "v-test"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "usage: autodoc crew|mail") {
+		t.Errorf("autodoc crew nope: exit %d, %q; want 2 and the crew's usage", code, stderr.String())
+	}
+	t.Setenv("AUTODOC_EDITOR", "")
+	stdout.Reset()
+	if code := run(context.Background(), []string{"--workspace-notice"}, Options{Version: "v-test"}, &stdout, io.Discard); code != 0 || stdout.Len() != 0 {
+		t.Errorf("--workspace-notice with no editor: exit %d, %q; want 0 and nothing", code, stdout.String())
+	}
+}

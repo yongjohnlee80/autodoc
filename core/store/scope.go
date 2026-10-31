@@ -73,7 +73,8 @@ func (sc *Scope) Patterns(tx *Tx) dao.DAO[*Pattern, PatternField, int64] {
 	return scoped(sc, tx.t.patterns, tx)
 }
 
-// GraphOnly are the workspace's graph_only patterns (ADR 1792015212 §2.2).
+// GraphOnly are the workspace's graph_only patterns
+// (docs/decisions/todos.md#which-paths-are-graph-only).
 func (sc *Scope) GraphOnly(tx *Tx) dao.DAO[*GraphOnly, GraphOnlyField, int64] {
 	return scoped(sc, tx.t.graphOnly, tx)
 }

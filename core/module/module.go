@@ -52,7 +52,8 @@ func (a Audience) String() string {
 }
 
 // Effect is what a verb does to the store: what a gated Lua script's capability must cover to call
-// it (ADR 1792004705 §4.1). Every contract names one; EffectUnset is a contract that forgot.
+// it (docs/decisions/contract.md#every-verb-states-its-effect). Every contract names one;
+// EffectUnset is a contract that forgot.
 type Effect int
 
 const (
@@ -101,8 +102,8 @@ type Contract struct {
 	Errors   []int64    `json:"errors,omitempty"` // the public codes it may answer, beyond invalid params
 	Event    *EventSpec `json:"event,omitempty"`  // a success logs an event in sys.events; nil for none
 	// Root is a verb that adds a root or moves where files are written (a workspace, a todo store's
-	// directory): refused to a gated Lua script's call, whose bounds such a verb would move (ADR
-	// 1792004705 §4.2a.1; Johno's ruling 2026-10-30).
+	// directory): refused to a gated Lua script's call, whose bounds such a verb would move
+	// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace).
 	Root bool   `json:"-"`
 	Doc  string `json:"doc,omitempty"`
 }

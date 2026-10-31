@@ -133,9 +133,10 @@ func TestAStoredCollisionDoesNotStopTheStart(t *testing.T) {
 	}
 }
 
-// TestAStoredHTMLTextTypeIsADocumentNow: .html, which a build before ADR 1791429611 let a
-// workspace declare as plain text, is a derived format now. The daemon still starts; workspace.list
-// names the collision; .html is read as a document and .log stays text; a new .htm is refused.
+// TestAStoredHTMLTextTypeIsADocumentNow: .html, which a build before the change in
+// docs/decisions/search.md#stored-html-text-types let a workspace declare as plain text, is a
+// derived format now. The daemon still starts; workspace.list names the collision; .html is read as
+// a document and .log stays text; a new .htm is refused.
 func TestAStoredHTMLTextTypeIsADocumentNow(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "autodoc.db")

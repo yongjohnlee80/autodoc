@@ -3,8 +3,9 @@
 # Every action is pinned by its commit, the version it was tagged as beside it.
 name: ci
 
-# Pull requests merge into canary and run no CI (each has its VM43 gate and review); CI runs on
-# each merge into canary, and on the milestone pull request that merges canary into main.
+# Pull requests merge into canary and run no CI (each has its own gate and review); CI runs on
+# each merge into canary, and on the release pull request into main: a release/YYYY-MM-DD branch,
+# canary rebased onto main, merged by rebase, after which canary is reset to main.
 on:
   push:
     branches: [canary]
@@ -15,17 +16,20 @@ permissions:
   contents: read
 
 # Every repository of the account shares one pool of concurrent jobs, so CI runs only where it is
-# read: a newer merge into canary cancels the older canary run (the newer tree holds it), and a
-# newer push to the milestone pull request cancels that pull request's older run.
+# read. A canary run is never cancelled: merges come faster than a run takes, so cancelling would
+# never let one finish. A newer merge waits instead, and of the waiting runs only the newest is
+# kept, so the run that starts next covers every merge since. A newer push to the milestone pull
+# request cancels that pull request's older run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A pull request runs CI only when it is the milestone one, canary into main: any other into main
-  # starts the workflow, but every job is skipped and holds no runner.
+  # A pull request runs CI only when it is the release one into main (from canary, or a release/
+  # branch of canary rebased onto main): any other into main starts the workflow, but every job is
+  # skipped and holds no runner.
   test:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: build, vet, test
     runs-on: ubuntu-latest
     services:
@@ -40,7 +44,10 @@ jobs:
           POSTGRES_DB: autodoc
         ports:
           - 5432:5432
+        # --shm-size: a parallel HNSW build keeps its maintenance_work_mem (512 MB on the
+        # pgstore cells' scratch databases) in /dev/shm, past Docker's default 64 MB
         options: >-
+          --shm-size 1g
           --health-cmd "pg_isready -U autodoc"
           --health-interval 5s
           --health-timeout 5s
@@ -95,16 +102,34 @@ jobs:
             exit 1
           fi
 
+      # The Bun the OpenCode plugin's executable controls run on (app's TestThePluginsBunControls,
+      # TestThePluginLoadsFromItsURL): the one opencode 1.18.31 embeds. By its SHA-256, from Bun's
+      # SHASUMS256.txt for the release: a release asset can be replaced under the same tag.
+      - name: install bun
+        env:
+          BUN_VERSION: "1.3.14"
+          BUN_SHA256: "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f"
+        run: |
+          curl -fsSL -o /tmp/bun.zip \
+            "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          echo "$BUN_SHA256  /tmp/bun.zip" | sha256sum -c -
+          unzip -q -d /tmp/bun /tmp/bun.zip
+          sudo install -m 0755 /tmp/bun/bun-linux-x64/bun /usr/local/bin/bun
+          bun --version
+          echo "AUTODOC_TEST_BUN=/usr/local/bin/bun" >> "$GITHUB_ENV"
+
       # -race because the daemon, the follower, the indexer's writer and the TUI
       # all run concurrently. -count=2 because a suite run once is a suite whose
       # flakes are someone else's problem later. The Postgres cells are required
       # here, where the service exists: they fail loudly rather than skip when
       # the URL is missing (AUTODOC_TEST_PG_REQUIRED, not CI: the macOS job runs
-      # core/... too and has no service container to give it one).
+      # core/... too and has no service container to give it one). The plugin's Bun cells are
+      # required here too (AUTODOC_TEST_BUN_REQUIRED), where the step above installed it.
       - name: test
         env:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
+          AUTODOC_TEST_BUN_REQUIRED: "1"
         run: |
           go list -tags server ./... | awk '$0 != "github.com/yongjohnlee80/autodoc/tui"' > "$RUNNER_TEMP/test-packages"
           mapfile -t packages < "$RUNNER_TEMP/test-packages"
@@ -120,7 +145,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -tags server -o /dev/null ./cmd/autodoc
 
   tui:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: TUI race (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     strategy:
@@ -147,7 +172,7 @@ jobs:
   # The Lua side (lua/autodoc/): the suites under tests/, against a daemon built from this checkout,
   # in a pinned Neovim with a pinned auto-core.nvim (its hard dependency).
   lua:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
     env:
       # auto-core's release the suites were verified against; bump deliberately, with the suites
@@ -181,7 +206,7 @@ jobs:
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.
   macos:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: macOS (cgo)
     runs-on: macos-latest
     steps:
@@ -208,7 +233,7 @@ jobs:
   # The Linux GUI build (make build-gui, the release's -gui artifacts): cgo against the window
   # system's libraries. The static TUI build is the job above's.
   gui-linux:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: Linux GUI (cgo)
     # On Ubuntu 24.04, where release.yml builds the GUI, so this job checks that build; the other
     # Linux jobs stay on ubuntu-latest and would show a new image's change first.
@@ -238,8 +263,9 @@ jobs:
       # They need no display (decltest's backend), and run without -race to keep this job short.
       - name: the TUI's GUI cells
         run: go test -tags gui -count=1 -timeout 20m ./tui/
-      # The export's GUI cells: the chart hook draws a chart as SVG (ADR 1792395460). Named, since
-      # app's other cells start the GUI, which needs a display. Few and quick, so with -race.
+      # The export's GUI cells: the chart hook draws a chart as SVG
+      # (docs/decisions/editor.md#charts-drawn-as-svg). Named, since app's other cells start the
+      # GUI, which needs a display. Few and quick, so with -race.
       - name: the export's GUI cells
         run: go test -race -tags gui -count=1 -run 'TheGUIBuildDrawsAnExportedChart|AnExportedChartGolibCannotDrawSaysWhy|CheckDiagramSaysWhatGolibDraws|TheDiagramReferenceIsGolibs|ExportASite|ExportThroughTheCommandLine' ./app/
 
@@ -247,7 +273,7 @@ jobs:
   # toolchain (the release builds with it): the default build, the server's and the GUI's. golang.org/x/vuln
   # at a pinned version, through go run, so its source is checked against the module checksum database.
   govulncheck:
-    if: github.event_name == 'push' || github.head_ref == 'canary'
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: govulncheck
     runs-on: ubuntu-24.04
     steps:
@@ -271,7 +297,7 @@ jobs:
 
   coverage:
     name: coverage policy
-    if: github.event_name == 'pull_request' && github.head_ref == 'canary'
+    if: github.event_name == 'pull_request' && (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
     services:
       # The same ephemeral Postgres the test job runs: the head-coverage run
@@ -286,7 +312,10 @@ jobs:
           POSTGRES_DB: autodoc
         ports:
           - 5432:5432
+        # --shm-size: a parallel HNSW build keeps its maintenance_work_mem (512 MB on the
+        # pgstore cells' scratch databases) in /dev/shm, past Docker's default 64 MB
         options: >-
+          --shm-size 1g
           --health-cmd "pg_isready -U autodoc"
           --health-interval 5s
           --health-timeout 5s
@@ -383,7 +412,7 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
-      github.head_ref == 'canary' &&
+      (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/')) &&
       github.event.pull_request.head.repo.full_name == github.repository
     needs: coverage
     runs-on: ubuntu-latest

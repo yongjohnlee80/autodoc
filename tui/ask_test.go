@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -238,5 +239,76 @@ func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
 	a.rejected()
 	if cancel != 1 || other != 1 {
 		t.Fatalf("cancel %d, other %d; want 1, 1", cancel, other)
+	}
+}
+
+// TestAQuestionAskedWhenFreeWaitsAndYields: a question asked to wait for a free card is shown only
+// once the open one is answered, in order; another question displaces it back to the head of the
+// wait without running its callbacks, and it is shown again once that one is answered; a stopping
+// host cancels what still waits.
+func TestAQuestionAskedWhenFreeWaitsAndYields(t *testing.T) {
+	a := newAsker(newScripted("kb"))
+	var got []string
+	q := func(name string) Question {
+		return Question{Title: name, OnYes: func() { got = append(got, name+":yes") }, OnCancel: func() { got = append(got, name+":cancel") }}
+	}
+	shown := func() string {
+		if !a.pending {
+			return ""
+		}
+		return a.current.Title
+	}
+	a.ask(q("user"))
+	a.askWhenFree(q("one"))
+	a.askWhenFree(q("two"))
+	if shown() != "user" {
+		t.Fatalf("shown %q while the user's question is open", shown())
+	}
+	a.accepted()
+	a.closed()
+	if shown() != "one" {
+		t.Fatalf("after the user's answer: shown %q, want one", shown())
+	}
+	a.ask(q("other"))
+	if shown() != "other" || len(got) != 1 {
+		t.Fatalf("a question over one: shown %q, %v; want other shown, one's callbacks not run", shown(), got)
+	}
+	a.rejected()
+	a.closed()
+	if shown() != "one" {
+		t.Fatalf("after other's answer: shown %q, want one again", shown())
+	}
+	a.accepted()
+	a.closed()
+	if shown() != "two" {
+		t.Fatalf("after one: shown %q, want two", shown())
+	}
+	a.askWhenFree(q("three"))
+	a.Stopped()
+	if want := []string{"user:yes", "other:cancel", "one:yes", "two:cancel", "three:cancel"}; !slices.Equal(got, want) {
+		t.Fatalf("callbacks %v, want %v", got, want)
+	}
+}
+
+// TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce: once the host has stopped, a question
+// asked to wait for a free card is neither shown nor kept waiting: its OnCancel runs at once, and
+// once only, and its OnYes never; one without an OnCancel is dropped as quietly.
+func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
+	s := newScripted("kb")
+	a := newAsker(s)
+	a.Stopped()
+	cancel := 0
+	a.askWhenFree(Question{Title: "late", OnCancel: func() { cancel++ }, OnYes: func() { t.Error("a stopped host's question accepted") }})
+	if cancel != 1 {
+		t.Fatalf("asked when free of a stopped host: cancelled %d times, want once at once", cancel)
+	}
+	a.askWhenFree(Question{Title: "quiet"}) // no OnCancel: nothing to run, nothing to panic on
+	a.accepted()
+	a.Stopped()
+	if _, set := s.set["App.askTitle"]; set || len(s.opened) != 0 || a.pending || len(a.waiting) != 0 {
+		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.opened, a.pending, len(a.waiting))
+	}
+	if cancel != 1 {
+		t.Fatalf("the stopped host's question cancelled %d times, want once", cancel)
 	}
 }

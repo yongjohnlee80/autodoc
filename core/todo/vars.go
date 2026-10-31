@@ -11,8 +11,9 @@ import (
 
 // Builtin variable names: $KB_ROOT is the workspace's root and $HOME the daemon user's home
 // (storevars.go). A KB's file or this machine may override them, a global user var may not.
-// VarWorkspace is AutoVim's retired $WORKSPACE (ADR 1792132105 §2.6): an ordinary name now, unset
-// unless a person sets it, which todos.migrate_refs rewrites to $PROJECT_ROOT.
+// VarWorkspace is AutoVim's retired $WORKSPACE (docs/decisions/todos.md#retiring-workspace): an
+// ordinary name now, unset unless a person sets it, which todos.migrate_refs rewrites to
+// $PROJECT_ROOT.
 const (
 	VarKBRoot    = "KB_ROOT"
 	VarWorkspace = "WORKSPACE"
@@ -36,7 +37,8 @@ func isBuiltin(name string) bool { return name == VarKBRoot || name == VarHome }
 type scope struct {
 	kbRoot, workspace, projectRoot, home string
 	// storeHome is the store's parent: what the daemon derived $WORKSPACE as before it was retired
-	// (ADR 1792132105 §2.6), read only to tell where a Lua-era $WORKSPACE ref exists
+	// (docs/decisions/todos.md#retiring-workspace), read only to tell where a Lua-era $WORKSPACE
+	// ref exists
 	storeHome string
 	user      map[string]string // the effective variables that are not built in
 	machine   map[string]bool   // the names the KB's file declares per machine

@@ -37,7 +37,8 @@ func (h *Host) start() {
 			h.set("App.aboutError", h.trf("autodoc.text.session.the_last_connect_failed_2", err.Error()))
 			if h.mismatchRecovery && !errors.As(err, &me) {
 				// the older backend stopped, and the installed one did not come up: the recovery stays
-				// in its dialog, with the reason, and Restart Now tries the start again (ADR 0212 §8)
+				// in its dialog, with the reason, and Restart Now tries the start again
+				// (docs/decisions/search.md#protocol-mismatch-recovery)
 				h.set("App.mismatchQuestion", h.trf("autodoc.text.session.the_installed_backend_did_not_start_restart_now", wireMessage(err)))
 				h.set("App.canRestartMismatch", h.session.CanSpawn())
 				if !h.mismatchOpen {

@@ -256,8 +256,9 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 				}
 				node.Kind = markdown.KindEmph
 			case markdown.KindCodeBlock:
-				// a lab note's cell: its outputs, files beside the note (ADR 1792457255), drawn
-				// right after its fence, in name order; a fence no run wrote for draws none
+				// a lab note's cell: its outputs, files beside the note
+				// (docs/decisions/plugins.md#lab-notes), drawn right after its fence, in name
+				// order; a fence no run wrote for draws none
 				if embedder == nil || node.Fence() == 0 || !lab.Is(options.Document) {
 					return
 				}

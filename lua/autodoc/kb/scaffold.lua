@@ -1,10 +1,12 @@
--- autodoc.kb.scaffold: create a KB's layout (ADR 1791209946 §1), idempotently.
+-- autodoc.kb.scaffold: create a KB's layout (docs/decisions/crew.md#one-shared-kb-layout),
+-- idempotently.
 --
 --   * Never overwrites an existing file, with two exceptions: the managed KB_OPERATIONS.md and
 --     _schema/frontmatter.yaml are replaced when the KB's copy carries an older autodoc_version
 --     (a semantic-version compare). A copy with no readable version is kept.
 --   * RULES.md is created once and never rewritten.
---   * Never creates `.todo-list/` (the todo store is not part of the KB, §1).
+--   * Never creates `.todo-list/` (the todo store is not part of the KB,
+--     docs/decisions/crew.md#one-shared-kb-layout).
 --   * Never writes into an existing, non-empty raw/ (it is the user's immutable material): raw/ABOUT.md
 --     is created only with a new or empty raw/.
 --   * A `_` folder's descriptor is `_ABOUT.md` (M.about_name): `_templates/ABOUT.md` would be the same

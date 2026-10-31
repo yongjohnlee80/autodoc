@@ -9,7 +9,8 @@ import (
 )
 
 // TestSysStats: sys.stats answers the daemon's own process in every key, with the right kinds, its
-// pid this one's and its CPU seconds never falling between two calls (ADR 1792256101 §4.2).
+// pid this one's and its CPU seconds never falling between two calls
+// (docs/decisions/editor.md#process-stats).
 func TestSysStats(t *testing.T) {
 	r := serve(t)
 	cli := r.dial(true)

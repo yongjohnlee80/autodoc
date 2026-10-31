@@ -39,7 +39,8 @@ type Hider interface {
 	Show()
 }
 
-// The optional interfaces of protocol 2 (ADR 1791268009) and 4. Serve probes the Handler for each;
+// The optional interfaces of protocol 2 (docs/decisions/plugins.md#protocol-versions-and-strict-manifests)
+// and 4. Serve probes the Handler for each;
 // a notification no interface takes is dropped. A plugin implements the ones its manifest declares.
 type (
 	// DocumentReader takes the feed ([feed] document = true): the open note, after each pause in

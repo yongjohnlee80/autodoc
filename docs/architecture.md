@@ -2,7 +2,8 @@
 
 How AutoDoc is put together, and the one convention every part of it follows. Read it before
 adding a feature: a feature that follows it touches no central file. The decisions behind it are
-ADR 1791719881 (the module convention) and ADR 1791532020 (the todo system, its first module).
+[the module convention](decisions/contract.md#features-as-modules-with-verb-contracts) and
+[the todo system](decisions/todos.md#the-daemon-owns-the-todo-system), its first module.
 
 ## 1. Processes
 
@@ -25,7 +26,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/todo` | the todo system: the format (versioned schema files), the rules and every write of a `.todo-list`; the `todos.*` verbs, as a `Module` |
 | `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
 | `core/docs` | reads and writes files for AutoDoc's own apps, conditional on the version the writer read: versioned reads and writes of a workspace's files over a `vfs.FS` |
-| `core/index` | one workspace's index in the store: its indexer, links, the link graph, search, and the writer port its documents are kept through; a path's mode (`Mode`): full, or graph-only (its links and relations, no chunks), and the todo store it lies in (ADR 1792015212) |
+| `core/index` | one workspace's index in the store: its indexer, links, the link graph, search, and the writer port its documents are kept through; a path's mode (`Mode`): full, or graph-only (its links and relations, no chunks), and the todo store it lies in ([graph-only indexing](decisions/todos.md#graph-only-indexing)) |
 | `core/store` | the one store: every workspace and its index, in one SQLite file, read and written through golib `dao` (one declaration per table), with the lease that makes one daemon its only server; migrations, its tables (workspaces, preferences, and the metered services: embedding providers and rankers, keys sealed, calls metered), and the seam a module declares its own through |
 | `sql/deployments` | the store's schema as numbered SQL scripts, applied by golib `dao/deploy` (see `docs/ops/schema-scripts.md`) |
 | `core/todo/sqlitejournal` | the todo system's Journal on the store, its tables declared through the seam |
@@ -41,7 +42,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs; each path's mode from the todo registry and the workspace's `graph_only` and `todo_search`; the todo system's disk and roots |
 | `internal/client` | the daemon's client: the session (handshake, spawning `--serve`), restart handoffs |
 | `internal/endpoint` | which socket serves a config's store |
-| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract, …; the one module list; a main hands it its version (ADR 0216) |
+| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract, …; the one module list; a main hands it its version ([one entry point](decisions/search.md#one-entry-point-for-every-build)) |
 | `cmd/autodoc` | the binary, the community build: `app.Main` with no registrations |
 | `tui` | the terminal UI and the GUI, their host and its features: search, the files, a Vim-keyed editor, the explorer's Links tab and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
 | `script` | the Lua engine for the editor's commands (gopher-lua), exportable to other programs; no AutoDoc imports |
@@ -116,7 +117,8 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   percentage bounds. Duplicate ids/views and invalid geometry are refused before state is built;
   descriptors and place slices are snapshotted. Focus follows declared priority, with stable
   contribution order for ties. No package-global runtime panel list exists. The one exception is
-  the plugins feature's card panels, which follow the plugins folder (ADR 1792848741): the registry
+  the plugins feature's card panels, which follow the plugins folder
+  ([card panels made at runtime](decisions/plugins.md#card-panels-made-at-runtime)): the registry
   stages that contributor's new specs under the same checks, the document is reloaded with them
   (`ReloadWithSources` declares an added card's sources), and the change commits only when the
   reload succeeded.
@@ -235,6 +237,6 @@ other.
 
 ## 8. Testing gates
 
-The checks to run before pushing, and what CI runs (on each merge into `canary` and on the milestone
+The checks to run before pushing, and what CI runs (on each merge into `canary` and on the release
 pull request into `main`), are in [CONTRIBUTING.md](../CONTRIBUTING.md#running-the-checks).
 Never `go test -tags gui ./app/`: it opens a window.

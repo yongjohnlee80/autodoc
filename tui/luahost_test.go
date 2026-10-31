@@ -4,6 +4,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -98,8 +99,8 @@ end }`)
 	}
 	r.s.WaitFor(t, "the list", func(string) bool { return r.noticed("agents 1 heron running true closing false") })
 	r.s.WaitFor(t, "sent", func(string) bool { return r.noticed("sent true nil") })
-	// one paste, whole: its newline the text's, never an Enter
-	first := "\x1b[200~first-line\nsecond-line\x1b[201~"
+	// one paste, whole: its newline the text's, then the Enter that sends it (agentmessaging.go)
+	first := "\x1b[200~first-line\nsecond-line\x1b[201~\r"
 	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reported(report), first) })
 	r.s.WaitFor(t, "an unknown agent refused", func(string) bool { return r.noticed("nobody unavailable") })
 
@@ -109,7 +110,7 @@ end }`)
 	}
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 	r.s.WaitFor(t, "the page pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~")
+		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~\r")
 	})
 
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
@@ -120,14 +121,65 @@ end }`)
 	if err := r.luaRun("agent-forward"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~") })
-	if got := reported(report); strings.Contains(got, "ignored") || strings.ContainsRune(got, '\r') {
-		t.Errorf("more than the selection, or an Enter, was sent: %q", got)
+	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~\r") })
+	if got := reported(report); strings.Contains(got, "ignored") || strings.Count(got, "\r") != 3 {
+		t.Errorf("more than the selection, or other than one Enter per send, was sent: %q", got)
 	}
 }
 
+// TestScriptsSendALongRichTextThroughLua: the 2026-10-29 report's send, a ~2.5 KB brief with
+// newlines, quotes, backticks, $, ~, → and —, run as a :lua command line (the line editor.run
+// runs), arrives as one whole paste, as does 2,600 x's. A chunk that no longer parses (a JSON
+// decoder's raw newline inside a Lua string) is the command's error, never ok; a send with no
+// callback that fails is a notice.
+func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
+	agent, report := recordingAgent(t, true)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
+	cb := `function(ok, err) autodoc.notify("%s " .. tostring(ok) .. " " .. tostring(err)) end`
+
+	if err := r.luaRun(`:lua autodoc.agents.send("heron", string.rep("x", 2600), ` + fmt.Sprintf(cb, "long") + `)`); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the long send", func(string) bool { return r.noticed("long true nil") })
+	r.s.WaitFor(t, "2,600 x's pasted", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~"+strings.Repeat("x", 2600)+"\x1b[201~\r")
+	})
+
+	var b strings.Builder
+	for b.Len() < 2500 {
+		b.WriteString("Step → run `go test ./...` in ~/src with $GOFLAGS set — then say \"done\" \\ next.\n")
+	}
+	rich := b.String()
+	lit := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(rich)
+	if err := r.luaRun(`:lua autodoc.agents.send("heron", "` + lit + `", ` + fmt.Sprintf(cb, "rich") + `)`); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the rich send", func(string) bool { return r.noticed("rich true nil") })
+	r.s.WaitFor(t, "the rich text pasted whole", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~"+rich+"\x1b[201~\r")
+	})
+
+	// the escapes decoded once too often: a raw newline inside a Lua string no longer parses
+	raw := strings.ReplaceAll(lit, `\n`, "\n")
+	if err := r.luaRun(`:lua autodoc.agents.send("heron", "` + raw + `", ` + fmt.Sprintf(cb, "raw") + `)`); err == nil {
+		t.Fatal("a chunk that does not parse ran as ok")
+	}
+	if r.noticed("raw ") {
+		t.Fatal("a chunk that does not parse sent something")
+	}
+
+	if err := r.luaRun(`:lua autodoc.agents.send("nobody", "x")`); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "a failed send without a callback noticed", func(string) bool { return r.noticed("the send to nobody failed: unavailable") })
+}
+
 // autodoc.agents.send to a program that never asked for bracketed paste sends it nothing, never
-// keys, and the script hears "unbracketed" (ADR 1792991980 §6).
+// keys, and the script hears "unbracketed"
+// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
 	agent, report := recordingAgent(t, false)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
@@ -154,6 +206,7 @@ end }`)
 // and a stopped one is asked about, naming what will be sent.
 func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	a, c := modelAgents(t)
+	a.promptsReported = func(string, bool) bool { return true } // its prompts reported: the base sends with its Enter
 	one, _ := a.profile("one")
 	first, _ := a.startInstance(one)
 	var got []error
@@ -164,6 +217,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.drainPosts()
+	c.fireAfters() // the Enter, submitDelay after the paste, and then done
 	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":[bracketed]line one\nline two"}) {
 		t.Fatalf("a running agent: done %v, pastes %q", got, c.panel.pastes)
 	}
@@ -174,6 +228,8 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatalf("a stopped agent: questions %+v", c.questions)
 	}
 	c.questions[0].OnYes()
+	c.drainPosts()
+	c.fireAfters()
 	if len(got) != 2 || got[1] != nil || len(c.panel.pastes) != 2 || !strings.HasSuffix(c.panel.pastes[1], ":[bracketed]for two") {
 		t.Fatalf("started and sent: done %v, pastes %q", got, c.panel.pastes)
 	}

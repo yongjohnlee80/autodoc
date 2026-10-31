@@ -108,7 +108,8 @@ func (s *Server) docVerbs() []module.Verb {
 		write(module.Contract{Verb: "doc.write_raw", Effect: module.EffectWrite, Since: 19, Scope: ws, Audience: user, Result: "{version}", Errors: writeErrs,
 			Doc: "doc.write on an HTML file's own bytes, which doc.write refuses."}, true),
 		// doc.outline is a saved file's headings, with the version they were read at, for a client
-		// to navigate by (ADR 0212 §6). A document of another kind has none.
+		// to navigate by (docs/decisions/search.md#outline-breadcrumbs-and-previews). A document of
+		// another kind has none.
 		module.Handle(module.Contract{Verb: "doc.outline", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{version, headings: [{id, level, text, line, byte}]}", Errors: readErrs,
 			Doc: "A Markdown file's headings in order, with the version they were read at; other kinds have none."},
@@ -130,7 +131,8 @@ func (s *Server) docVerbs() []module.Verb {
 				return out, nil
 			}),
 		// doc.validate checks a file's text, saved or not, against the workspace's frontmatter
-		// schema with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
+		// schema with the validator the indexer uses (docs/decisions/search.md#frontmatter-schemas). Only
+		// Markdown has frontmatter.
 		module.Handle(module.Contract{Verb: "doc.validate", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{diagnostics: [{field, line, rule, message}]}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry."},
@@ -146,7 +148,8 @@ func (s *Server) docVerbs() []module.Verb {
 				case idx == nil:
 					ds = sch.ValidateFile(p.Content).Diagnostics
 				case idx.Kind(p.Path).Traits().Frontmatter:
-					// as the index checks the path: a task in a todo store by its todo format (ADR 1792015212 amendment 2)
+					// as the index checks the path: a task in a todo store by its todo format
+					// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format)
 					ds = idx.ValidateFrontmatter(p.Path, p.Content, sch).Diagnostics
 				}
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil

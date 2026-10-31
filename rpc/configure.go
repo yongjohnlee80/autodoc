@@ -12,8 +12,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// workspace.configure saves a workspace's settings together (ADR 0214 §3): the TUI's Edit and
-// Advanced tabs as one map, every key optional, an absent key left as it is.
+// workspace.configure saves a workspace's settings together
+// (docs/decisions/store.md#workspace-settings-saved-together): the TUI's Edit and Advanced tabs as
+// one map, every key optional, an absent key left as it is.
 //
 //	name               string
 //	include, exclude   [string]   set together
@@ -27,7 +28,7 @@ import (
 //	view_args          map
 //	abstract_chunk     bool       each document's abstract as a chunk of its own; off by default
 //	demote_superseded  bool       a superseded document's hits below its successor's; off by default
-//	graph_only         [string]   paths indexed for the graph, never for search (ADR 1792015212)
+//	graph_only         [string]   paths indexed for the graph, never for search (docs/decisions/todos.md#graph-only-indexing)
 //	todo_search        bool       the workspace's todo tasks in search; on by default, off keeps them graph-only
 //	source, destination_connection   {engine, dsn, schema, remove}   an empty dsn keeps the stored one
 //

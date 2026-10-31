@@ -178,7 +178,7 @@ func (s *Store) RemoveProvider(ctx context.Context, name string) error {
 }
 
 // Retired is a model a provider's removal took out of use: its workspace and fingerprint, to
-// reclaim (ADR 1791284787 §2.3, item 4).
+// reclaim (docs/decisions/store.md#removing-a-provider-retires-its-model).
 type Retired struct {
 	Workspace int64
 	FP        string

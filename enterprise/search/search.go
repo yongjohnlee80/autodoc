@@ -1,6 +1,6 @@
 // Package search is AutoDoc's enterprise search, for web applications: hybrid search, by words and
-// by meaning, over a tenant that `autodoc --server` indexes from a .view into PostgreSQL (ADR
-// 1791762085). A Go web application opens a Searcher on its own pool and searches in-process;
+// by meaning, over a tenant that `autodoc --server` indexes from a .view into PostgreSQL
+// (docs/decisions/server.md#a-headless-server-mode). A Go web application opens a Searcher on its own pool and searches in-process;
 // `autodoc --server` serves the same Searcher over HTTP (POST /v1/search).
 //
 // Every search carries a Scope: for each access field of the tenant's policy, the values the
@@ -85,7 +85,13 @@ const (
 // Option configures a Searcher.
 type Option func(*options)
 
-type options struct{ def, max int }
+type options struct {
+	def, max int
+	ann      *pgstore.ANN
+}
+
+// WithANN gives the Searcher's store the server's approximate search (pgstore.WithANN).
+func WithANN(a *pgstore.ANN) Option { return func(o *options) { o.ann = a } }
 
 // WithLimits sets the number of hits a Request with no Limit gets, and the most one may ask for.
 // Values below 1 leave the defaults.
@@ -118,7 +124,11 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 	for _, f := range opts {
 		f(&o)
 	}
-	st, err := pgstore.New(conn, tenant)
+	var sopts []pgstore.Option
+	if o.ann != nil {
+		sopts = append(sopts, pgstore.WithANN(o.ann))
+	}
+	st, err := pgstore.New(conn, tenant, sopts...)
 	if err != nil {
 		return nil, err
 	}

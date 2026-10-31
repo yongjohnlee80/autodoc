@@ -1,6 +1,6 @@
 # Chapter 15: Plugin Architecture & Registry
 
-While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052, ADR 1792254331; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
+While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (see [the plugin decisions](../decisions/plugins.md) and `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
 
 This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 8**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from a Git URL (a plugin registry is coming; there is none yet).
 
@@ -104,14 +104,14 @@ Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI it
 - The plugin presents a buffer it holds credit for.
 - The host answers each frame's outcome, then the buffer's credit, so every buffer has at most one frame in flight.
 
-The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. Linux ships first; macOS and plugin-exported DMA-BUFs follow (ADR 1792797354).
+The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. Linux ships first; macOS and plugin-exported DMA-BUFs follow ([pixel surfaces](../decisions/plugins.md#pixel-surfaces)).
 
 ### Protocol 11: Editor Menu Rows
 
 Protocol 11 (`[[menu]]`) puts a plugin's rows on the editor's right-click menu, under a submenu of its title. Each row runs one of its `[[commands]]`, for the files its globs match:
 - While it runs, the plugin may retitle a row or disable it with `host.menu {id, title?, enabled?}` (the SDK's `Peer.MenuRow`), from the next time the menu opens.
 - The host keeps the latest and never asks the plugin as the menu opens; a stopped plugin's rows show as declared.
-- A script's rows (`autodoc.menu`) share the same registry and the same submenu (ADR 1792991184).
+- A script's rows (`autodoc.menu`) share the same registry and the same submenu ([editor menu rows](../decisions/plugins.md#editor-menu-rows)).
 
 ---
 
@@ -217,7 +217,7 @@ Because the wire protocol is standard msgpack-RPC over `stdin` and `stdout`, a p
 
 ## 15.6 Building the Card's UI: `plugin/card` and `plugin/decl`
 
-A card or dialog can draw every cell itself into a `plugin.Frame`, as the example above could. AutoDB's first card did, in about 860 lines of layout, wrapping, focus, list and theme code before any database logic. The SDK's two **UI kits** (ADR 1792254331) do that work, so a card is its controls and its behaviour. Neither changes the wire: both end in the same `host.frame`.
+A card or dialog can draw every cell itself into a `plugin.Frame`, as the example above could. AutoDB's first card did, in about 860 lines of layout, wrapping, focus, list and theme code before any database logic. The SDK's two **UI kits** ([the native card kit](../decisions/plugins.md#the-native-card-kit)) do that work, so a card is its controls and its behaviour. Neither changes the wire: both end in the same `host.frame`.
 
 ![The two UI kits' render path](ui-kits-render-path.mmd)
 

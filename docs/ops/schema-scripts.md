@@ -21,7 +21,9 @@ sql/deployments/
   tagged release shipped, so an edit cannot ship. A fix is the next script.
 - A second engine is a second directory with the same names. A script with no
   work on one engine is a comment saying why.
-- **PostgreSQL** (ADR 1793319634): `postgres/000001` creates, in one script, the
+- **PostgreSQL**
+  ([the decision](../decisions/store.md#a-postgresql-engine-for-the-store)):
+  `postgres/000001` creates, in one script, the
   schema SQLite's 000001 to 000025 leave, so `postgres/000002` to `000025` are
   comments. From 000026 on, every script ships for both engines. Its
   translation:
@@ -72,7 +74,7 @@ A new workspace-owned table follows the same rule.
 | table | what a row is | key |
 | --- | --- | --- |
 | `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
-| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed; its retrieval settings `abstract_chunk` and `demote_superseded` (000014); `graph_only_set`, its graph_only list set (000021, ADR 1792015212), and `todo_graph_only`, its todo tasks kept out of search (000022; 0, the default, keeps them in search; it replaced 000021's `todo_search`) | `id` |
+| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed; its retrieval settings `abstract_chunk` and `demote_superseded` (000014); `graph_only_set`, its graph_only list set (000021, [graph-only indexing](../decisions/todos.md#graph-only-indexing)), and `todo_graph_only`, its todo tasks kept out of search (000022; 0, the default, keeps them in search; it replaced 000021's `todo_search`) | `id` |
 | `embedding_provider` | an embedding provider: kind, base URL, model, and its API key sealed with the keyslot (000002); its context window in tokens (000003) | `id`, `name` |
 | `embedding_usage` | a provider's requests, texts, tokens and failures by day (000002) | `(provider_id, day)` |
 | `embedding_log` | a provider's recent calls, the last 200 kept (000002) | `id` |
@@ -81,8 +83,8 @@ A new workspace-owned table follows the same rule.
 | `ranker_log` | a ranker's recent calls, the last 200 kept (000013) | `id` |
 | `preference` | a client's preference, by name: the store's, not a workspace's (000002) | `name` |
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
-| `workspace_graph_only` | a graph_only pattern of a workspace, in order: paths indexed for the graph, never for search (000021, ADR 1792015212) | `(workspace_id, ord)` |
-| `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |
+| `workspace_graph_only` | a graph_only pattern of a workspace, in order: paths indexed for the graph, never for search (000021, [graph-only indexing](../decisions/todos.md#graph-only-indexing)) | `(workspace_id, ord)` |
+| `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema ([databases attach to a workspace](../decisions/store.md#databases-attach-to-a-workspace)) | `(workspace_id, role)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
 | `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012); its kind, `section` or `abstract` (000014); found by its text through `chunk_text` (000016) | `id`, `(workspace_id, id)` |
 | `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content); on PostgreSQL, `chunk.tsv` and its GIN index instead | the chunk's `id` |
@@ -91,25 +93,25 @@ A new workspace-owned table follows the same rule.
 | `doc_name` | a name a link can resolve through | `(workspace_id, name_key, doc_id)` |
 | `doc_facet` | a typed value of a document's valid frontmatter field under its workspace's schema, defaults included (000007) | `(workspace_id, field, value, doc_id)` |
 | `doc_diagnostic` | a problem with a document's frontmatter: field, line, rule, message, in source order (000007) | `(workspace_id, doc_id, ord)` |
-| `link` | a link from a document, and the document it resolved to; `target`, a todo task's file outside the workspace, absolute (000021, ADR 1792015212) | `id`, `(workspace_id, id)` |
+| `link` | a link from a document, and the document it resolved to; `target`, a todo task's file outside the workspace, absolute (000021, [external links](../decisions/todos.md#task-relations-and-external-links)) | `id`, `(workspace_id, id)` |
 | `link_key` | a frontmatter relation link's names, tried in order when it resolves (000014) | `(workspace_id, link_id, ord)` |
 | `model` | an embedding model a workspace uses: the active one, and the target its indexer fills (000015); any other is reclaimed | `(workspace_id, fp)` |
-| `embedding` | a text's vector under a model, kept while some chunk of the workspace has the text (ADR 1791329335) | `(workspace_id, text_hash, model_fp)` |
+| `embedding` | a text's vector under a model, kept while some chunk of the workspace has the text ([vectors follow their chunks](../decisions/store.md#vectors-follow-their-chunks)) | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
 | `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
-| `todo_store` | a todo store, by its stable id: its path now, and its claim (000017); its daily refresh's last run (000019); `kb`, the root of the workspace it belongs to, recorded once (000023, ADR 1792132105); `released_at`, when `todos.release` gave it back, after which only `todos.claim` claims it again (000024, ADR 1791532020 r13) | `id` |
-| `todo_root` | a project root the todo system knows: its store override and registration (000017); its `kb_root`, an older client's, carried into its store's variable file once and cleared (ADR 1792015069) | `root` |
+| `todo_store` | a todo store, by its stable id: its path now, and its claim (000017); its daily refresh's last run (000019); `kb`, the root of the workspace it belongs to, recorded once (000023, [which workspace a store belongs to](../decisions/todos.md#which-workspace-a-store-belongs-to)); `released_at`, when `todos.release` gave it back, after which only `todos.claim` claims it again (000024, [store claims](../decisions/todos.md#a-store-is-claimed-by-its-first-write)) | `id` |
+| `todo_root` | a project root the todo system knows: its store override and registration (000017); its `kb_root`, an older client's, carried into its store's variable file once and cleared ([one answer from every route](../decisions/todos.md#one-answer-from-every-route-to-a-store)) | `root` |
 | `todo_var` | a user's global todo ref variable (000017) | `name` |
-| `todo_store_var` | a todo store's variable on this machine: a machine-only name's value, or an override (000020, ADR 1792015069); read once more by the migration into `todo_workspace_var` | `(store, name)` |
-| `todo_workspace_var` | a workspace's variable on this machine, keyed by the workspace's root: an absolute path that never travels (000023, ADR 1792132105) | `(kb, name)` |
+| `todo_store_var` | a todo store's variable on this machine: a machine-only name's value, or an override (000020, [where a value comes from](../decisions/todos.md#where-a-variables-value-comes-from)); read once more by the migration into `todo_workspace_var` | `(store, name)` |
+| `todo_workspace_var` | a workspace's variable on this machine, keyed by the workspace's root: an absolute path that never travels (000023, [where a value comes from](../decisions/todos.md#where-a-variables-value-comes-from)) | `(kb, name)` |
 | `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
 | `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
 | `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017); the cursor of the resync it was last answered (000018) | `(store, name)` |
-| `crew_host` | a host (an AutoDoc window or a Neovim project) holding its scope at an ownership epoch, with its run token's hash (000026, ADR 1793271500) | `id` |
+| `crew_host` | a host (an AutoDoc window or a Neovim project) holding its scope at an ownership epoch, with its run token's hash (000026, [the crew and mail tables](../decisions/crew.md#the-crew-and-mail-tables)) | `id` |
 | `crew_scope` | a scope agents live in: an AutoVim project, an AutoDoc window, or global; live, adopting or gone (000026) | `id` |
 | `crew_profile` | an agent's identity in a scope, (scope, codename); "user" is the human; active or merged into another (000026) | `id`, `(scope, codename)` while active |
-| `crew_session` | one process of a profile, registered by its host under an epoch, with its secret's hash (000026) | `id`, `(host, epoch, instance)` |
+| `crew_session` | one process of a profile, registered by its host under an epoch, with its secret's hash (000026), and whether its host wrote what reports its permission prompts (`prompts`, 000028) | `id`, `(host, epoch, instance)` |
 | `crew_endpoint` | how a session is woken: its CLI's channel and locator, never a secret (000026) | `session` |
 | `crew_wake` | a session's wake scheduler state: pending and announced generations, the attempt in flight, failures, the next deadline (000026) | `session` |
 | `crew_attention` | a permission prompt or block an agent's adapter reported, shown to the human (000026) | `session` |
@@ -140,7 +142,7 @@ anything runs.
 ## A destination's scripts
 
 A workspace whose destination is Postgres keeps its index in that database, not in the local store
-(ADR 0214). Its tables are `core/pgstore/postgres/`, compiled into `core/pgstore` and applied by
+([databases attach to a workspace](../decisions/store.md#databases-attach-to-a-workspace)). Its tables are `core/pgstore/postgres/`, compiled into `core/pgstore` and applied by
 golib `dao/deploy` through `pgstore.Migrate`, with a ledger of its own, `autodoc_schema`
 (`pgstore.Ledger`). The same rules hold as for the store: a released script never changes, and the
 set must be dense and paired.

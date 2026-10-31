@@ -9,8 +9,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// The cells of ADR 1792991184 §4.5-4.6: a plugin's [[menu]] rows, and host.menu (protocol 11). The
-// plugins are the test binary in mode "rawcalls": ping says pong, menuwith sends host.menu.
+// The cells of docs/decisions/plugins.md#editor-menu-rows: a plugin's [[menu]] rows, and host.menu
+// (protocol 11). The plugins are the test binary in mode "rawcalls": ping says pong, menuwith sends
+// host.menu.
 
 const menuCommands = "[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n[[commands]]\nid = \"menuwith\"\ntitle = \"Menu\"\n"
 

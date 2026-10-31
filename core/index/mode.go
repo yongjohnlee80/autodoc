@@ -16,27 +16,31 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
-// Mode is how one workspace path is indexed beyond include and exclude (ADR 1792015212).
+// Mode is how one workspace path is indexed beyond include and exclude
+// (docs/decisions/todos.md#graph-only-indexing).
 type Mode struct {
 	// GraphOnly indexes the document's row, frontmatter, links and relations, and no chunks: it is
 	// never a lexical or semantic hit, and never embedded.
 	GraphOnly bool
 	// Store is the todo store the path lies in, nil for none: its tasks answer to the store's names.
 	Store *TodoStore
-	// Vars are the variables of the workspace the path belongs to (ADR 1792132105 §2.5): a $NAME ref
+	// Vars are the variables of the workspace the path belongs to
+	// (docs/decisions/todos.md#resolving-refs-in-every-document): a $NAME ref
 	// of the document resolves through them. nil when the index is given none: a task's $NAME ref is
 	// then unresolved, and any other document's reads its root as the workspace root, as before.
 	Vars *Vars
 }
 
-// TodoStore is a todo store as the index reads its documents (ADR 1792015212 §2.4).
+// TodoStore is a todo store as the index reads its documents
+// (docs/decisions/todos.md#task-relations-and-external-links).
 type TodoStore struct {
 	// ID is the store's stable id in the todo registry: a task answers to "#todo:<ID>/<task id>",
 	// so two stores' identical ids never meet.
 	ID string
 	// Check is how the todo format judges a task file's frontmatter (core/todo's CheckFile, the
-	// daemon's): a task is never checked against the workspace's KB schema (ADR 1792015212
-	// amendment 2). nil checks it against the KB schema, as a build without the todo system does.
+	// daemon's): a task is never checked against the workspace's KB schema
+	// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format). nil checks it against the KB
+	// schema, as a build without the todo system does.
 	Check func(src []byte) schema.Result
 }
 
@@ -79,10 +83,11 @@ func (m Mode) version() string {
 	return b.String()
 }
 
-// varsVersion is what a document whose $NAME refs name names adds to its indexer version (ADR
-// 1792132105 §2.5): the names, and a fingerprint of their values in vars ("nil" for none given), so a
-// change of the workspace's variables re-indexes exactly the documents that name a changed one. ""
-// for a document that names none. A variable name holds no ',', ':' or ';'.
+// varsVersion is what a document whose $NAME refs name names adds to its indexer version
+// (docs/decisions/todos.md#resolving-refs-in-every-document): the names, and a fingerprint of their
+// values in vars ("nil" for none given), so a change of the workspace's variables re-indexes
+// exactly the documents that name a changed one. "" for a document that names none. A variable name
+// holds no ',', ':' or ';'.
 func varsVersion(names []string, vars *Vars) string {
 	if len(names) == 0 {
 		return ""

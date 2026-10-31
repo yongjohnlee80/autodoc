@@ -95,7 +95,7 @@ func TestTheDeploymentExamplesHoldTrue(t *testing.T) {
 		t.Error("the Dockerfile builds without the server tag: its image would refuse --server")
 	}
 	// the example's API is plain HTTP behind a proxy (proxy = true): its published port is the
-	// host's loopback only, never every interface (Lector, #131 r0 P1)
+	// host's loopback only, never every interface
 	compose, err := os.ReadFile("../deploy/container/compose.yml")
 	if err != nil {
 		t.Fatal(err)

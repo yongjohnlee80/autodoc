@@ -106,9 +106,10 @@ func cellAt(lines []string, row, col int) string {
 	return key + "  " + does
 }
 
-// TestTheHelpsCommandsAreTheCatalogs (ADR 1791762474 §5.5, §4.2 r2): F1's COMMANDS lists every
-// entry under its source, with the ':' names it owns, its keys and its title; the command line and
-// its completion resolve each name to that same owner, a Lua command's taken name included.
+// TestTheHelpsCommandsAreTheCatalogs (docs/decisions/plugins.md#keys-and-help-read-the-catalog,
+// docs/decisions/plugins.md#one-owner-per-command-name): F1's COMMANDS lists every entry under its
+// source, with the ':' names it owns, its keys and its title; the command line and its completion
+// resolve each name to that same owner, a Lua command's taken name included.
 func TestTheHelpsCommandsAreTheCatalogs(t *testing.T) {
 	_, r := luaTUI(t, "a\n", map[string]string{"over.lua": `
 autodoc.command{ name = "find", title = "my find", run = function(ed, args, line) ed:insert("F:" .. line) end }

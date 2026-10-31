@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
+	"maps"
 	"math/rand/v2"
 	"reflect"
 	"slices"
@@ -223,5 +225,90 @@ func TestMindmapModel(t *testing.T) {
 		if i, ok := m.mindIndex(c.id); ok != c.ok || ok && i != c.i {
 			t.Errorf("mindIndex(%q) = %d, %v; want %d, %v", c.id, i, ok, c.i, c.ok)
 		}
+	}
+}
+
+// pagedReader answers graph.map from pages, as a protocol-36 daemon does: page i is pages[i], its
+// next the cursor of page i+1 ("" after the last). It records the opts it was asked with.
+func pagedReader(pages ...map[string]any) (func(map[string]any) (any, error), *[]map[string]any) {
+	var asked []map[string]any
+	return func(opts map[string]any) (any, error) {
+		asked = append(asked, opts)
+		i := 0
+		if a, ok := opts["after"].(string); ok {
+			fmt.Sscanf(a, "p%d", &i)
+		}
+		page := maps.Clone(pages[i])
+		page["next"] = ""
+		if i+1 < len(pages) {
+			page["next"] = fmt.Sprintf("p%d", i+1)
+		}
+		return page, nil
+	}, &asked
+}
+
+func node(p string) map[string]any { return map[string]any{"path": p, "title": strings.ToUpper(p)} }
+func edge(src, dst string) map[string]any {
+	return map[string]any{"src": src, "dst": dst, "kind": "wikilink"}
+}
+
+// readMap (docs/decisions/search.md#clients-read-every-page) reads every page, each asked after the
+// last one's next with the caller's options kept: a link to a document of a later page, or of an
+// earlier one, is placed; a link whose document never came is dropped; the counts are told after
+// each page; the types are the answer's.
+func TestReadMapReadsEveryPage(t *testing.T) {
+	read, asked := pagedReader(
+		map[string]any{"nodes": []any{node("a.md"), node("b.md")}, "edges": []any{edge("a.md", "e.md"), edge("b.md", "a.md")}, "types": []any{"adr"}},
+		map[string]any{"nodes": []any{node("c.md"), node("d.md")}, "edges": []any{edge("c.md", "a.md"), edge("d.md", "gone.md")}, "types": []any{"adr"}},
+		map[string]any{"nodes": []any{node("e.md")}, "edges": []any{edge("e.md", "c.md")}, "types": []any{"adr"}},
+	)
+	var told []int
+	m, err := readMap(read, map[string]any{"kinds": []any{"wikilink"}}, func(n int) { told = append(told, n) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Nodes) != 5 || m.Nodes[4].Path != "e.md" || !slices.Equal(m.Types, []string{"adr"}) {
+		t.Errorf("nodes %v, types %v", m.Nodes, m.Types)
+	}
+	var got []string
+	for _, e := range m.Edges {
+		got = append(got, m.Nodes[e.Src].Path+">"+m.Nodes[e.Dst].Path)
+	}
+	if want := []string{"a.md>e.md", "b.md>a.md", "c.md>a.md", "e.md>c.md"}; !slices.Equal(got, want) {
+		t.Errorf("edges %v, want %v (d.md's link to a document that never came dropped)", got, want)
+	}
+	if !slices.Equal(told, []int{2, 4, 5}) {
+		t.Errorf("told %v, want the documents read after each page", told)
+	}
+	if len(*asked) != 3 || (*asked)[0]["after"] != nil || (*asked)[2]["after"] != "p2" || (*asked)[2]["kinds"] == nil {
+		t.Errorf("asked %v", *asked)
+	}
+}
+
+// An older daemon's answer has no next: it is the whole map, read once; a failed page fails the
+// map; a next that never ends is refused, not followed for good.
+func TestReadMapAtItsEdges(t *testing.T) {
+	calls := 0
+	m, err := readMap(func(map[string]any) (any, error) {
+		calls++
+		return map[string]any{"nodes": []any{node("a.md"), node("b.md")}, "edges": []any{edge("a.md", "b.md")}}, nil
+	}, map[string]any{}, nil)
+	if err != nil || calls != 1 || len(m.Nodes) != 2 || len(m.Edges) != 1 {
+		t.Errorf("an answer without next: %d calls, %+v, %v", calls, m, err)
+	}
+	boom := errors.New("the daemon went away")
+	read, _ := pagedReader(map[string]any{"nodes": []any{node("a.md")}}, map[string]any{"nodes": []any{node("b.md")}})
+	if _, err := readMap(func(o map[string]any) (any, error) {
+		if o["after"] != nil {
+			return nil, boom
+		}
+		return read(o)
+	}, map[string]any{}, nil); !errors.Is(err, boom) {
+		t.Errorf("a failed second page: %v", err)
+	}
+	if _, err := readMap(func(map[string]any) (any, error) {
+		return map[string]any{"nodes": []any{}, "next": "again"}, nil
+	}, map[string]any{}, nil); err == nil || !strings.Contains(err.Error(), "no end") {
+		t.Errorf("a next that never ends: %v", err)
 	}
 }

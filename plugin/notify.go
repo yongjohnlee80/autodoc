@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// PROTOCOL 8 (ADR 1792351123): a plugin's notifications.
+// PROTOCOL 8 (docs/decisions/plugins.md#notifications): a plugin's notifications.
 //
 //	plugin → host   host.notify {message, id, ongoing}
 //

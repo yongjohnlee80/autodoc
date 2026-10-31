@@ -380,8 +380,8 @@ func TestWrapAndElideMeasureWidths(t *testing.T) {
 
 // TestAnEditThatJoinsCharactersKeepsTheCursorOnOne: typing or deleting can join the characters
 // around the cursor into one (a ZWJ between two emoji, two regional indicators meeting, a combining
-// mark): the cursor then sits after the joined character, and every key still moves and deletes
-// (Lector #230 r2 R2). What is typed next shows where the cursor is.
+// mark): the cursor then sits after the joined character, and every key still moves and deletes.
+// What is typed next shows where the cursor is.
 func TestAnEditThatJoinsCharactersKeepsTheCursorOnOne(t *testing.T) {
 	const man, woman, k, r = "\U0001f468", "\U0001f469", "\U0001f1f0", "\U0001f1f7"
 	for _, c := range []struct {
@@ -419,7 +419,7 @@ func TestAnEditThatJoinsCharactersKeepsTheCursorOnOne(t *testing.T) {
 
 // TestARemovedSelectionGoesToItsNearestShowingAncestor: the plugin refreshing its data can take
 // the selected node out of the tree; the selection goes to the nearest ancestor it had that still
-// shows, and to the first row only when none does (Lector #230 r2 R3).
+// shows, and to the first row only when none does.
 func TestARemovedSelectionGoesToItsNearestShowingAncestor(t *testing.T) {
 	build := func() (other, gp, p, g *Node, tree *Tree) {
 		g = &Node{Text: "grandchild", Leaf: true}
@@ -496,7 +496,7 @@ func TestARemovedSelectionGoesToItsNearestShowingAncestor(t *testing.T) {
 
 // TestATreesAncestryBelongsToItsCurrentSelection: every change of the selection, a fall back to the
 // first row, an empty tree, a recovered ancestor, leaves the ancestry of the new selection, so a
-// later refresh never brings back a node the selection has moved away from (Lector #230 r3).
+// later refresh never brings back a node the selection has moved away from.
 func TestATreesAncestryBelongsToItsCurrentSelection(t *testing.T) {
 	type tree struct {
 		other, parent, child *Node
@@ -573,7 +573,7 @@ func TestATreesAncestryBelongsToItsCurrentSelection(t *testing.T) {
 
 // TestEveryButtonIsATabStop: Tab walks a Buttons bar a button at a time before it goes on, and
 // Shift+Tab (or Up from the control after) enters it at its last button, as a sign-in's Sign in
-// and Cancel are each reached by Tab (found by the autodb port, ADR 1792254331 §4.12).
+// and Cancel are each reached by Tab (found by the autodb port; docs/decisions/plugins.md#the-native-card-kit).
 func TestEveryButtonIsATabStop(t *testing.T) {
 	name, pass := &Input{}, &Input{}
 	btns := &Buttons{Labels: []string{"Sign in", "Cancel"}}

@@ -53,9 +53,10 @@ func TestTheRegistryMergesCatalogEntries(t *testing.T) {
 	}
 }
 
-// TestTheCatalogRefusesWhatItCannotHold (ADR 1791762474 §5.2, §5.9, §5.10): a duplicate id, naming
-// both owners; a verb golib's or another entry's; an id outside its namespace; each refused at the
-// registry's build, so the program does not start.
+// TestTheCatalogRefusesWhatItCannotHold (docs/decisions/plugins.md#one-command-catalog,
+// docs/decisions/plugins.md#one-owner-per-command-name): a duplicate id, naming both owners; a verb
+// golib's or another entry's; an id outside its namespace; each refused at the registry's build, so
+// the program does not start.
 func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	first := Entry{ID: "a.one", Verb: "one", Aliases: []string{"uno"}, Run: noRun}
 	for want, e := range map[string]Entry{
@@ -109,7 +110,8 @@ func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	}
 }
 
-// TestTheCatalogsNamespacesAreOwned (§5.10): lua.* is Lua's alone, plugin.<name>.* that plugin's.
+// TestTheCatalogsNamespacesAreOwned (docs/decisions/plugins.md#one-command-catalog): lua.* is Lua's
+// alone, plugin.<name>.* that plugin's.
 func TestTheCatalogsNamespacesAreOwned(t *testing.T) {
 	c := newCatalog()
 	for want, e := range map[string]Entry{
@@ -134,9 +136,9 @@ func TestTheCatalogsNamespacesAreOwned(t *testing.T) {
 	}
 }
 
-// TestARefusedEntryLeavesNothingBehind (§5.10): an alias collision refuses the whole entry, its id
-// and verb included; a Lua entry replacing its own id that is refused keeps the one it would have
-// replaced.
+// TestARefusedEntryLeavesNothingBehind (docs/decisions/plugins.md#one-command-catalog): an alias
+// collision refuses the whole entry, its id and verb included; a Lua entry replacing its own id
+// that is refused keeps the one it would have replaced.
 func TestARefusedEntryLeavesNothingBehind(t *testing.T) {
 	c := newCatalog()
 	core := widget.NewEditorCore()
@@ -172,9 +174,10 @@ func TestARefusedEntryLeavesNothingBehind(t *testing.T) {
 	}
 }
 
-// TestALuaCommandTakesOneNameOnly (ADR 1791762474 §4.2, r2): a Lua command whose name another
-// entry has takes that name alone; the other keeps its id and its other names, and gets the name
-// back when the Lua command goes. A Lua command takes golib's verbs as it always could.
+// TestALuaCommandTakesOneNameOnly (docs/decisions/plugins.md#one-owner-per-command-name): a Lua
+// command whose name another entry has takes that name alone; the other keeps its id and its other
+// names, and gets the name back when the Lua command goes. A Lua command takes golib's verbs as it
+// always could.
 func TestALuaCommandTakesOneNameOnly(t *testing.T) {
 	c := newCatalog()
 	core := widget.NewEditorCore()
@@ -226,9 +229,10 @@ func TestALuaCommandTakesOneNameOnly(t *testing.T) {
 // noArgCall is QML that invokes a command with no arguments: App.save(), help.open().
 var noArgCall = regexp.MustCompile(`^(App\.\w+|\w+\.open)\(\)$`)
 
-// TestEveryMenuRowAndLeaderKeyIsACatalogEntry (ADR 1791762474 §4.1): what a menu row or a SPC key
-// runs, with no arguments, is a catalog entry's twin, and each twin is a command the document can
-// invoke: so the catalog holds every user command, and each entry runs what its row runs.
+// TestEveryMenuRowAndLeaderKeyIsACatalogEntry (docs/decisions/plugins.md#one-command-catalog): what
+// a menu row or a SPC key runs, with no arguments, is a catalog entry's twin, and each twin is a
+// command the document can invoke: so the catalog holds every user command, and each entry runs
+// what its row runs.
 func TestEveryMenuRowAndLeaderKeyIsACatalogEntry(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
 	reg, err := newRegistry(h.features()...)

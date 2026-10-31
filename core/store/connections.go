@@ -14,10 +14,11 @@ import (
 )
 
 // DATABASES — a workspace's source, the database its .view files run on, and its destination,
-// where its index and vectors live (ADR 0214). A workspace is still a directory; these attach to
-// it. Each workspace has at most one connection of each role. Its DSN is sealed by the keyslot and
-// bound to the workspace and the role, as a provider's API key is: it is never stored as written,
-// and only the daemon opens it. A client sees a ConnectionSummary, never the DSN.
+// where its index and vectors live (docs/decisions/store.md#databases-attach-to-a-workspace). A
+// workspace is still a directory; these attach to it. Each workspace has at most one connection of
+// each role. Its DSN is sealed by the keyslot and bound to the workspace and the role, as a
+// provider's API key is: it is never stored as written, and only the daemon opens it. A client sees
+// a ConnectionSummary, never the DSN.
 
 // The roles a connection plays, the engines one names, and where an index can live.
 const (
@@ -54,7 +55,10 @@ type ConnectionInfo struct {
 type ConnectionSummary struct {
 	Role, Engine, Host, Database, User, Schema string
 	HasPassword                                bool
-	UpdatedAt                                  int64
+	// Sealed is a connection whose DSN does not open with the store's key (a store restored
+	// without its own): listed so it can be entered again, never failing the rest of the listing
+	Sealed    bool
+	UpdatedAt int64
 }
 
 // newUID is a workspace's identity in a shared destination: 128 random bits in hex, the form
@@ -117,11 +121,16 @@ func (s *Store) Connections(ctx context.Context, id int64) ([]ConnectionSummary,
 			return err
 		}
 		for _, c := range rows {
+			var sum ConnectionSummary
 			dsn, err := s.keys.open(c.DSN, dsnAAD(id, c.Role))
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrSealed):
+				sum = ConnectionSummary{Engine: c.Engine, Sealed: true} // enter it again; the rest list as they are
+			case err != nil:
 				return err
+			default:
+				sum = Summarize(c.Engine, string(dsn))
 			}
-			sum := Summarize(c.Engine, string(dsn))
 			sum.Role, sum.UpdatedAt = c.Role, c.UpdatedAt
 			if c.Schema != nil {
 				sum.Schema = *c.Schema

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
 
@@ -49,8 +50,9 @@ func (e *env) seedModel(ws int64, fp string, n int, active, target int) {
 	}
 }
 
-// TestACancelledSwitchIsReclaimed (ADR 1791284787 §2.3, item 2): a switch to b, part-way, goes back
-// to a: b's partial vectors and its row go, and a, which answered throughout, keeps every vector.
+// TestACancelledSwitchIsReclaimed (docs/decisions/store.md#when-a-model-is-reclaimed): a switch to
+// b, part-way, goes back to a: b's partial vectors and its row go, and a, which answered
+// throughout, keeps every vector.
 func TestACancelledSwitchIsReclaimed(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -105,9 +107,9 @@ func TestARetargetedSwitchReclaimsTheOneLeft(t *testing.T) {
 	c.unhold()
 }
 
-// TestASweepKeepsTheActiveAndTheTarget (§2.3, item 3): a workspace's indexer sweeps its leftovers
-// and keeps what it answers with; a workspace with no indexer is swept by the store alone, keeping
-// its recorded active model and target.
+// TestASweepKeepsTheActiveAndTheTarget (docs/decisions/store.md#the-start-sweep): a workspace's
+// indexer sweeps its leftovers and keeps what it answers with; a workspace with no indexer is swept
+// by the store alone, keeping its recorded active model and target.
 func TestASweepKeepsTheActiveAndTheTarget(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -146,8 +148,9 @@ func TestASweepKeepsTheActiveAndTheTarget(t *testing.T) {
 	}
 }
 
-// TestAReclaimTakesBatches (§2.2): a model's vectors go a batch at a time, each its own write,
-// then its row in a write of its own; a write by anyone else can commit between them.
+// TestAReclaimTakesBatches (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a
+// model's vectors go a batch at a time, each its own write, then its row in a write of its own; a
+// write by anyone else can commit between them.
 func TestAReclaimTakesBatches(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -174,8 +177,9 @@ func TestAReclaimTakesBatches(t *testing.T) {
 	}
 }
 
-// TestAReclaimLeavesAModelSwitchedBack (§2.2): a model made the target again while it is being
-// reclaimed keeps what is left: the next batch finds it in use, and stops.
+// TestAReclaimLeavesAModelSwitchedBack
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a model made the target again
+// while it is being reclaimed keeps what is left: the next batch finds it in use, and stops.
 func TestAReclaimLeavesAModelSwitchedBack(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -201,8 +205,9 @@ func TestAReclaimLeavesAModelSwitchedBack(t *testing.T) {
 	}
 }
 
-// TestASweepFinishesAReclaimCutShort (§2.2, restart-safety): a reclaim that fails part-way leaves an
-// inactive model with fewer vectors and its row; the next sweep finishes it.
+// TestASweepFinishesAReclaimCutShort
+// (docs/decisions/store.md#a-workspace-keeps-two-models-vectors): a reclaim that fails part-way
+// leaves an inactive model with fewer vectors and its row; the next sweep finishes it.
 func TestASweepFinishesAReclaimCutShort(t *testing.T) {
 	was := reclaimBatch
 	reclaimBatch = 2
@@ -231,9 +236,9 @@ func TestASweepFinishesAReclaimCutShort(t *testing.T) {
 	}
 }
 
-// TestAReadOpenAcrossTheFlipKeepsTheOldVectors (§2.3, item 1): a read transaction opened before a
-// switch's flip still reads the superseded model's vectors after the reclaim has deleted them: its
-// snapshot is its own, and the reclaim comes after the publish.
+// TestAReadOpenAcrossTheFlipKeepsTheOldVectors (docs/decisions/store.md#when-a-model-is-reclaimed):
+// a read transaction opened before a switch's flip still reads the superseded model's vectors after
+// the reclaim has deleted them: its snapshot is its own, and the reclaim comes after the publish.
 func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -259,8 +264,10 @@ func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	}
 }
 
-// TestPurgeSaysWhatToDoInstead (§2.4): purging the active model is refused, pointing at Search models,
-// and deletes nothing; an inactive model is reclaimed at once.
+// TestPurgeSaysWhatToDoInstead
+// (docs/decisions/store.md#purging-refuses-the-active-model-and-the-target): purging the active
+// model is refused, pointing at Search models, and deletes nothing; an inactive model is reclaimed
+// at once.
 func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, options{Provider: a})
@@ -389,4 +396,81 @@ func (l *lockedLog) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b.String()
+}
+
+// TestAReclaimSaysItsVacuumFailing: a reclaim whose writes all committed, the model's vectors and
+// row gone, but whose incremental vacuum then fails (its context ended after the last write)
+// answers that failure, with what it removed.
+func TestAReclaimSaysItsVacuumFailing(t *testing.T) {
+	e := newEnv(t, options{})
+	e.seedModel(e.ws, "old|v", 3, 0, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	writes := 0
+	endingAfterTheRow := func(wctx context.Context, fn func(context.Context, *store.Tx) error) error {
+		writes++
+		err := e.store.storeWrite(wctx, fn)
+		if writes == 2 { // the vectors in one batch, then the row: the vacuum is next
+			cancel()
+		}
+		return err
+	}
+	r, err := e.store.reclaim(ctx, "old|v", endingAfterTheRow)
+	if writes != 2 {
+		t.Fatalf("%d writes, want 2: the vectors, then the row", writes)
+	}
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "incremental_vacuum") {
+		t.Fatalf("the vacuum failing: %v, want its error", err)
+	}
+	if r.Vectors != 3 || !r.Gone {
+		t.Errorf("the vacuum failing: %+v, want the 3 vectors and the row said removed", r)
+	}
+	if n, row := e.vectorsOf("old|v"); n != 0 || row {
+		t.Errorf("after the reclaim: %d vectors, row %v; want both gone (the writes committed)", n, row)
+	}
+}
+
+// TestTheReclaimerLogsAFailureOnlyWhileItRuns: a queued reclaim the writer refuses is logged as
+// failed while the reclaimer's context is alive; one refused once that context has ended (the
+// daemon stopping) is not, and the reclaimer returns. The writer here is the cell: it answers each
+// reclaim's op, so the order is the cell's own.
+func TestTheReclaimerLogsAFailureOnlyWhileItRuns(t *testing.T) {
+	e := newEnv(t, options{})
+	log := &lockedLog{}
+	x := newIndexer(e.store, e.fsys, options{Logger: logger.New(logger.WithWriter(log))}) // never run: the cell writes
+	x.reclaims <- "first|x"
+	x.reclaims <- "second|x"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); x.reclaimer(ctx) }()
+	refused := errors.New("the writer refused")
+	next := func(what string) op {
+		t.Helper()
+		select {
+		case o := <-x.ops:
+			return o
+		// NOTE: a bound on a failing run alone: the reclaimer sends each reclaim's first op at once.
+		case <-time.After(10 * time.Second):
+			t.Fatalf("the reclaimer never asked the writer for %s", what)
+			return op{}
+		}
+	}
+	next("first|x's batch").done <- refused
+	o := next("second|x's batch") // the reclaimer is sequential: first|x's failure is logged by now
+	cancel()
+	o.done <- refused
+	select {
+	case <-done:
+	// NOTE: a bound on a failing run alone: the reclaimer returns once its context has ended.
+	case <-time.After(10 * time.Second):
+		t.Fatal("the reclaimer did not return once its context ended")
+	}
+	s := log.String()
+	if strings.Count(s, "model.reclaim.failed") != 1 || !strings.Contains(s, "first|x") {
+		t.Errorf("want first|x's failure logged once:\n%s", s)
+	}
+	if strings.Contains(s, "second|x") {
+		t.Errorf("a reclaim refused after the context ended was logged:\n%s", s)
+	}
 }

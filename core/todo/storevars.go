@@ -21,15 +21,17 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
-// A WORKSPACE'S VARIABLES (ADR 1792132105). Variables belong to the workspace, the KB, not to a todo
-// store: a store belongs to exactly one workspace and reads that workspace's variables, and so does
-// every other document of the workspace. A name's value is, first match winning: this machine's row
-// for the workspace (absolute, never travels); the KB's file, <root>/.autodoc-vars.toml (relative
-// paths only, carried by git, resolved from each machine's KB root); the derived built-in ($KB_ROOT,
-// the workspace root, and $HOME); a global user variable; the environment. A name a pending
-// migration holds in conflict answers only to this machine's row.
+// A WORKSPACE'S VARIABLES (docs/decisions/todos.md#variables-belong-to-the-workspace). Variables
+// belong to the workspace, the KB, not to a todo store: a store belongs to exactly one workspace
+// and reads that workspace's variables, and so does every other document of the workspace. A name's
+// value is, first match winning: this machine's row for the workspace (absolute, never travels);
+// the KB's file, <root>/.autodoc-vars.toml (relative paths only, carried by git, resolved from each
+// machine's KB root); the derived built-in ($KB_ROOT, the workspace root, and $HOME); a global user
+// variable; the environment. A name a pending migration holds in conflict answers only to this
+// machine's row.
 
-// varsFile is the variable file: a KB's, at its root. A store's own (ADR 1792015069) is read only by
+// varsFile is the variable file: a KB's, at its root. A store's own
+// (docs/decisions/todos.md#one-answer-from-every-route-to-a-store) is read only by
 // the migration that folds it into its workspace's (fold).
 const varsFile = ".autodoc-vars.toml"
 
@@ -118,7 +120,7 @@ func (prior storeVars) undoDeclare(sv *storeVars, name string) {
 // writes is stable and diffs cleanly.
 func (sv storeVars) render() []byte {
 	var b strings.Builder
-	b.WriteString("# AutoDoc variables of this KB (ADR 1792132105). Values are paths relative to this\n")
+	b.WriteString("# AutoDoc variables of this KB. Values are paths relative to this\n")
 	b.WriteString("# directory, resolved on each machine; a machine's own values are set per machine.\n")
 	b.WriteString("# machine: the names whose value is set per machine, never here.\n")
 	if len(sv.Machine) > 0 {
@@ -179,7 +181,7 @@ func (m *Manager) readVarsFile(ctx context.Context, dir string) (sv storeVars, o
 	return sv, true, nil
 }
 
-// WHICH WORKSPACE (ADR 1792132105 §2.4, §2.5)
+// WHICH WORKSPACE (docs/decisions/todos.md#which-workspace-a-store-belongs-to)
 
 // containing is the root of the deepest workspace dir lies in, "" for none.
 func (m *Manager) containing(dir string) string {
@@ -214,9 +216,10 @@ func (m *Manager) ownerOf(rec StoreRecord) string {
 	return m.containing(rec.Path)
 }
 
-// owner is the root of the workspace the store id belongs to: ownerOf's. A store recorded before ADR
-// 1792132105, or outside every workspace then, has its containing workspace recorded now, so a
-// workspace added later never takes it.
+// owner is the root of the workspace the store id belongs to: ownerOf's. A store recorded before
+// stores belonged to their workspace (docs/decisions/todos.md#which-workspace-a-store-belongs-to),
+// or outside every workspace then, has its containing workspace recorded now, so a workspace added
+// later never takes it.
 func (m *Manager) owner(ctx context.Context, id string) (string, error) {
 	st, err := m.j.Settings(ctx)
 	if err != nil {
@@ -354,7 +357,8 @@ func (m *Manager) layersAt(ctx context.Context, w where) (layers, error) {
 	return m.layersOf(ctx, kb)
 }
 
-// value is name's effective value and where it came from (ADR 1792132105 §2.3).
+// value is name's effective value and where it came from
+// (docs/decisions/todos.md#where-a-variables-value-comes-from).
 func (l layers) value(name string, env func(string) string) (string, string) {
 	if v := l.machine[name]; v != "" {
 		return v, "machine"
@@ -472,9 +476,9 @@ func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
 }
 
 // WorkspaceVars lists a workspace's variables (workspace.vars). "" is no workspace's: the ones a
-// path in none resolves its refs with (ADR 1792132105 §2.5, the owner rule's third case), $HOME and
-// the global variables, before the environment, as the index resolves such a path (AllEffectiveVars'
-// "").
+// path in none resolves its refs with (docs/decisions/todos.md#resolving-refs-in-every-document,
+// the owner rule's third case), $HOME and the global variables, before the environment, as the
+// index resolves such a path (AllEffectiveVars' "").
 func (m *Manager) WorkspaceVars(ctx context.Context, workspace string) ([]Var, error) {
 	kb := ""
 	if workspace != "" {
@@ -828,7 +832,7 @@ func (m *Manager) recordProjectRoot(ctx context.Context, w where, project string
 	})
 }
 
-// THE MIGRATION (ADR 1792132105 §2.7)
+// THE MIGRATION (docs/decisions/todos.md#migrating-store-variable-files)
 
 // unfold makes the next read of kb's variables fold its stores' files again.
 func (m *Manager) unfold(kb string) {
@@ -1023,9 +1027,10 @@ func (m *Manager) retire(ctx context.Context, dir string) error {
 	return fsys.Rename(ctx, varsFile, varsFile+migratedSuffix)
 }
 
-// MigrateVars is ADR 1792132105 §2.7, run once as the daemon starts serving: every store's workspace
-// is recorded (the containing one; for a store outside every workspace, the workspace an older route's
-// kb_root named), the routes' kb_roots are cleared, and each workspace's stores are folded in.
+// MigrateVars is docs/decisions/todos.md#migrating-store-variable-files, run once as the daemon
+// starts serving: every store's workspace is recorded (the containing one; for a store outside
+// every workspace, the workspace an older route's kb_root named), the routes' kb_roots are cleared,
+// and each workspace's stores are folded in.
 func (m *Manager) MigrateVars(ctx context.Context) {
 	st, err := m.j.Settings(ctx)
 	if err != nil {

@@ -53,7 +53,9 @@ func modulesFrom(files fs.FS) []tuidecl.ProgramOption {
 		tuidecl.Themes(themes.FS(), ".", "autodoc.theme", moduleVersion),
 		tuidecl.Components(files, "dialogs", "autodoc.dialogs", moduleVersion),
 		tuidecl.Components(files, "views", "autodoc.views", moduleVersion),
-		panels.Offer(), // tui.panels: Panel, golib's docked panel (ADR 1792459145)
+		// tui.panels: Panel, golib's docked panel
+		// (docs/decisions/plugins.md#shared-panels-and-their-geometry)
+		panels.Offer(),
 		tuidecl.Types(controls.Types()...),
 		// AutoDoc's own text in six languages (language.go), over golib's
 		tuidecl.Translations(files, "i18n", "autodoc"),

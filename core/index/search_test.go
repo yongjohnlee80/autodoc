@@ -46,16 +46,18 @@ func TestSearchQuotesOperators(t *testing.T) {
 	e := newEnv(t, options{})
 	e.put("a.md", "alpha beta\n", "b.md", "alpha or beta, near alpha, title alpha\n", "c.md", "gamma\n")
 	for q, want := range map[string][]string{
-		"alpha OR gamma":  nil,              // OR is a word: no file has alpha, or and gamma
-		"alpha or beta":   {"b.md"},         // the word "or"
-		"alpha AND":       nil,              // no file has "and"
-		"NOT gamma":       nil,              // no file has "not"
-		"title:alpha":     {"b.md"},         // the phrase "title alpha", not a column filter
-		"NEAR(alpha beta": {"b.md"},         // the phrase "near alpha", and beta; unquoted, a syntax error
-		`"alpha`:          {"a.md", "b.md"}, // a stray quote
-		"-alpha ^beta":    {"a.md", "b.md"}, // no exclusion, no initial-token anchor
-		"alpha (beta)":    {"a.md", "b.md"}, // no grouping
-		"* ** ()":         nil,              // only punctuation: no query
+		// No file holds every word of these, so any one word is enough (AM-8): what each finds shows
+		// the operator was read as a word. As syntax, NOT gamma would find the files without gamma.
+		"alpha OR gamma":  {"a.md", "b.md", "c.md"}, // the words alpha, or, gamma: each on its own
+		"alpha or beta":   {"b.md"},                 // the word "or": b.md holds all three
+		"alpha AND":       {"a.md", "b.md"},         // no file has "and": alpha's files
+		"NOT gamma":       {"c.md"},                 // no file has "not": gamma's file, not the others
+		"title:alpha":     {"b.md"},                 // the phrase "title alpha", not a column filter
+		"NEAR(alpha beta": {"b.md"},                 // the phrase "near alpha", and beta; unquoted, a syntax error
+		`"alpha`:          {"a.md", "b.md"},         // a stray quote
+		"-alpha ^beta":    {"a.md", "b.md"},         // no exclusion, no initial-token anchor
+		"alpha (beta)":    {"a.md", "b.md"},         // no grouping
+		"* ** ()":         nil,                      // only punctuation: no query
 		"":                nil,
 	} {
 		res, err := e.store.Search(context.Background(), q, QueryOpts{})
@@ -90,8 +92,10 @@ func TestSearchPrefixOnTheLastWord(t *testing.T) {
 	eq(t, "zebra*", sortedCopy(hitPaths(e.search("zebra*", QueryOpts{}))), []string{"a.md", "b.md"})
 	eq(t, "zebra", hitPaths(e.search("zebra", QueryOpts{})), []string{"b.md"})
 	eq(t, "meeting zebraf*", hitPaths(e.search("meeting zebraf*", QueryOpts{})), []string{"a.md"})
-	if got := hitPaths(e.search("zebraf* meeting", QueryOpts{})); len(got) != 0 {
-		t.Errorf("zebraf* meeting matched %v: an earlier * was a prefix", got)
+	// an earlier * is punctuation: "zebraf" is a word no file holds. As a prefix it would match
+	// zebrafish, and the any-word fallback would then find a.md through it.
+	if got := hitPaths(e.search("zebraf* bogus", QueryOpts{})); len(got) != 0 {
+		t.Errorf("zebraf* bogus matched %v: an earlier * was a prefix", got)
 	}
 }
 

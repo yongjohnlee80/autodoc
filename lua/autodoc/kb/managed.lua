@@ -1,8 +1,9 @@
 ---autodoc.kb.managed: this build's managed KB documents, handed to auto-core.
 ---
----KB_OPERATIONS.md and _schema/frontmatter.yaml belong to AutoDoc, not to the KB (ADR 1791209946
----§3.1). Each load of the plugin gives auto-core this build's copies (`provide`), and auto-core keeps
----the newest of each, persisted, so the copy is at hand even in a session where AutoDoc never loads.
+---KB_OPERATIONS.md and _schema/frontmatter.yaml belong to AutoDoc, not to the KB
+---(docs/decisions/crew.md#managed-kb-files). Each load of the plugin gives auto-core this build's
+---copies (`provide`), and auto-core keeps the newest of each, persisted, so the copy is at hand even
+---in a session where AutoDoc never loads.
 ---auto-core is the ONE writer that brings a KB up to them (`auto-core.kb.sync_managed`): the session
 ---asks it for each listed KB, and auto-agents asks it for the primary KB before every spawn, so an agent
 ---always starts on the installed AutoDoc's operations document.

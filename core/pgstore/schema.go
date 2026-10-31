@@ -135,6 +135,7 @@ type chunkSort string
 const (
 	cByRank    chunkSort = "rank"
 	cByNearest chunkSort = "nearest"
+	cByANN     chunkSort = "ann" // a candidate schema's (newChunkSchemaWith): the index's own expression
 	cByPath    chunkSort = "path"
 	cByDoc     chunkSort = "doc"
 	cByOrd     chunkSort = "ord"
@@ -151,12 +152,24 @@ func tsv() dao.FullTextIndex {
 
 type chunkSchema = dao.Schema[*chunkRow, chunkField, chunkSort, int64]
 
-func newChunkSchema(conn dao.DataConn) *chunkSchema {
+func newChunkSchema(conn dao.DataConn) *chunkSchema { return chunkSchemaOf(conn) }
+
+// newChunkSchemaWith is the chunk schema with one more sort key, cByANN: the cosine distance of
+// the embeddings cast to t, the expression model's HNSW index is defined on (annSpec), so the
+// candidate stage's ORDER BY can use it.
+func newChunkSchemaWith(conn dao.DataConn, t dao.VectorType) *chunkSchema {
+	type o = dao.Option[*chunkRow, chunkField, chunkSort, int64]
+	return chunkSchemaOf(conn,
+		o(dao.SortParam[*chunkRow, chunkField, chunkSort, int64](cByANN, dao.DistanceAs(dao.T(tEmb, "vec"), dao.Cosine, t))),
+		o(dao.JoinForSort[*chunkRow, chunkField, chunkSort, int64](cByANN, joinEmb)))
+}
+
+func chunkSchemaOf(conn dao.DataConn, extra ...dao.Option[*chunkRow, chunkField, chunkSort, int64]) *chunkSchema {
 	type o = dao.Option[*chunkRow, chunkField, chunkSort, int64]
 	// every join carries the tenant: a document's id is unique, but the key is (tenant, id)
 	docJoin := dao.InnerJoinOn(tDoc, dao.On(dao.T(tDoc, "tenant"), dao.T(tChunk, "tenant")), dao.On(dao.T(tDoc, "id"), dao.T(tChunk, "doc")))
 	embJoin := dao.InnerJoinOn(tEmb, dao.On(dao.T(tEmb, "tenant"), dao.T(tChunk, "tenant")), dao.On(dao.T(tEmb, "text_hash"), dao.T(tChunk, "text_hash")))
-	return dao.New(conn,
+	opts := []o{
 		o(dao.Table[*chunkRow, chunkField, chunkSort, int64](tChunk)),
 		o(dao.Fields[*chunkRow, chunkField, chunkSort, int64](map[chunkField]dao.Field[*chunkRow]{
 			cTenant: {Expr: dao.T(tChunk, cTenant), Scan: func(r *chunkRow) any { return &r.Tenant }, Value: func(r *chunkRow) any { return r.Tenant }},
@@ -185,7 +198,8 @@ func newChunkSchema(conn dao.DataConn) *chunkSchema {
 		o(dao.SortExpr[*chunkRow, chunkField, chunkSort, int64](cByOrd, dao.T(tChunk, cOrd))),
 		o(dao.JoinForSort[*chunkRow, chunkField, chunkSort, int64](cByPath, joinDoc)),
 		o(dao.JoinForSort[*chunkRow, chunkField, chunkSort, int64](cByNearest, joinEmb)),
-	)
+	}
+	return dao.New(conn, append(opts, extra...)...)
 }
 
 // --- embeddings ------------------------------------------------------------------

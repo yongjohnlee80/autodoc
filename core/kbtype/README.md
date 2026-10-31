@@ -1,6 +1,6 @@
 # core/kbtype
 
-A KB type, read and planned (ADR 1792349867). A KB type is a git repo with a `kbtype.toml` (what the
+A KB type, read and planned ([the decision](../../docs/decisions/contract.md#kb-types-are-git-repos-of-files)). A KB type is a git repo with a `kbtype.toml` (what the
 type is, its folders and their purposes, the workspace settings it proposes) and a `tree/` (the KB
 as it is created). Nothing in a type runs: its text files are read and copied, nothing else.
 

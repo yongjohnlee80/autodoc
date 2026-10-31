@@ -16,20 +16,22 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A PLUGIN'S PIXEL SURFACE, THE HOST'S SIDE (ADR 1792797354 §4.2–4.4): the side channel's buffer
-// registry and its one owner. The owner allocates each generation's pool (sealed memfds the host
-// maps read-only), admits the plugin's frames into a sink (the window's gui.Stream), and answers
-// each frame's outcome and then its buffer's reuse credit. Everything else posts to it: the reader,
+// A PLUGIN'S PIXEL SURFACE, THE HOST'S SIDE
+// (docs/decisions/plugins.md#surface-buffers-and-generations): the side channel's buffer registry
+// and its one owner. The owner allocates each generation's pool (sealed memfds the host maps
+// read-only), admits the plugin's frames into a sink (the window's gui.Stream), and answers each
+// frame's outcome and then its buffer's reuse credit. Everything else posts to it: the reader,
 // receipt waiters, extimage release callbacks and the loop. No window is needed to run it: a test's
 // sink stands in for the stream.
 
-// The bounds.
+// The bounds. surfaceRetiredGens and surfaceMaxBytes:
+// docs/decisions/plugins.md#surface-buffers-and-generations.
 const (
 	surfaceMaxPixels   = 4096        // a frame's side in device pixels: protocol 10's, below the window's MaxSize
 	surfaceMaxDMABufs  = 3           // plugin-added, per generation
 	surfaceMaxRetiring = 2           // generations still held by a frame; no new one starts past it
-	surfaceRetiredGens = 8           // retired generations whose ids are recorded (§4.4)
-	surfaceMaxBytes    = 640 << 20   // 4 held 64 MiB frames, a 192 MiB pool and 3 new 64 MiB DMA-BUFs: always fits (§4.4)
+	surfaceRetiredGens = 8           // retired generations whose ids are recorded
+	surfaceMaxBytes    = 640 << 20   // 4 held 64 MiB frames, a 192 MiB pool and 3 new 64 MiB DMA-BUFs: always fits
 	surfaceMaxBacking  = 64 << 20    // a frame's largest charge: 4096 × 4096 × 4
 	surfaceSlack       = 1 << 20     // a DMA-BUF's alignment slack past its descriptor's bytes
 	surfaceAckTimeout  = time.Second // a generation not acknowledged by then paces the next anyway
@@ -372,7 +374,9 @@ func (s *surfaceOwner) startGeneration(g surfaceGeometry) {
 	if w <= 0 || h <= 0 || w > surfaceMaxPixels || h > surfaceMaxPixels || !ok {
 		return // a size or caps the window can't draw: no generation, the placeholder stays
 	}
-	s.retire() // first: idle old buffers are destroyed, so the reservation below always fits (§4.4)
+	// First: idle old buffers are destroyed, so the reservation below always fits
+	// (docs/decisions/plugins.md#surface-buffers-and-generations).
+	s.retire()
 	pitch := w * 4
 	size := pitch * h
 	if s.charged+int64(plugin.MaxPoolBuffers)*int64(size) > s.ceiling {
@@ -685,7 +689,9 @@ func (s *surfaceOwner) addDMABuf(m map[string]any, g *plugin.FDGuard) string {
 	s.charged += size
 	s.bufs[id] = &surfaceBuffer{spec: spec, dmabuf: true, modifier: modifier, state: bufAvailable,
 		back: &surfaceBacking{fd: fd, refs: 1, size: size, charged: &s.charged}}
-	s.emit(plugin.BufferFreeMsg(id)) // the acceptance credit: presentable from now (§4.2)
+	// The acceptance credit: presentable from now
+	// (docs/decisions/plugins.md#surface-buffers-and-generations).
+	s.emit(plugin.BufferFreeMsg(id))
 	return ""
 }
 

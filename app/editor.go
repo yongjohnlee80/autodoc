@@ -17,9 +17,9 @@ import (
 )
 
 // runEditor is --editor <verb> [params]: one call to the page of the TUI that started this agent
-// (ADR 1792014854), at $AUTODOC_EDITOR, with the secret it was started with, $AUTODOC_EDITOR_TOKEN,
-// which the TUI knows it by. params is a JSON array, as --call's; the token goes first, and the
-// answer is written to out as JSON.
+// (docs/decisions/crew.md#the-editor-socket), at $AUTODOC_EDITOR, with the secret it was started
+// with, $AUTODOC_EDITOR_TOKEN, which the TUI knows it by. params is a JSON array, as --call's; the
+// token goes first, and the answer is written to out as JSON.
 func runEditor(ctx context.Context, verb, params string, env func(string) string, out io.Writer) error {
 	sock, token := env("AUTODOC_EDITOR"), env("AUTODOC_EDITOR_TOKEN")
 	if sock == "" || token == "" {
@@ -69,9 +69,10 @@ func editorMain(ctx context.Context, verb, params string, stdout, stderr io.Writ
 // editor that doesn't answer delays none by more.
 const noticeWait = 2 * time.Second
 
-// workspaceNotice is --workspace-notice, editor.workspace for a UserPromptSubmit hook (ADR 1792988759
-// r2 §4.3): the switch's one-line notice on out, or nothing. It is always 0: with the TUI gone, a
-// refusal, or no editor at all it prints nothing, so the hook never blocks or decorates a prompt.
+// workspaceNotice is --workspace-notice, editor.workspace for a UserPromptSubmit hook
+// (docs/decisions/crew.md#the-workspace-notice-hook): the switch's one-line notice on out, or
+// nothing. It is always 0: with the TUI gone, a refusal, or no editor at all it prints nothing, so
+// the hook never blocks or decorates a prompt.
 func workspaceNotice(ctx context.Context, env func(string) string, out io.Writer) int {
 	ctx, cancel := context.WithTimeout(ctx, noticeWait)
 	defer cancel()

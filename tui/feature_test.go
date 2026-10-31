@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
@@ -157,6 +159,139 @@ func TestCoreReachesTheHost(t *testing.T) {
 		t.Error("no answer from the daemon through Core")
 	} else if err, ok := v.(error); ok {
 		t.Error(err)
+	}
+}
+
+// coreKept is what the host keeps for Run, read on the loop.
+func coreKept(r *running) []error {
+	return onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return slices.Clone(r.h.errs) })
+}
+
+// TestCoreOpensAFileByItsAbsolutePath: Core.OpenFile and Core.OpenAbsolute open the file at an
+// absolute path: one a workspace indexes as that workspace's, one outside every workspace as in none.
+func TestCoreOpensAFileByItsAbsolutePath(t *testing.T) {
+	r, kb, _, abs := runOutside(t)
+	c := core{r.h}
+	r.h.p.Post(func() { c.OpenFile(filepath.Join(kb, "a.md")) })
+	r.waitOpen(t, "kb", "a.md")
+	r.h.p.Post(func() { c.OpenAbsolute(abs) })
+	r.waitOpen(t, "", abs)
+}
+
+// TestCoreAsksWhenTheCardIsFree: Core.AskWhenFree never displaces the question open: it waits,
+// the open one still asked and its callbacks not run, and is asked once that one is answered.
+func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	type seen struct {
+		shown   string
+		waiting int
+		got     string
+	}
+	// one loop turn: no answer from the real card comes between the steps
+	got := onLoop(r, func() [3]seen {
+		c, a := core{r.h}, r.h.asker
+		var heard []string
+		q := func(name string) Question {
+			return Question{Title: name, OnYes: func() { heard = append(heard, name+":yes") }, OnCancel: func() { heard = append(heard, name+":cancel") }}
+		}
+		at := func() seen {
+			s := seen{waiting: len(a.waiting), got: strings.Join(heard, " ")}
+			if a.pending {
+				s.shown = a.current.Title
+			}
+			return s
+		}
+		c.Ask(q("user"))
+		c.AskWhenFree(q("free"))
+		var out [3]seen
+		out[0] = at()
+		a.accepted()
+		out[1] = at()
+		a.accepted()
+		out[2] = at()
+		return out
+	})
+	want := [3]seen{{"user", 1, ""}, {"free", 0, "user:yes"}, {"", 0, "user:yes free:yes"}}
+	if got != want {
+		t.Fatalf("asked when free over an open question: %+v, want %+v", got, want)
+	}
+}
+
+// TestCoreFocusesTheWidgetNamed: Core.Focus gives the keyboard to the widget id, from wherever it
+// is; an id the layout has not is kept as an error, the keyboard left where it was.
+func TestCoreFocusesTheWidgetNamed(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("explorer", "open")); return true })
+	r.s.WaitFor(t, "the explorer open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["explorer"] }) })
+	before := len(coreKept(r))
+	got := onLoop(r, func() [6]bool {
+		c := core{r.h}
+		within := func(id string) bool { w, ok := r.h.p.Find(id); return ok && r.h.p.App().FocusWithin(w) }
+		var out [6]bool
+		c.Focus("editor")
+		out[0], out[1] = within("editor"), within("explorerTree")
+		c.Focus("explorerTree")
+		out[2], out[3] = within("editor"), within("explorerTree")
+		c.Focus("noSuchWidget")
+		out[4], out[5] = within("editor"), within("explorerTree")
+		return out
+	})
+	if want := [6]bool{true, false, false, true, false, true}; got != want {
+		t.Fatalf("focus (editor, explorerTree) after Focus editor, Focus explorerTree, Focus of no widget: %v, want %v", got, want)
+	}
+	kept := coreKept(r)
+	if len(kept) != before+1 || !strings.Contains(kept[len(kept)-1].Error(), `"noSuchWidget"`) {
+		t.Fatalf("a focus of no widget kept %v (before: %d), want its error", kept, before)
+	}
+}
+
+// TestCoreRingsTheTerminalsBell: in the terminal build Core.Bell rings the terminal's bell, once
+// for each ring.
+func TestCoreRingsTheTerminalsBell(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	before := r.s.Backend.Bells()
+	onLoop(r, func() bool { core{r.h}.Bell(); return true })
+	if n := r.s.Backend.Bells() - before; n != 1 {
+		t.Fatalf("one Bell rang the terminal %d times", n)
+	}
+}
+
+// TestCoreSetTextSaysALayoutWithoutTheTextArea: Core.SetText on an id that is no text area of the
+// layout keeps that as an error, never passes over it; before the host has a layout at all, there
+// is nothing to set and nothing is wrong.
+func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	before := len(coreKept(r))
+	onLoop(r, func() bool { core{r.h}.SetText("noSuchArea", "text"); return true })
+	kept := coreKept(r)
+	if len(kept) != before+1 || !strings.Contains(kept[len(kept)-1].Error(), `no text area "noSuchArea"`) {
+		t.Fatalf("SetText on no text area kept %v (before: %d), want its error", kept, before)
+	}
+
+	h := newHost(NewSession("unused", nil), Options{})
+	t.Cleanup(h.cancel)
+	core{h}.SetText(crewReplyText, "text") // no layout yet: must neither panic nor keep an error
+	if len(h.errs) != 0 {
+		t.Fatalf("SetText before a layout kept %v", h.errs)
+	}
+}
+
+// TestCoreSaysTheStoreItsDaemonServes: Core.StoreID is the store_id the daemon said at hello: the
+// identity of the store it serves.
+func TestCoreSaysTheStoreItsDaemonServes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{storeAt: path})
+	r := attached(t, d)
+	want, err := store.Identity(path)
+	if err != nil || want == "" {
+		t.Fatalf("the store's identity: %q, %v", want, err)
+	}
+	if got := onLoop(r, core{r.h}.StoreID); got != want {
+		t.Fatalf("Core.StoreID %q, want the daemon's store %q", got, want)
 	}
 }
 

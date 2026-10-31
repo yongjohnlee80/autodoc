@@ -93,7 +93,8 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 	if len(c.views) != 0 || len(c.files) != 0 || len(c.hidden) != 0 {
 		t.Fatalf("a heading: views %v, files %v, hidden %v; want none", c.views, c.files, c.hidden)
 	}
-	r.open(1) // b.md, the drawer hidden, not closed (ADR 1792397302 r3)
+	// b.md, the drawer hidden, not closed (docs/decisions/editor.md#dock-clicks-hide-and-show)
+	r.open(1)
 	if !slices.Equal(c.files, []string{"kb:b.md"}) || !slices.Equal(c.hidden, []string{"explorer"}) || len(c.views) != 0 {
 		t.Fatalf("opened files %v, hidden %v, views %v; want b.md, the drawer hidden", c.files, c.hidden, c.views)
 	}
@@ -172,9 +173,9 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 	}
 }
 
-// A todo task's relations (ADR 1792015212 §2.4): its review and blocked relations have their
-// sections both ways, and a ref to a file outside the workspace is a row of its section that opens
-// the file by its absolute path, never an unresolved link.
+// A todo task's relations (docs/decisions/todos.md#task-relations-and-external-links): its review
+// and blocked relations have their sections both ways, and a ref to a file outside the workspace is
+// a row of its section that opens the file by its absolute path, never an unresolved link.
 func TestATasksRelationsInTheDrawer(t *testing.T) {
 	c := newScripted("kb")
 	c.answers["graph.links"] = func([]any) (any, error) {

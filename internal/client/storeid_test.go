@@ -71,3 +71,36 @@ func TestADaemonThatSaysNoStoreIsRefused(t *testing.T) {
 	}
 	s.Close()
 }
+
+// TestASessionSaysTheStoreItsHelloNamed: before Connect a session names no store and the address it
+// was given; connected, StoreID is the store_id the daemon's hello said and Address where it
+// dialled; a daemon whose hello says none leaves it "".
+func TestASessionSaysTheStoreItsHelloNamed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sock := filepath.Join(shortDir(t), "s.sock")
+	daemonSaying(t, sock, "store-1")
+	s := NewSession(sock, nil).As(rpc.CLIName)
+	if id := s.StoreID(); id != "" {
+		t.Fatalf("before Connect: StoreID %q, want \"\"", id)
+	}
+	if err := s.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if id, addr := s.StoreID(), s.Address(); id != "store-1" || addr != sock {
+		s.Close()
+		t.Fatalf("connected: StoreID %q, Address %q; want store-1, %s", id, addr, sock)
+	}
+	s.Close()
+
+	sock = filepath.Join(shortDir(t), "s.sock")
+	daemonSaying(t, sock, "")
+	s = NewSession(sock, nil).As(rpc.CLIName)
+	if err := s.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if id := s.StoreID(); id != "" {
+		t.Fatalf("a hello saying no store: StoreID %q, want \"\"", id)
+	}
+}

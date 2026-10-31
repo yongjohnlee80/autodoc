@@ -1,13 +1,16 @@
--- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate (ADR 1791209946 §1–§4, §8, §9).
+-- AutoDoc KB tooling: scaffold, templates and :AutodocKbMigrate
+-- (docs/decisions/crew.md#one-shared-kb-layout,
+-- docs/decisions/crew.md#migrating-a-kb-to-the-layout).
 --
 -- Run (tests/run-all.sh does this inside an XDG sandbox):
 --   AUTO_CORE=<auto-core.nvim checkout> nvim --headless -u NONE -l tests/kb_spec.lua
 --
--- Every §9 mutant has a cell here. The fixture KB is built in a temp dir and exercises every
--- reference class: path-qualified wikilinks (root, ../../ relative, suffix), relative Markdown links,
--- bare paths in prose and inline code, $KB_ROOT and absolute KB paths, frontmatter paths under
--- arbitrary keys, todo YAML adr/review and a second --- block, fenced code, archive-bound files,
--- raw/, a collision, an external todo store, and a non-git and a git variant.
+-- Every mutant of the migration's rules (docs/decisions/crew.md#migrating-a-kb-to-the-layout) has a
+-- cell here. The fixture KB is built in a temp dir and exercises every reference class:
+-- path-qualified wikilinks (root, ../../ relative, suffix), relative Markdown links, bare paths in
+-- prose and inline code, $KB_ROOT and absolute KB paths, frontmatter paths under arbitrary keys,
+-- todo YAML adr/review and a second --- block, fenced code, archive-bound files, raw/, a collision,
+-- an external todo store, and a non-git and a git variant.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.runtimepath:append(here)
@@ -77,7 +80,7 @@ local function build_fixture(root, ext)
   util.mkdirp(root)
   write(root, "AGENTS.md", "# Old agent contract\n\nSee [[shared/conventions/naming]] and log.md.\n")
   write(root, "CLAUDE.md", "# CLAUDE\n\nCanonical instructions live in [AGENTS.md](./AGENTS.md).\n")
-  write(root, "RULES.md", "# My rules\n\n1. Johno's own rule, never rewritten.\n")
+  write(root, "RULES.md", "# My rules\n\n1. The owner's own rule, never rewritten.\n")
   write(root, "README.md", "# KB\n\nStart at [the first ADR](shared/adrs/0001-first.md).\n")
   write(root, "index.md", "# Index\n\n- [[shared/adrs/0001-first]]\n")
   write(root, "MIGRATIONS.md", "---\ntype: kb\nstatus: active\ndate: 2026-05-01\ntags: [kb]\nabstract: \"Migrations.\"\n---\n\n# Migrations\n")
@@ -99,12 +102,12 @@ local function build_fixture(root, ext)
     "",
     "# ADR 0001",
     "",
-    "Follows [[shared/conventions/naming]] and [[../../agents/jarvis/reviews/r1|the review]].",
+    "Follows [[shared/conventions/naming]] and [[../../agents/ada/reviews/r1|the review]].",
     "Suffix form: [[adrs/0002-second]]. Bare name: [[naming]].",
     "See [naming](../conventions/naming.md) and the playbook `shared/playbooks/release.md`.",
     "Lesson: shared/synthesis/lesson.md, and $KB_ROOT/shared/adrs/0002-second.md.",
     "Absolute: " .. root .. "/shared/conventions/naming.md.",
-    "Folder: shared/glossary/ and agents/jarvis/ (split).",
+    "Folder: shared/glossary/ and agents/ada/ (split).",
     "",
     "```sh",
     "cat shared/adrs/0002-second.md",
@@ -122,25 +125,25 @@ local function build_fixture(root, ext)
   write(root, "shared/scripts/run.sh", "#!/bin/sh\necho run\n")
   vim.uv.fs_chmod(root .. "/shared/scripts/run.sh", 493)
   util.mkdirp(root .. "/shared/agents/lector")
-  write(root, "agents/jarvis/reviews/r1.md", table.concat({
+  write(root, "agents/ada/reviews/r1.md", table.concat({
     "---",
     "type: review-response",
     "status: completed",
     "created: 2026-05-03",
     "tags: [review]",
     'abstract: "A review."',
-    "reviewer: jarvis",
+    "reviewer: ada",
     "subject: adr 0001",
     "head_sha: abc123",
-    'sources: ["agents/jarvis/tasks/t1.md"]',
+    'sources: ["agents/ada/tasks/t1.md"]',
     "anykey: ../../../shared/adrs/0002-second.md",
     "---",
     "",
     "Reviewed [[shared/adrs/0001-first]].",
     "",
   }, "\n"))
-  write(root, "agents/jarvis/tasks/t1.md", "---\ntype: task\nstatus: active\ncreated: 2026-05-03\ntags: [task]\nabstract: \"A task.\"\n---\n\nTask.\n")
-  write(root, "agents/jarvis/loose.md", "Loose note: [first](../../shared/adrs/0001-first.md).\n")
+  write(root, "agents/ada/tasks/t1.md", "---\ntype: task\nstatus: active\ncreated: 2026-05-03\ntags: [task]\nabstract: \"A task.\"\n---\n\nTask.\n")
+  write(root, "agents/ada/loose.md", "Loose note: [first](../../shared/adrs/0001-first.md).\n")
   write(root, "log/2026-W01.md", "week one, wrote shared/adrs/0001-first.md\n")
   write(root, ".todo-list/open/task-a.md", table.concat({
     "---",
@@ -321,7 +324,7 @@ end
 
 section("[R] reference scanner")
 do
-  local px = refs.prefixes("/kb", { "jarvis" })
+  local px = refs.prefixes("/kb", { "ada" })
   local function scan(text, todo) return refs.scan("shared/adrs/x.md", text, { px = px, todo = todo }) end
   local r = scan("a [[shared/adrs/y|alias]] b")
   ok("R1: a path-qualified wikilink is found, its span the path only", r[1] and r[1].sub == "path:shared/" and r[1].old == "shared/adrs/y")
@@ -338,7 +341,7 @@ do
   ok("R6: a ../../ relative path in frontmatter is found", r[1] and r[1].kind == "fmrel" and r[1].fm_key == "sources", vim.inspect(r))
   r = scan("---\nid: x\n---\n\nbody\n\n---\nlegacy: ../a/b.md\n---\n", true)
   ok("R7: a todo body's second --- block counts as frontmatter", r[1] and r[1].kind == "fmrel" and r[1].fm_key == "legacy", vim.inspect(r))
-  r = scan("agents/jarvis/reviews/a.md and agents/nobody/x.md")
+  r = scan("agents/ada/reviews/a.md and agents/nobody/x.md")
   ok("R8: agents/<n>/ matches known agents only", #r == 1 and r[1].sub == "agents/<n>/")
 end
 
@@ -389,12 +392,12 @@ if res then
   local m = util.read_json(res.manifest)
   ok("M4: the manifest lists every file with old path, new path and sha256", m and #m.files == vim.tbl_count(snapA.files)
     and m.files[1].old and m.files[1].new and #m.files[1].sha256 == 64)
-  local wl = rewrite_of("shared/adrs/0001-first.md", "../../agents/jarvis/reviews/r1")
-  ok("M5: a ../../ wikilink is re-relativized from the NEW location", wl and wl.new == "../reviews/jarvis/r1", wl and wl.new)
+  local wl = rewrite_of("shared/adrs/0001-first.md", "../../agents/ada/reviews/r1")
+  ok("M5: a ../../ wikilink is re-relativized from the NEW location", wl and wl.new == "../reviews/ada/r1", wl and wl.new)
   local wr = rewrite_of("shared/adrs/0001-first.md", "shared/conventions/naming")
   ok("M6: a root path-qualified wikilink keeps its form (no .md)", wr and wr.new == "conventions/naming", wr and wr.new)
   ok("M7: a suffix wikilink that still resolves after the move is left alone", rewrite_of("shared/adrs/0001-first.md", "adrs/0002-second") == nil)
-  local ml = rewrite_of("agents/jarvis/loose.md", "../../shared/adrs/0001-first.md")
+  local ml = rewrite_of("agents/ada/loose.md", "../../shared/adrs/0001-first.md")
   ok("M8: a relative Markdown link is re-relativized from the new location", ml and ml.new == "../adrs/0001-first.md", ml and ml.new)
   ok("M9: a relative link whose source and target moved together is unchanged",
     rewrite_of("shared/synthesis/lesson.md", "../adrs/0001-first.md#decision") == nil)
@@ -404,7 +407,7 @@ if res then
   ok("M11: a $KB_ROOT path keeps its prefix", kb and kb.new == "$KB_ROOT/adrs/0002-second.md")
   local ab = rewrite_of("shared/adrs/0001-first.md", A .. "/shared/conventions/naming.md")
   ok("M12: an absolute KB path is rewritten", ab and ab.new == A .. "/conventions/naming.md")
-  local fk = rewrite_of("agents/jarvis/reviews/r1.md", "../../../shared/adrs/0002-second.md")
+  local fk = rewrite_of("agents/ada/reviews/r1.md", "../../../shared/adrs/0002-second.md")
   ok("M13: a frontmatter path under an arbitrary key is re-relativized", fk and fk.new == "../../adrs/0002-second.md" and fk.fm_key == "anykey", fk and fk.new)
   local ty = rewrite_of(".todo-list/open/task-a.md", "$KB_ROOT/shared/adrs/0001-first.md")
   local tr = rewrite_of(".todo-list/open/task-a.md", "shared/conventions/naming.md")
@@ -428,7 +431,7 @@ if res then
   ok("M17: a bare-name wikilink is left alone", bare_kept)
   local split = false
   for _, r in ipairs(plan.reported.split_dirs) do
-    if r.old == "agents/jarvis/" then split = true end
+    if r.old == "agents/ada/" then split = true end
   end
   ok("M18: a folder mention whose files split across folders is reported, not guessed", split)
   ok("M19: a mention of a merged folder maps (shared/glossary/ -> reference/)",
@@ -448,7 +451,7 @@ if res then
   local n = plan.normalize["shared/bug-fixes/bug.md"] or {}
   ok("M24: frontmatter normalization: bug-fix -> synthesis with kind, related-adrs -> related",
     #n == 2 and n[1].op == "set_type" and n[1].to == "synthesis" and n[1].kind == "bug-fix" and n[2].to == "related", vim.inspect(n))
-  local n2 = plan.normalize["agents/jarvis/reviews/r1.md"] or {}
+  local n2 = plan.normalize["agents/ada/reviews/r1.md"] or {}
   ok("M25: review-response -> review, head_sha -> head", #n2 == 2 and n2[1].to == "review" and n2[2].to == "head", vim.inspect(n2))
   ok("M26: the empty shared/agents/* folders are removed, and emptied source folders too",
     vim.tbl_contains(plan.removed_dirs, "shared/agents/lector") and vim.tbl_contains(plan.removed_dirs, "agents"))
@@ -518,7 +521,7 @@ do
     r9 ~= nil and r10 == nil and tostring(e10):find("no longer resolves") ~= nil and same_snapshot(snapB4, snapshot(B)), e10)
   local r11 = dry(B, nil)
   local r12, e12 = apply(B, nil, { hooks = { mutate_output = function(e, out)
-    if e.old == "agents/jarvis/loose.md" then return out .. "\nNew: [[adrs/does-not-exist]]\n" end
+    if e.old == "agents/ada/loose.md" then return out .. "\nNew: [[adrs/does-not-exist]]\n" end
     return out
   end } })
   ok("A7: the validator catches a new broken internal reference", r11 ~= nil and r12 == nil and tostring(e12):find("new broken reference") ~= nil, e12)
@@ -526,7 +529,7 @@ end
 
 section("[E] a mention of an empty folder the migration removes")
 do
-  -- ADR 1791209946's own table mentions `shared/agents/`, an empty folder the migration removes: it
+  -- The layout decision's own table mentions `shared/agents/`, an empty folder the migration removes: it
   -- was planned "unchanged" (map_dir is vacuously true of a folder with no files), so the apply's
   -- validation found it broken and rolled back
   local E = tmp .. "/kb-e"
@@ -661,15 +664,15 @@ if r_apply then
     and read(A, "reference/term--from-shared-glossary.md"):find("glossary term")
     and read(A, "reference/term--from-shared-reference.md"):find("reference term"))
   ok("P7: the path-qualified ../../ wikilink reads from its new location",
-    read(A, "adrs/0001-first.md"):find("[[../reviews/jarvis/r1|the review]]", 1, true) ~= nil)
-  ok("P8: …and resolves there", util.isfile(util.normpath(A .. "/adrs/../reviews/jarvis/r1.md")))
+    read(A, "adrs/0001-first.md"):find("[[../reviews/ada/r1|the review]]", 1, true) ~= nil)
+  ok("P8: …and resolves there", util.isfile(util.normpath(A .. "/adrs/../reviews/ada/r1.md")))
   ok("P9b: a file that stays was normalized in place (date -> created)", read(A, "MIGRATIONS.md"):find("\ncreated: 2026%-05%-01\n") ~= nil)
   ok("P9: frontmatter was normalized", read(A, "synthesis/bug.md"):find("\ntype: synthesis\nkind: bug%-fix\n") ~= nil
     and read(A, "synthesis/bug.md"):find("\nrelated: %[adrs/0001%-first.md%]") ~= nil)
   ok("P10: the external todo store's reference was rewritten",
     read(EXT_A, "open/task-b.md"):find(A .. "/adrs/0001-first.md", 1, true) ~= nil
     and read(EXT_A, "open/task-b.md"):find("$KB_ROOT/conventions/naming.md", 1, true) ~= nil)
-  ok("P11: a new AGENTS.md (the §2 contract) and ABOUT.md files exist; .todo-list/ was not scaffolded anew",
+  ok("P11: a new AGENTS.md (the agent contract) and ABOUT.md files exist; .todo-list/ was not scaffolded anew",
     read(A, "AGENTS.md"):find("Agent contract") ~= nil and util.isfile(A .. "/notes/ABOUT.md")
     and #util.walk(A .. "/.todo-list") == 1)
   ok("P12: the script kept its executable mode", (vim.uv.fs_stat(A .. "/scripts/run.sh").mode % 512) == 493)

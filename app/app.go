@@ -1,6 +1,7 @@
-// Package app is AutoDoc's one binary, with its modes as flags (ADR 0203 §4.1), as a function a
-// main calls (ADR 0216 §1.1). --serve is the daemon; --ui is the TUI, its client, which starts the
-// daemon when nothing answers:
+// Package app is AutoDoc's one binary, with its modes as flags
+// (docs/decisions/contract.md#one-binary-modes-as-flags), as a function a main calls
+// (docs/decisions/search.md#one-entry-point-for-every-build). --serve is the daemon; --ui is the
+// TUI, its client, which starts the daemon when nothing answers:
 //
 //	autodoc --ui [--dev dir] [workspace]
 //
@@ -9,14 +10,15 @@
 //
 //	autodoc --call search.query '["kb", "a query", {"limit": 5}]'
 //
-// --editor is one verb of the page in the AutoDoc that started this agent (ADR 1792014854). Every
-// verb takes a trailing buffer number, the buffer shown without it; editor.buffers lists them (ADR
-// 1792076688):
+// --editor is one verb of the page in the AutoDoc that started this agent
+// (docs/decisions/crew.md#the-editor-socket). Every verb takes a trailing buffer number, the buffer
+// shown without it; editor.buffers lists them
+// (docs/decisions/editor.md#buffers-in-lua-and-the-editor-socket):
 //
 //	autodoc --editor editor.read '[1, 20]'
 //	autodoc --editor editor.buffers
 //	autodoc --editor editor.read '[1, 20, 3]'   # lines 1 to 20 of buffer 3, shown or not
-//	autodoc --editor editor.workspace           # the agent's workspace, the editor's, and the switch since it last asked (ADR 1792988759)
+//	autodoc --editor editor.workspace           # the agent's workspace, the editor's, and the switch since it last asked (docs/decisions/crew.md#workspace-switches-are-told-not-imposed)
 //	autodoc --workspace-notice                  # that switch as one line, or nothing: a Claude agent's UserPromptSubmit hook
 //
 // --contracts prints the verbs' contracts and the error codes, built in this process with no daemon:
@@ -45,6 +47,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
@@ -60,19 +63,20 @@ type Options struct {
 	// BuildDate is the day the build was made (YYYY-MM-DD), for Help › About; "" shows none.
 	BuildDate string
 	// Chunkers are the build's own chunkers, by lower-case extension with its dot: a file of one is
-	// indexed by it, as kind.Registered (ADR 0216 §1.2-1.3). They are added to golib's code
-	// chunkers (.go, .ts, .tsx, .js, .jsx, .mjs, .py, .rs), which every build has. Main refuses one
-	// of those extensions, a malformed or built-in one, a derived format's, and a version outside
-	// document.indexer's charset. nil: golib's alone, the community build.
+	// indexed by it, as kind.Registered (docs/decisions/search.md#registered-chunkers-and-derivers).
+	// They are added to golib's code chunkers (.go, .ts, .tsx, .js, .jsx, .mjs, .py, .rs), which every
+	// build has. Main refuses one of those extensions, a malformed or built-in one, a derived
+	// format's, and a version outside document.indexer's charset. nil: golib's alone, the community
+	// build.
 	Chunkers map[string]search.Chunker
-	// Deriver adds formats beside .docx, .htm and .html, which every build derives (ADR 0216 §1.8):
-	// its formats and their identities are read once, at entry; a file of one is indexed from its
-	// derived text, and doc.read serves that text, read-only. A format every build derives is
-	// refused. nil: none, the community build.
+	// Deriver adds formats beside .docx, .htm and .html, which every build derives
+	// (docs/decisions/search.md#derived-document-formats): its formats and their identities are read
+	// once, at entry; a file of one is indexed from its derived text, and doc.read serves that text,
+	// read-only. A format every build derives is refused. nil: none, the community build.
 	Deriver Deriver
-	// Rank is the build's search ranking (ADR 0215 §3): its own ranker, the texts the ranker reads,
-	// and whether a search answers ranked or not at all. The zero value: the stored ranker models,
-	// over the chunks' texts, falling back to recall order.
+	// Rank is the build's search ranking (docs/decisions/search.md#a-builds-own-ranking): its own
+	// ranker, the texts the ranker reads, and whether a search answers ranked or not at all. The zero
+	// value: the stored ranker models, over the chunks' texts, falling back to recall order.
 	Rank Rank
 }
 
@@ -126,6 +130,9 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
+	if rest, configPath, ok := crewCommandArgs(args); ok { // an agent's `autodoc crew|mail …` (docs/decisions/crew.md#the-agent-guide-and-commands), not a mode
+		return crewMainIn(ctx, configPath, rest, os.Stdin, stdout, stderr)
+	}
 	chunkers, err := registrations.Builtin(o.Chunkers)
 	var reg *registrations.Table
 	if err == nil {
@@ -149,8 +156,10 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
+	fs.Bool("kb-operations", false, "print the KB operations manual (KB_OPERATIONS.md) this build carries, as a KB's scaffold writes it, with no UI or daemon")
+	fs.Bool("tutorial", false, "print the tutorial page whose number is after the flags (autodoc --tutorial 6), or, with none, the list of its pages; in English, with no UI or daemon")
 	fs.Bool("check-theme", false, "validate the Theme file after the flags; report every problem, without a UI or daemon")
-	fs.Bool("check-kbtype", false, "validate the KB type repository in the directory after the flags (kbtype.toml and tree/, ADR 1792349867) and list what it creates, without a UI or daemon")
+	fs.Bool("check-kbtype", false, "validate the KB type repository in the directory after the flags (kbtype.toml and tree/, docs/decisions/contract.md#kb-types-are-git-repos-of-files) and list what it creates, without a UI or daemon")
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
 	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
 	fs.Bool("commands-reference", false, "print the reference for the commands AutoDoc is built with: each one's id, its ':' name and arguments, with no UI or daemon")
@@ -160,7 +169,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
-	fs.Bool("workspace-notice", false, "print the line telling this agent the editor's workspace changed since it last asked, or nothing; always exit 0 (a Claude agent's UserPromptSubmit hook, ADR 1792988759)")
+	fs.Bool("workspace-notice", false, "print the line telling this agent the editor's workspace changed since it last asked, or nothing; always exit 0 (a Claude agent's UserPromptSubmit hook, docs/decisions/crew.md#the-workspace-notice-hook)")
 	editor := fs.String("editor", "", `call a verb of the page in the AutoDoc that started this agent ($AUTODOC_EDITOR, as $AUTODOC_AGENT) and print its answer as JSON; its parameters, a JSON array, after the flags: --editor editor.read '[1, 20]'`)
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text, or a docs folder as a site (its site.toml)")
 	exportOutput := fs.String("output", "", "--export: destination file, or a site's folder (required)")
@@ -169,9 +178,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
+	fs.Bool("check-store", false, "check the store: SQLite's integrity_check and foreign_key_check, and every sealed secret opened with its key; JSON out, exit 1 on a problem. The daemon serving it checks it when one runs")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
+	logLevel := fs.String("log-level", "", "--serve and --server: the least severe record logged, over the config's [log] level: debug, info, notice, warning, error or critical")
 	health := fs.Bool("health", false, "--server: ask the running server for its health (GET /v1/health); exit 0 when ok or degraded, 1 otherwise")
 	debug := &debugFlag{}
 	fs.Var(debug, "debug", "--ui and --gui: record the input and event stream to one JSONL file for an input or IME bug report; =PATH names the file (default autodoc-debug-<date>.jsonl in the working directory). The file contains everything typed, passwords included")
@@ -186,6 +197,22 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	}
 	modes := []mode{
 		{flag: "theme-reference", run: func(string) int { themeReference(stdout); return 0 }},
+		{flag: "kb-operations", run: func(string) int {
+			if err := kbOperations(stdout, b.version); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "tutorial", arg: true, run: func(page string) int {
+			if err := tutorial(stdout, page); err != nil {
+				code := 1
+				if errors.Is(err, errNoPage) {
+					code = 2
+				}
+				return failed(err, code)
+			}
+			return 0
+		}},
 		{flag: "check-theme", arg: true, run: func(file string) int {
 			if err := checkTheme(file, stdout); err != nil {
 				return failed(err, 1)
@@ -221,6 +248,12 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
+		{flag: "check-store", run: func(string) int {
+			if err := runCheckStore(ctx, *configPath, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
 		{flag: "compact", run: func(string) int {
 			if err := runCompact(ctx, *configPath, stdout); err != nil {
 				return failed(err, 1)
@@ -238,16 +271,24 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 0
 		}},
 		{flag: "serve", run: func(string) int {
+			level, err := logLevelFlag(*logLevel)
+			if err != nil {
+				return failed(err, 2)
+			}
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			prof, err := startProfile(ctx, profile, "serve", stderr)
 			if err != nil {
 				return failed(err, 1)
 			}
-			return serveExit(stderr, runServe(ctx, *configPath, stderr, b, prof.p), prof)
+			return serveExit(stderr, runServe(ctx, *configPath, stderr, b, prof.p, level), prof)
 		}},
 		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
-			return serverMode(ctx, cfg, *check, *health, stdout, stderr, b.version, failed)
+			level, err := logLevelFlag(*logLevel)
+			if err != nil {
+				return failed(err, 2)
+			}
+			return serverMode(ctx, cfg, *check, *health, level, stdout, stderr, b.version, failed)
 		}},
 		{flag: "call", asked: func() bool { return *call != "" }, arg: true, run: func(params string) int {
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -304,6 +345,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"check", "health"}, modes: []string{"server"}},
 		{flags: []string{"debug"}, modes: []string{"ui", "gui"}},
 		{flags: []string{"profile"}, modes: []string{"ui", "gui", "serve"}},
+		{flags: []string{"log-level"}, modes: []string{"serve", "server"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
@@ -323,4 +365,17 @@ func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, 
 		return 1
 	}
 	return 0
+}
+
+// logLevelFlag is --log-level as the logger's severity, "" when it is not given: the config's
+// [log] level then applies.
+func logLevelFlag(v string) (logger.Severity, error) {
+	if v == "" {
+		return "", nil
+	}
+	s, err := logger.ParseSeverity(v)
+	if err != nil {
+		return "", fmt.Errorf("--log-level %q: want debug, info, notice, warning, error or critical", v)
+	}
+	return s, nil
 }

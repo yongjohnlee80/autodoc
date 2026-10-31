@@ -14,8 +14,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
-// The cells of ADR 1792351123 §5: notifications from plugins (protocol 8) and Lua. The plugins are
-// the test binary in mode "rawcalls", sending host.notify as a plugin that is not the SDK does.
+// The cells of docs/decisions/plugins.md#notifications: notifications from plugins (protocol 8) and
+// Lua. The plugins are the test binary in mode "rawcalls", sending host.notify as a plugin that is
+// not the SDK does.
 
 const notifyCommands = "[[commands]]\nid = \"notifywith\"\ntitle = \"Notify\"\n[[commands]]\nid = \"badnotify\"\ntitle = \"Bad\"\n" +
 	"[[commands]]\nid = \"manynotify\"\ntitle = \"Many\"\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n"
@@ -36,9 +37,10 @@ func kept(r *running, text string) int {
 	})
 }
 
-// TestAPluginsNotices (§5.2-§5.4): a plain notice and an ongoing one, updated, ended, started again;
-// two plugins' same id their own; a bad notice and a protocol-7 plugin's refused, logged without the
-// message; past MaxActiveNotices refused; a plugin stopped ends its ongoing notices once.
+// TestAPluginsNotices (docs/decisions/plugins.md#notifications): a plain notice and an ongoing one,
+// updated, ended, started again; two plugins' same id their own; a bad notice and a protocol-7
+// plugin's refused, logged without the message; past MaxActiveNotices refused; a plugin stopped
+// ends its ongoing notices once.
 func TestAPluginsNotices(t *testing.T) {
 	dir := t.TempDir()
 	installPluginAt(t, dir, "a", "service", "rawcalls", notifyCommands, 8)
@@ -98,8 +100,9 @@ func TestAPluginsNotices(t *testing.T) {
 	}
 }
 
-// TestANoticeQueuedBeforeAStopPostsNothing (§5.4): acceptNotice from a run that is stopping, or is
-// no longer the plugin's live run, posts nothing and tracks nothing.
+// TestANoticeQueuedBeforeAStopPostsNothing (docs/decisions/plugins.md#notifications): acceptNotice
+// from a run that is stopping, or is no longer the plugin's live run, posts nothing and tracks
+// nothing.
 func TestANoticeQueuedBeforeAStopPostsNothing(t *testing.T) {
 	dir := t.TempDir()
 	installPluginAt(t, dir, "a", "service", "rawcalls", notifyCommands, 8)
@@ -123,12 +126,13 @@ func TestANoticeQueuedBeforeAStopPostsNothing(t *testing.T) {
 	}
 }
 
-// TestLuaNotices (§5.5): one argument as before; options post, update, end and start again under the
-// lua namespace; a bad option raises an error; an engine with only WithNotify gets the message.
+// TestLuaNotices (docs/decisions/plugins.md#notifications): one argument as before; options post,
+// update, end and start again under the lua namespace; a bad option raises an error; an engine with
+// only WithNotify gets the message.
 func TestLuaNotices(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	run := func(src string) error {
 		return onLoop(r, func() error { return r.h.scripts.L.DoString(src) })
 	}

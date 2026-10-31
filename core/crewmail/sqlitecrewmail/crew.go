@@ -35,6 +35,7 @@ const (
 	cStarted     col = "started"
 	cEnded       col = "ended"
 	cEndedWhy    col = "ended_why"
+	cPrompts     col = "prompts"
 	cSession     col = "session"
 	cPendingGen  col = "pending_gen"
 	cAnnounced   col = "announced_gen"
@@ -143,6 +144,7 @@ func newCrewTables(c dao.DataConn) *crewTables {
 			cInstance: func(r *crew.Session) any { return &r.Instance }, cSecretHash: func(r *crew.Session) any { return &r.SecretHash },
 			cArgsDigest: func(r *crew.Session) any { return &r.ArgsDigest }, cStarted: func(r *crew.Session) any { return &r.Started },
 			cEnded: func(r *crew.Session) any { return &r.Ended }, cEndedWhy: func(r *crew.Session) any { return &r.EndedWhy },
+			cPrompts: func(r *crew.Session) any { return &r.Prompts },
 		}, cID),
 		wakes: table(c, "crew_wake", map[col]func(*crew.Wake) any{
 			cSession: func(r *crew.Wake) any { return &r.Session }, cPendingGen: func(r *crew.Wake) any { return &r.PendingGen },
@@ -288,7 +290,7 @@ func (t *Tx) LiveSessionsOfScope(scope string) ([]crew.Session, error) {
 func (t *Tx) PutSession(s crew.Session) error {
 	return t.t.sessions.On(t.tx).SetMap(map[col]any{cID: s.ID, cProfile: s.Profile, cHost: s.Host, cEpoch: s.Epoch,
 		cInstance: s.Instance, cSecretHash: blob(s.SecretHash), cArgsDigest: blob(s.ArgsDigest), cStarted: s.Started,
-		cEnded: s.Ended, cEndedWhy: s.EndedWhy}).Upsert()
+		cEnded: s.Ended, cEndedWhy: s.EndedWhy, cPrompts: s.Prompts}).Upsert()
 }
 
 func (t *Tx) Wake(session string) (crew.Wake, bool, error) {
@@ -300,15 +302,11 @@ func (t *Tx) Wake(session string) (crew.Wake, bool, error) {
 }
 
 func (t *Tx) PutWake(w crew.Wake) error {
+	t.wake = true
 	return t.t.wakes.On(t.tx).SetMap(map[col]any{cSession: w.Session, cPendingGen: w.PendingGen,
 		cAnnounced: w.AnnouncedGen, cState: w.State, cToken: w.Token, cAttemptGen: w.AttemptGen,
 		cFailures: w.Failures, cDaemonRun: w.DaemonRun, cNextAt: w.NextAt}).Upsert()
 }
-
-// the wake rows a reservation, a timeout and a deadline read (§4.7)
-var (
-	wakeHasWork = dao.Or(dao.And(dao.Eq(`"crew_wake"."state"`, crew.WakeIdle), wakePending), dao.Eq(`"crew_wake"."state"`, crew.WakeAwaiting))
-)
 
 func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
 	if err != nil {
@@ -324,20 +322,26 @@ func wakes(rows []*crew.Wake, err error) ([]crew.Wake, error) {
 // errLimit is a limited read asked for no rows: dao would emit LIMIT 0 and answer nothing.
 var errLimit = errors.New("sqlitecrewmail: a limit must be > 0")
 
-// wakePending is a wake row with pending_gen past announced_gen; wakeLiveReachable, one whose
-// session is live and has an endpoint.
-var (
-	wakePending       = dao.Cmp(dao.T("crew_wake", "pending_gen"), dao.OpGt, dao.T("crew_wake", "announced_gen"))
-	wakeLiveReachable = dao.And(
-		store.Correlated(false, "crew_session", "id", "crew_wake", "session", dao.IsNull(`"crew_session"."ended"`)),
-		store.Correlated(false, "crew_endpoint", "session", "crew_wake", "session"))
-)
+// wakePending is a wake row with pending_gen past announced_gen.
+var wakePending = dao.Cmp(dao.T("crew_wake", "pending_gen"), dao.OpGt, dao.T("crew_wake", "announced_gen"))
 
-func (t *Tx) WakesDue(now int64, limit int) ([]crew.Wake, error) {
+// wakeable is a wake row whose session is live and has an endpoint of one of kinds: a row a
+// scheduler with wakers for kinds may reserve. No kinds matches none.
+func wakeable(kinds []string) dao.Predicate {
+	ks := make([]any, len(kinds))
+	for i, k := range kinds {
+		ks[i] = k
+	}
+	return dao.And(
+		store.Correlated(false, "crew_session", "id", "crew_wake", "session", dao.IsNull(`"crew_session"."ended"`)),
+		store.Correlated(false, "crew_endpoint", "session", "crew_wake", "session", dao.In(`"crew_endpoint"."kind"`, ks)))
+}
+
+func (t *Tx) WakesDue(now int64, kinds []string, limit int) ([]crew.Wake, error) {
 	if limit <= 0 {
 		return nil, errLimit
 	}
-	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).WithPredicate(wakeLiveReachable).
+	return wakes(t.t.wakes.On(t.tx).With(cState, crew.WakeIdle).WithPredicate(wakeable(kinds)).
 		WithPredicate(wakePending).
 		WithPredicate(dao.Or(dao.IsNull(`"crew_wake"."next_at"`), dao.Lte(`"crew_wake"."next_at"`, now))).
 		OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select())
@@ -357,8 +361,10 @@ func (t *Tx) WakesInFlight() ([]crew.Wake, error) {
 
 // NextWakeAt reads the rows with work and a deadline, and takes the earliest: at most one per live
 // session, so the scan is the crew's size.
-func (t *Tx) NextWakeAt() (int64, bool, error) {
-	ws, err := wakes(t.t.wakes.On(t.tx).WithPredicate(wakeHasWork).
+func (t *Tx) NextWakeAt(kinds []string) (int64, bool, error) {
+	hasWork := dao.Or(dao.And(dao.Eq(`"crew_wake"."state"`, crew.WakeIdle), wakePending, wakeable(kinds)),
+		dao.Eq(`"crew_wake"."state"`, crew.WakeAwaiting))
+	ws, err := wakes(t.t.wakes.On(t.tx).WithPredicate(hasWork).
 		WithPredicate(dao.IsNotNull(`"crew_wake"."next_at"`)).Select())
 	if err != nil {
 		return 0, false, err
@@ -406,5 +412,6 @@ func (t *Tx) PutAttention(a crew.Attention) error {
 // AddInboxChange journals one change of the human feed; its seq is the table's own.
 func (t *Tx) AddInboxChange(kind, ref string) error {
 	_, err := t.t.inbox.On(t.tx).SetMap(map[col]any{cKind: kind, cRef: ref, cAt: t.now.UnixNano()}).Insert()
+	t.feed = t.feed || err == nil
 	return err
 }

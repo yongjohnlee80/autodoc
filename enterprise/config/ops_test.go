@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/logger"
+
 	"github.com/yongjohnlee80/autodoc/enterprise/config"
 )
 
@@ -15,7 +17,8 @@ func withOperator(block string) string {
 }
 
 // An operator loads with its token and tenants; ["*"] names every tenant. The defaults: no proxy,
-// no operator, the ingester's own refresh retry, metrics every minute.
+// no operator, the ingester's own refresh retry, metrics every minute, no level (every record).
+// The level is read in any case.
 func TestAnOperatorAndTheOperationsFieldsLoad(t *testing.T) {
 	t.Setenv("TEST_OPS_TOKEN", strings.Repeat("o", 64))
 	s, err := load(t, withOperator("[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"music\"]\n"))
@@ -25,23 +28,24 @@ func TestAnOperatorAndTheOperationsFieldsLoad(t *testing.T) {
 	if len(s.HTTP.Operators) != 1 || s.HTTP.Operators[0].Name != "ops" || !slices.Equal(s.HTTP.Operators[0].Tenants, []string{"music"}) {
 		t.Errorf("operators %+v", s.HTTP.Operators)
 	}
-	if s.HTTP.Proxy || s.Sources[0].RefreshRetry != 0 || s.Log.MetricsInterval != config.DefaultMetricsInterval {
-		t.Errorf("defaults: proxy %v, refresh_retry %v, metrics %v", s.HTTP.Proxy, s.Sources[0].RefreshRetry, s.Log.MetricsInterval)
+	if s.HTTP.Proxy || s.Sources[0].RefreshRetry != 0 || s.Log.MetricsInterval != config.DefaultMetricsInterval || s.Log.Level != "" {
+		t.Errorf("defaults: proxy %v, refresh_retry %v, metrics %v, level %q", s.HTTP.Proxy, s.Sources[0].RefreshRetry, s.Log.MetricsInterval, s.Log.Level)
 	}
 	s, err = load(t, strings.Replace(withOperator("[[http.operator]]\nname = \"ops\"\ntoken_sha256 = \""+hashOf("an operator's long random token")+"\"\ntenants = [\"*\"]\n"),
-		`lag      = "2m"`, "lag      = \"2m\"\nrefresh_retry = \"30m\"", 1)+"\n[log]\nmetrics_interval = \"0s\"\n")
+		`lag      = "2m"`, "lag      = \"2m\"\nrefresh_retry = \"30m\"", 1)+"\n[log]\nmetrics_interval = \"0s\"\nlevel = \"WARNING\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(s.HTTP.Operators[0].Tenants, []string{"*"}) || s.Sources[0].RefreshRetry != 30*time.Minute || s.Log.MetricsInterval != 0 {
-		t.Errorf("operator %+v, refresh_retry %v, metrics %v", s.HTTP.Operators[0], s.Sources[0].RefreshRetry, s.Log.MetricsInterval)
+	if !slices.Equal(s.HTTP.Operators[0].Tenants, []string{"*"}) || s.Sources[0].RefreshRetry != 30*time.Minute || s.Log.MetricsInterval != 0 || s.Log.Level != logger.SeverityWarning {
+		t.Errorf("operator %+v, refresh_retry %v, metrics %v, level %q", s.HTTP.Operators[0], s.Sources[0].RefreshRetry, s.Log.MetricsInterval, s.Log.Level)
 	}
 }
 
 // Each refusal of the operations fields names its field, and never echoes a token: an operator
 // without a name, with a client's name, with both or neither token form, with no tenants, an
 // unknown tenant, a tenant twice or "*" with others; the same token as a client's (one token, one
-// role); proxy with TLS; refresh_retry below a minute or above the refresh; metrics too often.
+// role); proxy with TLS; refresh_retry below a minute or above the refresh; metrics too often; a
+// level that is not one of the six.
 func TestEveryOperationsRefusalNamesItsField(t *testing.T) {
 	t.Setenv("TEST_OPS_TOKEN", strings.Repeat("o", 64))
 	op := func(body string) string { return withOperator("[[http.operator]]\n" + body + "\n") }
@@ -63,6 +67,7 @@ func TestEveryOperationsRefusalNamesItsField(t *testing.T) {
 		{"retry under a minute", strings.Replace(good, `lag      = "2m"`, "lag      = \"2m\"\nrefresh_retry = \"30s\"", 1), "source[0].refresh_retry", "want 1m0s up to the refresh"},
 		{"retry over the refresh", strings.Replace(good, `lag      = "2m"`, "lag      = \"2m\"\nrefresh_retry = \"48h\"", 1), "source[0].refresh_retry", "want 1m0s up to the refresh"},
 		{"metrics too often", good + "\n[log]\nmetrics_interval = \"5s\"\n", "log.metrics_interval", "want 0 (none) or at least 10s"},
+		{"an unknown level", good + "\n[log]\nlevel = \"loud\"\n", "log.level", "want debug, info, notice, warning, error or critical"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := load(t, c.src)

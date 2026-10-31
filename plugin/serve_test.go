@@ -299,7 +299,7 @@ func TestThePeerSendsFramesTitlesAndClose(t *testing.T) {
 	}
 }
 
-// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a 0209-era manifest) to 7 is answered
+// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a manifest of the first plugin protocol) to 7 is answered
 // with that same protocol, and the Handler opens; one below or above the range is told the newest,
 // and nothing opens.
 func TestServeAnswersEachProtocolInItsRange(t *testing.T) {
@@ -488,7 +488,7 @@ func closeOnce(c chan struct{}) {
 	}
 }
 
-// TestADocumentIsBoundedByItsEncoding (ADR 1791268009 §2.3): the bound is the whole notification
+// TestADocumentIsBoundedByItsEncoding (docs/decisions/plugins.md#the-document-feed): the bound is the whole notification
 // as the link writes it, not the text, and it is the link's own limit. A document that encodes to
 // exactly MaxMessageBytes is sent whole and arrives; one byte more, which the link would refuse to
 // send, is too large, keeping its path, workspace and version; neither ends the link.
@@ -594,7 +594,7 @@ func waitCalls(t *testing.T, r *recorder, n int) []string {
 	return r.all()
 }
 
-// TestACallFromAHandlerIsAnswered (ADR 1791762474 §4.5, §5.7): Peer.Call from inside Key and
+// TestACallFromAHandlerIsAnswered (docs/decisions/plugins.md#plugin-calls): Peer.Call from inside Key and
 // Command, the Handler's own queue, gets the host's answer: plugin.result is routed by the link,
 // never queued behind the method waiting for it. The host's error comes back as a *CallError.
 func TestACallFromAHandlerIsAnswered(t *testing.T) {

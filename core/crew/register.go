@@ -11,16 +11,20 @@ import (
 	"strings"
 )
 
-// Registration is what crew.register records for one agent process (§4.4).
+// Registration is what crew.register records for one agent process
+// (docs/decisions/crew.md#sessions-and-the-guard).
 type Registration struct {
 	Scope     string
 	Run       string
 	Epoch     int64
 	Codename  string
 	Kind      string // claude | codex | agy | opencode …
-	Workspace string // the workspace's uid
+	Workspace string // the workspace's id; empty when no workspace serves the agent's folder
 	Instance  string // the host's spawn id: with the epoch, the registration's idempotency key
 	Secret    string // host-generated, 32 random bytes as text; only its hash is kept
+	// Prompts is that the host wrote what reports the session's permission prompts (Claude's
+	// hooks, ClaudeHookCommands): crew.list's prompts_reported trusts a hooks reporter only then.
+	Prompts bool
 }
 
 // Registered is the session a registration made (or found again, on a replay).
@@ -31,9 +35,14 @@ type Registered struct {
 
 // argsDigest is the digest of a registration's immutable arguments: a replay must match them.
 // Each field is length-prefixed, so no two argument tuples encode alike, whatever bytes they hold.
+// Prompts joins them only when set, so a registration without it digests as one from before it.
 func argsDigest(r Registration) []byte {
 	h := sha256.New()
-	for _, f := range []string{r.Codename, r.Kind, r.Workspace} {
+	fields := []string{r.Codename, r.Kind, r.Workspace}
+	if r.Prompts {
+		fields = append(fields, "prompts")
+	}
+	for _, f := range fields {
 		_ = binary.Write(h, binary.BigEndian, uint64(len(f)))
 		h.Write([]byte(f))
 	}
@@ -49,8 +58,20 @@ func newID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// The longest names and identifiers crew accepts. They travel in every snapshot entry and list
+// item that names a sender or a session, so each is bounded at admission: an entry then always fits
+// one page of the human's feed, which the inbox measures whole.
+const (
+	MaxName  = 64  // a codename, a kind
+	MaxIdent = 256 // a scope, an instance, a workspace
+)
+
 func checkRegistration(r Registration) error {
 	switch {
+	case len(r.Codename) > MaxName || len(r.Kind) > MaxName:
+		return fmt.Errorf("%w: a codename or kind longer than %d bytes", ErrInvalid, MaxName)
+	case len(r.Instance) > MaxIdent || len(r.Workspace) > MaxIdent:
+		return fmt.Errorf("%w: an instance or workspace longer than %d bytes", ErrInvalid, MaxIdent)
 	case r.Codename == "" || r.Codename == "user" || strings.ContainsAny(r.Codename, "@ \t\n"):
 		return fmt.Errorf("%w: codename %q", ErrInvalid, r.Codename)
 	case r.Kind == "":
@@ -63,7 +84,8 @@ func checkRegistration(r Registration) error {
 	return nil
 }
 
-// Register starts a session for (r.Scope, r.Codename) under the host's epoch (§4.4). One write:
+// Register starts a session for (r.Scope, r.Codename) under the host's epoch
+// (docs/decisions/crew.md#sessions-and-the-guard). One write:
 //   - guardHost: the host still owns the scope at r.Epoch;
 //   - a session for (scope, epoch, instance) exists: a replay, answered with the same session, only
 //     if its secret and immutable arguments match and it has not ended; else ErrInstanceReused;
@@ -73,7 +95,8 @@ func checkRegistration(r Registration) error {
 //     seeded when the profile already has mail it may receive.
 //
 // A new epoch is a new namespace for instances: a crash successor's agent-1 never meets the old
-// one's (§R22). The host keeps the secret and writes the session context only after this succeeds.
+// one's (docs/decisions/crew.md#sessions-and-the-guard). The host keeps the secret and writes the
+// session context only after this succeeds.
 func (m *Manager) Register(ctx context.Context, r Registration) (Registered, error) {
 	if err := checkRegistration(r); err != nil {
 		return Registered{}, err
@@ -125,7 +148,7 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 			return err
 		}
 		s = Session{ID: id, Profile: p.ID, Host: r.Scope, Epoch: r.Epoch, Instance: r.Instance,
-			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now}
+			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now, Prompts: r.Prompts}
 		if err := tx.PutSession(s); err != nil {
 			return err
 		}
@@ -148,8 +171,8 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 	return out, err
 }
 
-// Renew keeps the host's ownership of scope: its lease runs another 90 s (§4.4). Hosts renew
-// every 30 s.
+// Renew keeps the host's ownership of scope: its lease runs another 90 s
+// (docs/decisions/crew.md#sessions-and-the-guard). Hosts renew every 30 s.
 func (m *Manager) Renew(ctx context.Context, scope, run string, epoch int64) error {
 	return m.store.Write(ctx, func(tx Tx) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
@@ -165,13 +188,13 @@ func (m *Manager) Renew(ctx context.Context, scope, run string, epoch int64) err
 }
 
 // Exit ends session, which the host started under its epoch: why is EndedExit, or
-// EndedStartFailed for a spawn that failed after its registration (§4.4). Ending an ended session
-// again is no error.
+// EndedStartFailed for a spawn that failed after its registration
+// (docs/decisions/crew.md#sessions-and-the-guard). Ending an ended session again is no error.
 func (m *Manager) Exit(ctx context.Context, scope, run string, epoch int64, session, why string) error {
 	if why != EndedExit && why != EndedStartFailed {
 		return fmt.Errorf("%w: exit reason %q", ErrInvalid, why)
 	}
-	return m.store.Write(ctx, func(tx Tx) error {
+	return m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, scope, run, epoch); err != nil {
 			return err
 		}
@@ -185,6 +208,6 @@ func (m *Manager) Exit(ctx context.Context, scope, run string, epoch int64, sess
 		if s.Ended != nil {
 			return nil
 		}
-		return m.endSession(tx, s, why)
+		return m.endSession(tx, after, s, why)
 	})
 }

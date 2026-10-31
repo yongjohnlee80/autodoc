@@ -117,7 +117,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		a.startEditAgent(row)
 		a.saveAgentProfile("Same", before[row].Command+" edited", before[row].Codename)
 		got := a.profiles()
-		if got[1-row] != before[1-row] || got[row].Command != before[row].Command+" edited" {
+		if !got[1-row].same(before[1-row]) || got[row].Command != before[row].Command+" edited" {
 			t.Fatalf("edit row%d overwrote another profile: %+v", row, got)
 		}
 		for _, p := range got {
@@ -127,7 +127,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		}
 		a.makeAgentDefault(row)
 		p, ok := a.profile(a.defaultProfile())
-		if !ok || p != got[row] || c.p.Value(prefAgentDefaultCodename) != got[row].Codename {
+		if !ok || !p.same(got[row]) || c.p.Value(prefAgentDefaultCodename) != got[row].Codename {
 			t.Fatalf("default selected another Same label: %+v", p)
 		}
 		a.openAgentPanel()

@@ -101,7 +101,7 @@ auto-core's first-run import records the project's primary KB by its root alone.
 
 ### 6-Slot Floating Markdown Previews (`autodoc.preview`)
 
-Absorbing the workflow of `md-harpoon` (ADR 1791210485), `autodoc.preview` gives you six persistent floating Markdown slots arranged ergonomically on the home and number rows: **`1`, `2`, `3`** across the top and **`a`, `s`, `d`** below.
+Absorbing the workflow of `md-harpoon` ([Markdown preview slots](../decisions/neovim.md#markdown-preview-slots)), `autodoc.preview` gives you six persistent floating Markdown slots arranged ergonomically on the home and number rows: **`1`, `2`, `3`** across the top and **`a`, `s`, `d`** below.
 
 Use `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`, `:AutodocPreviewFind` (`<leader>mp`), `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and `:AutodocPreviewBrowser` (the document as HTML, through `autodoc --export html`).
 
@@ -166,7 +166,7 @@ Run `:checkhealth autodoc` at any time to verify the binary path, daemon socket 
 
 ## 18.6 Safe, Reversible KB Migrations (`:AutodocKbMigrate`)
 
-When upgrading an older knowledge base (with `shared/` and `agents/<name>/` trees) to the v2 schema-validated layout (ADR 1791209946 §8: top-level `adrs/`, `conventions/`, `playbooks/`, `reference/`, `synthesis/`, `reviews/<reviewer>/`, `prs/`, `notes/`, `archive/`, `_schema/`, and `_templates/`), `:AutodocKbMigrate` executes a deterministic, checksummed **6-stage pipeline** with full pre-image rollback.
+When upgrading an older knowledge base (with `shared/` and `agents/<name>/` trees) to the v2 schema-validated layout ([migrating a KB](../decisions/crew.md#migrating-a-kb-to-the-layout): top-level `adrs/`, `conventions/`, `playbooks/`, `reference/`, `synthesis/`, `reviews/<reviewer>/`, `prs/`, `notes/`, `archive/`, `_schema/`, and `_templates/`), `:AutodocKbMigrate` executes a deterministic, checksummed **6-stage pipeline** with full pre-image rollback.
 
 The KB migration (`:AutodocKbMigrate [root]`) moves a KB to the current layout. It first saves a full copy of every file it will touch, so `--undo` restores the KB without git, and `--forget` deletes that copy.
 

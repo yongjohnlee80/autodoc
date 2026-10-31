@@ -1,7 +1,8 @@
 -- :usage — what AutoDoc uses: a card (autodoc.ui.card) of the daemon's and the app's memory and
--- CPU, and the workspace's index, refreshed each second while the card is open (ADR 1792256101
--- §4.6). In a window that draws charts (autodoc.ui.charts()) two vega-lite line charts follow the
--- tables: CPU and memory over the last minute; a terminal shows the tables alone.
+-- CPU, and the workspace's index, refreshed each second while the card is open
+-- (docs/decisions/editor.md#the-usage-card). In a window that draws charts (autodoc.ui.charts())
+-- two vega-lite line charts follow the tables: CPU and memory over the last minute; a terminal
+-- shows the tables alone.
 
 local keep = 60 -- samples kept per process: a minute at one a second
 

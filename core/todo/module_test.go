@@ -260,7 +260,7 @@ func TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee(t *testing.T) {
 	a := call("todos.add", "kb", map[string]any{"title": "scoped"}).(todo.Task)
 	b := call("todos.add", "kb", map[string]any{"title": "unscoped"}).(todo.Task)
 	call("todos.assign", "kb", a.ID, a.Rev, "agent:jarvis", "", "auto-agents:p1")
-	call("todos.assign", "kb", b.ID, b.Rev, "agent:gold-man")
+	call("todos.assign", "kb", b.ID, b.Rev, "agent:ada")
 
 	assigns := func(page todo.ChangesPage) map[string]todo.Change {
 		out := map[string]todo.Change{}
@@ -275,7 +275,7 @@ func TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee(t *testing.T) {
 	if c := old[a.ID]; c.To != "" || c.Scope != "auto-agents:p1" {
 		t.Errorf("an undeclared reader got the scoped assign %+v: want no to, the scope kept", c)
 	}
-	if c := old[b.ID]; c.To != "agent:gold-man" {
+	if c := old[b.ID]; c.To != "agent:ada" {
 		t.Errorf("an undeclared reader got the unscoped assign %+v: want its to", c)
 	}
 	scoped := assigns(call("todos.changes", "kb", "scoped-notifier", int64(50), true).(todo.ChangesPage))

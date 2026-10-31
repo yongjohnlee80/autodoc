@@ -210,7 +210,8 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
 		case emb.target != "" && sameModelNewDigest(emb.model, emb.target):
-			// the same model, another download: Ollama updated it, and it refills (ADR 1793005098 §4.4)
+			// the same model, another download: Ollama updated it, and it refills
+			// (docs/decisions/search.md#the-setup-dialog)
 			name, _ := embed.ParseFingerprint(emb.target)
 			h.notifyOngoing(toastSemantic, h.trf("autodoc.notice.progress.model_updated_refilling", name.Name, h.ws))
 		case emb.target != "" || emb.semantic == "switching":

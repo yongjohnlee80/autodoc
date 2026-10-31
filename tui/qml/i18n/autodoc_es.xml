@@ -343,6 +343,14 @@
         <source>yes</source>
         <translation>sí</translation>
     </message>
+    <message id="autodoc.cmd.agent.bell">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>hacer sonar una campana cuando un agente te pregunte o te espere</translation>
+    </message>
+    <message id="autodoc.cmd.agent.bell.help">
+        <source>ring a bell when an agent asks you or waits on you</source>
+        <translation>hacer sonar una campana cuando un agente te pregunte o te espere</translation>
+    </message>
     <message id="autodoc.cmd.agent.setup">
         <source>set up an agent</source>
         <translation>configurar un agente</translation>
@@ -1183,6 +1191,154 @@
         <source>switch workspace</source>
         <translation>cambiar de espacio de trabajo</translation>
     </message>
+    <message id="autodoc.crew.adopted">
+        <source>Adopted %1 message(s) for %2.</source>
+        <translation>Se adoptaron %1 mensaje(s) para %2.</translation>
+    </message>
+    <message id="autodoc.crew.answering_closed">
+        <source>The request you were answering was answered, dismissed or expired.</source>
+        <translation>La solicitud que respondías fue respondida, descartada o caducó.</translation>
+    </message>
+    <message id="autodoc.crew.asks">
+        <source>%1 asks: %2</source>
+        <translation>%1 pregunta: %2</translation>
+    </message>
+    <message id="autodoc.crew.bell_off">
+        <source>The agent bell is off.</source>
+        <translation>La campana de agentes está desactivada.</translation>
+    </message>
+    <message id="autodoc.crew.bell_on">
+        <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
+        <translation>La campana de agentes está activada: una solicitud o una solicitud de permiso suena, como mucho una vez cada 10 s.</translation>
+    </message>
+    <message id="autodoc.crew.claude_prompts_unreported">
+        <source>%1's permission prompts aren't reported, so a message typed to it isn't sent with Enter: its Claude Code could not be read (%2). Name the Claude Code binary itself in the profile's command to have them reported.</source>
+        <translation>Las solicitudes de permiso de %1 no se informan, así que un mensaje escrito para él no se envía con Intro: no se pudo leer su Claude Code (%2). Indica el binario de Claude Code en el comando del perfil para que se informen.</translation>
+    </message>
+    <message id="autodoc.crew.did_not_start">
+        <source>%1 did not start: %2</source>
+        <translation>%1 no se inició: %2</translation>
+    </message>
+    <message id="autodoc.crew.discarded">
+        <source>Discarded %1 message(s) for %2; each sender is told.</source>
+        <translation>Se descartaron %1 mensaje(s) para %2; se avisa a cada remitente.</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_failed">
+        <source>%1's request was not dismissed: %2.</source>
+        <translation>La solicitud de %1 no se descartó: %2.</translation>
+    </message>
+    <message id="autodoc.crew.dismiss_too_late">
+        <source>%1's request was already answered, dismissed or expired.</source>
+        <translation>La solicitud de %1 ya fue respondida, descartada o caducó.</translation>
+    </message>
+    <message id="autodoc.crew.no_longer_waits">
+        <source>%1 no longer waits on you</source>
+        <translation>%1 ya no te espera</translation>
+    </message>
+    <message id="autodoc.crew.inbox_refused">
+        <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
+        <translation>El daemon rechazó la bandeja del equipo de esta ventana (%1): las solicitudes y avisos se muestran de nuevo en la próxima conexión.</translation>
+    </message>
+    <message id="autodoc.crew.no_scope">
+        <source>This window's agents have no crew scope: %1</source>
+        <translation>Los agentes de esta ventana no tienen ámbito de equipo: %1</translation>
+    </message>
+    <message id="autodoc.crew.not_registered">
+        <source>%1 did not start: its crew session was not registered: %2</source>
+        <translation>%1 no se inició: su sesión de equipo no se registró: %2</translation>
+    </message>
+    <message id="autodoc.crew.not_shown">
+        <source>%1 could not be shown: %2.</source>
+        <translation>No se pudo mostrar a %1: %2.</translation>
+    </message>
+    <message id="autodoc.crew.orphan_adopt">
+        <source>&amp;Adopt</source>
+        <translation>&amp;Adoptar</translation>
+    </message>
+    <message id="autodoc.crew.orphan_discard">
+        <source>&amp;Discard</source>
+        <translation>&amp;Descartar</translation>
+    </message>
+    <message id="autodoc.crew.orphan_keep">
+        <source>&amp;Keep</source>
+        <translation>Conservar (&amp;k)</translation>
+    </message>
+    <message id="autodoc.crew.orphan_not_settled">
+        <source>%1's mail was not settled: %2</source>
+        <translation>El correo de %1 no se resolvió: %2</translation>
+    </message>
+    <message id="autodoc.crew.orphan_text">
+        <source>%1 unhandled message(s) wait for %2, agents of a window that is gone (%3). Adopt moves them to this window's agents of the same names; Discard fails them and tells each sender; Keep leaves them for that window, or a later one.</source>
+        <translation>%1 mensaje(s) sin atender esperan a %2, agentes de una ventana que ya no existe (%3). Adoptar los pasa a los agentes de esta ventana con los mismos nombres; Descartar los da por fallidos y avisa a cada remitente; Conservar los deja para esa ventana o una posterior.</translation>
+    </message>
+    <message id="autodoc.crew.orphan_title">
+        <source>Mail for a window that is gone</source>
+        <translation>Correo para una ventana que ya no existe</translation>
+    </message>
+    <message id="autodoc.crew.orphans_unlisted">
+        <source>The crew's orphaned mail could not be listed: %1</source>
+        <translation>No se pudo listar el correo huérfano del equipo: %1</translation>
+    </message>
+    <message id="autodoc.crew.other_window">
+        <source>%1 runs in another window: that window shows it.</source>
+        <translation>%1 se ejecuta en otra ventana: esa ventana lo muestra.</translation>
+    </message>
+    <message id="autodoc.crew.replied">
+        <source>Replied to %1.</source>
+        <translation>Respondiste a %1.</translation>
+    </message>
+    <message id="autodoc.crew.reply_closed_meanwhile">
+        <source>Your reply to %1 was not sent (%2), and the request has closed meanwhile.</source>
+        <translation>Tu respuesta a %1 no se envió (%2), y mientras tanto la solicitud se cerró.</translation>
+    </message>
+    <message id="autodoc.crew.reply_earlier_failed">
+        <source>An earlier reply to %1 was not sent: %2.</source>
+        <translation>Una respuesta anterior a %1 no se envió: %2.</translation>
+    </message>
+    <message id="autodoc.crew.reply_failed">
+        <source>Your reply to %1 was not sent: %2. Open the request again to send it.</source>
+        <translation>Tu respuesta a %1 no se envió: %2. Abre la solicitud de nuevo para enviarla.</translation>
+    </message>
+    <message id="autodoc.crew.reply_too_late">
+        <source>%1's request was already answered, dismissed or expired: your reply was not sent.</source>
+        <translation>La solicitud de %1 ya fue respondida, descartada o caducó: tu respuesta no se envió.</translation>
+    </message>
+    <message id="autodoc.crew.reports">
+        <source>%1 reports: %2</source>
+        <translation>%1 informa: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_closed">
+        <source>%1's request is closed: %2</source>
+        <translation>La solicitud de %1 está cerrada: %2</translation>
+    </message>
+    <message id="autodoc.crew.request_gone">
+        <source>That request is closed.</source>
+        <translation>Esa solicitud está cerrada.</translation>
+    </message>
+    <message id="autodoc.crew.scope_lost">
+        <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
+        <translation>Esta ventana perdió su ámbito de equipo %1 mientras estaba fuera; sus agentes viven ahora bajo %2.</translation>
+    </message>
+    <message id="autodoc.crew.scope_unlisted">
+        <source>This window's crew scope is held, but not listed for a successor: %1</source>
+        <translation>El ámbito de equipo de esta ventana está tomado, pero no anotado para un sucesor: %1</translation>
+    </message>
+    <message id="autodoc.crew.tab_not_shown">
+        <source>%1 started, but its tab could not be shown: %2</source>
+        <translation>%1 se inició, pero su pestaña no se pudo mostrar: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits">
+        <source>%1 waits on you (%2): %3</source>
+        <translation>%1 te espera (%2): %3</translation>
+    </message>
+    <message id="autodoc.crew.waits_blocked">
+        <source>%1 is blocked and waits on you: %2</source>
+        <translation>%1 está bloqueado y te espera: %2</translation>
+    </message>
+    <message id="autodoc.crew.waits_permission">
+        <source>%1 waits on you (a permission prompt): %2</source>
+        <translation>%1 te espera (una solicitud de permiso): %2</translation>
+    </message>
     <message id="autodoc.dialog.aIModels.add">
         <source>&amp;Add…</source>
         <translation>&amp;Añadir…</translation>
@@ -1270,6 +1426,18 @@
     <message id="autodoc.dialog.agentEdit.command">
         <source>command</source>
         <translation>comando</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env">
+        <source>environment</source>
+        <translation>entorno</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_not_for_secrets">
+        <source>NAME=value pairs set on the agent's process; ~ and $VAR are expanded when it starts, never by a shell. They are kept in plain text in the preferences: not for secrets. AUTODOC_* variables are AutoDoc's own.</source>
+        <translation>Pares NOMBRE=valor que se fijan en el proceso del agente; ~ y $VAR se expanden al arrancar, nunca mediante una shell. Se guardan en texto plano en las preferencias: no son para secretos. Las variables AUTODOC_* son propias de AutoDoc.</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_placeholder">
+        <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
+        <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
@@ -1914,6 +2082,26 @@
     <message id="autodoc.dialog.registryBrowse.the_registry_plugins_and_lua_packages">
         <source>the registry: plugins and Lua packages</source>
         <translation>el registro: plugins y paquetes Lua</translation>
+    </message>
+    <message id="autodoc.dialog.reply.cancel">
+        <source>&amp;Cancel</source>
+        <translation>&amp;Cancelar</translation>
+    </message>
+    <message id="autodoc.dialog.reply.dismiss">
+        <source>&amp;Dismiss</source>
+        <translation>&amp;Descartar</translation>
+    </message>
+    <message id="autodoc.dialog.reply.send">
+        <source>&amp;Send</source>
+        <translation>Enviar (&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.reply.tab_reaches_the_buttons">
+        <source>Enter breaks the line; Tab reaches the buttons.</source>
+        <translation>Intro parte la línea; Tab llega a los botones.</translation>
+    </message>
+    <message id="autodoc.dialog.reply.your_answer">
+        <source>Your answer</source>
+        <translation>Tu respuesta</translation>
     </message>
     <message id="autodoc.dialog.searchPicker.lexical">
         <source>Lexical</source>
@@ -3806,10 +3994,6 @@ LO QUE NECESITA UNA TECLA
         <source>%1 is tiled: Layout › Float lets it be arranged</source>
         <translation>%1 está en mosaico: Diseño › Flotante permite colocarlo</translation>
     </message>
-    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
-        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
-        <translation>auditoría de %1 escrita en la entrada de %2: pulsa Enter allí para enviarla; haz clic para instalar o cancelar</translation>
-    </message>
     <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
         <source>its program takes no bracketed paste</source>
         <translation>su programa no admite pegado entre corchetes</translation>
@@ -4277,6 +4461,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.luahost.a_lua_callback_failed">
         <source>a Lua callback failed: %1</source>
         <translation>falló un callback Lua: %1</translation>
+    </message>
+    <message id="autodoc.notice.luahost.a_send_to_the_agent_failed">
+        <source>the send to %1 failed: %2</source>
+        <translation>falló el envío a %1: %2</translation>
     </message>
     <message id="autodoc.notice.luakeys.its_keys_and_menu_rows_need_commands_not_granted">
         <source>%1: its keys and menu rows need commands: not granted</source>
@@ -5194,10 +5382,6 @@ LO QUE NECESITA UNA TECLA
         <source>todos: the store is now in %1</source>
         <translation>tareas: el almacén está ahora en %1</translation>
     </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
-        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
-        <translation>tareas: asignada a %1 y escrita en su entrada: pulsa Enter allí para enviarla</translation>
-    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
         <translation>tareas: asignada a %1, pero no entregada: su programa no admite pegado entre corchetes; abre su panel y pega la tarea</translation>
@@ -5612,6 +5796,18 @@ LO QUE NECESITA UNA TECLA
         <source>edit %1</source>
         <translation>editar %1</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.env_key_is_autodocs_own">
+        <source>%1 is AutoDoc's own variable</source>
+        <translation>%1 es una variable propia de AutoDoc</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_set_twice">
+        <source>%1 is set twice</source>
+        <translation>%1 se fija dos veces</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_word_is_not_name_value">
+        <source>%1 is not NAME=value</source>
+        <translation>%1 no es NOMBRE=valor</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>Marcar como predeterminado marca el que abre SPC g</translation>
@@ -5823,6 +6019,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.text.globemap_gui.reading">
         <source>reading %1…</source>
         <translation>leyendo %1…</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.reading_documents">
+        <source>reading %1: %2 documents…</source>
+        <translation>leyendo %1: %2 documentos…</translation>
     </message>
     <message id="autodoc.text.globemap_gui.relations">
         <source>relations</source>
@@ -6862,6 +7062,10 @@ La última conexión falló:
         <source>schema %1</source>
         <translation>esquema %1</translation>
     </message>
+    <message id="autodoc.text.settings.conn_sealed">
+        <source>sealed under another key: enter it again</source>
+        <translation>sellada con otra clave: introdúcela de nuevo</translation>
+    </message>
     <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
         <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
         <translation>Ctrl+PageUp/PageDown cambian de pestaña · Guardar envía todos los cambios a la vez; un rechazo no cambia nada</translation>
@@ -7581,6 +7785,34 @@ H J K L, Shift+flechas   redimensionarlo</translation>
     <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>Una configuración que aún se ejecutaba cambió los espacios de trabajo: pulsa Comprobar otra vez antes de Usar.</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
+        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
+        <translation>el timbre de %1 no sonó (%2): el mensaje va a su entrada en su lugar</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
+        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
+        <translation>%1 espera en un aviso: el mensaje está escrito pero no enviado; responde al aviso y luego pulsa Enter allí</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>tareas: asignada a %1 y enviada</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
+        <source>audit of %1 sent to %2; click to install or cancel</source>
+        <translation>auditoría de %1 enviada a %2; haz clic para instalar o cancelar</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
+        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
+        <translation>tareas: asignada a %1 y escrita en su entrada: pulsa Enter allí para enviarla</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
+        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
+        <translation>auditoría de %1 escrita en la entrada de %2: pulsa Enter allí para enviarla; haz clic para instalar o cancelar</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc no puede ver ahora los avisos de permiso de %1, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>
     </message>
 </context>
 </TS>

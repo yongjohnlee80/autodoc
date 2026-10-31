@@ -1,11 +1,13 @@
-// WorkspaceSettings.qml — a workspace's settings in one dialog, in two tabs (ADR 0214). Edit is what
-// the workspace is and which files it holds; Advanced is how they are indexed and embedded, and,
-// where the edition offers them, the databases: a source its .view files read, and the destination
-// its index is kept in. Save sends every change at once, and a refusal changes nothing: the dialog
-// opens again as it was typed, the reason on its help line. Adding a workspace uses it too, with
-// the root typed, browsed to or made (New Folder), and a KB type to scaffold it with (ADR
-// 1792349867). Enter in a field saves, as Save does. Each tab's frames are stacked, top to bottom,
-// in a ScrollView: the wheel and the page keys scroll it, and a field taking focus is brought into view.
+// WorkspaceSettings.qml — a workspace's settings in one dialog, in two tabs
+// (docs/decisions/store.md#workspace-settings-saved-together). Edit is what the workspace is and
+// which files it holds; Advanced is how they are indexed and embedded, and, where the edition
+// offers them, the databases: a source its .view files read, and the destination its index is kept
+// in. Save sends every change at once, and a refusal changes nothing: the dialog opens again as it
+// was typed, the reason on its help line. Adding a workspace uses it too, with the root typed,
+// browsed to or made (New Folder), and a KB type to scaffold it with
+// (docs/decisions/contract.md#kb-types-are-git-repos-of-files). Enter in a field saves, as Save
+// does. Each tab's frames are stacked, top to bottom, in a ScrollView: the wheel and the page keys
+// scroll it, and a field taking focus is brought into view.
 Dialog {
     closeOnQ: true
     standardButtons: Dialog.Save | Dialog.Cancel

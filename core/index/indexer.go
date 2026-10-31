@@ -33,8 +33,8 @@ import (
 // A derived format's file has its own bound, derived.MaxContainer, and its text derived.MaxText.
 const MaxFileSize = 16 << 20
 
-// The change log's retention (ADR 0204 §4.7): a row goes only when it is BOTH older than
-// retainAge AND more than retainRows behind the head.
+// The change log's retention (docs/decisions/search.md#index-status-and-change-log-retention): a
+// row goes only when it is BOTH older than retainAge AND more than retainRows behind the head.
 const (
 	retainAge  = 7 * 24 * time.Hour
 	retainRows = 100_000
@@ -48,8 +48,8 @@ type options struct {
 	BatchDelay time.Duration // or every this long (default 200 ms)
 	// Match reports whether a path is eligible (the workspace's include and exclude). Nil: all.
 	Match func(path string) bool
-	// Modes says how an eligible path is indexed (ADR 1792015212): graph-only, and the todo store it
-	// lies in. Nil: every path in full, in no store.
+	// Modes says how an eligible path is indexed (docs/decisions/todos.md#graph-only-indexing):
+	// graph-only, and the todo store it lies in. Nil: every path in full, in no store.
 	Modes func(path string) Mode
 	// Root is the workspace's root, absolute: a todo task's ref to an absolute path under it is a
 	// workspace path. "": every such ref is an external link.
@@ -97,8 +97,9 @@ type options struct {
 	Schema func() (*schema.Schema, string)
 	// TextExtensions are the workspace's own plain-text extensions (kind.Of); nil: none.
 	TextExtensions func() []string
-	// Registrations are the build's chunkers (ADR 0216): a file of a registered extension is cut
-	// by its chunker, under its version. nil: none, the community build.
+	// Registrations are the build's chunkers
+	// (docs/decisions/search.md#registered-chunkers-and-derivers): a file of a registered extension
+	// is cut by its chunker, under its version. nil: none, the community build.
 	Registrations *registrations.Table
 	// NewSearcher builds the engine that answers the indexer's searches, over the workspace's
 	// index: once by words alone (embed nil), and once with the semantic tier when there is a
@@ -125,9 +126,10 @@ func WithBatching(size int, delay time.Duration) Option {
 // WithMatch is which paths are the workspace's (its include and exclude); default all.
 func WithMatch(match func(path string) bool) Option { return func(o *options) { o.Match = match } }
 
-// WithModes sets how each eligible path is indexed (ADR 1792015212): graph-only, and its todo store.
-// It is asked for each path as it is indexed, so a mode that changes applies from the next index
-// of the path; Revalidate finds the documents whose mode changed.
+// WithModes sets how each eligible path is indexed (docs/decisions/todos.md#graph-only-indexing):
+// graph-only, and its todo store. It is asked for each path as it is indexed, so a mode that
+// changes applies from the next index of the path; Revalidate finds the documents whose mode
+// changed.
 func WithModes(modes func(path string) Mode) Option { return func(o *options) { o.Modes = modes } }
 
 // WithRoot is the workspace's root, absolute, for a todo task's absolute refs.
@@ -157,7 +159,8 @@ func WithSchema(fn func() (*schema.Schema, string)) Option { return func(o *opti
 // WithTextExtensions are the workspace's own plain-text extensions, asked once per document.
 func WithTextExtensions(fn func() []string) Option { return func(o *options) { o.TextExtensions = fn } }
 
-// WithRegistrations are the build's chunkers and derivers (ADR 0216); default none.
+// WithRegistrations are the build's chunkers and derivers
+// (docs/decisions/search.md#registered-chunkers-and-derivers); default none.
 func WithRegistrations(t *registrations.Table) Option {
 	return func(o *options) { o.Registrations = t }
 }
@@ -205,7 +208,7 @@ type Indexer struct {
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 
 	kinds kind.Resolver // the build's registered extensions, read once, and the workspace's text ones
-	holds holds         // the documents this daemon holds (ADR 0216 §1.4)
+	holds holds         // the documents this daemon holds (docs/decisions/search.md#held-documents)
 }
 
 type job struct {
@@ -768,8 +771,9 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	return graphOnly(p, m)
 }
 
-// graphOnly drops a graph-only document's chunks (ADR 1792015212 §2.1): its row, frontmatter, links
-// and relations are written, and the chunks it had die in the same generation.
+// graphOnly drops a graph-only document's chunks (docs/decisions/todos.md#graph-only-indexing): its
+// row, frontmatter, links and relations are written, and the chunks it had die in the same
+// generation.
 func graphOnly(p *prepared, m Mode) *prepared {
 	if m.GraphOnly && p.err == nil {
 		p.chunks = nil
@@ -785,7 +789,7 @@ type source struct {
 	abstract bool
 	schema   *schema.Schema
 	title    string
-	mode     Mode // the path's (ADR 1792015212)
+	mode     Mode // the path's (docs/decisions/todos.md#graph-only-indexing)
 }
 
 // cutter cuts a kind's text into p's chunks, links and frontmatter.
@@ -801,7 +805,8 @@ var cutters = kind.NewTable(map[kind.Kind]cutter{
 })
 
 // cutMarkdown parses a workspace's Markdown once, for its chunks (and its abstract), its links and
-// relations, its ADR number, and its frontmatter, validated from the same parse (ADR 0212 §5).
+// relations, its ADR number, and its frontmatter, validated from the same parse
+// (docs/decisions/search.md#frontmatter-schemas).
 func cutMarkdown(x *Indexer, p *prepared, s source) error {
 	doc := kind.ParseMarkdown(s.text)
 	p.meta = chunk.ReadMeta(doc, p.path)
@@ -1126,8 +1131,9 @@ func (x *Indexer) retryDelay(attempts int) time.Duration {
 	return min(d, x.opts.MaxRetryDelay)
 }
 
-// upsertDoc writes a document's new generation (ADR 0204 §4.2): chunks whose hash is in the active
-// generation are reused in place (their position updated, no full-text write), new ones are
+// upsertDoc writes a document's new generation
+// (docs/decisions/search.md#document-generations-and-chunk-reuse): chunks whose hash is in the
+// active generation are reused in place (their position updated, no full-text write), new ones are
 // inserted under the new generation, and the rest die at it. The flip of active_gen is in the same
 // transaction, so a reader sees the old generation or the new one, never a mix. The full-text index
 // follows the chunks by the schema's triggers.
@@ -1243,9 +1249,13 @@ func (s *Store) upsertDoc(tx *store.Tx, p Doc, now time.Time) (int64, error) {
 	if p.Meta.FrontmatterErr != "" {
 		fmErr = p.Meta.FrontmatterErr
 	}
+	// its sort keys (docs/decisions/search.md#stored-sort-keys) in the same write, so a stored key
+	// is never behind its document
+	updS, updNs, indexed := docKeysOf(&p.Meta.FrontmatterJSON, now.Unix())
 	if err := s.documents(tx).With(DocID, docID).Set(DocVersion, string(p.Version)).Set(DocActiveGen, next).
 		Set(DocTitle, title).Set(DocFrontmatterJSON, fmJSON).Set(DocFrontmatterError, fmErr).
-		Set(DocIndexer, p.Indexer).Set(DocIndexedAt, now.Unix()).Update(); err != nil {
+		Set(DocIndexer, p.Indexer).Set(DocIndexedAt, now.Unix()).
+		Set(DocKUpdS, updS).Set(DocKUpdNs, updNs).Set(DocKIndexed, indexed).Update(); err != nil {
 		return 0, err
 	}
 	if err := s.logChange(tx, p.Path, "upsert", next, now.Unix()); err != nil {
@@ -1277,7 +1287,8 @@ func (s *Store) deleteDoc(tx *store.Tx, path string, now time.Time) (int64, erro
 	if err := s.documents(tx).With(DocID, d.ID).Delete(); err != nil {
 		return 0, err
 	}
-	// its texts' vectors go with the last chunk that has them (ADR 1791329335)
+	// its texts' vectors go with the last chunk that has them
+	// (docs/decisions/store.md#vectors-follow-their-chunks)
 	texts := make([][]byte, len(chunks))
 	for i, c := range chunks {
 		texts[i] = c.TextHash
@@ -1330,7 +1341,8 @@ func (s *Store) replaceValues(tx *store.Tx, set dao.DAO[*DocValue, DocValueField
 }
 
 // gc deletes up to 1000 dead chunks (their full-text entries with them, by the delete trigger), and
-// the vectors of the texts no chunk has any more (ADR 1791329335), and prunes the change log,
+// the vectors of the texts no chunk has any more
+// (docs/decisions/store.md#vectors-follow-their-chunks), and prunes the change log,
 // reporting whether dead chunks remain. Dead rows still count in BM25's statistics until they go, so
 // this runs whenever the writer is idle.
 func (x *Indexer) gc(ctx context.Context) (bool, error) {

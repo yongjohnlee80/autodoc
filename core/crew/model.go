@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// The rows the crew module reads and writes (ADR 1793271500 §4.2). Times are Unix nanoseconds; a
-// nil *int64 is SQL NULL. Each engine's adapter maps them onto its tables.
+// The rows the crew module reads and writes (docs/decisions/crew.md#the-crew-and-mail-tables).
+// Times are Unix nanoseconds; a nil *int64 is SQL NULL. Each engine's adapter maps them onto its
+// tables.
 type (
 	// Host is a scope's owner: one process incarnation of an AutoDoc window or a Neovim, fenced by
 	// Epoch. Its ID is the scope it holds.
@@ -49,9 +50,11 @@ type (
 		Started    int64
 		Ended      *int64
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
+		Prompts    bool   // its permission prompts are reported, as its registration said (crew.register's prompts)
 	}
 
-	// Endpoint is how a session is woken (§4.7): its CLI's channel, never a secret.
+	// Endpoint is how a session is woken (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+	// its CLI's channel, never a secret.
 	Endpoint struct {
 		Session    string
 		Generation int64  // raised by every crew.endpoint
@@ -60,7 +63,8 @@ type (
 		Registered int64
 	}
 
-	// Attention is a session waiting on the user: a permission prompt, or blocked (§4.8).
+	// Attention is a session waiting on the user: a permission prompt, or blocked
+	// (docs/decisions/crew.md#the-human-inbox).
 	Attention struct {
 		Session string
 		Owner   string // the host whose terminal shows the prompt
@@ -70,8 +74,9 @@ type (
 		Cleared *int64
 	}
 
-	// Wake is a session's row of the wake scheduler's state machine (§4.7). The crew module
-	// raises PendingGen; the scheduler owns the rest.
+	// Wake is a session's row of the wake scheduler's state machine
+	// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). The crew module raises PendingGen;
+	// the scheduler owns the rest.
 	Wake struct {
 		Session      string
 		PendingGen   int64 // raised whenever a delivery becomes eligible for the session
@@ -85,8 +90,9 @@ type (
 	}
 )
 
-// A wake row's states (§4.7): no attempt out; an attempt's call out; a notice accepted (or
-// sent with an unknown outcome) and the session not yet received.
+// A wake row's states (docs/decisions/crew.md#wakers-and-the-wake-scheduler): no attempt out; an
+// attempt's call out; a notice accepted (or sent with an unknown outcome) and the session not yet
+// received.
 const (
 	WakeIdle     = "idle"
 	WakeInFlight = "in_flight"
@@ -110,8 +116,9 @@ const (
 )
 
 // Tx is one write (or read) transaction over the crew tables: the module's state machines run on
-// it, and every engine implements it. Every guard runs on the verb's own Tx (§4.4), so a takeover
-// that commits between a verb's first check and its write fails the verb.
+// it, and every engine implements it. Every guard runs on the verb's own Tx
+// (docs/decisions/crew.md#sessions-and-the-guard), so a takeover that commits between a verb's
+// first check and its write fails the verb.
 type Tx interface {
 	// Now is the transaction's clock.
 	Now() time.Time
@@ -138,17 +145,22 @@ type Tx interface {
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
 	// WakesDue is the idle rows with pending_gen past announced_gen whose next_at is unset or at or
-	// before now, of a live session with an endpoint: the sessions a wake may be reserved for. An
-	// ended session's row, or an endpoint-less one's, is never due, so such rows can't crowd out
-	// the live ones under the limit. limit must be > 0, here and in every limited read.
-	WakesDue(now int64, limit int) ([]Wake, error)
+	// before now, of a live session with an endpoint of one of kinds (the kinds the scheduler has
+	// wakers for): the sessions a wake may be reserved for. An ended session's row, an
+	// endpoint-less one's, or one whose endpoint no waker serves is never due, so such rows can't
+	// crowd out the live ones under the limit; no kinds, none. limit must be > 0, here and in every
+	// limited read.
+	WakesDue(now int64, kinds []string, limit int) ([]Wake, error)
 	// WakesTimedOut is the awaiting_receive rows whose next_at is at or before now (limit > 0).
 	WakesTimedOut(now int64, limit int) ([]Wake, error)
 	// WakesInFlight is every in_flight row, for a daemon start's recovery.
 	WakesInFlight() ([]Wake, error)
 	// NextWakeAt is the earliest next_at among the rows that have work: idle with pending_gen past
-	// announced_gen, or awaiting_receive; false when none has a deadline.
-	NextWakeAt() (int64, bool, error)
+	// announced_gen and due by WakesDue's other terms (a live session, an endpoint of one of
+	// kinds), or awaiting_receive of any kind (its timeout ends an attempt already made); false
+	// when none has a deadline. A row no look can act on never sets the timer, or a past deadline
+	// on it would have the loop look again at once, forever.
+	NextWakeAt(kinds []string) (int64, bool, error)
 
 	Endpoint(session string) (Endpoint, bool, error)
 	PutEndpoint(Endpoint) error
@@ -157,8 +169,8 @@ type Tx interface {
 	Attention(session string) (Attention, bool, error)
 	PutAttention(Attention) error
 
-	// AddInboxChange journals one change of the human's feed (inbox_change, §4.8), in the same
-	// transaction as the change itself.
+	// AddInboxChange journals one change of the human's feed (inbox_change,
+	// docs/decisions/crew.md#the-human-inbox), in the same transaction as the change itself.
 	AddInboxChange(kind, ref string) error
 }
 

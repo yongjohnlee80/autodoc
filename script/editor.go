@@ -10,7 +10,8 @@ import (
 )
 
 // editorType is the metatable of the editor object a command's run gets; gatedEditorType a gated
-// script's, whose run needs the commands grant (ADR 1792004705 §4.2).
+// script's, whose run needs the commands grant
+// (docs/decisions/contract.md#gated-scripts-and-their-capabilities).
 const (
 	editorType      = "autodoc.editor"
 	gatedEditorType = "autodoc.editor.gated"
@@ -95,7 +96,8 @@ func (e *Engine) registerEditorType() {
 			return 2
 		}
 		// the command runs as the script, as autodoc.run's does: Caller is set while it runs, so its
-		// paths are bounded and a user-only entry refused (ADR 1792004705 §4.2a.2c)
+		// paths are bounded and a user-only entry refused
+		// (docs/decisions/contract.md#who-an-invocation-acts-for)
 		prev := e.calling
 		e.calling = g
 		defer func() { e.calling = prev }()

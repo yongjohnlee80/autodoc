@@ -16,12 +16,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// OPEN FILES FOLLOW THE DISK (ADR 1792077464). The TUI watches the folder of every open buffer's
-// file, natively where the driver can (inotify, FSEvents), by polling where it cannot, and checks
-// each change against the daemon's version: a buffer with no unsaved edits reloads silently, one
-// undo step, its cursor kept; a modified one is badged, and asked keep / reload / overwrite when
-// it is next entered or saved, never while it is typed in; a file deleted on disk keeps its
-// buffer, badged, and a save creates it again. The TUI's own saves are never outside changes.
+// OPEN FILES FOLLOW THE DISK (docs/decisions/editor.md#open-files-follow-the-disk). The TUI watches
+// the folder of every open buffer's file, natively where the driver can (inotify, FSEvents), by
+// polling where it cannot, and checks each change against the daemon's version: a buffer with no
+// unsaved edits reloads silently, one undo step, its cursor kept; a modified one is badged, and
+// asked keep / reload / overwrite when it is next entered or saved, never while it is typed in; a
+// file deleted on disk keeps its buffer, badged, and a save creates it again. The TUI's own saves
+// are never outside changes.
 
 // diskState is how a buffer's file stands on disk, as its last check found it.
 type diskState uint8

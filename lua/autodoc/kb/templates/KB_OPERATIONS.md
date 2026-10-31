@@ -120,8 +120,8 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 
 - `sort` is `updated` (newest first), `path` or `indexed`.
 - `missing` lists files that lack a field: the gaps to fill.
-- `facets`, `tags` and `paths` narrow it as they narrow a search. Page with `after` (the previous
-  answer's `next`).
+- `facets`, `tags` and `paths` narrow it as they narrow a search. Page with `after`: the previous
+  answer's `next`, an opaque cursor. Pass it back unread, with the same sort and filters.
 
 ## 4. History
 
@@ -160,7 +160,8 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 - **Find the documents the schema diagnoses:**
   `autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"diagnosed": true, "limit": 500}]'`.
   Each listed document carries its `diagnostics`. Narrow the list with `"paths": ["<folder>"]`, and
-  page through it with `"after": <next>`. `index.status`'s `diagnosed` is the count.
+  page through it with `"after": <next>` (pass `next` back unread). `index.status`'s `diagnosed` is
+  the count.
 - `ABOUT.md` in each folder (`_ABOUT.md` in `_templates/` and `_schema/`) says what goes there, how
   files are named and which `type` they carry.
   "Where does X go" is a search: `"<X>" type:about`.
@@ -211,7 +212,8 @@ releases:
   https://yongjohnlee80.github.io/autodoc/reference/06-configuring-embeddings-and-rerankers.html.
   Fetch it when you can.
 - **This version's:** the same chapter at `docs/reference/06-configuring-embeddings-and-rerankers.md`
-  in AutoDoc's plugin or source checkout.
+  in AutoDoc's plugin or source checkout. With neither, `autodoc --tutorial 6` prints this version's
+  short page on the search models, and `autodoc --kb-operations` this manual.
 
 **The embedding model** (meaning, `semantic`): with Ollama running, **Search models › Embedding
 Models › Set up…** probes the machine, recommends a model, downloads it and applies it. Agents

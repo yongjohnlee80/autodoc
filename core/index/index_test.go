@@ -50,12 +50,36 @@ func newEnv(t testing.TB, opts options) *env {
 	return e
 }
 
-// faultFS counts the indexer's opens of each path and fails the ones it is told to.
+// faultFS counts the indexer's opens of each path and fails the opens and stats it is told to.
 type faultFS struct {
 	*memfs.FS
 	mu    sync.Mutex
 	fail  map[string]error
+	stats map[string]error
 	opens map[string]int
+}
+
+func (f *faultFS) Stat(ctx context.Context, name string) (vfs.FileInfo, error) {
+	f.mu.Lock()
+	err := f.stats[name]
+	f.mu.Unlock()
+	if err != nil {
+		return vfs.FileInfo{}, err
+	}
+	return f.FS.Stat(ctx, name)
+}
+
+func (f *faultFS) failStat(p string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stats == nil {
+		f.stats = map[string]error{}
+	}
+	if err == nil {
+		delete(f.stats, p)
+	} else {
+		f.stats[p] = err
+	}
 }
 
 func (f *faultFS) Open(ctx context.Context, name string, offset int64) (io.ReadCloser, error) {
@@ -850,7 +874,8 @@ func TestChangeRetention(t *testing.T) {
 }
 
 // TestFollowerIntoIndexer: the follower and the indexer together keep the index on the root —
-// 0203 §5.1's changes reach the index, visible through the change log.
+// the changes in docs/decisions/contract.md#the-index-follows-the-files reach the index, visible
+// through the change log.
 func TestFollowerIntoIndexer(t *testing.T) {
 	e := newEnv(t, options{})
 	e.write("a.md", "# A\n\nfirst\n")

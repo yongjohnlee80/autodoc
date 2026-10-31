@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// FRONTMATTER — a workspace's schema, and the open file checked against its own workspace's (ADR 0212 §5).
+// FRONTMATTER — a workspace's schema, and the open file checked against its own workspace's
+// (docs/decisions/search.md#frontmatter-schemas).
 //
 // The file is checked by the daemon's own validator (doc.validate), the one the index uses, so the
 // line over the page and the index never disagree. It is checked as it is typed, a moment after

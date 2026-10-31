@@ -8,7 +8,8 @@ import (
 )
 
 // MaxScaffoldFiles is the most files one workspace.scaffold call takes; more is the call's error,
-// before anything is written (ADR 1792349867 §4.3).
+// before anything is written
+// (docs/decisions/contract.md#the-daemon-writes-the-scaffold-create-only).
 const MaxScaffoldFiles = 64
 
 // ScaffoldFile is one file a KB type creates in a workspace.
@@ -95,7 +96,8 @@ func (fs *scaffoldFiles) DecodeParam(v any) error {
 	return nil
 }
 
-// scaffoldVerb is workspace.scaffold (ADR 1792349867 §4.3).
+// scaffoldVerb is workspace.scaffold
+// (docs/decisions/contract.md#the-daemon-writes-the-scaffold-create-only).
 func (s *Server) scaffoldVerb() module.Verb {
 	return module.Handle(module.Contract{Verb: "workspace.scaffold", Effect: module.EffectWrite, Since: 27,
 		Audience: module.AudienceUser, Result: "[{path, outcome, error?}]",
