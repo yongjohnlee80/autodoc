@@ -18,7 +18,8 @@ import (
 )
 
 // TestServeWakesAgySessions: serve's own wakers (crewWakers) wake an Antigravity session through
-// its language server, with the token its bridge registered, and the token is held in the daemon's
+// its language server, with the token its bridge registered and the MCP notice (its mail is the
+// crew MCP server's tools), and the token is held in the daemon's
 // memory alone: after a register and a wake it is in none of the store's files (its rows, its
 // events), nor in the daemon's log.
 func TestServeWakesAgySessions(t *testing.T) {
@@ -64,8 +65,10 @@ func TestServeWakesAgySessions(t *testing.T) {
 	r.send(jarvis, "tifa", "for tifa")
 	select {
 	case body := <-sent:
-		if body["content"] != crew.WakeNotice {
-			t.Fatalf("the language server was sent %q, want the notice", body["content"])
+		// an agy session reads its mail with the crew MCP server's tools, so its notice names the
+		// tool, never the shell command its rules don't allow
+		if body["content"] != crew.WakeNoticeMCP || !strings.Contains(body["content"], "mail_receive tool") {
+			t.Fatalf("the language server was sent %q, want the MCP notice %q", body["content"], crew.WakeNoticeMCP)
 		}
 	// NOTE: a bound on a failing run only: a wake that never comes fails here rather than hanging.
 	case <-time.After(10 * time.Second):

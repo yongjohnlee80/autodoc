@@ -9,9 +9,41 @@ import (
 	"time"
 )
 
-// WakeNotice is the only text any waker sends: constant, with no subject, no sender, nothing a peer
-// wrote (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
+// WakeNotice is the wake's text for a session that reads its mail with the CLI (MailViaCLI):
+// constant, with no subject, no sender, nothing a peer wrote
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). OpenCode's plugin wakes with its own copy.
 const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
+
+// WakeNoticeMCP is the wake's text for a session that reads its mail with `autodoc crew mcp`'s
+// tools (MailViaMCP): constant too. Its rules allow the tools, not the shell command.
+const WakeNoticeMCP = "AutoDoc mail is waiting for you: call the mail_receive tool until more is false."
+
+// MailVia is how a session reads its mail, which decides what its wake says (NoticeFor).
+type MailVia int
+
+const (
+	MailViaCLI MailVia = iota // `autodoc mail …` in its shell
+	MailViaMCP                // the `autodoc crew mcp` server's tools (mail_receive, …)
+)
+
+// MailViaOf is how a session of kind reads its mail: agy's through the MCP tools its setup gives
+// it, every other kind's through the CLI. A session's setup will say it per session, when a host
+// turns MCP on for a kind.
+func MailViaOf(kind string) MailVia {
+	if kind == KindAgy {
+		return MailViaMCP
+	}
+	return MailViaCLI
+}
+
+// NoticeFor is the one wake text for a session that reads its mail via: every waker sends it, and
+// it names nothing of the mail.
+func NoticeFor(via MailVia) string {
+	if via == MailViaMCP {
+		return WakeNoticeMCP
+	}
+	return WakeNotice
+}
 
 // The scheduler's bounds (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 const (

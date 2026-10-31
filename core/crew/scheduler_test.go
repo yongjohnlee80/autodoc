@@ -125,6 +125,25 @@ func (r *wakeRig) received(session string) {
 	r.write(func(tx crew.Tx) error { return r.m.Received(tx, session) })
 }
 
+// TestAWakeSaysHowTheSessionReadsItsMail (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
+// the wake's text follows how the session reads its mail: agy's with the crew MCP server's tools,
+// so its notice names the tool and not the shell command; every other kind's with the CLI, today's
+// notice. Each is constant, naming nothing of the mail.
+func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
+	for kind, want := range map[string]crew.MailVia{crew.KindAgy: crew.MailViaMCP, crew.KindClaude: crew.MailViaCLI,
+		crew.KindOpenCode: crew.MailViaCLI, crew.KindCodex: crew.MailViaCLI, "other": crew.MailViaCLI} {
+		if got := crew.MailViaOf(kind); got != want {
+			t.Errorf("%s reads its mail via %v, want %v", kind, got, want)
+		}
+	}
+	if n := crew.NoticeFor(crew.MailViaCLI); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive") {
+		t.Errorf("the CLI notice: %q", n)
+	}
+	if n := crew.NoticeFor(crew.MailViaMCP); n != crew.WakeNoticeMCP || !strings.Contains(n, "mail_receive tool") || strings.Contains(n, "Run:") {
+		t.Errorf("the MCP notice: %q", n)
+	}
+}
+
 // A due session is woken once, with the constant notice; an accepted notice waits for a receive,
 // which clears it and its deadline. Nothing more is sent while nothing new is pending.
 func TestAWakeIsSentOnceAndClearedByAReceive(t *testing.T) {
