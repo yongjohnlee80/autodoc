@@ -17,8 +17,8 @@ import (
 // next tool round, its draft left alone. Before every wake the socket is bound to the session's own
 // process: its path lies in Claude's socket folders for the daemon's user, and the process at the
 // other end (the kernel's record, not the path) is the registered pid, still the same process (its
-// reference). A wrong or vanished holder fails the wake, and the session's next SessionStart
-// registers its new socket.
+// reference). A wrong or vanished holder fails the wake as gone (ErrEndpointGone), and the
+// session's next SessionStart registers its new socket.
 type ClaudeWaker struct {
 	roots []string // the socket folders a locator must lie in
 }
@@ -47,8 +47,9 @@ func (w *ClaudeWaker) Wake(ctx context.Context, ep Endpoint, notice string) erro
 	var d net.Dialer
 	c, err := d.DialContext(ctx, "unix", l.Socket)
 	if err != nil {
-		// %v, not %w: nothing was sent, so even a deadline here is a failure, never an unknown
-		return fmt.Errorf("crew: dialing claude's inbox socket: %v", err)
+		// nothing was sent, so even a deadline here is a failure, never an unknown; no socket, or
+		// nothing listening on it, is the session's process gone
+		return dialFailure("claude's inbox socket", err)
 	}
 	defer c.Close()
 	if err := w.bound(c, l); err != nil {
@@ -93,9 +94,9 @@ func boundTo(c net.Conn, start, what string) error {
 		return err
 	}
 	// the reference names the pid too (registration made start the pid's): one comparison refuses
-	// another process and a later one at the same pid alike
+	// another process and a later one at the same pid alike, and the session's is not the one there
 	if ref != start {
-		return fmt.Errorf("crew: %s is held by process %s, not the session's %s", what, ref, start)
+		return fmt.Errorf("%w: %s is held by process %s, not the session's %s", ErrEndpointGone, what, ref, start)
 	}
 	return nil
 }

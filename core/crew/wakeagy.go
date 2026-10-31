@@ -92,6 +92,9 @@ func (w *AgyWaker) Wake(ctx context.Context, ep Endpoint, notice string) error {
 // one a failure, since nothing has been sent.
 func AgyHosts(ctx context.Context, c *http.Client, address, token, conversation string) error {
 	code, _, err := agyCall(ctx, c, address, token, "GetConversationMetadata", map[string]string{"conversationId": conversation})
+	if errors.Is(err, syscall.ECONNREFUSED) { // nothing listens at its address: the language server is gone
+		return fmt.Errorf("%w: checking the agy conversation: %v", ErrEndpointGone, err)
+	}
 	if err != nil {
 		return fmt.Errorf("crew: checking the agy conversation: %v", err) // %v: nothing was sent, never an unknown
 	}

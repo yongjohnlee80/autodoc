@@ -57,8 +57,9 @@ func (w *OpenCodeWaker) Wake(ctx context.Context, ep Endpoint, _ string) error {
 	var d net.Dialer
 	c, err := d.DialContext(ctx, "unix", l.Socket)
 	if err != nil {
-		// %v, not %w: nothing was sent, so even a deadline here is a failure, never an unknown
-		return fmt.Errorf("crew: dialing opencode's plugin socket: %v", err)
+		// nothing was sent, so even a deadline here is a failure, never an unknown; no socket, or
+		// nothing listening on it, is the plugin's process gone
+		return dialFailure("opencode's plugin socket", err)
 	}
 	defer c.Close()
 	if err := boundTo(c, l.Start, "opencode's plugin socket"); err != nil {

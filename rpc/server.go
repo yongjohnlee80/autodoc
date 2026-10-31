@@ -171,7 +171,8 @@ import (
 // unknown method, and its window types the text into the agent's prompt as before. With it,
 // crew.attention's alive (a session's permission-prompt reporter is running) and crew.list's
 // prompts_reported (its prompts are reported now), which a window reads before pressing Enter into an
-// agent it typed to.
+// agent it typed to, and its why (why a session can't be woken now); and a wake that finds the
+// session's endpoint gone for certain makes it unreachable at once.
 const Protocol int64 = 41
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
