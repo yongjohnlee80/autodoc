@@ -54,6 +54,51 @@ func TestAProfileKeepsWhatItSetsItself(t *testing.T) {
 	}
 }
 
+// A profile's env (docs/decisions/crew.md#a-profiles-environment) reaches its agent's process: its
+// values with ~ and $VAR expanded from AutoDoc's own environment, never by a shell; a spawner
+// variable it sets itself as it set it; its PATH after the agent's own folder, so the autodoc there
+// is still the first found; and an AutoDoc variable it names is AutoDoc's.
+func TestAProfilesEnvReachesItsAgent(t *testing.T) {
+	pollute(t)
+	dir := t.TempDir()
+	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
+	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	extra := t.TempDir()
+	env := map[string]string{
+		"CLAUDE_CONFIG_DIR": "~/.claude-work",
+		"GREETING":          "${FAKE_GREETING}; $HOME too; $(whoami) `id` not run",
+		"CLAUDE_EFFORT":     "low",           // a spawner variable the profile sets itself
+		"AUTODOC_ROOT":      "/not/autodocs", // AutoDoc's own, which a profile never sets
+		"PATH":              extra + ":$PATH",
+	}
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron", Env: env}}, "heron")
+	home, path := os.Getenv("HOME"), os.Getenv("PATH") // runAgentTUI's own, which the spawn expands from
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	got := envReported(t, r, report)
+	if want := filepath.Join(home, ".claude-work"); got["CLAUDE_CONFIG_DIR"] != want {
+		t.Errorf("CLAUDE_CONFIG_DIR %q, want %q (~ expanded)", got["CLAUDE_CONFIG_DIR"], want)
+	}
+	if want := "the user's shell; " + home + " too; $(whoami) `id` not run"; got["GREETING"] != want {
+		t.Errorf("GREETING %q, want %q ($VAR expanded, nothing run)", got["GREETING"], want)
+	}
+	if got["CLAUDE_EFFORT"] != "low" {
+		t.Errorf("CLAUDE_EFFORT %q, want the profile's own low", got["CLAUDE_EFFORT"])
+	}
+	if got["AUTODOC_ROOT"] == "" || got["AUTODOC_ROOT"] == "/not/autodocs" {
+		t.Errorf("AUTODOC_ROOT %q, want AutoDoc's workspace root", got["AUTODOC_ROOT"])
+	}
+	parts := filepath.SplitList(got["PATH"])
+	if len(parts) < 2 || filepath.Base(parts[0]) != "bin" || parts[1] != extra || strings.Join(parts[2:], ":") != path {
+		t.Fatalf("PATH %q, want the agent's own bin, then the profile's %s:%s", got["PATH"], extra, path)
+	}
+	if _, err := os.Stat(filepath.Join(parts[0], "autodoc")); err != nil {
+		t.Errorf("PATH's first folder %s holds no autodoc: %v", parts[0], err)
+	}
+}
+
 // A plugin AutoDoc runs is third-party code started on AutoDoc's behalf: the spawner's identity,
 // its session's messaging socket and secret among it, does not reach it either. AutoDoc's
 // AUTODOC_PLUGIN_* do, and so do the user's own settings.

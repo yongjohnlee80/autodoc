@@ -22,11 +22,12 @@ AutoDoc organizes embedded PTYs into two distinct, dockable `TerminalTabs` drawe
 1. **The Shell Terminal Panel (`terminalView`)**: General-purpose interactive shells (`bash`, `zsh`, `fish`) for running builds, tests, and Git commands.
 2. **The Dedicated Agent Panel (`agentView`, `SPC g`)**: Long-lived CLI coding agents, each started from an agent profile, identified by a persistent `codename` and scoped to the active workspace.
 
-Agent profiles live in AutoDoc's preferences and are managed in **System › Agent profiles…** (`SPC G`); there is no config-file section for them. The dialog lists each profile (`●` marks the default, `▶` a running one) with **Use**, **Add…**, **Edit…**, **Make default** and **Remove**. A profile has three fields:
+Agent profiles live in AutoDoc's preferences and are managed in **System › Agent profiles…** (`SPC G`); there is no config-file section for them. The dialog lists each profile (`●` marks the default, `▶` a running one) with **Use**, **Add…**, **Edit…**, **Make default** and **Remove**. A profile has four fields:
 
 - **name**: the display label, for example `Claude Code`;
 - **codename**: its routing identity, derived from the name when left empty (lower-case letters or digits, separated by hyphens);
-- **command**: the command line that starts the agent, run through `/bin/sh -c`, for example `claude --model opus` or `codex`. `{root}` and `{workspace}` in it become the workspace's root folder and name, each quoted for the shell.
+- **command**: the command line that starts the agent, run through `/bin/sh -c`, for example `claude --model opus` or `codex`. `{root}` and `{workspace}` in it become the workspace's root folder and name, each quoted for the shell;
+- **environment** (`env` in the preference): `NAME=value` words set on the agent's process, for example `CLAUDE_CONFIG_DIR=~/.claude-work` for Claude Code on another account. `~` and `$VAR` are expanded from AutoDoc's own environment at the spawn, never by a shell; AutoDoc's variables come after the profile's and win, and an `AUTODOC_*` key is refused. A `PATH` is the agent's after its own `bin/` folder. Profiles are plain text in the preferences: not for secrets ([decision](../decisions/crew.md#a-profiles-environment)).
 
 The first profile added becomes the default, which `SPC g` starts; **Make default** chooses another. The shell terminal's tabs need no profile: `+` starts your login shell.
 

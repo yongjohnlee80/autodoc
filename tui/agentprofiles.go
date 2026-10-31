@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -150,7 +151,7 @@ func (h *agents) storeAgentProfile(name, command, codename, envText string) (age
 	}
 	env, err := parseProfileEnv(envText)
 	if err != nil {
-		return refuse(h.c.Trf("autodoc.text.agentprofiles.env_not_saved", err.Error()))
+		return refuse(h.envRefusal(err))
 	}
 	agents := h.profiles()
 	at := -1
@@ -188,6 +189,21 @@ func (h *agents) storeAgentProfile(name, command, codename, envText string) (age
 	h.editingAgent, h.editingAgentProfile = "", nil
 	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
 	return agentProfile{Name: name, Command: command, Codename: codename, Env: env}, true
+}
+
+// envRefusal is why the form's env field was refused (parseProfileEnv), in the catalog's language.
+func (h *agents) envRefusal(err error) string {
+	var e *envError
+	switch {
+	case !errors.As(err, &e):
+		return err.Error()
+	case errors.Is(err, errEnvKeyReserved):
+		return h.c.Trf("autodoc.text.agentprofiles.env_key_is_autodocs_own", e.word)
+	case errors.Is(err, errEnvKeyTwice):
+		return h.c.Trf("autodoc.text.agentprofiles.env_key_set_twice", e.word)
+	default:
+		return h.c.Trf("autodoc.text.agentprofiles.env_word_is_not_name_value", e.word)
+	}
 }
 
 // removeAgent asks about the profile at i. The answer holds that profile, not
