@@ -21,7 +21,7 @@ func messagingRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
 	if instance, err := a.startInstance(p); err != nil || !instance.running {
 		t.Fatalf("start: %v", err)
 	}
-	a.promptsReported = func(string, bool, bool) bool { return true }
+	a.promptsReported = func(string, bool) bool { return true }
 	return a, c, w
 }
 
@@ -192,7 +192,7 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 // doorbell yet, so it is never rung (S1: the doorbell runs inside the one delivery).
 func TestAStartedAgentIsNotRung(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	a.promptsReported = func(string, bool, bool) bool { return true }
+	a.promptsReported = func(string, bool) bool { return true }
 	rang := false
 	w.inboxSend = func([]any) (any, error) { rang = true; return map[string]any{"message": "m"}, nil }
 	if err := a.SendText(AgentRef{Codename: "two"}, "hi", func(error) {}); err != nil {
@@ -208,56 +208,62 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 	}
 }
 
-// The Enter rule: only a live session's prompts are seen, and of the kinds that report them, an
-// endpoint-reported kind (OpenCode's plugin, agy's bridge) only while it is reachable.
-func TestPromptsSeen(t *testing.T) {
+// The Enter decision asks the crew whether the agent's own session, in the window's scope, has its
+// prompts reported (crew.list's prompts_reported, the daemon's rule): the same codename in another
+// scope says nothing, and a session the list doesn't name is not reported (the mutants: the lookup
+// skipped; the scope not matched; no session taken as reported).
+func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
+	scopeOf := func(a *agents) string { s, _, _ := a.crew.held(); return s }
 	for _, c := range []struct {
-		kind            string
-		live, reachable bool
-		want            bool
+		name   string
+		list   func(scope string) []any
+		enter  bool
+		notice string
 	}{
-		{crew.KindClaude, true, false, true},
-		{crew.KindClaude, false, false, false},
-		{crew.KindOpenCode, true, true, true},
-		{crew.KindOpenCode, true, false, false},
-		{crew.KindAgy, true, true, true},
-		{crew.KindAgy, true, false, false},
-		{crew.KindCodex, true, true, false},
-		{"", true, true, false},
+		{"reported", func(scope string) []any {
+			return []any{map[string]any{"scope": "autodoc:other", "codename": "one", "prompts_reported": false},
+				map[string]any{"scope": scope, "codename": "one", "prompts_reported": true}}
+		}, true, ""},
+		{"another scope's", func(scope string) []any {
+			return []any{map[string]any{"scope": "autodoc:other", "codename": "one", "prompts_reported": true},
+				map[string]any{"scope": scope, "codename": "one", "prompts_reported": false}}
+		}, false, "AutoDoc can't see one's permission prompts"},
+		{"no session listed", func(string) []any {
+			return []any{map[string]any{"scope": "autodoc:other", "codename": "one", "prompts_reported": true}}
+		}, false, "AutoDoc can't see one's permission prompts"},
 	} {
-		if got := promptsSeen(c.kind, c.live, c.reachable); got != c.want {
-			t.Errorf("promptsSeen(%q, live %v, reachable %v) = %v, want %v", c.kind, c.live, c.reachable, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			a, cw, w := messagingRig(t)
+			a.promptsReported = nil // the crew's answer decides
+			scope := scopeOf(a)
+			w.crewList = func() (any, error) { return c.list(scope), nil }
+			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
+			var heard []error
+			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+				t.Fatal(err)
+			}
+			settleMessaging(cw, w)
+			if pressed := len(cw.panel.keys) == 1; pressed != c.enter || len(heard) != 1 {
+				t.Fatalf("pressed %q heard %v: want Enter %v", cw.panel.keys, heard, c.enter)
+			}
+			if c.enter && heard[0] != nil || !c.enter && !errors.Is(heard[0], ErrAgentTypedNotSent) {
+				t.Fatalf("heard %v", heard)
+			}
+			if c.notice != "" && !hasNote(cw.notes, c.notice) {
+				t.Fatalf("notes %q", cw.notes)
+			}
+		})
 	}
 }
 
-// The Enter decision asks the crew about the agent's own session in the window's scope: one,
-// started and registered, is live with no endpoint yet, so not reachable; a codename with no
-// session there is neither (the mutants: the lookup skipped; no session taken as live).
-func TestTheEnterAsksTheCrewForTheSession(t *testing.T) {
-	a, c, w := messagingRig(t)
-	type seen struct{ live, reachable bool }
-	var asked []seen
-	a.promptsReported = func(_ string, live, reachable bool) bool {
-		asked = append(asked, seen{live, reachable})
-		return true
-	}
-	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(error) {}); err != nil {
-		t.Fatal(err)
-	}
-	settleMessaging(c, w)
-	if len(asked) != 1 || asked[0] != (seen{live: true}) {
-		t.Fatalf("asked %+v, want one live, unreachable", asked)
-	}
-	if len(c.panel.keys) != 1 {
-		t.Fatalf("pressed %q, want the Enter", c.panel.keys)
-	}
-	asked = nil
+// The crew's own list answers a session of a kind with no prompt reporter (one's) as not reported.
+func TestASessionWithNoReporterIsNotReported(t *testing.T) {
+	a, cw, w := messagingRig(t)
+	var said []bool
 	done := false
-	a.crew.sessionOf("two", func(live, reachable bool) { asked = append(asked, seen{live, reachable}); done = true })
-	settleMessaging(c, w)
-	if !done || asked[0] != (seen{}) {
-		t.Fatalf("two, with no session: %+v", asked)
+	a.crew.promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
+	settleMessaging(cw, w)
+	if !done || len(said) != 1 || said[0] {
+		t.Fatalf("one, of no reporting kind: %v", said)
 	}
 }
