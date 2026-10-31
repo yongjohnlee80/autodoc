@@ -106,7 +106,10 @@ type crewWindow struct {
 	store   string   // the store the daemon serves, "store-1" when unset
 	socket  string   // the daemon's address, "/run/test/d.sock" when unset
 	calls   []string // the verbs called, in order
-	card    *asker   // the question card, made at the first question
+	// inboxSend, when set, answers inbox.send (the user's doorbell) instead of the daemon: the
+	// messaging cells choose whether it fired (agentmessaging_test.go)
+	inboxSend func(p []any) (any, error)
+	card      *asker // the question card, made at the first question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -117,6 +120,9 @@ func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, erro
 	if w.down[verb] > 0 {
 		w.down[verb]--
 		return nil, io.ErrUnexpectedEOF
+	}
+	if verb == "inbox.send" && w.inboxSend != nil {
+		return w.inboxSend(p)
 	}
 	v, err := w.d.call(ctx, verb, p...)
 	if err == nil && w.lost[verb] > 0 {

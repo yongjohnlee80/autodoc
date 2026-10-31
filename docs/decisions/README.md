@@ -73,7 +73,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [AutoDoc's own todos view](todos.md#autodocs-own-todos-view)
 - [AutoDoc assigns only to its own agents](todos.md#autodoc-assigns-only-to-its-own-agents)
 - [Text reaches an agent only as a bracketed paste](todos.md#text-reaches-an-agent-only-as-a-bracketed-paste)
-- [AutoDoc never presses Enter for an agent](todos.md#autodoc-never-presses-enter-for-an-agent)
+- [A message to an agent is sent, never left for Enter](todos.md#a-message-to-an-agent-is-sent-never-left-for-enter)
 - [Graph-only indexing](todos.md#graph-only-indexing)
 - [Which paths are graph-only](todos.md#which-paths-are-graph-only)
 - [Tasks stay in search by default](todos.md#tasks-stay-in-search-by-default)

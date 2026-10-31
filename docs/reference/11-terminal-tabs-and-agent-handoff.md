@@ -114,8 +114,11 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
      ID: 2026-10-17-implement-sqlite-todo-journal
      Instruction: Task assigned to you.
      ```
-   - It dispatches the payload via `panel.SendBracketedPaste(tab, payload)`: one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact at the prompt. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
-   - **AutoDoc never presses Enter** ([the decision](../decisions/todos.md#autodoc-never-presses-enter-for-an-agent)). An Enter can't tell the agent's input from a permission or select prompt it is showing, so it could answer one. Instead the payload waits in the agent's input, and the agent's panel opens with its tab selected and the keyboard in input mode. The toast says *"assigned to Claude Code, and typed into its input: press Enter there to send it"*, and the user's Enter starts the agent on the task file and its linked `$KB_ROOT` ADRs.
+   - It sends the task through AutoDoc's agent messaging ([the decision](../decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter)), and the user never presses Enter:
+     - **The doorbell first.** When the agent's CLI has a wake channel (Claude Code's socket, agy's bridge, OpenCode's plugin, Codex's app-server), the task is crew mail from `user`. The daemon rings the agent, its turn starts with nothing typed, and it reads the task with `autodoc mail receive`.
+     - **Else typed and sent.** The task is typed as one bracketed paste (`\x1b[200~...\x1b[201~`), so the multi-line text lands intact, and Enter follows a moment later. A program that hasn't enabled bracketed paste gets nothing, never keystrokes, and the toast says why. An agent `HandTask` just started is tried again every `agentReadyPoll` (`100ms`) for up to `agentReadyWait` (`10s`) while its program starts.
+     - **Never into a prompt.** An agent the crew says is waiting on a permission or blocked prompt gets the text typed but no Enter, since an Enter would answer the prompt. A toast asks you to answer the prompt, then press Enter there.
+   - The toast says *"assigned to Claude Code, and sent to it"*, and the agent starts on the task file and its linked `$KB_ROOT` ADRs.
 
 ![Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff](agent-dispatch-latency.chart.json)
 
