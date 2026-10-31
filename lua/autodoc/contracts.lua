@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 40,
+  protocol = 41,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -505,6 +505,21 @@ return {
       },
       result = "{message}",
       doc = "Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response.",
+    },
+    ["inbox.send"] = {
+      since = 41, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
     },
     ["inbox.watch"] = {
       since = 37, scope = "local-peer", audience = "user",

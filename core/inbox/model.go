@@ -59,6 +59,7 @@ type Store interface {
 // Mail is the human's transitions, mail's own (mail.Manager).
 type Mail interface {
 	Answer(ctx context.Context, message, body, key string) (mail.Message, error)
+	SendAsUser(ctx context.Context, scope, run string, epoch int64, p mail.Send) (mail.Sent, error)
 	Dismiss(ctx context.Context, message string) error
 	Read(ctx context.Context, message string) error
 }

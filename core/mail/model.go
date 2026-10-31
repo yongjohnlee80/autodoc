@@ -146,6 +146,10 @@ type Crew interface {
 	// docs/decisions/crew.md#the-session-context), in tx: a takeover committed meanwhile fails the
 	// verb.
 	Authenticate(tx crew.Tx, credential string) (crew.Session, error)
+	// GuardHost passes when run's process still holds scope at epoch, and the scope is live
+	// (docs/decisions/crew.md#sessions-and-the-guard), in tx: the user's sends from a window
+	// (SendAsUser) are its host's.
+	GuardHost(tx crew.Tx, scope, run string, epoch int64) error
 	// RaisePending raises pending_gen for profile's live session, so the scheduler wakes it
 	// (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	RaisePending(tx crew.Tx, profile string) error

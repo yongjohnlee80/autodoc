@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 40; the daemon serves sessions from protocol 12.
+Verbs at protocol 41; the daemon serves sessions from protocol 12.
 
 ### `crew`
 
@@ -313,6 +313,7 @@ Verbs at protocol 40; the daemon serves sessions from protocol 12.
 | `inbox.focus` | `session` string (the session whose agent to raise) | `{session, owner}` — Ask the session's current owner to raise its agent: the owner's host hears a focus change. Codes: -32061. | 37 | for people's tools; unix socket only | write |
 | `inbox.list` | `filter`? string ("" for the history, or undeliverable), `before`? int (the history's seq to page below; 0 for the newest), `limit`? int (at most 200; default 50) | `{items[]}` — The human's history, newest first, or the generated notices nobody could receive (filter undeliverable). | 37 | for people's tools; unix socket only | read |
 | `inbox.reply` | `message` string (the request's id), `body` string, `key` string (the idempotency key: a retry with the same body answers the first reply) | `{message}` — Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response. Codes: -32130, -32131, -32132, -32133, -32134. | 37 | for people's tools; unix socket only | write |
+| `inbox.send` | `scope` string (the window's scope, which its host holds), `run` string (the host's run token), `epoch` int (the host's epoch), `to` []string (names in the scope, name@scope, or session:<id>), `body` string (at most 64 KiB), `key` string (the idempotency key: a retry with the same content answers the first send), `kind`? string (message (the default) or request), `subject`? string | `{message}` — Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send. Codes: -32091, -32110, -32133, -32134. | 41 | for people's tools; unix socket only | write |
 | `inbox.watch` | `cursor` int (the last answer's cursor; 0 for a snapshot), `timeout`? int (milliseconds to wait for a change, at most 25000), `page`? string (a snapshot's next: the rest of that snapshot, answered at once, its cursor echoed) | `{cursor, snapshot?{items, attention, next}, changes[]}` — The human feed: the changes after cursor, waiting up to timeout for one; a snapshot of what is open when the cursor is 0 or no longer retained, its attention then its open items, at most 500 entries and 2 MiB a page (page = next for the rest). Never leases. A connection holds at most two long-polls. Codes: -32064. | 37 | for people's tools; unix socket only | read |
 
 ### `index`

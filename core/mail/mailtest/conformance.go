@@ -61,6 +61,7 @@ func Run(t *testing.T, h Harness) {
 		{"DiscardLeavesNothingWaitingThroughCrewsDiscard", testDiscardLeavesNothingWaitingThroughCrewsDiscard},
 		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
 		{"AnItemNamesItsSenderAsAnAddress", testAnItemNamesItsSenderAsAnAddress},
+		{"TheUsersSendIsTheWindowsHostsAndFromTheUser", testTheUsersSendIsTheWindowsHostsAndFromTheUser},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -85,6 +86,11 @@ func (g *guard) Authenticate(tx crew.Tx, credential string) (crew.Session, error
 		return crew.Session{}, crew.ErrBadCredential
 	}
 	return s, nil
+}
+
+// GuardHost is crew's own check, against the rig's host rows (a cell claims its scope through crew).
+func (g *guard) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return g.crew.GuardHost(tx, scope, run, epoch)
 }
 
 func (g *guard) RaisePending(tx crew.Tx, profile string) error {
@@ -789,6 +795,10 @@ func (c *lazyCrew) Authenticate(tx crew.Tx, credential string) (crew.Session, er
 	return c.m.Authenticate(tx, credential)
 }
 
+func (c *lazyCrew) GuardHost(tx crew.Tx, scope, run string, epoch int64) error {
+	return c.m.GuardHost(tx, scope, run, epoch)
+}
+
 func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
 	return c.m.RaisePending(tx, profile)
 }
@@ -1027,5 +1037,55 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 		if it.Message.Kind != mail.KindEvent || it.From != "autodoc" {
 			t.Fatalf("the daemon's notice: %+v, want an event from autodoc", it)
 		}
+	}
+}
+
+// The user's own send (inbox.send): only the window that holds the scope sends it, its run and
+// epoch checked in the write; its sender is the user's profile, never a session's, so the receiver
+// names it "user" and is woken as for any mail; its key is the user's, so a replay answers the first.
+func testTheUsersSendIsTheWindowsHostsAndFromTheUser(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	epoch, err := crew.New(r.st.Crew).Claim(r.ctx, "autovim:p", "run1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Subject: "Task: a title", Body: "the file, the id, the reason", Key: "u1"}
+	for _, bad := range []struct {
+		run   string
+		epoch int64
+	}{{"run2", epoch}, {"run1", epoch + 1}} {
+		if _, err := r.m.SendAsUser(r.ctx, "autovim:p", bad.run, bad.epoch, task); !errors.Is(err, crew.ErrStaleEpoch) {
+			t.Fatalf("a send from run %s at epoch %d: %v, want the stale epoch", bad.run, bad.epoch, err)
+		}
+	}
+	if len(r.st.Inspect.Messages()) != 0 || r.woken("p-gold") != 0 {
+		t.Fatal("a refused send stored mail or woke the agent")
+	}
+	sent, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := sent.Message; m.Sender != "p-user" || m.SenderSession != "" || m.Kind != mail.KindRequest || len(sent.Deliveries) != 1 ||
+		sent.Deliveries[0].Recipient != "p-gold" {
+		t.Fatalf("the user's send: %+v", sent)
+	}
+	if r.woken("p-gold") != 1 {
+		t.Fatal("the user's send did not wake its recipient")
+	}
+	again, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, task)
+	if err != nil || again.Message.ID != sent.Message.ID || len(r.st.Inspect.Messages()) != 1 {
+		t.Fatalf("a replay: %v %+v, want the first send", err, again)
+	}
+	changed := task
+	changed.Body = "another reason"
+	if _, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, changed); !errors.Is(err, mail.ErrKeyReused) {
+		t.Fatalf("the key with other content: %v", err)
+	}
+	if _, err := r.m.SendAsUser(r.ctx, "autovim:p", "run1", epoch, mail.Send{To: []string{"nobody"}, Body: "x", Key: "u2"}); !errors.Is(err, mail.ErrNoRecipient) {
+		t.Fatalf("a send to no profile: %v", err)
+	}
+	got := r.receive("s-gold")
+	if len(got.Items) != 1 || got.Items[0].From != mail.UserCodename || got.Items[0].Message.Subject != "Task: a title" {
+		t.Fatalf("the agent's receive: %+v, want the request from user", got.Items)
 	}
 }

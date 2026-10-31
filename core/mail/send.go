@@ -87,45 +87,84 @@ func (m *Manager) Send(ctx context.Context, credential string, p Send) (Sent, er
 		if err != nil {
 			return err
 		}
-		sum := sendDigest(p)
-		if old, ok, err := tx.MessageByKey(s.Profile, p.Key); err != nil {
-			return err
-		} else if ok {
-			if !bytes.Equal(old.Digest, sum) {
-				return ErrKeyReused
-			}
-			ds, err := tx.DeliveriesOf(old.ID)
-			out = Sent{Message: old, Deliveries: ds}
-			return err
-		}
-		to, err := m.addresses(tx, s, p.To)
+		from, ok, err := tx.Profile(s.Profile)
 		if err != nil {
 			return err
 		}
-		now := tx.Now()
-		msg := Message{ID: m.newID(), Sender: s.Profile, SenderSession: s.ID, IdemKey: p.Key, Digest: sum,
-			Kind: p.Kind, Subject: p.Subject, Body: p.Body, State: MessageOpen, Created: now.UnixNano()}
-		if msg.Kind == "" {
-			msg.Kind = KindMessage
+		if !ok {
+			return crew.ErrBadCredential
 		}
-		if p.TTL > 0 {
-			at := now.Add(p.TTL).UnixNano()
-			msg.Expires = &at
-		}
-		if err := tx.PutMessage(msg); err != nil {
-			return err
-		}
-		out = Sent{Message: msg}
-		for _, a := range to {
-			d, err := m.deliver(tx, msg, a.profile, a.session)
-			if err != nil {
-				return err
-			}
-			out.Deliveries = append(out.Deliveries, d)
-		}
-		return nil
+		out, err = m.send(tx, s.Profile, s.ID, from.Scope, p)
+		return err
 	})
 	return out, err
+}
+
+// SendAsUser is inbox.send: the user's own message or request, from the window that holds scope
+// (run's process at epoch, checked in the write, as a host verb is), to addresses resolved in that
+// scope, in one write (docs/decisions/crew.md#the-human-inbox). The sender is the user's profile,
+// which only the daemon sets: no session's credential can send as the user, so an agent tells the
+// user's own instruction from a peer's by the sender alone. Its key is the user's, as Send's is a
+// session's profile's.
+func (m *Manager) SendAsUser(ctx context.Context, scope, run string, epoch int64, p Send) (Sent, error) {
+	if err := checkSend(p); err != nil {
+		return Sent{}, err
+	}
+	var out Sent
+	err := m.store.Write(ctx, func(tx Tx) error {
+		if err := m.crew.GuardHost(tx, scope, run, epoch); err != nil {
+			return err
+		}
+		user, err := userProfile(tx)
+		if err != nil {
+			return err
+		}
+		out, err = m.send(tx, user, "", scope, p)
+		return err
+	})
+	return out, err
+}
+
+// send is a send's write, in tx, from profile sender (its session senderSession, "" for the user)
+// to addresses resolved in scope: a key sender already used answers that send while its message is
+// retained, when the content is the same, and ErrKeyReused when it is not.
+func (m *Manager) send(tx Tx, sender, senderSession, scope string, p Send) (Sent, error) {
+	sum := sendDigest(p)
+	if old, ok, err := tx.MessageByKey(sender, p.Key); err != nil {
+		return Sent{}, err
+	} else if ok {
+		if !bytes.Equal(old.Digest, sum) {
+			return Sent{}, ErrKeyReused
+		}
+		ds, err := tx.DeliveriesOf(old.ID)
+		return Sent{Message: old, Deliveries: ds}, err
+	}
+	to, err := addresses(tx, scope, p.To)
+	if err != nil {
+		return Sent{}, err
+	}
+	now := tx.Now()
+	msg := Message{ID: m.newID(), Sender: sender, SenderSession: senderSession, IdemKey: p.Key, Digest: sum,
+		Kind: p.Kind, Subject: p.Subject, Body: p.Body, State: MessageOpen, Created: now.UnixNano()}
+	if msg.Kind == "" {
+		msg.Kind = KindMessage
+	}
+	if p.TTL > 0 {
+		at := now.Add(p.TTL).UnixNano()
+		msg.Expires = &at
+	}
+	if err := tx.PutMessage(msg); err != nil {
+		return Sent{}, err
+	}
+	out := Sent{Message: msg}
+	for _, a := range to {
+		d, err := m.deliver(tx, msg, a.profile, a.session)
+		if err != nil {
+			return Sent{}, err
+		}
+		out.Deliveries = append(out.Deliveries, d)
+	}
+	return out, nil
 }
 
 func checkSend(p Send) error {
@@ -163,23 +202,16 @@ func sendDigest(p Send) []byte {
 
 type address struct{ profile, session string }
 
-// addresses resolves every address once, in s's scope; any that resolves to nothing is
+// addresses resolves every address once, in scope; any that resolves to nothing is
 // ErrNoRecipient, and the daemon's own profile is never a recipient. A message has one delivery per
 // recipient profile (mail_delivery's UNIQUE (message, recipient)): the same address twice is one,
 // and two addresses binding one profile differently (gold and session:<gold's>, or two of its
 // sessions) are refused, never silently narrowed or widened.
-func (m *Manager) addresses(tx Tx, s crew.Session, to []string) ([]address, error) {
-	from, ok, err := tx.Profile(s.Profile)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, crew.ErrBadCredential
-	}
+func addresses(tx Tx, scope string, to []string) ([]address, error) {
 	var out []address
 	bound := map[string]string{} // profile → the session its address binds ("" for any)
 	for _, t := range to {
-		a, err := resolveAddress(tx, from.Scope, t)
+		a, err := resolveAddress(tx, scope, t)
 		if err != nil {
 			return nil, err
 		}
