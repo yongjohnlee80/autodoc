@@ -9,8 +9,9 @@
 //   - raises the session's attention in AutoDoc when a registration fails, so the window shows why
 //     the agent can't be woken;
 //   - reports the agent's permission prompts: one showing raises the session's permission attention
-//     in AutoDoc, saying what it asks, and the last one answered clears it, so a window presses
-//     Enter into the agent only when no prompt is there to approve;
+//     in AutoDoc, saying what it asks, and the last one answered clears it; and says it is alive
+//     every 5 s, so a window presses Enter into the agent only while it reports, and no prompt is
+//     there to approve;
 //   - listens on a unix socket, named by its pid, in a folder of its own that no one else can reach;
 //     asked to wake its session, it shows it in the TUI and starts a turn with the fixed notice below
 //     (promptAsync: a busy session takes it in at its next step), and answers one line.
@@ -65,6 +66,10 @@ const aborted = (signal) =>
 // the plugin makes none at load.
 const RESUMES = new Set(["-c", "--continue", "-s", "--session", "--fork"]);
 const resumed = (argv) => argv.some((a) => RESUMES.has(a.split("=")[0]));
+
+// HEARTBEAT_MS is how often the plugin says it is alive: well within AutoDoc's 15 s, past which a
+// reporter is taken for gone.
+const HEARTBEAT_MS = 5000;
 
 // SHOW_AT are the waits before each ask that the TUI show the session made at load: the TUI may not
 // listen yet when the plugin loads, and an ask it misses is lost.
@@ -181,11 +186,16 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     );
     return attentionRuns;
   };
+  // the reporter's heartbeat: while the plugin runs it says so every heartbeatMs, so AutoDoc trusts
+  // this session's prompts as reported (crew.list's prompts_reported) only while it does
+  const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
+  const heartbeat = heartbeatMs > 0 ? setInterval(() => crewAttention("alive"), heartbeatMs) : null;
+  heartbeat?.unref?.();
   // attention tells AutoDoc's window that this session can't be woken, and why.
   const attention = (why) => crewAttention("raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`);
   // asking are the permission prompts the agent shows now, by request: the first raises the
   // session's permission attention, saying what it asks; the last one answered clears it. A window
-  // presses Enter into this agent only while none is showing (crew.ReportsPrompts).
+  // presses Enter into this agent only while none is showing (crew.list's prompts_reported).
   const asking = new Map();
   const onPermission = (event) => {
     const p = event?.properties ?? {};
@@ -302,6 +312,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     },
     dispose: async () => {
       disposed = true;
+      if (heartbeat) clearInterval(heartbeat);
       attemptAbort?.abort();
       await worker;
       server.stop(true);

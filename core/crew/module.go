@@ -204,22 +204,24 @@ func (m *Manager) Verbs() []module.Verb {
 			}),
 		module.Handle(module.Contract{Verb: "crew.attention", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectWrite, Result: "{}", Errors: []int64{CodeBadCredential, CodeStaleEpoch},
-			Doc: "Raise or clear: the session waits on the user."},
+			Doc: "Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41)."},
 			func(ctx context.Context, p attentionParams) (struct{}, error) {
 				switch p.Op {
 				case "raise":
 					return struct{}{}, m.RaiseAttention(ctx, p.Credential, p.Kind, p.Text)
 				case "clear":
 					return struct{}{}, m.ClearAttention(ctx, p.Credential)
+				case "alive":
+					return struct{}{}, m.ReporterAlive(ctx, p.Credential)
 				}
-				return struct{}{}, fmt.Errorf("%w: attention op %q, want raise or clear", ErrInvalid, p.Op)
+				return struct{}{}, fmt.Errorf("%w: attention op %q, want raise, clear or alive", ErrInvalid, p.Op)
 			}),
 		module.Handle(module.Contract{Verb: "crew.guide", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "{markdown, protocol}",
 			Doc: "The crew and mail procedure for a CLI kind, for a host's agent guide."},
 			func(_ context.Context, p guideParams) (Guide, error) { return m.GuideFor(p.Kind), nil }),
 		module.Handle(module.Contract{Verb: "crew.list", Since: Protocol, Audience: module.AudienceAgent,
-			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable}]", Doc: "The addressbook."},
+			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable, prompts_reported}]", Doc: "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention."},
 			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),
 		module.Handle(host("crew.exit", "{}",
 			"A session ended; its bound deliveries fail (session_ended).", CodeStaleEpoch, CodeBadCredential),

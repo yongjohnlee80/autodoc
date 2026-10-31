@@ -25,7 +25,7 @@ return {
         { name = "text", type = "string", optional = true }
       },
       result = "{}",
-      doc = "Raise or clear: the session waits on the user.",
+      doc = "Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41).",
     },
     ["crew.claim"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -82,8 +82,8 @@ return {
     ["crew.list"] = {
       since = 37, scope = "global", audience = "agent",
       params = {},
-      result = "[{codename, scope, kind, presence, reachable}]",
-      doc = "The addressbook.",
+      result = "[{codename, scope, kind, presence, reachable, prompts_reported}]",
+      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention.",
     },
     ["crew.orphans"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -520,7 +520,7 @@ return {
         { name = "fire", type = "bool", optional = true }
       },
       result = "{message}",
-      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. The same key answers the first send.",
+      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.unreachable means nothing was left, so the text may be sent some other way; any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
     },
     ["inbox.watch"] = {
       since = 37, scope = "local-peer", audience = "user",

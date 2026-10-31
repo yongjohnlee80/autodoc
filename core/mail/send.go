@@ -157,22 +157,23 @@ func (m *Manager) fire(ctx context.Context, sent Sent) error {
 	if fired && ferr == nil {
 		return nil
 	}
+	// withdrawn, the send is unreachable whatever the doorbell's error was: nothing is left of it. A
+	// withdraw that fails leaves the delivery queued, its outcome unknown to the caller (the store's
+	// error): the next wake delivers it, so the caller must not send it some other way.
 	received, err := m.withdraw(context.WithoutCancel(ctx), d)
 	switch {
 	case err != nil:
 		return err
 	case received:
 		return nil
-	case ferr != nil:
-		return ferr
 	}
 	return ErrUnreachable
 }
 
 // withdraw ends delivery d, still queued, as Withdrawn: done, never receivable. received is true,
 // and nothing changes, when the recipient leased or acked it first. When the recipient has nothing
-// else unhandled, its wake is settled as a receive settles it, so no later wake rings for mail that
-// is gone.
+// else queued, its wake is settled (crew's Settled: what was pending, not its failures), so no
+// later wake rings for mail that is gone.
 func (m *Manager) withdraw(ctx context.Context, d Delivery) (received bool, err error) {
 	err = m.store.Write(ctx, func(tx Tx) error {
 		cur, ok, err := tx.DeliveryOf(d.Message, d.Recipient)
@@ -188,15 +189,21 @@ func (m *Manager) withdraw(ctx context.Context, d Delivery) (received bool, err 
 		if err := tx.PutDelivery(cur); err != nil {
 			return err
 		}
+		// a leased delivery doesn't keep the wake due: its lease lapsing raises pending on its own
 		left, err := tx.Unhandled(cur.Recipient)
-		if err != nil || len(left) > 0 {
+		if err != nil {
 			return err
+		}
+		for _, d := range left {
+			if d.State == Queued {
+				return nil
+			}
 		}
 		s, live, err := tx.LiveSession(cur.Recipient)
 		if err != nil || !live {
 			return err
 		}
-		return m.crew.Received(tx, s.ID)
+		return m.crew.Settled(tx, s.ID)
 	})
 	return received, err
 }

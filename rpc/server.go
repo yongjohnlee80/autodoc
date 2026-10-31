@@ -168,7 +168,10 @@ import (
 // Protocol 41 is the user's own sends (docs/decisions/crew.md#the-human-inbox): inbox.send, a
 // message or request from the window that holds a scope (its scope, run and epoch, guarded as a
 // host verb is) whose sender is the user, set by the daemon alone. A session below 41 sees it as an
-// unknown method, and its window types the text into the agent's prompt as before.
+// unknown method, and its window types the text into the agent's prompt as before. With it,
+// crew.attention's alive (a session's permission-prompt reporter is running) and crew.list's
+// prompts_reported (its prompts are reported now), which a window reads before pressing Enter into an
+// agent it typed to.
 const Protocol int64 = 41
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it

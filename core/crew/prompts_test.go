@@ -1,32 +1,73 @@
 package crew_test
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
 )
 
-// TestReportsPromptsIsTheKindsWithAnAdapter: Claude's hooks report its prompts whatever its
-// endpoint; OpenCode's plugin and agy's bridge are their endpoints, so they report only while the
-// session is reachable; Codex, and any other kind, reports none, so a window never presses Enter
-// into it.
-func TestReportsPromptsIsTheKindsWithAnAdapter(t *testing.T) {
-	for _, c := range []struct {
-		kind               string
-		reachable, unreach bool
-	}{
-		{crew.KindClaude, true, true},
-		{crew.KindOpenCode, true, false},
-		{crew.KindAgy, true, false},
-		{crew.KindCodex, false, false},
-		{"aider", false, false},
-		{"", false, false},
-	} {
-		if got := crew.ReportsPrompts(c.kind, true); got != c.reachable {
-			t.Errorf("ReportsPrompts(%q, reachable) = %v, want %v", c.kind, got, c.reachable)
+// TestPromptsAreReportedWhileTheirReporterIsThere: crew.list's prompts_reported is a live session's
+// prompts being reported now: Claude's whenever it is live (its hooks are the host's); OpenCode's and
+// agy's only while their reporter's heartbeat (crew.attention alive) is within 15 s, by the store's
+// clock, and never before one; Codex's never. A session that ended reports none.
+func TestPromptsAreReportedWhileTheirReporterIsThere(t *testing.T) {
+	ctx := context.Background()
+	clock := crewtest.NewClock()
+	m := crew.New(crewtest.NewMem(clock.Now))
+	epoch, err := m.Claim(ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds := map[string]string{}
+	for _, kind := range []string{crew.KindClaude, crew.KindOpenCode, crew.KindAgy, crew.KindCodex} {
+		secret := strings.Repeat("s", 40)
+		r, err := m.Register(ctx, crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: epoch, Codename: kind + "-one",
+			Kind: kind, Workspace: "w", Instance: "i-" + kind, Secret: secret})
+		if err != nil {
+			t.Fatal(err)
 		}
-		if got := crew.ReportsPrompts(c.kind, false); got != c.unreach {
-			t.Errorf("ReportsPrompts(%q, unreachable) = %v, want %v", c.kind, got, c.unreach)
+		creds[kind] = crew.Credential(r.Session, secret)
+	}
+	reported := func() map[string]bool {
+		t.Helper()
+		es, err := m.List(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
+		out := map[string]bool{}
+		for _, e := range es {
+			out[e.Kind] = e.PromptsReported
+		}
+		return out
+	}
+	check := func(when string, want map[string]bool) {
+		t.Helper()
+		got := reported()
+		for kind, w := range want {
+			if got[kind] != w {
+				t.Errorf("%s: %s's prompts reported %v, want %v", when, kind, got[kind], w)
+			}
+		}
+	}
+	check("before any heartbeat", map[string]bool{crew.KindClaude: true, crew.KindOpenCode: false, crew.KindAgy: false, crew.KindCodex: false})
+	for _, kind := range []string{crew.KindOpenCode, crew.KindAgy, crew.KindCodex} {
+		if err := m.ReporterAlive(ctx, creds[kind]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check("just after a heartbeat", map[string]bool{crew.KindClaude: true, crew.KindOpenCode: true, crew.KindAgy: true, crew.KindCodex: false})
+	clock.Advance(15 * time.Second)
+	check("15 s on", map[string]bool{crew.KindOpenCode: true, crew.KindAgy: true})
+	clock.Advance(time.Second)
+	if err := m.ReporterAlive(ctx, creds[crew.KindAgy]); err != nil {
+		t.Fatal(err)
+	}
+	check("16 s on, agy's heartbeat again", map[string]bool{crew.KindClaude: true, crew.KindOpenCode: false, crew.KindAgy: true})
+	if err := m.ReporterAlive(ctx, "nobody.secret"); err == nil {
+		t.Fatal("a heartbeat with no session's credential was taken")
 	}
 }
