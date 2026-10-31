@@ -7751,17 +7751,9 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>A setup that was still running changed the workspaces: Check again before Use.</source>
         <translation>実行中だった設定がワークスペースを変更しました。使用の前にもう一度確認してください。</translation>
     </message>
-    <message id="autodoc.notice.agentmessaging.typed_but_not_sent">
-        <source>%1: the message was typed, but its Enter wasn't sent: %2</source>
-        <translation>%1: メッセージは入力されましたが、Enter を送れませんでした: %2</translation>
-    </message>
-    <message id="autodoc.notice.agentmessaging.no_doorbell_reaches_it">
-        <source>no doorbell reaches it</source>
-        <translation>届くドアベルがありません</translation>
-    </message>
     <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
-        <source>%1's doorbell didn't ring (%2): the message was typed into its input and sent</source>
-        <translation>%1 のドアベルが鳴りませんでした（%2）: メッセージを入力欄に入力して送信しました</translation>
+        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
+        <translation>%1 のドアベルが鳴りませんでした（%2）: 代わりにメッセージを入力欄へ送ります</translation>
     </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
         <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
@@ -7774,6 +7766,18 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
     <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
         <source>audit of %1 sent to %2; click to install or cancel</source>
         <translation>%1 の監査を %2 に送信しました。クリックしてインストールまたはキャンセル</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
+        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
+        <translation>ToDo: %1 に割り当て、その入力欄に入力しました: そこで Enter を押して送信してください</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
+        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
+        <translation>%1 の監査を %2 の入力欄に入力しました: そこで Enter を押して送信してください。クリックしてインストールまたはキャンセル</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
+        <source>%1's CLI doesn't report its permission prompts, so the message is typed but not sent: press Enter there</source>
+        <translation>%1 の CLI は権限プロンプトを報告しないため、メッセージは入力済みですが未送信です: そこで Enter を押してください</translation>
     </message>
 </context>
 </TS>
