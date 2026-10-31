@@ -67,6 +67,28 @@ const aborted = (signal) =>
 const RESUMES = new Set(["-c", "--continue", "-s", "--session", "--fork"]);
 const resumed = (argv) => argv.some((a) => RESUMES.has(a.split("=")[0]));
 
+// cliModel is the model opencode was started with (`--model provider/model`, `--model=…`, `-m …`), as
+// a prompt names one, or null for none. A wake names it: a session the plugin made at load has had no
+// message, and a prompt that names no model runs on the configured default, which may not be the one
+// the agent was started on (or one that can answer at all).
+const cliModel = (argv) => {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    let v = null;
+    if (a === "--model" || a === "-m") v = argv[i + 1];
+    else if (a.startsWith("--model=")) v = a.slice("--model=".length);
+    else if (a.startsWith("-m=")) v = a.slice("-m=".length);
+    if (typeof v !== "string") continue;
+    const slash = v.indexOf("/");
+    if (slash > 0 && slash < v.length - 1) return { providerID: v.slice(0, slash), modelID: v.slice(slash + 1) };
+  }
+  return null;
+};
+
+// WAKE_ERROR_MS is how long after a wake a session error is taken for the woken turn's own: the turn
+// the notice starts runs at once, or at a busy session's next step.
+const WAKE_ERROR_MS = 120000;
+
 // HEARTBEAT_MS is how often the plugin says it is alive: well within AutoDoc's 15 s, past which a
 // reporter is taken for gone.
 const HEARTBEAT_MS = 5000;
@@ -81,6 +103,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   if (holder && holder !== process.pid && alive(holder)) return {}; // started under the session's own opencode
   process.env.AUTODOC_CREW_WAKER = String(process.pid);
   const registerMs = Number(options.registerMs) || REGISTER_MS;
+  const argv = options.argv ?? process.argv;
+  const model = cliModel(argv);
+  let wokeAt = 0; // when the last wake's turn was started (onWakeTurn)
+  let wakeRaised = false; // whether a woken turn's error raised the session's attention
   const log = (level, message) =>
     Promise.resolve()
       .then(() => client.app.log({ body: { service: "autodoc-crew", level, message } }))
@@ -133,12 +159,14 @@ export const AutodocCrew = async ({ client }, options = {}) => {
         }
         if (!session || req?.session !== session) return reply(s, { ok: false, refused: "not this plugin's session" });
         show(session); // the turn the notice starts is the one the user sees
-        client.session
-          .promptAsync({ path: { id: session }, body: { parts: [{ type: "text", text: NOTICE }] } })
-          .then(
-            (r) => reply(s, r.error ? { ok: false, error: "promptAsync failed" } : { ok: true }),
-            () => reply(s, { ok: false, error: "promptAsync failed" }),
-          );
+        const body = { parts: [{ type: "text", text: NOTICE }], ...(model ? { model } : {}) };
+        client.session.promptAsync({ path: { id: session }, body }).then(
+          (r) => {
+            if (!r.error) wokeAt = Date.now();
+            reply(s, r.error ? { ok: false, error: "promptAsync failed" } : { ok: true });
+          },
+          () => reply(s, { ok: false, error: "promptAsync failed" }),
+        );
       },
       error() {},
     },
@@ -197,6 +225,26 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   // session's permission attention, saying what it asks; the last one answered clears it. A window
   // presses Enter into this agent only while none is showing (crew.list's prompts_reported).
   const asking = new Map();
+  // a woken turn whose model refused it (no credits, no such model) did nothing: the wake was
+  // accepted, so AutoDoc would wait on a receive that never comes. The session's error, within
+  // WAKE_ERROR_MS of a wake, raises its attention, saying what the model said; the next turn the
+  // model completes clears it, unless a permission prompt shows.
+  const onWakeTurn = (event) => {
+    const p = event?.properties ?? {};
+    if (event?.type === "session.error" && p.sessionID && p.sessionID === session && wokeAt && Date.now() - wokeAt < WAKE_ERROR_MS) {
+      wokeAt = 0;
+      wakeRaised = true;
+      const e = p.error ?? {};
+      const said = e.data?.message ?? e.message ?? e.name ?? "an error";
+      attention(`the woken session's model refused the wake: ${String(said).slice(0, 200)}`);
+    } else if (event?.type === "message.updated" && wakeRaised) {
+      const info = p.info ?? {};
+      if (info.sessionID === session && info.role === "assistant" && info.time?.completed && !info.error && asking.size === 0) {
+        wakeRaised = false;
+        crewAttention("clear");
+      }
+    }
+  };
   const onPermission = (event) => {
     const p = event?.properties ?? {};
     if (event?.type === "permission.asked" && p.id && !asking.has(p.id)) {
@@ -297,7 +345,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       log("warn", `making a session at load failed: ${String(e).slice(0, 300)}`);
     }
   };
-  if (options.prepare !== false && !resumed(process.argv)) prepare();
+  if (options.prepare !== false && !resumed(argv)) prepare();
   return {
     "chat.message": async (input) => {
       const id = input.sessionID;
@@ -305,7 +353,9 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       want(id); // in the background: the message never waits on AutoDoc
     },
     event: async ({ event }) => {
-      if (!disposed) onPermission(event);
+      if (disposed) return;
+      onPermission(event);
+      onWakeTurn(event);
     },
     "shell.env": async (_input, output) => {
       output.env.AUTODOC_CREW_WAKER = String(process.pid);
