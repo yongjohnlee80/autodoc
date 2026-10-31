@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -181,8 +182,9 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 }
 
 // TestAClaudeSessionAcceptsWakes (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): a
-// Claude agent's crew session gets the SessionStart hook that registers its endpoint and
-// crossSessionInbound "accept", nothing about tool approvals; an agent of another CLI gets neither.
+// Claude agent's crew session gets the SessionStart hook that registers its endpoint,
+// crossSessionInbound "accept", and the hooks that report its permission prompts, nothing about tool
+// approvals; an agent of another CLI gets none of it.
 func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 	a, c, _ := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
 	for code, wants := range map[string]bool{"cl": true, "one": false} {
@@ -198,6 +200,14 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 		accepts := s["crossSessionInbound"] == "accept" && strings.Contains(string(b), "crew endpoint --claude")
 		if accepts != wants {
 			t.Errorf("%s's settings accept wakes %v, want %v:\n%s", code, accepts, wants, b)
+		}
+		// and its permission prompts are reported, on each of the hooks that tell of them
+		hooks, _ := s["hooks"].(map[string]any)
+		for _, event := range claudePromptEvents {
+			reported := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
+			if reported != wants {
+				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reported, wants)
+			}
 		}
 		for _, never := range []string{"permissions", "allow", "deny", "defaultMode"} {
 			if strings.Contains(string(b), never) {

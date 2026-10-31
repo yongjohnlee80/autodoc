@@ -118,14 +118,30 @@ func endpointCommand(dir string) string {
 
 // writeWakeAcceptance configures only what lets the crew's fixed notice start a turn
 // (docs/decisions/crew.md#wake-acceptance-not-tool-approvals), for a crew session's CLI of kind in
-// dir: for Claude Code, the SessionStart hook that registers its endpoint and crossSessionInbound
-// "accept"; for the others nothing yet (Codex's queue starts turns as it is). It never writes
+// dir: for Claude Code, the SessionStart hook that registers its endpoint, crossSessionInbound
+// "accept", and the hooks that report its permission prompts (they report; they decide nothing);
+// for the others nothing yet (Codex's queue starts turns as it is). It never writes
 // approval policies, permission modes, or allow or deny rules: a turn a wake starts runs under the
 // profile's own tool policy.
 func writeWakeAcceptance(dir, kind string) error {
 	if kind != "claude" {
 		return nil
 	}
-	return mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"),
-		map[string]string{"SessionStart": endpointCommand(dir)}, map[string]any{"crossSessionInbound": "accept"})
+	events := map[string]string{"SessionStart": endpointCommand(dir)}
+	for _, e := range claudePromptEvents {
+		events[e] = promptCommand(dir)
+	}
+	return mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), events, map[string]any{"crossSessionInbound": "accept"})
+}
+
+// claudePromptEvents are the hooks that report a crew Claude agent's permission prompts
+// (crew.ReportsPrompts): PermissionRequest and Notification raise its permission attention, and
+// the rest clear it once the prompt is behind it (`crew attention --claude-hook`).
+var claudePromptEvents = []string{"PermissionRequest", "Notification", "PostToolUse", "UserPromptSubmit", "Stop"}
+
+// promptCommand is the hook that reports a permission prompt, run by dir's own autodoc: it prints
+// nothing (a PermissionRequest hook's output could decide the prompt, a UserPromptSubmit hook's
+// joins the agent's context), and a failure says why on stderr alone.
+func promptCommand(dir string) string {
+	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew attention --claude-hook >/dev/null"
 }
