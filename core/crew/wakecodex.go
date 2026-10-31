@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +68,9 @@ func (w *CodexWaker) Wake(ctx context.Context, ep Endpoint, notice string) error
 // user, in a folder of the user's that nobody else can enter.
 func (w *CodexWaker) bound(server string) error {
 	fi, err := os.Lstat(server)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w: codex's app-server socket: %v", ErrEndpointGone, err) // its app-server is gone
+	}
 	if err != nil {
 		return fmt.Errorf("crew: codex's app-server socket: %w", err)
 	}

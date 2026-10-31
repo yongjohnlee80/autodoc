@@ -754,7 +754,7 @@ func Run(t *testing.T, h Harness) {
 		}
 	})
 
-	t.Run("list: presence and reachability", func(t *testing.T) {
+	t.Run("list: presence, reachability and why", func(t *testing.T) {
 		clock, enders := NewClock(), &Enders{}
 		store := h.New(t, clock.Now)
 		started := clock.Now()
@@ -789,7 +789,8 @@ func Run(t *testing.T, h Harness) {
 			// both live Claude sessions: the hooks report the prompts of the one registered with them,
 			// reachable or not, as the store kept it; the other's are never assumed reported
 			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true},
-			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false},
+			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false,
+				Why: crew.WhyNoEndpoint},
 		}
 		if got := list(); !slices.Equal(got, want) {
 			t.Fatalf("list: %+v\nwant %+v", got, want)
@@ -806,25 +807,35 @@ func Run(t *testing.T, h Harness) {
 		if got, err := young.List(ctx); err != nil || got[0].Presence != crew.PresenceReconnecting {
 			t.Fatalf("a lapsed host on a daemon 10 s old: %+v, %v; want reconnecting", got, err)
 		}
-		if err := store.Write(ctx, func(tx crew.Tx) error {
-			w, _, err := tx.Wake(jarvis.Session)
-			if err != nil {
-				return err
+		setWake := func(failures int64, next *int64) {
+			t.Helper()
+			if err := store.Write(ctx, func(tx crew.Tx) error {
+				w, _, err := tx.Wake(jarvis.Session)
+				if err != nil {
+					return err
+				}
+				w.Failures, w.NextAt = failures, next
+				return tx.PutWake(w)
+			}); err != nil {
+				t.Fatal(err)
 			}
-			w.Failures = 5
-			return tx.PutWake(w)
-		}); err != nil {
-			t.Fatal(err)
 		}
-		if got := list(); got[0].Reachable {
-			t.Fatal("an agent after 5 failed wakes still reads reachable")
+		// one failed wake, its retry still ahead: reachable, and why says when it is tried again
+		next := clock.Now().Add(30 * time.Second).UnixNano()
+		setWake(1, &next)
+		if got := list(); !got[0].Reachable || got[0].Why != crew.WhyBackoffUntil+" "+time.Unix(0, next).UTC().Format(time.RFC3339) {
+			t.Fatalf("an agent backing off: %+v", got[0])
+		}
+		setWake(5, &next) // no cause known in this manager: why names none
+		if got := list(); got[0].Reachable || got[0].Why != crew.WhyWakesFailing {
+			t.Fatalf("an agent after 5 failed wakes: %+v, want unreachable, %s", got[0], crew.WhyWakesFailing)
 		}
 		clock.Advance(-91 * time.Second) // the host back within its lease, to exit cleanly
 		if err := m.Exit(ctx, scope, "run-a", e, vision.Session, crew.EndedExit); err != nil {
 			t.Fatal(err)
 		}
-		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable {
-			t.Fatalf("an exited agent: %+v, want ended and unreachable", got[1])
+		if got := list(); got[1].Presence != crew.PresenceEnded || got[1].Reachable || got[1].Why != crew.WhyEnded {
+			t.Fatalf("an exited agent: %+v, want ended and unreachable, why %s", got[1], crew.WhyEnded)
 		}
 	})
 

@@ -134,8 +134,8 @@ func TestTheOpenCodeWakerBindsToTheSessionsProcess(t *testing.T) {
 	} {
 		w := crew.NewOpenCodeWaker(os.Getuid())
 		w.SetRoots(dir)
-		if err := w.Wake(context.Background(), ep, crew.WakeNotice); crew.Classify(err) != crew.OutcomeFailed {
-			t.Errorf("%s: %v, want a failure", name, err)
+		if err := w.Wake(context.Background(), ep, crew.WakeNotice); crew.Classify(err) != crew.OutcomeGone {
+			t.Errorf("%s: %v, want a failure as gone: the session's process is not there", name, err)
 		}
 	}
 	w := crew.NewOpenCodeWaker(os.Getuid()) // its own folders: the stand-in's is not one

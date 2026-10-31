@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -60,11 +62,18 @@ type wakeRig struct {
 	failed []string // each wake the scheduler told of as failed: "<session>: <reason>"
 }
 
-func newWakeRig(t *testing.T, run string) *wakeRig {
+func newWakeRig(t *testing.T, run string) *wakeRig { return newWakeRigWith(t, run, nil) }
+
+// newWakeRigWith is newWakeRig with more wakers, by kind, beside the fake one.
+func newWakeRigWith(t *testing.T, run string, more map[string]crew.Waker) *wakeRig {
 	r := &wakeRig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), w: &fakeWaker{}}
 	r.mem = crewtest.NewMem(r.clock.Now)
 	r.m = crew.New(r.mem, crew.WithSessionEnder(&crewtest.Enders{}))
-	r.s = r.m.NewScheduler(run, map[string]crew.Waker{"fake": r.w}, crew.WithWakeClock(r.clock.Now),
+	wakers := map[string]crew.Waker{"fake": r.w}
+	for k, w := range more {
+		wakers[k] = w
+	}
+	r.s = r.m.NewScheduler(run, wakers, crew.WithWakeClock(r.clock.Now),
 		crew.WithWakeErrors(func(err error) { t.Errorf("scheduler: %v", err) }),
 		crew.WithWakeFailures(func(ep crew.Endpoint, err error) {
 			r.fmu.Lock()
@@ -623,5 +632,115 @@ func TestFireRingsNowOrWaitsForTheLoopsAttempt(t *testing.T) {
 	calls := r.w.count()
 	if fired, _ := r.m.Fire(r.ctx, s.Profile); fired || r.w.count() != calls {
 		t.Fatalf("a fire during the backoff rang (%d calls)", r.w.count())
+	}
+}
+
+// entry is crew.list's row for codename.
+func (r *wakeRig) entry(codename string) crew.Entry {
+	r.t.Helper()
+	es, err := r.m.List(r.ctx)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	for _, e := range es {
+		if e.Codename == codename {
+			return e
+		}
+	}
+	r.t.Fatalf("crew.list has no %s: %+v", codename, es)
+	return crew.Entry{}
+}
+
+// reachabilityChanges counts the human feed's reachability changes for session.
+func (r *wakeRig) reachabilityChanges(session string) int {
+	n := 0
+	for _, c := range r.mem.Inbox() {
+		if c.Kind == crew.ChangeReachability && c.Ref == session {
+			n++
+		}
+	}
+	return n
+}
+
+// TestAKilledAgentIsUnreachableAtOnce (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a
+// wake that finds the session's endpoint gone for certain (a killed Claude agent's socket, gone)
+// makes it unreachable at once, not after five failures: crew.list says so, and why names the
+// cause; the human feed hears of the loss once, and a later failure tells it nothing more. The
+// cause, kept in memory, goes when the session ends.
+func TestAKilledAgentIsUnreachableAtOnce(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	cw := crew.NewClaudeWaker(os.Getuid())
+	cw.SetRoots(dir)
+	r := newWakeRigWith(t, "run1", map[string]crew.Waker{"claude": cw})
+	reg, err := r.m.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: r.epoch, Codename: "gold",
+		Kind: "claude", Workspace: "w", Instance: "i-gold", Secret: strings.Repeat("s", 40)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	self, err := crew.ProcRef(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := claudeEndpoint(t, filepath.Join(dir, "gone.sock"), os.Getpid(), self) // the agent was killed: no socket
+	ep.Session = reg.Session
+	r.write(func(tx crew.Tx) error {
+		if err := tx.PutEndpoint(ep); err != nil {
+			return err
+		}
+		return r.m.RaisePending(tx, reg.Profile)
+	})
+	if e := r.entry("gold"); !e.Reachable || e.Why != "" {
+		t.Fatalf("before any wake: %+v, want reachable, no why", e)
+	}
+	r.look()
+	w := r.wake(reg.Session)
+	if w.Failures != 5 {
+		t.Fatalf("after one wake to a gone socket: %d failures, want 5 (unreachable at once)", w.Failures)
+	}
+	e := r.entry("gold")
+	if e.Reachable || !strings.HasPrefix(e.Why, crew.WhyWakesFailing+": ") || !strings.Contains(e.Why, "dialing claude's inbox socket") {
+		t.Fatalf("after one wake to a gone socket: %+v, want unreachable, why naming the dial", e)
+	}
+	if n := r.reachabilityChanges(reg.Session); n != 1 {
+		t.Fatalf("%d reachability changes told, want the loss once", n)
+	}
+	r.clock.Advance(time.Hour)
+	r.look()
+	if w := r.wake(reg.Session); w.Failures != 6 || r.reachabilityChanges(reg.Session) != 1 {
+		t.Fatalf("a later failure: %d failures, %d changes; want 6 and the loss told once", w.Failures, r.reachabilityChanges(reg.Session))
+	}
+	// the session ends: its cause goes with it
+	if err := r.m.Exit(r.ctx, "autodoc:w", "host", r.epoch, reg.Session, crew.EndedExit); err != nil {
+		t.Fatal(err)
+	}
+	if n := crew.KeptCauses(r.m); n != 0 {
+		t.Fatalf("%d causes kept after the session ended, want none", n)
+	}
+}
+
+// TestATimeoutCountsTowardFive: a failure that may pass (a dial cut off by its deadline) counts once
+// and backs off: still reachable, why saying when the next try is; the fifth makes the session
+// unreachable, why naming that failure.
+func TestATimeoutCountsTowardFive(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.w.answer = fmt.Errorf("crew: dialing the socket: %v", context.DeadlineExceeded)
+	r.look()
+	w := r.wake(s.Session)
+	e := r.entry("gold")
+	if w.Failures != 1 || !e.Reachable || e.Why != crew.WhyBackoffUntil+" "+time.Unix(0, *w.NextAt).UTC().Format(time.RFC3339) {
+		t.Fatalf("after one timeout: %d failures, %+v; want 1, reachable, backing off", w.Failures, e)
+	}
+	for i := 2; i <= 5; i++ {
+		r.clock.Advance(time.Hour)
+		r.look()
+	}
+	w, e = r.wake(s.Session), r.entry("gold")
+	if w.Failures != 5 || e.Reachable || e.Why != crew.WhyWakesFailing+": crew: dialing the socket: "+context.DeadlineExceeded.Error() {
+		t.Fatalf("after five timeouts: %d failures, %+v; want 5, unreachable, why naming the timeout", w.Failures, e)
 	}
 }

@@ -63,8 +63,9 @@ func claudeEndpoint(t *testing.T, socket string, pid int, start string) crew.End
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a wake writes the one notice line to a
 // socket whose other end is the registered process, and to nothing else. Another process at the
 // socket, a pid now held by a later process, a socket gone, one outside Claude's folders, or a
-// deadline already passed fails the wake with nothing written; only a write cut off by the deadline
-// would be unknown.
+// deadline already passed fails the wake with nothing written; the first three for certain (gone:
+// no one will ever answer there), the others as a failure that may pass. Only a write cut off by the
+// deadline would be unknown.
 func TestTheClaudeWakerBindsToTheSessionsProcess(t *testing.T) {
 	ctx := context.Background()
 	dir, sock, got := inboxSocket(t)
@@ -93,8 +94,8 @@ func TestTheClaudeWakerBindsToTheSessionsProcess(t *testing.T) {
 	}
 	for name, ep := range refused {
 		err := w.Wake(ctx, ep, crew.WakeNotice)
-		if err == nil || crew.Classify(err) != crew.OutcomeFailed {
-			t.Errorf("%s: %v (%v), want a failed wake", name, err, crew.Classify(err))
+		if err == nil || crew.Classify(err) != crew.OutcomeGone {
+			t.Errorf("%s: %v (%v), want a wake failed as gone: the session's process is not there", name, err, crew.Classify(err))
 		}
 		if line := <-got; line != "" {
 			t.Errorf("%s: the socket read %q, want nothing", name, line)
@@ -108,18 +109,28 @@ func TestTheClaudeWakerBindsToTheSessionsProcess(t *testing.T) {
 	defer os.RemoveAll(other)
 	past, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
 	defer cancel()
+	// a socket file left with nothing listening, as a killed process leaves it
+	stale := filepath.Join(dir, "3.sock")
+	if l, err := net.Listen("unix", stale); err != nil {
+		t.Fatal(err)
+	} else {
+		l.(*net.UnixListener).SetUnlinkOnClose(false)
+		l.Close()
+	}
 	unsent := map[string]struct {
-		ctx context.Context
-		ep  crew.Endpoint
+		ctx  context.Context
+		ep   crew.Endpoint
+		want crew.Outcome
 	}{
-		"a socket gone":                {ctx, claudeEndpoint(t, filepath.Join(dir, "2.sock"), os.Getpid(), self)},
-		"a socket outside the folders": {ctx, claudeEndpoint(t, filepath.Join(other, "1.sock"), os.Getpid(), self)},
-		"a deadline already passed":    {past, claudeEndpoint(t, sock, os.Getpid(), self)},
+		"a socket gone":                {ctx, claudeEndpoint(t, filepath.Join(dir, "2.sock"), os.Getpid(), self), crew.OutcomeGone},
+		"a socket nothing listens on":  {ctx, claudeEndpoint(t, stale, os.Getpid(), self), crew.OutcomeGone},
+		"a socket outside the folders": {ctx, claudeEndpoint(t, filepath.Join(other, "1.sock"), os.Getpid(), self), crew.OutcomeFailed},
+		"a deadline already passed":    {past, claudeEndpoint(t, sock, os.Getpid(), self), crew.OutcomeFailed},
 	}
 	for name, c := range unsent {
 		err := w.Wake(c.ctx, c.ep, crew.WakeNotice)
-		if err == nil || crew.Classify(err) != crew.OutcomeFailed {
-			t.Errorf("%s: %v (%v), want a failed wake: nothing was sent", name, err, crew.Classify(err))
+		if err == nil || crew.Classify(err) != c.want {
+			t.Errorf("%s: %v (%v), want %v: nothing was sent", name, err, crew.Classify(err), c.want)
 		}
 	}
 	if !errors.Is(w.Wake(ctx, unsent["a socket outside the folders"].ep, crew.WakeNotice), crew.ErrBadEndpoint) {
