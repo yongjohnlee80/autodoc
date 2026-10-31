@@ -72,6 +72,7 @@ type crewHost struct {
 // (docs/decisions/crew.md#sessions-and-the-guard).
 type crewRegistration struct {
 	codename, kind string
+	prompts        bool // the CLI's settings report its permission prompts (crew.register's prompts)
 	workspace      int64
 	instance       string
 	secret         string // until the context is written, or the registration is dropped
@@ -335,7 +336,7 @@ func newSecret() string {
 // codename's next start (or by settle, which ends it); one the daemon refused is dropped. A lost
 // one with other arguments (its profile edited since) is ended first. workspace is the workspace's
 // id in the store; instance the host's spawn id.
-func (h *crewHost) register(codename, kind string, workspace int64, instance, dir string, then func(crewSession, error)) {
+func (h *crewHost) register(codename, kind string, prompts bool, workspace int64, instance, dir string, then func(crewSession, error)) {
 	scope, epoch, ok := h.held()
 	if !ok {
 		then(crewSession{}, errNoCrewScope)
@@ -351,13 +352,13 @@ func (h *crewHost) register(codename, kind string, workspace int64, instance, di
 		delete(h.pending, codename) // the claim that changed the epoch ended its session; another store has none
 		r = nil
 	}
-	if r != nil && (r.kind != kind || r.workspace != workspace) {
+	if r != nil && (r.kind != kind || r.prompts != prompts || r.workspace != workspace) {
 		h.resolve(r)
 		then(crewSession{}, errCrewResolving)
 		return
 	}
 	if r == nil {
-		r = &crewRegistration{codename: codename, kind: kind, workspace: workspace, instance: instance, secret: newSecret(),
+		r = &crewRegistration{codename: codename, kind: kind, prompts: prompts, workspace: workspace, instance: instance, secret: newSecret(),
 			scope: scope, epoch: epoch, store: store}
 		h.pending[codename] = r
 	}
@@ -371,7 +372,7 @@ func (h *crewHost) register(codename, kind string, workspace int64, instance, di
 
 // send is r's crew.register, off the loop.
 func (h *crewHost) send(ctx context.Context, r *crewRegistration) any {
-	v, err := h.c.Call(ctx, "crew.register", r.scope, h.run, r.epoch, r.codename, r.kind, strconv.FormatInt(r.workspace, 10), r.instance, r.secret)
+	v, err := h.c.Call(ctx, "crew.register", r.scope, h.run, r.epoch, r.codename, r.kind, strconv.FormatInt(r.workspace, 10), r.instance, r.secret, r.prompts)
 	if err != nil {
 		return err
 	}

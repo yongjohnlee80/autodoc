@@ -60,7 +60,7 @@ func TestClaudeSettingsMergeEveryHookAndKey(t *testing.T) {
 	}
 	events := map[string]string{"SessionStart": "ours-start", "UserPromptSubmit": "ours-prompt"}
 	for range 2 {
-		if err := mergeClaudeSettings(path, events, map[string]any{"crossSessionInbound": "accept"}); err != nil {
+		if err := mergeClaudeSettings(path, claudeMerge{events: events, set: map[string]any{"crossSessionInbound": "accept"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -79,6 +79,56 @@ func TestClaudeSettingsMergeEveryHookAndKey(t *testing.T) {
 		if got := strings.Count(string(b), c.text); got != c.n {
 			t.Errorf("%s %d times, want %d:\n%s", c.text, got, c.n, b)
 		}
+	}
+}
+
+// TestClaudeSettingsTakeOutAutoDocsOldHooks: a merge takes AutoDoc's hooks of an earlier write out
+// of every event before it writes the ones it writes now, so a Claude Code that no longer knows an
+// event is never left naming it: an event left with no hook goes, one with the user's hooks keeps
+// them, and an old key AutoDoc set goes unless it is set again; a key the user set otherwise stays.
+func TestClaudeSettingsTakeOutAutoDocsOldHooks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	user := `{"theme": "dark", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "mine"}]}]}}`
+	if err := os.WriteFile(path, []byte(user), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ours := []string{"ours-start", "ours-prompt"}
+	unset := map[string]any{"crossSessionInbound": "accept"}
+	full := claudeMerge{events: map[string]string{"SessionStart": "ours-start", "PermissionRequest": "ours-prompt", "Stop": "ours-prompt"},
+		set: map[string]any{"crossSessionInbound": "accept"}, ours: ours, unset: unset}
+	old := claudeMerge{events: map[string]string{"SessionStart": "ours-start"}, ours: ours, unset: unset}
+	for _, m := range []claudeMerge{full, old} {
+		if err := mergeClaudeSettings(path, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, _ := os.ReadFile(path)
+	var s map[string]any
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	hooks, _ := s["hooks"].(map[string]any)
+	if _, named := hooks["PermissionRequest"]; named || strings.Contains(string(b), "ours-prompt") {
+		t.Errorf("the old write's prompt hooks are still there:\n%s", b)
+	}
+	if strings.Count(string(b), `"mine"`) != 1 || strings.Count(string(b), `"ours-start"`) != 1 || s["theme"] != "dark" {
+		t.Errorf("the user's hook and key, or this write's hook, are not there once:\n%s", b)
+	}
+	if _, set := s["crossSessionInbound"]; set {
+		t.Errorf("crossSessionInbound outlived a write that doesn't set it:\n%s", b)
+	}
+	// a value the user chose is theirs
+	if err := os.WriteFile(path, []byte(`{"crossSessionInbound": "ask"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := mergeClaudeSettings(path, old); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `"ask"`) {
+		t.Errorf("the user's own crossSessionInbound was taken out:\n%s", b)
 	}
 }
 

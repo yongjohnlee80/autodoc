@@ -37,6 +37,10 @@ type agents struct {
 	pluginEnv func() (string, error)
 	// pluginAnswer is the process's one run of it (warmPluginEnv), on the loop
 	pluginAnswer *pluginEnvAnswer
+	// claudeAnswers are what each Claude Code program knows (warmClaude), by the word that runs it,
+	// on the loop; claudeWarned the programs a failed read was told of
+	claudeAnswers map[string]*claudeAnswer
+	claudeWarned  map[string]bool
 	// codexHere replaces registerCodex's runs of the agent's autodoc (a cell's); nil in production
 	codexHere  func(args ...string) error
 	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
@@ -293,6 +297,16 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 // NAME=value assignments and the wrappers env, exec, command, nohup and mise exec|x … --; "agent"
 // when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
 func agentKind(command string) string {
+	if name := filepath.Base(agentProgram(command)); name != "" && name != "." && name != "/" {
+		return name
+	}
+	return "agent"
+}
+
+// agentProgram is the program command's first simple command runs, as agentKind reads it: the word
+// as written (a name the shell looks up on PATH, or a path), "" when there is none. A mise exec
+// with no -- is mise itself.
+func agentProgram(command string) string {
 	w := shellWords(command)
 	for len(w) > 0 {
 		f := w[0].text
@@ -306,17 +320,14 @@ func agentKind(command string) string {
 		case filepath.Base(f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
 			i := slices.IndexFunc(w, func(x shellWord) bool { return x.text == "--" })
 			if i < 0 {
-				return "mise" // its tools run their own default program: none of them guessed
+				return f // its tools run their own default program: none of them guessed
 			}
 			w = w[i+1:]
 		default:
-			if name := filepath.Base(f); name != "" && name != "." && name != "/" {
-				return name
-			}
-			return "agent"
+			return f
 		}
 	}
-	return "agent"
+	return ""
 }
 
 // skipOptions is w past its leading options and a "--"; an option in valued takes the next word.

@@ -22,6 +22,9 @@ type Registration struct {
 	Workspace string // the workspace's id; empty when no workspace serves the agent's folder
 	Instance  string // the host's spawn id: with the epoch, the registration's idempotency key
 	Secret    string // host-generated, 32 random bytes as text; only its hash is kept
+	// Prompts is that the host wrote what reports the session's permission prompts (Claude's
+	// hooks, ClaudeHookCommands): crew.list's prompts_reported trusts a hooks reporter only then.
+	Prompts bool
 }
 
 // Registered is the session a registration made (or found again, on a replay).
@@ -32,9 +35,14 @@ type Registered struct {
 
 // argsDigest is the digest of a registration's immutable arguments: a replay must match them.
 // Each field is length-prefixed, so no two argument tuples encode alike, whatever bytes they hold.
+// Prompts joins them only when set, so a registration without it digests as one from before it.
 func argsDigest(r Registration) []byte {
 	h := sha256.New()
-	for _, f := range []string{r.Codename, r.Kind, r.Workspace} {
+	fields := []string{r.Codename, r.Kind, r.Workspace}
+	if r.Prompts {
+		fields = append(fields, "prompts")
+	}
+	for _, f := range fields {
 		_ = binary.Write(h, binary.BigEndian, uint64(len(f)))
 		h.Write([]byte(f))
 	}
@@ -140,7 +148,7 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 			return err
 		}
 		s = Session{ID: id, Profile: p.ID, Host: r.Scope, Epoch: r.Epoch, Instance: r.Instance,
-			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now}
+			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now, Prompts: r.Prompts}
 		if err := tx.PutSession(s); err != nil {
 			return err
 		}

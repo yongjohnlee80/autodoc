@@ -1211,6 +1211,10 @@
         <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
         <translation>エージェントのベルはオンです。依頼や許可の確認で鳴ります（最大で 10 秒に 1 回）。</translation>
     </message>
+    <message id="autodoc.crew.claude_prompts_unreported">
+        <source>%1's permission prompts aren't reported, so a message typed to it isn't sent with Enter: its Claude Code could not be read (%2). Name the Claude Code binary itself in the profile's command to have them reported.</source>
+        <translation>%1 の許可の確認は報告されないため、入力したメッセージは Enter で送信されません: Claude Code を読み取れませんでした (%2)。報告させるには、プロファイルのコマンドに Claude Code の実行ファイルそのものを指定してください。</translation>
+    </message>
     <message id="autodoc.crew.did_not_start">
         <source>%1 did not start: %2</source>
         <translation>%1 は起動しませんでした: %2</translation>

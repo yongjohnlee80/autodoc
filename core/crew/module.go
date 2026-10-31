@@ -60,6 +60,7 @@ type (
 		Workspace string `param:"workspace" doc:"the workspace's id; empty when no workspace serves the agent's folder"`
 		Instance  string `param:"instance" doc:"the host's spawn id"`
 		Secret    string `param:"secret" doc:"host-generated, 32+ random bytes; only its hash is kept"`
+		Prompts   bool   `param:"prompts,optional" doc:"the host wrote the hooks that report the session's permission prompts (Claude's): prompts_reported trusts them only then (protocol 41)"`
 	}
 	whoamiParams struct {
 		Credential string `param:"credential" doc:"the session context's \"<session id>.<secret>\""`
@@ -154,7 +155,7 @@ func (m *Manager) Verbs() []module.Verb {
 			CodeStaleEpoch, CodeCodenameBusy, CodeInstanceReused),
 			func(ctx context.Context, p registerParams) (Registered, error) {
 				return m.Register(ctx, Registration{Scope: p.Scope, Run: p.Run, Epoch: p.Epoch, Codename: p.Codename,
-					Kind: p.Kind, Workspace: p.Workspace, Instance: p.Instance, Secret: p.Secret})
+					Kind: p.Kind, Workspace: p.Workspace, Instance: p.Instance, Secret: p.Secret, Prompts: p.Prompts})
 			}),
 		module.Handle(host("crew.renew", "{}", "The host still holds its scope: its lease runs another 90 s.", CodeStaleEpoch),
 			func(ctx context.Context, p hostParams) (struct{}, error) {

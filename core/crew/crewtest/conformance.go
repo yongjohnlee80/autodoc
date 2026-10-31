@@ -415,6 +415,7 @@ func Run(t *testing.T, h Harness) {
 			"another codename":  func(r *crew.Registration) { r.Codename = "vision" },
 			"another kind":      func(r *crew.Registration) { r.Kind = "codex" },
 			"another workspace": func(r *crew.Registration) { r.Workspace = "ws-2" },
+			"another prompts":   func(r *crew.Registration) { r.Prompts = true },
 		} {
 			bad := r
 			change(&bad)
@@ -763,6 +764,7 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		rv, rj := reg(e, "vision", "agent-2"), reg(e, "jarvis", "agent-1")
+		rj.Prompts = true // jarvis's host wrote its prompt hooks; vision's Claude Code had none
 		vision, err := m.Register(ctx, rv)
 		if err != nil {
 			t.Fatal(err)
@@ -784,9 +786,10 @@ func Run(t *testing.T, h Harness) {
 			return l
 		}
 		want := []crew.Entry{
-			// both live Claude sessions: their hooks report their prompts, reachable or not
+			// both live Claude sessions: the hooks report the prompts of the one registered with them,
+			// reachable or not, as the store kept it; the other's are never assumed reported
 			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true},
-			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: true},
+			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false},
 		}
 		if got := list(); !slices.Equal(got, want) {
 			t.Fatalf("list: %+v\nwant %+v", got, want)
