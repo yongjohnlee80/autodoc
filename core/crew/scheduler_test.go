@@ -665,8 +665,9 @@ func (r *wakeRig) reachabilityChanges(session string) int {
 // TestAKilledAgentIsUnreachableAtOnce (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a
 // wake that finds the session's endpoint gone for certain (a killed Claude agent's socket, gone)
 // makes it unreachable at once, not after five failures: crew.list says so, and why names the
-// cause; the human feed hears of the loss once, and a later failure tells it nothing more. The
-// cause, kept in memory, goes when the session ends.
+// cause; the human feed hears of the loss once, and a later failure tells it nothing more. A new
+// endpoint (the agent restarted) makes it reachable again, which the feed hears too. The cause,
+// kept in memory, goes when the session ends.
 func TestAKilledAgentIsUnreachableAtOnce(t *testing.T) {
 	dir, err := os.MkdirTemp("", "cc")
 	if err != nil {
@@ -712,6 +713,15 @@ func TestAKilledAgentIsUnreachableAtOnce(t *testing.T) {
 	r.look()
 	if w := r.wake(reg.Session); w.Failures != 6 || r.reachabilityChanges(reg.Session) != 1 {
 		t.Fatalf("a later failure: %d failures, %d changes; want 6 and the loss told once", w.Failures, r.reachabilityChanges(reg.Session))
+	}
+	// the restarted agent registers its endpoint again: reachable, no why, and the feed hears it
+	loc := fmt.Sprintf(`{"socket":"/tmp/cc-socks-%d/new.sock","pid":%d,"start":%q,"session":"c-2"}`, os.Getuid(), os.Getpid(), self)
+	if _, err := r.m.SetEndpoint(r.ctx, crew.Credential(reg.Session, strings.Repeat("s", 40)), "claude", loc); err != nil {
+		t.Fatal(err)
+	}
+	if e := r.entry("gold"); !e.Reachable || e.Why != "" || r.reachabilityChanges(reg.Session) != 2 {
+		t.Fatalf("after a new endpoint: %+v, %d reachability changes; want reachable, no why, the return told",
+			e, r.reachabilityChanges(reg.Session))
 	}
 	// the session ends: its cause goes with it
 	if err := r.m.Exit(r.ctx, "autodoc:w", "host", r.epoch, reg.Session, crew.EndedExit); err != nil {
