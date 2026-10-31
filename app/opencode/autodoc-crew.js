@@ -3,10 +3,14 @@
 // $OPENCODE_CONFIG_CONTENT; it writes nothing into the project. In the agent's own opencode process
 // it:
 //   - registers the session it chats in with AutoDoc (`autodoc crew endpoint --opencode <session>`),
-//     at its first message and at each new top-level session (a subagent's is not one);
+//     at each new top-level session it chats in (a subagent's is not one); a fresh opencode, one not
+//     started to resume a session, has none until its first message, so the plugin makes one at load,
+//     shows it in the TUI and registers it, and the agent is reachable before anyone types;
+//   - raises the session's attention in AutoDoc when a registration fails, so the window shows why
+//     the agent can't be woken;
 //   - listens on a unix socket, named by its pid, in a folder of its own that no one else can reach;
-//     asked to wake its session, it starts a turn with the fixed notice below (promptAsync: a busy
-//     session takes it in at its next step), and answers one line.
+//     asked to wake its session, it shows it in the TUI and starts a turn with the fixed notice below
+//     (promptAsync: a busy session takes it in at its next step), and answers one line.
 // It never wakes with text it is sent, nor for any session but its own: any process of the user can
 // connect, and the worst it can do is a spurious "mail is waiting". It does nothing outside an
 // AutoDoc crew session ($AUTODOC_CREW_CONTEXT), nor in an opencode started under one that does
@@ -53,6 +57,15 @@ const aborted = (signal) =>
     if (signal.aborted) return reject(new Error("aborted"));
     signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
   });
+
+// RESUMES are opencode's flags that start it on a session it already has: that one is the agent's, and
+// the plugin makes none at load.
+const RESUMES = new Set(["-c", "--continue", "-s", "--session", "--fork"]);
+const resumed = (argv) => argv.some((a) => RESUMES.has(a.split("=")[0]));
+
+// SHOW_AT are the waits before each ask that the TUI show the session made at load: the TUI may not
+// listen yet when the plugin loads, and an ask it misses is lost.
+const SHOW_AT = [0, 500, 1000, 2000, 4000];
 
 export const AutodocCrew = async ({ client }, options = {}) => {
   if (!process.env.AUTODOC_CREW_CONTEXT) return {};
@@ -111,6 +124,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
           return reply(s, { ok: false, refused: "the request is not JSON" });
         }
         if (!session || req?.session !== session) return reply(s, { ok: false, refused: "not this plugin's session" });
+        show(session); // the turn the notice starts is the one the user sees
         client.session
           .promptAsync({ path: { id: session }, body: { parts: [{ type: "text", text: NOTICE }] } })
           .then(
@@ -128,6 +142,34 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     } catch {}
   };
   process.on("exit", remove);
+  // show asks opencode's TUI to show session id: POST /tui/select-session on the plugin's own client,
+  // the TUI's server being reachable only through it (this client has no method for the route).
+  // Without the route the session is still woken; it shows once the user opens it.
+  const show = (id) => {
+    const http = client._client;
+    if (typeof http?.post !== "function") return Promise.resolve(false);
+    return Promise.resolve()
+      .then(() => http.post({ url: "/tui/select-session", body: { sessionID: id }, headers: { "content-type": "application/json" } }))
+      .then((r) => !r?.error && r?.data === true, () => false);
+  };
+  // attention tells AutoDoc's window that this session can't be woken, and why (`autodoc crew
+  // attention raise blocked`), bounded as a registration is; its own failure is only logged.
+  const attention = (why) => {
+    let p;
+    try {
+      p = Bun.spawn(["autodoc", "crew", "attention", "raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`], {
+        env: process.env,
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+    } catch (e) {
+      log("warn", `raising the session's attention failed: ${String(e).slice(0, 300)}`);
+      return;
+    }
+    const timer = setTimeout(() => p.kill(), registerMs);
+    p.exited.finally(() => clearTimeout(timer)).catch(() => {});
+  };
   // attempt registers id, within registerMs: "ok", "child" (a subagent's session, never the
   // agent's), or "failed". The child it starts is its own: killed at the bound or on dispose, and
   // waited for, so none outlives the attempt.
@@ -154,14 +196,20 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       if (ac.signal.aborted) p.kill();
       const [why, code] = await Promise.all([new Response(p.stderr).text().catch(() => ""), p.exited]);
       if (code === 0 && !ac.signal.aborted) return "ok";
-      log("warn", `registering the session with AutoDoc failed: ${ac.signal.aborted ? "no answer in time" : why.trim().slice(0, 300)}`);
+      if (disposed) return "failed";
+      const reason = ac.signal.aborted ? "no answer in time" : why.trim().slice(0, 300);
+      log("warn", `registering the session with AutoDoc failed: ${reason}`);
+      attention(`registering it failed: ${reason}`);
       return "failed";
     } catch (e) {
       if (p) {
         p.kill();
         await p.exited.catch(() => {});
       }
-      log("warn", `registering the session with AutoDoc failed: ${ac.signal.aborted ? "no answer in time" : String(e).slice(0, 300)}`);
+      if (disposed) return "failed";
+      const reason = ac.signal.aborted ? "no answer in time" : String(e).slice(0, 300);
+      log("warn", `registering the session with AutoDoc failed: ${reason}`);
+      attention(`registering it failed: ${reason}`);
       return "failed";
     } finally {
       clearTimeout(timer);
@@ -187,6 +235,30 @@ export const AutodocCrew = async ({ client }, options = {}) => {
           worker = null;
         });
   };
+  // prepare makes the agent reachable before anyone types: a fresh opencode has no session until its
+  // first message, so the plugin makes one, wants it registered, and asks the TUI to show it, so the
+  // user's own first message lands in it too and no empty session is left. A session the agent chats
+  // in first is its own: the one made is then left alone.
+  const prepare = async () => {
+    try {
+      const made = await client.session.create({ body: {} });
+      const id = made?.data?.id;
+      if (!id) {
+        log("warn", "making a session at load failed: AutoDoc can wake this agent once it has a message");
+        return;
+      }
+      if (disposed || desired) return;
+      want(id);
+      for (const ms of SHOW_AT) {
+        await Bun.sleep(ms);
+        if (disposed || desired !== id) return;
+        await show(id);
+      }
+    } catch (e) {
+      log("warn", `making a session at load failed: ${String(e).slice(0, 300)}`);
+    }
+  };
+  if (options.prepare !== false && !resumed(process.argv)) prepare();
   return {
     "chat.message": async (input) => {
       const id = input.sessionID;
