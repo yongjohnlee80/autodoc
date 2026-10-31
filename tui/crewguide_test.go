@@ -33,6 +33,9 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 			a.pluginEnv = func() (string, error) { return `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`, nil }
 			p, _ := a.profile(codename)
 			instance, err := a.startInstance(p)
+			if err == nil {
+				awaitStart(t, c, instance)
+			}
 			if err != nil || !instance.running {
 				t.Fatalf("start: %v", err)
 			}
@@ -89,6 +92,7 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	awaitStart(t, c, instance)
 	args, _, err := startedEnv(a, c, instance)
 	if err != nil || !slices.Contains(args, env) || calls != 1 {
 		t.Fatalf("the OpenCode agent's start: %v, plugin setups %d, args %v", err, calls, args)
@@ -158,6 +162,7 @@ func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(release)
+	awaitStart(t, c, instance)
 	for range 2 {
 		if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) {
 			t.Fatalf("an OpenCode spawn: %v, args %v", err, args)
@@ -188,5 +193,56 @@ func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
 	}
 	if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) || fails.Load() != 2 {
 		t.Fatalf("after a failure: %v, args %v, %d runs", err, args, fails.Load())
+	}
+}
+
+// TestAnOpenCodeStartContinuesOnThePluginsAnswer: a crew OpenCode agent whose registration is
+// answered while the plugin's env is still on its way is not started, and no timer is set to look
+// again: the start continues when the env's answer posts, never waiting on the loop, and takes
+// that answer.
+func TestAnOpenCodeStartContinuesOnThePluginsAnswer(t *testing.T) {
+	const env = `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`
+	a, c, _ := crewAgents(t, crewKinds)
+	release := make(chan struct{})
+	a.pluginEnv = func() (string, error) { <-release; return env, nil }
+	p, _ := a.profile("opencode-one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if instance.running || !instance.starting || len(c.afters) != 0 {
+		t.Fatalf("before the env's answer: running %v, starting %v, %d waits; want it starting, and no timer",
+			instance.running, instance.starting, len(c.afters))
+	}
+	close(release)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+		c.postMu.Lock()
+		n := len(c.posts)
+		c.postMu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the env's answer posted nothing to the loop")
+		}
+	}
+	c.drainPosts()
+	if !instance.running || instance.starting || len(c.afters) != 0 {
+		t.Fatalf("after the env's answer: running %v, starting %v, %d waits; want it running", instance.running, instance.starting, len(c.afters))
+	}
+	if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) {
+		t.Fatalf("the spawn: %v, args %v; want the env's answer", err, args)
+	}
+}
+
+// awaitStart runs what the loop is posted until instance's crew start is answered: an OpenCode
+// start continues when the plugin's env answers (whenStartable), which posts from off the loop.
+func awaitStart(t *testing.T, c *identityHost, instance *agentInstance) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); instance.starting; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the agent's start was never answered")
+		}
+		c.drainPosts()
 	}
 }
