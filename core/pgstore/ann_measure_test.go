@@ -159,3 +159,61 @@ func distancesOf(t *testing.T, st *Store, docs []int64, q []float32) []string {
 	}
 	return out
 }
+
+// TestANN_BudgetSweep measures, at AUTODOC_ANN_MEASURE embeddings, each hnsw.max_scan_tuples in
+// AUTODOC_ANN_BUDGETS (e.g. "40000 20000 10000 5000"): exact against ann p50 and p99, recall and
+// the fallback rate over 50 queries, unfiltered and under a 10% and a 1% tag filter, at n=10. It is
+// the evidence the budget's default stands on, and runs only when both variables are set.
+func TestANN_BudgetSweep(t *testing.T) {
+	size, _ := strconv.Atoi(os.Getenv("AUTODOC_ANN_MEASURE"))
+	budgets := strings.Fields(os.Getenv("AUTODOC_ANN_BUDGETS"))
+	if size <= 0 || len(budgets) == 0 {
+		t.Skip("AUTODOC_ANN_MEASURE and AUTODOC_ANN_BUDGETS are not set: the sweep is a separate run")
+	}
+	cfg := DefaultANNConfig()
+	conn, build := annSetup(t, cfg)
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, size, annDims, 0.5)
+	buildFor(t, build, model)
+	exact, _ := New(conn, "t")
+	qs := queryVecs(t, conn, "t", model, 50)
+	shapes := []struct {
+		name string
+		f    search.Filter
+	}{{"unfiltered", search.Filter{}}, {"tag 10%", search.Filter{Tags: []string{"tenth"}}}, {"tag 1%", search.Filter{Tags: []string{"rare"}}}}
+	// the exact answers and their times, once per shape
+	type ex struct {
+		want [][]int64
+		took []time.Duration
+	}
+	exacts := make([]ex, len(shapes))
+	for i, sh := range shapes {
+		for _, q := range qs {
+			s := time.Now()
+			exacts[i].want = append(exacts[i].want, docsOf(semantic(t, exact, model, q, sh.f, 10)))
+			exacts[i].took = append(exacts[i].took, time.Since(s))
+		}
+	}
+	for _, bs := range budgets {
+		b, _ := strconv.Atoi(bs)
+		c := cfg
+		c.MaxScanTuples = b
+		a := NewANN(conn, c, "budget")
+		approx, _ := New(conn, "t", WithANN(a))
+		for i, sh := range shapes {
+			var took []time.Duration
+			sum := 0.0
+			before := a.underfillOf(model).Load()
+			for j, q := range qs {
+				s := time.Now()
+				got := docsOf(semantic(t, approx, model, q, sh.f, 10))
+				took = append(took, time.Since(s))
+				sum += recall(got, exacts[i].want[j])
+			}
+			ep, ap := pct(exacts[i].took, 50), pct(took, 50)
+			t.Logf("budget %d, %s, n=10: exact p50 %s p99 %s; ann p50 %s p99 %s (%.2f× exact); recall %.4f; fallback %d/%d",
+				b, sh.name, ep, pct(exacts[i].took, 99), ap, pct(took, 99), float64(ap)/float64(ep), sum/float64(len(qs)),
+				a.underfillOf(model).Load()-before, len(qs))
+		}
+	}
+}
