@@ -35,6 +35,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	if err := a.HandTask(AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
+	c.drainPosts()
 	c.fireAfters()
 	if len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("done heard %v, want one nil", heard)
@@ -64,6 +65,7 @@ func TestADoorbellThatDoesntFireIsTypedAndSent(t *testing.T) {
 			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 				t.Fatal(err)
 			}
+			c.drainPosts() // the delivery the fallback posted
 			if len(c.panel.pastes) != 1 || !strings.Contains(c.panel.pastes[0], "hello one") {
 				t.Fatalf("pasted %q, want the text once", c.panel.pastes)
 			}
@@ -93,6 +95,7 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(error) {}); err != nil {
 		t.Fatal(err)
 	}
+	c.drainPosts()
 	c.fireAfters()
 	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 {
 		t.Fatalf("pasted %q, pressed %q: want typed, no Enter", c.panel.pastes, c.panel.keys)
