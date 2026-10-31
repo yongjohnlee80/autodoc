@@ -166,3 +166,42 @@ func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 		t.Errorf("notices %v: its Claude Code was read", c.notes)
 	}
 }
+
+// TestTheFormSaysEachEnvRefusalInItsLanguage: each reason the form's env field is refused is said
+// in the catalog's words, naming the word (envRefusal): a word that isn't NAME=value, AutoDoc's own
+// key, and a key set twice; an error of another kind is said as it is.
+func TestTheFormSaysEachEnvRefusalInItsLanguage(t *testing.T) {
+	a, c := modelAgents(t)
+	for text, want := range map[string]string{
+		"FOO":             "not saved: FOO is not NAME=value",
+		"AUTODOC_ROOT=/x": "not saved: AUTODOC_ROOT is AutoDoc's own variable",
+		"A=1 A=2":         "not saved: A is set twice",
+	} {
+		before := a.profiles()
+		a.saveAgentProfileWithEnv("Three", "three", "three", text)
+		if why, _ := c.state["App.agentFormError"].(string); why != want {
+			t.Errorf("%q: the form says %q, want %q", text, why, want)
+		}
+		if !slices.EqualFunc(a.profiles(), before, agentProfile.same) {
+			t.Errorf("%q: a refused env was saved: %+v", text, a.profiles())
+		}
+	}
+	if got := a.envRefusal(errors.New("a reason of another kind")); got != "a reason of another kind" {
+		t.Errorf("another error: %q, want it as it is", got)
+	}
+}
+
+// TestASaveNamingNoEnvOfANewProfileHasNone: App.saveAgentProfile with no profile being edited saves
+// a new profile with no env; removing a row that isn't there asks nothing.
+func TestASaveNamingNoEnvOfANewProfileHasNone(t *testing.T) {
+	a, c := modelAgents(t)
+	a.saveAgentProfile("Three", "three", "three")
+	if p, ok := a.profile("three"); !ok || p.Env != nil {
+		t.Fatalf("a new profile saved with no env named: %+v %v, want saved with none", p, ok)
+	}
+	asked := len(c.questions)
+	a.removeAgent(len(a.profiles()) + 5)
+	if len(c.questions) != asked {
+		t.Errorf("removing a row that isn't there asked %v", c.questions[asked:])
+	}
+}
