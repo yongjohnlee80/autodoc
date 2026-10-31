@@ -514,3 +514,106 @@ func TestTheBridgeReportsTheAgentsPermissionPrompts(t *testing.T) {
 		t.Fatalf("two failed reads in a row logged %d times, want once:\n%s", n, log.String())
 	}
 }
+
+// launchTurn gives f a launch turn the cell plays: the running look answers turns[i] at its i-th
+// call (the last for every call after), each recorded in f.calls as "turn", before or after the
+// registration; sleep advances a fake clock by its d and records "sleep"; turnBound is bound.
+func (f *fakeBridge) launchTurn(bound time.Duration, turns ...any) {
+	now := time.Unix(1_800_000_000, 0)
+	n := 0
+	f.turnEvery, f.turnBound = 2*time.Second, bound
+	f.now = func() time.Time { f.mu.Lock(); defer f.mu.Unlock(); return now }
+	f.sleep = func(_ context.Context, d time.Duration) bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.calls = append(f.calls, "sleep")
+		now = now.Add(d)
+		return true
+	}
+	f.running = func(context.Context) (bool, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.calls = append(f.calls, "turn")
+		v := turns[min(n, len(turns)-1)]
+		n++
+		if err, ok := v.(error); ok {
+			return false, err
+		}
+		return v.(bool), nil
+	}
+}
+
+// before is the calls f made before its first call of method.
+func (f *fakeBridge) before(method string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	i := slices.Index(f.calls, method)
+	if i < 0 {
+		return slices.Clone(f.calls)
+	}
+	return slices.Clone(f.calls[:i])
+}
+
+// TestTheBridgesFirstRegistrationWaitsForTheLaunchTurn
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a bridge started inside the agent's launch
+// turn registers only once that turn has ended, so the first wake starts a turn of its own, where
+// agy has given the agent its MCP tools; a turn already ended registers at once.
+func TestTheBridgesFirstRegistrationWaitsForTheLaunchTurn(t *testing.T) {
+	t.Parallel()
+	f := newFakeBridge()
+	f.launchTurn(2*time.Minute, true, true, true, false)
+	if err := runFor(t, f, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := f.before("crew.endpoint"), []string{"turn", "sleep", "turn", "sleep", "turn", "sleep", "turn"}; !slices.Equal(got, want) {
+		t.Fatalf("before the registration: %v, want the running turn looked at until it ended, %v", got, want)
+	}
+	if f.count("crew.endpoint") != 1 {
+		t.Fatalf("%d registrations, want one once the turn ended", f.count("crew.endpoint"))
+	}
+	ended := newFakeBridge()
+	ended.launchTurn(2*time.Minute, false)
+	if err := runFor(t, ended, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := ended.before("crew.endpoint"); !slices.Equal(got, []string{"turn"}) || ended.count("crew.endpoint") != 1 {
+		t.Fatalf("a launch turn already ended: %v before the registration, want one look and no wait", got)
+	}
+}
+
+// TestTheBridgeRegistersAnywayAtItsBound: a launch turn that never ends, or a running state the
+// bridge can't read, never keeps mail from the agent: at turnBound it registers anyway, and an
+// unreadable state registers at once. Only the first registration waits: a new daemon is registered
+// with at its look, whatever the turn.
+func TestTheBridgeRegistersAnywayAtItsBound(t *testing.T) {
+	t.Parallel()
+	f := newFakeBridge()
+	f.launchTurn(10*time.Second, true)
+	if err := runFor(t, f, 2, func(i int) {
+		if i == 0 {
+			f.mu.Lock()
+			f.inst = "instance-2" // the daemon restarted
+			f.mu.Unlock()
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := f.before("crew.endpoint")
+	if n := strings.Count(strings.Join(before, " "), "sleep"); n != 5 {
+		t.Fatalf("before the registration: %v; want it to wait out its 10 s bound (5 looks of 2 s), then register", before)
+	}
+	if n := f.count("crew.endpoint"); n != 2 {
+		t.Fatalf("%d registrations; want the first at the bound, and the new daemon's at its look", n)
+	}
+	if n := f.count("turn"); n != 6 {
+		t.Fatalf("%d looks at the turn; want the first registration's alone (a re-registration doesn't wait)", n)
+	}
+	broken := newFakeBridge()
+	broken.launchTurn(2*time.Minute, errors.New("the language server said 500"))
+	if err := runFor(t, broken, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := broken.before("crew.endpoint"); !slices.Equal(got, []string{"turn"}) {
+		t.Fatalf("an unreadable turn: %v before the registration, want it registered at once", got)
+	}
+}
