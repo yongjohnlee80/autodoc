@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // TestCrewClaudeSettingsPrintOnlyWhatTheClaudeKnows: `autodoc crew claude-settings --claude P`
@@ -99,7 +101,7 @@ func TestCrewFilesGoInTheConfigsDataFolder(t *testing.T) {
 	claude := writeFile(filepath.Join(t.TempDir(), "claude"), `"SessionStart" "crossSessionInbound" `, 0o755)
 	inXDG := func() []string {
 		var found []string
-		for _, f := range []string{filepath.Join(xdg, "autodoc", "opencode", opencodePluginName), filepath.Join(xdg, "autodoc", "claude-hooks.json")} {
+		for _, f := range []string{filepath.Join(xdg, "autodoc", "opencode", crew.OpenCodePluginName), filepath.Join(xdg, "autodoc", "claude-hooks.json")} {
 			if _, err := os.Stat(f); err == nil {
 				found = append(found, f)
 			}
@@ -115,7 +117,7 @@ func TestCrewFilesGoInTheConfigsDataFolder(t *testing.T) {
 	other := t.TempDir()
 	cfg := writeFile(filepath.Join(t.TempDir(), "other.toml"), "[server]\ndata_dir = \""+other+"\"\n", 0o600)
 	for _, flagForm := range [][]string{{"--config", cfg}, {"--config=" + cfg}} {
-		if code, out, errOut := crewRun(append(flagForm, "crew", "plugin", "--opencode")...); code != 0 || out != filepath.Join(other, "opencode", opencodePluginName) {
+		if code, out, errOut := crewRun(append(flagForm, "crew", "plugin", "--opencode")...); code != 0 || out != filepath.Join(other, "opencode", crew.OpenCodePluginName) {
 			t.Errorf("%v crew plugin: exit %d, %q, %s; want the plugin in --config's data_dir", flagForm, code, out, errOut)
 		}
 	}
@@ -132,7 +134,7 @@ func TestCrewFilesGoInTheConfigsDataFolder(t *testing.T) {
 	// no --config: the default config's data_dir, when it names one
 	def := t.TempDir()
 	writeFile(filepath.Join(home, "autodoc", "config.toml"), "[server]\ndata_dir = \""+def+"\"\n", 0o600)
-	if code, out, errOut := crewRun("crew", "plugin", "--opencode"); code != 0 || out != filepath.Join(def, "opencode", opencodePluginName) {
+	if code, out, errOut := crewRun("crew", "plugin", "--opencode"); code != 0 || out != filepath.Join(def, "opencode", crew.OpenCodePluginName) {
 		t.Errorf("crew plugin under the default config: exit %d, %q, %s; want its data_dir", code, out, errOut)
 	}
 

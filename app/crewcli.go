@@ -223,6 +223,15 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
+	"crew setup": {usage: "--kind K [--host window|nvim] [--program P] [--autodoc CMD] [--env K=V]…: print a crew agent's setup as JSON (argv to append, env to merge after the profile's, user-level files, prompts, notices) for a host's agent launch; the profile's env is read, never printed back",
+		example: "autodoc crew setup --kind claude --host nvim --autodoc /path/to/autodoc",
+		flags: func(fs *flag.FlagSet) {
+			fs.String("kind", "", "the agent's crew kind")
+			fs.String("host", crew.HostNvim, "nvim or window")
+			fs.String("program", "", "the CLI the agent's command runs")
+			fs.String("autodoc", "autodoc", "the command the hooks run AutoDoc with")
+			fs.Var(envFlag{}, "env", "K=V of the profile's environment (repeatable)")
+		}}, // run by crewSetupMain: it needs no session, so it is no call
 	"crew claude-settings": {usage: "[--claude PATH] [--autodoc CMD] [--prompts]: print a crew Claude agent's settings for `claude --settings`, only the hooks the installed Claude Code knows (for a host's agent launch; nothing is written), or with --prompts whether they report its permission prompts, which its crew.register says",
 		example: "autodoc crew claude-settings --claude ~/.local/bin/claude > crew-claude.json",
 		flags: func(fs *flag.FlagSet) {
@@ -471,6 +480,9 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 	}
 	if name == "crew claude-settings" {
 		return crewClaudeSettingsMain(configPath, args[2:], stdout, stderr)
+	}
+	if name == "crew setup" {
+		return crewSetupMain(configPath, args[2:], os.Environ(), stdout, stderr)
 	}
 	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
