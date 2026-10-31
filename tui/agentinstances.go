@@ -716,8 +716,10 @@ type deliverOpts struct {
 	// errDoorbellNotSent goes on to send; any other error ends it unsent, since it may have rung.
 	ring func(answer func(rang bool, err error))
 	// submit, when set, follows a send that succeeded, and the delivery finishes with its answer:
-	// the messaging base's Enter decision (agentmessaging.go).
-	submit func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error))
+	// the messaging base's Enter decision (agentmessaging.go). still checks everything again, as an
+	// attempt does (finished, the workspace, the instance, its tab's owner): what submit waits for
+	// lets any of them change, so it presses nothing unless still answers nil.
+	submit func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error))
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal
@@ -826,7 +828,25 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			a.present(panel, instance)
 		}
 		if err == nil && o.submit != nil {
-			o.submit(panel, instance.tab, finish)
+			tab := instance.tab
+			still := func() error {
+				if accepted.finished {
+					return ErrAgentStale
+				}
+				a.syncInstances()
+				if err := validate(); err != nil {
+					return err
+				}
+				now, err := a.runtime()
+				if err != nil {
+					return err
+				}
+				if !instance.running || instance.tab != tab || !instance.owner.SameOwner(now) {
+					return ErrAgentStale // another incarnation, or its tab the old parent's
+				}
+				return nil
+			}
+			o.submit(panel, tab, still, finish)
 			return
 		}
 		finish(err)
