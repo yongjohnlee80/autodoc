@@ -1427,6 +1427,18 @@
         <source>command</source>
         <translation>명령</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.env">
+        <source>environment</source>
+        <translation>환경 변수</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_not_for_secrets">
+        <source>NAME=value pairs set on the agent's process; ~ and $VAR are expanded when it starts, never by a shell. They are kept in plain text in the preferences: not for secrets. AUTODOC_* variables are AutoDoc's own.</source>
+        <translation>에이전트 프로세스에 설정되는 NAME=value 쌍입니다. ~와 $VAR는 시작할 때 펼쳐지며, 셸을 거치지 않습니다. 환경설정에 평문으로 저장되므로 비밀 정보에는 쓰지 마세요. AUTODOC_* 변수는 AutoDoc 자체의 것입니다.</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_placeholder">
+        <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
+        <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>이름</translation>
@@ -5784,6 +5796,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.edit">
         <source>edit %1</source>
         <translation>%1 편집</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_is_autodocs_own">
+        <source>%1 is AutoDoc's own variable</source>
+        <translation>%1은(는) AutoDoc 자체의 변수입니다</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_set_twice">
+        <source>%1 is set twice</source>
+        <translation>%1이(가) 두 번 설정되었습니다</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_word_is_not_name_value">
+        <source>%1 is not NAME=value</source>
+        <translation>%1은(는) NAME=value 형식이 아닙니다</translation>
     </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>

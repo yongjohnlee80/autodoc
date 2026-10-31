@@ -2,7 +2,6 @@ package tui
 
 import (
 	"errors"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -24,7 +23,18 @@ var envKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var (
 	errEnvKeyReserved = errors.New("is AutoDoc's own")
 	errEnvKeyInvalid  = errors.New("is not a variable's name")
+	errEnvKeyTwice    = errors.New("is set twice")
 )
+
+// envError is why the form's env field is refused: the word or key it names, and which of the
+// errEnvKey* it is, so the form says it in the catalog's language (envRefusal).
+type envError struct {
+	word string
+	why  error
+}
+
+func (e *envError) Error() string { return e.word + " " + e.why.Error() }
+func (e *envError) Unwrap() error { return e.why }
 
 // profileEnvKey is why key can't be in a profile's env, nil when it can.
 func profileEnvKey(key string) error {
@@ -60,13 +70,13 @@ func parseProfileEnv(text string) (map[string]string, error) {
 	for _, w := range shellWords(text) {
 		key, value, ok := strings.Cut(w.text, "=")
 		if !ok || key == "" {
-			return nil, fmt.Errorf("%q: %w", w.text, errEnvKeyInvalid)
+			return nil, &envError{w.text, errEnvKeyInvalid}
 		}
 		if err := profileEnvKey(key); err != nil {
-			return nil, fmt.Errorf("%s %w", key, err)
+			return nil, &envError{key, err}
 		}
 		if _, twice := env[key]; twice {
-			return nil, fmt.Errorf("%s is set twice", key)
+			return nil, &envError{key, errEnvKeyTwice}
 		}
 		if env == nil {
 			env = map[string]string{}

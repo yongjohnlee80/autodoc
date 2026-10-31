@@ -24,6 +24,37 @@ index.
 
 In the code: `tui/agent.go`, `tui/agentprofiles.go`, `tui/agenttabs.go`, `agents.go`
 
+## A profile's environment
+
+A profile can carry an `env` map, set on its agent's process: for example, Claude Code on another
+account is `{"name": "Sephiroth", "command": "claude", "env": {"CLAUDE_CONFIG_DIR":
+"~/.claude-work"}}`. AutoDoc starts the agent's command with `/bin/sh -c`, which reads no shell
+startup file, so a `.bashrc` alias never reaches it. A wrapper script would, but its name would
+be the agent's kind, so it would not get Claude's crew setup.
+
+- The profile's variables come before AutoDoc's own, so AutoDoc's win. A key AutoDoc sets for every
+  agent (`AUTODOC_*`), or for a crew OpenCode agent (`OPENCODE_CONFIG_CONTENT`), is refused when the
+  profile is saved, and dropped from a profile written into the preference by hand.
+- A variable the agent would not inherit from AutoDoc's own spawner (the parent Claude Code
+  session's, say) is the profile's own when the profile sets it.
+- A value's leading `~` is the home folder, and `$NAME` or `${NAME}` is AutoDoc's own variable, at
+  the spawn. Nothing else is evaluated, and no shell sees the value.
+- `PATH` is the agent's `PATH` after its own folder, so its `bin/autodoc` is still the first found.
+  The Claude Code AutoDoc reads for its hooks is looked up on that `PATH`, and Codex's
+  `crew endpoint --codex-here` runs with the profile's variables (a `CODEX_HOME` there is the one it
+  reads).
+- The kind still comes from the command's program, so `claude` with `CLAUDE_CONFIG_DIR` is a Claude
+  agent, with the `SessionStart` hook and `crossSessionInbound` written. A profile's explicit kind,
+  for a wrapper whose name says nothing, is a follow-up.
+- A changed `env` is a changed launch, as a changed command is. A stopped tab whose profile's `env`
+  changed is not started again as it was, and Restart starts a fresh one.
+- Profiles are plain text in the preferences: the form says that `env` is not for secrets.
+
+The form's field holds `NAME=value` words, quoted as a shell would quote them, and shows the
+profile's `env` back the same way.
+
+In the code: `tui/agentprofileenv.go`, `tui/agentprofiles.go`, `tui/agent.go`, `tui/agentinstances.go`
+
 ## First-run agent setup
 
 On a first run with no profile and no earlier answer, a card offers the agent CLIs it finds on

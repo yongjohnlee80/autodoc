@@ -1427,6 +1427,18 @@
         <source>command</source>
         <translation>命令</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.env">
+        <source>environment</source>
+        <translation>环境变量</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_not_for_secrets">
+        <source>NAME=value pairs set on the agent's process; ~ and $VAR are expanded when it starts, never by a shell. They are kept in plain text in the preferences: not for secrets. AUTODOC_* variables are AutoDoc's own.</source>
+        <translation>设置在智能体进程上的 NAME=value 对；~ 和 $VAR 在启动时展开，从不经过 shell。它们以明文保存在偏好设置中：不要用于机密信息。AUTODOC_* 变量属于 AutoDoc 自身。</translation>
+    </message>
+    <message id="autodoc.dialog.agentEdit.env_placeholder">
+        <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
+        <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>名称</translation>
@@ -5778,6 +5790,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.edit">
         <source>edit %1</source>
         <translation>编辑 %1</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_is_autodocs_own">
+        <source>%1 is AutoDoc's own variable</source>
+        <translation>%1 是 AutoDoc 自身的变量</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_key_set_twice">
+        <source>%1 is set twice</source>
+        <translation>%1 被设置了两次</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.env_word_is_not_name_value">
+        <source>%1 is not NAME=value</source>
+        <translation>%1 不是 NAME=value 形式</translation>
     </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
