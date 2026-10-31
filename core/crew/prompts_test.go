@@ -70,4 +70,27 @@ func TestPromptsAreReportedWhileTheirReporterIsThere(t *testing.T) {
 	if err := m.ReporterAlive(ctx, "nobody.secret"); err == nil {
 		t.Fatal("a heartbeat with no session's credential was taken")
 	}
+	// a session that ends takes its heartbeat with it, and gives no more
+	if n := crew.AliveReporters(m); n != 3 {
+		t.Fatalf("%d heartbeats held, want the three given", n)
+	}
+	if err := m.Exit(ctx, "autodoc:w", "host", epoch, sessionOf(t, creds[crew.KindAgy]), crew.EndedExit); err != nil {
+		t.Fatal(err)
+	}
+	if n := crew.AliveReporters(m); n != 2 {
+		t.Fatalf("%d heartbeats held after a session ended, want its own gone", n)
+	}
+	if err := m.ReporterAlive(ctx, creds[crew.KindAgy]); err == nil || crew.AliveReporters(m) != 2 {
+		t.Fatal("an ended session's reporter was heard")
+	}
+}
+
+// sessionOf is the session id of credential "<session>.<secret>".
+func sessionOf(t *testing.T, credential string) string {
+	t.Helper()
+	id, _, ok := strings.Cut(credential, ".")
+	if !ok {
+		t.Fatalf("credential %q", credential)
+	}
+	return id
 }

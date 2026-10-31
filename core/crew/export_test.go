@@ -23,3 +23,10 @@ func (w *CodexWaker) SetRoots(roots ...string) { w.roots = roots }
 
 // SetRoots points the OpenCode waker at a test's own socket folders.
 func (w *OpenCodeWaker) SetRoots(roots ...string) { w.roots = roots }
+
+// AliveReporters is how many sessions' prompt-reporter heartbeats m holds (ReporterAlive).
+func AliveReporters(m *Manager) int {
+	m.aliveMu.Lock()
+	defer m.aliveMu.Unlock()
+	return len(m.alive)
+}

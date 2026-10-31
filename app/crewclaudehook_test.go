@@ -14,8 +14,10 @@ import (
 // TestClaudesHooksReportItsPermissionPrompts: `crew attention --claude-hook`, run by Claude's hooks
 // with their input (as live-probed on Claude Code 2.1.280), keeps the session's permission
 // attention raised while any prompt shows, saying what the newest asks: a prompt's own PostToolUse
-// closes it, another tool's (a parallel one) doesn't; the next UserPromptSubmit (after a denial) or
-// Stop closes them all; an idle Notification changes nothing. It prints nothing and exits 0.
+// closes it, another tool's (a parallel one) doesn't, and so does its PostToolUseFailure when the
+// approved tool fails; two identical prompting calls are two to close; the next UserPromptSubmit
+// (after a denial) or Stop closes them all; an idle Notification changes nothing. It prints nothing
+// and exits 0.
 func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
 	d := newCrewDaemon(t)
 	path := d.agent("cl", "i1", "store-1")
@@ -82,6 +84,19 @@ func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
 	expect("another tool done", perm+"Claude needs your permission")
 	hook(`{"hook_event_name":"Stop"}`)
 	expect("the turn's end")
+
+	// two identical calls that both prompt are two open prompts: the first done leaves the second
+	hook(`{"hook_event_name":"PermissionRequest",` + bash + `}`)
+	hook(`{"hook_event_name":"PermissionRequest",` + bash + `}`)
+	hook(bashDone)
+	expect("one of two identical prompts done", perm+"Bash: touch probe-file")
+	hook(bashDone)
+	expect("both done")
+
+	// a tool approved that fails closes its prompt by PostToolUseFailure (it has no PostToolUse)
+	hook(`{"hook_event_name":"PermissionRequest",` + bash + `}`)
+	hook(`{"hook_event_name":"PostToolUseFailure",` + bash + `,"error":"mkdir: cannot create directory","is_interrupt":false}`)
+	expect("an approved tool that failed")
 }
 
 // TestAClaudeHookRetriesWhatTheDaemonWasntTold: a raise or a clear that failed is never taken for

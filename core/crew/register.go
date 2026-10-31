@@ -19,7 +19,7 @@ type Registration struct {
 	Epoch     int64
 	Codename  string
 	Kind      string // claude | codex | agy | opencode …
-	Workspace string // the workspace's uid
+	Workspace string // the workspace's id; empty when no workspace serves the agent's folder
 	Instance  string // the host's spawn id: with the epoch, the registration's idempotency key
 	Secret    string // host-generated, 32 random bytes as text; only its hash is kept
 }
