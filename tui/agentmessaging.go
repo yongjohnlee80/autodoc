@@ -6,17 +6,23 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // Agent messaging: how anything the user sends reaches one of the window's agents
-// (docs/decisions/crew.md#the-users-own-sends). One contract, two implementations:
+// (docs/decisions/crew.md#the-users-own-sends). One delivery (agents.deliver: the agent resolved,
+// validated, recorded until done, brought forward), and two ways through it, tried in order:
 //
-//   - textMessenger, the base: the message pasted into the agent's terminal, then Enter, so it is
-//     sent with no key pressed by the user. Every CLI takes it.
-//   - doorbellMessenger: the message mailed from `user` through the crew, the daemon ringing the
-//     agent's CLI through that kind's own waker (Claude's socket, agy's bridge, OpenCode's plugin,
-//     Codex's app-server). A doorbell that doesn't fire answers an error, and the message falls
-//     back to the base.
+//   - the doorbell (agentDoorbell): the message mailed from `user` through the crew, the daemon
+//     ringing the agent's CLI through that kind's own waker (Claude's socket, agy's bridge,
+//     OpenCode's plugin, Codex's app-server). It answers rang, or why not: errDoorbellNotSent,
+//     nothing sent, goes on to the base; any other error ends the delivery unsent, since the
+//     doorbell may have rung and the message must never arrive twice.
+//   - the base: the message as one bracketed paste into the agent's terminal, then Enter, only into
+//     an agent whose CLI reports its permission prompts (crew.ReportsPrompts) and that shows none
+//     now: an Enter into a permission prompt would approve it. Otherwise it stays typed, and done
+//     hears ErrAgentTypedNotSent.
 //
 // Every user-to-agent path sends through it: SendText (and the Lua autodoc.agents.send), HandTask
 // (a todo's assignment, a candidate's audit). None of them chooses a mechanism.
@@ -41,11 +47,25 @@ func (m AgentMessage) text() string {
 	return m.Subject + "\n" + m.Body
 }
 
-// agentMessenger delivers one AgentMessage to an agent of the window. An immediate error rejects
-// it without calling done; accepted, done is called once, on the UI loop: nil when it reached the
-// agent (rang, or typed and sent), else why it didn't.
-type agentMessenger interface {
-	send(to AgentRef, m AgentMessage, done func(error)) error
+// ErrAgentTypedNotSent is a message the base typed into the agent's input but didn't send: its CLI
+// doesn't report its permission prompts, or it shows one now. The user's Enter there sends it.
+var ErrAgentTypedNotSent = errors.New("typed into its input, not sent")
+
+// errDoorbellNotSent is a doorbell that answered, for certain, that nothing was sent: the message
+// goes on to the base.
+var errDoorbellNotSent = errors.New("the doorbell didn't ring")
+
+// agentDoorbell rings an agent through its CLI's own channel. answer is called once, on the loop:
+// rang, or why not.
+type agentDoorbell interface {
+	ring(to AgentRef, m AgentMessage, answer func(rang bool, err error))
+}
+
+// crewDoorbell is the crew's doorbell: inbox.send with fire, from the window that holds the scope.
+type crewDoorbell struct{ crew *crewHost }
+
+func (d crewDoorbell) ring(to AgentRef, m AgentMessage, answer func(rang bool, err error)) {
+	d.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) { answer(err == nil, err) })
 }
 
 // submitDelay is how long the base waits between the paste and its Enter: a program that reads the
@@ -54,14 +74,11 @@ type agentMessenger interface {
 // it after a fixed gap.
 const submitDelay = 60 * time.Millisecond
 
-// textMessenger is the base: the message as one bracketed paste into the agent's terminal, then
-// Enter. A program that takes no bracketed paste gets nothing (widget.ErrTerminalPasteUnbracketed),
-// so a message never arrives as keys a prompt could take one by one. No Enter is pressed into an
-// agent the crew says waits on a permission or blocked prompt: it would answer the prompt. The
-// message stays typed there, and a notice says so. An agent with no crew session reports no prompt.
-type textMessenger struct{ a *agents }
-
-func (t textMessenger) send(to AgentRef, m AgentMessage, done func(error)) error {
+// sendMessage delivers m to the agent to through the window's one delivery: its doorbell first when
+// the window has one, else the base. An immediate error rejects it without calling done; accepted,
+// done is called once on the UI loop: nil when it reached the agent (rang, or typed and sent),
+// ErrAgentTypedNotSent when it was typed but left for the user's Enter, else why it didn't.
+func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) error {
 	text := m.text()
 	check := func() error {
 		if text == "" || len(text) > widget.TerminalInputLimit {
@@ -69,79 +86,70 @@ func (t textMessenger) send(to AgentRef, m AgentMessage, done func(error)) error
 		}
 		return nil
 	}
-	what := t.a.c.Tr("autodoc.text.agentinstances.this_text")
+	what := a.c.Tr("autodoc.text.agentinstances.this_text")
 	if m.Kind == MessageRequest {
-		what = t.a.c.Tr("autodoc.text.agentinstances.this_task")
+		what = a.c.Tr("autodoc.text.agentinstances.this_task")
 	}
-	return t.a.deliver(to, check, what, deliverOpts{present: m.Kind == MessageRequest}, func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		if err := panel.SendBracketedPaste(tab, text); err != nil {
-			return err
+	o := deliverOpts{present: m.Kind == MessageRequest, submit: a.submitter(to)}
+	if a.crew != nil {
+		var bell agentDoorbell = crewDoorbell{crew: a.crew}
+		o.ring = func(answer func(rang bool, err error)) {
+			bell.ring(to, m, func(rang bool, err error) {
+				if !rang && errors.Is(err, errDoorbellNotSent) {
+					a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, err.Error()))
+				}
+				answer(rang, err)
+			})
 		}
-		enter := func() {
-			if t.a.inbox.awaitsUser(to.Codename) { // an Enter would answer its permission or blocked prompt
-				t.a.c.Notify(t.a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt", to.Codename))
-				return
-			}
-			if err := panel.SendText(tab, "\r"); err != nil {
-				t.a.c.Notify(t.a.c.Trf("autodoc.notice.agentmessaging.typed_but_not_sent", to.Codename, err.Error()))
-			}
-		}
-		if c, ok := t.a.c.(agentRuntimeHost); ok {
-			c.After(submitDelay, enter)
-		} else {
-			enter()
-		}
-		return nil
+	}
+	return a.deliver(to, check, what, o, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendBracketedPaste(tab, text)
 	}, done)
 }
 
-// doorbellMessenger mails the message from `user` through the crew and rings the agent's CLI
-// (inbox.send: fired, or nothing sent). An agent with no session here, or a doorbell that doesn't
-// fire, falls back to next, the base, with a notice saying why.
-type doorbellMessenger struct {
-	a    *agents
-	next agentMessenger
-}
-
-func (d doorbellMessenger) send(to AgentRef, m AgentMessage, done func(error)) error {
-	if d.a.crew == nil || !d.a.crewRoutable(to) {
-		return d.next.send(to, m, done)
-	}
-	if m.text() == "" || len(m.text()) > widget.TerminalInputLimit {
-		return ErrAgentText
-	}
-	d.a.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) {
-		if err == nil {
-			done(nil)
+// submitter is the base's Enter decision for to, after its paste: Enter submitDelay later, only
+// into an agent whose CLI reports its permission prompts and that shows none then; otherwise the
+// message stays typed, a notice says why, and the delivery finishes ErrAgentTypedNotSent.
+func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID, func(error)) {
+	return func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error)) {
+		if !a.reportsPrompts(a.kindOf(to.Codename)) {
+			a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting", to.Codename))
+			finish(ErrAgentTypedNotSent)
 			return
 		}
-		why := err.Error()
-		if errors.Is(err, errCrewUnreachable) {
-			why = d.a.c.Tr("autodoc.notice.agentmessaging.no_doorbell_reaches_it")
+		enter := func() {
+			if a.inbox.awaitsUser(to.Codename) { // an Enter would answer its permission or blocked prompt
+				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt", to.Codename))
+				finish(ErrAgentTypedNotSent)
+				return
+			}
+			finish(panel.SendText(tab, "\r"))
 		}
-		d.a.c.Notify(d.a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, why))
-		if err := d.next.send(to, m, done); err != nil {
-			done(err)
+		if c, ok := a.c.(agentRuntimeHost); ok {
+			c.After(submitDelay, enter)
+			return
 		}
-	})
-	return nil
-}
-
-// crewRoutable reports whether to is an agent running in this window now, the only one a crew
-// session can answer for: a stopped or closing one, or another incarnation than to names, goes to
-// the base, which starts it with the user's consent or refuses it as before.
-func (a *agents) crewRoutable(to AgentRef) bool {
-	a.syncInstances()
-	if a.stopping {
-		return false
+		enter()
 	}
-	in := a.instances[to.Codename]
-	return in != nil && in.running && !in.closing && (to.Instance == "" || in.token == to.Instance)
 }
 
-// messenger is the window's agent messaging: the doorbell first, the base behind it.
-func (a *agents) messenger() agentMessenger {
-	return doorbellMessenger{a: a, next: textMessenger{a: a}}
+// reportsPrompts is crew.ReportsPrompts, or the cell's stand-in.
+func (a *agents) reportsPrompts(kind string) bool {
+	if a.promptsReported != nil {
+		return a.promptsReported(kind)
+	}
+	return crew.ReportsPrompts(kind)
+}
+
+// kindOf is the CLI kind of codename's agent (agentKind of its command), "" when it has none here.
+func (a *agents) kindOf(codename string) string {
+	if p, ok := a.profile(codename); ok {
+		return agentKind(p.Command)
+	}
+	if in := a.instances[codename]; in != nil {
+		return agentKind(in.profile.Command)
+	}
+	return ""
 }
 
 // taskMessage is a task as a request: its title in the subject, its file, id and the instruction

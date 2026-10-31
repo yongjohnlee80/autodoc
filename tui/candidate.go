@@ -378,7 +378,10 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 	}
 	ref := TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
 	done := func(err error) {
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
+			cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
+		case err != nil:
 			failed(err)
 		}
 	}
