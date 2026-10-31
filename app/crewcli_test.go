@@ -263,41 +263,79 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 	}
 }
 
-// TestTheGuideNamesOnlyRealCommands: every `autodoc crew|mail …` the agent guide tells a CLI to run
-// is one of the commands, with the flag it names, so an agent following it never meets "no command".
-// A command named as pending would be skipped: none is.
+// TestTheGuideNamesOnlyRealCommands: every `autodoc crew|mail …` the agent guide tells a CLI to run,
+// and every command's help example, is one of the commands, with only flags it defines, so an agent
+// following either never meets "no command" or an unknown flag.
 func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
-	pending := map[string]bool{}
-	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z]+)( --[a-z-]+)?")
+	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z]+)([^`]*)`")
+	flagRe := regexp.MustCompile(`(?:^|\s)--([a-z][a-z-]*)`)
+	check := func(where, name, rest string) {
+		t.Helper()
+		c, ok := crewCommands[name]
+		if !ok {
+			t.Errorf("%s names `autodoc %s`, which is no command", where, name)
+			return
+		}
+		fs := flag.NewFlagSet(name, flag.ContinueOnError)
+		if c.flags != nil {
+			c.flags(fs)
+		}
+		for _, f := range flagRe.FindAllStringSubmatch(rest, -1) {
+			if fs.Lookup(f[1]) == nil {
+				t.Errorf("%s names `autodoc %s … --%s`, a flag %s doesn't define", where, name, f[1], name)
+			}
+		}
+	}
 	m := crew.New(nil)
 	seen := map[string]bool{}
 	for _, kind := range []string{"claude", "codex", "agy", "opencode", "other"} {
 		for _, hit := range cmd.FindAllStringSubmatch(m.GuideFor(kind).Markdown, -1) {
-			name, withFlag := hit[1], hit[1]+hit[2]
-			seen[name] = true
-			if pending[withFlag] || pending[name] {
-				continue
+			seen[hit[1]] = true
+			check(kind+"'s guide", hit[1], hit[2])
+		}
+	}
+	for _, want := range []string{"crew whoami", "crew list", "mail receive", "mail reply", "mail ack", "mail renew", "mail send"} {
+		if !seen[want] {
+			t.Errorf("the guides never name `autodoc %s`: this check reads them wrong", want)
+		}
+	}
+	for name, c := range crewCommands {
+		hit := cmd.FindStringSubmatch("`" + c.example + "`")
+		if hit == nil || hit[1] != name {
+			t.Errorf("%s's example %q is not a line of that command", name, c.example)
+			continue
+		}
+		check(name+"'s example", name, hit[2])
+	}
+}
+
+// TestTheCrewAndMailHelpShowEveryCommandWithAnExample: `autodoc mail` and `autodoc crew`, bare or
+// with --help, -h or help, answer (stdout, exit 0) every command of that domain with its usage and
+// example, and no other domain's; a command's own --help answers its line and example.
+func TestTheCrewAndMailHelpShowEveryCommandWithAnExample(t *testing.T) {
+	for _, domain := range []string{"crew", "mail"} {
+		other := map[string]string{"crew": "mail", "mail": "crew"}[domain]
+		for _, args := range [][]string{{domain}, {domain, "--help"}, {domain, "-h"}, {domain, "help"}} {
+			var out, errOut bytes.Buffer
+			if code := crewMain(context.Background(), args, nil, &out, &errOut); code != 0 || errOut.Len() != 0 {
+				t.Fatalf("%v: exit %d, stderr %q", args, code, errOut.String())
 			}
-			c, ok := crewCommands[name]
-			if !ok {
-				t.Errorf("%s's guide names `autodoc %s`, which is no command", kind, withFlag)
-				continue
-			}
-			if f := strings.TrimPrefix(strings.TrimSpace(hit[2]), "--"); f != "" {
-				fs := flag.NewFlagSet(name, flag.ContinueOnError)
-				if c.flags != nil {
-					c.flags(fs)
+			for name, c := range crewCommands {
+				d, _, _ := strings.Cut(name, " ")
+				has := strings.Contains(out.String(), "autodoc "+name+" ") && strings.Contains(out.String(), "e.g. "+c.example+"\n")
+				if d == domain && !has {
+					t.Errorf("%v doesn't show `autodoc %s` and its example", args, name)
 				}
-				if fs.Lookup(f) == nil {
-					t.Errorf("%s's guide names `autodoc %s`, whose flag --%s %s doesn't define", kind, withFlag, f, name)
+				if d == other && strings.Contains(out.String(), "autodoc "+name+" ") {
+					t.Errorf("%v shows %s's `autodoc %s`", args, other, name)
 				}
 			}
 		}
 	}
-	for _, want := range []string{"crew whoami", "mail receive", "mail reply", "mail ack", "mail renew", "mail send"} {
-		if !seen[want] {
-			t.Errorf("the guides never name `autodoc %s`: this check reads them wrong", want)
-		}
+	var out, errOut bytes.Buffer
+	if code := crewMain(context.Background(), []string{"mail", "send", "--help"}, nil, &out, &errOut); code != 0 ||
+		!strings.Contains(out.String(), "e.g. "+crewCommands["mail send"].example) || !strings.Contains(errOut.String(), "-kind") {
+		t.Fatalf("mail send --help: exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
 	}
 }
 

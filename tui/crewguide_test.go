@@ -22,8 +22,8 @@ const crewKinds = `[{"name":"Codex","command":"codex","codename":"codex-one"},` 
 	`{"name":"Claude","command":"claude","codename":"claude-one"}]`
 
 // TestACrewAgentIsToldItsCLIsCrewProcedure: each CLI's agent's AGENTS.md and CLAUDE.md hold the crew
-// guide for its own kind (crew.GuideOf), its wake step included; an agent outside a crew scope is
-// told none of it.
+// guide for its own kind (crew.GuideOf), its wake step included, as their first section, at most 25
+// lines; an agent outside a crew scope is told none of it.
 func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 	for codename, kind := range map[string]string{"codex-one": "codex", "agy-one": "agy", "opencode-one": "opencode", "claude-one": "claude"} {
 		t.Run(kind, func(t *testing.T) {
@@ -41,8 +41,19 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !strings.Contains(string(b), "## Mail between agents") || !strings.Contains(string(b), want) {
+				g := string(b)
+				at, ws := strings.Index(g, "## Mail and your crew\n"), strings.Index(g, "## The workspace\n")
+				if at < 0 || !strings.Contains(g, want) {
 					t.Fatalf("%s's %s doesn't hold its crew procedure", kind, name)
+				}
+				// first, under the header, before anything it might read past; and short
+				if ws < 0 || at > ws {
+					t.Fatalf("%s's %s has its crew section at %d, after the workspace's at %d", kind, name, at, ws)
+				}
+				section := g[at:]
+				section = section[:strings.Index(section[3:], "\n## ")+3]
+				if n := strings.Count(section, "\n"); n > 25 {
+					t.Fatalf("%s's crew section is %d lines, at most 25", kind, n)
 				}
 			}
 		})
@@ -50,14 +61,14 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 	// each kind's wake step is its own, so the guide names the right command
 	for kind, step := range map[string]string{
 		"codex": "autodoc crew endpoint --codex-thread", "agy": "autodoc crew bridge --agy",
-		"opencode": "OpenCode's AutoDoc plugin registers on its own", "claude": "SessionStart",
+		"opencode": "OpenCode's AutoDoc plugin registers how you're woken on its own", "claude": "SessionStart",
 	} {
 		if !strings.Contains(crew.GuideOf(kind).Markdown, step) {
 			t.Errorf("%s's guide has no %q", kind, step)
 		}
 	}
 	// outside a crew scope: no crew procedure
-	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", ""); strings.Contains(g, "## Mail between agents") {
+	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", ""); strings.Contains(g, "## Mail and your crew") {
 		t.Fatal("an agent outside a crew scope is told the crew procedure")
 	}
 }

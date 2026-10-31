@@ -123,22 +123,26 @@ func parseHandle(h string) (delivery, lease string, err error) {
 // crewCommand is one `autodoc crew|mail` subcommand: its usage, and the call it makes from its
 // flags and arguments.
 type crewCommand struct {
-	usage string
-	call  func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (method string, params []any, shape func(any) any, err error)
-	flags func(fs *flag.FlagSet)
+	usage   string
+	example string // one line an agent can run as it is, or with its own id and text
+	call    func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (method string, params []any, shape func(any) any, err error)
+	flags   func(fs *flag.FlagSet)
 }
 
 // crewCommands are the subcommands, by "domain verb".
 var crewCommands = map[string]crewCommand{
 	"crew whoami": {usage: "who this session is: its codename, scope, session and store",
+		example: "autodoc crew whoami",
 		call: func(c sessionContext, _ *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "crew.whoami", []any{c.Credential, c.Store}, nil, nil
 		}},
 	"crew list": {usage: "the addressbook: every codename, its scope, presence and reachability",
+		example: "autodoc crew list",
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "crew.list", nil, nil, nil
 		}},
 	"crew endpoint": {usage: "--claude | --codex-thread ID | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --opencode: AutoDoc's OpenCode plugin runs it)",
+		example: "autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("claude", false, "this Claude Code session's inbox socket, found from the hook's input and its process")
 			fs.String("codex-thread", "", "this Codex session's thread ($CODEX_THREAD_ID), on the app-server its TUI is attached to")
@@ -190,18 +194,21 @@ var crewCommands = map[string]crewCommand{
 			return "crew.endpoint", []any{c.Credential, args[0], args[1]}, nil, nil
 		}},
 	"crew bridge": {usage: "--agy: an Antigravity session's bridge, run once from the agent's shell: it detaches, registers how the session is woken, and registers again whenever the daemon restarts",
+		example: "autodoc crew bridge --agy",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
 			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
 			fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 		}}, // run by crewBridgeMain: it stays, so it is no one call
 	"crew plugin": {usage: "--opencode [--print-env] [--dir D]: write AutoDoc's OpenCode plugin into AutoDoc's data folder and print its path, or with --print-env the OPENCODE_CONFIG_CONTENT that loads it (for a host's agent launch; nothing is written into a project)",
+		example: "autodoc crew plugin --opencode --print-env",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("opencode", false, "OpenCode's plugin")
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
 	"crew attention": {usage: "raise <permission|blocked> [text] | clear: tell the user this session waits on them, or no longer does",
+		example: "autodoc crew attention raise permission \"waiting for your OK to run the migration\"",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
 			switch {
 			case len(args) >= 2 && args[0] == "raise":
@@ -212,20 +219,25 @@ var crewCommands = map[string]crewCommand{
 			return "", nil, nil, errors.New("crew attention takes raise <permission|blocked> [text], or clear")
 		}},
 	"mail receive": {usage: "lease your next deliveries, at most 8; run it until more is false",
+		example: "autodoc mail receive",
 		call: func(c sessionContext, _ *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "mail.receive", []any{c.Credential}, withHandles, nil
 		}},
 	"mail inbox": {usage: "[--limit N]: a preview of your waiting mail; leases nothing",
-		flags: func(fs *flag.FlagSet) { fs.Int("limit", 20, "items to show, at most 1000; 0 counts only") },
+		example: "autodoc mail inbox --limit 5",
+		flags:   func(fs *flag.FlagSet) { fs.Int("limit", 20, "items to show, at most 1000; 0 counts only") },
 		call: func(c sessionContext, fs *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "mail.inbox", []any{c.Credential, int64(intFlag(fs, "limit"))}, nil, nil
 		}},
 	"mail ack": {usage: "<id>: done with a delivery",
-		call: leaseCall("mail.ack")},
+		example: "autodoc mail ack <id from mail receive>",
+		call:    leaseCall("mail.ack")},
 	"mail renew": {usage: "<id>: keep a delivery's lease 10 more minutes, for long work",
-		call: leaseCall("mail.renew")},
+		example: "autodoc mail renew <id from mail receive>",
+		call:    leaseCall("mail.renew")},
 	"mail reply": {usage: "<id> [--subject S] --body TEXT|-: answer a request (and ack it); safe to repeat",
-		flags: bodyFlags,
+		example: "autodoc mail reply <id from mail receive> --body \"Done: the tests pass.\"",
+		flags:   bodyFlags,
 		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
 			if len(args) != 1 {
 				return "", nil, nil, errors.New("mail reply takes the request's id")
@@ -243,6 +255,7 @@ var crewCommands = map[string]crewCommand{
 			return "mail.reply", []any{c.Credential, d, l, body, "reply:" + d, strFlag(fs, "subject")}, nil, nil
 		}},
 	"mail send": {usage: "<to>... [--kind request] [--subject S] [--ttl 1h] [--key K] --body TEXT|-: send mail; to is a codename, name@scope, user or session:<id>",
+		example: "autodoc mail send tifa-lockhart --kind request --subject \"Review\" --body \"Please review the plan in docs/plan.md.\"",
 		flags: func(fs *flag.FlagSet) {
 			bodyFlags(fs)
 			fs.String("kind", "", "message (the default) or request")
@@ -376,6 +389,20 @@ func crewCommandArgs(args []string) (rest []string, ok bool) {
 	return args, true
 }
 
+// isHelp is a request for help in place of a command.
+func isHelp(arg string) bool { return arg == "--help" || arg == "-h" || arg == "help" }
+
+// crewHelp prints domain's commands (crew or mail), each with its usage and an example.
+func crewHelp(w io.Writer, domain string) {
+	fmt.Fprintf(w, "usage: autodoc %s <command> …  (each command's --help shows its flags)\n", domain)
+	for _, name := range slices.Sorted(maps.Keys(crewCommands)) {
+		if d, _, _ := strings.Cut(name, " "); d == domain {
+			c := crewCommands[name]
+			fmt.Fprintf(w, "\n  autodoc %s %s\n    e.g. %s\n", name, c.usage, c.example)
+		}
+	}
+}
+
 // crewMain runs `autodoc crew|mail <verb> …` and is its exit code: 0 with the answer on stdout; 1
 // with the daemon's refusal as {"error": {code, message}} on stderr, or any other failure as text;
 // 2 for usage.
@@ -386,6 +413,12 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 			fmt.Fprintf(stderr, "  autodoc %s %s\n", name, crewCommands[name].usage)
 		}
 		return 2
+	}
+	// `autodoc mail`, `autodoc mail --help`: the domain's commands, each with an example, as an
+	// answer (stdout, 0), so an agent finds every command in one call
+	if len(args) == 1 || (len(args) == 2 && isHelp(args[1])) {
+		crewHelp(stdout, args[0])
+		return 0
 	}
 	if len(args) < 2 {
 		return usage()
@@ -408,6 +441,11 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 		cmd.flags(fs)
 	}
 	if err := fs.Parse(interleaved(args[2:], fs)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// the flags were printed to stderr; the command's line and example are the answer
+			fmt.Fprintf(stdout, "autodoc %s %s\n  e.g. %s\n", name, cmd.usage, cmd.example)
+			return 0
+		}
 		return 2
 	}
 	cwd, err := os.Getwd()
