@@ -314,6 +314,31 @@ func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 	}
 }
 
+// TestAWrapperClaudeGetsTheRealOnesHooks: a wrapper script first on the agent's PATH (`exec mise x
+// claude -- claude`, say) is taken to run the Claude Code later on PATH, whose hooks it gets, with
+// prompts, and no notice.
+func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
+	wrappers, bin := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(wrappers, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
+	sep := string(os.PathListSeparator)
+	t.Setenv("PATH", wrappers+sep+bin+sep+os.Getenv("PATH"))
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
+	p, _ := a.profile("cl")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, b := claudeSettingsOf(t, c.panel.configs[instance.tab].Dir); !strings.Contains(b, "PermissionRequest") || !promptsReported(t, w, "cl") {
+		t.Errorf("a wrapper's agent: no prompt hooks, or its prompts unreported:\n%s", b)
+	}
+	if len(c.notes) != 0 {
+		t.Errorf("notices: %v", c.notes)
+	}
+}
+
 // TestAClaudeThatCantBeReadGetsTheFloor: a profile whose claude can't be read as a Claude Code (a
 // wrapper script) gets what a wake needs, SessionStart and crossSessionInbound, no prompt hooks,
 // registers without prompts, and is told of once, however often it starts.

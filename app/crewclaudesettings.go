@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -36,12 +38,11 @@ func crewClaudeSettingsMain(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	bin, err := crew.FindClaude(*claude, os.Getenv("PATH"), cwd)
-	if err != nil {
-		fmt.Fprintln(stderr, "autodoc:", err)
-		return 1
+	cache := "" // what a binary knows is kept beside the store, so a host's next run costs a stat
+	if store, err := (config.Server{}).StorePath(); err == nil {
+		cache = filepath.Join(filepath.Dir(store), "claude-hooks.json")
 	}
-	k, err := crew.ClaudeKnows(bin)
+	_, k, err := crew.ClaudeOf(*claude, os.Getenv("PATH"), cwd, cache)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1

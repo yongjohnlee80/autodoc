@@ -14,8 +14,10 @@ import (
 // prints the settings `claude --settings` takes, for the Claude Code at P: every hook, with
 // prompts, for one that knows them; SessionStart alone, without prompts, for one lacking
 // PermissionRequest; each hook run by --autodoc's command. --prompts prints whether they report.
+// What each binary knows is kept beside the store, for the next run.
 func TestCrewClaudeSettingsPrintOnlyWhatTheClaudeKnows(t *testing.T) {
-	dir := t.TempDir()
+	dir, data := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
 	write := func(name string, events ...string) string {
 		var b strings.Builder
 		for _, e := range events {
@@ -66,6 +68,9 @@ func TestCrewClaudeSettingsPrintOnlyWhatTheClaudeKnows(t *testing.T) {
 		if code := crewMain(t.Context(), []string{"crew", "claude-settings", "--claude", c.bin, "--prompts"}, nil, &out, &errOut); code != 0 || out.String() != c.prompts+"\n" {
 			t.Errorf("%s --prompts: exit %d, %q; want %s", c.bin, code, out.String(), c.prompts)
 		}
+	}
+	if b, err := os.ReadFile(filepath.Join(data, "autodoc", "claude-hooks.json")); err != nil || !strings.Contains(string(b), full) || !strings.Contains(string(b), old) {
+		t.Errorf("the kept answers: %q, %v; want both binaries'", b, err)
 	}
 	var out, errOut bytes.Buffer
 	if code := crewMain(t.Context(), []string{"crew", "claude-settings", "--claude", write("script", "#!/bin/sh")}, nil, &out, &errOut); code != 1 || out.Len() != 0 {

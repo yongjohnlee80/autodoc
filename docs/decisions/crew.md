@@ -358,15 +358,24 @@ the session doesn't start until someone answers it.
 
 - What it knows is read from its binary, which carries each hook event it knows as a quoted
   literal. A version floor would serve as well, but which release added an event isn't published
-  where a host can read it. The answer is kept by the binary's path, size and modification time,
-  so an update is read again. AutoDoc finds the binary the profile's command runs on PATH, and
-  follows a mise shim to the tool it runs; it reads it off the loop when the window starts and
-  after each spawn.
+  where a host can read it. The binary is hundreds of megabytes, so it is read a chunk at a time,
+  and the read stops once every event was found. The answer is kept by the binary's path, size and
+  modification time, so an update is read again: in memory, and for `autodoc crew claude-settings`
+  in a file beside the store, so a host's next run costs a stat.
+- The known limit: a literal the binary holds for another reason reads as an event it knows, and
+  naming that event would bring the warning back. `SessionStart`, which every Claude Code knows, is
+  required, so a file that isn't one is never taken for one.
+- The binary is the first file on PATH that reads as a Claude Code. A mise shim is followed to the
+  tool it runs (`mise which`). A wrapper script (as `exec mise x claude -- claude` is) is taken to
+  run the same CLI as mise's tool for the name, or a later file on PATH, which are tried next. The
+  TUI does this off the loop when the window starts and after each spawn; a spawn asks the binary it
+  found again, which costs a stat when nothing changed.
 - The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
   what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
   `SessionStart` alone, and registers without `prompts`.
-- A binary that can't be read (a wrapper script) is taken to know `SessionStart` and
-  `crossSessionInbound` alone, and the window says once that its prompts aren't reported.
+- When no file reads as a Claude Code, it is taken to know `SessionStart` and
+  `crossSessionInbound` alone, and the window says once that its prompts aren't reported, naming
+  the files tried.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 
