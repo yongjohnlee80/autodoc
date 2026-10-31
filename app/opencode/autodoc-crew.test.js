@@ -428,3 +428,26 @@ test("a session error with no wake before it raises nothing", async () => {
   await Bun.sleep(100);
   expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(0);
 });
+
+test("the plugin reads opencode's own command line (the process's), never its worker's process.argv", async () => {
+  // as opencode runs it: in a worker thread, whose process.argv is the worker's own
+  const dir = mkdtempSync(join(tmpdir(), "oc-argv-"));
+  const script = join(dir, "worker.js");
+  writeFileSync(
+    script,
+    `import { cliArgv } from ${JSON.stringify(join(import.meta.dir, "autodoc-crew.js"))};\npostMessage({ cli: cliArgv(), argv: process.argv });\n`,
+  );
+  const got = await new Promise((resolve, reject) => {
+    const w = new Worker(script);
+    w.onmessage = (e) => (resolve(e.data), w.terminate());
+    w.onerror = (e) => reject(e);
+  });
+  rmSync(dir, { recursive: true, force: true });
+  let want = null;
+  try {
+    want = readFileSync("/proc/self/cmdline", "utf8").split("\0").filter(Boolean);
+  } catch {}
+  if (!want) return; // no /proc: ps answers instead, which this cell doesn't pin
+  expect(got.argv).not.toEqual(want); // the worker's own argv is not the command line
+  expect(got.cli).toEqual(want);
+});
