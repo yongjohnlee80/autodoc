@@ -334,8 +334,35 @@ func mailWaiting(ctx context.Context, session func() (sessionContext, error)) (i
 	if err != nil {
 		return 0, false
 	}
-	n, ok := jsonOf(res).(map[string]any)["unread"].(float64)
-	return int(n), ok
+	m, _ := jsonOf(res).(map[string]any)
+	return countOf(m["unread"])
+}
+
+// countOf is a count the daemon answered: msgpack's integer, of whichever width, or JSON's number.
+func countOf(v any) (int, bool) {
+	switch n := v.(type) {
+	case int64:
+		return int(n), true
+	case uint64:
+		return int(n), true
+	case int:
+		return n, true
+	case int32:
+		return int(n), true
+	case uint32:
+		return int(n), true
+	case int16:
+		return int(n), true
+	case uint16:
+		return int(n), true
+	case int8:
+		return int(n), true
+	case uint8:
+		return int(n), true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
 }
 
 // mailWatch tells the client, through notify, each time more mail waits than when it last looked:
