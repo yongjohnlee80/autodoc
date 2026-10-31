@@ -317,6 +317,11 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   loopback, is refused at registration. The daemon never connects to an arbitrary host.
 - Antigravity's token lives only in memory, so its bridge stays detached and registers again
   whenever the daemon restarts. The other locators are stored, and need nothing after a restart.
+- An agy agent's launch turn runs its bridge, and agy gives the agent its workspace's MCP tools only
+  from the next turn on. So the bridge's first registration waits until the launch turn has ended
+  (its language server's conversation summary says idle), and the first wake starts a turn of its
+  own. It waits at most 2 minutes, then registers anyway, and registers at once when it can't read
+  the state. Registrations after a daemon restart don't wait.
 - The scheduler is one state machine per session (idle, in flight, awaiting a receive), driven by
   pokes after each committed write and by one timer on the earliest deadline. At most 4 calls run at
   once, each with a 10 s deadline. An accepted notice waits 2 minutes for a receive. Failures back
