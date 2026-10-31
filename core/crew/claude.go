@@ -181,9 +181,6 @@ func readClaudeHooks(path string) (ClaudeHooks, error) {
 		carry = min(longest-1, len(window))
 		copy(buf, window[len(window)-carry:])
 	}
-	for e := range lits {
-		k[e] = k[e] // every event answered, known or not
-	}
 	if !k[ClaudeSessionStart] {
 		return nil, fmt.Errorf("names no SessionStart hook: not a Claude Code binary")
 	}
