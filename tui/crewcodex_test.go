@@ -11,10 +11,13 @@ import (
 )
 
 // codexRuns is a stand-in for the agent's autodoc in registerCodex: each run's args are sent on
-// calls, and answered by answer (nil, an error, ...) in turn; past the list, the last answer.
+// calls, and answered by answer (nil, an error, ...) in turn; past the list, the last answer. With
+// hold, each run answers only once hold is closed, so a cell can change what the run's caller then
+// reads (the session's context) before it does.
 type codexRuns struct {
 	calls  chan []string
 	answer []error
+	hold   chan struct{}
 	n      int
 }
 
@@ -22,6 +25,9 @@ func (r *codexRuns) run(args ...string) error {
 	i := min(r.n, len(r.answer)-1)
 	r.n++
 	r.calls <- args
+	if r.hold != nil {
+		<-r.hold
+	}
 	return r.answer[i]
 }
 
@@ -55,10 +61,10 @@ func pump(t *testing.T, c *identityHost, runs *codexRuns) []string {
 // the session's attention, saying why. Another CLI's spawn runs none of it.
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	notFound := errors.New("no Codex thread for this folder on the app-server yet")
-	start := func(t *testing.T, answer ...error) (*agents, *identityHost, *agentInstance, *codexRuns) {
+	start := func(t *testing.T, hold chan struct{}, answer ...error) (*agents, *identityHost, *agentInstance, *codexRuns) {
 		a, c, _ := crewAgents(t, crewKinds)
 		a.pluginEnv = func() (string, error) { return `OPENCODE_CONFIG_CONTENT={}`, nil }
-		runs := &codexRuns{calls: make(chan []string, 64), answer: answer}
+		runs := &codexRuns{calls: make(chan []string, 64), answer: answer, hold: hold}
 		a.codexHere = runs.run
 		p, _ := a.profile("codex-one")
 		instance, err := a.startInstance(p)
@@ -69,7 +75,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	}
 
 	t.Run("found on the third look", func(t *testing.T) {
-		a, c, instance, runs := start(t, notFound, notFound, nil)
+		a, c, instance, runs := start(t, nil, notFound, notFound, nil)
 		before := time.Now().Unix()
 		if _, _, err := startedEnv(a, c, instance); err != nil {
 			t.Fatal(err)
@@ -95,13 +101,16 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	})
 
 	t.Run("a session that ended stops it", func(t *testing.T) {
-		a, c, instance, runs := start(t, notFound)
+		hold := make(chan struct{})
+		a, c, instance, runs := start(t, hold, notFound)
 		if _, _, err := startedEnv(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
+		// the session ends while its first look runs: the look's answer then finds its context gone
 		if err := os.Remove(instance.context); err != nil { // as its exit removes it
 			t.Fatal(err)
 		}
+		close(hold)
 		pump(t, c, runs)
 		if len(c.afters) != 0 || runs.n != 1 {
 			t.Fatalf("after the session ended: %d waits, %d runs", len(c.afters), runs.n)
@@ -109,7 +118,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	})
 
 	t.Run("never found raises the session's attention", func(t *testing.T) {
-		a, c, instance, runs := start(t, notFound)
+		a, c, instance, runs := start(t, nil, notFound)
 		if _, _, err := startedEnv(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
