@@ -1,5 +1,10 @@
 package crew
 
+import (
+	"context"
+	"time"
+)
+
 // The CLI kinds a crew session runs (Registration.Kind, Endpoint.Kind).
 const (
 	KindClaude   = "claude"
@@ -8,36 +13,60 @@ const (
 	KindOpenCode = "opencode"
 )
 
-// promptReporter is who reports a kind's permission prompts (docs/decisions/crew.md#the-human-inbox):
-// raising the session's permission attention when the agent shows one, and clearing it once
-// answered. A kind is listed here with its adapter.
+// A permission prompt's report (docs/decisions/crew.md#the-human-inbox): a kind's adapter raises
+// the session's permission attention when the agent shows a prompt, and clears it once answered.
+// A window may press Enter after typing to an agent only while its prompts are reported and none
+// shows now (crew.list's prompts_reported, and its attention), since an Enter into a permission
+// prompt approves it. A report is trusted only while its reporter is known to be there.
 type promptReporter int
 
 const (
-	reportsNone       promptReporter = iota
-	reportsAlways                    // the CLI's own hooks, written by the host: whatever the endpoint
-	reportsByEndpoint                // the process that is the session's endpoint (a plugin, a bridge)
+	reportsNone      promptReporter = iota
+	reportsHooks                    // the CLI's own hooks, which the host writes: whenever its session is live
+	reportsHeartbeat                // a process of the agent's (a plugin, a bridge) that says it is alive
 )
 
-var reportsPrompts = map[string]promptReporter{
-	KindClaude:   reportsAlways,     // the hooks AutoDoc writes: PermissionRequest and Notification raise; PostToolUse, UserPromptSubmit and Stop clear
-	KindOpenCode: reportsByEndpoint, // AutoDoc's plugin: permission.asked raises, the last permission.replied clears
-	KindAgy:      reportsByEndpoint, // the agy bridge: a trajectory step waiting on a permission raises, none clears
-	KindCodex:    reportsNone,
+var reporters = map[string]promptReporter{
+	KindClaude:   reportsHooks,     // AutoDoc's hooks: PermissionRequest raises; its own PostToolUse, UserPromptSubmit and Stop clear
+	KindOpenCode: reportsHeartbeat, // AutoDoc's plugin: permission.asked raises, the last permission.replied clears
+	KindAgy:      reportsHeartbeat, // the agy bridge: a trajectory step waiting on a permission raises, none clears
 }
 
-// ReportsPrompts reports whether a session of kind reports its permission prompts now; reachable
-// is whether the session can be woken (crew.list's reachable). Only into a session that reports
-// them, and shows none now, may a window press Enter after typing to it, since an Enter into a
-// permission prompt approves it. A kind whose reporter is its endpoint's own process (OpenCode's
-// plugin, agy's bridge) reports nothing while it is unreachable: that process may not be running.
-// An unknown kind reports none.
-func ReportsPrompts(kind string, reachable bool) bool {
-	switch reportsPrompts[kind] {
-	case reportsAlways:
+// reporterStale is how long a reporter's heartbeat (crew.attention alive) stands: a reporter that
+// hasn't said it is alive since is taken for gone, and its session's prompts as unreported.
+const reporterStale = 15 * time.Second
+
+// ReporterAlive records that the calling session's prompt reporter is running (crew.attention
+// alive), by the store's clock. It is kept in memory alone: a daemon restart forgets it, and the
+// session's prompts read as unreported until its reporter speaks again.
+func (m *Manager) ReporterAlive(ctx context.Context, credential string) error {
+	return m.store.Read(ctx, func(tx Tx) error {
+		s, err := m.Authenticate(tx, credential)
+		if err != nil {
+			return err
+		}
+		m.aliveMu.Lock()
+		defer m.aliveMu.Unlock()
+		if m.alive == nil {
+			m.alive = map[string]time.Time{}
+		}
+		m.alive[s.ID] = tx.Now()
+		return nil
+	})
+}
+
+// promptsReported is whether live session id, of kind, has its permission prompts reported at now:
+// Claude's hooks report whenever it is live; a heartbeat reporter while its last heartbeat is
+// within reporterStale; any other kind never.
+func (m *Manager) promptsReported(kind, id string, now time.Time) bool {
+	switch reporters[kind] {
+	case reportsHooks:
 		return true
-	case reportsByEndpoint:
-		return reachable
+	case reportsHeartbeat:
+		m.aliveMu.Lock()
+		at, ok := m.alive[id]
+		m.aliveMu.Unlock()
+		return ok && now.Sub(at) <= reporterStale
 	}
 	return false
 }

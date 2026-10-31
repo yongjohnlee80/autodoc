@@ -167,6 +167,9 @@ type Crew interface {
 	// Received is a receive's half of the wake, in the receive's write: the session has seen what is
 	// pending (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
 	Received(tx crew.Tx, session string) error
+	// Settled is a withdrawn send's half of the wake, in its write: nothing pending is due any more,
+	// while the session's failures and backoff stay (docs/decisions/crew.md#the-human-inbox).
+	Settled(tx crew.Tx, session string) error
 	// Watch is a channel that hears every change mail.wait may be waiting for (crew's wake signal);
 	// stop unregisters it. Registered before mail.wait's check.
 	Watch() (ch <-chan struct{}, stop func())

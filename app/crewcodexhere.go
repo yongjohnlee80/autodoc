@@ -36,6 +36,9 @@ var errNoCodexThreadHere = errors.New("no Codex thread for this folder on the ap
 // codexThreadHere is dir's Codex thread: the newest one loaded on the app-server whose cwd is dir,
 // created at or after since (Unix seconds: a thread a session before this one left is not this
 // session's). A thread that can't be read (archived meanwhile) is passed over.
+// The newest thread there need not be the agent's own: a sub-thread it started, or the user's own
+// Codex run in that folder. The agent's folder is AutoDoc's and its codename's alone, so neither is
+// to be expected; a wrong one is woken, and its wake goes unanswered.
 func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64) (string, error) {
 	var ids []string
 	cursor := ""

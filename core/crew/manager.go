@@ -29,6 +29,9 @@ type Manager struct {
 	secretsMu sync.Mutex
 	secrets   map[string]endpointSecret
 	ended     map[string]bool
+	// alive is each session's prompt reporter's last heartbeat (ReporterAlive), in memory alone
+	aliveMu sync.Mutex
+	alive   map[string]time.Time
 }
 
 // endpointSecret is a session's endpoint secret and the generation it belongs to.

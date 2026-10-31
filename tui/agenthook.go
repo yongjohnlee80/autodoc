@@ -135,8 +135,8 @@ func writeWakeAcceptance(dir, kind string) error {
 }
 
 // claudePromptEvents are the hooks that report a crew Claude agent's permission prompts
-// (crew.ReportsPrompts): PermissionRequest and Notification raise its permission attention, and
-// the rest clear it once the prompt is behind it (`crew attention --claude-hook`).
+// (`crew attention --claude-hook`): PermissionRequest opens a prompt, a permission Notification
+// stands for one, that tool's own PostToolUse closes it, and UserPromptSubmit and Stop close them all.
 var claudePromptEvents = []string{"PermissionRequest", "Notification", "PostToolUse", "UserPromptSubmit", "Stop"}
 
 // promptCommand is the hook that reports a permission prompt, run by dir's own autodoc: it prints
