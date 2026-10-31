@@ -38,6 +38,9 @@ type claudeMerge struct {
 	set    map[string]any
 	ours   []string
 	unset  map[string]any
+	// allow is AutoDoc's permissions.allow rules (crew.ClaudeAllow): AutoDoc's of any build taken out
+	// first (crew.IsClaudeAllow), every rule the user wrote kept; nil leaves permissions alone
+	allow []string
 }
 
 // mergeClaudeSettings makes each of path's hooks.<event> run its command in m.events once, and sets
@@ -111,6 +114,30 @@ func mergeClaudeSettings(path string, m claudeMerge) error {
 	for k, v := range set {
 		settings[k] = v
 	}
+	if m.allow != nil {
+		perm, ok := settings["permissions"].(map[string]any)
+		if !ok && settings["permissions"] != nil {
+			return fmt.Errorf("%s: permissions is not an object: left as it is, without AutoDoc's hooks", path)
+		}
+		if perm == nil {
+			perm = map[string]any{}
+		}
+		rules, ok := perm["allow"].([]any)
+		if !ok && perm["allow"] != nil {
+			return fmt.Errorf("%s: permissions.allow is not a list: left as it is, without AutoDoc's hooks", path)
+		}
+		kept := []any{}
+		for _, r := range rules {
+			if s, ok := r.(string); ok && crew.IsClaudeAllow(s) {
+				continue
+			}
+			kept = append(kept, r)
+		}
+		for _, r := range m.allow {
+			kept = append(kept, r)
+		}
+		perm["allow"], settings["permissions"] = kept, perm
+	}
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
@@ -158,8 +185,9 @@ func withoutCommand(g any, command string) any {
 // prompts (they report; they decide nothing), the events it doesn't know never named, and AutoDoc's
 // hooks of an earlier start taken out first. prompts is whether those hooks were written, which
 // the session's registration says. For the others nothing yet (Codex's queue starts turns as it
-// is). It never writes approval policies, permission modes, or allow or deny rules: a turn a wake
-// starts runs under the profile's own tool policy.
+// is). Its one allowance is the guide's own commands (crew.ClaudeAllow, exactly crew.GuideCommands),
+// in this folder's settings alone; it never writes approval policies, permission modes, deny rules
+// or any other allow rule: a turn a wake starts runs under the profile's own tool policy.
 func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks) (prompts bool, err error) {
 	if kind != crew.KindClaude {
 		return false, nil
@@ -168,6 +196,7 @@ func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks) (prompts bool, er
 	events, prompts := crew.ClaudeHookCommands(autodoc, k)
 	set := crew.ClaudeSetKeys(k)
 	err = mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), claudeMerge{events: events, set: set,
-		ours: crew.ClaudeCommandLines(autodoc), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"}})
+		ours: crew.ClaudeCommandLines(autodoc), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"},
+		allow: crew.ClaudeAllow()})
 	return prompts && err == nil, err
 }

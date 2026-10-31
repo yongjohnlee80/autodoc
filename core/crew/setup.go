@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 )
 
 // SetupSince, in an After step's argument, is the agent's start, as Unix seconds.
@@ -50,6 +51,9 @@ type Setup struct {
 	Env     map[string]string `json:"env"`     // AutoDoc's own variables, merged after the profile's
 	Files   []SetupFile       `json:"files"`   // user-level files the kind needs, reported, never written here
 	Prompts bool              `json:"prompts"` // the setup reports the session's permission prompts: crew.register's prompts
+	// Allow is the guide's commands as the kind's CLI allows them (GuideCommands), already in Argv or
+	// Env: a window writing Claude's settings itself merges them into the folder's.
+	Allow []string `json:"allow"`
 	// After is what the host runs once the agent's CLI has started: each one autodoc's arguments, run
 	// detached by the agent's own autodoc in its environment (its session's context), with
 	// SetupSince in an argument replaced by the start's Unix time in seconds.
@@ -71,7 +75,8 @@ type Setup struct {
 //
 // cache is ClaudeOf's cache of what each binary knows ("" for none).
 func SetupFor(in SetupInput, cache string) (Setup, error) {
-	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{}}
+	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{},
+		Allow: []string{}}
 	switch in.Kind {
 	case KindClaude:
 		program := in.Program
@@ -85,7 +90,9 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 		}
 		settings, prompts := ClaudeSettings(in.Autodoc, k)
 		s.Prompts = prompts
+		s.Allow = ClaudeAllow()
 		if in.Host == HostNvim {
+			settings["permissions"] = map[string]any{"allow": s.Allow}
 			b, err := json.Marshal(settings)
 			if err != nil {
 				return Setup{}, err
@@ -105,6 +112,13 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 		if err != nil {
 			return Setup{}, err
 		}
+		if v, err = OpenCodeWithAllow(v); err != nil {
+			return Setup{}, err
+		}
+		for rule := range OpenCodeAllow() {
+			s.Allow = append(s.Allow, rule)
+		}
+		slices.Sort(s.Allow)
 		s.Env["OPENCODE_CONFIG_CONTENT"] = v
 	}
 	return s, nil
