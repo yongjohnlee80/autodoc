@@ -415,6 +415,28 @@ messaging, which tries the agent's doorbell first and falls back to typing
 - An assignment made outside a window (the CLI, or Neovim before its host adopts the same
   messaging) reaches no agent by itself: assign from a window, or message the agent.
 
+## The crew MCP server
+
+`autodoc crew mcp` serves the crew's mail as MCP tools, for an agent CLI that runs it as a stdio
+MCP server. An agy agent's folder has an `.agents/mcp_config.json` naming it, so its mail never
+goes through shell commands its rules would have to allow.
+
+- The protocol is newline-delimited JSON-RPC 2.0 on stdin and stdout: `initialize`, `ping`,
+  `tools/list` and `tools/call`. A notification gets no answer; any other method is JSON-RPC's
+  method-not-found.
+- The tools are `mail_receive`, `mail_ack`, `mail_reply` and `mail_send`. `MCPTools()` is the one
+  list a host spells its per-tool allow rules from (agy's `mcp(autodoc/<tool>)`), and the server's
+  name is `autodoc`, with no slash, since agy's rule is `<server>/<tool>`.
+- Each tool is the `autodoc mail` command of its name, run the one way the CLI runs it, so the tools
+  have no meaning of their own. Ids and bodies are arguments, never shell words.
+- A received item's `answer` names the tool call that answers it, as the CLI's names its command.
+- The server is one session's: the context its start names (`$AUTODOC_CREW_CONTEXT`, or its folder's),
+  read again for each call.
+- A refused call is the tool's error (`isError`), with the daemon's code and message, never the
+  server's.
+
+In the code: `app/crewmcp.go`, `app/crewcli.go`
+
 ## Wake acceptance not tool approvals
 
 A host configures only what lets the fixed notice start a turn. For Claude Code, that is the
