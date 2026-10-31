@@ -142,13 +142,13 @@ func TestTheSearchAndMetricsSettingsLoad(t *testing.T) {
 	if s.Postgres.ANN != pgstore.DefaultANNConfig() || s.Metrics.Enabled {
 		t.Errorf("unset: ANN %+v, metrics %+v; want pgstore's defaults and none", s.Postgres.ANN, s.Metrics)
 	}
-	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000", 1)
+	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16", 1)
 	src = strings.Replace(src, `listen = "127.0.0.1:8730"`, "", 1)
 	src = strings.Replace(src, "[[source]]", "[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]\n\n[[source]]", 1) + "\n[metrics]\nenabled = true\n"
 	if s, err = load(t, src); err != nil {
 		t.Fatal(err)
 	}
-	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000}); s.Postgres.ANN != want {
+	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16}); s.Postgres.ANN != want {
 		t.Errorf("ANN %+v, want %+v", s.Postgres.ANN, want)
 	}
 	if s.HTTP.Listen != config.DefaultListen || !s.Metrics.Enabled {
@@ -180,6 +180,11 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"ann scan tuples past int32", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_max_scan_tuples = 2147483648"), "postgres.ann_max_scan_tuples", "1 to 2147483647"},
 		{"ann scan memory under 1", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_scan_mem_multiplier = 0.5"), "postgres.ann_scan_mem_multiplier", "1 to 1000"},
 		{"ann scan memory over 1000", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_scan_mem_multiplier = 1001"), "postgres.ann_scan_mem_multiplier", "1 to 1000"},
+		{"ann m 1", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 1"), "postgres.ann_m", "2 to 100"},
+		{"ann m 101", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 101"), "postgres.ann_m", "2 to 100"},
+		{"ann ef_construction 1001", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 1001"), "postgres.ann_ef_construction", "4 to 1000"},
+		{"ann ef_construction under twice m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 40\nann_ef_construction = 79"), "postgres.ann_ef_construction", "at least twice m (40)"},
+		{"ann ef_construction under twice the default m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 31"), "postgres.ann_ef_construction", "at least twice m (16)"},
 		{"dsn not a name", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "postgres://x"`), "postgres.dsn_env", "is not an environment variable name"},
 		{"sealed", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_sealed = "AAAA"`), "postgres.dsn_sealed", "not supported yet"},
 		{"schema", sub(`schema  = "autodoc_search"`, `schema = "Search-1"`), "postgres.schema", "not a plain schema name"},

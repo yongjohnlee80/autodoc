@@ -131,6 +131,32 @@ scrape_configs:
 - **No series holds a token, a query's text, a client's name, an access value or an error's text.** Errors are 0 or 1 by kind; their text is in `/v1/status` and the log.
 - **A scrape is counted once it has answered,** so `path="metrics"` shows the previous scrapes. A scrape interval of 30 s or more is plenty.
 
+## The approximate search's index: what it costs
+
+Each embedding model's HNSW index is built with `postgres.ann_ef_construction` (default 200; see
+[server-config.md](server-config.md)). That decides recall more than any search setting: at
+pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten
+across 20 builds, and 8 builds were below 0.95. At 200, every one of 10 builds found 0.990 or more.
+
+The price is paid when the index is built and by every insert while it exists, never by a search.
+Measured with `TestANN_Measure` (PostgreSQL 18, pgvector 0.8.7, 16-dimension embeddings, 4 CPUs):
+
+| | 100,000 embeddings | | 1,000,000 embeddings | |
+|---|---|---|---|---|
+| `ann_ef_construction` | 64 | 200 | 64 | 200 |
+| index build | 13 s | 32 s | 14 min | 34 min |
+| index size | 35 MB | 35 MB | 351 MB | 351 MB |
+| inserts with the index in place | 1,384/s | 784/s | 500/s | 159/s |
+| approximate search, p50 (n = 10) | 13.5 ms | 13.4 ms | 22.5 ms | 22.1 ms |
+
+So at a million embeddings, ingest with the index in place is about a third as fast at 200 as at
+64. A deployment that values ingest over recall can set a lower `ann_ef_construction`. Changing it
+rebuilds each model's index while the old one keeps serving.
+
+**A large initial import pays the per-insert cost.** A model's index is built as soon as a tenant
+names the model, before most of its embeddings are written, so every embedding of the import goes
+into an existing index. There is no path yet to build the index after a bulk load.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:

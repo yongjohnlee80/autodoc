@@ -37,6 +37,7 @@ type annJob struct {
 	model, owner string
 	gen          int64
 	t            dao.VectorType
+	replace      bool // the model's index serves (replacing): its replacement is built under annNextName
 }
 
 // token is the session mark of the job's builder (postgres.MarkSession): its owner and
@@ -182,11 +183,12 @@ func (a *ANN) claim(ctx context.Context) (*annJob, error) {
 			return err // busy, or lapsed: recoverLapsed's
 		}
 		now := a.now()
+		// a failed index, or one replacing (which serves meanwhile), is due once its backoff ends
 		due := dao.Or(dao.Eq(qcol(tANNIndex, string(aiState)), annWanted),
-			dao.And(dao.Eq(qcol(tANNIndex, string(aiState)), annFailed),
+			dao.And(dao.In(qcol(tANNIndex, string(aiState)), []any{annFailed, annReplacing}),
 				dao.Lt(qcol(tANNIndex, string(aiAttempts)), annMaxAttempts),
 				dao.Or(dao.IsNull(qcol(tANNIndex, string(aiNextAt))), dao.Lte(qcol(tANNIndex, string(aiNextAt)), now))))
-		rows, err := a.rwIndex.On(tx, a.locked(ctx)...).WithPredicate(due).Limit(1).Select(aiModel)
+		rows, err := a.rwIndex.On(tx, a.locked(ctx)...).WithPredicate(due).Limit(1).Select(aiModel, aiState)
 		if err != nil || len(rows) == 0 {
 			return err
 		}
@@ -196,10 +198,14 @@ func (a *ANN) claim(ctx context.Context) (*annJob, error) {
 			return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, model).
 				Set(aiState, annFailed).Set(aiAttempts, annMaxAttempts).Set(aiError, reason).Set(aiUpdated, now).Update()
 		}
-		j := annJob{model: model, owner: a.run, gen: b.Generation + 1, t: t}
+		j := annJob{model: model, owner: a.run, gen: b.Generation + 1, t: t, replace: rows[0].State == annReplacing}
 		if err := a.rwBuilder.On(tx, a.opts(ctx)...).With(abID, 1).Set(abModel, model).Set(abOwner, j.owner).
 			Set(abGen, j.gen).Set(abLease, now.Add(a.leaseFor)).Set(abPID, nil).Set(abStart, nil).Set(abToken, "").Update(); err != nil {
 			return err
+		}
+		if j.replace {
+			job = &j // its row stays replacing: the index serves until the replacement is swapped in
+			return nil
 		}
 		if err := a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, model).Set(aiState, annBuilding).Set(aiUpdated, now).Update(); err != nil {
 			return err
@@ -213,8 +219,9 @@ func (a *ANN) claim(ctx context.Context) (*annJob, error) {
 // build makes job's index on a session of its own, registered first (the backend recovery would
 // cancel), renewing the lease while CREATE INDEX CONCURRENTLY runs, and completes it: ready when
 // the index is valid and its definition is the declared one, else failed with a backoff. A valid
-// index of the name already matching the declaration is adopted, never rebuilt; any other is
-// dropped first. Fenced at any write, it stops and changes nothing.
+// index of the name already matching the declaration is adopted, never rebuilt; a replacing one is
+// rebuilt under a second name while it serves (replaceIndex), and stays replacing if that fails;
+// any other is dropped first. Fenced at any write, it stops and changes nothing.
 func (a *ANN) build(ctx context.Context, job annJob) (err error) {
 	p, err := postgres.PinSessionConn(ctx, a.conn)
 	if err != nil {
@@ -246,7 +253,7 @@ func (a *ANN) build(ctx context.Context, job annJob) (err error) {
 // makeIndex is build's work on its registered session p, under the renewed lease: the declared
 // index adopted or made, then completed.
 func (a *ANN) makeIndex(ctx context.Context, job annJob, p postgres.PinnedConn) error {
-	spec, err := annSpec(job.model, job.t)
+	spec, err := annSpec(job.model, job.t, a.cfg)
 	if err != nil {
 		return a.fail(ctx, job, err)
 	}
@@ -257,6 +264,11 @@ func (a *ANN) makeIndex(ctx context.Context, job annJob, p postgres.PinnedConn) 
 	st, err := postgres.ReadIndexState(ctx, a.conn, "", spec.Name)
 	if err != nil {
 		return a.fail(ctx, job, err)
+	}
+	if job.replace && st.Exists && st.Valid && st.Def != ref {
+		if st, err = a.replaceIndex(ctx, job, p, spec, ref); err != nil {
+			return a.fail(ctx, job, err)
+		}
 	}
 	if !(st.Exists && st.Valid && st.Def == ref) {
 		if st.Exists {
@@ -279,6 +291,36 @@ func (a *ANN) makeIndex(ctx context.Context, job annJob, p postgres.PinnedConn) 
 		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, job.model).Set(aiState, annReady).Set(aiDef, string(def)).
 			Set(aiAttempts, 0).Set(aiNextAt, nil).Set(aiError, "").Set(aiUpdated, a.now()).Update()
 	})
+}
+
+// replaceIndex replaces the model's index, which serves, with spec's while it keeps serving
+// (docs/enterprise/server-config.md): the replacement built concurrently under annNextName (a leftover of
+// an earlier attempt dropped first), the old index dropped concurrently once the replacement is
+// valid and the declared one (the replacement serves the searches from then on), and the
+// replacement renamed. It answers the index's state under its own name.
+func (a *ANN) replaceIndex(ctx context.Context, job annJob, p postgres.PinnedConn, spec postgres.IndexSpec, ref postgres.IndexDefinition) (postgres.IndexState, error) {
+	next := spec
+	next.Name = annNextName(job.model)
+	if err := postgres.DropIndexConcurrently(ctx, p, "", next.Name, postgres.BuildOptions{}); err != nil {
+		return postgres.IndexState{}, err
+	}
+	if err := postgres.CreateIndexConcurrently(ctx, p, next, postgres.BuildOptions{}); err != nil {
+		return postgres.IndexState{}, err
+	}
+	nst, err := postgres.ReadIndexState(ctx, a.conn, "", next.Name)
+	if err != nil {
+		return postgres.IndexState{}, err
+	}
+	if !nst.Exists || !nst.Valid || nst.Def != ref {
+		return postgres.IndexState{}, fmt.Errorf("the replacement built is not the one declared: %+v, want %+v (valid %v)", nst.Def, ref, nst.Valid)
+	}
+	if err := postgres.DropIndexConcurrently(ctx, p, "", spec.Name, postgres.BuildOptions{}); err != nil {
+		return postgres.IndexState{}, err
+	}
+	if err := postgres.RenameIndex(ctx, p, "", next.Name, spec.Name, postgres.BuildOptions{}); err != nil {
+		return postgres.IndexState{}, err
+	}
+	return postgres.ReadIndexState(ctx, a.conn, "", spec.Name)
 }
 
 // renew extends job's lease every annRenew until ctx ends. Fenced, it cancels the build (stop)
@@ -308,9 +350,18 @@ func (a *ANN) renew(ctx context.Context, job annJob, stop context.CancelFunc) er
 func (a *ANN) fail(ctx context.Context, job annJob, cause error) error {
 	if p, err := postgres.PinSessionConn(ctx, a.conn); err == nil {
 		if a.stillOwns(ctx, job) {
-			_ = postgres.DropIndexConcurrently(ctx, p, "", annIndexName(job.model), postgres.BuildOptions{})
+			// a replacement's failure leaves the index that serves: only its second name goes
+			name := annIndexName(job.model)
+			if job.replace {
+				name = annNextName(job.model)
+			}
+			_ = postgres.DropIndexConcurrently(ctx, p, "", name, postgres.BuildOptions{})
 		}
 		p.Discard()
+	}
+	state := annFailed
+	if job.replace {
+		state = annReplacing // it still serves; the replacement is retried after the backoff
 	}
 	err := a.owned(ctx, job, freed, func(tx *dao.Transaction) error {
 		r, err := a.rwIndex.On(tx, a.locked(ctx)...).With(aiModel, job.model).Get(aiAttempts)
@@ -319,7 +370,7 @@ func (a *ANN) fail(ctx context.Context, job annJob, cause error) error {
 		}
 		attempts := r.Attempts + 1
 		wait := min(annBackoffBase<<min(attempts-1, 10), annBackoffMax)
-		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, job.model).Set(aiState, annFailed).Set(aiAttempts, attempts).
+		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, job.model).Set(aiState, state).Set(aiAttempts, attempts).
 			Set(aiNextAt, a.now().Add(wait)).Set(aiError, cause.Error()).Set(aiUpdated, a.now()).Update()
 	})
 	if errors.Is(err, errFenced) {
@@ -410,7 +461,15 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 			return err
 		}
 	}
+	// a lapsed replacement's leftover goes too; the index it was replacing still serves
+	if err := postgres.DropIndexConcurrently(ctx, p, "", annNextName(rec.model), postgres.BuildOptions{}); err != nil {
+		return err
+	}
 	err = a.owned(ctx, *rec, freed, func(tx *dao.Transaction) error {
+		r, err := a.rwIndex.On(tx, a.locked(ctx)...).With(aiModel, rec.model).Get(aiState)
+		if err != nil || r.State == annReplacing {
+			return err // replacing: due again as it is, serving meanwhile
+		}
 		return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, rec.model).Set(aiState, annWanted).Set(aiUpdated, a.now()).Update()
 	})
 	if errors.Is(err, errFenced) {
@@ -419,9 +478,10 @@ func (a *ANN) recoverLapsed(ctx context.Context) error {
 	return err
 }
 
-// verifyReady checks every ready index: one missing or invalid, or (on the first tick of this run)
-// whose definition isn't the declared one, is wanted again, and searches treat it as exact from
-// that moment. The build drops what it finds of the name before it builds.
+// verifyReady checks every ready index: one missing or invalid is wanted again, and searches treat
+// it as exact from that moment; one valid but (on the first tick of this run) built otherwise than
+// declared, as after an upgrade that changed the build parameters, is replacing: it serves while
+// the builder makes its replacement under a second name and swaps it in (replaceIndex).
 func (a *ANN) verifyReady(ctx context.Context) error {
 	rows, err := a.rwIndex.DAO(a.opts(ctx)...).With(aiState, annReady).Select(aiModel)
 	if err != nil {
@@ -434,12 +494,15 @@ func (a *ANN) verifyReady(ctx context.Context) error {
 			return err
 		}
 		good := st.Exists && st.Valid
+		next := annWanted
 		if good && first {
 			t, reason := annType(r.Model)
 			if reason != "" {
 				good = false
 			} else if good, err = a.matches(ctx, r.Model, t, st.Def); err != nil {
 				return err
+			} else if !good {
+				next = annReplacing // valid, built otherwise: it serves while it is replaced
 			}
 		}
 		if good {
@@ -450,7 +513,7 @@ func (a *ANN) verifyReady(ctx context.Context) error {
 				return err
 			}
 			return a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).With(aiState, annReady).
-				Set(aiState, annWanted).Set(aiUpdated, a.now()).Update()
+				Set(aiState, next).Set(aiAttempts, 0).Set(aiNextAt, nil).Set(aiUpdated, a.now()).Update()
 		}); err != nil {
 			return err
 		}
@@ -460,7 +523,7 @@ func (a *ANN) verifyReady(ctx context.Context) error {
 
 // matches reports whether def is model's declared index definition (its reference build).
 func (a *ANN) matches(ctx context.Context, model string, t dao.VectorType, def postgres.IndexDefinition) (bool, error) {
-	spec, err := annSpec(model, t)
+	spec, err := annSpec(model, t, a.cfg)
 	if err != nil {
 		return false, err
 	}
@@ -521,6 +584,9 @@ func (a *ANN) retire(ctx context.Context) error {
 			return err
 		}
 		err = postgres.DropIndexConcurrently(ctx, p, "", annIndexName(r.Model), postgres.BuildOptions{})
+		if err == nil {
+			err = postgres.DropIndexConcurrently(ctx, p, "", annNextName(r.Model), postgres.BuildOptions{})
+		}
 		p.Discard()
 		if err != nil {
 			return err
