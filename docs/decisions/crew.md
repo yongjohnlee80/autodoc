@@ -454,13 +454,13 @@ writes approval policies, permission modes, or allow and deny rules: a woken tur
 profile's own tool policy, and a prompt it hits raises attention for you to answer in its tab.
 
 Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks
-with `autodoc crew setup --kind K --host nvim [--env K=V]…`. It answers JSON: the arguments to
-append (Claude's `--settings`), AutoDoc's environment to merge after the profile's (OpenCode's
-`OPENCODE_CONFIG_CONTENT`), the user-level files the kind needs, whether the setup reports the
-session's permission prompts (which its `crew.register` says), and notices for the user. It reads
-the profile's environment (its PATH finds the CLI) and never prints it back. AutoDoc's own files
-(the OpenCode plugin, what each Claude Code knows) go in the data folder of the config it runs
-under.
+with `autodoc crew setup --kind K --host nvim`, run under the agent's environment. It answers JSON:
+the arguments to append (Claude's `--settings`), AutoDoc's environment to merge after the profile's
+(OpenCode's `OPENCODE_CONFIG_CONTENT`), the user-level files the kind needs, whether the setup
+reports the session's permission prompts (which its `crew.register` says), and notices for the user.
+It reads the profile's environment from its own (its PATH finds the CLI), never from its command
+line, which any user can read, and never prints it back. AutoDoc's own files (the OpenCode plugin,
+what each Claude Code knows) go in the data folder of the config it runs under.
 
 Claude Code's settings have one source, which AutoDoc's own agents get and another host gets from
 `autodoc crew setup` (or, alone, `autodoc crew claude-settings`: the JSON `claude --settings`
