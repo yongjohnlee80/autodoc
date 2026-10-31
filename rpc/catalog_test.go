@@ -213,7 +213,7 @@ func sameJSON(t *testing.T, a, b any) bool {
 func TestCatalogMarkdown(t *testing.T) {
 	md := New(Fixed(), "v").Catalog(Protocol, "").Markdown()
 	for _, want := range []string{
-		"Verbs at protocol 40; the daemon serves sessions from protocol 12.",
+		"Verbs at protocol 41; the daemon serves sessions from protocol 12.",
 		"\n### `graph`\n\n| verb | params | result | since | audience | effect |\n",
 		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",
