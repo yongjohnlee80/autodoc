@@ -192,10 +192,11 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	if got := heard(heardDir, "scribe"); got[4] != "Task: Fix the typos" || got[7] != "Instruction: Read the ADR first" {
 		t.Fatalf("Scribe heard %q", got)
 	}
-	// its hidden panel brought forward for the Enter, none typed
+	// its hidden panel brought forward, and the task sent: one Enter after each of the two pastes
 	r.s.WaitFor(t, "the agent's panel open again", func(string) bool { return agentShown() && r.focused("agentView") })
-	if strings.ContainsRune(heardRaw(heardDir, "scribe"), '\r') {
-		t.Fatalf("an Enter reached Scribe: %q", heardRaw(heardDir, "scribe"))
+	r.s.WaitFor(t, "the second task's Enter", func(string) bool { return strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") == 2 })
+	if raw := heardRaw(heardDir, "scribe"); strings.Count(raw, "\r") != 2 {
+		t.Fatalf("Scribe was sent %q, want an Enter after each task and no other", raw)
 	}
 	if strings.Contains(r.s.String(), "start the agent?") {
 		t.Fatal("a running agent was asked about")
