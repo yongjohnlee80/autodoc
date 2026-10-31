@@ -290,7 +290,8 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 		}
 		perm, _ := s["permissions"].(map[string]any)
 		var allow []string
-		for _, r := range perm["allow"].([]any) {
+		rules, _ := perm["allow"].([]any)
+		for _, r := range rules {
 			allow = append(allow, r.(string))
 		}
 		if wants != slices.Equal(allow, crew.ClaudeAllow()) || (!wants && perm != nil) || (perm != nil && len(perm) != 1) {
@@ -721,7 +722,8 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 	s, b := claudeSettingsOf(t, dir)
 	perm, _ := s["permissions"].(map[string]any)
 	var allow []string
-	for _, r := range perm["allow"].([]any) {
+	rules, _ := perm["allow"].([]any)
+	for _, r := range rules {
 		allow = append(allow, r.(string))
 	}
 	want := append([]string{"Bash(git status:*)"}, crew.ClaudeAllow()...)
