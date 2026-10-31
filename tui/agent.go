@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc"
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // agents owns profile forms and the running agent's identity. Its single panel
@@ -32,7 +33,9 @@ type agents struct {
 	// tab's own start is
 	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
 	agentBinPath string
-	editorPath   func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	// pluginEnv replaces opencodeEnv's run of the agent's autodoc (a cell's); nil in production
+	pluginEnv  func() (string, error)
+	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
 	editorTokens        map[string]string
@@ -568,14 +571,15 @@ func safeName(s string) string {
 
 // writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into codename's folder for ws
 // (agentFolder): most agent CLIs read one of the two from where they start; bin/autodoc,
-// agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). It returns
-// the folder.
-func (h *agents) writeAgentGuide(ws wsInfo, codename string) (string, error) {
+// agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). A crew
+// agent's guide (crewKind its CLI's kind, "" for an agent outside a crew scope) holds the crew and
+// mail procedure for that CLI, so it registers how it is woken. It returns the folder.
+func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string) (string, error) {
 	dir := h.agentFolder(ws, codename)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
 	}
-	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"))
+	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"), crewKind)
 	for _, f := range []struct {
 		name, text string
 		mode       os.FileMode
@@ -604,8 +608,10 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 }
 
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
-// (its own AGENTS.md): as wrapper, the build bin on the TUI's config.
-func agentGuide(ws wsInfo, bin, config, wrapper string) string {
+// (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
+// CLI's kind) is also told the crew and mail procedure for its CLI (crew.GuideOf): who it is, how it
+// registers to be woken, and how it handles mail.
+func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
@@ -633,6 +639,13 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	b.WriteString(", so it reaches the same store and daemon as the TUI that started you. Call it as `autodoc`, as the ")
 	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
 	b.WriteString(editorGuide)
+	if crewKind != "" {
+		b.WriteString("## Mail between agents\n\n")
+		b.WriteString("You are one agent of a crew: AutoDoc carries mail between you and the other agents, and the user. ")
+		b.WriteString("Do these at the start of your session, before the user's task:\n\n")
+		b.WriteString(crew.GuideOf(crewKind).Markdown)
+		b.WriteString("\n")
+	}
 	b.WriteString("---\n\n")
 	b.WriteString(autodoc.AgentsGuide)
 	return b.String()

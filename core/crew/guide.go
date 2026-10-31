@@ -26,9 +26,14 @@ var endpointSteps = map[string]string{
 	"opencode": "OpenCode's AutoDoc plugin registers on its own. Nothing to run.",
 }
 
-// GuideFor is the guide for a CLI kind. A kind with no waker yet gets the guide without a wake
-// step: its host rings it instead.
-func (m *Manager) GuideFor(kind string) Guide {
+// GuideFor is the guide for a CLI kind (GuideOf, the daemon's).
+func (m *Manager) GuideFor(kind string) Guide { return GuideOf(kind) }
+
+// GuideOf is the guide for a CLI kind. A kind with no waker yet gets the guide without a wake
+// step: its host rings it instead. A host writing its agent's guide from its own build (AutoDoc's
+// writeAgentGuide) calls it directly: the guide then describes the commands of the build the agent
+// runs.
+func GuideOf(kind string) Guide {
 	step, ok := endpointSteps[kind]
 	if !ok {
 		step = "Your CLI has no waker yet: your host tells you when mail is waiting."
