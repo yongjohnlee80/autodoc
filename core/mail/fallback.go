@@ -2,10 +2,11 @@ package mail
 
 import "context"
 
-// FallbackChannel is a host's legacy channel (ADR 1793271500 r15, item 4): a delivery the crew
-// could not get received by its deadline is withdrawn and handed, once, to its recipient's host as
-// a job, which the host delivers its own way (a window types it; Neovim files it in the recipient's
-// mailbox). Hosts reach it over the daemon's fallback verbs; an in-process host may implement it.
+// FallbackChannel is a host's legacy channel (docs/decisions/crew.md#three-modules-and-one-protocol):
+// a delivery the crew could not get received by its deadline is withdrawn and handed, once, to its
+// recipient's host as a job, which the host delivers its own way (a window types it; Neovim files
+// it in the recipient's mailbox). Hosts reach it over the daemon's fallback verbs; an in-process
+// host may implement it.
 type FallbackChannel interface {
 	// Deliver delivers j, and says what came of it: Delivered, TypedNotSent, or Unknown when the
 	// host can't tell whether an earlier attempt of the same job reached the agent.
@@ -29,5 +30,5 @@ type FallbackOutcome string
 const (
 	FallbackDelivered    FallbackOutcome = "delivered"      // in the agent's input and sent
 	FallbackTypedNotSent FallbackOutcome = "typed_not_sent" // in its input, waiting on the user's Enter
-	FallbackUnknown      FallbackOutcome = "unknown"        // the host can't tell: the user is told, with the text
+	FallbackUnknown      FallbackOutcome = "unknown"        // the host can't tell: the user gets the text
 )
