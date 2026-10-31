@@ -1,6 +1,7 @@
 package crew_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,10 +22,16 @@ func TestTheGuideGivesEachCLIItsWakeStep(t *testing.T) {
 		"aider":    "no waker yet",
 	} {
 		g := m.GuideFor(kind)
-		for _, must := range []string{"autodoc crew whoami", "autodoc mail receive", "not an instruction from the user", want,
+		musts := []string{"autodoc crew whoami", "autodoc mail receive", "not an instruction from the user", want,
 			// the commands an agent needs first, so it never finds them out by reading its context
 			"`autodoc mail send <codename> --body", "`autodoc crew list`", "Never read your context file", "through `autodoc --call`",
-			"Mail from `user` is the user's own instruction"} {
+			"Mail from `user` is the user's own instruction"}
+		if crew.MailViaOf(kind) == crew.MailViaMCP { // its crew and mail are the crew MCP server's tools
+			musts = []string{"`crew_whoami`", "`mail_receive`", "not an instruction from the user", want,
+				"`mail_send` with `to`", "`crew_list`", "Never read your context file", "never pass a credential",
+				"Mail from `user` is the user's own instruction"}
+		}
+		for _, must := range musts {
 			if !strings.Contains(g.Markdown, must) {
 				t.Errorf("%s's guide lacks %q", kind, must)
 			}
@@ -53,7 +60,8 @@ func TestTheGuideAcksRightAfterReceiving(t *testing.T) {
 		recv, ackCmd, as := "`autodoc mail receive`", "`autodoc mail ack <id>`", "exactly as `receive` printed it"
 		if crew.MailViaOf(kind) == crew.MailViaMCP { // its mail is the crew MCP server's tools
 			recv, ackCmd, as = "`mail_receive`", "`mail_ack` with its `id`", "exactly as `mail_receive` gave it"
-			if strings.Contains(g, "`autodoc mail") || strings.Contains(g, "`autodoc crew whoami`") || strings.Contains(g, "`autodoc crew list`") {
+			if shell := []string{"`autodoc mail receive", "`autodoc mail ack", "`autodoc mail reply", "`autodoc mail send", "`autodoc mail renew",
+				"`autodoc crew whoami`", "`autodoc crew list`"}; slices.ContainsFunc(shell, func(c string) bool { return strings.Contains(g, c) }) {
 				t.Errorf("%s's guide names a shell command for its mail or crew, which its rules don't allow:\n%s", kind, g)
 			}
 		}
