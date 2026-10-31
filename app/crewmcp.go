@@ -111,6 +111,18 @@ var crewMCPTools = []mcpTool{
 			subject, err := strArg(in, "subject", false)
 			return "mail reply", []string{"--body=" + body, "--subject=" + subject, "--", id}, err
 		}},
+	{Name: "mail_renew", Description: "Keep a delivery 10 more minutes, for long work, by the id mail_receive gave; reply or ack when it's done.",
+		Schema: object(map[string]any{"id": idProp}, "id"),
+		args: func(in map[string]any) (string, []string, error) {
+			id, err := strArg(in, "id", true)
+			return "mail renew", []string{"--", id}, err
+		}},
+	{Name: "crew_whoami", Description: "Who you are in the crew: your codename, scope, session and store.",
+		Schema: object(map[string]any{}),
+		args:   func(map[string]any) (string, []string, error) { return "crew whoami", nil, nil }},
+	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it.",
+		Schema: object(map[string]any{}),
+		args:   func(map[string]any) (string, []string, error) { return "crew list", nil, nil }},
 	{Name: "mail_send", Description: "Send mail: to a codename, name@scope, user (the person you work for) or session:<id>. " +
 		"kind request asks for an answer, which wakes you when it comes.",
 		Schema: object(map[string]any{
