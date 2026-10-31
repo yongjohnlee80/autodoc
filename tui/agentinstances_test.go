@@ -285,12 +285,17 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	}
 	c.drainPosts()
 	tab := string(instance.tab)
-	if done != 1 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
-		t.Fatalf("the task goes as one bracketed paste, and done: done=%d pastes=%q", done, c.panel.pastes)
+	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
+		t.Fatalf("the task goes as one bracketed paste, done waiting for its Enter: done=%d pastes=%q", done, c.panel.pastes)
 	}
-	// the Enter that sends it follows the paste after submitDelay (agentmessaging.go), never with it
+	// the Enter that sends it follows the paste after submitDelay (agentmessaging.go), never with it,
+	// and the delivery is done with its answer
 	if !slices.Equal(c.delays, []time.Duration{submitDelay}) || len(c.panel.keys) != 0 {
 		t.Fatalf("the Enter isn't the paste's follower: delays=%v keys=%q", c.delays, c.panel.keys)
+	}
+	c.fireAfters()
+	if done != 1 || !slices.Equal(c.panel.keys, []string{"\r"}) {
+		t.Fatalf("the Enter sends it, then done: done=%d keys=%q", done, c.panel.keys)
 	}
 	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, widget.TerminalInput)}) {
 		t.Fatalf("the agent's panel is brought forward for the Enter: opened=%q active=%q modes=%q", c.opened, c.panel.active, c.panel.modes)
@@ -306,6 +311,7 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 	for _, ending := range []string{"no", "workspace", "profile", "shutdown", "yes"} {
 		t.Run(ending, func(t *testing.T) {
 			a, c := modelAgents(t)
+			a.promptsReported = func(string, bool, bool) bool { return true } // delivered is sent: the base presses Enter
 			done := 0
 			var outcome error
 			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
