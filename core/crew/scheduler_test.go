@@ -55,6 +55,9 @@ type wakeRig struct {
 	w     *fakeWaker
 	s     *crew.Scheduler
 	epoch int64
+
+	fmu    sync.Mutex
+	failed []string // each wake the scheduler told of as failed: "<session>: <reason>"
 }
 
 func newWakeRig(t *testing.T, run string) *wakeRig {
@@ -62,7 +65,12 @@ func newWakeRig(t *testing.T, run string) *wakeRig {
 	r.mem = crewtest.NewMem(r.clock.Now)
 	r.m = crew.New(r.mem, crew.WithSessionEnder(&crewtest.Enders{}))
 	r.s = r.m.NewScheduler(run, map[string]crew.Waker{"fake": r.w}, crew.WithWakeClock(r.clock.Now),
-		crew.WithWakeErrors(func(err error) { t.Errorf("scheduler: %v", err) }))
+		crew.WithWakeErrors(func(err error) { t.Errorf("scheduler: %v", err) }),
+		crew.WithWakeFailures(func(ep crew.Endpoint, err error) {
+			r.fmu.Lock()
+			defer r.fmu.Unlock()
+			r.failed = append(r.failed, ep.Session+": "+err.Error())
+		}))
 	e, err := r.m.Claim(r.ctx, "autodoc:w", "host", "")
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +155,11 @@ func TestFailuresBackOffAndAnUnansweredWakeTimesOut(t *testing.T) {
 	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 1 || *w.NextAt != r.clock.Now().Add(5*time.Second).UnixNano() {
 		t.Fatalf("after one failure: %+v", w)
 	}
+	// the row keeps the count, never the reason: the scheduler tells of it, with the session's
+	if r.fmu.Lock(); !slices.Equal(r.failed, []string{s.Session + ": refused"}) {
+		t.Fatalf("the failure told: %q", r.failed)
+	}
+	r.fmu.Unlock()
 	r.look()
 	if r.w.count() != 1 {
 		t.Fatal("retried before its backoff")
@@ -159,6 +172,10 @@ func TestFailuresBackOffAndAnUnansweredWakeTimesOut(t *testing.T) {
 	r.w.answer = nil
 	r.clock.Advance(30 * time.Second)
 	r.look() // accepted, then unanswered
+	if r.fmu.Lock(); len(r.failed) != 2 {
+		t.Fatalf("an accepted wake was told as failed, or a failure untold: %q", r.failed)
+	}
+	r.fmu.Unlock()
 	r.clock.Advance(2 * time.Minute)
 	r.look()
 	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Failures != 3 || *w.NextAt != r.clock.Now().Add(2*time.Minute).UnixNano() {

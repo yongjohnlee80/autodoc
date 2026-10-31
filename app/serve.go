@@ -367,7 +367,10 @@ func codexWaker(ctx context.Context, uid int, bin string) crew.Waker {
 // when it starts with a waker: it reserves only the kinds wakers serve, so with none it would have
 // nothing to do. A late waker (AddWaker) joins a running loop; serve's always starts with Claude's.
 func startScheduler(ctx context.Context, c *crew.Manager, wakers map[string]crew.Waker, log logger.Logger, opts ...crew.SchedulerOption) (*crew.Scheduler, func()) {
-	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") })}, opts...)
+	opts = append([]crew.SchedulerOption{crew.WithWakeErrors(func(err error) { logger.Warning(log, err, "the wake scheduler") }),
+		crew.WithWakeFailures(func(ep crew.Endpoint, err error) {
+			logger.Warning(log, err, fmt.Sprintf("the wake scheduler: waking the %s session %s", ep.Kind, ep.Session))
+		})}, opts...)
 	s := c.NewScheduler(newRunID(), wakers, opts...)
 	if len(wakers) == 0 {
 		logger.Info(log, "the wake scheduler waits for its wakers (phase 3): mail is received when agents ask")

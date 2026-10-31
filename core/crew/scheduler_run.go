@@ -32,6 +32,7 @@ type Scheduler struct {
 	kinds   []string
 	clock   func() time.Time
 	report  func(error)
+	failed  func(Endpoint, error)
 	retry   time.Duration
 	permits chan struct{}
 	poke    chan struct{}
@@ -69,6 +70,13 @@ func WithWakeErrors(report func(error)) SchedulerOption {
 	return func(s *Scheduler) { s.report = report }
 }
 
+// WithWakeFailures sets where a wake that failed, or whose outcome is unknown, is told, with the
+// waker's reason (the daemon's log): the session's row keeps the count and the backoff, never why,
+// so this is the only trace of why a session is not being woken.
+func WithWakeFailures(failed func(ep Endpoint, err error)) SchedulerOption {
+	return func(s *Scheduler) { s.failed = failed }
+}
+
 // WithWakeRetry sets how soon a look that met a store error looks again (tests shorten it).
 func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) { s.retry = d } }
 
@@ -76,7 +84,7 @@ func WithWakeRetry(d time.Duration) SchedulerOption { return func(s *Scheduler) 
 // calling the wakers by endpoint kind. It is the Manager's from then on: Watch hears its pokes.
 func (m *Manager) NewScheduler(run string, wakers map[string]Waker, opts ...SchedulerOption) *Scheduler {
 	s := &Scheduler{m: m, run: run, wakers: map[string]Waker{}, clock: time.Now, report: func(error) {}, retry: wakeRetry,
-		permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
+		failed: func(Endpoint, error) {}, permits: make(chan struct{}, wakePermits), poke: make(chan struct{}, 1),
 		watchers: map[chan struct{}]struct{}{}, owed: map[owedKey]owedEnd{}}
 	for kind, w := range wakers {
 		if w != nil {
@@ -299,6 +307,9 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 		cancel()
 	}
 	o := classify(werr)
+	if werr != nil {
+		s.failed(ep, werr)
+	}
 	if err := s.m.Outcome(ctx, session, tok, o); err != nil {
 		s.report(err)
 		s.owe(session, tok, owedEnd{outcome: o})
