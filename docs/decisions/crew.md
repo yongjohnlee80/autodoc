@@ -280,7 +280,10 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   missing (Claude's, OpenCode's, Codex's app-server), nothing listening on it or at agy's address,
   or another process than the session's holding it. A failure that may pass (a deadline, a
   refusal, any other error) counts toward the 5. The session's next registered endpoint makes it
-  reachable again.
+  reachable again, and your inbox hears of that too. Nothing listening happens for a moment while a
+  live process binds its socket again (a Claude restart); taking it for gone then is safe, since the
+  window types to an unreachable agent, presses Enter only where its prompts are reported, and the
+  restarted session's `SessionStart` registers its endpoint again.
 - `crew.list` says why a session can't be woken now: `ended`, `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
