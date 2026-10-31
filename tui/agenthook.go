@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // THE WORKSPACE NOTICE HOOK (docs/decisions/crew.md#the-workspace-notice-hook) — a Claude agent
@@ -25,14 +27,25 @@ func noticeCommand(dir string) string {
 
 // mergeClaudeHook makes path's hooks.UserPromptSubmit run command once (mergeClaudeSettings).
 func mergeClaudeHook(path, command string) error {
-	return mergeClaudeSettings(path, map[string]string{"UserPromptSubmit": command}, nil)
+	return mergeClaudeSettings(path, claudeMerge{events: map[string]string{"UserPromptSubmit": command}})
 }
 
-// mergeClaudeSettings makes each of path's hooks.<event> run its command in events once, and sets
-// each key in set at the top level, keeping every other key, hook and matcher the user wrote there,
-// numbers as written. A file that isn't a JSON object, or whose hooks aren't the shape Claude Code
-// reads, is left as it is, and the error says so.
-func mergeClaudeSettings(path string, events map[string]string, set map[string]any) error {
+// claudeMerge is what mergeClaudeSettings writes: each hook event's command, the top-level keys to
+// set, and what was AutoDoc's before: commands taken out of every event first (an event left with
+// no hook goes), and keys whose value is unset's taken out unless set again.
+type claudeMerge struct {
+	events map[string]string
+	set    map[string]any
+	ours   []string
+	unset  map[string]any
+}
+
+// mergeClaudeSettings makes each of path's hooks.<event> run its command in m.events once, and sets
+// each key in m.set at the top level, keeping every other key, hook and matcher the user wrote
+// there, numbers as written, and taking out m's old ones. A file that isn't a JSON object, or whose
+// hooks aren't the shape Claude Code reads, is left as it is, and the error says so.
+func mergeClaudeSettings(path string, m claudeMerge) error {
+	events, set := m.events, m.set
 	settings := map[string]any{}
 	switch b, err := os.ReadFile(path); {
 	case err == nil:
@@ -52,6 +65,33 @@ func mergeClaudeSettings(path string, events map[string]string, set map[string]a
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
+	for event, v := range hooks {
+		groups, ok := v.([]any)
+		if !ok || len(m.ours) == 0 {
+			continue
+		}
+		kept := []any{}
+		for _, g := range groups {
+			for _, command := range m.ours {
+				if g = withoutCommand(g, command); g == nil {
+					break
+				}
+			}
+			if g != nil {
+				kept = append(kept, g)
+			}
+		}
+		if len(kept) < len(groups) && len(kept) == 0 {
+			delete(hooks, event) // only ours were there: an event the CLI may not know is not left named
+		} else {
+			hooks[event] = kept
+		}
+	}
+	for k, v := range m.unset {
+		if _, again := set[k]; !again && settings[k] == v {
+			delete(settings, k)
+		}
+	}
 	for event, command := range events {
 		groups, ok := hooks[event].([]any)
 		if !ok && hooks[event] != nil {
@@ -65,7 +105,9 @@ func mergeClaudeSettings(path string, events map[string]string, set map[string]a
 		}
 		hooks[event] = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command}}})
 	}
-	settings["hooks"] = hooks
+	if len(hooks) > 0 || settings["hooks"] != nil {
+		settings["hooks"] = hooks
+	}
 	for k, v := range set {
 		settings[k] = v
 	}
@@ -108,41 +150,24 @@ func withoutCommand(g any, command string) any {
 	return group
 }
 
-// endpointCommand is the SessionStart hook that registers a Claude session's endpoint
-// (docs/decisions/crew.md#wakers-and-the-wake-scheduler), run by dir's own autodoc: what it prints
-// (the endpoint's generation) is not for the agent's context, which a SessionStart hook's output
-// joins; a failure still says why, on stderr.
-func endpointCommand(dir string) string {
-	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew endpoint --claude >/dev/null"
-}
-
 // writeWakeAcceptance configures only what lets the crew's fixed notice start a turn
 // (docs/decisions/crew.md#wake-acceptance-not-tool-approvals), for a crew session's CLI of kind in
-// dir: for Claude Code, the SessionStart hook that registers its endpoint, crossSessionInbound
-// "accept", and the hooks that report its permission prompts (they report; they decide nothing);
-// for the others nothing yet (Codex's queue starts turns as it is). It never writes
-// approval policies, permission modes, or allow or deny rules: a turn a wake starts runs under the
-// profile's own tool policy.
-func writeWakeAcceptance(dir, kind string) error {
-	if kind != "claude" {
-		return nil
+// dir: for a Claude Code that knows k, crew's one source of its settings (crew.ClaudeHookCommands,
+// crew.ClaudeSetKeys), run by dir's own autodoc: the SessionStart hook that registers its endpoint,
+// crossSessionInbound "accept", and, when it can report them, the hooks that report its permission
+// prompts (they report; they decide nothing), the events it doesn't know never named, and AutoDoc's
+// hooks of an earlier start taken out first. prompts is whether those hooks were written, which
+// the session's registration says. For the others nothing yet (Codex's queue starts turns as it
+// is). It never writes approval policies, permission modes, or allow or deny rules: a turn a wake
+// starts runs under the profile's own tool policy.
+func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks) (prompts bool, err error) {
+	if kind != crew.KindClaude {
+		return false, nil
 	}
-	events := map[string]string{"SessionStart": endpointCommand(dir)}
-	for _, e := range claudePromptEvents {
-		events[e] = promptCommand(dir)
-	}
-	return mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), events, map[string]any{"crossSessionInbound": "accept"})
-}
-
-// claudePromptEvents are the hooks that report a crew Claude agent's permission prompts
-// (`crew attention --claude-hook`): PermissionRequest opens a prompt, a permission Notification
-// stands for one, that tool's own PostToolUse or PostToolUseFailure closes it, and UserPromptSubmit
-// and Stop close them all.
-var claudePromptEvents = []string{"PermissionRequest", "Notification", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop"}
-
-// promptCommand is the hook that reports a permission prompt, run by dir's own autodoc: it prints
-// nothing (a PermissionRequest hook's output could decide the prompt, a UserPromptSubmit hook's
-// joins the agent's context), and a failure says why on stderr alone.
-func promptCommand(dir string) string {
-	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " crew attention --claude-hook >/dev/null"
+	autodoc := shellQuote(filepath.Join(dir, "bin", "autodoc"))
+	events, prompts := crew.ClaudeHookCommands(autodoc, k)
+	set := crew.ClaudeSetKeys(k)
+	err = mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), claudeMerge{events: events, set: set,
+		ours: crew.ClaudeCommandLines(autodoc), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"}})
+	return prompts && err == nil, err
 }

@@ -50,6 +50,7 @@ type (
 		Started    int64
 		Ended      *int64
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
+		Prompts    bool   // its permission prompts are reported, as its registration said (crew.register's prompts)
 	}
 
 	// Endpoint is how a session is woken (docs/decisions/crew.md#wakers-and-the-wake-scheduler):

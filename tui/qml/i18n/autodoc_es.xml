@@ -1211,6 +1211,10 @@
         <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
         <translation>La campana de agentes está activada: una solicitud o una solicitud de permiso suena, como mucho una vez cada 10 s.</translation>
     </message>
+    <message id="autodoc.crew.claude_prompts_unreported">
+        <source>%1's permission prompts aren't reported, so a message typed to it isn't sent with Enter: its Claude Code could not be read (%2). Name the Claude Code binary itself in the profile's command to have them reported.</source>
+        <translation>Las solicitudes de permiso de %1 no se informan, así que un mensaje escrito para él no se envía con Intro: no se pudo leer su Claude Code (%2). Indica el binario de Claude Code en el comando del perfil para que se informen.</translation>
+    </message>
     <message id="autodoc.crew.did_not_start">
         <source>%1 did not start: %2</source>
         <translation>%1 no se inició: %2</translation>

@@ -101,7 +101,8 @@ return {
         { name = "kind", type = "string" },
         { name = "workspace", type = "string" },
         { name = "instance", type = "string" },
-        { name = "secret", type = "string" }
+        { name = "secret", type = "string" },
+        { name = "prompts", type = "bool", optional = true }
       },
       result = "{session, profile}",
       doc = "Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret).",

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // SETTING UP AN AGENT — the first run's card (docs/decisions/crew.md#first-run-agent-setup): when
@@ -51,11 +53,16 @@ func agentSetupPending(p prefs) bool {
 var lookAgentCLI = exec.LookPath
 
 // Started warms the OpenCode plugin's env when a crew window has an OpenCode profile (whose spawn
-// needs it), and offers the setup on a first run (startup's About waits for it, startup.go), once the
+// needs it), and what each Claude profile's Claude Code knows (warmClaude), and offers the setup on a first run (startup's About waits for it, startup.go), once the
 // Vim question before it is answered (vimquestion.go opens it then).
 func (a *agents) Started() {
 	if a.crew != nil && slices.ContainsFunc(a.profiles(), func(p agentProfile) bool { return agentKind(p.Command) == "opencode" }) {
 		a.warmPluginEnv() // off the loop now, so an OpenCode agent's spawn never waits on it
+	}
+	for _, p := range a.profiles() {
+		if a.crew != nil && agentKind(p.Command) == crew.KindClaude {
+			a.warmClaude(p.Command) // and a Claude agent's on what its Claude Code knows
+		}
 	}
 	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {
 		a.openAgentSetup()

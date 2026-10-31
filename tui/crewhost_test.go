@@ -58,7 +58,8 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 			return nil, d.refuse
 		}
 		reg, err := d.m.Register(ctx, crew.Registration{Scope: p[0].(string), Run: p[1].(string), Epoch: p[2].(int64),
-			Codename: p[3].(string), Kind: p[4].(string), Workspace: p[5].(string), Instance: p[6].(string), Secret: p[7].(string)})
+			Codename: p[3].(string), Kind: p[4].(string), Workspace: p[5].(string), Instance: p[6].(string), Secret: p[7].(string),
+			Prompts: p[8].(bool)})
 		if err != nil {
 			return nil, crewWire(err)
 		}

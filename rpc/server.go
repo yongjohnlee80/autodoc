@@ -171,7 +171,8 @@ import (
 // unknown method, and its window types the text into the agent's prompt as before. With it,
 // crew.attention's alive (a session's permission-prompt reporter is running) and crew.list's
 // prompts_reported (its prompts are reported now), which a window reads before pressing Enter into an
-// agent it typed to.
+// agent it typed to; and crew.register's prompts, that the host wrote the hooks that report a
+// Claude session's prompts, without which its prompts_reported is false.
 const Protocol int64 = 41
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it

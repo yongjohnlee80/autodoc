@@ -291,7 +291,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     raised while any is open. What the daemon was last told is kept, written only once told, so a
     raise or clear that failed is retried by the next hook; until then that prompt is unreported.
     The hooks print nothing, so they decide nothing. A live Claude session's prompts count as
-    reported.
+    reported only when its host wrote those hooks, which its registration says (`crew.register`'s
+    `prompts`, kept with the session). A Claude Code too old for them gets none, and its prompts
+    are never assumed reported.
   - OpenCode's plugin (`permission.asked`, `permission.replied`) and agy's bridge (a trajectory step
     waiting on a permission, read every 2 s) report them, and say they are alive (`crew.attention
     alive`, every 5 s and every look). Their sessions' prompts count as reported only within 15 s of
@@ -343,12 +345,32 @@ In the code: `core/inbox/manager.go`, `core/mail/human.go`, `core/mail/send.go`,
 
 A host configures only what lets the fixed notice start a turn. For Claude Code, that is the
 `SessionStart` hook that registers the endpoint and `crossSessionInbound: "accept"` in the agent
-folder's `.claude/settings.json`. Codex's queue starts turns as it is, and OpenCode's plugin and
-Antigravity's bridge need nothing written. No host writes approval policies, permission modes, or
-allow and deny rules: a woken turn runs under the profile's own tool policy, and a prompt it hits
-raises attention for you to answer in its tab.
+folder's `.claude/settings.json`, and the hooks that report its permission prompts. Codex's queue
+starts turns as it is, and OpenCode's plugin and Antigravity's bridge need nothing written. No host
+writes approval policies, permission modes, or allow and deny rules: a woken turn runs under the
+profile's own tool policy, and a prompt it hits raises attention for you to answer in its tab.
 
-In the code: `tui/agenthook.go`
+Claude Code's settings have one source, which AutoDoc's own agents get and another host prints
+with `autodoc crew claude-settings` (the JSON `claude --settings` takes; `--prompts` says whether
+they report the prompts). They name only the hook events and settings the installed Claude Code
+knows: an event it doesn't know, it skips, but first it shows a warning that waits for a key, and
+the session doesn't start until someone answers it.
+
+- What it knows is read from its binary, which carries each hook event it knows as a quoted
+  literal. A version floor would serve as well, but which release added an event isn't published
+  where a host can read it. The answer is kept by the binary's path, size and modification time,
+  so an update is read again. AutoDoc finds the binary the profile's command runs on PATH, and
+  follows a mise shim to the tool it runs; it reads it off the loop when the window starts and
+  after each spawn.
+- The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
+  what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
+  `SessionStart` alone, and registers without `prompts`.
+- A binary that can't be read (a wrapper script) is taken to know `SessionStart` and
+  `crossSessionInbound` alone, and the window says once that its prompts aren't reported.
+- AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
+  downgraded Claude Code no longer knows is never left named.
+
+In the code: `core/crew/claude.go`, `tui/agenthook.go`, `tui/agentclaude.go`, `app/crewclaudesettings.go`
 
 ## The agent guide and commands
 
