@@ -37,7 +37,9 @@ type agents struct {
 	pluginEnv func() (string, error)
 	// pluginAnswer is the process's one run of it (warmPluginEnv), on the loop
 	pluginAnswer *pluginEnvAnswer
-	editorPath   func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	// codexHere replaces registerCodex's runs of the agent's autodoc (a cell's); nil in production
+	codexHere  func(args ...string) error
+	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
 	editorTokens        map[string]string

@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.21
+	github.com/yongjohnlee80/golib v0.8.22
 	github.com/yongjohnlee80/golib/gui v0.3.10
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
@@ -16,6 +16,7 @@ require (
 
 require (
 	gioui.org/shader v1.0.9 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
