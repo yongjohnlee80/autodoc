@@ -99,7 +99,16 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	// language server's end are seen: neither tells the bridge.
 	tick := time.NewTicker(bridgeEvery)
 	defer tick.Stop()
+	// NOTE: a look every bridgePromptEvery is how a permission prompt is seen: the language server
+	// tells no one but its own client.
+	prompts := time.NewTicker(bridgePromptEvery)
+	defer prompts.Stop()
+	watching, stopWatching := context.WithCancel(ctx)
+	watched := make(chan struct{})
+	go func() { defer close(watched); b.watchPrompts(watching, prompts.C, stderr) }()
 	err = b.run(ctx, tick.C, stderr)
+	stopWatching()
+	<-watched
 	fmt.Fprintln(stderr, "autodoc: the agy bridge stops:", err)
 	return 0
 }
@@ -153,6 +162,8 @@ type agyBridge struct {
 	instance func(ctx context.Context) (string, error) // the daemon's instance
 	dial     func(ctx context.Context) error           // a connection to the language server
 	hosts    func(ctx context.Context) error           // it hosts the conversation, for the token
+	// prompt reads the conversation's permission prompt from step offset on (crew.AgyPromptOf)
+	prompt func(ctx context.Context, offset int) (crew.AgyPrompt, int, error)
 }
 
 // newAgyBridge is c's bridge from the language server getenv names, its address made a loopback IP.
@@ -182,6 +193,9 @@ func newAgyBridge(c sessionContext, getenv func(string) string) (*agyBridge, err
 	}
 	client := crew.AgyClient()
 	b.hosts = func(ctx context.Context) error { return crew.AgyHosts(ctx, client, ip, token, conv) }
+	b.prompt = func(ctx context.Context, offset int) (crew.AgyPrompt, int, error) {
+		return crew.AgyPromptOf(ctx, client, ip, token, conv, offset)
+	}
 	b.dial = func(ctx context.Context) error {
 		var d net.Dialer
 		conn, err := d.DialContext(ctx, "tcp", ip)
@@ -269,6 +283,46 @@ func (b *agyBridge) run(ctx context.Context, tick <-chan time.Time, log io.Write
 				return err
 			}
 		}
+	}
+}
+
+// bridgePromptEvery is how often the bridge looks for the agent's permission prompt.
+const bridgePromptEvery = 2 * time.Second
+
+// watchPrompts reports the agent's permission prompts (crew.ReportsPrompts), at each tick until
+// ctx ends: a prompt showing raises the session's permission attention, saying what it asks (again
+// if another prompt took its place), and none showing clears what it raised. Each look is bounded
+// (b.bound); a look that fails changes nothing and is logged once until one succeeds.
+func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log io.Writer) {
+	offset, raised, failing := 0, "", false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick:
+		}
+		lctx, cancel := context.WithTimeout(ctx, b.bound)
+		p, next, err := b.prompt(lctx, offset)
+		if err != nil {
+			cancel()
+			if !failing && ctx.Err() == nil {
+				fmt.Fprintln(log, "autodoc: looking for the agent's permission prompt; trying again:", err)
+			}
+			failing = true
+			continue
+		}
+		failing, offset = false, next
+		switch {
+		case p.Showing && p.Asks != raised:
+			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "raise", crew.AttentionPermission, p.Asks); err == nil {
+				raised = p.Asks
+			}
+		case !p.Showing && raised != "":
+			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "clear"); err == nil {
+				raised = ""
+			}
+		}
+		cancel()
 	}
 }
 

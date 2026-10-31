@@ -198,3 +198,75 @@ func agyCall(ctx context.Context, c *http.Client, address, token, method string,
 }
 
 var _ Waker = (*AgyWaker)(nil)
+
+// AgyPrompt is an agy conversation's permission prompt, as its language server shows it: Showing
+// when the trajectory's last step waits on the user with a permission requested, Asks what it asks
+// ("command: touch build/x").
+type AgyPrompt struct {
+	Showing bool
+	Asks    string
+}
+
+// The trajectory step states AgyPromptOf reads (GetCascadeTrajectorySteps).
+const agyStepWaiting = "CORTEX_STEP_STATUS_WAITING"
+
+// AgyPromptOf reads conversation's trajectory from step offset on (its tail: offset is the answer a
+// read before gave, 0 at first) and answers its permission prompt, and the offset the next read
+// takes, which keeps the last step read in view, since its state is what changes. A trajectory
+// shorter than offset (reverted) is read again from its start.
+func AgyPromptOf(ctx context.Context, c *http.Client, address, token, conversation string, offset int) (AgyPrompt, int, error) {
+	type step struct {
+		Status      string `json:"status"`
+		Interaction *struct {
+			Permission *struct {
+				Resource struct {
+					Action string `json:"action"`
+					Target string `json:"target"`
+				} `json:"resource"`
+				Description string `json:"actionDescription"`
+			} `json:"permission"`
+		} `json:"requestedInteraction"`
+	}
+	read := func(from int) ([]step, error) {
+		code, answer, err := agyCall(ctx, c, address, token, "GetCascadeTrajectorySteps",
+			map[string]any{"cascadeId": conversation, "stepOffset": from})
+		if err != nil {
+			return nil, err
+		}
+		if code != http.StatusOK {
+			return nil, fmt.Errorf("crew: the agy language server answered status %d for the trajectory", code)
+		}
+		var got struct {
+			Steps []step `json:"steps"`
+		}
+		if err := json.Unmarshal(answer, &got); err != nil {
+			return nil, fmt.Errorf("crew: the agy trajectory: %w", err)
+		}
+		return got.Steps, nil
+	}
+	steps, err := read(offset)
+	if err == nil && len(steps) == 0 && offset > 0 {
+		offset = 0
+		steps, err = read(0)
+	}
+	if err != nil || len(steps) == 0 {
+		return AgyPrompt{}, offset, err
+	}
+	last := steps[len(steps)-1]
+	next := offset + len(steps) - 1
+	if last.Status != agyStepWaiting || last.Interaction == nil || last.Interaction.Permission == nil {
+		return AgyPrompt{}, next, nil
+	}
+	p := last.Interaction.Permission
+	asks := p.Resource.Action
+	if p.Resource.Target != "" {
+		asks += ": " + p.Resource.Target
+	}
+	if asks == "" {
+		asks = p.Description
+	}
+	if asks == "" {
+		asks = "a permission"
+	}
+	return AgyPrompt{Showing: true, Asks: asks}, next, nil
+}
