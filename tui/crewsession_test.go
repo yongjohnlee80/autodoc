@@ -210,6 +210,32 @@ func claudeSettingsOf(t *testing.T, dir string) (map[string]any, string) {
 	return s, string(b)
 }
 
+// crewHookEvents are the hook events in settings s that run one of the crew's commands
+// (`crew endpoint`, `crew attention`), sorted: the workspace notice's UserPromptSubmit, which every
+// Claude agent gets, is not one.
+func crewHookEvents(s map[string]any) []string {
+	hooks, _ := s["hooks"].(map[string]any)
+	var out []string
+	for e, v := range hooks {
+		if c := fmt.Sprint(v); strings.Contains(c, " crew endpoint ") || strings.Contains(c, " crew attention ") {
+			out = append(out, e)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// unreportedNotices counts the notices in notes saying an agent's prompts aren't reported.
+func unreportedNotices(notes []string) int {
+	n := 0
+	for _, s := range notes {
+		if strings.Contains(s, "aren't reported") {
+			n++
+		}
+	}
+	return n
+}
+
 // promptsReported is crew.list's prompts_reported for codename, on the window's daemon.
 func promptsReported(t *testing.T, w *crewWindow, codename string) bool {
 	t.Helper()
@@ -264,8 +290,8 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 			t.Errorf("%s's prompts_reported %v, want %v (its registration's prompts)", code, got, wants)
 		}
 	}
-	if len(c.notes) != 0 {
-		t.Errorf("notices: %v", c.notes)
+	if n := unreportedNotices(c.notes); n != 0 {
+		t.Errorf("notices %v: a binary that was read is never told of as unreported", c.notes)
 	}
 }
 
@@ -298,19 +324,17 @@ func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, b := claudeSettingsOf(t, dir)
-	hooks, _ := s["hooks"].(map[string]any)
-	var named []string
-	for e := range hooks {
-		named = append(named, e)
+	if named := crewHookEvents(s); !slices.Equal(named, []string{"SessionStart"}) || strings.Contains(b, "--claude-hook") || s["crossSessionInbound"] != "accept" {
+		t.Errorf("the older Claude Code's crew hooks are %v, want SessionStart alone, with crossSessionInbound:\n%s", named, b)
 	}
-	if !slices.Equal(named, []string{"SessionStart"}) || strings.Contains(b, "--claude-hook") || s["crossSessionInbound"] != "accept" {
-		t.Errorf("the older Claude Code's settings name %v, want SessionStart alone, with crossSessionInbound:\n%s", named, b)
+	if hooks, _ := s["hooks"].(map[string]any); hooks["PermissionRequest"] != nil {
+		t.Errorf("the older Claude Code's settings still name PermissionRequest:\n%s", b)
 	}
 	if promptsReported(t, w, "cl") {
 		t.Error("a session whose Claude Code has no prompt hooks reports its prompts")
 	}
-	if len(c.notes) != 0 {
-		t.Errorf("notices: %v", c.notes)
+	if n := unreportedNotices(c.notes); n != 0 {
+		t.Errorf("notices %v: a binary that was read is never told of as unreported", c.notes)
 	}
 }
 
@@ -334,8 +358,8 @@ func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
 	if _, b := claudeSettingsOf(t, c.panel.configs[instance.tab].Dir); !strings.Contains(b, "PermissionRequest") || !promptsReported(t, w, "cl") {
 		t.Errorf("a wrapper's agent: no prompt hooks, or its prompts unreported:\n%s", b)
 	}
-	if len(c.notes) != 0 {
-		t.Errorf("notices: %v", c.notes)
+	if n := unreportedNotices(c.notes); n != 0 {
+		t.Errorf("notices %v: the real binary was read, so nothing is unreported", c.notes)
 	}
 }
 
@@ -355,16 +379,16 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 			t.Fatal(err)
 		}
 		s, b := claudeSettingsOf(t, c.panel.configs[instance.tab].Dir)
-		if hooks, _ := s["hooks"].(map[string]any); len(hooks) != 1 || hooks["SessionStart"] == nil || s["crossSessionInbound"] != "accept" {
-			t.Errorf("an unreadable Claude Code's settings:\n%s\nwant SessionStart and crossSessionInbound alone", b)
+		if named := crewHookEvents(s); !slices.Equal(named, []string{"SessionStart"}) || s["crossSessionInbound"] != "accept" {
+			t.Errorf("an unreadable Claude Code's crew hooks are %v:\n%s\nwant SessionStart and crossSessionInbound alone", named, b)
 		}
 		if promptsReported(t, w, "cl") {
 			t.Error("an unreadable Claude Code's session reports its prompts")
 		}
 		c.panel.exit(instance.tab, 0)
 	}
-	if len(c.notes) != 1 || !strings.Contains(c.notes[0], "aren't reported") {
-		t.Errorf("notices %v, want one saying its prompts aren't reported", c.notes)
+	if n := unreportedNotices(c.notes); n != 1 {
+		t.Errorf("notices %v: %d say its prompts aren't reported, want one, however often it starts", c.notes, n)
 	}
 }
 

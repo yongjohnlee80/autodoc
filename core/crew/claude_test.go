@@ -203,21 +203,23 @@ func TestClaudeOfLooksPastAWrapper(t *testing.T) {
 func TestALiteralAcrossTwoChunksIsFound(t *testing.T) {
 	const chunk = 1 << 20 // claudeScanChunk
 	lit := `"PermissionRequest"`
-	for _, split := range []int{1, len(lit) / 2, len(lit) - 1} {
-		b := bytes.Repeat([]byte{0}, chunk-split)
-		b = append(b, lit...)
-		b = append(b, bytes.Repeat([]byte{0}, 4096)...)
-		for _, e := range everyClaudeEvent {
-			if e != "PermissionRequest" {
-				b = append(b, `"`+e+`" `...)
+	for _, boundary := range []int{chunk, 2 * chunk} { // the first chunk's end, and one the carry crosses again
+		for _, split := range []int{1, len(lit) / 2, len(lit) - 1} { // the literal's bytes before the boundary
+			b := bytes.Repeat([]byte{0}, boundary-split)
+			b = append(b, lit...)
+			b = append(b, bytes.Repeat([]byte{0}, 4096)...)
+			for _, e := range everyClaudeEvent {
+				if e != "PermissionRequest" {
+					b = append(b, `"`+e+`" `...)
+				}
 			}
-		}
-		path := filepath.Join(t.TempDir(), "claude")
-		if err := os.WriteFile(path, b, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if k, err := crew.ClaudeKnows(path); err != nil || !k["PermissionRequest"] || !k.Reports() {
-			t.Errorf("a literal split %d bytes before a chunk's end: %v, %v; want it found", split, k, err)
+			path := filepath.Join(t.TempDir(), "claude")
+			if err := os.WriteFile(path, b, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if k, err := crew.ClaudeKnows(path); err != nil || !k["PermissionRequest"] || !k.Reports() {
+				t.Errorf("a literal %d bytes before the chunk end at %d: %v, %v; want it found", split, boundary, k, err)
+			}
 		}
 	}
 }
