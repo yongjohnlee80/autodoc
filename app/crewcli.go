@@ -217,6 +217,8 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
 			fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 		}}, // run by crewBridgeMain: it stays, so it is no one call
+	"crew mcp": {usage: "the crew's mail as MCP tools (mail_receive, mail_ack, mail_reply, mail_send) on stdin and stdout, as this session: for an agent CLI's MCP config, which a host writes",
+		example: "autodoc crew mcp"}, // run by crewMCPMain: a stdio server, so it is no one call
 	"crew plugin": {usage: "--opencode [--print-env] [--dir D]: write AutoDoc's OpenCode plugin into AutoDoc's data folder and print its path, or with --print-env the OPENCODE_CONFIG_CONTENT that loads it (for a host's agent launch; nothing is written into a project)",
 		example: "autodoc crew plugin --opencode --print-env",
 		flags: func(fs *flag.FlagSet) {
@@ -486,36 +488,22 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 	if name == "crew claude-settings" {
 		return crewClaudeSettingsMain(configPath, args[2:], stdout, stderr)
 	}
-	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	if cmd.flags != nil {
-		cmd.flags(fs)
+	if name == "crew mcp" {
+		return crewMCPMain(ctx, stdin, stdout, stderr)
 	}
-	if err := fs.Parse(interleaved(args[2:], fs)); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			// the flags were printed to stderr; the command's line and example are the answer
-			fmt.Fprintf(stdout, "autodoc %s %s\n  e.g. %s\n", name, cmd.usage, cmd.example)
-			return 0
+	res, err := runCrewCommand(ctx, name, args[2:], stdin, stderr, sessionHere)
+	var usageErr *crewUsageError
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		// the flags were printed to stderr; the command's line and example are the answer
+		fmt.Fprintf(stdout, "autodoc %s %s\n  e.g. %s\n", name, cmd.usage, cmd.example)
+		return 0
+	case errors.As(err, &usageErr):
+		if usageErr.err != nil {
+			fmt.Fprintln(stderr, "autodoc:", usageErr.err)
 		}
 		return 2
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintln(stderr, "autodoc:", err)
-		return 1
-	}
-	c, err := findSessionContext(os.Getenv("AUTODOC_CREW_CONTEXT"), cwd)
-	if err != nil {
-		fmt.Fprintln(stderr, "autodoc:", err)
-		return 1
-	}
-	method, params, shape, err := cmd.call(c, fs, fs.Args(), stdin)
-	if err != nil {
-		fmt.Fprintln(stderr, "autodoc:", err)
-		return 2
-	}
-	res, err := crewCall(ctx, c, method, params)
-	if err != nil {
+	case err != nil:
 		var re *golibrpc.Error
 		if errors.As(err, &re) {
 			b, _ := json.Marshal(map[string]any{"error": &CallError{Code: re.Code, Message: re.Message}})
@@ -525,10 +513,6 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 		}
 		return 1
 	}
-	res = jsonOf(res)
-	if shape != nil {
-		res = shape(res)
-	}
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
@@ -537,6 +521,63 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 		return 1
 	}
 	return 0
+}
+
+// crewUsageError is a command's arguments refused before any call (crewMainIn's exit 2); err is
+// what to say, nil when the flag package already said it.
+type crewUsageError struct{ err error }
+
+func (e *crewUsageError) Error() string {
+	if e.err == nil {
+		return "usage"
+	}
+	return e.err.Error()
+}
+func (e *crewUsageError) Unwrap() error { return e.err }
+
+// sessionHere is the session the CLI acts as: $AUTODOC_CREW_CONTEXT's, or the working folder's.
+func sessionHere() (sessionContext, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return sessionContext{}, err
+	}
+	return findSessionContext(os.Getenv("AUTODOC_CREW_CONTEXT"), cwd)
+}
+
+// runCrewCommand runs the `autodoc crew|mail` command name with args as the session session finds
+// (read for each command, as a re-registration may rewrite it), and answers its result as the CLI
+// prints it: the one path the CLI and `autodoc crew mcp`'s tools share. flag.ErrHelp is a --help;
+// a *crewUsageError its arguments refused; a *golibrpc.Error the daemon's refusal.
+func runCrewCommand(ctx context.Context, name string, args []string, stdin io.Reader, stderr io.Writer, session func() (sessionContext, error)) (any, error) {
+	cmd := crewCommands[name]
+	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if cmd.flags != nil {
+		cmd.flags(fs)
+	}
+	if err := fs.Parse(interleaved(args, fs)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil, err
+		}
+		return nil, &crewUsageError{}
+	}
+	c, err := session()
+	if err != nil {
+		return nil, err
+	}
+	method, params, shape, err := cmd.call(c, fs, fs.Args(), stdin)
+	if err != nil {
+		return nil, &crewUsageError{err}
+	}
+	res, err := crewCall(ctx, c, method, params)
+	if err != nil {
+		return nil, err
+	}
+	res = jsonOf(res)
+	if shape != nil {
+		res = shape(res)
+	}
+	return res, nil
 }
 
 // crewCall makes one call to the daemon the context names: never another, and never a spawn, so
