@@ -1164,9 +1164,6 @@ func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness)
 			t.Fatalf("the failed send's delivery: %+v, want withdrawn", d)
 		}
 	}
-	if got := receive(); len(got) != 0 {
-		t.Fatalf("a withdrawn send was received: %+v", got)
-	}
 	wake := func() crew.Wake {
 		t.Helper()
 		var w crew.Wake
@@ -1188,7 +1185,10 @@ func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness)
 	if _, err := send("k2b", true); !errors.Is(err, mail.ErrUnreachable) || bell.answer(nil) != rings {
 		t.Fatalf("a send during the backoff: %v, %d rings, want unreachable and none", err, bell.answer(nil)-rings)
 	}
-	clock.Advance(5 * time.Second)
+	// withdrawn, neither is received (the receive itself, a sign the agent is there, ends the backoff)
+	if got := receive(); len(got) != 0 {
+		t.Fatalf("a withdrawn send was received: %+v", got)
+	}
 	// a doorbell that rings: the send stands, and the agent receives it from the user
 	fired, err := send("k3", true)
 	if err != nil || bell.answer(nil) != rings+1 || fired.Message.Sender == "" {

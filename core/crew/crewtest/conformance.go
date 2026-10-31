@@ -784,8 +784,9 @@ func Run(t *testing.T, h Harness) {
 			return l
 		}
 		want := []crew.Entry{
-			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true},
-			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false},
+			// both live Claude sessions: their hooks report their prompts, reachable or not
+			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true},
+			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: true},
 		}
 		if got := list(); !slices.Equal(got, want) {
 			t.Fatalf("list: %+v\nwant %+v", got, want)
