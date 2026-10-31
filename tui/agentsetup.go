@@ -61,7 +61,7 @@ func (a *agents) Started() {
 	}
 	for _, p := range a.profiles() {
 		if a.crew != nil && agentKind(p.Command) == crew.KindClaude {
-			a.warmClaude(p.Command) // and a Claude agent's on what its Claude Code knows
+			a.warmClaude(p) // and a Claude agent's on what its Claude Code knows
 		}
 	}
 	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {
@@ -122,7 +122,7 @@ func (a *agents) agentSetupConfirm(i int, name string) {
 	}
 	cli := a.setupFound[i]
 	a.editingAgent, a.editingAgentProfile = "", nil // a new profile, never an edit
-	p, ok := a.storeAgentProfile(name, cli.command, "")
+	p, ok := a.storeAgentProfile(name, cli.command, "", "")
 	if !ok {
 		return // refused: storeAgentProfile opened agentEdit with the reason, and nothing is recorded
 	}

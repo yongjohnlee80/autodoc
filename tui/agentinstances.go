@@ -244,7 +244,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if instance != nil && (instance.running || instance.starting) {
 		return instance, a.selectInstance(instance)
 	}
-	if instance != nil && instance.profile.Command != p.Command {
+	if instance != nil && !instance.profile.sameLaunch(p) {
 		return nil, fmt.Errorf("close the old agent tab before starting its edited command: %w", ErrAgentStale)
 	}
 	if instance != nil && instance.dir != a.agentFolder(ws, p.Codename) {
@@ -265,12 +265,12 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := a.agentEnv(ws, dir, p.Codename)
+	env := append(p.envList(), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
 	prompts := false
 	if crewed && crewKind == crew.KindClaude {
 		// a wake reaches it only with these: without them it still starts, and receives when it asks
 		var err error
-		prompts, err = writeWakeAcceptance(dir, crewKind, a.claudeHooks(p.Name, p.Command))
+		prompts, err = writeWakeAcceptance(dir, crewKind, a.claudeHooks(p))
 		a.c.Keep(err)
 	}
 	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
@@ -368,7 +368,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 	}
 	proc, err := a.spawn(c)
 	if err == nil && instance.crewed && agentKind(instance.profile.Command) == "codex" {
-		a.registerCodex(instance.context, c.Dir, time.Now())
+		a.registerCodex(instance.context, c.Dir, instance.profile.environ(os.Environ()), time.Now())
 	}
 	return proc, err
 }
@@ -384,11 +384,11 @@ const (
 )
 
 // registerCodex registers a crew Codex agent's session, started at started in folder dir under
-// the session context file ctxFile, so it is reachable before anyone types: its own autodoc's
+// the session context file ctxFile with environ (runAgentAutodoc), so it is reachable before anyone types: its own autodoc's
 // `crew endpoint --codex-here`, which finds the folder's thread on Codex's app-server, run off the
 // loop and again until it is found. A session that ended (its context gone) stops it; one never
 // found raises the session's attention, saying why, so the window shows it.
-func (a *agents) registerCodex(ctxFile, dir string, started time.Time) {
+func (a *agents) registerCodex(ctxFile, dir string, environ []string, started time.Time) {
 	c, ok := a.c.(agentRuntimeHost)
 	if !ok {
 		return
@@ -396,7 +396,7 @@ func (a *agents) registerCodex(ctxFile, dir string, started time.Time) {
 	run := a.codexHere
 	if run == nil {
 		bin, config := a.agentBin(), a.agentConfig
-		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, args...) }
+		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, environ, args...) }
 	}
 	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
 	var attempt func(tries int)
@@ -421,8 +421,9 @@ func (a *agents) registerCodex(ctxFile, dir string, started time.Time) {
 }
 
 // runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
-// session (ctxFile, $AUTODOC_CREW_CONTEXT), bounded at 15 s; its error carries what it said.
-func runAgentAutodoc(bin, config, ctxFile, dir string, args ...string) error {
+// session (ctxFile, $AUTODOC_CREW_CONTEXT) with environ, its profile's (agentProfile.environ: a
+// CODEX_HOME there is the one it reads), bounded at 15 s; its error carries what it said.
+func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	full := []string{}
@@ -431,7 +432,7 @@ func runAgentAutodoc(bin, config, ctxFile, dir string, args ...string) error {
 	}
 	cmd := exec.CommandContext(ctx, bin, append(full, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "AUTODOC_CREW_CONTEXT="+ctxFile)
+	cmd.Env = append(slices.Clone(environ), "AUTODOC_CREW_CONTEXT="+ctxFile)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
@@ -799,7 +800,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			return ErrAgentStale
 		}
 		if saved {
-			if currentProfile, exists := a.profile(to.Codename); !exists || currentProfile != p {
+			if currentProfile, exists := a.profile(to.Codename); !exists || !currentProfile.same(p) {
 				return ErrAgentStale
 			}
 		}

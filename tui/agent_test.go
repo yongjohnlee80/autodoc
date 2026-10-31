@@ -379,7 +379,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "beta removed", func(string) bool { return count() == 2 })
 	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
-	if got[0] != profiles[0] || got[1] != profiles[2] {
+	if !got[0].same(profiles[0]) || !got[1].same(profiles[2]) {
 		t.Fatalf("Yes removed a changed row instead of beta: %v", got)
 	}
 	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "" {
