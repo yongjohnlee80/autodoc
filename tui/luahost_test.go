@@ -206,6 +206,7 @@ end }`)
 // and a stopped one is asked about, naming what will be sent.
 func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	a, c := modelAgents(t)
+	a.promptsReported = func(string, bool) bool { return true } // its prompts reported: the base sends with its Enter
 	one, _ := a.profile("one")
 	first, _ := a.startInstance(one)
 	var got []error
@@ -216,6 +217,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.drainPosts()
+	c.fireAfters() // the Enter, submitDelay after the paste, and then done
 	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":[bracketed]line one\nline two"}) {
 		t.Fatalf("a running agent: done %v, pastes %q", got, c.panel.pastes)
 	}
@@ -226,6 +228,8 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 		t.Fatalf("a stopped agent: questions %+v", c.questions)
 	}
 	c.questions[0].OnYes()
+	c.drainPosts()
+	c.fireAfters()
 	if len(got) != 2 || got[1] != nil || len(c.panel.pastes) != 2 || !strings.HasSuffix(c.panel.pastes[1], ":[bracketed]for two") {
 		t.Fatalf("started and sent: done %v, pastes %q", got, c.panel.pastes)
 	}
