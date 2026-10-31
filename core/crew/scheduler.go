@@ -3,7 +3,9 @@ package crew
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"syscall"
 	"time"
 )
 
@@ -25,8 +27,12 @@ const (
 const ChangeReachability = "reachability"
 
 // failed counts one more consecutive failure of w and backs it off from now; the failure that
-// crosses unreachableAfter journals the loss in the same write, once.
-func failed(tx Tx, w *Wake, now time.Time) error {
+// crosses unreachableAfter journals the loss in the same write, once. A gone endpoint's failure
+// counts as the one that crosses it, unless one did already.
+func failed(tx Tx, w *Wake, now time.Time, gone bool) error {
+	if gone && w.Failures < unreachableAfter-1 {
+		w.Failures = unreachableAfter - 1
+	}
 	w.Failures++
 	at := now.Add(backoff(w.Failures)).UnixNano()
 	w.State, w.Token, w.NextAt = WakeIdle, "", &at
@@ -43,10 +49,28 @@ const (
 	OutcomeAccepted Outcome = iota // the channel took the notice
 	OutcomeUnknown                 // it may have: a deadline, a lost answer
 	OutcomeFailed                  // it did not
+	OutcomeGone                    // it did not, and the endpoint never will: no one is there
 )
 
 // ErrWakeUnknown is a waker's call whose outcome it can't tell: classified OutcomeUnknown.
 var ErrWakeUnknown = errors.New("crew: the wake's outcome is unknown")
+
+// ErrEndpointGone is a wake that found nothing at the session's endpoint, for certain: its socket
+// gone, nothing listening there, or another process than the session's holding it. Classified
+// OutcomeGone: the session is unreachable at once, not after unreachableAfter failures, until it
+// registers an endpoint again. A failure that may pass (a deadline, a refusal, an error) is never
+// this.
+var ErrEndpointGone = errors.New("crew: the session's endpoint is gone")
+
+// dialFailure is err, from dialing what at an endpoint, as ErrEndpointGone when it says for certain
+// that no one is there (ENOENT: no socket; ECONNREFUSED: nothing listening), else a failure. Never
+// an unknown: nothing was sent.
+func dialFailure(what string, err error) error {
+	if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+		return fmt.Errorf("%w: dialing %s: %v", ErrEndpointGone, what, err)
+	}
+	return fmt.Errorf("crew: dialing %s: %v", what, err)
+}
 
 // Waker sends the notice through one CLI's own channel
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler): argv or a socket write, never a shell
@@ -61,6 +85,8 @@ func classify(err error) Outcome {
 		return OutcomeAccepted
 	case errors.Is(err, ErrWakeUnknown), errors.Is(err, context.DeadlineExceeded):
 		return OutcomeUnknown
+	case errors.Is(err, ErrEndpointGone):
+		return OutcomeGone
 	}
 	return OutcomeFailed
 }
@@ -114,7 +140,7 @@ func (m *Manager) RecoverRun(ctx context.Context, run string) error {
 // after mail's expiry, in one write; it answers the sessions now due whose endpoint is of one of
 // kinds, the kinds there are wakers for.
 func (m *Manager) sweep(ctx context.Context, kinds []string) ([]string, error) {
-	var due []string
+	var due, unanswered []string
 	err := m.store.Write(ctx, func(tx Tx) error {
 		if err := m.expire(tx); err != nil {
 			return err
@@ -124,8 +150,10 @@ func (m *Manager) sweep(ctx context.Context, kinds []string) ([]string, error) {
 		if err != nil {
 			return err
 		}
+		due, unanswered = nil, nil
 		for _, w := range late {
-			if err := failed(tx, &w, now); err != nil {
+			unanswered = append(unanswered, w.Session)
+			if err := failed(tx, &w, now, false); err != nil {
 				return err
 			}
 			if err := tx.PutWake(w); err != nil {
@@ -138,7 +166,41 @@ func (m *Manager) sweep(ctx context.Context, kinds []string) ([]string, error) {
 		}
 		return err
 	})
+	if err == nil {
+		for _, s := range unanswered {
+			m.noteCause(s, CauseUnanswered)
+		}
+	}
 	return due, err
+}
+
+// CauseUnanswered is the cause crew.list's why gives a failure that was a notice no mail.receive
+// followed in time.
+const CauseUnanswered = "no mail receive within 2m0s of the notice"
+
+// maxCause bounds a failure's cause, as crew.list's why carries it.
+const maxCause = 200
+
+// noteCause keeps cause as session's last failed wake's, in memory alone (the store keeps the
+// count, never the reason): crew.list's why names it while the session is unreachable. A daemon
+// restart forgets it, and why then names no cause until the next failure.
+func (m *Manager) noteCause(session, cause string) {
+	if len(cause) > maxCause {
+		cause = cause[:maxCause]
+	}
+	m.aliveMu.Lock()
+	defer m.aliveMu.Unlock()
+	if m.causes == nil {
+		m.causes = map[string]string{}
+	}
+	m.causes[session] = cause
+}
+
+// cause is session's last failed wake's cause (noteCause), "" when none is known.
+func (m *Manager) cause(session string) string {
+	m.aliveMu.Lock()
+	defer m.aliveMu.Unlock()
+	return m.causes[session]
 }
 
 // Reserve takes session's idle → in_flight step as a compare-and-set, after mail's expiry, in one
@@ -235,8 +297,8 @@ func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome)
 		switch {
 		case w.AnnouncedGen >= w.AttemptGen:
 			w.State, w.Failures, w.NextAt = WakeIdle, 0, nil
-		case o == OutcomeFailed:
-			if err := failed(tx, &w, now); err != nil {
+		case o == OutcomeFailed || o == OutcomeGone:
+			if err := failed(tx, &w, now, o == OutcomeGone); err != nil {
 				return err
 			}
 		default:

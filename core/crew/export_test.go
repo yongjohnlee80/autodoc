@@ -30,3 +30,10 @@ func AliveReporters(m *Manager) int {
 	defer m.aliveMu.Unlock()
 	return len(m.alive)
 }
+
+// KeptCauses is how many sessions' last wake-failure causes m holds (noteCause).
+func KeptCauses(m *Manager) int {
+	m.aliveMu.Lock()
+	defer m.aliveMu.Unlock()
+	return len(m.causes)
+}

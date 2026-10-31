@@ -29,9 +29,11 @@ type Manager struct {
 	secretsMu sync.Mutex
 	secrets   map[string]endpointSecret
 	ended     map[string]bool
-	// alive is each session's prompt reporter's last heartbeat (ReporterAlive), in memory alone
+	// alive is each session's prompt reporter's last heartbeat (ReporterAlive), and causes each
+	// session's last failed wake's cause (noteCause), in memory alone
 	aliveMu sync.Mutex
 	alive   map[string]time.Time
+	causes  map[string]string
 }
 
 // endpointSecret is a session's endpoint secret and the generation it belongs to.
@@ -87,10 +89,11 @@ func (m *Manager) write(ctx context.Context, fn func(tx Tx, after *afterCommit) 
 		m.forgetSecret(id)
 	}
 	m.secretsMu.Unlock()
-	if len(after.ended) > 0 { // an ended session's reporter has nothing more to report
+	if len(after.ended) > 0 { // an ended session's reporter has nothing more to report, nor its wakes
 		m.aliveMu.Lock()
 		for _, id := range after.ended {
 			delete(m.alive, id)
+			delete(m.causes, id)
 		}
 		m.aliveMu.Unlock()
 	}
