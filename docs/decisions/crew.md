@@ -360,7 +360,8 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
 
 In the code: `core/crew/scheduler.go`, `core/crew/scheduler_run.go`, `core/crew/wakeclaude.go`,
 `core/crew/wakecodex.go`, `core/crew/wakeagy.go`, `core/crew/wakeopencode.go`,
-`app/crewbridge.go`, `app/crewopencode.go`, `app/serve.go`
+`app/crewbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
+`core/crew/opencode/autodoc-crew.js`, `app/serve.go`
 
 ## The human inbox
 
@@ -452,9 +453,18 @@ starts turns as it is, and OpenCode's plugin and Antigravity's bridge need nothi
 writes approval policies, permission modes, or allow and deny rules: a woken turn runs under the
 profile's own tool policy, and a prompt it hits raises attention for you to answer in its tab.
 
-Claude Code's settings have one source, which AutoDoc's own agents get and another host prints
-with `autodoc crew claude-settings` (the JSON `claude --settings` takes; `--prompts` says whether
-they report the prompts). They name only the hook events and settings the installed Claude Code
+Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks
+with `autodoc crew setup --kind K --host nvim [--env K=V]…`. It answers JSON: the arguments to
+append (Claude's `--settings`), AutoDoc's environment to merge after the profile's (OpenCode's
+`OPENCODE_CONFIG_CONTENT`), the user-level files the kind needs, whether the setup reports the
+session's permission prompts (which its `crew.register` says), and notices for the user. It reads
+the profile's environment (its PATH finds the CLI) and never prints it back. AutoDoc's own files
+(the OpenCode plugin, what each Claude Code knows) go in the data folder of the config it runs
+under.
+
+Claude Code's settings have one source, which AutoDoc's own agents get and another host gets from
+`autodoc crew setup` (or, alone, `autodoc crew claude-settings`: the JSON `claude --settings`
+takes; `--prompts` says whether they report the prompts). They name only the hook events and settings the installed Claude Code
 knows: an event it doesn't know, it skips, but first it shows a warning that waits for a key, and
 the session doesn't start until someone answers it.
 
@@ -481,7 +491,8 @@ the session doesn't start until someone answers it.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 
-In the code: `core/crew/claude.go`, `tui/agenthook.go`, `tui/agentclaude.go`, `app/crewclaudesettings.go`
+In the code: `core/crew/setup.go`, `core/crew/claude.go`, `tui/agenthook.go`, `tui/agentclaude.go`,
+`app/crewsetup.go`, `app/crewclaudesettings.go`
 
 ## The agent guide and commands
 
