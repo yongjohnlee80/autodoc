@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
-
-	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // Agent messaging: how anything the user sends reaches one of the window's agents
@@ -20,9 +18,9 @@ import (
 //     nothing sent, goes on to the base; any other error ends the delivery unsent, since the
 //     doorbell may have rung and the message must never arrive twice.
 //   - the base: the message as one bracketed paste into the agent's terminal, then Enter, only into
-//     an agent whose permission prompts the window sees now (a live session whose kind reports
-//     them, crew.ReportsPrompts) and that shows none: an Enter into a permission prompt would
-//     approve it. Otherwise it stays typed, and done hears ErrAgentTypedNotSent.
+//     an agent whose permission prompts are reported now (crew.list's prompts_reported: a live
+//     session whose reporter is there) and that shows none: an Enter into a permission prompt
+//     would approve it. Otherwise it stays typed, and done hears ErrAgentTypedNotSent.
 //
 // Every user-to-agent path sends through it: SendText (and the Lua autodoc.agents.send), HandTask
 // (a todo's assignment, a candidate's audit). None of them chooses a mechanism.
@@ -108,14 +106,14 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 }
 
 // submitter is the base's Enter decision for to, after its paste: submitDelay later, the crew is
-// asked about to's session (crewHost.sessionOf), and Enter is pressed only into an agent whose
-// prompts the window can see now (promptsSeen) and that shows none; otherwise the message stays
-// typed, a notice says why, and the delivery finishes ErrAgentTypedNotSent.
+// asked whether to's prompts are reported (crewHost.promptsReported), and Enter is pressed only
+// into an agent whose prompts are and that shows none; otherwise the message stays typed, a notice
+// says why, and the delivery finishes ErrAgentTypedNotSent.
 func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID, func(error)) {
 	return func(panel TerminalPanel, tab widget.TerminalTabID, finish func(error)) {
 		kind := a.kindOf(to.Codename)
-		decide := func(live, reachable bool) {
-			if !a.promptsSeen(kind, live, reachable) {
+		decide := func(reported bool) {
+			if !a.promptsSeen(kind, reported) {
 				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting", to.Codename))
 				finish(ErrAgentTypedNotSent)
 				return
@@ -129,10 +127,10 @@ func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID
 		}
 		look := func() {
 			if a.crew == nil {
-				decide(false, false)
+				decide(false)
 				return
 			}
-			a.crew.sessionOf(to.Codename, decide)
+			a.crew.promptsReported(to.Codename, decide)
 		}
 		if c, ok := a.c.(agentRuntimeHost); ok {
 			c.After(submitDelay, look)
@@ -142,19 +140,13 @@ func (a *agents) submitter(to AgentRef) func(TerminalPanel, widget.TerminalTabID
 	}
 }
 
-// promptsSeen reports whether the window sees a kind session's permission prompts now: it has a
-// live session in the window's scope (a prompt is raised through the session; without one nothing
-// reaches the crew inbox) and its kind reports them (crew.ReportsPrompts, with crew.list's
-// reachable). A cell's promptsReported stands in for it.
-func (a *agents) promptsSeen(kind string, live, reachable bool) bool {
+// promptsSeen is whether the window sees the agent's permission prompts now: the crew's answer
+// (reported), or a cell's promptsReported in its place.
+func (a *agents) promptsSeen(kind string, reported bool) bool {
 	if a.promptsReported != nil {
-		return a.promptsReported(kind, live, reachable)
+		return a.promptsReported(kind, reported)
 	}
-	return promptsSeen(kind, live, reachable)
-}
-
-func promptsSeen(kind string, live, reachable bool) bool {
-	return live && crew.ReportsPrompts(kind, reachable)
+	return reported
 }
 
 // kindOf is the CLI kind of codename's agent (agentKind of its command), "" when it has none here.

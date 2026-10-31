@@ -368,11 +368,10 @@ messaging, which tries the agent's doorbell first and falls back to typing
   withdrawn, never receivable, and it answers `inbox.unreachable`. Nothing is left behind, so the
   fallback never delivers twice.
 - **The fallback** types the message into the agent's terminal as one bracketed paste and presses
-  Enter after it, only where the window sees the agent's prompts: a live session (`crew.list`'s
-  presence) whose kind reports them (`crew.ReportsPrompts`, with `crew.list`'s `reachable`), showing
-  none. Elsewhere the message stays typed for the user's Enter, and a notice says why. Only a
-  doorbell that answers for certain it didn't ring falls back; one whose answer is lost is asked
-  again with the same key, and the daemon answers a repeat with the first send's answer.
+  Enter after it, only where the agent's prompts are reported (`crew.list`'s `prompts_reported` for
+  its session in the window's scope) and none shows (no permission attention raised). Elsewhere the
+  message stays typed for the user's Enter, and a notice says why. Only a doorbell that answers for
+  certain it didn't ring falls back; one whose answer is lost is asked again with the same key.
 - A task is a request, subject `Task: <title>`, with its file, id and instruction in the body; a text
   is a plain message. Either way, the agent's guide says that mail from `user` is the user's own
   instruction.
