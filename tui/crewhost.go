@@ -57,8 +57,11 @@ type crewHost struct {
 	epoch    int64
 	gen      uint64 // bumped by each claim: an earlier claim's renewals stop
 	claiming bool
-	offered  bool                   // the orphans were offered this run (creworphans.go)
-	sessions map[string]crewSession // the agents' sessions registered and not yet ended, by id
+	// claimFailing is that the claims have failed since the last one that held: the outage was told
+	// of (autodoc.crew.no_scope), once, and its retries say nothing
+	claimFailing bool
+	offered      bool                   // the orphans were offered this run (creworphans.go)
+	sessions     map[string]crewSession // the agents' sessions registered and not yet ended, by id
 	// pending is each codename's registration whose answer was lost: the daemon may have committed
 	// it, so its exact tuple is replayed, by the codename's next start or by settle, never a fresh
 	// one that would find the session it left as busy. owed is each ended session whose crew.exit
@@ -144,10 +147,14 @@ func (h *crewHost) claim() {
 			return // panicked (kept and said where it happened, work.go), or a daemon with no crew
 		}
 		if r.err != nil {
-			h.c.Notify(h.c.Trf("autodoc.crew.no_scope", r.err.Error()))
+			if !h.claimFailing { // told once an outage: the retries say nothing new
+				h.claimFailing = true
+				h.c.Notify(h.c.Trf("autodoc.crew.no_scope", r.err.Error()))
+			}
 			h.c.After(crewRenewEvery, h.claim) // a store or daemon failure may pass: try again
 			return
 		}
+		h.claimFailing = false
 		if r.warn != nil {
 			h.c.Notify(h.c.Trf("autodoc.crew.scope_unlisted", r.warn.Error()))
 		}

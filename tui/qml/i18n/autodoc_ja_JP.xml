@@ -1235,6 +1235,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 はもうあなたを待っていません</translation>
     </message>
+    <message id="autodoc.crew.inbox_refused">
+        <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
+        <translation>このウィンドウのクルーの受信箱はデーモンに拒否されました (%1)。依頼と注意は次の接続で再び表示されます。</translation>
+    </message>
     <message id="autodoc.crew.no_scope">
         <source>This window's agents have no crew scope: %1</source>
         <translation>このウィンドウのエージェントにはクルーのスコープがありません: %1</translation>

@@ -1235,6 +1235,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 不再等你了</translation>
     </message>
+    <message id="autodoc.crew.inbox_refused">
+        <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
+        <translation>此窗口的团队收件箱被守护进程拒绝（%1）：请求和提醒会在下次连接时重新显示。</translation>
+    </message>
     <message id="autodoc.crew.no_scope">
         <source>This window's agents have no crew scope: %1</source>
         <translation>此窗口的代理没有团队作用域：%1</translation>
