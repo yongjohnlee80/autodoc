@@ -68,6 +68,12 @@ func (k *fakeSink) Close() {
 	}
 }
 
+// surfaceWait bounds every wait a surface cell makes for what must come (a frame at the sink, a side-
+// channel op, a violation, the owner's end): each returns as soon as it comes, so only a failing
+// cell spends it, and it is scaled under -race, whose slower goroutines a loaded run (-count, other
+// packages) leaves a frame in flight past a bare 5 s.
+const surfaceWait = 5 * time.Second * raceFactor
+
 // surfaceRig is a host's owner and the plugin's end of its side channel.
 type surfaceRig struct {
 	owner    *surfaceOwner
@@ -137,7 +143,7 @@ func (r *surfaceRig) next(t *testing.T) map[string]any {
 			t.Fatalf("the side channel closed%s", r.violatedSince())
 		}
 		return m
-	case <-time.After(5 * time.Second):
+	case <-time.After(surfaceWait):
 		t.Fatalf("no side-channel op arrived%s", r.violatedSince())
 	}
 	return nil
@@ -147,7 +153,7 @@ func (r *surfaceRig) next(t *testing.T) map[string]any {
 // for, which no frame follows.
 func (r *surfaceRig) take(t *testing.T) *fakeHeld {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(surfaceWait); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
 		r.sink.mu.Lock()
 		if len(r.sink.held) > 0 {
 			h := r.sink.held[0]
@@ -236,7 +242,7 @@ func (r *surfaceRig) violation(t *testing.T) string {
 	select {
 	case why := <-r.violated:
 		return why
-	case <-time.After(5 * time.Second):
+	case <-time.After(surfaceWait):
 		t.Fatal("no violation")
 	}
 	return ""
@@ -364,7 +370,7 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	r.present(t, 1, gen, ids[0])
 	h := r.take(t)
 	r.owner.Close()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(surfaceWait)
 	for r.mappings(t) > before+1 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
@@ -379,7 +385,7 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	h.f.Drop() // the positive control: the frame was held past Close
 	select {
 	case <-r.owner.Ended():
-	case <-time.After(5 * time.Second):
+	case <-time.After(surfaceWait):
 		t.Fatal("the owner did not end at the last release")
 	}
 	if n := r.mappings(t) - before; n != 0 {
@@ -431,7 +437,7 @@ func TestAStalledSurfacePluginIsClosedAndNeverBlocksARelease(t *testing.T) {
 	}
 	select {
 	case <-violated:
-	case <-time.After(5 * time.Second):
+	case <-time.After(surfaceWait):
 		t.Fatal("a plugin that never read was not closed")
 	}
 }
@@ -535,7 +541,7 @@ func TestASaturatedSurfaceBudgetKeepsAHeldFrame(t *testing.T) {
 	}
 	h.r.complete("drawn")
 	h.f.Drop()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(surfaceWait)
 	for r.mappings(t)-before != plugin.MaxPoolBuffers && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
