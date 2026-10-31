@@ -139,8 +139,40 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 		t.Fatalf("the delivery's message: %v", msg)
 	}
 	id, _ := item["id"].(string)
+	if item["answer"] != "autodoc mail ack "+id {
+		t.Fatalf("a message's answer: %q, want its ack by its id %s", item["answer"], id)
+	}
 	if code, _, errOut := d.as(jarvis, "", "mail", "ack", id); code != 0 {
 		t.Fatalf("mail ack %s: exit %d, %s", id, code, errOut)
+	}
+	// a request's answer is its reply, by the id receive printed; run as given, it answers and acks
+	if code, _, errOut := d.as(gold, "", "mail", "send", "jarvis", "--kind", "request", "--subject", "review", "--body", "the diff"); code != 0 {
+		t.Fatalf("mail send a request: exit %d, %s", code, errOut)
+	}
+	code, got, errOut = d.as(jarvis, "", "mail", "receive")
+	ds, _ = got["deliveries"].([]any)
+	if code != 0 || len(ds) != 1 {
+		t.Fatalf("jarvis's receive of the request: exit %d, %v, %s", code, got, errOut)
+	}
+	req := ds[0].(map[string]any)
+	rid, _ := req["id"].(string)
+	answer, _ := req["answer"].(string)
+	if want := "autodoc mail reply " + rid + ` --body "<your reply>"`; answer != want {
+		t.Fatalf("a request's answer: %q, want %q", answer, want)
+	}
+	words := strings.Fields(strings.Replace(answer, `"<your reply>"`, "looks-good", 1))
+	if code, _, errOut := d.as(jarvis, "", words[1:]...); code != 0 {
+		t.Fatalf("running the request's answer %v: exit %d, %s", words, code, errOut)
+	}
+	if code, again, _ := d.as(jarvis, "", "mail", "receive"); code != 0 || len(again["deliveries"].([]any)) != 0 {
+		t.Fatalf("after the answer, jarvis's receive: %v; want nothing (the reply acked it)", again)
+	}
+	code, got, errOut = d.as(gold, "", "mail", "receive")
+	if ds, _ = got["deliveries"].([]any); code != 0 || len(ds) != 1 || ds[0].(map[string]any)["message"].(map[string]any)["body"] != "looks-good" {
+		t.Fatalf("gold's receive of the reply: exit %d, %v, %s", code, got, errOut)
+	}
+	if code, _, errOut := d.as(gold, "", "mail", "ack", ds[0].(map[string]any)["id"].(string)); code != 0 {
+		t.Fatalf("gold's ack of the reply: exit %d, %s", code, errOut)
 	}
 	// a decision request to the human, answered in the inbox; the answer comes back as mail
 	if code, _, errOut := d.as(gold, "", "mail", "send", "user", "--kind", "request", "--subject", "Decision: ship?", "--body", "now or later"); code != 0 {

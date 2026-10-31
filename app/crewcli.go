@@ -24,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
 // The agent's commands (docs/decisions/crew.md#the-session-context,
@@ -275,7 +276,7 @@ var crewCommands = map[string]crewCommand{
 			}
 			// one response per request: the delivery is the key, so a retry after a lost answer
 			// gets that response back
-			return "mail.reply", []any{c.Credential, d, l, body, "reply:" + d, strFlag(fs, "subject")}, nil, nil
+			return "mail.reply", []any{c.Credential, d, l, body, mail.ReplyKey(d), strFlag(fs, "subject")}, nil, nil
 		}},
 	"mail send": {usage: "<to>... [--kind request] [--subject S] [--ttl 1h] [--key K] --body TEXT|-: send mail; to is a codename, name@scope, user or session:<id>",
 		example: "autodoc mail send tifa-lockhart --kind request --subject \"Review\" --body \"Please review the plan in docs/plan.md.\"",
@@ -366,7 +367,10 @@ func sendKey(to []string, kind, subject, body string, ttl time.Duration) string 
 	return "cli:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// withHandles gives each received delivery the id the other commands take: delivery and lease.
+// withHandles gives each received delivery the id the other commands take, delivery and lease,
+// and the command that answers it (answer): a request's reply, a message's ack. An agent runs the
+// command it is given, and builds no id of its own (a message's id with a delivery's lease is
+// none).
 func withHandles(v any) any {
 	res, ok := v.(map[string]any)
 	if !ok {
@@ -382,9 +386,19 @@ func withHandles(v any) any {
 			id, _ := d["id"].(string)
 			lease, _ := d["lease"].(string)
 			item["id"] = handle(id, lease)
+			item["answer"] = answerCommand(item, handle(id, lease))
 		}
 	}
 	return res
+}
+
+// answerCommand is the command that answers a received item h: a request is replied to (which acks
+// it), anything else acked.
+func answerCommand(item map[string]any, h string) string {
+	if m, _ := item["message"].(map[string]any); m != nil && m["kind"] == mail.KindRequest {
+		return "autodoc mail reply " + h + ` --body "<your reply>"`
+	}
+	return "autodoc mail ack " + h
 }
 
 // isCrewCommand reports whether args are an `autodoc crew|mail` subcommand, not the flag modes.

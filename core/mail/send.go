@@ -419,18 +419,35 @@ func (m *Manager) Receive(ctx context.Context, credential string) (Received, err
 	return out, err
 }
 
-// owned is delivery id when session s may act on it: the recipient's, unbound or bound to s.
-// Anything else answers as a lost lease, which says nothing of another's mail.
-func owned(tx Tx, s crew.Session, id string) (Delivery, error) {
+// owned is the delivery id names when session s may act on it: the recipient's, unbound or bound
+// to s. id is the delivery's, or the id of a message s's profile has a delivery of when that
+// delivery holds exactly lease (docs/decisions/crew.md#durable-mail): the lease is one receive's,
+// so holding it proves the hold, and the message's id with it names the same item; viaMessage says
+// it was named so. Anything else answers as a lost lease, which says nothing of another's mail.
+func owned(tx Tx, s crew.Session, id, lease string) (d Delivery, viaMessage bool, err error) {
+	mine := func(d Delivery) bool { return d.Recipient == s.Profile && (d.Session == "" || d.Session == s.ID) }
 	d, ok, err := tx.Delivery(id)
 	if err != nil {
-		return Delivery{}, err
+		return Delivery{}, false, err
 	}
-	if !ok || d.Recipient != s.Profile || (d.Session != "" && d.Session != s.ID) {
-		return Delivery{}, ErrLeaseLost
+	if ok && mine(d) {
+		return d, false, nil
 	}
-	return d, nil
+	if !ok && lease != "" {
+		if d, ok, err = tx.DeliveryOf(id, s.Profile); err != nil {
+			return Delivery{}, false, err
+		}
+		if ok && mine(d) && d.Lease == lease {
+			return d, true, nil
+		}
+	}
+	return Delivery{}, false, ErrLeaseLost
 }
+
+// ReplyKey is the idempotency key the CLI gives a reply to delivery: one response per request's
+// delivery, so a retry after a lost answer gets that response back. A reply that names the
+// delivery by its message's id (owned) is keyed as the delivery's.
+func ReplyKey(delivery string) string { return "reply:" + delivery }
 
 // Renew extends a lease the caller holds by LeaseFor from now; it does not count as an attempt.
 func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string) error {
@@ -442,7 +459,7 @@ func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string)
 		if err := m.expire(tx); err != nil {
 			return err
 		}
-		d, err := owned(tx, s, delivery)
+		d, _, err := owned(tx, s, delivery, lease)
 		if err != nil {
 			return err
 		}
@@ -466,7 +483,7 @@ func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) e
 		if err := m.expire(tx); err != nil {
 			return err
 		}
-		d, err := owned(tx, s, delivery)
+		d, _, err := owned(tx, s, delivery, lease)
 		if err != nil {
 			return err
 		}
@@ -516,9 +533,12 @@ func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string,
 		if err := m.expire(tx); err != nil {
 			return err
 		}
-		d, err := owned(tx, s, delivery)
+		d, viaMessage, err := owned(tx, s, delivery, lease)
 		if err != nil {
 			return err
+		}
+		if viaMessage && p.Key == ReplyKey(delivery) { // the CLI's key for the item, named by its message
+			p.Key = ReplyKey(d.ID)
 		}
 		req, ok, err := tx.Message(d.Message)
 		if err != nil {
