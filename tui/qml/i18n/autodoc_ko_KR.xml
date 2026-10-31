@@ -1211,6 +1211,10 @@
         <source>The agent bell is on: a request or a permission prompt rings, at most once every 10 s.</source>
         <translation>에이전트 벨이 켜졌습니다. 요청이나 권한 확인이 있으면 울립니다(최대 10초에 한 번).</translation>
     </message>
+    <message id="autodoc.crew.claude_prompts_unreported">
+        <source>%1's permission prompts aren't reported, so a message typed to it isn't sent with Enter: its Claude Code could not be read (%2). Name the Claude Code binary itself in the profile's command to have them reported.</source>
+        <translation>%1의 권한 확인이 보고되지 않아, 입력한 메시지는 Enter로 보내지지 않습니다: Claude Code를 읽을 수 없습니다(%2). 보고되게 하려면 프로필 명령에 Claude Code 실행 파일 자체를 지정하세요.</translation>
+    </message>
     <message id="autodoc.crew.did_not_start">
         <source>%1 did not start: %2</source>
         <translation>%1이(가) 시작되지 않았습니다: %2</translation>

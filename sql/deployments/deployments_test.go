@@ -825,3 +825,21 @@ func TestTheCrewMailInboxScript(t *testing.T) {
 		}
 	}
 }
+
+// 000028 gives a crew session its prompts (docs/decisions/crew.md#the-human-inbox): 0 for one
+// registered without it, or before the script, so its prompts are never assumed reported. The
+// revert drops the column and keeps the sessions.
+func TestTheCrewSessionPromptsScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO crew_session(id, profile, host, epoch, instance, secret_hash, args_digest, started) VALUES ('s1', 'p1', 'autodoc:w', 1, 'agent-1', x'00', x'00', 1)")
+	if got, err := first(db, "SELECT prompts FROM crew_session"); err != nil || got != "0" {
+		t.Fatalf("a session written without prompts: %q, %v; want 0", got, err)
+	}
+	revertDownTo(t, db, 28)
+	if _, err := first(db, "SELECT prompts FROM crew_session"); err == nil {
+		t.Fatal("the revert left crew_session.prompts")
+	}
+	if got, err := first(db, "SELECT count(*) FROM crew_session"); err != nil || got != "1" {
+		t.Fatalf("sessions after the revert: %s, %v; want the one kept", got, err)
+	}
+}

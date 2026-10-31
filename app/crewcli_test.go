@@ -267,7 +267,7 @@ func TestTheCommandsParseAsWritten(t *testing.T) {
 // and every command's help example, is one of the commands, with only flags it defines, so an agent
 // following either never meets "no command" or an unknown flag.
 func TestTheGuideNamesOnlyRealCommands(t *testing.T) {
-	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z]+)([^`]*)`")
+	cmd := regexp.MustCompile("`autodoc ((?:crew|mail) [a-z][a-z-]*)([^`]*)`")
 	flagRe := regexp.MustCompile(`(?:^|\s)--([a-z][a-z-]*)`)
 	check := func(where, name, rest string) {
 		t.Helper()

@@ -266,9 +266,12 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	env := a.agentEnv(ws, dir, p.Codename)
-	if crewed {
+	prompts := false
+	if crewed && crewKind == crew.KindClaude {
 		// a wake reaches it only with these: without them it still starts, and receives when it asks
-		a.c.Keep(writeWakeAcceptance(dir, agentKind(p.Command)))
+		var err error
+		prompts, err = writeWakeAcceptance(dir, crewKind, a.claudeHooks(p.Name, p.Command))
+		a.c.Keep(err)
 	}
 	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
 	if err != nil {
@@ -295,7 +298,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
 		instance.starting = true
 		token := instance.token
-		a.crew.register(p.Codename, agentKind(p.Command), ws.id, token, dir, func(s crewSession, err error) {
+		a.crew.register(p.Codename, agentKind(p.Command), prompts, ws.id, token, dir, func(s crewSession, err error) {
 			instance.starting = false
 			if a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token {
 				if err == nil {

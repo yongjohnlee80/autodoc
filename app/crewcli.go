@@ -223,6 +223,13 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
+	"crew claude-settings": {usage: "[--claude PATH] [--autodoc CMD] [--prompts]: print a crew Claude agent's settings for `claude --settings`, only the hooks the installed Claude Code knows (for a host's agent launch; nothing is written), or with --prompts whether they report its permission prompts, which its crew.register says",
+		example: "autodoc crew claude-settings --claude ~/.local/bin/claude > crew-claude.json",
+		flags: func(fs *flag.FlagSet) {
+			fs.String("claude", "claude", "the Claude Code to write them for: a path, or a name looked up on PATH")
+			fs.String("autodoc", "autodoc", "the command the hooks run AutoDoc with, as a shell reads it")
+			fs.Bool("prompts", false, "print whether the settings report the permission prompts, instead of the settings")
+		}}, // run by crewClaudeSettingsMain: it needs no session, so it is no call
 	"crew attention": {usage: "raise <permission|blocked> [text] | clear | --claude-hook: tell the user this session waits on them, or no longer does (--claude-hook: Claude Code's hooks run it, with their input, for its permission prompts)",
 		example: "autodoc crew attention raise permission \"waiting for your OK to run the migration\"",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
@@ -453,6 +460,9 @@ func crewMain(ctx context.Context, args []string, stdin io.Reader, stdout, stder
 	}
 	if name == "crew plugin" {
 		return crewPluginMain(args[2:], os.Getenv, stdout, stderr)
+	}
+	if name == "crew claude-settings" {
+		return crewClaudeSettingsMain(args[2:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet("autodoc "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)

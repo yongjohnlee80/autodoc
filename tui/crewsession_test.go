@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/tui/pty"
@@ -181,39 +182,164 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	}
 }
 
+// fakeClaudeBin writes an executable "Claude Code" at dir/claude whose binary names events as the
+// real one does (quoted literals), and returns its path.
+func fakeClaudeBin(t *testing.T, dir string, events ...string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("\x7fELF ")
+	for _, e := range events {
+		b.WriteString(`"` + e + `";`)
+	}
+	path := filepath.Join(dir, "claude")
+	if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// claudeHookEvents are every hook event a crew Claude agent's settings may name.
+var claudeHookEvents = []string{"SessionStart", "PermissionRequest", "Notification", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop"}
+
+// claudeSettingsOf is dir's .claude/settings.json, read, and its text.
+func claudeSettingsOf(t *testing.T, dir string) (map[string]any, string) {
+	t.Helper()
+	b, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	var s map[string]any
+	_ = json.Unmarshal(b, &s)
+	return s, string(b)
+}
+
+// promptsReported is crew.list's prompts_reported for codename, on the window's daemon.
+func promptsReported(t *testing.T, w *crewWindow, codename string) bool {
+	t.Helper()
+	es, err := w.d.m.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range es {
+		if e.Codename == codename {
+			return e.PromptsReported
+		}
+	}
+	t.Fatalf("crew.list has no %s: %+v", codename, es)
+	return false
+}
+
 // TestAClaudeSessionAcceptsWakes (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): a
-// Claude agent's crew session gets the SessionStart hook that registers its endpoint,
-// crossSessionInbound "accept", and the hooks that report its permission prompts, nothing about tool
-// approvals; an agent of another CLI gets none of it.
+// Claude agent's crew session, for a Claude Code that knows every hook, gets the SessionStart hook
+// that registers its endpoint, crossSessionInbound "accept", and the hooks that report its
+// permission prompts, nothing about tool approvals, and registers with prompts, so crew.list
+// reports its prompts; an agent of another CLI gets none of it.
 func TestAClaudeSessionAcceptsWakes(t *testing.T) {
-	a, c, _ := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
+	bin := t.TempDir()
+	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
 	for code, wants := range map[string]bool{"cl": true, "one": false} {
 		p, _ := a.profile(code)
 		instance, err := a.startInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		dir := c.panel.configs[instance.tab].Dir
-		b, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
-		var s map[string]any
-		_ = json.Unmarshal(b, &s)
-		accepts := s["crossSessionInbound"] == "accept" && strings.Contains(string(b), "crew endpoint --claude")
+		s, b := claudeSettingsOf(t, c.panel.configs[instance.tab].Dir)
+		accepts := s["crossSessionInbound"] == "accept" && strings.Contains(b, "crew endpoint --claude")
 		if accepts != wants {
 			t.Errorf("%s's settings accept wakes %v, want %v:\n%s", code, accepts, wants, b)
 		}
 		// and its permission prompts are reported, on each of the hooks that tell of them
 		hooks, _ := s["hooks"].(map[string]any)
-		for _, event := range claudePromptEvents {
+		for _, event := range claudeHookEvents[1:] {
 			reported := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
 			if reported != wants {
 				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reported, wants)
 			}
 		}
 		for _, never := range []string{"permissions", "allow", "deny", "defaultMode"} {
-			if strings.Contains(string(b), never) {
+			if strings.Contains(b, never) {
 				t.Errorf("%s's settings name %q: a wake never loosens tool approvals", code, never)
 			}
 		}
+		if got := promptsReported(t, w, code); got != wants {
+			t.Errorf("%s's prompts_reported %v, want %v (its registration's prompts)", code, got, wants)
+		}
+	}
+	if len(c.notes) != 0 {
+		t.Errorf("notices: %v", c.notes)
+	}
+}
+
+// TestAnOlderClaudeGetsOnlyTheHooksItKnows: a Claude Code whose binary lacks PermissionRequest gets
+// the SessionStart hook alone, never an event it would stop at a warning for, the prompt hooks an
+// earlier start wrote for a newer one taken out, and registers without prompts: crew.list's
+// prompts_reported is false, so a window types to it without pressing Enter. The binary is asked
+// again at each spawn: an update between two is seen.
+func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
+	bin := t.TempDir()
+	path := fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
+	p, _ := a.profile("cl")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := c.panel.configs[instance.tab].Dir
+	if _, b := claudeSettingsOf(t, dir); !strings.Contains(b, "PermissionRequest") || !promptsReported(t, w, "cl") {
+		t.Fatalf("the newer Claude Code's start: no prompt hooks, or its prompts unreported:\n%s", b)
+	}
+	c.panel.exit(instance.tab, 0)
+	fakeClaudeBin(t, bin, "SessionStart", "Notification", "PostToolUse", "UserPromptSubmit", "Stop", "crossSessionInbound")
+	at := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.startInstance(p); err != nil {
+		t.Fatal(err)
+	}
+	s, b := claudeSettingsOf(t, dir)
+	hooks, _ := s["hooks"].(map[string]any)
+	var named []string
+	for e := range hooks {
+		named = append(named, e)
+	}
+	if !slices.Equal(named, []string{"SessionStart"}) || strings.Contains(b, "--claude-hook") || s["crossSessionInbound"] != "accept" {
+		t.Errorf("the older Claude Code's settings name %v, want SessionStart alone, with crossSessionInbound:\n%s", named, b)
+	}
+	if promptsReported(t, w, "cl") {
+		t.Error("a session whose Claude Code has no prompt hooks reports its prompts")
+	}
+	if len(c.notes) != 0 {
+		t.Errorf("notices: %v", c.notes)
+	}
+}
+
+// TestAClaudeThatCantBeReadGetsTheFloor: a profile whose claude can't be read as a Claude Code (a
+// wrapper script) gets what a wake needs, SessionStart and crossSessionInbound, no prompt hooks,
+// registers without prompts, and is told of once, however often it starts.
+func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
+	wrapper := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec somewhere-else \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":"`+wrapper+`","codename":"cl"}]`)
+	p, _ := a.profile("cl")
+	for range 2 {
+		instance, err := a.startInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, b := claudeSettingsOf(t, c.panel.configs[instance.tab].Dir)
+		if hooks, _ := s["hooks"].(map[string]any); len(hooks) != 1 || hooks["SessionStart"] == nil || s["crossSessionInbound"] != "accept" {
+			t.Errorf("an unreadable Claude Code's settings:\n%s\nwant SessionStart and crossSessionInbound alone", b)
+		}
+		if promptsReported(t, w, "cl") {
+			t.Error("an unreadable Claude Code's session reports its prompts")
+		}
+		c.panel.exit(instance.tab, 0)
+	}
+	if len(c.notes) != 1 || !strings.Contains(c.notes[0], "aren't reported") {
+		t.Errorf("notices %v, want one saying its prompts aren't reported", c.notes)
 	}
 }
 
