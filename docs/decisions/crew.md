@@ -284,8 +284,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   typing to an agent only when its prompts are reported (`crew.list`'s `prompts_reported`) and it
   shows no permission attention, since an Enter into a permission prompt approves it.
   - Claude Code's hooks report them through `autodoc crew attention --claude-hook`. Each prompt
-    shown (`PermissionRequest`) is an open prompt, named by its tool and input; its own
-    `PostToolUse` closes it, while another tool's, a parallel one, doesn't; `UserPromptSubmit` (after
+    shown (`PermissionRequest`) is an open prompt, named by its tool and input and counted (two
+    identical calls that both prompt are two); its own `PostToolUse`, or `PostToolUseFailure` when
+    the approved tool fails, closes one, while another tool's, a parallel one, doesn't; `UserPromptSubmit` (after
     a denial) and `Stop` close them all; an idle `Notification` changes nothing. The attention is
     raised while any is open. What the daemon was last told is kept, written only once told, so a
     raise or clear that failed is retried by the next hook; until then that prompt is unreported.
