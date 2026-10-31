@@ -28,6 +28,7 @@ var spawnerIdentityNames = []string{
 	"CLAUDE_CODE_SSE_PORT",         // the parent session's IDE connection
 	"ENABLE_IDE_INTEGRATION",       // has a Claude Code connect to that IDE: an agent would dial the parent's
 	"CLAUDE_CODE_EXECPATH",         // the parent session's own binary
+	"CLAUDE_EFFORT",                // the parent session's effort, which Claude Code hands its subprocesses
 	"CLAUDE_PID",                   // the parent session's process
 	"NVIM",                         // the parent Neovim's RPC socket
 	"NVIM_LISTEN_ADDRESS",          // the same socket, as older Neovims name it
