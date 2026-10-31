@@ -19,8 +19,23 @@ import (
 // crewInboxWait is how long one inbox.watch waits for a change: the daemon's most.
 const crewInboxWait = 25 * time.Second
 
-// crewInboxRetry is the wait after a failed watch, before the next.
-const crewInboxRetry = 5 * time.Second
+// crewInboxRetry is the wait after a failed watch, before the next, doubling with each failure in a
+// row up to crewInboxRetryMax; an answer starts it over.
+const (
+	crewInboxRetry    = 5 * time.Second
+	crewInboxRetryMax = 60 * time.Second
+)
+
+// watchRefused is whether err is the daemon refusing inbox.watch itself, which asking again never
+// changes: its params (a TUI and daemon apart), or its gate. The watch then stops until the next
+// connection, and the window says so once.
+func watchRefused(err error) bool {
+	switch code(err) {
+	case golibrpc.CodeInvalidParams, golibrpc.CodeAccessDenied:
+		return true
+	}
+	return false
+}
 
 // crewInboxCore is what the window's inbox needs of the program.
 type crewInboxCore interface {
@@ -60,9 +75,13 @@ type crewInbox struct {
 	genCtx  context.Context
 	stopGen context.CancelFunc
 	cursor  int64
-	open    map[string]crewOpen // the toasts shown, by toast id
-	reports map[string]bool     // the open reports a passing toast has announced, by message
-	parts   snapshotParts       // a snapshot's pages read so far
+	// retry is the wait before the next watch after a failed one (crewInboxRetry, doubling), 0 after
+	// an answer; refusedSaid that a refused watch was told of, once in the window's life
+	retry       time.Duration
+	refusedSaid bool
+	open        map[string]crewOpen // the toasts shown, by toast id
+	reports     map[string]bool     // the open reports a passing toast has announced, by message
+	parts       snapshotParts       // a snapshot's pages read so far
 	// requests is the open requests, by message; replying the one the reply dialog is open on, ""
 	// when it is closed; drafts the replies not sent, by request (crewreply.go)
 	requests map[string]crewRequest
@@ -91,7 +110,7 @@ func (x *crewInbox) Connected() {
 	x.endGen()
 	x.gen++
 	x.genCtx, x.stopGen = context.WithCancel(context.Background())
-	x.cursor, x.parts = 0, snapshotParts{}
+	x.cursor, x.parts, x.retry = 0, snapshotParts{}, 0
 	x.watch(x.gen, "")
 }
 
@@ -133,7 +152,16 @@ func (x *crewInbox) watch(gen uint64, page string) {
 			if code(r.err) == golibrpc.CodeMethodNotFound {
 				return // a daemon before crew: the next connection asks again
 			}
-			x.c.After(crewInboxRetry, func() {
+			if watchRefused(r.err) {
+				if !x.refusedSaid {
+					x.refusedSaid = true
+					x.c.Notify(x.c.Trf("autodoc.crew.inbox_refused", r.err.Error()))
+				}
+				return // asking again changes nothing: the next connection asks again
+			}
+			wait := max(x.retry, crewInboxRetry)
+			x.retry = min(2*wait, crewInboxRetryMax)
+			x.c.After(wait, func() {
 				if gen == x.gen {
 					if page != "" { // a snapshot's part, its page perhaps gone: the snapshot afresh
 						x.cursor = 0
@@ -143,6 +171,7 @@ func (x *crewInbox) watch(gen uint64, page string) {
 			})
 			return
 		}
+		x.retry = 0
 		x.answered(gen, cursor, page, r.m)
 	})
 }

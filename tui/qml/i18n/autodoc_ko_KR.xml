@@ -1231,6 +1231,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1이(가) 더 이상 기다리지 않습니다</translation>
     </message>
+    <message id="autodoc.crew.inbox_refused">
+        <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
+        <translation>이 창의 크루 받은편지함이 데몬에서 거부되었습니다(%1). 요청과 주의는 다음 연결에서 다시 표시됩니다.</translation>
+    </message>
     <message id="autodoc.crew.no_scope">
         <source>This window's agents have no crew scope: %1</source>
         <translation>이 창의 에이전트에 크루 범위가 없습니다: %1</translation>
