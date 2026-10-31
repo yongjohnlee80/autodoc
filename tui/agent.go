@@ -616,6 +616,13 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
 	fmt.Fprintf(&b, "This folder is AutoDoc's, not the user's: the user's files are in the workspace below.\n\n")
+	// a crew agent's mail comes first, before anything it might read past: an agent told how only
+	// deep in the reference spent its first turn finding out
+	if crewKind != "" {
+		b.WriteString("## Mail and your crew\n\n")
+		b.WriteString(crew.GuideOf(crewKind).Markdown)
+		b.WriteString("\n")
+	}
 	fmt.Fprintf(&b, "## The workspace\n\n")
 	fmt.Fprintf(&b, "- name: `%s` (also `$AUTODOC_WORKSPACE`)\n", ws.name)
 	fmt.Fprintf(&b, "- root: `%s` (also `$AUTODOC_ROOT`): the user's files, by path under it\n", ws.root)
@@ -639,13 +646,6 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
 	b.WriteString(", so it reaches the same store and daemon as the TUI that started you. Call it as `autodoc`, as the ")
 	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
 	b.WriteString(editorGuide)
-	if crewKind != "" {
-		b.WriteString("## Mail between agents\n\n")
-		b.WriteString("You are one agent of a crew: AutoDoc carries mail between you and the other agents, and the user. ")
-		b.WriteString("Do these at the start of your session, before the user's task:\n\n")
-		b.WriteString(crew.GuideOf(crewKind).Markdown)
-		b.WriteString("\n")
-	}
 	b.WriteString("---\n\n")
 	b.WriteString(autodoc.AgentsGuide)
 	return b.String()
