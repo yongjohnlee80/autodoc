@@ -85,6 +85,17 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		}
 		return filepath.Dir(file), copy
 	}
+	// settled waits until the n-th hand-over is over and its notices are gone: the base's notice
+	// (the window holds no crew scope) comes with its paste, and its Enter follows it
+	// (agentmessaging.go). A toast that comes or goes moves the audit's toast, so a click aimed at
+	// it before then can land on another (the notifications history).
+	settled := func(n int) {
+		t.Helper()
+		r.s.WaitFor(t, "the audit handed over and its notices gone", func(sc string) bool {
+			return strings.Count(heardRaw(heardDir, "scribe"), "\x1b[201~\r") >= n &&
+				strings.Contains(sc, "audit of echo sent to Scribe") && !strings.Contains(noticeText(sc), "doorbell didn't ring")
+		})
+	}
 
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "audit with an agent")
@@ -93,7 +104,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
-	r.s.WaitForText(t, "audit of echo sent to Scribe")
+	settled(1)
 	if strings.Contains(r.s.String(), "Yes, at my own risk") || r.card() != nil {
 		t.Fatal("the card stayed up while the audit was handed over")
 	}
@@ -111,6 +122,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "running")
 	r.keys(t, enter())
 	root2, copy2 := task(2)
+	settled(2)
 	if root2 == root1 || !gone(filepath.Join(copy2, "agent-was-here")) || gone(filepath.Join(copy1, "agent-was-here")) {
 		t.Fatalf("the second audit's copy %s is not fresh beside the first's %s", copy2, copy1)
 	}
