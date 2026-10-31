@@ -163,3 +163,27 @@ func TestAPreparationFailsAsItsReads(t *testing.T) {
 		t.Errorf("a.md, its version readable: %v", p.err)
 	}
 }
+
+// TestTheOutdatedListFailsAsItsDocumentsRead: a revalidation's list of the outdated documents, its
+// retrieval settings read, fails as its read of the documents, saying what it was listing.
+func TestTheOutdatedListFailsAsItsDocumentsRead(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, options{})
+	e.put("a.md", "zebra\n")
+	e.stop() // the list is the test's own from here on
+	db, err := store.Open(ctx, e.db.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	x := newIndexer(NewStore(db, e.ws), e.fault, options{Match: testMatch})
+	if _, err := x.outdated(ctx); err != nil { // the instrument: the documents readable, the list answers
+		t.Fatal(err)
+	}
+	undo := e.renamed("document")
+	_, err = x.outdated(ctx)
+	undo()
+	if err == nil || !strings.Contains(err.Error(), "index: listing outdated documents: ") || strings.Contains(err.Error(), "retrieval settings") {
+		t.Errorf("the outdated list with the documents unreadable: %v; want the documents' read failing, not the settings'", err)
+	}
+}
