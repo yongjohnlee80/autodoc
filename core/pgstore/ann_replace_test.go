@@ -305,3 +305,50 @@ func TestANNLife_RecoveryDropsAnUndeclaredReplacementAndWantsTheIndex(t *testing
 		t.Errorf("the status after the recovery: %+v; want ann-building (exact meanwhile)", s)
 	}
 }
+
+// A replacing model whose own index is gone (dropped by hand), with no build of it under way, serves
+// nothing: a run's first tick wants it again, its searches exact meanwhile. While the builder holds
+// the model (its replacement may be between the drop and the rename), the tick leaves it alone.
+func TestANNLife_AReplacingModelWithNoIndexIsWantedAtTheFirstTick(t *testing.T) {
+	r := newReplaceRig(t)
+	ctx := context.Background()
+	if err := r.b.verifyReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s := indexOf(t, r.b, r.model).State; s != annReplacing {
+		t.Fatalf("after the upgraded run's first tick: %s; want replacing", s)
+	}
+	p, err := postgres.PinSessionConn(ctx, r.conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := postgres.DropIndexConcurrently(ctx, p, "", annIndexName(r.model), postgres.BuildOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	p.Discard()
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := r.conn.ExecContext(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a build of the model under way, another run's: left to it
+	exec("UPDATE rag_ann_builder SET model = $1, owner = 'another', generation = generation + 1, lease_until = now() + interval '5 minutes' WHERE id = 1", r.model)
+	if err := NewANN(r.conn, r.b.cfg, "held").verifyReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s := indexOf(t, r.b, r.model).State; s != annReplacing {
+		t.Fatalf("with the builder on the model: %s; want replacing, left to the build", s)
+	}
+	exec("UPDATE rag_ann_builder SET model = NULL, owner = '', lease_until = NULL WHERE id = 1")
+	c := NewANN(r.conn, r.b.cfg, "nextrun")
+	if err := c.verifyReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s := indexOf(t, c, r.model).State; s != annWanted {
+		t.Fatalf("a replacing model with no index, no build of it: %s; want wanted", s)
+	}
+	if s := r.mode(t); s.Mode != ModeANNBuilding {
+		t.Errorf("its status: %+v; want ann-building (exact meanwhile)", s)
+	}
+}
