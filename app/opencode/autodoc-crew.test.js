@@ -303,16 +303,12 @@ test("a fresh opencode makes a session at load, shows it and registers it: reach
 
 test("an opencode started to resume a session makes none: its own is registered at its message", async () => {
   for (const flag of ["--continue", "-c", "--session=ses_old", "-s"]) {
-    process.argv.push(flag);
-    try {
-      await start({ prepare: true });
-      await Bun.sleep(50);
-      expect(client.made.length).toBe(0);
-      await plugin.dispose();
-      plugin = null;
-    } finally {
-      process.argv.pop();
-    }
+    // the command line as opencode's own: the plugin reads the process's, not its worker's argv
+    await start({ prepare: true, argv: ["opencode", flag] });
+    await Bun.sleep(50);
+    expect(client.made.length).toBe(0);
+    await plugin.dispose();
+    plugin = null;
   }
 });
 
@@ -429,25 +425,19 @@ test("a session error with no wake before it raises nothing", async () => {
   expect(attentions().filter((l) => l.startsWith("raise blocked")).length).toBe(0);
 });
 
-test("the plugin reads opencode's own command line (the process's), never its worker's process.argv", async () => {
-  // as opencode runs it: in a worker thread, whose process.argv is the worker's own
-  const dir = mkdtempSync(join(tmpdir(), "oc-argv-"));
-  const script = join(dir, "worker.js");
-  writeFileSync(
-    script,
-    `import { cliArgv } from ${JSON.stringify(join(import.meta.dir, "autodoc-crew.js"))};\npostMessage({ cli: cliArgv(), argv: process.argv });\n`,
-  );
-  const got = await new Promise((resolve, reject) => {
-    const w = new Worker(script);
-    w.onmessage = (e) => (resolve(e.data), w.terminate());
-    w.onerror = (e) => reject(e);
-  });
-  rmSync(dir, { recursive: true, force: true });
+test("the plugin reads opencode's own command line (the process's), never process.argv", async () => {
+  const { cliArgv } = await import("./autodoc-crew.js");
   let want = null;
   try {
     want = readFileSync("/proc/self/cmdline", "utf8").split("\0").filter(Boolean);
   } catch {}
   if (!want) return; // no /proc: ps answers instead, which this cell doesn't pin
-  expect(got.argv).not.toEqual(want); // the worker's own argv is not the command line
-  expect(got.cli).toEqual(want);
+  // as in opencode's TUI worker, whose process.argv is the worker's own
+  const saved = process.argv;
+  process.argv = ["bun", "/$bunfs/root/src/cli/tui/worker.js"];
+  try {
+    expect(cliArgv()).toEqual(want);
+  } finally {
+    process.argv = saved;
+  }
 });
