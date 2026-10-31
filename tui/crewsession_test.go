@@ -281,10 +281,20 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reported, wants)
 			}
 		}
-		for _, never := range []string{"permissions", "allow", "deny", "defaultMode"} {
+		// the one allowance is the guide's own commands, exactly (crew.ClaudeAllow): never a deny
+		// rule, a mode, or any other allow
+		for _, never := range []string{"deny", "defaultMode", "autodoc *", "Bash(autodoc:"} {
 			if strings.Contains(b, never) {
-				t.Errorf("%s's settings name %q: a wake never loosens tool approvals", code, never)
+				t.Errorf("%s's settings name %q: a wake never loosens tool approvals beyond the guide's commands", code, never)
 			}
+		}
+		perm, _ := s["permissions"].(map[string]any)
+		var allow []string
+		for _, r := range perm["allow"].([]any) {
+			allow = append(allow, r.(string))
+		}
+		if wants != slices.Equal(allow, crew.ClaudeAllow()) || (!wants && perm != nil) || (perm != nil && len(perm) != 1) {
+			t.Errorf("%s's permissions %v, want exactly the guide's commands allowed for a crew Claude, nothing for another", code, perm)
 		}
 		if got := promptsReported(t, w, code); got != wants {
 			t.Errorf("%s's prompts_reported %v, want %v (its registration's prompts)", code, got, wants)
@@ -687,5 +697,38 @@ func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
 	}
 	if a.raiseSession("elsewhere") {
 		t.Fatal("a session no agent here has was found")
+	}
+}
+
+// TestTheGuidesAllowanceIsMergedIntoTheFolderAlone (docs/decisions/crew.md#wake-acceptance-not-tool-approvals):
+// a crew Claude agent's folder settings get the guide's commands allowed; a rule the user wrote
+// there is kept, and an allow rule AutoDoc wrote before (a command no longer the guide's) taken
+// out; nothing is written anywhere but the agent's folder.
+func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
+	dir, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(dir, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	user := `{"permissions":{"allow":["Bash(git status:*)","Bash(autodoc mail peek:*)"],"deny":["Bash(rm:*)"]},"model":"haiku"}`
+	if err := os.WriteFile(path, []byte(user), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor()); err != nil {
+		t.Fatal(err)
+	}
+	s, b := claudeSettingsOf(t, dir)
+	perm, _ := s["permissions"].(map[string]any)
+	var allow []string
+	for _, r := range perm["allow"].([]any) {
+		allow = append(allow, r.(string))
+	}
+	want := append([]string{"Bash(git status:*)"}, crew.ClaudeAllow()...)
+	if !slices.Equal(allow, want) || fmt.Sprint(perm["deny"]) != "[Bash(rm:*)]" || s["model"] != "haiku" {
+		t.Errorf("the merged settings:\n%s\nwant the user's rules kept, AutoDoc's old one gone, the guide's commands allowed", b)
+	}
+	if es, _ := os.ReadDir(home); len(es) != 0 {
+		t.Errorf("the allowance was written into the user's home: %v", es)
 	}
 }

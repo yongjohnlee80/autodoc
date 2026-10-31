@@ -4,6 +4,7 @@ package crew_test
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -127,5 +128,77 @@ func TestSetupForCodexIsTheWaitingRegistration(t *testing.T) {
 		if err != nil || len(s.After) != 1 || !slices.Equal(s.After[0], want) || len(s.Argv)+len(s.Env) != 0 || s.Prompts {
 			t.Errorf("%s: %+v %v, want the one step %q", host, s, err, want)
 		}
+	}
+}
+
+// TestSetupForAllowsTheGuidesCommandsInTheSessionAlone: Claude's and OpenCode's setups carry the
+// allowance (exactly crew.ClaudeAllow, crew.OpenCodeAllow) where the session's own CLI reads it:
+// Neovim's --settings, the session's OPENCODE_CONFIG_CONTENT (a rule of the agent's own value
+// kept), and Setup.Allow for a window to merge into the agent's folder. Nothing is written beyond
+// AutoDoc's own data folder.
+func TestSetupForAllowsTheGuidesCommandsInTheSessionAlone(t *testing.T) {
+	full := claudeOnPath(t, everyClaudeEvent...)
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindClaude, Host: crew.HostNvim, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir()}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct{ Permissions struct{ Allow []string } }
+	if err := json.Unmarshal([]byte(s.Argv[1]), &settings); err != nil || !slices.Equal(settings.Permissions.Allow, crew.ClaudeAllow()) ||
+		!slices.Equal(s.Allow, crew.ClaudeAllow()) {
+		t.Errorf("Neovim's Claude allowance: --settings %s, Allow %q; want exactly crew.ClaudeAllow", s.Argv[1], s.Allow)
+	}
+	w, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindClaude, Host: crew.HostWindow, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir()}, "")
+	if err != nil || len(w.Argv) != 0 || !slices.Equal(w.Allow, crew.ClaudeAllow()) {
+		t.Errorf("a window's Claude allowance: %+v %v, want Allow for the folder's settings and nothing appended", w, err)
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	data := t.TempDir()
+	o, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindOpenCode, Host: crew.HostNvim, Autodoc: "a", DataDir: data,
+		Env: map[string]string{"OPENCODE_CONFIG_CONTENT": `{"permission":{"bash":{"git push*":"ask"},"edit":"ask"}}`}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Permission struct {
+			Bash map[string]string
+			Edit string
+		}
+	}
+	if err := json.Unmarshal([]byte(o.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"git push*": "ask"}
+	for k, v := range crew.OpenCodeAllow() {
+		want[k] = v.(string)
+	}
+	if !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || len(o.Allow) != len(crew.OpenCodeAllow()) {
+		t.Errorf("OpenCode's allowance: %+v, Allow %q; want the guide's commands added, the agent's own rules kept", cfg.Permission, o.Allow)
+	}
+	if es, _ := os.ReadDir(home); len(es) != 0 {
+		t.Errorf("the setup wrote into the user's home: %v", es)
+	}
+}
+
+// TestOpenCodeWithAllowKeepsTheAgentsOwnPermission: a bash that is one action for every command
+// keeps that action for the rest ("*"), the guide's commands allowed; a permission or bash of a
+// shape no rule can be added to is left as the agent wrote it.
+func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
+	got, err := crew.OpenCodeWithAllow(`{"permission":{"bash":"ask"}}`)
+	var cfg struct {
+		Permission struct{ Bash map[string]string }
+	}
+	if err != nil || json.Unmarshal([]byte(got), &cfg) != nil || cfg.Permission.Bash["*"] != "ask" ||
+		cfg.Permission.Bash["autodoc mail receive*"] != "allow" || len(cfg.Permission.Bash) != len(crew.OpenCodeAllow())+1 {
+		t.Errorf("a bash of one action: %s %v, want it as \"*\" and the guide's commands allowed", got, err)
+	}
+	for _, kept := range []string{`{"permission":"allow"}`, `{"permission":{"bash":["x"]}}`} {
+		if got, err := crew.OpenCodeWithAllow(kept); err != nil || got != kept {
+			t.Errorf("%s: %s %v, want it left as it is", kept, got, err)
+		}
+	}
+	if _, err := crew.OpenCodeWithAllow("[]"); err == nil {
+		t.Error("content that is no JSON object: want refused")
 	}
 }

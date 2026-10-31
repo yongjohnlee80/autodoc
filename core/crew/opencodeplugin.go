@@ -65,6 +65,53 @@ func pluginURL(path string) (string, error) {
 	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String(), nil
 }
 
+// OpenCodeWithAllow is content (an OPENCODE_CONFIG_CONTENT) with the guide's commands allowed
+// (OpenCodeAllow) in its permission.bash, every rule already there kept: a session's own config,
+// never the user's opencode.json. A bash that is one action for every command ("ask") stays that
+// action for the rest ("*"); a permission that is no object is left as it is, with no allowance.
+func OpenCodeWithAllow(content string) (string, error) {
+	cfg := map[string]any{}
+	d := json.NewDecoder(bytes.NewReader([]byte(content)))
+	d.UseNumber()
+	if err := d.Decode(&cfg); err != nil || cfg == nil {
+		return "", fmt.Errorf("OPENCODE_CONFIG_CONTENT is not a JSON object: %v", err)
+	}
+	perm, ok := cfg["permission"].(map[string]any)
+	if !ok && cfg["permission"] != nil {
+		return content, nil // not a shape to add rules to: the agent's own, untouched
+	}
+	if perm == nil {
+		perm = map[string]any{}
+	}
+	bash, ok := perm["bash"].(map[string]any)
+	if action, isAction := perm["bash"].(string); isAction {
+		bash, ok = map[string]any{"*": action}, true
+	}
+	if !ok && perm["bash"] != nil {
+		return content, nil // not a shape to add rules to: the agent's own, untouched
+	}
+	if bash == nil {
+		bash = map[string]any{}
+	}
+	for rule, v := range OpenCodeAllow() {
+		bash[rule] = v
+	}
+	perm["bash"], cfg["permission"] = bash, perm
+	return encodeOpenCodeConfig(cfg)
+}
+
+// encodeOpenCodeConfig is cfg as OPENCODE_CONFIG_CONTENT: one line, its strings as written ('<',
+// '>' and '&' unescaped).
+func encodeOpenCodeConfig(cfg map[string]any) (string, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(cfg); err != nil {
+		return "", err
+	}
+	return string(bytes.TrimSuffix(b.Bytes(), []byte("\n"))), nil
+}
+
 // OpenCodeConfigContent is $OPENCODE_CONFIG_CONTENT with the plugin at path in its plugin list:
 // existing, a value already set (the user's, or another tool's), kept whole and its list extended,
 // never replaced. OpenCode merges it over the user's own configuration. A plugin whose path holds a
@@ -97,11 +144,5 @@ func OpenCodeConfigContent(existing, path string) (string, error) {
 		list = append(list, u)
 	}
 	cfg["plugin"] = list
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(cfg); err != nil {
-		return "", err
-	}
-	return string(bytes.TrimSuffix(b.Bytes(), []byte("\n"))), nil
+	return encodeOpenCodeConfig(cfg)
 }

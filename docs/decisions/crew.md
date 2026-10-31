@@ -482,8 +482,20 @@ A host configures only what lets the fixed notice start a turn. For Claude Code,
 `SessionStart` hook that registers the endpoint and `crossSessionInbound: "accept"` in the agent
 folder's `.claude/settings.json`, and the hooks that report its permission prompts. Codex's queue
 starts turns as it is, and OpenCode's plugin and Antigravity's bridge need nothing written. No host
-writes approval policies, permission modes, or allow and deny rules: a woken turn runs under the
-profile's own tool policy, and a prompt it hits raises attention for you to answer in its tab.
+writes approval policies, permission modes, or deny rules: a woken turn runs under the profile's own
+tool policy, and a prompt it hits raises attention for you to answer in its tab.
+
+The one allowance is the guide's own commands, so following the guide never stops at a prompt:
+`autodoc mail receive|ack|reply|send|inbox` and `autodoc crew whoami|list|endpoint|attention|bridge`,
+each named (`crew.GuideCommands`), never `autodoc *`. It is written only where the session's own CLI
+reads it, never in your own CLI configuration:
+
+- Claude Code: `permissions.allow`, one `Bash(autodoc <command>:*)` per command, in the agent
+  folder's `.claude/settings.json` (a window) or in its `--settings` (Neovim), AutoDoc's earlier rules
+  taken out first and yours kept.
+- OpenCode: `permission.bash`, one `autodoc <command>*` allowed per command, in the session's own
+  `OPENCODE_CONFIG_CONTENT`.
+- Codex and Antigravity: none yet, until each shows a per-session place for it.
 
 Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks
 with `autodoc crew setup --kind K --host nvim`, run under the agent's environment. It answers JSON:
@@ -523,8 +535,8 @@ the session doesn't start until someone answers it.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 
-In the code: `core/crew/setup.go`, `core/crew/claude.go`, `tui/agenthook.go`, `tui/agentclaude.go`,
-`app/crewsetup.go`, `app/crewclaudesettings.go`
+In the code: `core/crew/setup.go`, `core/crew/allow.go`, `core/crew/claude.go`, `tui/agenthook.go`,
+`tui/agentclaude.go`, `app/crewsetup.go`, `app/crewclaudesettings.go`
 
 ## The agent guide and commands
 
