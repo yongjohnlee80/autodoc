@@ -47,9 +47,9 @@ func TestCheckStoreChecksHereOrThroughTheDaemon(t *testing.T) {
 	dir := short(t)
 	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
-	var out bytes.Buffer
-	if err := runCheckStore(context.Background(), cfg, &out); err != nil {
-		t.Fatal(err)
+	var out, errs bytes.Buffer
+	if code := run(context.Background(), []string{"--config", cfg, "--check-store"}, Options{Version: "v-test"}, &out, &errs); code != 0 {
+		t.Fatalf("--check-store: exit %d, %s", code, errs.String())
 	}
 	if r := checkReport(t, &out); !r.OK || r.CheckedBy != "this process" || r.Store != filepath.Join(state, config.StoreName) {
 		t.Fatalf("with no daemon: %+v", r)
@@ -82,6 +82,10 @@ func TestADamagedStoreIsNotServed(t *testing.T) {
 	var out bytes.Buffer
 	if err := runCheckStore(context.Background(), cfg, &out); !errors.Is(err, errStoreProblems) {
 		t.Fatalf("--check-store on a damaged store: %v, want errStoreProblems", err)
+	}
+	var errs bytes.Buffer
+	if code := run(context.Background(), []string{"--config", cfg, "--check-store"}, Options{Version: "v-test"}, io.Discard, &errs); code != 1 || errs.Len() == 0 {
+		t.Errorf("autodoc --check-store on a damaged store: exit %d, %q; want 1, saying why", code, errs.String())
 	}
 	if r := checkReport(t, &out); r.OK || len(r.Integrity) == 0 || r.MarkCleared {
 		t.Fatalf("the report on a damaged store: %+v", r)
