@@ -49,6 +49,7 @@ func Run(t *testing.T, h Harness) {
 		{"ARenewKeepsTheLease", testARenewKeepsTheLease},
 		{"AnExpiredMessageEnds", testAnExpiredMessageEnds},
 		{"AReplyAnswersARequestOnce", testAReplyAnswersARequestOnce},
+		{"AMessagesIDWithItsLeaseNamesTheItem", testAMessagesIDWithItsLeaseNamesTheItem},
 		{"MergedProfilesForwardToTheirSurvivor", testMergedProfilesForwardToTheirSurvivor},
 		{"ASessionsEndFailsItsBoundMail", testASessionsEndFailsItsBoundMail},
 		{"AdoptionNormalizesOrMergesEveryUnhandledDelivery", testAdoptionNormalizesOrMergesEveryUnhandledDelivery},
@@ -417,6 +418,54 @@ func testAReplyAnswersARequestOnce(t *testing.T, h Harness) {
 	m := got.Items[0].Delivery
 	if _, err := r.m.Reply(r.ctx, "s-jarvis", m.ID, m.Lease, mail.Reply{Body: "x", Key: "r2"}); !errors.Is(err, mail.ErrInvalid) {
 		t.Fatalf("a reply to a response: %v", err)
+	}
+}
+
+// A message's id with the lease of the caller's delivery of it names that delivery, as its own id
+// does: a reply so named answers the request and acks it, and the same reply by either name is one
+// response (the CLI's key for the item is the delivery's); an ack and a renew so named act on it.
+// The message's id with any other lease, or another's message's id, is a lost lease.
+func testAMessagesIDWithItsLeaseNamesTheItem(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.profile("p-zen", "autovim:p", "zen", "s-zen")
+	req := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "q?", Key: "k"})
+	d := r.receive("s-gold").Items[0].Delivery
+	msg := req.Message.ID
+	if _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Fatalf("the message's id with another lease: %v, want lease lost", err)
+	}
+	if err := r.m.Renew(r.ctx, "s-gold", msg, d.Lease); err != nil {
+		t.Fatalf("a renew by the message's id and the lease: %v", err)
+	}
+	resp, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)})
+	if err != nil || resp.ReplyTo != msg || resp.Kind != mail.KindResponse || resp.IdemKey != mail.ReplyKey(d.ID) {
+		t.Fatalf("the reply by the message's id: %+v %v; want the response, keyed as the delivery's", resp, err)
+	}
+	if r.delivery(d.ID).State != mail.Acked {
+		t.Fatal("the request's delivery is not acked")
+	}
+	if again, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(d.ID)}); err != nil || again.ID != resp.ID {
+		t.Fatalf("the same reply by the delivery's id: %+v %v; want the one response", again, err)
+	}
+	if again, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); err != nil || again.ID != resp.ID {
+		t.Fatalf("the reply by the message's id again: %+v %v; want the one response", again, err)
+	}
+	if got := r.receive("s-jarvis"); len(got.Items) != 1 || got.Items[0].Message.ID != resp.ID {
+		t.Fatalf("the requester's receive: %+v; want the one response", got)
+	}
+	// a message, acked by its id and the lease; another's message's id is a lost lease
+	plain := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fyi", Key: "k2"})
+	theirs := r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "not gold's", Key: "k3"})
+	pd := r.receive("s-gold").Items[0].Delivery
+	zd := r.receive("s-zen").Items[0].Delivery
+	if err := r.m.Ack(r.ctx, "s-gold", theirs.Message.ID, zd.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Fatalf("an ack of another's message by its id and their lease: %v, want lease lost", err)
+	}
+	if err := r.m.Ack(r.ctx, "s-gold", plain.Message.ID, pd.Lease); err != nil || r.delivery(pd.ID).State != mail.Acked {
+		t.Fatalf("an ack by the message's id and the lease: %v, %s", err, r.delivery(pd.ID).State)
+	}
+	if r.delivery(zd.ID).State != mail.Leased {
+		t.Fatal("another's delivery changed")
 	}
 }
 

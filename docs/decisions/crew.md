@@ -273,6 +273,12 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   until the agent has drained them. `ack` and `renew` fence on the lease token.
 - `mail.reply` acks a request and stores its response in one transaction, idempotently, and a
   request has at most one response from each replier.
+- An answer names the item by the id `autodoc mail receive` printed (the delivery's, with its lease),
+  and each received item carries `answer`, the command that answers it, so an agent builds no id.
+  The message's id with that same lease names the same item too: the lease is one receive's, so
+  holding it proves the hold. `ack`, `renew` and `reply` act on the delivery, and a reply is one
+  response by either name. The message's id with any other lease, or another's message's id, is a
+  lost lease, which says nothing of anyone else's mail.
 - A lapsed lease is queued again and wakes the agent; after 5 lapses the delivery fails. An expired
   one ends. Either way the sender gets an event notice from the daemon's reserved profile. A notice
   never bounces: one nobody can receive shows only in your history.

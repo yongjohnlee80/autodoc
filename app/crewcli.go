@@ -276,7 +276,7 @@ var crewCommands = map[string]crewCommand{
 			}
 			// one response per request: the delivery is the key, so a retry after a lost answer
 			// gets that response back
-			return "mail.reply", []any{c.Credential, d, l, body, "reply:" + d, strFlag(fs, "subject")}, nil, nil
+			return "mail.reply", []any{c.Credential, d, l, body, mail.ReplyKey(d), strFlag(fs, "subject")}, nil, nil
 		}},
 	"mail send": {usage: "<to>... [--kind request] [--subject S] [--ttl 1h] [--key K] --body TEXT|-: send mail; to is a codename, name@scope, user or session:<id>",
 		example: "autodoc mail send tifa-lockhart --kind request --subject \"Review\" --body \"Please review the plan in docs/plan.md.\"",
