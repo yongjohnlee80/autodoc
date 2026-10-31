@@ -33,6 +33,31 @@ type SetupInput struct {
 	Env     map[string]string
 	DataDir string // AutoDoc's data folder, for the config the host runs under: AutoDoc's own files go there
 	Dir     string // the agent's folder: where a CLI found on PATH is looked up from
+	// AgentDir is the folder its host owns for the agent, where FolderFiles go: a window's agent
+	// folder (its cwd), or auto-agents' per-agent folder for Neovim (which passes it as --add-dir),
+	// never the user's project.
+	AgentDir string
+	// Servers are the MCP servers the daemon offers the session (none from a daemon without them): a
+	// kind that takes MCP servers delivers each its own way.
+	Servers []MCPServer
+}
+
+// MCPServer is an MCP server a crew session's CLI is given (its tools the crew's own, such as
+// `autodoc crew mcp`): its name, its argv, AutoDoc's own env for it (never the profile's), and the
+// tools it serves, from which each kind spells its allow rules (agy mcp(<name>/<tool>), Claude
+// mcp__<name>__<tool>).
+type MCPServer struct {
+	Name    string            `json:"name"`
+	Command []string          `json:"command"`
+	Env     map[string]string `json:"env"`
+	Tools   []string          `json:"tools"`
+}
+
+// FolderFile is a file a host writes into the agent's own folder (SetupInput.AgentDir): a CLI's
+// folder-scoped configuration, never a user-level file and never the user's project.
+type FolderFile struct {
+	Path    string `json:"path"` // relative to SetupInput.AgentDir
+	Content string `json:"content"`
 }
 
 // SetupFile is a user-level file a kind needs, outside AutoDoc's folders: reported with its state,
@@ -54,6 +79,8 @@ type Setup struct {
 	// Allow is the guide's commands as the kind's CLI allows them (GuideCommands), already in Argv or
 	// Env: a window writing Claude's settings itself merges them into the folder's.
 	Allow []string `json:"allow"`
+	// FolderFiles are written by the host into SetupInput.AgentDir before the CLI starts.
+	FolderFiles []FolderFile `json:"folder_files"`
 	// After is what the host runs once the agent's CLI has started: each one autodoc's arguments, run
 	// detached by the agent's own autodoc in its environment (its session's context), with
 	// SetupSince in an argument replaced by the start's Unix time in seconds.
@@ -73,55 +100,85 @@ type Setup struct {
 //     until it is found (crew endpoint --codex-here --wait).
 //   - the other kinds: nothing yet.
 //
+// Each kind's is its kindSetups entry; a new kind, or a kind taking in.Servers, changes only its own.
 // cache is ClaudeOf's cache of what each binary knows ("" for none).
 func SetupFor(in SetupInput, cache string) (Setup, error) {
 	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{},
-		Allow: []string{}}
-	switch in.Kind {
-	case KindClaude:
-		program := in.Program
-		if program == "" {
-			program = "claude"
-		}
-		_, k, err := ClaudeOf(program, in.Env["PATH"], in.Dir, cache)
-		if err != nil {
-			k = ClaudeFloor()
-			s.Notices = append(s.Notices, fmt.Sprintf("Claude Code's permission prompts can't be reported: %v", err))
-		}
-		settings, prompts := ClaudeSettings(in.Autodoc, k)
-		s.Prompts = prompts
-		s.Allow = ClaudeAllow()
-		if in.Host == HostNvim {
-			settings["permissions"] = map[string]any{"allow": s.Allow}
-			b, err := json.Marshal(settings)
-			if err != nil {
-				return Setup{}, err
-			}
-			s.Argv = append(s.Argv, "--settings", string(b))
-		}
-	case KindCodex:
-		// Codex starts its thread on its app-server without telling anyone: the agent's autodoc looks
-		// for the folder's thread until it is found, then registers it (crew endpoint --codex-here --wait)
-		s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
-	case KindOpenCode:
-		path, err := WriteOpenCodePlugin(filepath.Join(in.DataDir, "opencode"))
-		if err != nil {
-			return Setup{}, fmt.Errorf("writing AutoDoc's OpenCode plugin: %w", err)
-		}
-		v, err := OpenCodeConfigContent(in.Env["OPENCODE_CONFIG_CONTENT"], path)
-		if err != nil {
+		Allow: []string{}, FolderFiles: []FolderFile{}}
+	if f := kindSetups[in.Kind]; f != nil {
+		if err := f(in, cache, &s); err != nil {
 			return Setup{}, err
 		}
-		if openCodeAllowProven {
-			if v, err = OpenCodeWithAllow(v); err != nil {
-				return Setup{}, err
-			}
-			for rule := range OpenCodeAllow() {
-				s.Allow = append(s.Allow, rule)
-			}
-			slices.Sort(s.Allow)
-		}
-		s.Env["OPENCODE_CONFIG_CONTENT"] = v
 	}
 	return s, nil
+}
+
+// kindSetup adds kind's setup to s: its argv, env, files and allowance, and, once it takes them, the
+// MCP servers in.Servers names, delivered its own way (Claude's --mcp-config or the folder's
+// .mcp.json, OpenCode's mcp key, Antigravity's folder .agents/mcp_config.json found by --add-dir).
+type kindSetup func(in SetupInput, cache string, s *Setup) error
+
+// kindSetups are the kinds with a setup: a kind is added here, never by rewriting SetupFor.
+var kindSetups = map[string]kindSetup{
+	KindClaude:   claudeSetup,
+	KindCodex:    codexSetup,
+	KindOpenCode: opencodeSetup,
+}
+
+// claudeSetup is crew.ClaudeSettings for the Claude Code on in.Env's PATH, the guide's commands
+// allowed: Neovim's --settings; a window writes them into the agent's folder itself.
+func claudeSetup(in SetupInput, cache string, s *Setup) error {
+	program := in.Program
+	if program == "" {
+		program = "claude"
+	}
+	_, k, err := ClaudeOf(program, in.Env["PATH"], in.Dir, cache)
+	if err != nil {
+		k = ClaudeFloor()
+		s.Notices = append(s.Notices, fmt.Sprintf("Claude Code's permission prompts can't be reported: %v", err))
+	}
+	settings, prompts := ClaudeSettings(in.Autodoc, k)
+	s.Prompts = prompts
+	s.Allow = ClaudeAllow()
+	if in.Host == HostNvim {
+		settings["permissions"] = map[string]any{"allow": s.Allow}
+		b, err := json.Marshal(settings)
+		if err != nil {
+			return err
+		}
+		s.Argv = append(s.Argv, "--settings", string(b))
+	}
+	return nil
+}
+
+// codexSetup is one step after the start: Codex starts its thread on its app-server without
+// telling anyone, so the agent's autodoc looks for the folder's thread until it is found, then
+// registers it (crew endpoint --codex-here --wait).
+func codexSetup(_ SetupInput, _ string, s *Setup) error {
+	s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
+	return nil
+}
+
+// opencodeSetup is AutoDoc's plugin, written into in.DataDir, and the OPENCODE_CONFIG_CONTENT that
+// loads it, the guide's commands allowed.
+func opencodeSetup(in SetupInput, _ string, s *Setup) error {
+	path, err := WriteOpenCodePlugin(filepath.Join(in.DataDir, "opencode"))
+	if err != nil {
+		return fmt.Errorf("writing AutoDoc's OpenCode plugin: %w", err)
+	}
+	v, err := OpenCodeConfigContent(in.Env["OPENCODE_CONFIG_CONTENT"], path)
+	if err != nil {
+		return err
+	}
+	if openCodeAllowProven {
+		if v, err = OpenCodeWithAllow(v); err != nil {
+			return err
+		}
+		for rule := range OpenCodeAllow() {
+			s.Allow = append(s.Allow, rule)
+		}
+		slices.Sort(s.Allow)
+	}
+	s.Env["OPENCODE_CONFIG_CONTENT"] = v
+	return nil
 }
