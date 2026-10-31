@@ -111,7 +111,7 @@ func TestSetupForOpenCodeLoadsAutoDocsPlugin(t *testing.T) {
 func TestSetupForAnotherKindIsNothing(t *testing.T) {
 	for _, k := range []string{"agy", "generic"} {
 		s, err := crew.SetupFor(crew.SetupInput{Kind: k, Host: crew.HostNvim, Env: map[string]string{"PATH": "/x"}}, "")
-		if err != nil || s.Argv == nil || s.Env == nil || s.Files == nil || s.Notices == nil || s.After == nil ||
+		if err != nil || s.Argv == nil || s.Env == nil || s.Files == nil || s.Notices == nil || s.After == nil || s.FolderFiles == nil ||
 			len(s.Argv)+len(s.Env)+len(s.Files)+len(s.Notices)+len(s.After) != 0 || s.Prompts {
 			t.Errorf("%s: %+v %v, want empty lists and maps, no prompts", k, s, err)
 		}
@@ -197,5 +197,29 @@ func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
 	}
 	if _, err := crew.OpenCodeWithAllow("[]"); err == nil {
 		t.Error("content that is no JSON object: want refused")
+	}
+}
+
+// TestSetupForTakesServersWithoutAKindChanging: the daemon's MCP servers (SetupInput.Servers) and the
+// agent's own folder (AgentDir) reach every kind's setup, and change no kind's answer until that
+// kind takes MCP servers: Claude's, Codex's and OpenCode's are the same with and without them, and
+// none writes a folder file yet.
+func TestSetupForTakesServersWithoutAKindChanging(t *testing.T) {
+	full := claudeOnPath(t, everyClaudeEvent...)
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
+	for _, k := range []string{crew.KindClaude, crew.KindCodex, crew.KindOpenCode} {
+		in := crew.SetupInput{Kind: k, Host: crew.HostNvim, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir()}
+		without, err := crew.SetupFor(in, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		in.Servers, in.AgentDir = servers, t.TempDir()
+		with, err := crew.SetupFor(in, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(with.Argv, without.Argv) || !maps.Equal(with.Env, without.Env) || len(with.FolderFiles) != 0 {
+			t.Errorf("%s: with servers %+v, without %+v: want the same until the kind takes MCP servers", k, with, without)
+		}
 	}
 }
