@@ -2242,3 +2242,34 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xb5, G: 0x54, B: 0x1f}
 	})
 }
+
+// TestASearchWaitingOnEmbeddingSaysWhenItFinishes: a search toasted as waiting on texts still
+// embedding is told when the embedding has finished, nothing left working, and only once. Driven on
+// the loop, not by a poll racing the search's own answer, which clears the toast too; asserted on
+// the notifications kept, since a done toast leaves the screen.
+func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		r.h.searchWaitToast = true // as a search that met texts still embedding leaves it
+		// the state last polled, its model unchanged (a changed one clears the search first), with
+		// nothing left embedding
+		emb := r.h.prog.emb
+		emb.pending, emb.refused, emb.targetPending, emb.targetRefused = 0, 0, 0, 0
+		r.h.showProgress(r.h.prog.docs, 0, emb, r.h.prog.cursor)
+	})
+	// read on the loop after the post: a done toast may already be gone from the screen, the
+	// history keeps it
+	said, waiting := onLoop(r, func() (n int) {
+		for _, m := range r.h.noticeLog.items {
+			if m.text == "embedding finished; search is refreshing in kb" {
+				n++
+			}
+		}
+		return n
+	}), onLoop(r, func() bool { return r.h.searchWaitToast })
+	if said != 1 || waiting {
+		t.Errorf("after the embedding finished: said %d times, still waiting %v; want said once, not waiting", said, waiting)
+	}
+}
