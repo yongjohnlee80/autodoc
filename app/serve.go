@@ -290,8 +290,21 @@ func (d *process) startWakes() {
 // Phase 3 brings them one CLI at a time; a session whose kind has none is watch-only, reached by
 // crew.wait and the inbox. A waker that depends on what is installed is a late one (lateWakers).
 func crewWakers(m *crew.Manager) map[string]crew.Waker {
-	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid()), "agy": crew.NewAgyWaker(m.EndpointSecret),
-		"opencode": crew.NewOpenCodeWaker(os.Getuid())}
+	return map[string]crew.Waker{"claude": crew.NewClaudeWaker(os.Getuid(), peerProc), "agy": crew.NewAgyWaker(m.EndpointSecret),
+		"opencode": crew.NewOpenCodeWaker(os.Getuid(), peerProc)}
+}
+
+// peerProc is crew's PeerProc from the kernel's peer credentials: c's peer must run as this user
+// (peercred.Check), and its process (peercred.PeerPID) is answered as its reference (crew.ProcRef).
+func peerProc(c net.Conn) (string, error) {
+	if err := peercred.Check(c); err != nil {
+		return "", err
+	}
+	pid, err := peercred.PeerPID(c)
+	if err != nil {
+		return "", err
+	}
+	return crew.ProcRef(pid)
 }
 
 // lateWakers find the wakers that depend on what is installed, each by probing its CLI: Codex's,
