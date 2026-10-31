@@ -12,7 +12,7 @@ const (
 // (docs/decisions/crew.md#the-human-inbox): it raises the session's permission attention when the
 // agent shows one, and clears it once answered. A kind turns true here with its adapter.
 var reportsPrompts = map[string]bool{
-	KindClaude:   false,
+	KindClaude:   true, // the hooks AutoDoc writes: PermissionRequest and Notification raise, PostToolUse, UserPromptSubmit and Stop clear
 	KindCodex:    false,
 	KindAgy:      false,
 	KindOpenCode: true, // AutoDoc's plugin: permission.asked raises, the last permission.replied clears
