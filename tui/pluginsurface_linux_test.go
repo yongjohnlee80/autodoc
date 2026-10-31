@@ -68,25 +68,6 @@ func (k *fakeSink) Close() {
 	}
 }
 
-// take is the oldest held frame, still held.
-func (k *fakeSink) take(t *testing.T) *fakeHeld {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		k.mu.Lock()
-		if len(k.held) > 0 {
-			h := k.held[0]
-			k.held = k.held[1:]
-			k.mu.Unlock()
-			return h
-		}
-		k.mu.Unlock()
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("no frame reached the sink")
-	return nil
-}
-
 // surfaceRig is a host's owner and the plugin's end of its side channel.
 type surfaceRig struct {
 	owner    *surfaceOwner
@@ -146,19 +127,53 @@ func newSurfaceRigCeiling(t *testing.T, ceiling int64) *surfaceRig {
 
 var rigGeometry = surfaceGeometry{W: 16, H: 8, Scale: 1, Kinds: []plugin.SurfaceKind{{Kind: "memory", Format: "rgba8"}}}
 
-// next is the plugin's next side-channel op.
+// next is the plugin's next side-channel op. A violation the owner closed the plugin for says so,
+// rather than the op that then never comes.
 func (r *surfaceRig) next(t *testing.T) map[string]any {
 	t.Helper()
 	select {
 	case m, ok := <-r.msgs:
 		if !ok {
-			t.Fatal("the side channel closed")
+			t.Fatalf("the side channel closed%s", r.violatedSince())
 		}
 		return m
 	case <-time.After(5 * time.Second):
-		t.Fatal("no side-channel op arrived")
+		t.Fatalf("no side-channel op arrived%s", r.violatedSince())
 	}
 	return nil
+}
+
+// take is the sink's oldest held frame (fakeSink.take), or a violation the owner closed the plugin
+// for, which no frame follows.
+func (r *surfaceRig) take(t *testing.T) *fakeHeld {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		r.sink.mu.Lock()
+		if len(r.sink.held) > 0 {
+			h := r.sink.held[0]
+			r.sink.held = r.sink.held[1:]
+			r.sink.mu.Unlock()
+			return h
+		}
+		r.sink.mu.Unlock()
+		select {
+		case why := <-r.violated:
+			t.Fatalf("no frame reached the sink: the owner closed the plugin: %s", why)
+		default:
+		}
+	}
+	t.Fatal("no frame reached the sink")
+	return nil
+}
+
+// violatedSince is ", after a violation: why", or "" when there was none.
+func (r *surfaceRig) violatedSince() string {
+	select {
+	case why := <-r.violated:
+		return ", after a violation: " + why
+	default:
+		return ""
+	}
 }
 
 // nextOp is the plugin's next side-channel op named op, skipping others (a new generation's buffers
@@ -258,7 +273,7 @@ func TestASurfaceBufferIsReusedThroughManyFrames(t *testing.T) {
 	for i := range 5 {
 		seq := uint64(i + 1)
 		r.present(t, seq, gen, ids[0])
-		h := r.sink.take(t)
+		h := r.take(t)
 		h.r.complete("drawn")
 		h.f.Drop()
 		done, free := r.next(t), r.next(t)
@@ -278,7 +293,7 @@ func TestASurfaceCreditWaitsForItsFramesOutcome(t *testing.T) {
 	r := newSurfaceRig(t)
 	gen, ids := r.pool(t, rigGeometry)
 	r.present(t, 1, gen, ids[0])
-	h := r.sink.take(t)
+	h := r.take(t)
 	h.f.Drop() // released, its outcome not yet known
 	select {
 	case m := <-r.msgs:
@@ -347,7 +362,7 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	before := r.mappings(t)
 	gen, ids := r.pool(t, rigGeometry)
 	r.present(t, 1, gen, ids[0])
-	h := r.sink.take(t)
+	h := r.take(t)
 	r.owner.Close()
 	deadline := time.Now().Add(5 * time.Second)
 	for r.mappings(t) > before+1 && time.Now().Before(deadline) {
@@ -460,7 +475,7 @@ func TestASurfaceResizeDragIsPacedByThePlugin(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 	r.present(t, 1, gen, ids[0])
-	h := r.sink.take(t)
+	h := r.take(t)
 	h.r.complete("drawn")
 	h.f.Drop()
 	if d, err := plugin.ReadFrameDoneMsg(r.nextOp(t, plugin.OpFrameDone)); err != nil || d.Outcome != "drawn" {
@@ -511,7 +526,7 @@ func TestASaturatedSurfaceBudgetKeepsAHeldFrame(t *testing.T) {
 	before := r.mappings(t)
 	gen, ids := r.pool(t, big)
 	r.present(t, 1, gen, ids[0])
-	h := r.sink.take(t)
+	h := r.take(t)
 	same := big
 	same.W = 63.5 // another geometry of the same pixels (ceil 64): a new generation, the same charge
 	r.pool(t, same)

@@ -20,7 +20,7 @@ func TestAnUnansweredSearchSaysWhatItWaitsOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
+	r.waitAttached(t, "kb")
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}

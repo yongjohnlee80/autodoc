@@ -51,7 +51,9 @@ func TestTheBuffersHaveKeysAndMenuEntries(t *testing.T) {
 		t.Fatalf("after SPC b d: %q shown, want a.md", r.file().path)
 	}
 
-	r.leader(t, 'm')   // the menu bar, focused
+	r.leader(t, 'm') // the menu bar, focused
+	// the card closes before the bar takes the keys: an Enter sent at once can reach the page
+	r.s.WaitFor(t, "the menu bar focused", func(string) bool { return r.focused("menuBar") })
 	r.keys(t, enter()) // File
 	r.s.WaitForText(t, "Close buffer")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyRight}) // Go

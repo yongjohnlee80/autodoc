@@ -200,7 +200,7 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "connected — autodoc v-pro")
+	r.waitWithin(t, "the connection's toast", daemonWait, func() bool { return strings.Contains(r.s.String(), "connected — autodoc v-pro") })
 	r.s.WaitFor(t, "the files listed", func(string) bool { return len(r.listed()) > 0 }) // the workspace entered
 	r.h.p.Post(func() { r.h.openPath("a.zig") })
 	r.waitFile(t, "a.zig")

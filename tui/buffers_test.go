@@ -537,7 +537,7 @@ func TestDeletingTheWorkspaceInUseAsksAboutItsBuffers(t *testing.T) {
 		"beta":  fileDir(t, "c.md", "ccc\n"),
 	})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
-	r.s.WaitForText(t, "· alpha")
+	r.waitAttached(t, "alpha")
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
 	r.h.p.Post(func() { r.h.openPath("b.md") })
