@@ -68,9 +68,10 @@ const woken = async (id, extra = {}) => {
 };
 
 // start runs the plugin as opencode would; the cells of registration by message start it without
-// its session made at load (prepare), which the cells of a fresh opencode turn on.
+// its session made at load (prepare), which the cells of a fresh opencode turn on, and without its
+// heartbeat, which its own cell turns on.
 const start = async (opts = {}) => {
-  plugin = await AutodocCrew({ client }, { registerMs: 400, prepare: false, ...opts });
+  plugin = await AutodocCrew({ client }, { registerMs: 400, prepare: false, heartbeatMs: 0, ...opts });
 };
 const attentions = () => (existsSync(join(fake, "attention")) ? readFileSync(join(fake, "attention"), "utf8").trim().split("\n") : []);
 const chat = (id) => plugin["chat.message"]({ sessionID: id }, {});
@@ -368,4 +369,15 @@ test("a disposed plugin reports no permission prompt", async () => {
   plugin = null;
   await Bun.sleep(100);
   expect(attentions()).toEqual([]);
+});
+
+test("the plugin says it is alive while it runs, and stops once disposed", async () => {
+  await start({ heartbeatMs: 30 });
+  const alive = () => attentions().filter((l) => l.trimEnd() === "alive").length;
+  await until(() => alive() >= 3);
+  await plugin.dispose();
+  plugin = null;
+  const after = alive();
+  await Bun.sleep(150);
+  expect(alive()).toBe(after);
 });

@@ -289,12 +289,16 @@ func (b *agyBridge) run(ctx context.Context, tick <-chan time.Time, log io.Write
 // bridgePromptEvery is how often the bridge looks for the agent's permission prompt.
 const bridgePromptEvery = 2 * time.Second
 
-// watchPrompts reports the agent's permission prompts (crew.ReportsPrompts), at each tick until
-// ctx ends: a prompt showing raises the session's permission attention, saying what it asks (again
-// if another prompt took its place), and none showing clears what it raised. Each look is bounded
-// (b.bound); a look that fails changes nothing and is logged once until one succeeds.
+// watchPrompts reports the agent's permission prompts, at each tick until ctx ends: a prompt showing
+// raises the session's permission attention, saying what it asks (again if another prompt took its
+// place), and none showing clears what it raised (or, at its first look, what an earlier bridge
+// may have). Each look that read the language server says the reporter is alive (crew.attention
+// alive), so a window trusts the session's prompts only while this runs. Each look is bounded
+// (b.bound); a look that fails changes nothing, says nothing, and is logged once until one succeeds.
 func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log io.Writer) {
-	offset, raised, failing := 0, "", false
+	// unknown: an attention an earlier bridge of this session raised is cleared at the first look that
+	// finds no prompt, since nothing else would
+	offset, raised, unknown, failing := 0, "", true, false
 	for {
 		select {
 		case <-ctx.Done():
@@ -315,13 +319,15 @@ func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log
 		switch {
 		case p.Showing && p.Asks != raised:
 			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "raise", crew.AttentionPermission, p.Asks); err == nil {
-				raised = p.Asks
+				raised, unknown = p.Asks, false
 			}
-		case !p.Showing && raised != "":
+		case !p.Showing && (raised != "" || unknown):
 			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "clear"); err == nil {
-				raised = ""
+				raised, unknown = "", false
 			}
 		}
+		// the look read the language server: the prompts are reported (crew.list's prompts_reported)
+		_, _ = b.call(lctx, "crew.attention", b.c.Credential, "alive")
 		cancel()
 	}
 }

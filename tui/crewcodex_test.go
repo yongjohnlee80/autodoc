@@ -126,8 +126,9 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("no attention raised")
 		}
-		if runs.n != codexRegisterTries+1 { // the looks, then the attention
-			t.Fatalf("%d runs, want %d looks and the attention", runs.n, codexRegisterTries)
+		// the looks a minute holds at 2 s apart, then the attention
+		if looks := int(codexRegisterWait / codexRegisterEvery); runs.n != looks+1 {
+			t.Fatalf("%d runs, want %d looks and the attention", runs.n, looks)
 		}
 		if !slices.Equal(last[:4], []string{"crew", "attention", "raise", "blocked"}) ||
 			!strings.Contains(last[4], "AutoDoc can't wake this Codex session") || !strings.Contains(last[4], notFound.Error()) {

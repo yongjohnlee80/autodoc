@@ -279,18 +279,24 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
 - A woken OpenCode session is shown in the TUI before its turn starts, so the turn is the one you
   see. A failed OpenCode registration raises the session's attention, so the window says why it
   can't be woken.
-- A kind's adapter reports its agent's permission prompts (`crew.ReportsPrompts`): a prompt raises
-  the session's permission attention, saying what it asks, and the last one answered clears it. A
-  window presses Enter after typing to an agent only when its kind reports prompts and none shows
-  now, since an Enter into a permission prompt approves it. OpenCode's plugin reports them
-  (`permission.asked`, `permission.replied`). Claude Code's hooks report them through `autodoc crew
-  attention --claude-hook`: `PermissionRequest` and a permission `Notification` raise, and
-  `PostToolUse`, `Stop`, the next `UserPromptSubmit` (after a denial) or another `Notification`
-  clear. The hooks print nothing, so they decide nothing. agy's bridge reports them: every 2 s it
-  reads the conversation's trajectory from where its last read ended, and a last step waiting on a
-  permission raises, none clears. A plugin or a bridge is its session's endpoint too, so an
-  OpenCode or agy session that can't be woken reports nothing, and no Enter is pressed into it.
-  Codex doesn't report them yet.
+- A kind's adapter reports its agent's permission prompts: a prompt raises the session's permission
+  attention, saying what it asks, and the last one answered clears it. A window presses Enter after
+  typing to an agent only when its prompts are reported (`crew.list`'s `prompts_reported`) and it
+  shows no permission attention, since an Enter into a permission prompt approves it.
+  - Claude Code's hooks report them through `autodoc crew attention --claude-hook`. Each prompt
+    shown (`PermissionRequest`) is an open prompt, named by its tool and input; its own
+    `PostToolUse` closes it, while another tool's, a parallel one, doesn't; `UserPromptSubmit` (after
+    a denial) and `Stop` close them all; an idle `Notification` changes nothing. The attention is
+    raised while any is open. What the daemon was last told is kept, written only once told, so a
+    raise or clear that failed is retried by the next hook; until then that prompt is unreported.
+    The hooks print nothing, so they decide nothing. A live Claude session's prompts count as
+    reported.
+  - OpenCode's plugin (`permission.asked`, `permission.replied`) and agy's bridge (a trajectory step
+    waiting on a permission, read every 2 s) report them, and say they are alive (`crew.attention
+    alive`, every 5 s and every look). Their sessions' prompts count as reported only within 15 s of
+    the last heartbeat, which the daemon keeps in memory alone: a reporter that stopped, or a daemon
+    that restarted, reads as unreported, and no Enter is pressed.
+  - Codex doesn't report them yet.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 

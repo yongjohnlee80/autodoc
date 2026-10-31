@@ -82,11 +82,19 @@ func (s *Scheduler) fireNow(ctx context.Context, session string) (fired, tried b
 	default:
 		return false, false, nil
 	}
+	s.stopMu.Lock()
+	if s.stopped {
+		s.stopMu.Unlock()
+		<-s.permits
+		return false, true, nil // the daemon is stopping: nothing rings
+	}
+	s.wg.Add(1)
+	s.stopMu.Unlock()
 	tok, ep, reserved, err := s.m.Reserve(ctx, session, s.run, s.served())
 	if err != nil || !reserved {
 		<-s.permits
+		s.wg.Done()
 		return false, true, err // not due (a backoff), no endpoint, no waker: nothing to ring now
 	}
-	s.wg.Add(1)
 	return s.attemptWith(ctx, context.WithoutCancel(ctx), session, tok, ep) == OutcomeAccepted, true, nil
 }

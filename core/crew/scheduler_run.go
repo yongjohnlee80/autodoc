@@ -47,6 +47,10 @@ type Scheduler struct {
 	// this run would look at it again.
 	omu  sync.Mutex
 	owed map[owedKey]owedEnd
+
+	// stopped is Run's end: from then no Fire starts a call (stopMu orders it against wg.Add)
+	stopMu  sync.Mutex
+	stopped bool
 }
 
 // owedKey is one attempt: a session can owe the ends of two (an old call that outlived an endpoint
@@ -179,7 +183,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-time.After(s.retry):
 		}
 	}
-	defer s.wg.Wait()
+	defer func() {
+		// no call starts once the loop is done: a Fire after this finds the scheduler stopped
+		s.stopMu.Lock()
+		s.stopped = true
+		s.stopMu.Unlock()
+		s.wg.Wait()
+	}()
 	// NOTE: the times no event announces (a lease's end, a message's expiry, a backoff's next
 	// attempt, the retry after a store error) are waited on with this one timer, reset each turn to
 	// the first of them; a poke or ctx ends the wait before it.

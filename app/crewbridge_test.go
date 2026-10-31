@@ -435,9 +435,10 @@ func TestTheDetachedBridgeIsPinnedToItsSession(t *testing.T) {
 }
 
 // TestTheBridgeReportsTheAgentsPermissionPrompts: at each prompt tick the bridge reads the
-// conversation's prompt from the offset its last read answered; a prompt showing raises the
-// session's permission attention once, saying what it asks, again when another takes its place, a
-// failed read changes nothing (logged once), and none showing clears what it raised, once.
+// conversation's prompt from the offset its last read answered; its first look clears what an
+// earlier bridge may have raised; a prompt showing raises the session's permission attention once,
+// saying what it asks, again when another takes its place; a failed read changes nothing (logged
+// once); none showing clears what it raised, once; and each look that read says it is alive.
 func TestTheBridgeReportsTheAgentsPermissionPrompts(t *testing.T) {
 	f := newFakeBridge()
 	type read struct {
@@ -491,9 +492,23 @@ func TestTheBridgeReportsTheAgentsPermissionPrompts(t *testing.T) {
 	if got := strings.Join(offsets, ","); got != "0,4,5,5,5,5,6,7" {
 		t.Fatalf("the reads' offsets %s, want each the last read's answer", got)
 	}
-	want := []string{"raise" + crew.AttentionPermission + "command: touch x", "raise" + crew.AttentionPermission + "command: rm y", "clear"}
-	if strings.Join(attention, "|") != strings.Join(want, "|") {
-		t.Fatalf("the attention calls %q, want %q", attention, want)
+	// the first look clears what an earlier bridge of the session may have raised; each look that
+	// read the language server says the reporter is alive, and a failed one doesn't
+	var told []string
+	alive := 0
+	for _, a := range attention {
+		if a == "alive" {
+			alive++
+			continue
+		}
+		told = append(told, a)
+	}
+	want := []string{"clear", "raise" + crew.AttentionPermission + "command: touch x", "raise" + crew.AttentionPermission + "command: rm y", "clear"}
+	if strings.Join(told, "|") != strings.Join(want, "|") {
+		t.Fatalf("the attention calls %q, want %q", told, want)
+	}
+	if alive != len(script)-2 {
+		t.Fatalf("%d heartbeats, want one for each of the %d looks that read the server", alive, len(script)-2)
 	}
 	if n := strings.Count(log.String(), "looking for the agent's permission prompt"); n != 1 {
 		t.Fatalf("two failed reads in a row logged %d times, want once:\n%s", n, log.String())

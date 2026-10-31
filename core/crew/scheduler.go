@@ -269,6 +269,22 @@ func (m *Manager) Received(tx Tx, session string) error {
 	return tx.PutWake(w)
 }
 
+// Settled is a withdrawn send's half of the wake (mail's fire), in its write: what was pending is
+// no longer due (announced_gen catches up, and an awaiting row is done, its wait's deadline with
+// it). Unlike a receive it is no sign the session can be woken: its failures and a backoff stay, so
+// failed rings still add up to unreachable, and no reachability change is told.
+func (m *Manager) Settled(tx Tx, session string) error {
+	w, found, err := tx.Wake(session)
+	if err != nil || !found {
+		return err
+	}
+	w.AnnouncedGen = w.PendingGen
+	if w.State == WakeAwaiting {
+		w.State, w.Token, w.NextAt = WakeIdle, "", nil
+	}
+	return tx.PutWake(w)
+}
+
 // nextAt is when the scheduler must look again by time alone: the earliest wake deadline or mail
 // deadline (of a row due by kinds, as sweep reads them); false when nothing is waiting on a clock.
 func (m *Manager) nextAt(ctx context.Context, kinds []string) (time.Time, bool, error) {

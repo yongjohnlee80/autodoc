@@ -110,6 +110,8 @@ func (g *guard) RaisePending(tx crew.Tx, profile string) error {
 
 func (g *guard) Received(tx crew.Tx, session string) error { return g.crew.Received(tx, session) }
 
+func (g *guard) Settled(tx crew.Tx, session string) error { return g.crew.Settled(tx, session) }
+
 func (g *guard) Watch() (<-chan struct{}, func()) { return g.crew.Watch() }
 
 type rig struct {
@@ -824,6 +826,8 @@ func (c *lazyCrew) RaisePending(tx crew.Tx, profile string) error {
 
 func (c *lazyCrew) Received(tx crew.Tx, session string) error { return c.m.Received(tx, session) }
 
+func (c *lazyCrew) Settled(tx crew.Tx, session string) error { return c.m.Settled(tx, session) }
+
 func (c *lazyCrew) Watch() (<-chan struct{}, func()) { return c.m.Watch() }
 
 // The real crew.Adopt over mail's real effects, on one store: a profile of the
@@ -1163,22 +1167,31 @@ func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness)
 	if got := receive(); len(got) != 0 {
 		t.Fatalf("a withdrawn send was received: %+v", got)
 	}
-	if err := st.Crew.Read(ctx, func(tx crew.Tx) error {
-		w, _, err := tx.Wake(reg.Session)
-		if err == nil && (w.AnnouncedGen != w.PendingGen || w.State != crew.WakeIdle) {
-			t.Errorf("the wake after the withdrawal: %+v, want settled", w)
+	wake := func() crew.Wake {
+		t.Helper()
+		var w crew.Wake
+		if err := st.Crew.Read(ctx, func(tx crew.Tx) error { var err error; w, _, err = tx.Wake(reg.Session); return err }); err != nil {
+			t.Fatal(err)
 		}
-		return err
-	}); err != nil {
-		t.Fatal(err)
+		return w
+	}
+	// settled: nothing pending is due; but the failure and its backoff stay, as a receive's wouldn't
+	if w := wake(); w.AnnouncedGen != w.PendingGen || w.State != crew.WakeIdle || w.Failures != 1 || w.NextAt == nil {
+		t.Fatalf("the wake after the withdrawal: %+v, want settled, its failure and backoff kept", w)
 	}
 	// its replay is the same refusal, never a send that stands
 	if _, err := send("k2", true); !errors.Is(err, mail.ErrUnreachable) {
 		t.Fatalf("a replay of a withdrawn send: %v, want unreachable", err)
 	}
+	// during the backoff nothing rings: unreachable at once, and withdrawn
+	rings := bell.answer(nil)
+	if _, err := send("k2b", true); !errors.Is(err, mail.ErrUnreachable) || bell.answer(nil) != rings {
+		t.Fatalf("a send during the backoff: %v, %d rings, want unreachable and none", err, bell.answer(nil)-rings)
+	}
+	clock.Advance(5 * time.Second)
 	// a doorbell that rings: the send stands, and the agent receives it from the user
 	fired, err := send("k3", true)
-	if err != nil || bell.answer(nil) != 2 || fired.Message.Sender == "" {
+	if err != nil || bell.answer(nil) != rings+1 || fired.Message.Sender == "" {
 		t.Fatalf("a send whose doorbell rang: %v, %d rings, %+v", err, bell.answer(nil), fired)
 	}
 	got := receive()
@@ -1190,5 +1203,37 @@ func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness)
 	queued, err := send("k4", false)
 	if err != nil || len(queued.Deliveries) != 1 || queued.Deliveries[0].State != mail.Queued {
 		t.Fatalf("a send without fire: %v %+v", err, queued)
+	}
+	// a held lease (k4, received and not acked) doesn't keep a withdrawn send's wake due: its lapse
+	// raises pending on its own
+	if got := receive(); len(got) != 1 {
+		t.Fatalf("receiving the queued send: %+v", got)
+	}
+	if _, err := send("k5", true); !errors.Is(err, mail.ErrUnreachable) {
+		t.Fatalf("a send whose doorbell failed, with a lease held: %v", err)
+	}
+	if w := wake(); w.AnnouncedGen != w.PendingGen {
+		t.Fatalf("the wake after a withdrawal with a lease held: %+v, want nothing pending", w)
+	}
+	// failed rings add up: the session is unreachable after five in a row, its withdrawals no help
+	for i := 0; ; i++ {
+		es, err := cm.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(es) == 0 || !es[0].Reachable {
+			if w := wake(); w.Failures < 5 {
+				t.Fatalf("unreachable after %d failures", w.Failures)
+			}
+			break
+		}
+		if i > 10 {
+			t.Fatalf("still reachable after %d failed fires: %+v", i, wake())
+		}
+		clock.Advance(15 * time.Minute) // past any backoff
+		if err := cm.Renew(ctx, "autodoc:w", "host-run", epoch); err != nil {
+			t.Fatal(err) // the window's lease, as it renews it
+		}
+		_, _ = send(fmt.Sprintf("kf%d", i), true)
 	}
 }

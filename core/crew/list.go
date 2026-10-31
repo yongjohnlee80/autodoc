@@ -21,6 +21,10 @@ type Entry struct {
 	Kind      string `json:"kind"`
 	Presence  string `json:"presence"`
 	Reachable bool   `json:"reachable"` // a live session with an endpoint and fewer than 5 failed wakes
+	// PromptsReported is a live session whose permission prompts are reported now: Claude's hooks,
+	// or a reporter (OpenCode's plugin, agy's bridge) that said it is alive within 15 s. Only into
+	// such a session, showing no permission attention, may a window press Enter.
+	PromptsReported bool `json:"prompts_reported"`
 }
 
 // List is the addressbook (crew.list): every active profile, by scope then codename, with its
@@ -55,6 +59,7 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				if e.Reachable, err = sessionReachable(tx, s.ID); err != nil {
 					return err
 				}
+				e.PromptsReported = m.promptsReported(p.Kind, s.ID, now)
 			}
 			out = append(out, e)
 		}

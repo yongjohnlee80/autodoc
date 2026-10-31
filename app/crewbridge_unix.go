@@ -3,11 +3,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 // detachBridge starts the bridge argv and env name (bridgeChild), detached: its own session (so the
@@ -53,4 +55,37 @@ func lockBridge(dir, session string) (func(), error) {
 		return nil, fmt.Errorf("locking %s: %w", lockPath, err)
 	}
 	return func() { f.Close() }, nil
+}
+
+// lockFolderPoll is how often lockFolder tries a lock another holds.
+const lockFolderPoll = 20 * time.Millisecond
+
+// lockFolder takes the flock at path, waiting while another holds it, until ctx ends: one Claude
+// hook at a time for a session (parallel tools' hooks come at once). The kernel drops it when its
+// holder ends however it ends.
+func lockFolder(ctx context.Context, path string) (func(), error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("the prompts' lock: %w", err)
+	}
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return func() { f.Close() }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			f.Close()
+			return nil, fmt.Errorf("locking %s: %w", path, err)
+		}
+		// NOTE: can't announce: an flock's release tells no one waiting for it, so a hook that finds
+		// it held tries again on a timer until its own bound.
+		t := time.NewTimer(lockFolderPoll)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			f.Close()
+			return nil, fmt.Errorf("waiting for %s: %w", path, ctx.Err())
+		case <-t.C:
+		}
+	}
 }

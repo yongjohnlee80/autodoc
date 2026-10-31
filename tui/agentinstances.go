@@ -370,13 +370,13 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 	return proc, err
 }
 
-// codexRegisterTries and codexRegisterEvery bound the window's registration of a Codex agent: a
-// minute, a look each 2 s, from its spawn.
+// codexRegisterWait and codexRegisterEvery bound the window's registration of a Codex agent: looks
+// 2 s apart, as many as a minute holds, none started a minute or more after its spawn.
 // NOTE: can't announce: Codex starts its thread on its app-server without telling anyone, so the
 // window looks again on a timer (the loop's After) until it is found, the session ends, or the
 // minute is up.
 const (
-	codexRegisterTries = 30
+	codexRegisterWait  = time.Minute
 	codexRegisterEvery = 2 * time.Second
 )
 
@@ -400,24 +400,21 @@ func (a *agents) registerCodex(ctxFile, dir string, started time.Time) {
 	attempt = func(tries int) {
 		go func() {
 			err := run("crew", "endpoint", "--codex-here", "--since", since)
+			_, gone := os.Stat(ctxFile) // here, never on the loop
 			c.Post(func() {
-				if err == nil {
-					return
-				}
-				if _, gone := os.Stat(ctxFile); gone != nil {
-					return // the session ended: nothing to register
-				}
-				if tries > 1 {
+				switch {
+				case err == nil, gone != nil: // found, or the session ended: nothing more to register
+				case tries > 1 && time.Since(started)+codexRegisterEvery < codexRegisterWait: // looks slow to answer count too
 					c.After(codexRegisterEvery, func() { attempt(tries - 1) })
-					return
+				default:
+					go func() {
+						_ = run("crew", "attention", "raise", "blocked", "AutoDoc can't wake this Codex session: "+attentionText(err.Error()))
+					}()
 				}
-				go func() {
-					_ = run("crew", "attention", "raise", "blocked", "AutoDoc can't wake this Codex session: "+attentionText(err.Error()))
-				}()
 			})
 		}()
 	}
-	attempt(codexRegisterTries)
+	attempt(int(codexRegisterWait / codexRegisterEvery))
 }
 
 // runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
