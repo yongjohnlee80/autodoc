@@ -67,7 +67,7 @@ func TestServeWakesAgySessions(t *testing.T) {
 	case body := <-sent:
 		// an agy session reads its mail with the crew MCP server's tools, so its notice names the
 		// tool, never the shell command its rules don't allow
-		if body["content"] != crew.WakeNoticeMCP || !strings.Contains(body["content"], "mail_receive tool") {
+		if body["content"] != crew.WakeNoticeMCP || !strings.Contains(body["content"], "mail_receive, a tool of the autodoc MCP server") {
 			t.Fatalf("the language server was sent %q, want the MCP notice %q", body["content"], crew.WakeNoticeMCP)
 		}
 	// NOTE: a bound on a failing run only: a wake that never comes fails here rather than hanging.

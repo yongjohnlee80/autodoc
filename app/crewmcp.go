@@ -201,7 +201,7 @@ const mcpInstructions = "AutoDoc's crew mail. When AutoDoc's notice wakes you, c
 	"whenever it shows waiting above 0, call mail_receive once the current step is done, and call it at the end of each task."
 
 // mcpWaitingNote is the line a tool result carries when mail is waiting, and the push notice's text.
-const mcpWaitingNote = "AutoDoc mail is waiting: call mail_receive once this step is done."
+const mcpWaitingNote = "AutoDoc mail is waiting: call mail_receive, a tool of the autodoc MCP server, once this step is done."
 
 // mcpRecheck bounds how long the push waits before looking again while mail sits unreceived: the
 // daemon's mail.wait answers at once while any is waiting, so it can't wait for the next.
