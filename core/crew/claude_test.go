@@ -225,26 +225,40 @@ func TestALiteralAcrossTwoChunksIsFound(t *testing.T) {
 }
 
 // TestWhatAClaudeKnowsIsKeptForTheNextRun: ClaudeKnowsIn writes its answer into its cache file,
-// and a later process asking of the same binary (its path, size and time) takes it from there,
-// without reading the binary.
+// and a later process asking of the same binary (its path, its links followed, size and time)
+// takes it from there, without reading the binary. The binaries are reached through a link to
+// their folder, as macOS's temporary folders are (/var is /private/var), so the entry is the
+// resolved path's on every system.
 func TestWhatAClaudeKnowsIsKeptForTheNextRun(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(t.TempDir(), dir); err != nil {
+		t.Fatal(err)
+	}
+	resolved := func(p string) string {
+		t.Helper()
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil || real == p {
+			t.Fatalf("%s resolves to %q (%v): want it reached through the link", p, real, err)
+		}
+		return real
+	}
 	cache := filepath.Join(dir, "state", "claude-hooks.json")
 	first := fakeClaude(t, dir, "first", everyClaudeEvent...)
 	if k, err := crew.ClaudeKnowsIn(first, cache); err != nil || !k.Reports() {
 		t.Fatalf("the first read: %v, %v", k, err)
 	}
-	if b, err := os.ReadFile(cache); err != nil || !strings.Contains(string(b), first) {
-		t.Fatalf("the cache after a read: %q, %v; want the binary's answer", b, err)
+	if b, err := os.ReadFile(cache); err != nil || !strings.Contains(string(b), fmt.Sprintf("%q", resolved(first))) {
+		t.Fatalf("the cache after a read: %q, %v; want the binary's answer, by its resolved path", b, err)
 	}
 	// another binary, never read in this process: a cache entry for it, saying it knows SessionStart
 	// alone, is believed over its content, which knows every hook
 	other := fakeClaude(t, dir, "other", everyClaudeEvent...)
-	fi, err := os.Stat(other)
+	real := resolved(other)
+	fi, err := os.Stat(real)
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := fmt.Sprintf(`[{"path":%q,"size":%d,"mtime":%d,"knows":{"SessionStart":true}}]`, other, fi.Size(), fi.ModTime().UnixNano())
+	entry := fmt.Sprintf(`[{"path":%q,"size":%d,"mtime":%d,"knows":{"SessionStart":true}}]`, real, fi.Size(), fi.ModTime().UnixNano())
 	if err := os.WriteFile(cache, []byte(entry), 0o600); err != nil {
 		t.Fatal(err)
 	}
