@@ -165,8 +165,7 @@ registered once.
 - The three share one store adapter, so every transaction is all three's: a verb's guard, crew's
   change and mail's effect commit together. Mail authenticates through crew, and crew ends a
   session's mail through mail.
-- Together, with `core/module`, they are one comms module that another product can take
-  (ADR 1793271500 r15).
+- Together, with `core/module`, they are one comms module that another product can take.
   - Nothing in them imports any other AutoDoc package, their tests included. A test guards this.
   - What they need of the platform or the daemon comes through a port the daemon supplies:
     - the store (`crew.Store`, `mail.Store`, `inbox.Store`; `sqlitecrewmail` is AutoDoc's adapter);
