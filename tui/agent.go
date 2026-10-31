@@ -46,7 +46,7 @@ type agents struct {
 	// on the loop; claudeWarned the programs a failed read was told of
 	claudeAnswers map[string]*claudeAnswer
 	claudeWarned  map[string]bool
-	// codexHere replaces registerCodex's runs of the agent's autodoc (a cell's); nil in production
+	// codexHere replaces runAfterSteps's runs of the agent's autodoc (a cell's); nil in production
 	codexHere  func(args ...string) error
 	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
