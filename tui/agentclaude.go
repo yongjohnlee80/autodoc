@@ -23,7 +23,8 @@ type claudeAnswer struct {
 
 // warmClaude starts finding and reading, off the loop, the Claude Code that command runs, unless
 // that is already on its way or answered for its program: found on the TUI's PATH, which is the
-// agent's but for its first folder (its own autodoc alone), a mise shim followed (crew.FindClaude).
+// agent's but for its first folder (its own autodoc alone), the first file there that reads as a
+// Claude Code, a mise shim or a wrapper followed to the CLI it runs (crew.ClaudeOf).
 // On the loop.
 func (a *agents) warmClaude(command string) *claudeAnswer {
 	program := agentProgram(command)
@@ -38,9 +39,7 @@ func (a *agents) warmClaude(command string) *claudeAnswer {
 	path, dir := os.Getenv("PATH"), a.agentDir
 	go func() {
 		defer close(f.done)
-		if f.path, f.err = crew.FindClaude(program, path, dir); f.err == nil {
-			_, f.err = crew.ClaudeKnows(f.path) // read now, so the spawn finds it kept
-		}
+		f.path, _, f.err = crew.ClaudeOf(program, path, dir, "") // read now, so the spawn finds it kept
 	}()
 	return f
 }

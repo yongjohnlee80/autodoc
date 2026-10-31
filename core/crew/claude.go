@@ -3,7 +3,9 @@ package crew
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,9 +86,17 @@ type claudeBinary struct {
 // ClaudeKnows is the hook events the Claude Code binary at path knows, read from the binary itself:
 // it carries each event it knows as a quoted literal ("PermissionRequest"), which the CLI's own
 // list of valid events is built from. A version floor would do as well, but which release added an
-// event isn't published where a host can read it. The answer is cached by the binary's path, size
-// and modification time, so an update is read again. path's links are followed.
-func ClaudeKnows(path string) (ClaudeHooks, error) {
+// event isn't published where a host can read it. The known limit: a literal the binary holds for
+// another reason reads as an event it knows, and naming that event would bring back the warning;
+// SessionStart, which every Claude Code knows, is required, so a file that isn't one is refused.
+// The answer is kept by the binary's path, size and modification time, so an update is read again;
+// path's links are followed.
+func ClaudeKnows(path string) (ClaudeHooks, error) { return ClaudeKnowsIn(path, "") }
+
+// ClaudeKnowsIn is ClaudeKnows keeping its answers in the file cache too, for a process that runs
+// once (`autodoc crew claude-settings`): a binary unchanged since an earlier run costs a stat. ""
+// keeps them in memory alone. A cache that can't be read or written is read past.
+func ClaudeKnowsIn(path, cache string) (ClaudeHooks, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, err
@@ -107,7 +117,12 @@ func ClaudeKnows(path string) (ClaudeHooks, error) {
 		<-r.done
 		return r.hooks, r.err
 	}
-	r.hooks, r.err = readClaudeHooks(real)
+	var kept bool
+	if r.hooks, kept = cachedClaudeHooks(cache, key); !kept {
+		if r.hooks, r.err = readClaudeHooks(real); r.err == nil {
+			keepClaudeHooks(cache, key, r.hooks)
+		}
+	}
 	if r.err != nil {
 		r.err = fmt.Errorf("crew: %s: %w", path, r.err)
 		claudeKnownMu.Lock()
@@ -118,20 +133,118 @@ func ClaudeKnows(path string) (ClaudeHooks, error) {
 	return r.hooks, r.err
 }
 
-// readClaudeHooks reads ClaudeKnows' answer from the binary at path.
+// claudeScanChunk is how much of a binary readClaudeHooks reads at once: the binary is hundreds of
+// megabytes, never read whole.
+const claudeScanChunk = 1 << 20
+
+// claudeLiterals are the quoted literals readClaudeHooks looks for, by the event or setting each
+// names.
+func claudeLiterals() map[string][]byte {
+	out := map[string][]byte{}
+	for _, e := range append([]string{ClaudeSessionStart, ClaudeCrossSessionInbound}, claudePromptHooks...) {
+		out[e] = []byte(`"` + e + `"`)
+	}
+	return out
+}
+
+// readClaudeHooks reads ClaudeKnows' answer from the binary at path, chunk by chunk: each chunk is
+// searched with the end of the one before it (a literal's length but one), so a literal across two
+// chunks is found, and the read stops once every literal was.
 func readClaudeHooks(path string) (ClaudeHooks, error) {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+	lits := claudeLiterals()
+	longest := 0
+	for _, l := range lits {
+		longest = max(longest, len(l))
+	}
 	k := ClaudeHooks{}
-	for _, e := range append([]string{ClaudeSessionStart, ClaudeCrossSessionInbound}, claudePromptHooks...) {
-		k[e] = bytes.Contains(b, []byte(`"`+e+`"`))
+	buf := make([]byte, longest-1+claudeScanChunk)
+	carry := 0
+	for len(k) < len(lits) {
+		n, err := io.ReadFull(f, buf[carry:])
+		window := buf[:carry+n]
+		for e, l := range lits {
+			if !k[e] && bytes.Contains(window, l) {
+				k[e] = true
+			}
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		carry = min(longest-1, len(window))
+		copy(buf, window[len(window)-carry:])
+	}
+	for e := range lits {
+		k[e] = k[e] // every event answered, known or not
 	}
 	if !k[ClaudeSessionStart] {
 		return nil, fmt.Errorf("names no SessionStart hook: not a Claude Code binary")
 	}
 	return k, nil
+}
+
+// claudeCacheLimit is how many binaries a ClaudeKnowsIn cache file holds.
+const claudeCacheLimit = 16
+
+// claudeCached is one binary's answer in a cache file.
+type claudeCached struct {
+	Path  string          `json:"path"`
+	Size  int64           `json:"size"`
+	MTime int64           `json:"mtime"`
+	Knows map[string]bool `json:"knows"`
+}
+
+func readClaudeCache(cache string) []claudeCached {
+	var all []claudeCached
+	if b, err := os.ReadFile(cache); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	return all
+}
+
+// cachedClaudeHooks is key's answer in cache, if it holds one.
+func cachedClaudeHooks(cache string, key claudeBinary) (ClaudeHooks, bool) {
+	if cache == "" {
+		return nil, false
+	}
+	for _, c := range readClaudeCache(cache) {
+		if c.Path == key.path && c.Size == key.size && c.MTime == key.mtime && c.Knows[ClaudeSessionStart] {
+			return ClaudeHooks(c.Knows), true
+		}
+	}
+	return nil, false
+}
+
+// keepClaudeHooks writes key's answer into cache, in place of the path's earlier one, the oldest
+// dropped past claudeCacheLimit, through a temporary file renamed over it.
+func keepClaudeHooks(cache string, key claudeBinary, k ClaudeHooks) {
+	if cache == "" {
+		return
+	}
+	all := slices.DeleteFunc(readClaudeCache(cache), func(c claudeCached) bool { return c.Path == key.path })
+	all = append(all, claudeCached{Path: key.path, Size: key.size, MTime: key.mtime, Knows: k})
+	if len(all) > claudeCacheLimit {
+		all = all[len(all)-claudeCacheLimit:]
+	}
+	b, err := json.Marshal(all)
+	if err != nil || os.MkdirAll(filepath.Dir(cache), 0o700) != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(cache), ".claude-hooks-*")
+	if err != nil {
+		return
+	}
+	_, werr := tmp.Write(b)
+	if cerr := tmp.Close(); werr != nil || cerr != nil || os.Rename(tmp.Name(), cache) != nil {
+		_ = os.Remove(tmp.Name())
+	}
 }
 
 // ClaudeFloor is what every Claude Code a crew session runs is taken to know when its binary can't
@@ -200,54 +313,106 @@ func ClaudeSettings(autodoc string, k ClaudeHooks) (settings map[string]any, pro
 	return settings, prompts
 }
 
-// claudeFindTimeout bounds FindClaude's one run of mise, for a shim.
+// claudeFindTimeout bounds ClaudeOf's one run of mise.
 const claudeFindTimeout = 5 * time.Second
 
-// FindClaude is the Claude Code binary that program runs, found as a shell in dir with PATH path
-// finds it: a name on path, or a path (relative to dir). A mise shim (a link to mise itself) is
-// followed to the tool it runs there (`mise which`). Any other wrapper is answered as itself, which
-// ClaudeKnows then can't read as a Claude Code.
-func FindClaude(program, path, dir string) (string, error) {
-	var found string
+// ClaudeOf is the Claude Code binary program runs, and what it knows (ClaudeKnowsIn, cache), found
+// as a shell in dir with PATH path finds it: a path (relative to dir) is that file; a name is the
+// first file on path that reads as a Claude Code. A mise shim (a link to mise) is the tool mise runs
+// for it there (`mise which`). A file that doesn't read as one (a wrapper script) is taken to run the
+// same CLI as mise's or a later one on path, which are tried next: mise's tool for the name, then
+// the later files on path. The error names every file tried.
+func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	if strings.Contains(program, "/") {
-		found = program
-		if !filepath.IsAbs(found) {
-			found = filepath.Join(dir, found)
+		bin := program
+		if !filepath.IsAbs(bin) {
+			bin = filepath.Join(dir, bin)
 		}
-	} else {
-		for _, d := range filepath.SplitList(path) {
-			if d == "" {
-				d = "."
-			}
-			if !filepath.IsAbs(d) {
-				d = filepath.Join(dir, d)
-			}
-			if fi, err := os.Stat(filepath.Join(d, program)); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-				found = filepath.Join(d, program)
-				break
+		k, err := ClaudeKnowsIn(bin, cache)
+		return bin, k, err
+	}
+	hits := lookAll(program, path, dir)
+	if len(hits) == 0 {
+		return "", nil, fmt.Errorf("crew: %s is not on the agent's PATH", program)
+	}
+	mise := lookAll("mise", path, dir)
+	var tried []string
+	seen := map[string]bool{}
+	try := func(bin string) (ClaudeHooks, bool) {
+		real, err := filepath.EvalSymlinks(bin)
+		if err != nil || seen[real] {
+			return nil, false
+		}
+		seen[real] = true
+		tried = append(tried, bin)
+		k, err := ClaudeKnowsIn(bin, cache)
+		return k, err == nil
+	}
+	triedMise := false
+	which := func(misebin string) string {
+		triedMise = true
+		w, err := miseWhich(misebin, program, path, dir)
+		if err != nil {
+			tried = append(tried, "mise which "+program+" ("+err.Error()+")")
+			return ""
+		}
+		return w
+	}
+	for i, hit := range hits {
+		real, err := filepath.EvalSymlinks(hit)
+		if err != nil {
+			continue
+		}
+		bin := hit
+		if filepath.Base(real) == "mise" { // a shim: the tool mise runs for it
+			if bin = which(real); bin == "" {
+				continue
 			}
 		}
-		if found == "" {
-			return "", fmt.Errorf("crew: %s is not on the agent's PATH", program)
+		if k, ok := try(bin); ok {
+			return bin, k, nil
+		}
+		if i == 0 && !triedMise && len(mise) > 0 { // a wrapper first: mise's own, before the later ones
+			if w := which(mise[0]); w != "" {
+				if k, ok := try(w); ok {
+					return w, k, nil
+				}
+			}
 		}
 	}
-	real, err := filepath.EvalSymlinks(found)
-	if err != nil {
-		return "", err
+	return "", nil, fmt.Errorf("crew: none of %s reads as a Claude Code", strings.Join(tried, ", "))
+}
+
+// lookAll is every executable file named name on path, in order, a relative folder taken from dir.
+func lookAll(name, path, dir string) []string {
+	var out []string
+	for _, d := range filepath.SplitList(path) {
+		if d == "" {
+			d = "."
+		}
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(dir, d)
+		}
+		f := filepath.Join(d, name)
+		if fi, err := os.Stat(f); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 && !slices.Contains(out, f) {
+			out = append(out, f)
+		}
 	}
-	if filepath.Base(real) != "mise" {
-		return found, nil
-	}
+	return out
+}
+
+// miseWhich is the tool mise (at bin) runs for program in dir: `mise which`, bounded.
+func miseWhich(bin, program, path, dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), claudeFindTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, real, "which", filepath.Base(program))
+	cmd := exec.CommandContext(ctx, bin, "which", program)
 	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH="+path)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("crew: mise which %s: %w", filepath.Base(program), err)
+		return "", err
 	}
-	if which := strings.TrimSpace(string(out)); filepath.IsAbs(which) && !strings.Contains(which, "\n") {
-		return which, nil
+	if w := strings.TrimSpace(string(out)); filepath.IsAbs(w) && !strings.Contains(w, "\n") {
+		return w, nil
 	}
-	return "", fmt.Errorf("crew: mise which %s answered %q", filepath.Base(program), out)
+	return "", fmt.Errorf("answered %q", out)
 }
