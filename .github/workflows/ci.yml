@@ -44,7 +44,10 @@ jobs:
           POSTGRES_DB: autodoc
         ports:
           - 5432:5432
+        # --shm-size: a parallel HNSW build keeps its maintenance_work_mem (512 MB on the
+        # pgstore cells' scratch databases) in /dev/shm, past Docker's default 64 MB
         options: >-
+          --shm-size 1g
           --health-cmd "pg_isready -U autodoc"
           --health-interval 5s
           --health-timeout 5s
@@ -309,7 +312,10 @@ jobs:
           POSTGRES_DB: autodoc
         ports:
           - 5432:5432
+        # --shm-size: a parallel HNSW build keeps its maintenance_work_mem (512 MB on the
+        # pgstore cells' scratch databases) in /dev/shm, past Docker's default 64 MB
         options: >-
+          --shm-size 1g
           --health-cmd "pg_isready -U autodoc"
           --health-interval 5s
           --health-timeout 5s
