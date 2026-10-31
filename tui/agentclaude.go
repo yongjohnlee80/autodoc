@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"os"
-
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -21,22 +19,23 @@ type claudeAnswer struct {
 	err  error
 }
 
-// warmClaude starts finding and reading, off the loop, the Claude Code that command runs, unless
-// that is already on its way or answered for its program: found on the TUI's PATH, which is the
-// agent's but for its first folder (its own autodoc alone), the first file there that reads as a
-// Claude Code, a mise shim or a wrapper followed to the CLI it runs (crew.ClaudeOf).
+// warmClaude starts finding and reading, off the loop, the Claude Code that p's command runs, unless
+// that is already on its way or answered for its program and PATH: found on p's PATH (agentPath),
+// which is the agent's but for its first folder (its own autodoc alone), the first file there that
+// reads as a Claude Code, a mise shim or a wrapper followed to the CLI it runs (crew.ClaudeOf).
 // On the loop.
-func (a *agents) warmClaude(command string) *claudeAnswer {
-	program := agentProgram(command)
-	if f := a.claudeAnswers[program]; f != nil {
+func (a *agents) warmClaude(p agentProfile) *claudeAnswer {
+	program, path := agentProgram(p.Command), p.agentPath()
+	key := program + "\x00" + path
+	if f := a.claudeAnswers[key]; f != nil {
 		return f
 	}
 	if a.claudeAnswers == nil {
 		a.claudeAnswers = map[string]*claudeAnswer{}
 	}
 	f := &claudeAnswer{done: make(chan struct{})}
-	a.claudeAnswers[program] = f
-	path, dir := os.Getenv("PATH"), a.agentDir
+	a.claudeAnswers[key] = f
+	dir := a.agentDir
 	go func() {
 		defer close(f.done)
 		f.path, _, f.err = crew.ClaudeOf(program, path, dir, "") // read now, so the spawn finds it kept
@@ -44,17 +43,17 @@ func (a *agents) warmClaude(command string) *claudeAnswer {
 	return f
 }
 
-// claudeHooks is what the Claude Code command runs knows, for the spawn of profile name: the warmed binary, waited
+// claudeHooks is what the Claude Code p's command runs knows, for its spawn: the warmed binary, waited
 // for only while it is found, asked again, and the next spawn's warm-up started. One that can't be
 // found or read is taken to know crew.ClaudeFloor alone (its prompts unreported, so a message typed
 // to it is never sent with Enter), told once per program: a notice, never a failure, since the
 // agent still starts and is woken.
-func (a *agents) claudeHooks(name, command string) crew.ClaudeHooks {
-	program := agentProgram(command)
-	f := a.warmClaude(command)
+func (a *agents) claudeHooks(p agentProfile) crew.ClaudeHooks {
+	program, name := agentProgram(p.Command), p.Name
+	f := a.warmClaude(p)
 	<-f.done
-	delete(a.claudeAnswers, program)
-	a.warmClaude(command) // found again, off the loop: a shim may name another version by the next spawn
+	delete(a.claudeAnswers, program+"\x00"+p.agentPath())
+	a.warmClaude(p) // found again, off the loop: a shim may name another version by the next spawn
 	err := f.err
 	if err == nil {
 		var k crew.ClaudeHooks

@@ -91,7 +91,7 @@ func (a *agents) restartAgent(code string) {
 		p = instance.profile
 	}
 	ws, _ := a.c.ActiveWorkspace()
-	if !instance.running && instance.profile.Command == p.Command && instance.workspace.name == ws.name && instance.workspace.root == ws.root {
+	if !instance.running && instance.profile.sameLaunch(p) && instance.workspace.name == ws.name && instance.workspace.root == ws.root {
 		a.startAgent(p)
 		return
 	}

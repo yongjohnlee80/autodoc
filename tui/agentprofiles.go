@@ -98,6 +98,7 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.SetFormText("App.agentName", a.Name)
 	h.c.SetFormText("App.agentCodename", a.Codename)
 	h.c.SetFormText("App.agentCommand", a.Command)
+	h.c.SetFormText("App.agentEnv", formatProfileEnv(a.Env))
 	h.c.Open("agentEdit")
 }
 
@@ -110,16 +111,27 @@ func (h *agents) saveAgent(name, command string) {
 	h.saveAgentProfile(name, command, codename)
 }
 
-// saveAgentProfile is the profile form's Save (App.saveAgentProfile): storeAgentProfile, its
-// answer read by nothing, since a refusal has already reopened the form with its reason.
+// saveAgentProfile is App.saveAgentProfile, a caller that names no env: the edited profile keeps
+// its own (saveAgentProfileWithEnv).
 func (h *agents) saveAgentProfile(name, command, codename string) {
-	h.storeAgentProfile(name, command, codename)
+	env := ""
+	if p, ok := h.profile(h.editingAgent); ok && h.editingAgent != "" {
+		env = formatProfileEnv(p.Env)
+	}
+	h.saveAgentProfileWithEnv(name, command, codename, env)
 }
 
-// storeAgentProfile is the form's save, including the explicit stable identity.
+// saveAgentProfileWithEnv is the profile form's Save (App.saveAgentProfileWithEnv): storeAgentProfile,
+// its answer read by nothing, since a refusal has already reopened the form with its reason.
+func (h *agents) saveAgentProfileWithEnv(name, command, codename, env string) {
+	h.storeAgentProfile(name, command, codename, env)
+}
+
+// storeAgentProfile is the form's save, including the explicit stable identity and the env as the
+// form's field has it (parseProfileEnv).
 // It returns the profile it stored and true, or false when it refused: the one save path, the form's
 // and the agent setup's (agentsetup.go), so both share every validation and neither infers success.
-func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile, bool) {
+func (h *agents) storeAgentProfile(name, command, codename, envText string) (agentProfile, bool) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	codename = strings.TrimSpace(codename)
 	if codename == "" {
@@ -136,6 +148,10 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 	if !validAgentCodename(codename) {
 		return refuse(h.c.Tr("autodoc.text.agentprofiles.codename_needs_lower_case_letters_or_digits_sepa"))
 	}
+	env, err := parseProfileEnv(envText)
+	if err != nil {
+		return refuse(h.c.Trf("autodoc.text.agentprofiles.env_not_saved", err.Error()))
+	}
 	agents := h.profiles()
 	at := -1
 	for i, a := range agents {
@@ -145,7 +161,7 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 			return refuse(h.c.Trf("autodoc.text.agentprofiles.codename_taken_by", a.Name))
 		}
 	}
-	if h.editingAgent != "" && (at < 0 || (h.editingAgentProfile != nil && agents[at] != *h.editingAgentProfile)) {
+	if h.editingAgent != "" && (at < 0 || (h.editingAgentProfile != nil && !agents[at].same(*h.editingAgentProfile))) {
 		return refuse(h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_open_it_again_before_s"))
 	}
 	if at >= 0 {
@@ -161,9 +177,9 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 		if def == agents[at].Codename {
 			def = codename
 		}
-		agents[at] = agentProfile{Name: name, Command: command, Codename: codename}
+		agents[at] = agentProfile{Name: name, Command: command, Codename: codename, Env: env}
 	} else {
-		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename})
+		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename, Env: env})
 		if def == "" {
 			def = codename
 		}
@@ -171,7 +187,7 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 	h.keepAgents(agents, def)
 	h.editingAgent, h.editingAgentProfile = "", nil
 	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
-	return agentProfile{Name: name, Command: command, Codename: codename}, true
+	return agentProfile{Name: name, Command: command, Codename: codename, Env: env}, true
 }
 
 // removeAgent asks about the profile at i. The answer holds that profile, not
@@ -193,7 +209,7 @@ func (h *agents) removeAgent(i int) {
 // edited or removed while the card was open needs a new question.
 func (h *agents) removeAgentConfirmed(a agentProfile) {
 	profiles := h.profiles()
-	i := slices.Index(profiles, a)
+	i := slices.IndexFunc(profiles, a.same)
 	if i < 0 {
 		h.c.Set("App.status", h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_ask_to_remove_it_again"))
 		return
