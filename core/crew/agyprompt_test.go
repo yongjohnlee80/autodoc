@@ -87,3 +87,50 @@ func TestAgyPromptOfReadsTheTrajectorysTail(t *testing.T) {
 		t.Fatal("a refused token gave a prompt")
 	}
 }
+
+// TestAgyTurnRunningReadsTheConversationsRunStatus: a conversation's turn is running while its
+// language server's summary says RUNNING or BUSY (across the pause between its steps), and not once
+// it says IDLE; a conversation the summary lacks is not running; a refused call is an error. The
+// call carries the CSRF token, and asks the summary, never the conversation's whole trajectory.
+func TestAgyTurnRunningReadsTheConversationsRunStatus(t *testing.T) {
+	status, code := "CASCADE_RUN_STATUS_RUNNING", http.StatusOK
+	var paths []string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.Header.Get("x-codeium-csrf-token") != "tok" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]any{"trajectorySummaries": map[string]any{
+			"c-1":   map[string]any{"status": status, "stepCount": 4},
+			"other": map[string]any{"status": "CASCADE_RUN_STATUS_RUNNING"},
+		}})
+	}))
+	t.Cleanup(s.Close)
+	addr := strings.TrimPrefix(s.URL, "http://")
+	ctx := context.Background()
+	for _, tc := range []struct {
+		status, conv string
+		want         bool
+	}{
+		{"CASCADE_RUN_STATUS_RUNNING", "c-1", true}, {"CASCADE_RUN_STATUS_BUSY", "c-1", true},
+		{"CASCADE_RUN_STATUS_IDLE", "c-1", false}, {"CASCADE_RUN_STATUS_IDLE", "missing", false},
+	} {
+		status = tc.status
+		got, err := crew.AgyTurnRunning(ctx, crew.AgyClient(), addr, "tok", tc.conv)
+		if err != nil || got != tc.want {
+			t.Errorf("%s, %s: running %v (%v), want %v", tc.conv, tc.status, got, err, tc.want)
+		}
+	}
+	if !strings.HasSuffix(paths[0], "/GetAllCascadeTrajectories") {
+		t.Errorf("it asked %s, want the summary of the conversations", paths[0])
+	}
+	code = http.StatusInternalServerError
+	if _, err := crew.AgyTurnRunning(ctx, crew.AgyClient(), addr, "tok", "c-1"); err == nil {
+		t.Error("a 500 is no error")
+	}
+	if _, err := crew.AgyTurnRunning(ctx, crew.AgyClient(), addr, "another", "c-1"); err == nil {
+		t.Error("a refused token is no error")
+	}
+}

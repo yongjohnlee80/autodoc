@@ -202,6 +202,33 @@ func agyCall(ctx context.Context, c *http.Client, address, token, method string,
 
 var _ Waker = (*AgyWaker)(nil)
 
+// agyTurnIdle is a conversation's run status between turns (CASCADE_RUN_STATUS_IDLE); a running
+// turn's is RUNNING or BUSY, and stays so across the pause between its steps.
+const agyTurnIdle = "CASCADE_RUN_STATUS_IDLE"
+
+// AgyTurnRunning reports whether conversation has a turn running, by its language server's summary
+// of its conversations (GetAllCascadeTrajectories: small, where the conversation's own trajectory
+// is its every step). A conversation the summary lacks, or one with no status, is not running.
+func AgyTurnRunning(ctx context.Context, c *http.Client, address, token, conversation string) (bool, error) {
+	code, answer, err := agyCall(ctx, c, address, token, "GetAllCascadeTrajectories", map[string]any{})
+	if err != nil {
+		return false, err
+	}
+	if code != http.StatusOK {
+		return false, fmt.Errorf("crew: the agy language server answered status %d for its conversations", code)
+	}
+	var got struct {
+		Summaries map[string]struct {
+			Status string `json:"status"`
+		} `json:"trajectorySummaries"`
+	}
+	if err := json.Unmarshal(answer, &got); err != nil {
+		return false, fmt.Errorf("crew: the agy language server's conversations: %w", err)
+	}
+	st := got.Summaries[conversation].Status
+	return st != "" && st != agyTurnIdle, nil
+}
+
 // AgyPrompt is an agy conversation's permission prompt, as its language server shows it: Showing
 // when the trajectory's last step waits on the user with a permission requested, Asks what it asks
 // ("command: touch build/x").

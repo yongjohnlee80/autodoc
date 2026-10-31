@@ -17,6 +17,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/clock"
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -164,7 +165,21 @@ type agyBridge struct {
 	hosts    func(ctx context.Context) error           // it hosts the conversation, for the token
 	// prompt reads the conversation's permission prompt from step offset on (crew.AgyPromptOf)
 	prompt func(ctx context.Context, offset int) (crew.AgyPrompt, int, error)
+	// running reports whether the conversation has a turn running (crew.AgyTurnRunning); nil
+	// registers at once. The first registration waits for the launch turn (awaitLaunchTurn), looking
+	// every turnEvery (through sleep) for at most turnBound (by now).
+	running              func(ctx context.Context) (bool, error)
+	turnEvery, turnBound time.Duration
+	sleep                func(ctx context.Context, d time.Duration) bool
+	now                  func() time.Time
 }
+
+// The first registration's wait for the launch turn (awaitLaunchTurn): how often it looks, and for
+// how long at most.
+const (
+	bridgeTurnEvery = 2 * time.Second
+	bridgeTurnBound = 2 * time.Minute
+)
 
 // newAgyBridge is c's bridge from the language server getenv names, its address made a loopback IP.
 func newAgyBridge(c sessionContext, getenv func(string) string) (*agyBridge, error) {
@@ -196,6 +211,8 @@ func newAgyBridge(c sessionContext, getenv func(string) string) (*agyBridge, err
 	b.prompt = func(ctx context.Context, offset int) (crew.AgyPrompt, int, error) {
 		return crew.AgyPromptOf(ctx, client, ip, token, conv, offset)
 	}
+	b.running = func(ctx context.Context) (bool, error) { return crew.AgyTurnRunning(ctx, client, ip, token, conv) }
+	b.turnEvery, b.turnBound, b.sleep, b.now = bridgeTurnEvery, bridgeTurnBound, clock.Sleep, time.Now
 	b.dial = func(ctx context.Context) error {
 		var d net.Dialer
 		conn, err := d.DialContext(ctx, "tcp", ip)
@@ -271,6 +288,7 @@ func (b *agyBridge) run(ctx context.Context, tick <-chan time.Time, log io.Write
 		}
 		return nil
 	}
+	b.awaitLaunchTurn(ctx, log)
 	if err := look(); err != nil {
 		return err
 	}
@@ -282,6 +300,39 @@ func (b *agyBridge) run(ctx context.Context, tick <-chan time.Time, log io.Write
 			if err := look(); err != nil {
 				return err
 			}
+		}
+	}
+}
+
+// awaitLaunchTurn holds the bridge's first registration until the turn that launched it has ended
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler): a wake registered sooner lands inside that
+// turn, where agy has not yet given the agent its workspace's MCP tools, so its mail_receive is
+// missing; once the turn ends, a wake starts the next, which has them. It waits at most turnBound,
+// then registers anyway (the scheduler rings until the mail is received, so a late registration
+// still delivers); a running state it can't read registers at once. Only the first registration
+// waits: a daemon's restart has no launch turn to wait for.
+func (b *agyBridge) awaitLaunchTurn(ctx context.Context, log io.Writer) {
+	if b.running == nil {
+		return
+	}
+	start := b.now()
+	for {
+		lctx, cancel := context.WithTimeout(ctx, b.bound)
+		running, err := b.running(lctx)
+		cancel()
+		switch {
+		case err != nil:
+			fmt.Fprintln(log, "autodoc: can't tell whether the launch turn has ended; registering now:", err)
+			return
+		case !running:
+			return
+		case b.now().Sub(start) >= b.turnBound:
+			fmt.Fprintf(log, "autodoc: the launch turn still runs after %s; registering anyway\n", b.turnBound)
+			return
+		}
+		// NOTE: agy tells the bridge of no turn's end, so it looks again after turnEvery
+		if !b.sleep(ctx, b.turnEvery) {
+			return
 		}
 	}
 }
