@@ -116,14 +116,14 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 }
 
 // TestTheOpenCodePluginEnvIsTheAgentsBuilds: opencodeEnv runs the agent's own autodoc (its build,
-// on the TUI's config) as `crew plugin --opencode --print-env`, and passes on its one line; any
-// other output is refused.
+// on the TUI's config) as `crew setup --kind opencode --host window`, and passes on its setup's
+// OPENCODE_CONFIG_CONTENT; output that is no setup, or a setup with none, is refused.
 func TestTheOpenCodePluginEnvIsTheAgentsBuilds(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "autodoc")
 	script := "#!/bin/sh\n" +
-		"[ \"$*\" = \"--config /c/autodoc.toml crew plugin --opencode --print-env\" ] || { echo \"args: $*\" >&2; exit 3; }\n" +
-		"echo 'OPENCODE_CONFIG_CONTENT={\"plugin\":[\"file:///p/autodoc-crew.js\"]}'\n"
+		"[ \"$*\" = \"--config /c/autodoc.toml crew setup --kind opencode --host window\" ] || { echo \"args: $*\" >&2; exit 3; }\n" +
+		"echo '{\"argv\":[],\"env\":{\"OPENCODE_CONFIG_CONTENT\":\"{\\\"plugin\\\":[\\\"file:///p/autodoc-crew.js\\\"]}\"},\"files\":[],\"prompts\":false,\"notices\":[],\"after\":[]}'\n"
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +131,13 @@ func TestTheOpenCodePluginEnvIsTheAgentsBuilds(t *testing.T) {
 	if err != nil || env != `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}` {
 		t.Fatalf("opencodeEnv: %q %v", env, err)
 	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho something else\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := opencodeEnv(bin, "/c/autodoc.toml"); err == nil {
-		t.Fatal("unexpected output was passed on")
+	for _, out := range []string{"something else", `{"env":{}}`} {
+		if err := os.WriteFile(bin, []byte("#!/bin/sh\necho '"+out+"'\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := opencodeEnv(bin, "/c/autodoc.toml"); err == nil {
+			t.Fatalf("%q was passed on", out)
+		}
 	}
 }
 
