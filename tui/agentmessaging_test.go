@@ -25,13 +25,18 @@ func messagingRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
 	return a, c, w
 }
 
-// settleMessaging runs what the window and the crew host left for later: posted deliveries, the base's Enter,
-// the doorbell's asks again.
+// settleRounds bounds settleMessaging's rounds of the crew host's timers: the doorbell's asks again
+// need userSendTries of them, and the scope's renewal re-arms itself every round, so the timers
+// never run out on their own.
+const settleRounds = userSendTries + 2
+
+// settleMessaging runs what the window and the crew host left for later: posted deliveries, the
+// base's Enter, the doorbell's asks again (settleRounds rounds of the crew host's timers).
 func settleMessaging(c *identityHost, w *crewWindow) {
-	for {
+	for round := 0; ; round++ {
 		c.drainPosts()
 		c.fireAfters()
-		if len(w.timers) == 0 {
+		if len(w.timers) == 0 || round == settleRounds {
 			return
 		}
 		due := w.timers
