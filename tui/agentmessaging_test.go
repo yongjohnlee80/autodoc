@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,7 +74,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	if len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("done heard %v, want one nil", heard)
 	}
-	if len(got) != 9 || got[0] != scope || got[2] != epoch || len(got[3].([]string)) != 1 || got[3].([]string)[0] != "one" ||
+	if len(got) != 9 || got[0] != scope || got[2] != epoch || func() bool { l, ok := got[3].([]any); return !ok || !slices.Equal(l, []any{"one"}) }() ||
 		got[4] != "File: /kb/.todo-list/in-progress/t1.md\nID: t1\nInstruction: Go." || got[6] != MessageRequest ||
 		got[7] != "Task: Ship" || got[8] != true || got[5] == "" {
 		t.Fatalf("inbox.send %v", got)
