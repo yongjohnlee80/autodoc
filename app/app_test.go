@@ -192,12 +192,18 @@ type badDeriver struct{ pdfDeriver }
 func (badDeriver) Formats() []string { return []string{".pptx"} }
 
 // The CLI hands an agent's `autodoc crew|mail …` to the crew's commands before any mode (with no
-// command, their usage, exit 2), and --workspace-notice is the hook's: with no editor to ask, nothing,
-// exit 0.
+// command, their help, exit 0; with one that isn't theirs, their usage, exit 2), and
+// --workspace-notice is the hook's: with no editor to ask, nothing, exit 0.
 func TestTheCLIRoutesTheCrewAndTheWorkspaceNotice(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run(context.Background(), []string{"crew"}, Options{Version: "v-test"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "usage: autodoc crew|mail") {
-		t.Errorf("autodoc crew: exit %d, %q; want 2 and the crew's usage", code, stderr.String())
+	if code := run(context.Background(), []string{"crew"}, Options{Version: "v-test"}, &stdout, &stderr); code != 0 ||
+		!strings.Contains(stdout.String(), "usage: autodoc crew <command>") || !strings.Contains(stdout.String(), "autodoc crew whoami") {
+		t.Errorf("autodoc crew: exit %d, stdout %q, stderr %q; want 0 and the crew's help", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(context.Background(), []string{"crew", "nope"}, Options{Version: "v-test"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "usage: autodoc crew|mail") {
+		t.Errorf("autodoc crew nope: exit %d, %q; want 2 and the crew's usage", code, stderr.String())
 	}
 	t.Setenv("AUTODOC_EDITOR", "")
 	stdout.Reset()
