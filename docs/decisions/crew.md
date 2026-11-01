@@ -519,6 +519,15 @@ It reads the profile's environment from its own (its PATH finds the CLI), never 
 line, which any user can read, and never prints it back. AutoDoc's own files (the OpenCode plugin,
 what each Claude Code knows) go in the data folder of the config it runs under.
 
+Antigravity's setup gives the agent its mail as the crew MCP servers' tools. The servers' config
+goes in the agent's own folder, as `.agents/mcp_config.json`, which agy reads in its working folder
+or, from Neovim, in the folder `--add-dir` adds. Everything else is on its command line, for that
+session alone: `--settings` allows each tool by its exact `mcp(<server>/<tool>)` rule and the bridge
+by its exact command, nothing by a wildcard, and trusts the agent's folder. The launch prompt runs
+the bridge alone, since agy gives a session its MCP tools only from its second turn. Nothing goes in
+the user's agy settings. A host that gives no servers, or no folder, still starts the agent, with a
+notice.
+
 Claude Code's settings have one source, which AutoDoc's own agents get and another host gets from
 `autodoc crew setup` (or, alone, `autodoc crew claude-settings`: the JSON `claude --settings`
 takes; `--prompts` says whether they report the prompts). They name only the hook events and settings the installed Claude Code
