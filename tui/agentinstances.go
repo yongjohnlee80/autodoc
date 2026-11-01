@@ -499,6 +499,21 @@ func (a *agents) showStarted(instance *agentInstance) error {
 	return err
 }
 
+// endSession ends instance's crew session as the window takes the agent away (Close, Restart, the
+// strip's stop-all), and answers its id ("" for none). A removed tab never reports its process's
+// exit (the terminal's pump stops with the tab), so instanceExited may never run for it: without
+// this the session stays live, its codename taken, with no process behind it.
+func (a *agents) endSession(instance *agentInstance) string {
+	id := instance.session.ID
+	if id == "" || a.stopping { // stopping: the window's release ends every session
+		return ""
+	}
+	instance.context = ""
+	a.crew.exit(instance.session, crew.EndedExit)
+	instance.session = crewSession{}
+	return id
+}
+
 func (a *agents) instanceExited(instance *agentInstance, code int) {
 	instance.context = ""                         // its session ends with it: a next start registers a new one
 	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
@@ -563,6 +578,7 @@ func (a *agents) removeInstance(code string) error {
 func (a *agents) awaitInstanceRetirement(instance *agentInstance, result TerminalCompletion) {
 	instance.running, instance.closing, instance.retirement = false, true, result
 	code := instance.profile.Codename
+	ended := a.endSession(instance)
 	a.listAgents()
 	c := a.c.(agentRuntimeHost)
 	complete := func(err error) {
@@ -585,7 +601,11 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 			if !saved {
 				p = instance.profile
 			}
-			a.startAgent(p)
+			if ended == "" {
+				a.startAgent(p)
+			} else {
+				a.crew.whenExited(ended, func() { a.startAgent(p) }) // the codename is free once the old session has ended
+			}
 		}
 	}
 	select {
