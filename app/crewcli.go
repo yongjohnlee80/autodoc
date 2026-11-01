@@ -247,7 +247,7 @@ var crewCommands = map[string]crewCommand{
 			fs.String("autodoc", "autodoc", "the command the hooks run AutoDoc with, as a shell reads it")
 			fs.Bool("prompts", false, "print whether the settings report the permission prompts, instead of the settings")
 		}}, // run by crewClaudeSettingsMain: it needs no session, so it is no call
-	"crew attention": {usage: "raise <permission|blocked> [text] | clear | --claude-hook: tell the user this session waits on them, or no longer does (--claude-hook: Claude Code's hooks run it, with their input, for its permission prompts)",
+	"crew attention": {usage: "raise <permission|blocked> [text] | clear | alive | --claude-hook: tell the user this session waits on them, or no longer does; alive: this session's prompt reporter is running, its heartbeat (OpenCode's plugin runs it every 5 s) (--claude-hook: Claude Code's hooks run it, with their input, for its permission prompts)",
 		example: "autodoc crew attention raise permission \"waiting for your OK to run the migration\"",
 		call: func(c sessionContext, _ *flag.FlagSet, args []string, _ io.Reader) (string, []any, func(any) any, error) {
 			switch {
@@ -255,8 +255,10 @@ var crewCommands = map[string]crewCommand{
 				return "crew.attention", []any{c.Credential, "raise", args[1], strings.Join(args[2:], " ")}, nil, nil
 			case len(args) == 1 && args[0] == "clear":
 				return "crew.attention", []any{c.Credential, "clear"}, nil, nil
+			case len(args) == 1 && args[0] == "alive":
+				return "crew.attention", []any{c.Credential, "alive"}, nil, nil
 			}
-			return "", nil, nil, errors.New("crew attention takes raise <permission|blocked> [text], or clear")
+			return "", nil, nil, errors.New("crew attention takes raise <permission|blocked> [text], clear, or alive")
 		}},
 	"mail receive": {usage: "lease your next deliveries, at most 8; run it until more is false",
 		example: "autodoc mail receive",
