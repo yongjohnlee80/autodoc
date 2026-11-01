@@ -289,7 +289,9 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.h.p.Post(func() { r.h.openPath("plan.md") })
-	r.s.WaitFor(t, "plan.md open", func(string) bool { return onLoop(r, func() bool { return r.h.core.Value() == "the-saved-page-text\n" }) })
+	r.s.WaitFor(t, "plan.md open", func(string) bool {
+		return onLoop(r, func() bool { return r.h.core.Value() == "the-saved-page-text\n" })
+	})
 
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
