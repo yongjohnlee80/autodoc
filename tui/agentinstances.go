@@ -36,8 +36,11 @@ type AgentEntry struct {
 }
 
 var (
-	ErrAgentStale        = errs.Sentinel(errs.ErrPrecondition, "agent instance is stale")
-	ErrAgentUnavailable  = errs.Sentinel(errs.ErrPrecondition, "agent is unavailable")
+	ErrAgentStale       = errs.Sentinel(errs.ErrPrecondition, "agent instance is stale")
+	ErrAgentUnavailable = errs.Sentinel(errs.ErrPrecondition, "agent is unavailable")
+	// ErrAgentElsewhere is a running agent started in another workspace than the window's: its crew
+	// mail reaches it in any workspace, but the base never types into it (agentElsewhere).
+	ErrAgentElsewhere    = errs.Sentinel(errs.ErrPrecondition, "agent runs in another workspace")
 	ErrAgentCancelled    = errs.Sentinel(errs.ErrPrecondition, "agent delivery was cancelled")
 	ErrAgentShuttingDown = errs.Sentinel(errs.ErrPrecondition, "agent owner is shutting down")
 	ErrAgentTask         = errs.Sentinel(errs.ErrInvalidArgument, "task needs a title and absolute file path")
@@ -645,6 +648,23 @@ func (a *agents) Resume(to AgentRef) error {
 	return panel.Resume(instance.tab)
 }
 
+// agentElsewhere is ErrAgentElsewhere for one delivery: the workspace the agent runs in, and why
+// its doorbell didn't ring (errNoDoorbell when the window has none), so nothing could reach it.
+type agentElsewhere struct {
+	workspace string
+	why       error
+}
+
+// errNoDoorbell is a delivery that had no doorbell to ring: the window has no crew, or the
+// delivery is the base's own (a fallback job).
+var errNoDoorbell = errors.New("no doorbell to ring")
+
+func (e *agentElsewhere) Error() string {
+	return fmt.Sprintf("%v (%s): %v", ErrAgentElsewhere, e.workspace, e.why)
+}
+
+func (e *agentElsewhere) Unwrap() []error { return []error{ErrAgentElsewhere, e.why} }
+
 // deliverOpts are a delivery's choices.
 type deliverOpts struct {
 	present bool // once sent, the agent's panel is brought forward, so the user sees it start (present)
@@ -663,7 +683,9 @@ type deliverOpts struct {
 // after the owner's own, a stopped agent started once the user agrees (what names what is sent),
 // everything checked again before send runs on the agent's tab, and done completed once on the
 // loop. An agent deliver started refusing a bracketed paste is tried again, the same checks first,
-// until agentReadyWait.
+// until agentReadyWait. An agent running in another workspace than the window's is rung all the
+// same (its crew mail needs no tab), but never typed into: its tab works in that workspace, so a
+// doorbell that didn't ring, or none, ends the delivery agentElsewhere.
 func (a *agents) deliver(to AgentRef, check func() error, what string, o deliverOpts, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
@@ -694,8 +716,9 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 	if !ok {
 		return ErrAgentUnavailable
 	}
-	if instance != nil && instance.running && (instance.workspace.name != ws.name || instance.workspace.root != ws.root) {
-		return ErrAgentStale
+	elsewhere := instance != nil && instance.running && (instance.workspace.name != ws.name || instance.workspace.root != ws.root)
+	if elsewhere && o.ring == nil { // nothing reaches it but the base, which types only in its own workspace
+		return &agentElsewhere{workspace: instance.workspace.name, why: errNoDoorbell}
 	}
 	ticket := c.Ticket(nil, TicketWorkspace)
 	accepted := &agentDelivery{done: done}
@@ -830,6 +853,8 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 					}
 				}
 				finish(nil)
+			case errors.Is(err, errDoorbellNotSent) && elsewhere: // nothing was sent, and the base never types there
+				finish(&agentElsewhere{workspace: instance.workspace.name, why: err})
 			case errors.Is(err, errDoorbellNotSent):
 				attempt(tries) // nothing was sent: the base, checked again first
 			default:

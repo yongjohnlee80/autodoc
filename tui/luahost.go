@@ -315,6 +315,8 @@ func agentErr(err error) string {
 		return "cancelled"
 	case errors.Is(err, ErrAgentStale):
 		return "stale"
+	case errors.Is(err, ErrAgentElsewhere):
+		return "elsewhere"
 	case errors.Is(err, ErrAgentUnavailable):
 		return "unavailable"
 	case errors.Is(err, ErrAgentShuttingDown):

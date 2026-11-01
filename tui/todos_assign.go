@@ -184,6 +184,11 @@ func (t *todos) handedOver(name, assignee string, err error) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste", name))
 		return
 	}
+	var e *agentElsewhere
+	if errors.As(err, &e) { // running, in another workspace: neither rung nor typed
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in", name, e.workspace, e.why.Error()))
+		return
+	}
 	why := err.Error()
 	if errors.Is(err, ErrAgentCancelled) {
 		why = t.c.Tr("autodoc.notice.todos_assign.you_didn_t_start_it")
