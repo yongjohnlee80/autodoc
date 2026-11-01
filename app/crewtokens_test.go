@@ -80,8 +80,8 @@ func TestTheMailCommandsAnswerCompactly(t *testing.T) {
 	if n := strings.Count(out, strings.SplitN(id, ":", 2)[0]); n != 1 {
 		t.Errorf("the delivery's id is printed %d times, want once (its id): %s", n, out)
 	}
-	if k := keys(item); !slices.Equal(k, []string{"answer", "attempts", "from", "id", "lease_until", "message"}) {
-		t.Errorf("a received item has %v, want answer, attempts, from, id, lease_until and message", k)
+	if k := keys(item); !slices.Equal(k, []string{"answer", "attempts", "from", "id", "lease_until", "message", "peer"}) {
+		t.Errorf("a received item has %v, want answer, attempts, from, id, lease_until, message and peer (gold is a peer)", k)
 	}
 	if want := `autodoc mail reply <id> --body "<your reply>"`; item["answer"] != want {
 		t.Errorf("a request's answer: %q, want %q", item["answer"], want)

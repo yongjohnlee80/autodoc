@@ -211,7 +211,8 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	if err != nil {
 		return err
 	}
-	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: agyMCPConfig, Content: string(cfg)})
+	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: agyMCPConfig, Content: string(cfg)},
+		FolderFile{Path: AgyRulesPath, Content: AgyRules()}) // the must-keep rules, always on, never truncated
 	s.Argv = append(s.Argv, "--settings", string(settings))
 	if in.Host == HostNvim { // Neovim's agent runs in the user's project: its folder is added, not its cwd
 		s.Argv = append(s.Argv, "--add-dir", in.AgentDir)
