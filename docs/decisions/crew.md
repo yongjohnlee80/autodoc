@@ -517,7 +517,10 @@ the arguments to append (Claude's `--settings`), AutoDoc's environment to merge 
 reports the session's permission prompts (which its `crew.register` says), and notices for the user.
 It reads the profile's environment from its own (its PATH finds the CLI), never from its command
 line, which any user can read, and never prints it back. AutoDoc's own files (the OpenCode plugin,
-what each Claude Code knows) go in the data folder of the config it runs under.
+what each Claude Code knows) go in the data folder of the config it runs under, which every host
+reads from that config, never from its working folder: a setup asked with a data folder that isn't
+absolute, or with none for a kind that keeps such a file, is refused, so nothing lands in a folder
+that may be the user's project.
 
 Antigravity's setup gives the agent its mail as the crew MCP servers' tools. The servers' config
 goes in the agent's own folder, as `.agents/mcp_config.json`, which agy reads in its working folder
