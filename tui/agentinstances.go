@@ -847,7 +847,9 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 			switch {
 			case accepted.finished: // shutdown finished it while the doorbell rang
 			case rang:
-				if err := validate(); err == nil && o.present {
+				// a task rung into an agent in another workspace isn't brought forward: its tab works
+				// there, and the window shows this one
+				if err := validate(); err == nil && o.present && !elsewhere {
 					if panel, perr := a.runtime(); perr == nil && instance.running && instance.owner.SameOwner(panel) {
 						a.present(panel, instance)
 					}
