@@ -23,7 +23,7 @@ type Guide struct {
 var endpointSteps = map[string]string{
 	"claude":   "Claude Code registers how you're woken on its own, from its `SessionStart` hook: nothing to run.",
 	"codex":    "AutoDoc registers how you're woken as Codex starts: nothing to run. Only if `autodoc crew list` shows you unreachable, run once: `autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"`.",
-	"agy":      "Then register how you're woken, once, from your shell: `autodoc crew bridge --agy`. It detaches and stays, and registers again whenever the daemon restarts.",
+	"agy":      "Then register how you're woken, once, from your shell: `" + AgyBridgeCommand + "`. It detaches and stays, and registers again whenever the daemon restarts.",
 	"opencode": "OpenCode's AutoDoc plugin registers how you're woken on its own: nothing to run.",
 }
 
