@@ -838,9 +838,10 @@ func Run(t *testing.T, h Harness) {
 		want := []crew.Entry{
 			// both live Claude sessions: the hooks report the prompts of the one registered with them,
 			// reachable or not, as the store kept it; the other's are never assumed reported
-			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true},
+			{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: true, PromptsReported: true,
+				MailVia: "cli"}, // registered without mail_via: a claude session's own, the CLI
 			{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false,
-				Why: crew.WhyNoEndpoint},
+				Why: crew.WhyNoEndpoint, MailVia: "cli"},
 		}
 		if got := list(); !slices.Equal(got, want) {
 			t.Fatalf("list: %+v\nwant %+v", got, want)
