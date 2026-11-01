@@ -28,6 +28,7 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
+	dataDir                string     // the config's data folder (Options.DataDir), for a crew agent's setup
 	crew                   *crewHost  // the window's crew scope; nil in a program without one
 	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
 	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's

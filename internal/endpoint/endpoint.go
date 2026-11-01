@@ -57,6 +57,17 @@ func (e *Endpoints) Socket() (string, error) { return e.Config.Server.SocketPath
 // Store is the store file.
 func (e *Endpoints) Store() (string, error) { return e.Config.Server.StorePath() }
 
+// DataDir is the config's data folder, absolute: the store's folder (server.data_dir when it is
+// set). AutoDoc's own files for its crew agents (the OpenCode plugin, what each Claude Code knows)
+// go there, never into a process's working folder: every host reads it from here.
+func (e *Endpoints) DataDir() (string, error) {
+	store, err := e.Store()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(filepath.Dir(store))
+}
+
 // StateDir is the state directory.
 func (e *Endpoints) StateDir() (string, error) { return e.Config.Server.StateDirPath() }
 

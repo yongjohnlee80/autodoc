@@ -64,6 +64,11 @@ type FolderFile struct {
 	Content string `json:"content"`
 }
 
+// ErrDataDir is a setup asked with a data folder that isn't absolute, or none for a kind that keeps
+// a file of AutoDoc's own there: a relative one would land in the process's working folder, which
+// may be the user's project.
+var ErrDataDir = errs.Sentinel(errs.ErrInvalidArgument, "crew: a setup's data folder must be an absolute path")
+
 // ErrFolderFile is a setup whose folder file would land outside the agent's own folder.
 var ErrFolderFile = errs.Sentinel(errs.ErrInvalidArgument, "crew: a folder file's path must stay inside the agent's folder")
 
@@ -113,6 +118,9 @@ type Setup struct {
 func SetupFor(in SetupInput, cache string) (Setup, error) {
 	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{},
 		Allow: []string{}, FolderFiles: []FolderFile{}}
+	if in.DataDir != "" && !filepath.IsAbs(in.DataDir) {
+		return Setup{}, fmt.Errorf("%w: %q", ErrDataDir, in.DataDir)
+	}
 	if f := kindSetups[in.Kind]; f != nil {
 		if err := f(in, cache, &s); err != nil {
 			return Setup{}, err
@@ -241,6 +249,9 @@ func codexSetup(_ SetupInput, _ string, s *Setup) error {
 // opencodeSetup is AutoDoc's plugin, written into in.DataDir, and the OPENCODE_CONFIG_CONTENT that
 // loads it, the guide's commands allowed.
 func opencodeSetup(in SetupInput, _ string, s *Setup) error {
+	if in.DataDir == "" { // its plugin is a file of AutoDoc's own: with no folder for it, nowhere
+		return fmt.Errorf("%w: OpenCode's plugin needs one, and none was given", ErrDataDir)
+	}
 	path, err := WriteOpenCodePlugin(filepath.Join(in.DataDir, "opencode"))
 	if err != nil {
 		return fmt.Errorf("writing AutoDoc's OpenCode plugin: %w", err)
