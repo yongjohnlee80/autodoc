@@ -101,9 +101,17 @@ func readEnglish(t *testing.T) map[string]string {
 	return out
 }
 
-// writeEnglish writes the English catalog: every id, sorted, its English as source and translation.
+// writeEnglish writes the English catalog (englishCatalogText).
 func writeEnglish(t *testing.T, msgs map[string]string) {
 	t.Helper()
+	if err := os.WriteFile(enCatalog, []byte(englishCatalogText(msgs)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// englishCatalogText is the English catalog's text: every id, sorted, its English as source and
+// translation.
+func englishCatalogText(msgs map[string]string) string {
 	var b strings.Builder
 	b.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE TS>\n<TS version=\"2.1\" language=\"en\">\n<context>\n    <name>autodoc</name>\n")
 	for _, id := range slices.Sorted(maps.Keys(msgs)) {
@@ -112,9 +120,7 @@ func writeEnglish(t *testing.T, msgs map[string]string) {
 		b.WriteString("    <message id=\"" + id + "\">\n        <source>" + e + "</source>\n        <translation>" + e + "</translation>\n    </message>\n")
 	}
 	b.WriteString("</context>\n</TS>\n")
-	if err := os.WriteFile(enCatalog, []byte(b.String()), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	return b.String()
 }
 
 func generated(id string) bool {
@@ -122,17 +128,20 @@ func generated(id string) bool {
 }
 
 // The English catalog holds what the Go tables say, each id once and as they say it, and nothing
-// they no longer say.
+// they no longer say; in the GUI build, whose tables are all of them, the file is what -update
+// writes, byte for byte, so a regeneration moves no line it didn't change.
 func TestTheEnglishCatalogHoldsTheGoTables(t *testing.T) {
 	want := goTableText(t)
 	have := readEnglish(t)
+	// what -update writes: the catalog's own messages, the tables' replacing the generated ones
+	written := maps.Clone(have)
+	maps.DeleteFunc(written, func(id, _ string) bool { return generated(id) })
+	maps.Copy(written, want)
 	if *updateKeys {
 		if !wholeTables {
 			t.Fatal("generate the catalog in the GUI build, whose tables are all of them: go test -tags gui ./tui -run " + t.Name() + " -update")
 		}
-		maps.DeleteFunc(have, func(id, _ string) bool { return generated(id) })
-		maps.Copy(have, want)
-		writeEnglish(t, have)
+		writeEnglish(t, written)
 		return
 	}
 	for id, english := range want {
@@ -147,5 +156,12 @@ func TestTheEnglishCatalogHoldsTheGoTables(t *testing.T) {
 		if generated(id) && want[id] == "" {
 			t.Errorf("%s is in the catalog, and no table says it (go test -tags gui ./tui -run %s -update)", id, t.Name())
 		}
+	}
+	file, err := os.ReadFile(enCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(file) != englishCatalogText(written) {
+		t.Errorf("%s is not what its generator writes (its order or its escaping): go test -tags gui ./tui -run %s -update", enCatalog, t.Name())
 	}
 }
