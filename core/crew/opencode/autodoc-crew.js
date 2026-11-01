@@ -21,8 +21,12 @@
 // ($AUTODOC_CREW_WAKER, which it sets for every process it starts): one plugin per session wakes it.
 import { chmodSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 
-// NOTICE is crew.WakeNotice: a cell holds the two the same.
+// The wake's text is one of two fixed notices, by the session's mail mode, which crew setup puts in
+// $AUTODOC_CREW_MAIL_VIA: NOTICE_MCP (crew.WakeNoticeMCP) on MCP mail, where the agent has the
+// autodoc server's tools, else NOTICE (crew.WakeNotice), its CLI. A cell holds each the same as its
+// Go twin.
 const NOTICE = "AutoDoc mail is waiting for you. Run: autodoc mail receive";
+const NOTICE_MCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false.";
 const MAX_REQUEST = 1024;
 
 const alive = (pid) => {
@@ -120,6 +124,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   const registerMs = Number(options.registerMs) || REGISTER_MS;
   const argv = options.argv ?? cliArgv();
   const model = cliModel(argv);
+  const notice = process.env.AUTODOC_CREW_MAIL_VIA === "mcp" ? NOTICE_MCP : NOTICE;
   let wokeAt = 0; // when the last wake's turn was started (onWakeTurn)
   let wakeRaised = false; // whether a woken turn's error raised the session's attention
   const log = (level, message) =>
@@ -174,7 +179,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
         }
         if (!session || req?.session !== session) return reply(s, { ok: false, refused: "not this plugin's session" });
         show(session); // the turn the notice starts is the one the user sees
-        const body = { parts: [{ type: "text", text: NOTICE }], ...(model ? { model } : {}) };
+        const body = { parts: [{ type: "text", text: notice }], ...(model ? { model } : {}) };
         client.session.promptAsync({ path: { id: session }, body }).then(
           (r) => {
             if (!r.error) wokeAt = Date.now();
