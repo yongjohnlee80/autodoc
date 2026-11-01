@@ -482,7 +482,9 @@ starts turns as it is, and OpenCode's plugin and Antigravity's bridge need nothi
 writes approval policies, permission modes, or deny rules: a woken turn runs under the profile's own
 tool policy, and a prompt it hits raises attention for you to answer in its tab.
 
-The one allowance is the guide's own commands, so following the guide never stops at a prompt:
+The one allowance is the guide's own commands, so following the guide never stops at a prompt.
+Each kind gets it only once a live probe shows that a compound command (`;`, `&&`, `|`, `$(…)`, a
+newline) can't ride its rules:
 `autodoc mail receive|ack|reply|send|inbox` and `autodoc crew whoami|list|endpoint|attention|bridge`,
 each named (`crew.GuideCommands`), never `autodoc *`. It is written only where the session's own CLI
 reads it, never in your own CLI configuration:
@@ -491,9 +493,10 @@ reads it, never in your own CLI configuration:
   folder's `.claude/settings.json` (a window) or in its `--settings` (Neovim). AutoDoc's own rules,
   exactly this build's or an earlier one's, are taken out first; every other rule is kept, your own
   `autodoc` rules included.
-- OpenCode: `permission.bash`, two allows per command, the command alone (`autodoc <command>`) and
-  with arguments (`autodoc <command> *`), so neither reaches a command that merely starts with its
-  name, in the session's own `OPENCODE_CONFIG_CONTENT`.
+- OpenCode: none yet. Its rules are ready (`permission.bash`, two allows per command, the command
+  alone and with arguments, in the session's own `OPENCODE_CONFIG_CONTENT`), but they ship only once
+  a live probe shows a compound command can't ride them, as Claude Code's did. Until then an OpenCode
+  agent prompts for the guide's commands, as its own policy says.
 - Codex and Antigravity: none yet, until each shows a per-session place for it.
 
 Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks
