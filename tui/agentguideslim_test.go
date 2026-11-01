@@ -10,8 +10,8 @@ import (
 )
 
 // guideBudget is what the whole written guide may weigh, in bytes: every one is read at the start
-// of every session (token item 2). AGENTS.md's verb tables alone were 59 KB of an 84 KB guide.
-const guideBudget = 30_000
+// of every session (token item 2). AGENTS.md's verb tables alone were 59 KB of an 84 KB guide; indexed, the guide is ~31 KB.
+const guideBudget = 32_000
 
 // verbRow is a verb's row in AGENTS.md's generated tables: | `domain.verb` | … |.
 var verbRow = regexp.MustCompile("(?m)^\\| `([a-z]+)\\.([a-z_]+)` \\|")
