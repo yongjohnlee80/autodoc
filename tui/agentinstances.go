@@ -358,8 +358,10 @@ func (a *agents) refuse(panel TerminalPanel, instance *agentInstance, why error)
 // commandOnPath refuses a command whose program isn't on the PATH in env (the agent's: its own
 // autodoc's link, then its profile's), naming it. AutoDoc runs the command with /bin/sh -c, which
 // reads none of the user's shell aliases or functions: an alias for another account's Claude Code
-// (cloud-strife's claude-work) is not found there. A command in shell syntax (an assignment first,
-// a pipe, a substitution, a redirection) can't be judged by its first word, and passes.
+// (e.g. claude-work) is not found there. Only a bare name (looked up on that PATH) and an absolute
+// path are judged. The shell resolves the rest itself, and they pass: a command in shell syntax (an
+// assignment first, a pipe, a substitution, a redirection), a leading ~ (from HOME), a relative
+// path (from the agent's folder, its process's working directory, never AutoDoc's), a glob.
 func commandOnPath(command string, env []string) error {
 	if strings.ContainsAny(command, ";&|$`()<>\\'\"") {
 		return nil
@@ -374,11 +376,14 @@ func commandOnPath(command string, env []string) error {
 			path = v // the last one: what the agent gets
 		}
 	}
-	if strings.Contains(word, "/") {
+	if strings.HasPrefix(word, "/") {
 		if executable(word) {
 			return nil
 		}
 		return fmt.Errorf("its command %s is not an executable file", word)
+	}
+	if strings.ContainsAny(word, "/~*?[") { // the shell's to resolve: from HOME, the agent's folder, a glob
+		return nil
 	}
 	for _, dir := range filepath.SplitList(path) {
 		if dir != "" && executable(filepath.Join(dir, word)) {
