@@ -578,8 +578,10 @@ func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 }
 
 // TestALostExitIsAskedAgain: an exit whose call fails before the daemon answers is owed, its context
-// gone at once; the codename stays busy at the daemon until the exit is asked again on its next
-// answer, and is free after. An exit the daemon refuses as stale is owed no longer.
+// gone at once, and is asked again on the next answer; one the daemon refuses (the session ended
+// already) is owed no longer. A start meanwhile isn't held up by it: the window's register of the
+// codename under its epoch supersedes the session the daemon never heard end (docs/decisions/crew.md,
+// the owner's register), so the agent starts, and the old session ends 'takeover'.
 func TestALostExitIsAskedAgain(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
 	p, _ := a.profile("one")
@@ -596,16 +598,23 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 	if _, _, ok := readContext(t, dir); ok {
 		t.Fatal("the context outlived the exit")
 	}
-	if busy, _ := a.startInstance(p); busy.running {
-		t.Fatal("precondition: the daemon never heard the exit, so the codename is busy")
+	var old string
+	for id := range a.crew.owed {
+		old = id
+	}
+	again, err := a.startInstance(p)
+	if err != nil || !again.running || again.session.ID == "" || again.session.ID == old {
+		t.Fatalf("a start while the old session's exit is owed: %+v, %v, notices %v; want it started, superseding it", again, err, c.notes)
+	}
+	if !w.d.sessionEnded(t, old) {
+		t.Fatalf("the session the daemon never heard end (%s) is still live after the new start", old)
 	}
 	w.fire()
 	if len(a.crew.owed) != 0 {
 		t.Fatalf("the exit is still owed after the daemon answered: %v", a.crew.owed)
 	}
-	again, err := a.startInstance(p)
-	if err != nil || !again.running {
-		t.Fatalf("a start after the exit was asked again: %v, notices %v", err, c.notes)
+	if !again.running {
+		t.Fatal("the late exit of the old session stopped the new one")
 	}
 }
 
