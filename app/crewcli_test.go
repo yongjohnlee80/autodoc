@@ -145,13 +145,13 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 		t.Fatalf("the delivery's message: %v", msg)
 	}
 	id, _ := item["id"].(string)
-	if item["answer"] != "autodoc mail ack "+id {
-		t.Fatalf("a message's answer: %q, want its ack by its id %s", item["answer"], id)
+	if item["answer"] != "autodoc mail ack <id>" {
+		t.Fatalf("a message's answer: %q, want its ack, run with its id %s", item["answer"], id)
 	}
 	if code, _, errOut := d.as(jarvis, "", "mail", "ack", id); code != 0 {
 		t.Fatalf("mail ack %s: exit %d, %s", id, code, errOut)
 	}
-	// a request's answer is its reply, by the id receive printed; run as given, it answers and acks
+	// a request's answer is its reply; run with the id receive printed, it answers and acks
 	if code, _, errOut := d.as(gold, "", "mail", "send", "jarvis", "--kind", "request", "--subject", "review", "--body", "the diff"); code != 0 {
 		t.Fatalf("mail send a request: exit %d, %s", code, errOut)
 	}
@@ -163,10 +163,10 @@ func TestTheAgentsCommandsSendReceiveAndReply(t *testing.T) {
 	req := ds[0].(map[string]any)
 	rid, _ := req["id"].(string)
 	answer, _ := req["answer"].(string)
-	if want := "autodoc mail reply " + rid + ` --body "<your reply>"`; answer != want {
+	if want := `autodoc mail reply <id> --body "<your reply>"`; answer != want {
 		t.Fatalf("a request's answer: %q, want %q", answer, want)
 	}
-	words := strings.Fields(strings.Replace(answer, `"<your reply>"`, "looks-good", 1))
+	words := strings.Fields(strings.NewReplacer("<id>", rid, `"<your reply>"`, "looks-good").Replace(answer))
 	if code, _, errOut := d.as(jarvis, "", words[1:]...); code != 0 {
 		t.Fatalf("running the request's answer %v: exit %d, %s", words, code, errOut)
 	}

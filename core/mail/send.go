@@ -524,6 +524,12 @@ func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string)
 	})
 }
 
+// Show is a delivery the caller holds, read again: its message, under the lease it holds, with the
+// lease and its attempts unchanged (mail.show).
+func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) (Item, error) {
+	return Item{}, ErrLeaseLost // red: not yet
+}
+
 // Ack is done with a delivery under its lease. Replaying an ack of the same lease answers ok;
 // another lease, or one that lapsed, is ErrLeaseLost.
 func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) error {
