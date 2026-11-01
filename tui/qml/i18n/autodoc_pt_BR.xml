@@ -5401,6 +5401,10 @@ O QUE UMA TECLA PRECISA
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
         <translation>tarefas: atribuída a %1, mas não entregue: o programa dele não aceita colagem entre colchetes; abra o painel dele e cole a tarefa</translation>
     </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in">
+        <source>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</source>
+        <translation>tarefas: atribuída a %1, mas não entregue: ele roda no espaço de trabalho %2 e o correio da equipe não chegou a ele (%3); mude para %2, depois A na tarefa para entregá-la de novo</translation>
+    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag">
         <source>todos: assigned to %1, but not delivered (%2): start the agent, then A on the task to deliver it again</source>
         <translation>tarefas: atribuída a %1, mas não entregue (%2): inicie o agente, depois A na tarefa para entregá-la de novo</translation>

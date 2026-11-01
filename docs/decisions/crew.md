@@ -443,6 +443,12 @@ messaging, which tries the agent's doorbell first and falls back to typing
   its session in the window's scope) and none shows (no permission attention raised). Elsewhere the
   message stays typed for the user's Enter, and a notice says why. Only a doorbell that answers for
   certain it didn't ring falls back; one whose answer is lost is asked again with the same key.
+- **An agent in another workspace** (started in one workspace, the window now in another) is rung
+  all the same: its crew session is the window's scope's, not the workspace's, so its mail reaches
+  it wherever the window is. Only the base needs the same workspace, since the agent's tab works in
+  its own root. So a doorbell that didn't ring, or a delivery with none (a fallback job, a window
+  with no crew), types nothing there: the delivery ends `ErrAgentElsewhere`, and the notice names
+  the agent's workspace to switch to. It never says the running agent is stale.
 - A task is a request, subject `Task: <title>`, with its file, id and instruction in the body; a text
   is a plain message. Either way, the agent's guide says that mail from `user` is the user's own
   instruction.

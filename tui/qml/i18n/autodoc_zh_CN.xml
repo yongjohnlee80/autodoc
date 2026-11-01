@@ -5389,6 +5389,10 @@ WHAT A KEY NEEDS
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
         <translation>待办：已分配给 %1，但未交付：其程序不接受括号粘贴；请打开其面板并粘贴任务</translation>
     </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in">
+        <source>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</source>
+        <translation>待办：已分配给 %1，但未送达：它在工作区 %2 中运行，团队邮件未能送达(%3)；请切换到 %2，然后在任务上按 A 重新送达</translation>
+    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag">
         <source>todos: assigned to %1, but not delivered (%2): start the agent, then A on the task to deliver it again</source>
         <translation>待办：已分配给 %1，但未送达(%2)：请启动该智能体，然后在任务上按 A 重新送达</translation>
