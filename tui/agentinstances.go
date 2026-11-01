@@ -2,9 +2,9 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +58,7 @@ type agentInstance struct {
 	session          crewSession
 	crewed           bool
 	context          string
+	setup            crew.Setup // its crew start's setup (crew setup's answer): what its process starts with
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -262,18 +263,11 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if crewed {
 		crewKind = agentKind(p.Command)
 	}
-	dir, err := a.writeAgentGuide(ws, p.Codename, crewKind)
+	dir, err := a.writeAgentGuide(ws, p.Codename, crewKind, crew.MailViaOf(crewKind)) // a crew start's is written again in its setup's mode
 	if err != nil {
 		return nil, err
 	}
 	env := append(p.envList(), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
-	prompts := false
-	if crewed && crewKind == crew.KindClaude {
-		// a wake reaches it only with these: without them it still starts, and receives when it asks
-		var err error
-		prompts, err = writeWakeAcceptance(dir, crewKind, a.claudeHooks(p))
-		a.c.Keep(err)
-	}
 	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
 	if err != nil {
 		return nil, err
@@ -299,37 +293,31 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
 		instance.starting = true
 		token := instance.token
-		a.crew.register(p.Codename, agentKind(p.Command), prompts, ws.id, token, dir, a.whenStartable(crewKind, func(s crewSession, err error) {
-			instance.starting = false
-			if a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token {
-				if err == nil {
-					a.crew.exit(s, crew.EndedStartFailed) // nobody starts it now
-				}
+		stale := func() bool {
+			return a.stopping || a.instances[p.Codename] != instance || instance.closing || instance.token != token
+		}
+		// its setup first (crew setup, the agent's own build, as every host asks): how its session
+		// reads its mail is what the setup delivered, so the guide, the folder's settings and files,
+		// and the registration all follow it
+		a.askSetup(crewKind, dir, p.environ(os.Environ()), func(setup crew.Setup, err error) {
+			if stale() {
+				instance.starting = false
 				a.listAgents()
 				return
 			}
+			prompts := false
 			if err == nil {
-				if instance.context, err = a.crew.publish(s); err != nil {
-					a.crew.exit(s, crew.EndedStartFailed)
-				}
+				prompts, err = a.applySetup(ws, p, dir, setup)
 			}
 			if err != nil {
-				a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
-				a.listAgents()
-				return
-			}
-			if err := a.start(panel, instance); err != nil {
-				instance.context = ""
-				a.crew.exit(s, crew.EndedStartFailed)
+				instance.starting = false
 				a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 				a.listAgents()
 				return
 			}
-			instance.session = s // it runs: its exit ends the session, whatever showing it does
-			if err := a.showStarted(instance); err != nil {
-				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
-			}
-		}))
+			instance.setup = setup
+			a.registerCrew(panel, instance, p, ws, dir, token, prompts, stale)
+		})
 		a.listAgents()
 		return instance, nil
 	}
@@ -341,6 +329,67 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	return instance, nil
+}
+
+// registerCrew registers instance's crew session, as its setup said it reads its mail
+// (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
+// starts its process once the session's context is written; a refused registration starts nothing.
+func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p agentProfile, ws wsInfo, dir, token string, prompts bool, stale func() bool) {
+	a.crew.register(p.Codename, agentKind(p.Command), prompts, instance.setup.MailVia, ws.id, token, dir, func(s crewSession, err error) {
+		instance.starting = false
+		if stale() {
+			if err == nil {
+				a.crew.exit(s, crew.EndedStartFailed) // nobody starts it now
+			}
+			a.listAgents()
+			return
+		}
+		if err == nil {
+			if instance.context, err = a.crew.publish(s); err != nil {
+				a.crew.exit(s, crew.EndedStartFailed)
+			}
+		}
+		if err != nil {
+			a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
+			a.listAgents()
+			return
+		}
+		if err := a.start(panel, instance); err != nil {
+			instance.context = ""
+			a.crew.exit(s, crew.EndedStartFailed)
+			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
+			a.listAgents()
+			return
+		}
+		instance.session = s // it runs: its exit ends the session, whatever showing it does
+		if err := a.showStarted(instance); err != nil {
+			a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
+		}
+	})
+}
+
+// applySetup puts a crew start's setup into the agent's folder dir before its session registers:
+// the guide in its mail mode's form (crew.GuideOfVia), its folder files, and for Claude Code the
+// wake's hooks (the window's, from what its Claude Code knows) with the setup's allowance, which on
+// MCP mail is its tools alone. prompts is that the hooks that report its prompts were written.
+func (a *agents) applySetup(ws wsInfo, p agentProfile, dir string, setup crew.Setup) (prompts bool, err error) {
+	kind := agentKind(p.Command)
+	for _, n := range setup.Notices { // what the host tells the user, once: the setup's own words
+		a.c.Notify(n)
+	}
+	if _, err := a.writeAgentGuide(ws, p.Codename, kind, setup.MailVia); err != nil {
+		return false, err
+	}
+	if err := writeFolderFiles(dir, setup.FolderFiles); err != nil {
+		return false, err
+	}
+	if kind == crew.KindClaude {
+		// a wake reaches it only with these: without them it still starts, and receives when it asks
+		var err error
+		prompts, err = writeWakeAcceptance(dir, kind, a.claudeHooks(p), setup.Allow)
+		a.c.Keep(err)
+	}
+	return prompts, nil
 }
 
 // errCrewStartHere is a crew agent's tab restarted from the tab itself (Enter after its program
@@ -359,33 +408,32 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 			return nil, errCrewStartHere
 		}
 		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
-		if agentKind(instance.profile.Command) == "opencode" {
-			env, err := a.opencodePluginEnv()
-			if err != nil {
-				return nil, fmt.Errorf("AutoDoc's OpenCode plugin: %w", err)
-			}
-			c.Args = withEnvArg(c.Args, env)
+		// its setup's: AutoDoc's env (OpenCode's OPENCODE_CONFIG_CONTENT, its plugin and its MCP
+		// server), and its arguments (Claude Code's --mcp-config) after the program's own
+		if agentKind(instance.profile.Command) == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
+			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
+		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
+			c.Args = withEnvArg(c.Args, k+"="+instance.setup.Env[k])
+		}
+		c.Args = withCommandArgs(c.Args, instance.setup.Argv)
 	}
 	proc, err := a.spawn(c)
 	if err == nil && instance.crewed {
 		environ := instance.profile.environ(os.Environ())
-		a.runAfterSteps(agentKind(instance.profile.Command), instance.context, c.Dir, environ, time.Now())
+		a.runAfterSteps(instance.setup.After, instance.context, c.Dir, environ, time.Now())
 	}
 	return proc, err
 }
 
-// runAfterSteps runs a crew agent's After steps (crew.SetupFor: a Codex agent's registration of
-// the folder's thread on its app-server), once its process has started at started in folder dir
-// under the session context file ctxFile with environ: each one its own autodoc's command
+// runAfterSteps runs a crew agent's after-steps (its setup's: a Codex agent's registration of the
+// folder's thread on its app-server), once its process has started at started in folder dir under
+// the session context file ctxFile with environ: each one its own autodoc's command
 // (runAgentAutodoc), detached and off the loop, crew.SetupSince given as the start's Unix seconds.
 // What a step must wait for, it waits for itself (`crew endpoint --codex-here --wait`), raising the
 // session's attention when it can't, so the window shows it.
-func (a *agents) runAfterSteps(kind, ctxFile, dir string, environ []string, started time.Time) {
-	// the config's data folder, as `crew setup` gives it: a setup that keeps a file of AutoDoc's own
-	// (OpenCode's plugin) keeps it there, never in this process's working folder
-	s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, DataDir: a.dataDir}, "")
-	if err != nil || len(s.After) == 0 {
+func (a *agents) runAfterSteps(after [][]string, ctxFile, dir string, environ []string, started time.Time) {
+	if len(after) == 0 {
 		return
 	}
 	run := a.codexHere
@@ -394,7 +442,7 @@ func (a *agents) runAfterSteps(kind, ctxFile, dir string, environ []string, star
 		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, environ, args...) }
 	}
 	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
-	for _, step := range s.After {
+	for _, step := range after {
 		args := slices.Clone(step)
 		for i, arg := range args {
 			args[i] = strings.ReplaceAll(arg, crew.SetupSince, since)
@@ -421,101 +469,6 @@ func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ..
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-// opencodeTimeout bounds the plugin's setup: one run of the agent's own autodoc, which writes a
-// file and prints a line.
-const opencodeTimeout = 10 * time.Second
-
-// pluginEnvAnswer is opencodeEnv's answer for this process, on its way until done closes: its
-// output depends only on the agent's build and config, so it runs once, off the loop, and every
-// crew OpenCode spawn takes the same answer.
-type pluginEnvAnswer struct {
-	done chan struct{}
-	env  string
-	err  error
-}
-
-// warmPluginEnv starts opencodeEnv off the loop, once (on the loop: the agents feature's start, and
-// a spawn that finds none started): the spawn, which runs on the loop, then only reads its answer.
-func (a *agents) warmPluginEnv() *pluginEnvAnswer {
-	if a.pluginAnswer == nil {
-		f := &pluginEnvAnswer{done: make(chan struct{})}
-		a.pluginAnswer = f
-		run, bin, config := a.pluginEnv, a.agentBin(), a.agentConfig // read on the loop
-		go func() {
-			if run != nil {
-				f.env, f.err = run()
-			} else {
-				f.env, f.err = opencodeEnv(bin, config)
-			}
-			close(f.done)
-		}()
-	}
-	return a.pluginAnswer
-}
-
-// whenStartable is then, for a crew session of kind whose start needs what the window warms off
-// the loop: an OpenCode agent's, the plugin's env (warmPluginEnv). Its registration's answer runs
-// then at once when the env's answer is in, and otherwise when that answer posts, so the start
-// (runAgent, which takes the env) never waits on the loop. The instance stays starting meanwhile.
-func (a *agents) whenStartable(kind string, then func(crewSession, error)) func(crewSession, error) {
-	c, ok := a.c.(agentRuntimeHost)
-	if kind != "opencode" || !ok {
-		return then
-	}
-	f := a.warmPluginEnv()
-	return func(s crewSession, err error) {
-		select {
-		case <-f.done:
-			then(s, err)
-		default:
-			go func() {
-				<-f.done
-				c.Post(func() { then(s, err) })
-			}()
-		}
-	}
-}
-
-// opencodePluginEnv is the spawn's OPENCODE_CONFIG_CONTENT=…: the warmed answer. A crew start
-// reaches it only once that answer is in (whenStartable), so it waits on the loop only for a start
-// that came another way. A failure is not kept: the next spawn runs it again.
-func (a *agents) opencodePluginEnv() (string, error) {
-	f := a.warmPluginEnv()
-	<-f.done
-	if f.err != nil && a.pluginAnswer == f {
-		a.pluginAnswer = nil
-	}
-	return f.env, f.err
-}
-
-// opencodeEnv is the OPENCODE_CONFIG_CONTENT=… that loads AutoDoc's OpenCode plugin, merged with
-// any the TUI was started with: the agent's setup (crew.SetupFor) as the agent's own autodoc (bin,
-// on config) answers it (`autodoc crew setup --kind opencode --host window`), so the plugin is the
-// build's that the agent runs, the one it calls back into to register. A cell replaces it
-// (agents.pluginEnv).
-func opencodeEnv(bin, config string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), opencodeTimeout)
-	defer cancel()
-	args := []string{}
-	if config != "" {
-		args = append(args, "--config", config)
-	}
-	args = append(args, "crew", "setup", "--kind", crew.KindOpenCode, "--host", crew.HostWindow)
-	out, err := exec.CommandContext(ctx, bin, args...).Output()
-	if err != nil {
-		return "", err
-	}
-	var setup crew.Setup
-	if err := json.Unmarshal(out, &setup); err != nil {
-		return "", fmt.Errorf("unexpected output from crew setup: %q", strings.TrimSpace(string(out)))
-	}
-	v := setup.Env["OPENCODE_CONFIG_CONTENT"]
-	if v == "" || strings.Contains(v, "\n") {
-		return "", fmt.Errorf("crew setup gave no OPENCODE_CONFIG_CONTENT: %q", strings.TrimSpace(string(out)))
-	}
-	return "OPENCODE_CONFIG_CONTENT=" + v, nil
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.

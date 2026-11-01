@@ -28,7 +28,6 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
-	dataDir                string     // the config's data folder (Options.DataDir), for a crew agent's setup
 	crew                   *crewHost  // the window's crew scope; nil in a program without one
 	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
 	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's
@@ -39,15 +38,15 @@ type agents struct {
 	// tab's own start is
 	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
 	agentBinPath string
-	// pluginEnv replaces opencodeEnv's run of the agent's autodoc (a cell's); nil in production
-	pluginEnv func() (string, error)
-	// pluginAnswer is the process's one run of it (warmPluginEnv), on the loop
-	pluginAnswer *pluginEnvAnswer
+	// setupRun replaces a crew start's run of the agent's autodoc as `crew setup` (crewSetupOf, a
+	// cell's); nil in production
+	setupRun func(kind, dir string, environ []string) (crew.Setup, error)
 	// claudeAnswers are what each Claude Code program knows (warmClaude), by the word that runs it,
 	// on the loop; claudeWarned the programs a failed read was told of
 	claudeAnswers map[string]*claudeAnswer
 	claudeWarned  map[string]bool
-	// codexHere replaces runAfterSteps's runs of the agent's autodoc (a cell's); nil in production
+	// codexHere replaces runAfterSteps's runs of the agent's autodoc (a setup's after-steps, a cell's);
+	// nil in production
 	codexHere  func(args ...string) error
 	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
@@ -497,6 +496,19 @@ func withEnvArg(args []string, kv string) []string {
 	return slices.Concat(args[:i:i], []string{kv}, args[i:])
 }
 
+// withCommandArgs is agentArgv's args with extra appended to the program's own command line, each
+// one shell-quoted, so a setup's argument (a JSON config, a prompt) reaches the program as one word.
+func withCommandArgs(args, extra []string) []string {
+	if len(extra) == 0 || len(args) == 0 {
+		return args
+	}
+	out := slices.Clone(args)
+	for _, e := range extra {
+		out[len(out)-1] += " " + shellQuote(e)
+	}
+	return out
+}
+
 // agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
 // the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
 // folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
@@ -603,12 +615,12 @@ func safeName(s string) string {
 // agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). A crew
 // agent's guide (crewKind its CLI's kind, "" for an agent outside a crew scope) holds the crew and
 // mail procedure for that CLI, so it registers how it is woken. It returns the folder.
-func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string) (string, error) {
+func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string, via crew.MailVia) (string, error) {
 	dir := h.agentFolder(ws, codename)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
 	}
-	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"), crewKind)
+	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"), crewKind, via)
 	for _, f := range []struct {
 		name, text string
 		mode       os.FileMode
@@ -638,9 +650,9 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
 // (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
-// CLI's kind) is also told the crew and mail procedure for its CLI (crew.GuideOf): who it is, how it
-// registers to be woken, and how it handles mail.
-func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
+// CLI's kind) is also told the crew and mail procedure for its CLI in the form its session reads its
+// mail (crew.GuideOfVia, via): who it is, how it registers to be woken, and how it handles mail.
+func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string, via crew.MailVia) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
@@ -649,7 +661,7 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string) string {
 	// deep in the reference spent its first turn finding out
 	if crewKind != "" {
 		b.WriteString("## Mail and your crew\n\n")
-		b.WriteString(crew.GuideOf(crewKind).Markdown)
+		b.WriteString(crew.GuideOfVia(crewKind, via).Markdown)
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "## The workspace\n\n")
