@@ -106,6 +106,15 @@ func checkRegistration(r Registration) error {
 // one's (docs/decisions/crew.md#sessions-and-the-guard). The host keeps the secret and writes the
 // session context only after this succeeds.
 func (m *Manager) Register(ctx context.Context, r Registration) (Registered, error) {
+	out, err := m.register(ctx, r)
+	if err != nil && m.refused != nil { // a host stuck on a fenced epoch, a codename taken: serve.log says so
+		r.Secret = ""
+		m.refused(r, err)
+	}
+	return out, err
+}
+
+func (m *Manager) register(ctx context.Context, r Registration) (Registered, error) {
 	if err := checkRegistration(r); err != nil {
 		return Registered{}, err
 	}

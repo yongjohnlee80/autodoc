@@ -44,6 +44,7 @@ func TestARefusedRegistrationIsShownInItsTab(t *testing.T) {
 func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth"},{"name":"Shell","command":"FOO=1 claude-work","codename":"shell"}]`)
 	c.panel = &modelPanel{owner: c, starts: true}
+	a.commandCheck = commandOnPath // as a window's agents are
 	p, _ := a.profile("sephiroth")
 	instance, err := a.startInstance(p)
 	if err != nil {

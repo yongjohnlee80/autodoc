@@ -37,7 +37,10 @@ type agents struct {
 	promptsReported func(kind string, reported bool) bool
 	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
 	// tab's own start is
-	spawn        func(pty.Cmd) (widget.TerminalProcess, error)
+	spawn func(pty.Cmd) (widget.TerminalProcess, error)
+	// commandCheck refuses a start whose command's program the agent can't find (commandOnPath);
+	// nil checks nothing
+	commandCheck func(command string, env []string) error
 	agentBinPath string
 	// setupRun replaces a crew start's run of the agent's autodoc as `crew setup` (crewSetupOf, a
 	// cell's); nil in production
@@ -70,7 +73,7 @@ type agents struct {
 func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
-		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }}
+		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)
