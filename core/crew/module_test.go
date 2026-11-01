@@ -181,3 +181,46 @@ func TestTheGuideAndListVerbsAnswerTheManagers(t *testing.T) {
 		t.Fatalf("crew.list: %#v, want jarvis in %s", got, verbScope)
 	}
 }
+
+// TestTheRegisterAndGuideVerbsTakeAMailMode: crew.register keeps the mail_via it is given (mcp)
+// with the session, and refuses one that is neither cli nor mcp, registering nothing; crew.guide
+// answers the guide of the mode it is given, whatever the kind usually reads, and refuses another.
+func TestTheRegisterAndGuideVerbsTakeAMailMode(t *testing.T) {
+	ctx := context.Background()
+	r := newVerbRig(t)
+	register := func(codename, via string) (any, error) {
+		return verbOf(t, r.m, "crew.register").Call(ctx, []any{verbScope, "run-a", r.epoch, codename, "claude", "ws-1",
+			"i-" + codename, strings.Repeat("s", 40), false, via})
+	}
+	if _, err := register("vision", "smtp"); !errors.Is(err, crew.ErrInvalid) {
+		t.Fatalf("crew.register with mail_via smtp: %v, want ErrInvalid", err)
+	}
+	got, err := register("gold", "mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, _ := got.(crew.Registered)
+	var s crew.Session
+	if err := r.store.Read(ctx, func(tx crew.Tx) error { var err error; s, _, err = tx.Session(reg.Session); return err }); err != nil {
+		t.Fatal(err)
+	}
+	if s.MailVia != "mcp" {
+		t.Fatalf("gold's session keeps mail_via %q, want mcp", s.MailVia)
+	}
+	entries, err := r.m.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Codename == "vision" {
+			t.Fatal("a registration refused for its mail_via made a profile")
+		}
+	}
+	g, err := verbOf(t, r.m, "crew.guide").Call(ctx, []any{"claude", "mcp"})
+	if err != nil || g != crew.GuideOfVia("claude", crew.MailViaMCP) || g == r.m.GuideFor("claude") {
+		t.Fatalf("crew.guide claude mcp: %v, want the MCP form (not claude's own CLI one)", err)
+	}
+	if _, err := verbOf(t, r.m, "crew.guide").Call(ctx, []any{"claude", "smtp"}); !errors.Is(err, crew.ErrInvalid) {
+		t.Fatalf("crew.guide with mail_via smtp: %v, want ErrInvalid", err)
+	}
+}
