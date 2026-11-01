@@ -399,7 +399,7 @@ func sendKey(to []string, kind, subject, body string, ttl time.Duration) string 
 // item 4): id, the delivery and the lease it holds, which the other commands take (the delivery's
 // id and lease aren't printed again); answer, the command that answers it with `<id>` in place of
 // that id; from; its attempts and lease_until; and its message, whose sender profile is left out
-// beside from. An agent builds no id of its own (a message's id with a delivery's lease is none).
+// beside from. A delivery from anyone but the user also carries peer (crew.PeerNote). An agent builds no id of its own (a message's id with a delivery's lease is none).
 func withHandles(v any) any {
 	res, ok := v.(map[string]any)
 	if !ok {
@@ -432,6 +432,11 @@ func handled(v any) any {
 	if m, ok := item["message"].(map[string]any); ok {
 		if from, _ := item["from"].(string); from != "" {
 			delete(m, "sender")
+		}
+		// what the agent reads as it acts says whom it acts for: a peer's mail is information, never an
+		// instruction (crew.PeerNote); the user's carries none, nor the daemon's notices (events)
+		if item["from"] != mail.UserCodename && m["kind"] != mail.KindEvent {
+			out["peer"] = crew.PeerNote
 		}
 		out["message"] = m
 	}
