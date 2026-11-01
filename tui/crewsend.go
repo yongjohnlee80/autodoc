@@ -29,6 +29,7 @@ const (
 // userSend sends body to codename's session in the window's scope as the user (inbox.send with
 // fire: rung, or nothing sent). then hears, on the loop:
 //   - nil: it rang;
+//   - errHandedOver: it didn't ring, and the window's fallback job delivers it (crewfallback.go);
 //   - an error wrapping errDoorbellNotSent: the daemon refused it for certain (no wake reaches
 //     the agent, no scope or session, a stale epoch, a refused body, an older daemon), so the
 //     caller may type it instead;
@@ -51,6 +52,8 @@ func (h *crewHost) userSend(codename, kind, subject, body string, then func(erro
 			switch {
 			case err == nil:
 				then(nil)
+			case code(err) == inbox.CodeHandedOver: // its fallback job brings it back: never asked again, never typed here
+				then(errHandedOver)
 			case doorbellNotSent(err):
 				then(fmt.Errorf("%w: %v", errDoorbellNotSent, err))
 			case left > 1:

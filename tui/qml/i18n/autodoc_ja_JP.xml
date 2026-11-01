@@ -7807,6 +7807,14 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
         <translation>%1 の監査を %2 の入力欄に入力しました: そこで Enter を押して送信してください。クリックしてインストールまたはキャンセル</translation>
     </message>
+    <message id="autodoc.notice.crewfallback.delivered">
+        <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
+        <translation>%1 を起こせなかったため、AutoDoc が %2 のメッセージをそのプロンプトに入力しました</translation>
+    </message>
+    <message id="autodoc.notice.crewfallback.unknown">
+        <source>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</source>
+        <translation>AutoDoc は %1 がクルーからのこのメッセージを受け取ったか判断できません。ご自身で送ってください: %2</translation>
+    </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc は今 %1 の権限プロンプトを確認できないため、メッセージは入力済みですが送信していません: そこで Enter を押してください</translation>
