@@ -171,7 +171,8 @@ func (s *scripting) newLuaPick() *pick[luaItem] {
 		},
 		scope:  TicketSession,
 		choose: func(x luaItem) { s.picked(x.value, "") },
-		cancel: func() { s.picked(nil, "cancelled") },
+		cancel: s.dismissed,
+		lost:   s.dismissed,
 	}
 }
 
@@ -190,6 +191,16 @@ func (s *scripting) picked(v lua.LValue, err string) {
 	cb := s.pickCB
 	s.pickCB = nil
 	s.callback("ui.pick", cb, v, err)
+}
+
+// dismissed answers the open picker's script "cancelled", once: Esc, or its dialog closed with no
+// choice. It hears it once the dialog has finished closing, so a pick its callback asks opens:
+// opened from Esc's own handler, the dismissal under way closed it again, and its callback stayed,
+// every later pick "busy".
+func (s *scripting) dismissed() {
+	cb := s.pickCB
+	s.pickCB = nil
+	s.later("ui.pick", cb, nil, "cancelled")
 }
 
 func (s *scripting) luaPick(L *lua.LState) int {
@@ -231,7 +242,7 @@ func (s *scripting) luaPick(L *lua.LState) int {
 // luaInput is autodoc.ui.input(spec, cb): a line asked of the user (LuaInput.qml), spec's title,
 // label (what it asks) and text (the line's start). No placeholder: a TextField takes one only as
 // it is built, so the one dialog can't carry each script's. cb(text) once Enter is pressed, or
-// cb(nil, "cancelled") on Esc; "busy" while another script's line is open.
+// cb(nil, "cancelled") on Esc or any other close; "busy" while another script's line is open.
 func (s *scripting) luaInput(L *lua.LState) int {
 	spec := L.CheckTable(1)
 	cb := L.CheckFunction(2)
@@ -252,11 +263,12 @@ func (s *scripting) luaInput(L *lua.LState) int {
 	return 0
 }
 
-// inputSet is the line accepted: its script hears the text, once.
+// inputSet is the line accepted: its script hears the text, once. Its callback is taken before
+// the dialog closes, so the closed that close raises finds nothing to cancel.
 func (s *scripting) inputSet(text string) {
-	s.c.Close("luaInput")
 	cb := s.inputCB
 	s.inputCB = nil
+	s.c.Close("luaInput")
 	if cb != nil {
 		s.callback("ui.input", cb, lua.LString(text), "")
 	}
@@ -267,8 +279,38 @@ func (s *scripting) inputSet(text string) {
 func (s *scripting) inputCancel() {
 	cb := s.inputCB
 	s.inputCB = nil
+	s.inputAnswered = cb != nil
 	if cb != nil {
 		s.callback("ui.input", cb, nil, "cancelled")
+	}
+}
+
+// inputClosed is the line's dialog closed, however. After Enter or Esc its script has heard, and
+// the closed Esc raises after its callback must leave a new line that callback asked alone; closed
+// any other way (close(), which answers nothing) it hears "cancelled", so the next line isn't
+// "busy" for good.
+func (s *scripting) inputClosed() {
+	if s.inputAnswered {
+		s.inputAnswered = false
+		return
+	}
+	cb := s.inputCB
+	s.inputCB = nil
+	if cb != nil {
+		s.callback("ui.input", cb, nil, "cancelled")
+	}
+}
+
+// resetDialogs drops the picker's and the line's callbacks and closes them: a new engine's (bind),
+// whose old callbacks are another engine's. Nobody hears; the old engine is gone.
+func (s *scripting) resetDialogs() {
+	if s.pickCB != nil {
+		s.pickCB = nil
+		s.c.Close("luaPicker")
+	}
+	if s.inputCB != nil {
+		s.inputCB = nil
+		s.c.Close("luaInput")
 	}
 }
 

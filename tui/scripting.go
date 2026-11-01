@@ -67,11 +67,13 @@ type scripting struct {
 	menuRows *tuidecl.ListModel
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
 	// autodoc.ui.pick's picker, pickCB the callback of the one open; inputCB is the callback of
-	// autodoc.ui.input's line while it is open (LuaInput.qml)
-	host    luaHost
-	pick    *pick[luaItem]
-	pickCB  *lua.LFunction
-	inputCB *lua.LFunction
+	// autodoc.ui.input's line while it is open (LuaInput.qml); inputAnswered, that Esc answered it,
+	// so its dialog's closed, which follows the callback, is notification only (inputClosed)
+	host          luaHost
+	pick          *pick[luaItem]
+	pickCB        *lua.LFunction
+	inputCB       *lua.LFunction
+	inputAnswered bool
 	// card is the card autodoc.ui.card shows (luacard.go), nil for none; cardGen the latest card's
 	// number, cardEpoch the panel's opening, which a tick chain belongs to
 	card      *luaCard
@@ -155,6 +157,7 @@ func (s *scripting) Commands() map[string]Command {
 		"App.luaMenu":        oneString("a Lua menu row", s.luaMenu),
 		"App.luaInputSet":    oneString("a script's answer", s.inputSet),
 		"App.luaInputCancel": none(s.inputCancel),
+		"App.luaInputClosed": none(s.inputClosed),
 	}
 }
 
@@ -181,9 +184,10 @@ func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) 
 	// grant given after the script loaded works at once (luakeys.go)
 	eng.SetGate("map", func(string, *lua.LState) string { return "" })
 	eng.SetGate("menu", func(string, *lua.LState) string { return "" })
-	// a new engine (a reload): the namespaces are made again in it, from the contracts known, and
-	// the old engine's card ends with its panel closed (luacard.go)
+	// a new engine (a reload): the namespaces are made again in it, from the contracts known, the
+	// old engine's card ends with its panel closed (luacard.go), and so do its picker and line
 	s.resetCard()
+	s.resetDialogs()
 	s.domains = map[string]*lua.LTable{}
 	if s.verbs != nil {
 		defer s.define(s.verbs)

@@ -1,6 +1,6 @@
 // LuaInput.qml — a script's one-line question (autodoc.ui.input, luahost.go): its title, what it
-// asks and the line, all the script's. Enter answers the script with the text; Esc answers it
-// "cancelled".
+// asks and the line, all the script's. Enter answers the script with the text; Esc, or any other
+// close, answers it "cancelled".
 Dialog {
     closeOnQ: false
     maxWidthPercent: 80
@@ -13,4 +13,5 @@ Dialog {
         TextField { id: luaInputField; text: App.luaInputText; onAccepted: App.luaInputSet(text) }
     }
     onRejected: App.luaInputCancel()
+    onClosed: App.luaInputClosed()
 }
