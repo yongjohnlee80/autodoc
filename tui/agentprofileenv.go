@@ -153,7 +153,8 @@ func (p agentProfile) same(q agentProfile) bool {
 	return p.Name == q.Name && p.Codename == q.Codename && p.sameLaunch(q)
 }
 
-// sameLaunch is whether p and q start the same process: its command and its env.
+// sameLaunch is whether p and q start the same process: its command, its kind (which its setup
+// follows) and its env.
 func (p agentProfile) sameLaunch(q agentProfile) bool {
-	return p.Command == q.Command && maps.Equal(p.Env, q.Env)
+	return p.Command == q.Command && p.Kind == q.Kind && maps.Equal(p.Env, q.Env)
 }

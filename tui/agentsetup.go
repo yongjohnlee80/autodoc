@@ -56,7 +56,7 @@ var lookAgentCLI = exec.LookPath
 // Vim question before it is answered (vimquestion.go opens it then).
 func (a *agents) Started() {
 	for _, p := range a.profiles() {
-		if a.crew != nil && agentKind(p.Command) == crew.KindClaude {
+		if a.crew != nil && p.kind() == crew.KindClaude {
 			a.warmClaude(p) // and a Claude agent's on what its Claude Code knows
 		}
 	}
@@ -118,7 +118,7 @@ func (a *agents) agentSetupConfirm(i int, name string) {
 	}
 	cli := a.setupFound[i]
 	a.editingAgent, a.editingAgentProfile = "", nil // a new profile, never an edit
-	p, ok := a.storeAgentProfile(name, cli.command, "", "")
+	p, ok := a.storeAgentProfile(name, cli.command, "", "", "")
 	if !ok {
 		return // refused: storeAgentProfile opened agentEdit with the reason, and nothing is recorded
 	}

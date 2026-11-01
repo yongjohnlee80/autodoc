@@ -1,5 +1,6 @@
 // AgentEdit.qml — an agent profile: display name, stable codename, the command that starts the
-// agent, run by the shell as written ({root} and {workspace} in it are filled in), and the env set on
+// agent, run by the shell as written ({root} and {workspace} in it are filled in), its kind (the
+// command's, or a CLI's by name: a wrapper of Claude Code is still Claude Code), and the env set on
 // its process (NAME=value words; ~ and $VAR expanded at its start, never by a shell). A refusal
 // opens it again with the reason on its help line.
 Dialog {
@@ -18,6 +19,8 @@ Dialog {
         TextField { id: aCodename; text: App.agentCodename; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_opus") }
         Text { text: qsTrId("autodoc.dialog.agentEdit.command") }
         TextField { id: aCommand; text: App.agentCommand; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_model_opus_codex_opencode_root") }
+        Text { text: qsTrId("autodoc.dialog.agentEdit.kind") }
+        ComboBox { model: App.agentKinds; textRole: "label"; currentIndex: App.agentKindIndex; onActivated: App.agentKindPicked(index) }
         Text { text: qsTrId("autodoc.dialog.agentEdit.env") }
         TextField { id: aEnv; text: App.agentEnv; placeholderText: qsTrId("autodoc.dialog.agentEdit.env_placeholder") }
         Text { wrapMode: Tui.WordWrap; text: qsTrId("autodoc.dialog.agentEdit.env_not_for_secrets") }
