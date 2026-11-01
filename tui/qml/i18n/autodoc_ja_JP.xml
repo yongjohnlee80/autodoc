@@ -1239,6 +1239,14 @@
         <source>%1's mail that waited for its host was delivered</source>
         <translation>ホストを待っていた %1 のメールが届けられました</translation>
     </message>
+    <message id="autodoc.crew.fallback_typed">
+        <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
+        <translation>ホストを待っていた %1 のメールはプロンプトに入力されています: そこで Enter を押して送信してください</translation>
+    </message>
+    <message id="autodoc.crew.fallback_unknown_ended">
+        <source>%1's mail that waited for its host may not have arrived: its text is in a notice</source>
+        <translation>ホストを待っていた %1 のメールは届いていない可能性があります: 本文は通知にあります</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 はもうあなたを待っていません</translation>

@@ -139,3 +139,32 @@ func TestAClaimTellsTheInboxToReadWaitingJobsAgain(t *testing.T) {
 		t.Fatalf("held %v, told %d; want the claim told once", ok, told)
 	}
 }
+
+// A wait ends saying how its job ended: delivered, typed and waiting for the user's Enter, or not
+// known to have arrived (the mutant: every ending says delivered).
+func TestAWaitEndsSayingHowItsJobEnded(t *testing.T) {
+	for _, c := range []struct {
+		state, outcome, kind, want string
+	}{
+		{"done", "delivered", "fallback_done", "was delivered"},
+		{"done", "typed_not_sent", "fallback_done", "press Enter"},
+		{"unknown", "unknown", "fallback_unknown", "may not have arrived"},
+	} {
+		w := newInboxWindow()
+		w.jobs = map[string]map[string]any{"j1": fbJob("open", false)}
+		w.answers = []any{snapshot(5, "", nil, nil), fbChange(6, "fallback", "j1"), fbChange(7, c.kind, "j1")}
+		x := newCrewInbox(w, w.raise)
+		x.Connected()
+		w.step(t) // the snapshot
+		w.step(t) // the fallback change
+		w.step(t) // its job read: waiting
+		ended := fbJob(c.state, true)
+		ended["outcome"] = c.outcome
+		w.jobs["j1"] = ended
+		w.step(t) // the ending change
+		w.step(t) // its job read
+		if got := w.ended[fallbackToast("j1")]; !strings.Contains(got, c.want) || !strings.Contains(got, "gold") {
+			t.Errorf("%s/%s: the wait ended with %q, want it to say %q", c.state, c.outcome, got, c.want)
+		}
+	}
+}

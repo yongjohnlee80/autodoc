@@ -53,14 +53,26 @@ func (x *crewInbox) showFallback(job, kind string, m map[string]any) {
 	}
 	if _, waited := x.fallbacks[job]; waited {
 		delete(x.fallbacks, job)
-		if o, shown := x.open[id]; shown {
-			x.c.NotifyDone(id, o.done)
+		if _, shown := x.open[id]; shown {
+			x.c.NotifyDone(id, x.fallbackEnded(m))
 			delete(x.open, id)
 		}
 	}
 	if state == mail.JobUnknown && kind == mail.ChangeFallbackUnknown && (x.took == nil || !x.took(job)) {
 		x.c.Notify(x.c.Trf("autodoc.notice.crewfallback.unknown", str(m, "recipient"), str(m, "text")))
 	}
+}
+
+// fallbackEnded is what a job's ended wait says, by how it ended: delivered; typed into its agent's
+// prompt, waiting for the user's Enter; or not known to have arrived (its text is in a notice).
+func (x *crewInbox) fallbackEnded(m map[string]any) string {
+	switch {
+	case str(m, "state") == mail.JobUnknown:
+		return x.c.Trf("autodoc.crew.fallback_unknown_ended", str(m, "recipient"))
+	case str(m, "outcome") == string(mail.FallbackTypedNotSent):
+		return x.c.Trf("autodoc.crew.fallback_typed", str(m, "recipient"))
+	}
+	return x.c.Trf("autodoc.crew.fallback_went", str(m, "recipient"))
 }
 
 // recheckFallbacks reads again every job shown as waiting: a reconnected feed, or a scope that
