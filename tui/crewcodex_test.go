@@ -5,18 +5,53 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // codexRuns is a stand-in for the agent's autodoc in runAfterSteps: each run's args are sent on
 // calls, and answered by answer.
 type codexRuns struct {
-	calls  chan []string
-	answer error
+	calls   chan []string
+	answer  error
+	environ chan []string // each run's environment, when set
 }
 
-func (r *codexRuns) run(args ...string) error {
+func (r *codexRuns) run(environ []string, args ...string) error {
+	if r.environ != nil {
+		r.environ <- environ
+	}
 	r.calls <- args
 	return r.answer
+}
+
+// TestACodexAgentsStepLooksOnItsOwnServer: the registration step runs in the CLI's environment,
+// its setup's included, so a Codex agent given its own app-server (crew.EnvCodexServer) looks for its
+// thread there, not on the shared one (the mutant: the profile's environment alone, as before).
+func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
+	a, c, _ := crewAgents(t, crewKinds)
+	runs := &codexRuns{calls: make(chan []string, 4), environ: make(chan []string, 4)}
+	a.codexHere = runs.run
+	a.setupRun = func(string, string, []string) (crew.Setup, error) {
+		return crew.Setup{Env: map[string]string{crew.EnvCodexServer: "/agent/codex.sock"},
+			After: [][]string{{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}}}, nil
+	}
+	p, _ := a.profile("codex-one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := startedEnv(a, c, instance); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case environ := <-runs.environ:
+		if !slices.Contains(environ, crew.EnvCodexServer+"=/agent/codex.sock") {
+			t.Fatalf("the step's environment lacks the agent's own server: %q", environ)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no run of the agent's autodoc")
+	}
 }
 
 // TestACrewCodexAgentIsRegisteredAsItStarts: a crew Codex agent's spawn has the window run its

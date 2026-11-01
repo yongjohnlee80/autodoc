@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,7 @@ func TestServeWakesCodexOnlyWithItsQueue(t *testing.T) {
 // socket, it refuses rather than register a guess.
 func TestCrewEndpointCodexThreadNamesItsServer(t *testing.T) {
 	home, run := t.TempDir(), t.TempDir()
+	withCodexSocketRoots(t, run)
 	server := filepath.Join(run, "abc")
 	if err := os.WriteFile(server, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -127,4 +129,67 @@ func TestServeAnswersBeforeALateWakerIsFound(t *testing.T) {
 		t.Errorf("serve answered after %v, with a late waker's probe still running", answered)
 	}
 	d.stop()
+}
+
+// withCodexSocketRoots makes dir (resolved) the one folder a Codex app-server socket may lie in, for
+// the cell.
+func withCodexSocketRoots(t *testing.T, dir string) {
+	t.Helper()
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := codexSocketRoots
+	codexSocketRoots = func() []string { return []string{real} }
+	t.Cleanup(func() { codexSocketRoots = saved })
+}
+
+// TestCodexServerIsBoundToCodexsSocketFolder: a Codex agent's own app-server
+// (AUTODOC_CODEX_SERVER, before the shared control link) is its link resolved to the socket, which
+// must lie in Codex's socket folder: a variable anyone can set, or the shared link, naming anything
+// else is refused, never dialed or registered (the mutant: the bound dropped).
+func TestCodexServerIsBoundToCodexsSocketFolder(t *testing.T) {
+	sockets, home, agent, elsewhere := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	withCodexSocketRoots(t, sockets)
+	own, shared, outside := filepath.Join(sockets, "own"), filepath.Join(sockets, "shared"), filepath.Join(elsewhere, "evil")
+	for _, f := range []string{own, shared, outside} {
+		if err := os.WriteFile(f, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(home, "app-server-control"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := func(name, to string) string {
+		p := filepath.Join(agent, name)
+		if err := os.Symlink(to, p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	if err := os.Symlink(shared, filepath.Join(home, "app-server-control", "app-server-control.sock")); err != nil {
+		t.Fatal(err)
+	}
+	env := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
+	wantOwn, _ := filepath.EvalSymlinks(own)
+	if got, err := codexServer(env(map[string]string{crew.EnvCodexServer: link("codex.sock", own), "CODEX_HOME": home})); err != nil || got != wantOwn {
+		t.Fatalf("the agent's own server: %q %v, want %s (before the shared link)", got, err, wantOwn)
+	}
+	wantShared, _ := filepath.EvalSymlinks(shared)
+	if got, err := codexServer(env(map[string]string{"CODEX_HOME": home})); err != nil || got != wantShared {
+		t.Fatalf("the shared server: %q %v, want %s", got, err, wantShared)
+	}
+	if got, err := codexServer(env(map[string]string{crew.EnvCodexServer: link("bad.sock", outside)})); err == nil || !strings.Contains(err.Error(), "isn't in Codex's socket folder") {
+		t.Fatalf("a variable's link out of Codex's socket folder: %q %v, want it refused", got, err)
+	}
+	bad := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bad, "app-server-control"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(bad, "app-server-control", "app-server-control.sock")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := codexServer(env(map[string]string{"CODEX_HOME": bad})); err == nil {
+		t.Fatalf("the shared link out of Codex's socket folder: %q, want it refused", got)
+	}
 }

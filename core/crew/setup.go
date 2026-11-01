@@ -3,8 +3,11 @@ package crew
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/yongjohnlee80/golib/errs"
 )
@@ -96,8 +99,14 @@ type Setup struct {
 	// After is what the host runs once the agent's CLI has started: each one autodoc's arguments, run
 	// detached by the agent's own autodoc in its environment (its session's context), with
 	// SetupSince in an argument replaced by the start's Unix time in seconds.
-	After   [][]string `json:"after"`
-	Notices []string   `json:"notices"` // what the host should tell the user, once
+	After [][]string `json:"after"`
+	// Server is a process the host runs for the session while its CLI runs (Codex's per-agent
+	// app-server): started before the CLI, in a process group of its own, its pid in ServerPidFile
+	// under the agent's folder; the CLI started once ServerSocket exists; stopped when the CLI ends
+	// or fails to start; and if it ends first, the CLI is stopped, so its session ends. Empty: none.
+	Server       []string `json:"server"`
+	ServerSocket string   `json:"server_socket,omitempty"` // the path the host waits for, in the agent's folder
+	Notices      []string `json:"notices"`                 // what the host should tell the user, once
 	// MailVia is how the session reads its mail, by what its setup delivered: MCP only when the
 	// kind put the crew MCP server in its start, else the CLI. The host registers the session with it.
 	MailVia MailVia `json:"mail_via"`
@@ -112,7 +121,8 @@ type Setup struct {
 //   - OpenCode: AutoDoc's plugin, written into in.DataDir (AutoDoc's own folder, so setup writes
 //     it), and the OPENCODE_CONFIG_CONTENT that loads it, in.Env's own value extended.
 //   - Codex: one step after its start, the agent's autodoc registering the folder's thread, looking
-//     until it is found (crew endpoint --codex-here --wait).
+//     until it is found (crew endpoint --codex-here --wait); given in.Servers, an app-server of its
+//     own carrying them (Server), the TUI attached to it (codexSetup).
 //   - Antigravity (agy): its mail as in.Servers' tools (agySetup).
 //   - the other kinds: nothing yet.
 //
@@ -120,7 +130,7 @@ type Setup struct {
 // cache is ClaudeOf's cache of what each binary knows ("" for none).
 func SetupFor(in SetupInput, cache string) (Setup, error) {
 	s := Setup{Argv: []string{}, Env: map[string]string{}, Files: []SetupFile{}, Notices: []string{}, After: [][]string{},
-		Allow: []string{}, FolderFiles: []FolderFile{}}
+		Allow: []string{}, FolderFiles: []FolderFile{}, Server: []string{}}
 	if in.DataDir != "" && !filepath.IsAbs(in.DataDir) {
 		return Setup{}, fmt.Errorf("%w: %q", ErrDataDir, in.DataDir)
 	}
@@ -280,10 +290,83 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 
 // codexSetup is one step after the start: Codex starts its thread on its app-server without
 // telling anyone, so the agent's autodoc looks for the folder's thread until it is found, then
-// registers it (crew endpoint --codex-here --wait).
-func codexSetup(_ SetupInput, _ string, s *Setup) error {
+// registers it (crew endpoint --codex-here --wait). Given the crew MCP server, the agent gets an
+// app-server of its own (Server), started by the host with the server on its command line and
+// each crew tool approved by name (`tools.<tool>.approval_mode`, never the server's whole default:
+// least privilege, as Claude's exact rules), and the TUI attaches to it (`--remote`). None of it is
+// written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a TUI given any
+// runs embedded, off every app-server: codex-cli 0.163.0), is left alone. AUTODOC_CODEX_SERVER names
+// the agent's server to its autodoc, for codex-here and the waker's locator.
+func codexSetup(in SetupInput, _ string, s *Setup) error {
 	s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
+	if len(in.Servers) == 0 {
+		return nil
+	}
+	if in.AgentDir == "" { // its server's socket lives in the agent's own folder: with none, the CLI's mail
+		s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
+		return nil
+	}
+	program := in.Program
+	if program == "" {
+		program = "codex"
+	}
+	sock := filepath.Join(in.AgentDir, CodexServerSocket)
+	server := []string{program, "app-server", "--listen", "unix://" + sock}
+	for _, sv := range in.Servers {
+		if len(sv.Command) == 0 {
+			return fmt.Errorf("crew: MCP server %q has no command", sv.Name)
+		}
+		if !codexBareKey.MatchString(sv.Name) {
+			return fmt.Errorf("crew: MCP server name %q isn't a bare TOML key", sv.Name)
+		}
+		key := "mcp_servers." + sv.Name
+		args := sv.Command[1:]
+		if args == nil {
+			args = []string{}
+		}
+		server = append(server, "-c", key+".command="+tomlValue(sv.Command[0]), "-c", key+".args="+tomlValue(args))
+		for _, k := range slices.Sorted(maps.Keys(sv.Env)) {
+			if !codexBareKey.MatchString(k) {
+				return fmt.Errorf("crew: MCP server %q env name %q isn't a bare TOML key", sv.Name, k)
+			}
+			server = append(server, "-c", key+".env."+k+"="+tomlValue(sv.Env[k]))
+		}
+		for _, t := range sv.Tools {
+			if !codexBareKey.MatchString(t) {
+				return fmt.Errorf("crew: MCP tool name %q isn't a bare TOML key", t)
+			}
+			server = append(server, "-c", key+".tools."+t+".approval_mode="+tomlValue(CodexToolApproval))
+		}
+	}
+	s.Server, s.ServerSocket = server, sock
+	s.Argv = append(s.Argv, "--remote", "unix://"+sock)
+	s.Env[EnvCodexServer] = sock
+	s.MailVia = MailViaMCP
 	return nil
+}
+
+// CodexServerSocket is a Codex agent's own app-server socket, in its folder (Codex makes it a link
+// to the socket it binds in its own socket folder, CodexSocketDirs).
+const CodexServerSocket = "codex.sock"
+
+// EnvCodexServer names a Codex agent's own app-server socket to its autodoc (codex-here, the waker's
+// locator), in place of the shared app-server's control link.
+const EnvCodexServer = "AUTODOC_CODEX_SERVER"
+
+// CodexToolApproval is the approval mode each crew MCP tool is given on Codex's command line.
+const CodexToolApproval = "approve"
+
+// codexBareKey is a TOML bare key: what a `-c` dotted path may hold unquoted.
+var codexBareKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// tomlValue is v as a TOML value for a `-c key=value` override: a string or a list of strings, in
+// JSON's notation, which TOML reads the same (basic strings, the escapes both share; no HTML escapes).
+func tomlValue(v any) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
+	return strings.TrimSpace(b.String())
 }
 
 // EnvMailVia names the session's mail mode (MailVia's text: cli or mcp) for OpenCode's plugin, which
