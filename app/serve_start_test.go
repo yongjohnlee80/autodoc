@@ -19,6 +19,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // serveLateWakers are serve's own late wakers, kept before TestMain empties them.
@@ -123,5 +125,36 @@ func TestServeRefusesAStateDirectoryItCannotMake(t *testing.T) {
 	}
 	if _, err := os.Stat(sock); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the socket after a failed start: %v, want none bound", err)
+	}
+}
+
+// TestARefusedRegistrationIsLogged: the daemon logs every crew.register it refuses, naming who (the
+// codename at its scope, its kind, the epoch it came with and its instance), so a host stuck on a
+// fenced epoch or a codename taken is found in serve.log rather than left silent.
+func TestARefusedRegistrationIsLogged(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var log bytes.Buffer
+	d := &moduleDeps{store: db, storeID: "store-1", workspaces: rpc.Fixed(), journal: sqlitejournal.New(db), log: logger.New(logger.WithWriter(&log))}
+	modules(d)
+	ep, err := d.crew.Claim(ctx, "autodoc:aaaa", "run-a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.crew.Register(ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: ep + 7, Codename: "gold", Kind: "claude",
+		Workspace: "w", Instance: "i-1", Secret: strings.Repeat("s", 32)})
+	if err == nil {
+		t.Fatal("a registration at a fenced epoch was accepted")
+	}
+	if want := fmt.Sprintf("crew.register refused: gold@autodoc:aaaa (claude, epoch %d, instance i-1)", ep+7); !strings.Contains(log.String(), want) {
+		t.Errorf("the daemon's log %q, want %q", log.String(), want)
+	}
+	if _, err := d.crew.Register(ctx, crew.Registration{Scope: "autodoc:aaaa", Run: "run-a", Epoch: ep, Codename: "jarvis", Kind: "claude",
+		Workspace: "w", Instance: "i-2", Secret: strings.Repeat("t", 32)}); err != nil || strings.Contains(log.String(), "jarvis@") {
+		t.Errorf("an accepted registration: %v, log %q; want no refusal logged", err, log.String())
 	}
 }
