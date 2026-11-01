@@ -448,6 +448,49 @@ func TestMailViaIsCLIOrMCPOnTheWire(t *testing.T) {
 	}
 }
 
+// TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare: what a Codex agent's server gets on its command line
+// is spelled as TOML `-c` keys, so each name in a key (the MCP server's, an env name, a tool's) must
+// be a bare key, or it could close the key and set another (`autodoc.command=x`); a server with no
+// command has nothing to run. Each is refused with its name, and no server is given. An env value
+// goes in quoted (a quote in it escaped); a program by path starts the server. With no agent folder
+// the MCP server can't be given (its socket would have nowhere to go): the setup says so once, and
+// the agent stays on the CLI's mail.
+func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
+	agent := t.TempDir()
+	server := func(mut func(*crew.MCPServer)) []crew.MCPServer {
+		sv := crew.MCPServer{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Env: map[string]string{"AUTODOC_X": `a"b`}, Tools: []string{"mail_receive"}}
+		if mut != nil {
+			mut(&sv)
+		}
+		return []crew.MCPServer{sv}
+	}
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Program: "/opt/codex/bin/codex", AgentDir: agent, Servers: server(nil)}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Server) == 0 || s.Server[0] != "/opt/codex/bin/codex" || !slices.Contains(s.Server, `mcp_servers.autodoc.env.AUTODOC_X="a\"b"`) {
+		t.Fatalf("its server %q: want it started by /opt/codex/bin/codex, the env value quoted with its quote escaped", s.Server)
+	}
+	for name, c := range map[string]struct {
+		mut  func(*crew.MCPServer)
+		want string
+	}{
+		"no command":             {func(sv *crew.MCPServer) { sv.Command = nil }, `MCP server "autodoc" has no command`},
+		"a server name not bare": {func(sv *crew.MCPServer) { sv.Name = "autodoc.command" }, `MCP server name "autodoc.command" isn't a bare TOML key`},
+		"an env name not bare":   {func(sv *crew.MCPServer) { sv.Env = map[string]string{"A=B": "v"} }, `env name "A=B" isn't a bare TOML key`},
+		"a tool name not bare":   {func(sv *crew.MCPServer) { sv.Tools = []string{"mail receive"} }, `MCP tool name "mail receive" isn't a bare TOML key`},
+	} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, AgentDir: agent, Servers: server(c.mut)}, "")
+		if err == nil || !strings.Contains(err.Error(), c.want) || len(s.Server) != 0 {
+			t.Errorf("%s: %v, server %q; want refused with %q and no server", name, err, s.Server, c.want)
+		}
+	}
+	nf, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Servers: server(nil)}, "")
+	if err != nil || len(nf.Server) != 0 || nf.MailVia != crew.MailViaCLI || len(nf.Notices) != 1 || !strings.Contains(nf.Notices[0], "needs the agent's own folder") {
+		t.Fatalf("no agent folder: %+v %v; want no server, the CLI's mail, and it said once", nf, err)
+	}
+}
+
 // TestSetupForCodexGetsItsOwnAppServer: a Codex agent given the crew's MCP server gets an app-server
 // of its own (Server, its socket in the agent's folder) with the server on its command line and each
 // crew tool approved by name, never the server's whole default; its TUI attaches to it (--remote);
