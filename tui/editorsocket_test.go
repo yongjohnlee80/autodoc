@@ -292,3 +292,73 @@ func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 		t.Fatalf("this user's call: %v, want the socket's own answer (an RPC error: not an agent's token)", err)
 	}
 }
+
+// TestAStartSweepsTheEditorSocketsNoProcessServes: a TUI that was killed never removed its
+// <pid>.sock, so the folder fills with sockets nothing listens on. At its start a TUI removes each
+// of those, and leaves a socket that answers (another TUI's), a file that is not a socket, and a
+// socket not named by a pid.
+func TestAStartSweepsTheEditorSocketsNoProcessServes(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no unix sockets on " + runtime.GOOS)
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	listen := func(name string) *net.UnixListener {
+		t.Helper()
+		ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(dir, name), Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ln
+	}
+	// a killed TUI's: the file stays, nothing listens on it
+	stale := listen("4194301.sock")
+	stale.SetUnlinkOnClose(false)
+	_ = stale.Close()
+	odd := listen("notes.sock")
+	odd.SetUnlinkOnClose(false)
+	_ = odd.Close()
+	live := listen("4194302.sock") // another TUI's, serving
+	defer live.Close()
+	go func() {
+		for {
+			c, err := live.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	if err := os.WriteFile(filepath.Join(dir, "4194303.sock"), []byte("not a socket"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// the premise: the stale one refuses a connection, the live one takes it
+	if c, err := net.Dial("unix", filepath.Join(dir, "4194301.sock")); err == nil {
+		_ = c.Close()
+		t.Fatal("fixture: the stale socket answers")
+	}
+	if c, err := net.Dial("unix", filepath.Join(dir, "4194302.sock")); err != nil {
+		t.Fatalf("fixture: the live socket: %v", err)
+	} else {
+		_ = c.Close()
+	}
+
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: dir})
+	r.connected(t)
+	own := onLoop(r, r.h.editorSocketPath)
+	if own == "" {
+		t.Fatal("the TUI serves no editor socket")
+	}
+
+	if _, err := os.Lstat(filepath.Join(dir, "4194301.sock")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the socket nothing listens on is still there (%v); want it removed at the start", err)
+	}
+	for _, name := range []string{"4194302.sock", "4194303.sock", "notes.sock", filepath.Base(own)} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("%s: %v; want it left", name, err)
+		}
+	}
+}

@@ -83,7 +83,8 @@ func (h *Host) startEditorSocket(dir string) {
 	// socket's own chmod after Listen is a second lock, not the first
 	err := privateDir(dir)
 	if err == nil {
-		_ = os.Remove(path) // a socket left by a crash of an earlier run with this pid
+		_ = os.Remove(path)     // a socket left by a crash of an earlier run with this pid
+		sweepEditorSockets(dir) // and those of the other runs that were killed (editorsocket_unix.go)
 	}
 	var ln net.Listener
 	if err == nil {
