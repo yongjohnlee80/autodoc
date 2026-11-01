@@ -33,6 +33,16 @@ type AgentEntry struct {
 	Ref                      AgentRef
 	Name, Command            string
 	Running, Closing, Orphan bool
+	// Peer is another host's crew agent (todos' A lists them beside the window's own): nil for the
+	// window's own agents.
+	Peer *PeerAgent
+}
+
+// PeerAgent is another host's live crew agent, as crew.list gives it: its scope (its address is
+// codename@scope), the project it is labelled by, and whether a wake reaches it now (why not).
+type PeerAgent struct {
+	Scope, Project, Why string
+	Reachable           bool
 }
 
 var (
