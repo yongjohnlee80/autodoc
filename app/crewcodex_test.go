@@ -119,9 +119,13 @@ func TestServeAnswersBeforeALateWakerIsFound(t *testing.T) {
 	began := time.Now()
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
 	answered := time.Since(began)
+	// the probe runs in its own goroutine, which may be scheduled only after serve answered (under the
+	// coverage run's instrumentation, it was): wait for it to start; it then stays blocked on release,
+	// closed only as the cell ends, so serve answers below with the probe still running
 	select {
 	case <-probing:
-	default:
+	// NOTE: a bound on a failing run only: a probe that never starts fails here rather than hanging.
+	case <-time.After(10 * time.Second):
 		t.Fatal("the late waker's probe never started: this cell checks nothing")
 	}
 	call(t, dial(t, sock), "workspace.list")
