@@ -89,3 +89,26 @@ func TestCrewEndpointWaitIsCodexHereAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestACodexHereMissIsLookedForAgain, end to end as the agent's autodoc runs it: a look that finds
+// no thread yet (here: no app-server to look on) is a runtime miss, exit 1, never 2, which is usage
+// and ends a wait at once; a real usage error stays 2; and `--wait` looks again until its wait has
+// passed. Live, Codex made its thread ~12 s after the spawn, so a wait that ended at its first look
+// never registered a Codex agent (the mutant: the miss a usage error again, as before).
+func TestACodexHereMissIsLookedForAgain(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir())
+	agent := d.agent("codex-a", "agent-1", "store-1")
+	t.Setenv("CODEX_HOME", t.TempDir()) // no control socket: no thread to be found yet
+	if code, _, errOut := d.as(agent, "", "crew", "endpoint", "--codex-here", "--since", "0"); code != 1 || !strings.Contains(errOut, "control socket") {
+		t.Fatalf("one look with nothing to find: exit %d, %q; want 1 and why", code, errOut)
+	}
+	if code, _, _ := d.as(agent, "", "crew", "endpoint", "--codex-here", "extra"); code != 2 {
+		t.Fatalf("a usage error: exit %d, want 2", code)
+	}
+	began := time.Now()
+	code, _, errOut := d.as(agent, "", "crew", "endpoint", "--codex-here", "--since", "0", "--wait", "3s")
+	if took := time.Since(began); code != 1 || took < 2*time.Second || !strings.Contains(errOut, "control socket") {
+		t.Fatalf("a wait of 3 s: exit %d after %v, %q; want 1 after looking again until the wait passed", code, took.Round(time.Millisecond), errOut)
+	}
+}
