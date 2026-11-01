@@ -28,6 +28,28 @@ const (
 	MailViaMCP                // the `autodoc crew mcp` server's tools (mail_receive, …)
 )
 
+// mailViaNames are MailVia's names on the wire (a setup's mail_via, crew.register's).
+var mailViaNames = map[MailVia]string{MailViaCLI: "cli", MailViaMCP: "mcp"}
+
+// MarshalText is v's wire name.
+func (v MailVia) MarshalText() ([]byte, error) {
+	if n, ok := mailViaNames[v]; ok {
+		return []byte(n), nil
+	}
+	return nil, fmt.Errorf("crew: no mail mode %d", int(v))
+}
+
+// UnmarshalText reads a wire name; any other is refused, never taken as the CLI's.
+func (v *MailVia) UnmarshalText(b []byte) error {
+	for m, n := range mailViaNames {
+		if string(b) == n {
+			*v = m
+			return nil
+		}
+	}
+	return fmt.Errorf("crew: mail mode %q is neither cli nor mcp", b)
+}
+
 // MailViaOf is how a session of kind reads its mail: agy's through the MCP tools its setup gives
 // it, every other kind's through the CLI. A session's setup will say it per session, when a host
 // turns MCP on for a kind.

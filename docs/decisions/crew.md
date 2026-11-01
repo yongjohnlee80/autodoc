@@ -563,6 +563,14 @@ reads from that config, never from its working folder: a setup asked with a data
 absolute, or with none for a kind that keeps such a file, is refused, so nothing lands in a folder
 that may be the user's project.
 
+Claude Code's and OpenCode's setups take the crew MCP server too, when `crew setup` offers it. Claude
+Code gets it on its command line on both hosts (`--mcp-config`; a folder's `.mcp.json` would have
+the user approve its servers first), each tool allowed by its exact `mcp__<server>__<tool>` rule, and
+never `--strict-mcp-config`, which would take the user's own MCP servers from their agent. OpenCode
+gets it in `OPENCODE_CONFIG_CONTENT`'s `mcp` key, beside the user's own servers, and no allowance,
+since OpenCode gates no MCP tool. A setup answers how the session reads its mail (`mail_via`): `mcp`
+only when it delivered the server, else `cli`.
+
 Antigravity's setup gives the agent its mail as the crew MCP servers' tools. The servers' config
 goes in the agent's own folder, as `.agents/mcp_config.json`, which agy reads in its working folder
 or, from Neovim, in the folder `--add-dir` adds. Everything else is on its command line, for that

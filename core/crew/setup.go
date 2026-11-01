@@ -98,6 +98,9 @@ type Setup struct {
 	// SetupSince in an argument replaced by the start's Unix time in seconds.
 	After   [][]string `json:"after"`
 	Notices []string   `json:"notices"` // what the host should tell the user, once
+	// MailVia is how the session reads its mail, by what its setup delivered: MCP only when the
+	// kind put the crew MCP server in its start, else the CLI. The host registers the session with it.
+	MailVia MailVia `json:"mail_via"`
 }
 
 // SetupFor is a crew agent's setup for in (docs/decisions/crew.md#three-modules-and-one-protocol),
@@ -171,17 +174,12 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 		s.Notices = append(s.Notices, "Antigravity's crew mail needs the crew MCP server and the agent's own folder, which this host didn't give: the agent starts without its mail")
 		return nil
 	}
-	servers := map[string]any{}
+	servers, err := mcpServers(in.Servers)
+	if err != nil {
+		return err
+	}
 	allow := []string{"command(" + AgyBridgeCommand + ")"}
 	for _, sv := range in.Servers {
-		if len(sv.Command) == 0 {
-			return fmt.Errorf("crew: MCP server %q has no command", sv.Name)
-		}
-		server := map[string]any{"command": sv.Command[0], "args": sv.Command[1:]}
-		if len(sv.Env) > 0 { // none: it inherits the agent's, its session's context included
-			server["env"] = sv.Env
-		}
-		servers[sv.Name] = server
 		for _, t := range sv.Tools {
 			allow = append(allow, "mcp("+sv.Name+"/"+t+")")
 		}
@@ -209,7 +207,26 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	s.Argv = append(s.Argv, "-i", AgyLaunchPrompt)
 	s.Allow = allow
 	s.Prompts = true
+	s.MailVia = MailViaMCP
 	return nil
+}
+
+// mcpServers is servers as the mcpServers map agy's and Claude Code's configs share: each server's
+// command, args and, only when it has one, its env (the crew's own server has none: it inherits the
+// agent's, its session's context included).
+func mcpServers(servers []MCPServer) (map[string]any, error) {
+	out := map[string]any{}
+	for _, sv := range servers {
+		if len(sv.Command) == 0 {
+			return nil, fmt.Errorf("crew: MCP server %q has no command", sv.Name)
+		}
+		server := map[string]any{"command": sv.Command[0], "args": sv.Command[1:]}
+		if len(sv.Env) > 0 {
+			server["env"] = sv.Env
+		}
+		out[sv.Name] = server
+	}
+	return out, nil
 }
 
 // claudeSetup is crew.ClaudeSettings for the Claude Code on in.Env's PATH, the guide's commands
@@ -227,6 +244,26 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 	settings, prompts := ClaudeSettings(in.Autodoc, k)
 	s.Prompts = prompts
 	s.Allow = ClaudeAllow()
+	if len(in.Servers) > 0 {
+		// the crew MCP server on its command line, on both hosts (a folder's .mcp.json would have the
+		// user approve its servers first), each tool allowed by its exact mcp__<server>__<tool>; never
+		// --strict-mcp-config, which would take the user's own MCP servers from their agent
+		servers, err := mcpServers(in.Servers)
+		if err != nil {
+			return err
+		}
+		cfg, err := json.Marshal(map[string]any{"mcpServers": servers})
+		if err != nil {
+			return err
+		}
+		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
+		for _, sv := range in.Servers {
+			for _, t := range sv.Tools {
+				s.Allow = append(s.Allow, "mcp__"+sv.Name+"__"+t)
+			}
+		}
+		s.MailVia = MailViaMCP
+	}
 	if in.Host == HostNvim {
 		settings["permissions"] = map[string]any{"allow": s.Allow}
 		b, err := json.Marshal(settings)
@@ -268,6 +305,12 @@ func opencodeSetup(in SetupInput, _ string, s *Setup) error {
 			s.Allow = append(s.Allow, rule)
 		}
 		slices.Sort(s.Allow)
+	}
+	if len(in.Servers) > 0 { // OpenCode gates no MCP tool: the server is all it needs, no allowance
+		if v, err = OpenCodeWithMCP(v, in.Servers); err != nil {
+			return err
+		}
+		s.MailVia = MailViaMCP
 	}
 	s.Env["OPENCODE_CONFIG_CONTENT"] = v
 	return nil
