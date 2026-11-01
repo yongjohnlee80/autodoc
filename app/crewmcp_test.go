@@ -167,10 +167,10 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 	for _, tool := range list["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "crew_whoami", "crew_list", "mail_send"}) {
+	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "mail_show", "crew_whoami", "crew_list", "mail_send"}) {
 		t.Fatalf("tools/list: %v, want the table %v", names, MCPTools())
 	}
-	if text, failed := g.tool("crew_whoami", nil); failed || !strings.Contains(text, `"codename": "gold"`) {
+	if text, failed := g.tool("crew_whoami", nil); failed || !strings.Contains(text, `"codename":"gold"`) {
 		t.Fatalf("gold's crew_whoami: %s (error %v)", text, failed)
 	}
 	if text, failed := g.tool("crew_list", nil); failed || !strings.Contains(text, `"jarvis"`) {
@@ -200,11 +200,8 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 		t.Fatalf("jarvis's items: %v", items)
 	}
 	rid, mid := req["id"].(string), msg["id"].(string)
-	if want := fmt.Sprintf(`mail_reply {"id": %q, "body": "<your reply>"}`, rid); req["answer"] != want {
-		t.Fatalf("the request's answer: %q, want %q", req["answer"], want)
-	}
-	if want := fmt.Sprintf(`mail_ack {"id": %q}`, mid); msg["answer"] != want {
-		t.Fatalf("the message's answer: %q, want %q", msg["answer"], want)
+	if req["answer"] != "mail_reply" || msg["answer"] != "mail_ack" {
+		t.Fatalf("the answers: %q and %q, want mail_reply and mail_ack", req["answer"], msg["answer"])
 	}
 	if text, failed := j.tool("mail_renew", map[string]any{"id": rid}); failed {
 		t.Fatalf("jarvis's mail_renew: %s", text)
