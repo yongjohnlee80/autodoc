@@ -1455,6 +1455,10 @@
         <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
         <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.kind">
+        <source>kind: what AutoDoc sets it up as</source>
+        <translation>类型：AutoDoc 将其设置为什么</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>名称</translation>
@@ -5816,6 +5820,10 @@ WHAT A KEY NEEDS
         <source>%1 is not NAME=value</source>
         <translation>%1 不是 NAME=value 形式</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.kind_from_the_command">
+        <source>the command's</source>
+        <translation>由命令判断</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>“设为默认”标记 SPC g 打开的那一个</translation>
@@ -5823,6 +5831,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t">
         <source>no profiles yet: Add… one, a name and the command that starts the agent</source>
         <translation>还没有配置：用“添加…”新建一个，填写名称和启动智能体的命令</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.not_a_kind">
+        <source>%1 is not a kind AutoDoc knows</source>
+        <translation>%1 不是 AutoDoc 已知的类型</translation>
     </message>
     <message id="autodoc.text.agentprofiles.not_saved">
         <source>not saved: %1</source>

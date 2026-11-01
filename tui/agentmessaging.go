@@ -169,13 +169,13 @@ func (a *agents) promptsSeen(kind string, reported bool) bool {
 	return reported
 }
 
-// kindOf is the CLI kind of codename's agent (agentKind of its command), "" when it has none here.
+// kindOf is the CLI kind of codename's agent (its profile's kind), "" when it has none here.
 func (a *agents) kindOf(codename string) string {
 	if p, ok := a.profile(codename); ok {
-		return agentKind(p.Command)
+		return p.kind()
 	}
 	if in := a.instances[codename]; in != nil {
-		return agentKind(in.profile.Command)
+		return in.profile.kind()
 	}
 	return ""
 }

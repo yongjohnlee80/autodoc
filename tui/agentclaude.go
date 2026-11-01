@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"path/filepath"
+
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -22,7 +24,8 @@ type claudeAnswer struct {
 // warmClaude starts finding and reading, off the loop, the Claude Code that p's command runs, unless
 // that is already on its way or answered for its program and PATH: found on p's PATH (agentPath),
 // which is the agent's but for its first folder (its own autodoc alone), the first file there that
-// reads as a Claude Code, a mise shim or a wrapper followed to the CLI it runs (crew.ClaudeOf).
+// reads as a Claude Code, a mise shim or a wrapper followed to the CLI it runs (crew.ClaudeOf); for a
+// program of another name that is none (a profile set to Claude Code, agentKinds), the claude there.
 // On the loop.
 func (a *agents) warmClaude(p agentProfile) *claudeAnswer {
 	program, path := agentProgram(p.Command), p.agentPath()
@@ -39,6 +42,12 @@ func (a *agents) warmClaude(p agentProfile) *claudeAnswer {
 	go func() {
 		defer close(f.done)
 		f.path, _, f.err = crew.ClaudeOf(program, path, dir, "") // read now, so the spawn finds it kept
+		if f.err != nil && filepath.Base(program) != crew.KindClaude {
+			// a profile set to Claude Code under another name (a wrapper, a script): the claude it runs
+			if bin, _, err := crew.ClaudeOf(crew.KindClaude, path, dir, ""); err == nil {
+				f.path, f.err = bin, nil
+			}
+		}
 	}()
 	return f
 }
