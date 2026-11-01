@@ -226,8 +226,8 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".agents/mcp_config.json" {
-			t.Fatalf("%s: folder files %+v, want .agents/mcp_config.json alone", host, s.FolderFiles)
+		if len(s.FolderFiles) != 2 || s.FolderFiles[0].Path != ".agents/mcp_config.json" || s.FolderFiles[1].Path != ".agents/rules/autodoc-crew.md" {
+			t.Fatalf("%s: folder files %+v, want .agents/mcp_config.json and its crew rules", host, s.FolderFiles)
 		}
 		var cfg map[string]map[string]struct {
 			Command string            `json:"command"`
@@ -276,7 +276,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 	// the crew's own server has no env of its own (it inherits the agent's): its config says none
 	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostWindow, AgentDir: "/a",
 		Servers: []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}}, "")
-	if err != nil || len(s.FolderFiles) != 1 || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
+	if err != nil || len(s.FolderFiles) != 2 || s.FolderFiles[0].Path != ".agents/mcp_config.json" || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
 		t.Errorf("a server with no env: %+v %v, want its config without an env", s.FolderFiles, err)
 	}
 	if !strings.Contains(crew.AgyLaunchPrompt, crew.AgyBridgeCommand) || !strings.Contains(crew.GuideOf(crew.KindAgy).Markdown, "`"+crew.AgyBridgeCommand+"`") {

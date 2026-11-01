@@ -99,7 +99,7 @@ func TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode(t *testing.T
 	if s := setup("--kind", "opencode", "--mail-via", "mcp"); !strings.Contains(s.Env["OPENCODE_CONFIG_CONTENT"], `"mcp"`) || s.MailVia != crew.MailViaMCP {
 		t.Errorf("opencode with --mail-via mcp: %q, mail via %v; want the MCP server", s.Env["OPENCODE_CONFIG_CONTENT"], s.MailVia)
 	}
-	if s := setup("--kind", "agy", "--agent-dir", agent); len(s.FolderFiles) != 1 || s.MailVia != crew.MailViaMCP {
+	if s := setup("--kind", "agy", "--agent-dir", agent); len(s.FolderFiles) != 2 || s.MailVia != crew.MailViaMCP { // its MCP config, its crew rules
 		t.Errorf("agy without --mail-via: folder files %d, mail via %v; want its MCP setup either way", len(s.FolderFiles), s.MailVia)
 	}
 	var out, errOut bytes.Buffer
