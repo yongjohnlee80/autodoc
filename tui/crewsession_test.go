@@ -702,9 +702,10 @@ func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
 }
 
 // TestTheGuidesAllowanceIsMergedIntoTheFolderAlone (docs/decisions/crew.md#wake-acceptance-not-tool-approvals):
-// a crew Claude agent's folder settings get the guide's commands allowed; a rule the user wrote
-// there is kept, and an allow rule AutoDoc wrote before (a command no longer the guide's) taken
-// out; nothing is written anywhere but the agent's folder.
+// a crew Claude agent's folder settings get the guide's commands allowed, once each however often
+// they're written; a rule the user wrote there is kept, their own autodoc rules included, since
+// AutoDoc's rules are known exactly (crew.IsClaudeAllow); nothing is written anywhere but the
+// agent's folder.
 func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 	dir, home := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
@@ -712,12 +713,15 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	user := `{"permissions":{"allow":["Bash(git status:*)","Bash(autodoc mail peek:*)"],"deny":["Bash(rm:*)"]},"model":"haiku"}`
+	// the user's own autodoc rule is well formed, and kept: AutoDoc's rules are known exactly
+	user := `{"permissions":{"allow":["Bash(git status:*)","Bash(autodoc search:*)","Bash(autodoc mail receive:*)"],"deny":["Bash(rm:*)"]},"model":"haiku"}`
 	if err := os.WriteFile(path, []byte(user), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor()); err != nil {
-		t.Fatal(err)
+	for range 2 { // a second write changes nothing
+		if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor()); err != nil {
+			t.Fatal(err)
+		}
 	}
 	s, b := claudeSettingsOf(t, dir)
 	perm, _ := s["permissions"].(map[string]any)
@@ -726,9 +730,9 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 	for _, r := range rules {
 		allow = append(allow, r.(string))
 	}
-	want := append([]string{"Bash(git status:*)"}, crew.ClaudeAllow()...)
+	want := append([]string{"Bash(git status:*)", "Bash(autodoc search:*)"}, crew.ClaudeAllow()...)
 	if !slices.Equal(allow, want) || fmt.Sprint(perm["deny"]) != "[Bash(rm:*)]" || s["model"] != "haiku" {
-		t.Errorf("the merged settings:\n%s\nwant the user's rules kept, AutoDoc's old one gone, the guide's commands allowed", b)
+		t.Errorf("the merged settings:\n%s\nwant the user's rules kept, the guide's commands allowed once each", b)
 	}
 	if es, _ := os.ReadDir(home); len(es) != 0 {
 		t.Errorf("the allowance was written into the user's home: %v", es)

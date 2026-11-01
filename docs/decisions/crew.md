@@ -491,10 +491,12 @@ each named (`crew.GuideCommands`), never `autodoc *`. It is written only where t
 reads it, never in your own CLI configuration:
 
 - Claude Code: `permissions.allow`, one `Bash(autodoc <command>:*)` per command, in the agent
-  folder's `.claude/settings.json` (a window) or in its `--settings` (Neovim), AutoDoc's earlier rules
-  taken out first and yours kept.
-- OpenCode: `permission.bash`, one `autodoc <command>*` allowed per command, in the session's own
-  `OPENCODE_CONFIG_CONTENT`.
+  folder's `.claude/settings.json` (a window) or in its `--settings` (Neovim). AutoDoc's own rules,
+  exactly this build's or an earlier one's, are taken out first; every other rule is kept, your own
+  `autodoc` rules included.
+- OpenCode: `permission.bash`, two allows per command, the command alone (`autodoc <command>`) and
+  with arguments (`autodoc <command> *`), so neither reaches a command that merely starts with its
+  name, in the session's own `OPENCODE_CONFIG_CONTENT`.
 - Codex and Antigravity: none yet, until each shows a per-session place for it.
 
 Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks

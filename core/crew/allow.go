@@ -1,6 +1,6 @@
 package crew
 
-import "strings"
+import "slices"
 
 // GuideCommands are the guide's own autodoc commands, the ones a crew session's CLI is allowed to
 // run with no permission prompt (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): exactly
@@ -21,18 +21,25 @@ func ClaudeAllow() []string {
 	return out
 }
 
+// earlierClaudeAllow are the exact rules earlier builds wrote and this one no longer does, so a
+// host still takes them out. None yet: the allowance's first build is this one.
+var earlierClaudeAllow = []string{}
+
 // IsClaudeAllow reports whether rule is one of AutoDoc's Claude allow rules, of this build's or an
-// earlier one's: a host takes them out before writing this build's, and keeps every other rule.
+// earlier one's, exactly: a host takes them out before writing this build's, and keeps every other
+// rule, the user's own `Bash(autodoc search:*)` included.
 func IsClaudeAllow(rule string) bool {
-	return strings.HasPrefix(rule, "Bash(autodoc ") && strings.HasSuffix(rule, ":*)")
+	return slices.Contains(ClaudeAllow(), rule) || slices.Contains(earlierClaudeAllow, rule)
 }
 
-// OpenCodeAllow is OpenCode's permission.bash for the guide's commands: one allow per command,
-// matching it and its arguments.
+// OpenCodeAllow is OpenCode's permission.bash for the guide's commands: two allows per command,
+// the command alone and the command with arguments, so neither matches another command that
+// merely starts with its name (`autodoc mail sendmail`).
 func OpenCodeAllow() map[string]any {
-	out := make(map[string]any, len(GuideCommands))
+	out := make(map[string]any, 2*len(GuideCommands))
 	for _, c := range GuideCommands {
-		out["autodoc "+c+"*"] = "allow"
+		out["autodoc "+c] = "allow"
+		out["autodoc "+c+" *"] = "allow"
 	}
 	return out
 }
