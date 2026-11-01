@@ -4,6 +4,7 @@ package app
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,5 +104,25 @@ func TestTheDiagramReferenceIsGolibs(t *testing.T) {
 		if !strings.Contains(out, w) {
 			t.Errorf("the reference lacks %q:\n%s", w, out)
 		}
+	}
+}
+
+// TestTheViewerDrawsEveryKindTheParserReads: doc.validate checks a diagram with golib's parser alone
+// (core/diagram, every build), so the viewer's layout must lay out every kind that parser reads, or
+// a diagram doc.validate passes could still go undrawn. And what doc.validate refuses, the viewer
+// refuses: an ADR's <job id> label is not drawn.
+func TestTheViewerDrawsEveryKindTheParserReads(t *testing.T) {
+	var parsed, laid []pm.Kind
+	for _, k := range pm.Kinds() {
+		parsed = append(parsed, k.Kind)
+	}
+	for _, k := range guimermaid.Kinds() {
+		laid = append(laid, k.Kind)
+	}
+	if !slices.Equal(parsed, laid) {
+		t.Errorf("the parser reads %v, the viewer lays out %v: doc.validate would pass what the viewer can't draw", parsed, laid)
+	}
+	if err := layDiagram("mermaid", "flowchart LR\n  A --> B[<job id>]\n"); err == nil {
+		t.Error("the viewer drew a <job id> label, which doc.validate diagnoses")
 	}
 }

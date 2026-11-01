@@ -335,7 +335,7 @@ func TestAnUnregisteredDerivedFormatTakesTheBuiltInIdentity(t *testing.T) {
 }
 
 // An exempt file keeps its facets and has no diagnostics; the same file outside the exempt folder
-// has them. ValidateFrontmatter agrees.
+// has them. ValidateDocument agrees.
 func TestAnExemptFileHasFacetsAndNoDiagnostics(t *testing.T) {
 	var sv schemaVar
 	sv.set(t, "version: 1\nexempt: [raw/**]\nfrontmatter:\n  type: {type: string, enum: [note], required: true}\n  status: {type: string}\n", "e1")
@@ -357,7 +357,46 @@ func TestAnExemptFileHasFacetsAndNoDiagnostics(t *testing.T) {
 		t.Errorf("the same file outside it: %+v, want type required", d)
 	}
 	kb, _ := sv.get()
-	if r := e.ix.ValidateFrontmatter("raw/a.md", []byte("---\nstatus: x\n---\n"), kb); len(r.Diagnostics) != 0 {
-		t.Errorf("ValidateFrontmatter of an exempt path: %+v, want none", r.Diagnostics)
+	if r := e.ix.ValidateDocument("raw/a.md", []byte("---\nstatus: x\n---\n"), kb); len(r.Diagnostics) != 0 {
+		t.Errorf("ValidateDocument of an exempt path: %+v, want none", r.Diagnostics)
+	}
+}
+
+// TestADiagramTheViewerCantDrawIsDiagnosed: a Markdown document whose mermaid fence the viewer's
+// parser refuses is stored with that diagnostic (rule mermaid, at the refused line), so
+// index.documents' diagnosed lists it and index.status counts it; one whose diagram is drawn is not,
+// nor is the same diagram at a path the schema exempts. ValidateDocument (doc.validate) agrees.
+func TestADiagramTheViewerCantDrawIsDiagnosed(t *testing.T) {
+	var sv schemaVar
+	sv.set(t, "version: 1\nexempt: [raw/**]\nfrontmatter:\n  status: {type: string}\n", "d1")
+	e := newEnv(t, options{Schema: sv.get})
+	bad := "# Jobs\n\n```mermaid\nflowchart LR\n  A --> B[<job id>]\n```\n"
+	e.write("adr.md", bad)
+	e.write("ok.md", "# Jobs\n\n```mermaid\nflowchart LR\n  A[one<br/>two] --> B\n```\n")
+	e.write("raw/adr.md", bad)
+	for _, p := range []string{"adr.md", "ok.md", "raw/adr.md"} {
+		e.ix.Touch(p)
+		e.indexedAt(p)
+	}
+	ctx := context.Background()
+	d, _ := e.store.Diagnostics(ctx, "adr.md")
+	if len(d) != 1 || d[0].Rule != "mermaid" || d[0].Line != 5 || d[0].Message != "HTML in a label, diagram not drawn natively" {
+		t.Errorf("adr.md's diagnostics: %+v, want mermaid's HTML in a label at line 5", d)
+	}
+	for _, p := range []string{"ok.md", "raw/adr.md"} {
+		if d, _ := e.store.Diagnostics(ctx, p); len(d) != 0 {
+			t.Errorf("%s's diagnostics: %+v, want none", p, d)
+		}
+	}
+	page, err := e.store.Documents(ctx, DocumentsOpts{Diagnosed: true})
+	if err != nil || len(page.Docs) != 1 || page.Docs[0].Path != "adr.md" {
+		t.Errorf("index.documents diagnosed: %+v, %v; want adr.md alone", page.Docs, err)
+	}
+	if st, err := e.store.Status(ctx); err != nil || st.Diagnosed != 1 {
+		t.Errorf("index.status diagnosed: %d, %v; want 1", st.Diagnosed, err)
+	}
+	kb, _ := sv.get()
+	if r := e.ix.ValidateDocument("draft.md", []byte(bad), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Line != 5 {
+		t.Errorf("ValidateDocument of the draft: %+v, want the index's", r.Diagnostics)
 	}
 }

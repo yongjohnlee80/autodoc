@@ -263,7 +263,7 @@ func TestVarLink(t *testing.T) {
 // by the store's Check, the todo format's, never by the workspace's KB schema, so it has none of
 // the KB's diagnostics and the format's facets. A file beside the store keeps the KB schema's. A
 // store whose Check comes later indexes its unchanged task again, now checked by it.
-// ValidateFrontmatter answers what the index holds, for both.
+// ValidateDocument answers what the index holds, for both.
 func TestATaskIsCheckedByItsStoresFormat(t *testing.T) {
 	var sv schemaVar
 	sv.set(t, facetSchema, "s1")
@@ -301,11 +301,11 @@ func TestATaskIsCheckedByItsStoresFormat(t *testing.T) {
 		t.Errorf("the file beside the store: %+v, want the KB schema's (type required)", d)
 	}
 	kb, _ := sv.get()
-	if r := e.ix.ValidateFrontmatter(".todo-list/open/t.md", []byte(task), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != "todo-not-found" {
-		t.Errorf("ValidateFrontmatter of the task: %+v, want the format's", r.Diagnostics)
+	if r := e.ix.ValidateDocument(".todo-list/open/t.md", []byte(task), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != "todo-not-found" {
+		t.Errorf("ValidateDocument of the task: %+v, want the format's", r.Diagnostics)
 	}
-	if r := e.ix.ValidateFrontmatter("n.md", []byte(beside), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != schema.RuleRequired {
-		t.Errorf("ValidateFrontmatter of the file beside it: %+v, want the KB schema's", r.Diagnostics)
+	if r := e.ix.ValidateDocument("n.md", []byte(beside), kb); len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != schema.RuleRequired {
+		t.Errorf("ValidateDocument of the file beside it: %+v, want the KB schema's", r.Diagnostics)
 	}
 }
 
