@@ -168,3 +168,22 @@ func TestTheGuideSaysAWakesSendMessageDoesntApply(t *testing.T) {
 		}
 	}
 }
+
+// TestTheGuideSaysHowToReadAHeldDeliveryAgain (token item 8): a body the agent's reader cut short is
+// read again by its id, in the guide's own form, never by asking its sender to resend; and an item's
+// answer is run with that item's id.
+func TestTheGuideSaysHowToReadAHeldDeliveryAgain(t *testing.T) {
+	for _, kind := range []string{crew.KindClaude, crew.KindCodex, crew.KindAgy, crew.KindOpenCode, "aider"} {
+		for via, musts := range map[crew.MailVia][]string{
+			crew.MailViaCLI: {"`autodoc mail show <id>`", "in place of `<id>`"},
+			crew.MailViaMCP: {"`mail_show` with its `id`", "with that delivery's `id`"},
+		} {
+			g := crew.GuideOfVia(kind, via).Markdown
+			for _, must := range musts {
+				if !strings.Contains(g, must) {
+					t.Errorf("%s's guide (mail via %d) lacks %q:\n%s", kind, via, must, g)
+				}
+			}
+		}
+	}
+}
