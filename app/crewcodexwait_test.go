@@ -112,3 +112,34 @@ func TestACodexHereMissIsLookedForAgain(t *testing.T) {
 		t.Fatalf("a wait of 3 s: exit %d after %v, %q; want 1 after looking again until the wait passed", code, took.Round(time.Millisecond), errOut)
 	}
 }
+
+// TestCodexWaitEndsWithItsContext: a waiting `crew endpoint --codex-here` whose context ends (its
+// agent's start given up) stops waiting at once, never sleeping out its interval: it looks once more,
+// then raises the session's attention, blocked, as at its deadline. A registration with no --since
+// starts the bridge with none.
+func TestCodexWaitEndsWithItsContext(t *testing.T) {
+	ctxFile := filepath.Join(t.TempDir(), "ctx")
+	if err := os.WriteFile(ctxFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := &waitLooks{answer: []int{1}}
+	// NOTE: can't announce: the loop says nothing as it starts its wait; the first look takes
+	// microseconds, so a context ended 200 ms in ends it during the hour's wait
+	time.AfterFunc(200*time.Millisecond, cancel)
+	began := time.Now()
+	code := codexWaitLoop(ctx, []string{"--codex-here"}, time.Hour, time.Hour, ctxFile, l.run, io.Discard, io.Discard)
+	if took := time.Since(began); code != 1 || took > 5*time.Second {
+		t.Errorf("a context ended mid-wait: exit %d after %s, want 1 at once", code, took)
+	}
+	if last := l.args[len(l.args)-1]; len(l.args) != 3 || !slices.Equal(last[:4], []string{"crew", "attention", "raise", "blocked"}) {
+		t.Errorf("a context ended mid-wait: runs %q, want a look, one more, then the attention raised", l.args)
+	}
+
+	none := &waitLooks{answer: []int{0}}
+	if code := codexRegisterThenReport(context.Background(), []string{"--codex-here"}, time.Minute, time.Millisecond, ctxFile, none.run, io.Discard, io.Discard); code != 0 ||
+		len(none.args) != 2 || !slices.Equal(none.args[1], []string{"crew", "bridge", "--codex"}) {
+		t.Errorf("no --since: exit %d, runs %q; want registered, then the bridge with no --since", code, none.args)
+	}
+}
