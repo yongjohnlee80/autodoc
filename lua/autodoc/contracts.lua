@@ -209,7 +209,7 @@ return {
         { name = "content", type = "bytes" }
       },
       result = "{diagnostics: [{field, line, rule, message}]}",
-      doc = "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry.",
+      doc = "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry. Each fenced mermaid diagram the viewer can't draw is rule mermaid, at the line of what golib's parser refused or found malformed, field empty. A path the schema exempts gets no diagnostic.",
     },
     ["doc.write"] = {
       since = 1, scope = "workspace", audience = "user",

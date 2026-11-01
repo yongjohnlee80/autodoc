@@ -180,7 +180,7 @@ In the code: `core/index/chunks.go`, `core/index/frontmatter.go`
 Each document records the identity it was indexed under, in one of three forms:
 
 ```
-built-in   = "c" CHUNKV ".s" SCHEMA ".t" TOKENS [".f" SCHEMAFP]
+built-in   = "c" CHUNKV ".s" SCHEMA ".t" TOKENS [".f" SCHEMAFP] [".r" N] [".a" N] [".m" N]
 registered = "c" EXT "@" VERSION ".s" SCHEMA ".t" TOKENS
 derived    = "d" EXT ":" DERIVER "@" VERSION "+" built-in
 ```
@@ -248,6 +248,24 @@ field is left out of the facet index, and the body stays searchable. The indexer
 use the same validator, so the editor and the index agree.
 
 In the code: `internal/daemon/schema.go`, `rpc/doc.go`, `tui/frontmatter.go`, `core/index/indexer.go`
+
+## Diagrams the viewer can't draw
+
+A Markdown document's fenced `mermaid` diagrams are checked with its frontmatter, by the parser the
+viewer draws them with: golib's `parse/mermaid`, at the version the build links, never a copy of its
+rules. A diagram it refuses (a construct outside what golib draws, such as HTML in a label other than
+`<br>`, a type it doesn't draw, a label or source past a limit) or finds malformed is a diagnostic,
+rule `mermaid`, at the line of what it refused, with the parser's reason. `doc.validate` and
+`index.documents {"diagnosed": true}` both report it, in every build, since the parser needs no GUI.
+Like every diagnostic, it never blocks a write, and a path the schema exempts gets none.
+
+The fences are found once, by `core/diagram`, for the viewer's `--check-diagram`, the export and
+`doc.validate` alike. The GUI's layout draws every kind the parser reads, which a GUI-build cell
+holds, so a diagram the parser accepts is one the viewer draws. Every Markdown document records the
+check in its indexer identity (`.m1`), so documents indexed before it are checked once, keeping their
+vectors.
+
+In the code: `core/diagram/diagram.go`, `core/index/frontmatter.go`, `rpc/doc.go`, `app/checkdiagram.go`
 
 ## Outline, breadcrumbs and previews
 

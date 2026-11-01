@@ -23,6 +23,9 @@ func TestIdentitiesParseOneWay(t *testing.T) {
 		{"c5.s3.t512.r1", Identity{Form: BuiltIn, Chunker: "5", Schema: 3, Tokens: 512, Relations: "r1"}},
 		{"c5.s3.t512.f0123456789ab.r1.a1", Identity{Form: BuiltIn, Chunker: "5", Schema: 3, Tokens: 512,
 			SchemaFP: "0123456789ab", Relations: "r1", Abstract: "a1"}},
+		{"c5.s3.t512.f0123456789ab.r1.a1.m1", Identity{Form: BuiltIn, Chunker: "5", Schema: 3, Tokens: 512,
+			SchemaFP: "0123456789ab", Relations: "r1", Abstract: "a1", Diagrams: "m1"}},
+		{"c5.s3.t512.r1.m1", Identity{Form: BuiltIn, Chunker: "5", Schema: 3, Tokens: 512, Relations: "r1", Diagrams: "m1"}},
 		{"c.go@code-go-1+text-5.s3.t512", Identity{Form: Registered, Ext: ".go", Version: "code-go-1+text-5", Schema: 3, Tokens: 512}},
 		{"c.go@1.s3.t5.s3.t512", Identity{Form: Registered, Ext: ".go", Version: "1.s3.t5", Schema: 3, Tokens: 512}},
 		{"d.pdf:autorag/pdf@1+a+" + built, Identity{Form: Derived, Ext: ".pdf", Deriver: "autorag/pdf", Version: "1+a", Built: built}},
@@ -42,14 +45,15 @@ func TestIdentitiesParseOneWay(t *testing.T) {
 			for _, abstract := range []bool{false, true} {
 				id, err := ParseIdentity(docVersion(indexerVersion(tok), true, fp, abstract))
 				wantA := map[bool]string{false: "", true: "a1"}[abstract]
-				if err != nil || id.Form != BuiltIn || id.SchemaFP != fp || id.Relations != "r1" || id.Abstract != wantA {
+				if err != nil || id.Form != BuiltIn || id.SchemaFP != fp || id.Relations != "r1" || id.Abstract != wantA || id.Diagrams != "m1" {
 					t.Errorf("docVersion(%d, %q, %v) reads back as %+v, %v", tok, fp, abstract, id, err)
 				}
 			}
 		}
 	}
-	// the marks come in their order, once each, as f, then r and a with a number
-	for _, s := range []string{"c5.s3.t512.a1.r1", "c5.s3.t512..r1", "c5.s3.t512.rx", "c5.s3.t512.r1.r1", "c5.s3.t512.x1", "c5.s3.t512.r1.f0123456789ab"} {
+	// the marks come in their order, once each, as f, then r, a and m with a number
+	for _, s := range []string{"c5.s3.t512.a1.r1", "c5.s3.t512..r1", "c5.s3.t512.rx", "c5.s3.t512.r1.r1", "c5.s3.t512.x1", "c5.s3.t512.r1.f0123456789ab",
+		"c5.s3.t512.m1.a1", "c5.s3.t512.r1.mx", "c5.s3.t512.m1.m1"} {
 		if _, err := ParseIdentity(s); !errors.Is(err, ErrIdentity) {
 			t.Errorf("%q parsed: %v, want ErrIdentity", s, err)
 		}
