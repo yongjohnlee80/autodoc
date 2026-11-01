@@ -352,7 +352,16 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   live process binds its socket again (a Claude restart); taking it for gone then is safe, since the
   window types to an unreachable agent, presses Enter only where its prompts are reported, and the
   restarted session's `SessionStart` registers its endpoint again.
-- `crew.list` says why a session can't be woken now: `ended`, `no_endpoint`, `wakes_failing` (with
+- A session whose host is gone (its lease lapsed while the daemon is older than a lease, or its
+  process reference names a dead process: a window killed, with no one left to send `crew.exit`)
+  is not reachable, `host_gone`, and is not woken: its mail waits for the profile, and the wake is
+  tried again a lease later. Its host's renewal makes it reachable again.
+- A registration by the scope's current owner, at its current epoch, of a codename whose live
+  session is that owner's under the same epoch supersedes it: the host has lost that session's
+  process, since it wouldn't start an agent it still runs, so the old session ends (`takeover`) and
+  the new one is registered. A ghost (a session left live by a host that never sent `crew.exit`)
+  frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
+- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
