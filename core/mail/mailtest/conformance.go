@@ -72,6 +72,7 @@ func Run(t *testing.T, h Harness) {
 		{"ALeasedOrEndedRecipientsMailNeverFallsBack", testALeasedOrEndedRecipientsMailNeverFallsBack},
 		{"AJobIsLeasedReofferedAndReportedOnce", testAJobIsLeasedReofferedAndReportedOnce},
 		{"TheUsersUnrungSendIsAJobOfAHostThatTakesThem", testTheUsersUnrungSendIsAJobOfAHostThatTakesThem},
+		{"TheFeedReadsAJobAndItsHost", testTheFeedReadsAJobAndItsHost},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}

@@ -184,7 +184,12 @@ import (
 // crew.register's mail_via (cli or mcp, as the session's setup delivered it), which its wake
 // notice follows, crew.list's mail_via, and crew.guide's mail_via. A session below 43 sends none,
 // and its mail is read as its kind's (crew.MailViaOf), as before.
-const Protocol int64 = 43
+// Protocol 44 is the fallback in the human's feed (docs/decisions/crew.md#the-fallback-exactly-once):
+// inbox.fallback, the job a feed change of kind fallback, fallback_done or fallback_unknown names,
+// with whether its host holds its scope, so a window says a job waits for an absent host, and gives
+// the text of one whose outcome is unknown; mail.fallback_done of a delivered job journals
+// fallback_done.
+const Protocol int64 = 44
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

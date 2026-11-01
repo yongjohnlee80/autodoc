@@ -1231,6 +1231,14 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1 の依頼はすでに回答済み・却下・期限切れです。</translation>
     </message>
+    <message id="autodoc.crew.fallback_waits">
+        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
+        <translation>%1 から %2 へのメールは、不在のホスト (%3) を待っています</translation>
+    </message>
+    <message id="autodoc.crew.fallback_went">
+        <source>%1's mail that waited for its host was delivered</source>
+        <translation>ホストを待っていた %1 のメールが届けられました</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 はもうあなたを待っていません</translation>

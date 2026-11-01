@@ -18,7 +18,7 @@ import (
 // session it changed.
 type Change struct {
 	Seq  int64
-	Kind string // request | report | answered | dismissed | read | expired | attention | cleared | reachability | focus | undeliverable
+	Kind string // request | report | answered | dismissed | read | expired | attention | cleared | reachability | focus | undeliverable | fallback | fallback_done | fallback_unknown
 	Ref  string // a message id, or a session id
 	At   int64
 }
@@ -62,4 +62,6 @@ type Mail interface {
 	SendAsUser(ctx context.Context, scope, run string, epoch int64, p mail.Send) (mail.Sent, error)
 	Dismiss(ctx context.Context, message string) error
 	Read(ctx context.Context, message string) error
+	// Fallback is one fallback job as the feed shows it (mail.Manager's Fallback).
+	Fallback(ctx context.Context, job string) (mail.FallbackView, error)
 }

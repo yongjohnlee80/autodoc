@@ -14,6 +14,10 @@ const leaseTTL = 90 * time.Second
 
 // free reports whether h's owner may be replaced at now: it released the scope, its lease lapsed,
 // or its process is known to be dead. An unknown process is not dead: the lease decides.
+// HostHolds is whether h holds its scope at now: claimed, renewed within its lease, its process not
+// known dead. Mail's fallback says by it whether a job's host is away.
+func HostHolds(h Host, now time.Time) bool { return !free(h, now) }
+
 func free(h Host, now time.Time) bool {
 	return len(h.Incarnation) == 0 || now.Sub(time.Unix(0, h.Renewed)) > leaseTTL || procDead(h.Proc)
 }
