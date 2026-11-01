@@ -145,7 +145,7 @@ func (s *scripting) State() map[string]any {
 		"App.luaKeysText": s.luaKeysText(), "App.luaMenus": s.luaMenuRows(),
 		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
 		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0,
-		"App.luaInputTitle": "", "App.luaInputLabel": "", "App.luaInputText": "", "App.luaInputPlaceholder": ""}
+		"App.luaInputTitle": "", "App.luaInputLabel": "", "App.luaInputText": ""}
 	maps.Copy(st, s.cardState())
 	return st
 }
