@@ -395,8 +395,11 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     an MCP tool's elicitation) or on the user's input raises the attention; anything else clears
     it. It says it is alive after each look that read the status, so it counts as reported on the
     same 15 s rule. A server outside Codex's socket folder is never dialed, and its looks raise
-    nothing. The bridge stops when the session's credential is refused, or when the app-server is
-    gone for 3 looks in a row (an agent's own server ends with its CLI).
+    nothing. The bridge stops when the session has ended: its context file gone (its host removes it
+    as the agent ends) or its credential refused. It also stops when the app-server, or the thread,
+    is gone for 3 looks in a row (an agent's own server ends with its CLI; a deleted thread reads
+    "thread not loaded"). A quit TUI's thread stays loaded and idle on the shared app-server, so
+    there the context file is what stops it.
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 
