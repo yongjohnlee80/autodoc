@@ -7810,6 +7810,14 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
         <translation>auditoría de %1 escrita en la entrada de %2: pulsa Enter allí para enviarla; haz clic para instalar o cancelar</translation>
     </message>
+    <message id="autodoc.notice.crewfallback.delivered">
+        <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
+        <translation>No se pudo despertar a %1: AutoDoc escribió el mensaje de %2 en su prompt</translation>
+    </message>
+    <message id="autodoc.notice.crewfallback.unknown">
+        <source>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</source>
+        <translation>AutoDoc no puede saber si %1 recibió este mensaje del equipo, así que envíaselo tú: %2</translation>
+    </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc no puede ver ahora los avisos de permiso de %1, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>

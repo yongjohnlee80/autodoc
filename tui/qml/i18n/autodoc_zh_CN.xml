@@ -7797,6 +7797,14 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
         <translation>%1 的审计已输入 %2 的输入框：在那里按 Enter 发送；点击以安装或取消</translation>
     </message>
+    <message id="autodoc.notice.crewfallback.delivered">
+        <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
+        <translation>无法唤醒 %1：AutoDoc 已将 %2 的消息输入到它的提示符中</translation>
+    </message>
+    <message id="autodoc.notice.crewfallback.unknown">
+        <source>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</source>
+        <translation>AutoDoc 无法确定 %1 是否收到了这条团队消息，请自行发送：%2</translation>
+    </message>
     <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc 目前看不到 %1 的权限提示，因此消息已输入但未发送：请在那里按 Enter</translation>

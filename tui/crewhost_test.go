@@ -123,7 +123,10 @@ type crewWindow struct {
 	// crewList, when set, answers crew.list instead of the daemon: the messaging cells choose what
 	// it says of a session's prompts
 	crewList func() (any, error)
-	card     *asker // the question card, made at the first question
+	// fallbacks and fallbackDone, when set, answer mail.fallbacks and mail.fallback_done: unset, the
+	// daemon is one before protocol 42, which has neither (crewfallback_test.go)
+	fallbacks, fallbackDone func(p []any) (any, error)
+	card                    *asker // the question card, made at the first question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -144,6 +147,11 @@ func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, erro
 	}
 	if verb == "crew.list" && w.crewList != nil {
 		return w.crewList()
+	}
+	if hook := map[string]func([]any) (any, error){"mail.fallbacks": w.fallbacks, "mail.fallback_done": w.fallbackDone}[verb]; hook != nil {
+		return hook(p)
+	} else if verb == "mail.fallbacks" || verb == "mail.fallback_done" {
+		return nil, &golibrpc.Error{Code: golibrpc.CodeMethodNotFound, Message: "unknown method: " + verb}
 	}
 	v, err := w.d.call(ctx, verb, p...)
 	if err == nil && w.lost[verb] > 0 {

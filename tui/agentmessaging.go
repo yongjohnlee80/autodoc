@@ -53,6 +53,10 @@ var ErrAgentTypedNotSent = errors.New("typed into its input, not sent")
 // goes on to the base.
 var errDoorbellNotSent = errors.New("the doorbell didn't ring")
 
+// errHandedOver is a doorbell that didn't ring for a message the window's own fallback job now
+// carries (inbox.handed_over): the job types it, through the same base, so the send types nothing.
+var errHandedOver = errors.New("the doorbell didn't ring: the window's fallback job carries it")
+
 // agentDoorbell rings an agent through its CLI's own channel. answer is called once, on the loop:
 // rang, or why not.
 type agentDoorbell interface {
@@ -63,7 +67,13 @@ type agentDoorbell interface {
 type crewDoorbell struct{ crew *crewHost }
 
 func (d crewDoorbell) ring(to AgentRef, m AgentMessage, answer func(rang bool, err error)) {
-	d.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) { answer(err == nil, err) })
+	d.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) {
+		if errors.Is(err, errHandedOver) { // the fallback job delivers it: the send is done, typing nothing
+			answer(true, nil)
+			return
+		}
+		answer(err == nil, err)
+	})
 }
 
 // submitDelay is how long the base waits between the paste and its Enter: a program that reads the
@@ -168,6 +178,25 @@ func (a *agents) kindOf(codename string) string {
 		return agentKind(in.profile.Command)
 	}
 	return ""
+}
+
+// deliverFallback types a crew fallback job's text into codename's terminal through the base alone
+// (crewHost.takeJob): pasted, then Enter only where the agent's prompts are reported and none
+// shows. done hears nil (sent), ErrAgentTypedNotSent, or why nothing was typed.
+func (a *agents) deliverFallback(codename, text string, done func(error)) {
+	to := AgentRef{Codename: codename}
+	check := func() error {
+		if text == "" || len(text) > widget.TerminalInputLimit {
+			return ErrAgentText
+		}
+		return nil
+	}
+	o := deliverOpts{submit: a.submitter(to, func() error { return nil })}
+	if err := a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), o, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendBracketedPaste(tab, text)
+	}, done); err != nil {
+		done(err)
+	}
 }
 
 // taskMessage is a task as a request: its title in the subject, its file, id and the instruction
