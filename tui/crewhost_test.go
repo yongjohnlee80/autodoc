@@ -25,6 +25,7 @@ import (
 // refusals as the daemon's codes.
 type crewDaemon struct {
 	m       *crew.Manager
+	mem     *crewtest.Mem // m's store
 	clock   *crewtest.Clock
 	failing string // a scope whose claims fail as a store failure would
 	none    bool   // a daemon before crew: every crew verb is unknown
@@ -41,7 +42,22 @@ type crewDaemon struct {
 
 func newCrewDaemonForHost() *crewDaemon {
 	clock := crewtest.NewClock()
-	return &crewDaemon{m: crew.New(crewtest.NewMem(clock.Now)), clock: clock}
+	mem := crewtest.NewMem(clock.Now)
+	return &crewDaemon{m: crew.New(mem), clock: clock, mem: mem}
+}
+
+// sessionEnded reports whether the daemon's store has session id ended.
+func (d *crewDaemon) sessionEnded(t *testing.T, id string) bool {
+	t.Helper()
+	ended := false
+	if err := d.mem.Read(context.Background(), func(tx crew.Tx) error {
+		s, ok, err := tx.Session(id)
+		ended = ok && s.Ended != nil
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return ended
 }
 
 func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, error) {
