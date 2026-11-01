@@ -627,12 +627,13 @@ reads it, never in your own CLI configuration:
   folder's `.claude/settings.json` (a window) or in its `--settings` (Neovim). AutoDoc's own rules,
   exactly this build's or an earlier one's, are taken out first; every other rule is kept, your own
   `autodoc` rules included.
-- OpenCode: none yet. Its rules are ready (`permission.bash`, two allows per command, the command
-  alone and with arguments, in the session's own `OPENCODE_CONFIG_CONTENT`), but they ship only once
-  a live probe shows a compound command can't ride them, as Claude Code's did. Until then an OpenCode
-  agent prompts for the guide's commands, as its own policy says.
+- OpenCode: `permission.bash`, two allows per command, the command alone and with arguments, in the
+  session's own `OPENCODE_CONFIG_CONTENT`, beside the agent's own rules. They shipped once the live
+  probe showed a compound command can't ride them (OpenCode 1.18.31, as Claude Code before it: every
+  compound form refused by the rule).
 - A session on MCP mail runs none of the mail and crew commands: Claude Code is allowed its tools'
-  exact rules and `Bash(autodoc --contracts:*)`, and Antigravity its bridge's command, the tools and
+  exact rules and `Bash(autodoc --contracts:*)`, OpenCode (which gates no MCP tool) only
+  `autodoc --contracts`, and Antigravity its bridge's command, the tools and
   `command(autodoc --contracts)` (agy matches a command rule's words in order, so with any
   arguments after).
 - Codex: none yet, until it shows a per-session place for it.
