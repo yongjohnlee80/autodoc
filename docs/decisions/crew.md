@@ -470,6 +470,9 @@ goes through shell commands its rules would have to allow.
   - agy shows the model no `notifications/message`: for agy the waiting line is how a busy agent
     hears of mail. agy also puts a wake into a running turn, as a system message, so a busy agy is
     woken mid-task as well; it receives the mail once either way.
+- The texts an agent reads per event (the wake notices, the waiting line) stay constant and short:
+  they repeat for the life of a session, so a word added to one is paid on every wake or tool
+  result. A cell pins each one's size, so growing one is a deliberate edit.
 
 In the code: `app/crewmcp.go`, `app/crewcli.go`, `core/crew/scheduler.go`, `core/crew/guide.go`
 
