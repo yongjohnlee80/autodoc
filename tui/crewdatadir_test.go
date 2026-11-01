@@ -22,6 +22,7 @@ func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	awaitStart(t, c, instance) // an OpenCode agent's session is published once its plugin's env is in
 	if _, _, err := startedEnv(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
