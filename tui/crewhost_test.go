@@ -107,16 +107,17 @@ func crewWire(err error) error {
 
 // crewWindow is one window's crewCore: work runs at once, timers wait until fired, notices are kept.
 type crewWindow struct {
-	marked  bool // Tr and Trf answer the marked test language (markedText), else the English catalog's words
-	d       *crewDaemon
-	timers  []func()
-	notices []string
-	hold    bool     // work waits in held until release, as a call in flight does
-	late    bool     // with hold, the work runs at once and only its answer waits, as a lost-then-late reply
-	held    []func() // the held work's answers
-	store   string   // the store the daemon serves, "store-1" when unset
-	socket  string   // the daemon's address, "/run/test/d.sock" when unset
-	calls   []string // the verbs called, in order
+	skipHold int  // with hold: the Go calls answered at once before the ones held
+	marked   bool // Tr and Trf answer the marked test language (markedText), else the English catalog's words
+	d        *crewDaemon
+	timers   []func()
+	notices  []string
+	hold     bool     // work waits in held until release, as a call in flight does
+	late     bool     // with hold, the work runs at once and only its answer waits, as a lost-then-late reply
+	held     []func() // the held work's answers
+	store    string   // the store the daemon serves, "store-1" when unset
+	socket   string   // the daemon's address, "/run/test/d.sock" when unset
+	calls    []string // the verbs called, in order
 	// inboxSend, when set, answers inbox.send (the user's doorbell) instead of the daemon: the
 	// messaging cells choose whether it fired (agentmessaging_test.go)
 	inboxSend func(p []any) (any, error)
@@ -161,6 +162,11 @@ func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, erro
 	return v, err
 }
 func (w *crewWindow) Go(fn func(context.Context) any, then func(any)) {
+	if w.hold && w.skipHold > 0 { // answered at once: a crew start's setup before the call a cell holds
+		w.skipHold--
+		then(fn(context.Background()))
+		return
+	}
 	if w.hold && w.late {
 		v := fn(context.Background())
 		w.held = append(w.held, func() { then(v) })
