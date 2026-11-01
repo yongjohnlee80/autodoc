@@ -302,7 +302,9 @@ The daemon wakes an agent through its CLI's own channel with a constant notice, 
 the agent receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every
 waker sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the
 crew MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the
-autodoc MCP server, until more is false" (naming the server, as agy finds MCP tools by it), since its rules allow the tool, not the shell command. Either names no sender and
+autodoc MCP server, with no arguments, until more is false" (naming the server, as agy finds MCP tools
+by it, and its arguments, so there is no schema to look up), since its rules allow the tool, not the
+shell command. Either names no sender and
 no subject, so nothing a peer wrote reaches the agent except through a receive.
 Each channel queues a busy agent itself, so no waker needs to wait for the agent to be idle.
 
@@ -446,6 +448,12 @@ goes through shell commands its rules would have to allow.
 - Each tool is the `autodoc mail` command of its name, run the one way the CLI runs it, so the tools
   have no meaning of their own. Ids and bodies are arguments, never shell words.
 - A received item's `answer` names the tool call that answers it, as the CLI's names its command.
+- What the agent is told says every tool's arguments: the wake notice and the waiting line say
+  `mail_receive` takes none, the MCP guide has a line a tool, and `initialize`'s instructions say them
+  all. They come from `crew.MCPToolArgs`, which the schemas take their required arguments from, so the
+  two can't drift. agy lazy-loads an MCP tool's schema from a file, and its model, looking for that
+  file, may list its folder in the shell, a command its rules don't allow, so a permission prompt.
+  Told the arguments, it has nothing to look up.
 - The server is one session's: the context its start names (`$AUTODOC_CREW_CONTEXT`, or its folder's),
   read again for each call.
 - A refused call is the tool's error (`isError`), with the daemon's code and message, never the
@@ -459,8 +467,11 @@ goes through shell commands its rules would have to allow.
     waiting than when it last looked. With nothing waiting it waits on `mail.wait`'s long-poll;
     while mail sits unreceived (when `mail.wait` would answer at once), it looks again after the
     agent's next tool call or 30 s. The watch ends with the server, which returns only once it has.
+  - agy shows the model no `notifications/message`: for agy the waiting line is how a busy agent
+    hears of mail. agy also puts a wake into a running turn, as a system message, so a busy agy is
+    woken mid-task as well; it receives the mail once either way.
 
-In the code: `app/crewmcp.go`, `app/crewcli.go`, `core/crew/scheduler.go`
+In the code: `app/crewmcp.go`, `app/crewcli.go`, `core/crew/scheduler.go`, `core/crew/guide.go`
 
 ## Wake acceptance not tool approvals
 

@@ -15,6 +15,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
@@ -80,6 +81,14 @@ func object(props map[string]any, required ...string) map[string]any {
 	return s
 }
 
+// toolSchema is tool name's input schema: props, required as crew.MCPToolArgs says (which the guide,
+// the notice and the instructions say too), so what the agent is told and what the server takes
+// can't drift; TestTheMCPToolsTakeWhatTheGuideSays holds props to it as well.
+func toolSchema(name string, props map[string]any) map[string]any {
+	t, _ := crew.MCPToolArgsOf(name)
+	return object(props, t.Required...)
+}
+
 var (
 	idProp      = map[string]any{"type": "string", "description": "the item's id, exactly as mail_receive gave it"}
 	bodyProp    = map[string]any{"type": "string", "description": "the text, at most 64 KiB"}
@@ -89,16 +98,16 @@ var (
 var crewMCPTools = []mcpTool{
 	{Name: "mail_receive", Description: "Lease your next mail deliveries, at most 8; call it again until more is false. " +
 		"Each item's answer names the tool and arguments that answer it.",
-		Schema: object(map[string]any{}),
+		Schema: toolSchema("mail_receive", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "mail receive", nil, nil }},
 	{Name: "mail_ack", Description: "Done with a delivery (a message or an event), by the id mail_receive gave.",
-		Schema: object(map[string]any{"id": idProp}, "id"),
+		Schema: toolSchema("mail_ack", map[string]any{"id": idProp}),
 		args: func(in map[string]any) (string, []string, error) {
 			id, err := strArg(in, "id", true)
 			return "mail ack", []string{"--", id}, err
 		}},
 	{Name: "mail_reply", Description: "Answer a request by the id mail_receive gave; it acks the delivery too, and is safe to repeat.",
-		Schema: object(map[string]any{"id": idProp, "body": bodyProp, "subject": subjectProp}, "id", "body"),
+		Schema: toolSchema("mail_reply", map[string]any{"id": idProp, "body": bodyProp, "subject": subjectProp}),
 		args: func(in map[string]any) (string, []string, error) {
 			id, err := strArg(in, "id", true)
 			if err != nil {
@@ -112,25 +121,25 @@ var crewMCPTools = []mcpTool{
 			return "mail reply", []string{"--body=" + body, "--subject=" + subject, "--", id}, err
 		}},
 	{Name: "mail_renew", Description: "Keep a delivery 10 more minutes, for long work, by the id mail_receive gave; reply or ack when it's done.",
-		Schema: object(map[string]any{"id": idProp}, "id"),
+		Schema: toolSchema("mail_renew", map[string]any{"id": idProp}),
 		args: func(in map[string]any) (string, []string, error) {
 			id, err := strArg(in, "id", true)
 			return "mail renew", []string{"--", id}, err
 		}},
 	{Name: "crew_whoami", Description: "Who you are in the crew: your codename, scope, session and store.",
-		Schema: object(map[string]any{}),
+		Schema: toolSchema("crew_whoami", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "crew whoami", nil, nil }},
 	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it.",
-		Schema: object(map[string]any{}),
+		Schema: toolSchema("crew_list", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "crew list", nil, nil }},
 	{Name: "mail_send", Description: "Send mail: to a codename, name@scope, user (the person you work for) or session:<id>. " +
 		"kind request asks for an answer, which wakes you when it comes.",
-		Schema: object(map[string]any{
+		Schema: toolSchema("mail_send", map[string]any{
 			"to":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1, "description": "the recipients"},
 			"body":    bodyProp,
 			"subject": subjectProp,
 			"kind":    map[string]any{"type": "string", "enum": []string{mail.KindMessage, mail.KindRequest}, "description": "message (the default) or request"},
-		}, "to", "body"),
+		}),
 		args: func(in map[string]any) (string, []string, error) {
 			raw, _ := in["to"].([]any)
 			if len(raw) == 0 {
@@ -195,13 +204,14 @@ type mcpRequest struct {
 }
 
 // mcpInstructions is what initialize tells the client about the server: how mail reaches the agent,
-// and when to look for it (docs/decisions/crew.md#the-crew-mcp-server).
-const mcpInstructions = "AutoDoc's crew mail. When AutoDoc's notice wakes you, call mail_receive until more is false, " +
+// when to look for it (docs/decisions/crew.md#the-crew-mcp-server), and each tool's arguments.
+var mcpInstructions = "AutoDoc's crew mail. When AutoDoc's notice wakes you, call mail_receive until more is false, " +
 	"then answer each item with the tool its answer names. Every tool's result says how much mail is waiting: " +
-	"whenever it shows waiting above 0, call mail_receive once the current step is done, and call it at the end of each task."
+	"whenever it shows waiting above 0, call mail_receive once the current step is done, and call it at the end of each task. " +
+	crew.MCPArgumentsSentence()
 
 // mcpWaitingNote is the line a tool result carries when mail is waiting, and the push notice's text.
-const mcpWaitingNote = "AutoDoc mail is waiting: call mail_receive, a tool of the autodoc MCP server, once this step is done."
+const mcpWaitingNote = "AutoDoc mail is waiting: call mail_receive, a tool of the autodoc MCP server, with no arguments, once this step is done."
 
 // mcpRecheck bounds how long the push waits before looking again while mail sits unreceived: the
 // daemon's mail.wait answers at once while any is waiting, so it can't wait for the next.
