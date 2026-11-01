@@ -209,11 +209,11 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       .then((r) => !r?.error && r?.data === true, () => false);
   };
   // crewAttention runs `autodoc crew attention <args>`, one run after another (so a clear never
-  // overtakes the raise before it), each bounded as a registration is; a run's failure is only
-  // logged.
+  // overtakes the raise before it), each bounded as a registration is. It answers how the run
+  // ended: null when it exited 0, else what failed (its exit and the start of its stderr).
   let attentionRuns = Promise.resolve();
   const crewAttention = (...args) => {
-    attentionRuns = attentionRuns.then(
+    const run = attentionRuns.then(
       () =>
         new Promise((done) => {
           let p;
@@ -222,25 +222,46 @@ export const AutodocCrew = async ({ client }, options = {}) => {
               env: process.env,
               stdin: "ignore",
               stdout: "ignore",
-              stderr: "ignore",
+              stderr: "pipe",
             });
           } catch (e) {
-            log("warn", `the session's attention (${args[0]}) failed: ${String(e).slice(0, 300)}`);
-            return done();
+            return done(String(e).slice(0, 300));
           }
           const timer = setTimeout(() => p.kill(), registerMs);
-          p.exited.finally(() => clearTimeout(timer)).then(done, done);
+          const said = new Response(p.stderr).text().catch(() => "");
+          p.exited
+            .finally(() => clearTimeout(timer))
+            .then(
+              async (code) => done(code === 0 ? null : `exit ${code}: ${(await said).trim().slice(0, 300)}`),
+              (e) => done(String(e).slice(0, 300)),
+            );
         }),
     );
-    return attentionRuns;
+    attentionRuns = run;
+    return run;
   };
+  // attend runs an attention whose failure is only logged.
+  const attend = (...args) =>
+    crewAttention(...args).then((failed) => {
+      if (failed) log("warn", `the session's attention (${args[0]}) failed: ${failed}`);
+    });
   // the reporter's heartbeat: while the plugin runs it says so every heartbeatMs, so AutoDoc trusts
-  // this session's prompts as reported (crew.list's prompts_reported) only while it does
+  // this session's prompts as reported (crew.list's prompts_reported) only while it does. A failing
+  // heartbeat is logged once, not every heartbeatMs, and again only if it fails anew after one went
+  // through.
   const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
-  const heartbeat = heartbeatMs > 0 ? setInterval(() => crewAttention("alive"), heartbeatMs) : null;
+  let heartbeatFailing = false;
+  const beat = () =>
+    crewAttention("alive").then((failed) => {
+      if (failed && !heartbeatFailing) {
+        log("warn", `AutoDoc doesn't hear this session's heartbeat (autodoc crew attention alive ${failed}): its prompts read as unreported, so a window won't press Enter into it`);
+      }
+      heartbeatFailing = Boolean(failed);
+    });
+  const heartbeat = heartbeatMs > 0 ? setInterval(beat, heartbeatMs) : null;
   heartbeat?.unref?.();
   // attention tells AutoDoc's window that this session can't be woken, and why.
-  const attention = (why) => crewAttention("raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`);
+  const attention = (why) => attend("raise", "blocked", `AutoDoc can't wake this OpenCode session: ${why}`);
   // asking are the permission prompts the agent shows now, by request: the first raises the
   // session's permission attention, saying what it asks; the last one answered clears it. A window
   // presses Enter into this agent only while none is showing (crew.list's prompts_reported).
@@ -266,7 +287,7 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       wokeAt = 0;
       if (wakeRaised && asking.size === 0) {
         wakeRaised = false;
-        crewAttention("clear");
+        attend("clear");
       }
     }
   };
@@ -276,10 +297,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       asking.set(p.id, true);
       if (asking.size === 1) {
         const what = [p.permission, (p.patterns ?? []).join(" ")].filter(Boolean).join(": ");
-        crewAttention("raise", "permission", what.slice(0, 300) || "a permission");
+        attend("raise", "permission", what.slice(0, 300) || "a permission");
       }
     } else if (event?.type === "permission.replied" && asking.delete(p.requestID) && asking.size === 0) {
-      crewAttention("clear");
+      attend("clear");
     }
   };
   // attempt registers id, within registerMs: "ok", "child" (a subagent's session, never the
