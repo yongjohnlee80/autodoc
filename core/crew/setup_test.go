@@ -234,7 +234,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"},
 		Env: map[string]string{"AUTODOC_CREW_CONTEXT": "/c/ctx"}, Tools: []string{"mail_receive", "mail_ack"}}}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
-		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: host, AgentDir: "/a", Servers: servers,
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: host, AgentDir: "/a", Dir: "/p", Servers: servers,
 			Env: map[string]string{"PATH": "/x", "SECRET": "s3"}}, "")
 		if err != nil {
 			t.Fatal(err)
@@ -275,8 +275,12 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		rules := []string{"command(autodoc crew bridge --agy)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
-		if !slices.Equal(settings.Permissions.Allow, rules) || !slices.Equal(s.Allow, rules) || !slices.Equal(settings.Trusted, []string{"/a"}) {
-			t.Errorf("%s: --settings %s (Allow %q), want exactly %q and the agent's folder trusted", host, s.Argv[1], s.Allow, rules)
+		trusted := []string{"/a"} // the window's working folder is the agent's folder
+		if host == crew.HostNvim {
+			trusted = []string{"/a", "/p"} // Neovim's is the user's project, the agent's folder added
+		}
+		if !slices.Equal(settings.Permissions.Allow, rules) || !slices.Equal(s.Allow, rules) || !slices.Equal(settings.Trusted, trusted) {
+			t.Errorf("%s: --settings %s (Allow %q), want exactly %q and %q trusted", host, s.Argv[1], s.Allow, rules, trusted)
 		}
 		if !s.Prompts || len(s.Env) != 0 || strings.Contains(strings.Join(s.Argv, " "), "s3") {
 			t.Errorf("%s: prompts %v, env %v, argv %q: want prompts reported, no env, the profile's env nowhere", host, s.Prompts, s.Env, s.Argv)
@@ -290,6 +294,25 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 	}
 	if !strings.Contains(crew.AgyLaunchPrompt, crew.AgyBridgeCommand) || !strings.Contains(crew.GuideOf(crew.KindAgy).Markdown, "`"+crew.AgyBridgeCommand+"`") {
 		t.Error("the launch prompt and the guide don't name the bridge's command, the one its rule allows")
+	}
+}
+
+// TestSetupForAgyTrustsNeovimsWorkingFolderOnlyWhenItIsAPath: from Neovim, the working folder is
+// trusted for the session only when it is an absolute path other than the agent's own folder; a
+// relative or missing one adds nothing, and nothing is ever trusted beyond the session's --settings.
+func TestSetupForAgyTrustsNeovimsWorkingFolderOnlyWhenItIsAPath(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
+	for dir, want := range map[string][]string{"": {"/a"}, "p": {"/a"}, "/a": {"/a"}, "/p": {"/a", "/p"}} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostNvim, AgentDir: "/a", Dir: dir, Servers: servers}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var settings struct {
+			Trusted []string `json:"trustedWorkspaces"`
+		}
+		if err := json.Unmarshal([]byte(s.Argv[1]), &settings); err != nil || !slices.Equal(settings.Trusted, want) {
+			t.Errorf("working folder %q: trusted %q (%v), want %q", dir, settings.Trusted, err, want)
+		}
 	}
 }
 

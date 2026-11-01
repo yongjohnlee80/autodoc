@@ -538,7 +538,8 @@ Antigravity's setup gives the agent its mail as the crew MCP servers' tools. The
 goes in the agent's own folder, as `.agents/mcp_config.json`, which agy reads in its working folder
 or, from Neovim, in the folder `--add-dir` adds. Everything else is on its command line, for that
 session alone: `--settings` allows each tool by its exact `mcp(<server>/<tool>)` rule and the bridge
-by its exact command, nothing by a wildcard, and trusts the agent's folder. The launch prompt runs
+by its exact command, nothing by a wildcard, and trusts the agent's folder and, from Neovim, its
+working folder (the user's project), so agy asks no trust question. The launch prompt runs
 the bridge alone, since agy gives a session its MCP tools only from its second turn. Nothing goes in
 the user's agy settings. A host that gives no servers, or no folder, still starts the agent, with a
 notice.

@@ -182,7 +182,14 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	if err != nil {
 		return err
 	}
-	settings, err := json.Marshal(map[string]any{"permissions": map[string]any{"allow": allow}, "trustedWorkspaces": []string{in.AgentDir}})
+	// the folders agy works in are trusted for this session alone, so it asks no trust question: the
+	// agent's folder, and from Neovim its working folder too (the user's project, the agent's own
+	// folder added to it); nothing is written to agy's own settings
+	trusted := []string{in.AgentDir}
+	if in.Host == HostNvim && filepath.IsAbs(in.Dir) && in.Dir != in.AgentDir {
+		trusted = append(trusted, in.Dir)
+	}
+	settings, err := json.Marshal(map[string]any{"permissions": map[string]any{"allow": allow}, "trustedWorkspaces": trusted})
 	if err != nil {
 		return err
 	}
