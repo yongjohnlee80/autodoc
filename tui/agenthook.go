@@ -185,10 +185,12 @@ func withoutCommand(g any, command string) any {
 // prompts (they report; they decide nothing), the events it doesn't know never named, and AutoDoc's
 // hooks of an earlier start taken out first. prompts is whether those hooks were written, which
 // the session's registration says. For the others nothing yet (Codex's queue starts turns as it
-// is). Its one allowance is the guide's own commands (crew.ClaudeAllow, exactly crew.GuideCommands),
-// in this folder's settings alone; it never writes approval policies, permission modes, deny rules
-// or any other allow rule: a turn a wake starts runs under the profile's own tool policy.
-func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks) (prompts bool, err error) {
+// is). Its one allowance is allow, the setup's: the guide's own commands (crew.ClaudeAllow, exactly
+// crew.GuideCommands) for a session on CLI mail, the crew MCP tools' exact rules
+// (crew.ClaudeMCPAllow) for one on MCP mail, in this folder's settings alone, AutoDoc's rules of
+// either mode taken out first; it never writes approval policies, permission modes, deny rules or
+// any other allow rule: a turn a wake starts runs under the profile's own tool policy.
+func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks, allow []string) (prompts bool, err error) {
 	if kind != crew.KindClaude {
 		return false, nil
 	}
@@ -197,6 +199,6 @@ func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks) (prompts bool, er
 	set := crew.ClaudeSetKeys(k)
 	err = mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), claudeMerge{events: events, set: set,
 		ours: crew.ClaudeCommandLines(autodoc), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"},
-		allow: crew.ClaudeAllow()})
+		allow: allow})
 	return prompts && err == nil, err
 }

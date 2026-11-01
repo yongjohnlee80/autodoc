@@ -25,11 +25,26 @@ func ClaudeAllow() []string {
 // host still takes them out. None yet: the allowance's first build is this one.
 var earlierClaudeAllow = []string{}
 
+// MCPServerName is the name hosts register the crew MCP server under: no slash, since agy's rule
+// for a tool is mcp(<server>/<tool>).
+const MCPServerName = "autodoc"
+
+// ClaudeMCPAllow is Claude Code's permissions.allow for the crew MCP server's tools: one exact
+// mcp__<server>__<tool> rule each, what a session on MCP mail is allowed in place of ClaudeAllow.
+func ClaudeMCPAllow() []string {
+	out := make([]string, 0, len(MCPToolArgs))
+	for _, name := range MCPToolNames() {
+		out = append(out, "mcp__"+MCPServerName+"__"+name)
+	}
+	return out
+}
+
 // IsClaudeAllow reports whether rule is one of AutoDoc's Claude allow rules, of this build's or an
-// earlier one's, exactly: a host takes them out before writing this build's, and keeps every other
-// rule, the user's own `Bash(autodoc search:*)` included.
+// earlier one's, exactly, the guide's commands' and the crew MCP tools' alike: a host takes them out
+// before writing this build's, so a folder whose session moved between CLI and MCP mail keeps none
+// of the other mode's, and keeps every other rule, the user's own `Bash(autodoc search:*)` included.
 func IsClaudeAllow(rule string) bool {
-	return slices.Contains(ClaudeAllow(), rule) || slices.Contains(earlierClaudeAllow, rule)
+	return slices.Contains(ClaudeAllow(), rule) || slices.Contains(ClaudeMCPAllow(), rule) || slices.Contains(earlierClaudeAllow, rule)
 }
 
 // openCodeAllowProven is whether SetupFor writes OpenCode's allowance (OpenCodeWithAllow) into a

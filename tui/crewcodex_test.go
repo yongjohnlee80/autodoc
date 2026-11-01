@@ -27,7 +27,6 @@ func (r *codexRuns) run(args ...string) error {
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("one waiting registration", func(t *testing.T) {
 		a, c, _ := crewAgents(t, crewKinds)
-		a.pluginEnv = func() (string, error) { return `OPENCODE_CONFIG_CONTENT={}`, nil }
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		a.codexHere = runs.run
 		p, _ := a.profile("codex-one")

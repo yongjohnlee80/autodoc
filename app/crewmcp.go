@@ -46,9 +46,8 @@ type mcpTool struct {
 // which the server's own table (crewMCPTools) is held to by a cell.
 func MCPTools() []string { return crew.MCPToolNames() }
 
-// MCPServerName is the name hosts register the crew MCP server under: no slash, since agy's rule
-// for a tool is mcp(<server>/<tool>).
-const MCPServerName = "autodoc"
+// MCPServerName is the name hosts register the crew MCP server under (crew.MCPServerName).
+const MCPServerName = crew.MCPServerName
 
 func strArg(in map[string]any, name string, required bool) (string, error) {
 	v, ok := in[name]
