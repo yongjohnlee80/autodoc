@@ -286,8 +286,13 @@ func codexSetup(_ SetupInput, _ string, s *Setup) error {
 	return nil
 }
 
+// EnvMailVia names the session's mail mode (MailVia's text: cli or mcp) for OpenCode's plugin, which
+// wakes with that mode's notice (WakeNotice or WakeNoticeMCP). OpenCode's setup always sets it, so
+// a value the host's own environment carries never decides it.
+const EnvMailVia = "AUTODOC_CREW_MAIL_VIA"
+
 // opencodeSetup is AutoDoc's plugin, written into in.DataDir, and the OPENCODE_CONFIG_CONTENT that
-// loads it, the guide's commands allowed.
+// loads it, the guide's commands allowed, and the mail mode its plugin wakes with (EnvMailVia).
 func opencodeSetup(in SetupInput, _ string, s *Setup) error {
 	if in.DataDir == "" { // its plugin is a file of AutoDoc's own: with no folder for it, nowhere
 		return fmt.Errorf("%w: OpenCode's plugin needs one, and none was given", ErrDataDir)
@@ -316,5 +321,10 @@ func opencodeSetup(in SetupInput, _ string, s *Setup) error {
 		s.MailVia = MailViaMCP
 	}
 	s.Env["OPENCODE_CONFIG_CONTENT"] = v
+	via, err := s.MailVia.MarshalText()
+	if err != nil {
+		return err
+	}
+	s.Env[EnvMailVia] = string(via)
 	return nil
 }

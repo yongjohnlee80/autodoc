@@ -328,7 +328,7 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
 | Claude Code | the session's inbox socket, one JSON line | its `SessionStart` hook: `autodoc crew endpoint --claude` | the socket's peer is the registered process (pid and start time), in Claude's socket folders |
 | Codex | the app-server's queue: `codex queue`, run as argv | its host, as the agent starts (the setup's step, `autodoc crew endpoint --codex-here --wait 60s`, run once by the agent's autodoc): it finds the thread whose folder is the agent's on the shared app-server (its JSON-RPC, a WebSocket on its control socket) and registers it, looking every 2 s for a minute, then raises the session's attention, blocked; the guide's `autodoc crew endpoint --codex-thread "$CODEX_THREAD_ID"` is the fallback | the server socket is the user's own, in a folder only the user can enter |
 | Antigravity | the language server's `SendAgentMessage`, on loopback | `autodoc crew bridge --agy`, which the agent runs once from its shell | the conversation is that server's; its token is held in daemon memory only |
-| OpenCode | AutoDoc's plugin in the opencode process, on a unix socket | the plugin itself: at load, a session it makes and the TUI shows (an opencode started to resume a session registers that one, at its first message) | the socket's peer is the registered process; the plugin wakes only its own session, with its own copy of the notice |
+| OpenCode | AutoDoc's plugin in the opencode process, on a unix socket | the plugin itself: at load, a session it makes and the TUI shows (an opencode started to resume a session registers that one, at its first message) | the socket's peer is the registered process; the plugin wakes only its own session, with its own copies of the notices, picked by its mail mode |
 
 - A locator never carries a secret, and one outside the CLI's own socket folders, or not on
   loopback, is refused at registration. The daemon never connects to an arbitrary host.
@@ -520,7 +520,8 @@ goes through shell commands its rules would have to allow.
 - A session reads its mail one way, the way its setup delivered: `crew setup` answers `mail_via`
   (`mcp` only when the kind put the crew MCP server in its start), the host registers the session
   with it (`crew.register`'s `mail_via`), and the daemon keeps it with the session. Its wake notice
-  (`crew.NoticeFor`), its guide (`crew.guide`'s `mail_via`) and `crew.list`'s `mail_via` follow it,
+  (`crew.NoticeFor`; OpenCode's plugin, which wakes its session itself, is told the mode by crew
+  setup's env, `AUTODOC_CREW_MAIL_VIA`, always set, and picks the same fixed notice), its guide (`crew.guide`'s `mail_via`) and `crew.list`'s `mail_via` follow it,
   whatever its kind usually does. A host from before it says nothing, and its sessions read their
   mail as their kind's do (`crew.MailViaOf`: agy's through MCP, the others' through the CLI). A
   session on MCP mail is allowed its tools alone and no shell rule for its mail: Claude Code's exact
