@@ -74,14 +74,20 @@ func newCrewDaemon(t *testing.T) *crewDaemon {
 // context file's path, which the agent is told; store is the context's store id.
 func (d *crewDaemon) agent(codename, instance, store string) string {
 	d.t.Helper()
+	return d.agentOfKind(codename, instance, store, "claude")
+}
+
+// agentOfKind is agent for a session of kind (crew.KindOpenCode, …).
+func (d *crewDaemon) agentOfKind(codename, instance, store, kind string) string {
+	d.t.Helper()
 	secret := strings.Repeat("s", 32) + instance
 	r, err := d.deps.crew.Register(d.ctx, crew.Registration{Scope: "autodoc:aaaa", Run: d.run, Epoch: d.ep,
-		Codename: codename, Kind: "claude", Workspace: "w", Instance: instance, Secret: secret})
+		Codename: codename, Kind: kind, Workspace: "w", Instance: instance, Secret: secret})
 	if err != nil {
 		d.t.Fatal(err)
 	}
 	path, err := crew.WriteContext(d.t.TempDir(), sessionContext{Store: store, Socket: d.sock, Scope: "autodoc:aaaa", Profile: r.Profile,
-		Session: r.Session, Credential: crew.Credential(r.Session, secret), Kind: "claude"})
+		Session: r.Session, Credential: crew.Credential(r.Session, secret), Kind: kind})
 	if err != nil {
 		d.t.Fatal(err)
 	}
