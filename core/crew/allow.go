@@ -7,9 +7,23 @@ import "slices"
 // these, each named, never `autodoc *`. The allowance is written only where the session's own CLI
 // reads it (its folder's settings, or its setup's argv or env), never in the user's own config.
 var GuideCommands = []string{
-	"mail receive", "mail ack", "mail reply", "mail send", "mail inbox",
+	"mail receive", "mail ack", "mail reply", "mail send", "mail inbox", "mail show",
 	"crew whoami", "crew list", "crew endpoint", "crew attention", "crew bridge",
+	ContractsCommand,
 }
+
+// ContractsCommand is the read-only command the written guide prints a verb's contract with, the
+// verb tables it leaves out (token item 2), with no daemon: allowed in either mail mode
+// (ClaudeContractsAllow, AgyContractsAllow).
+const ContractsCommand = "--contracts"
+
+// ClaudeContractsAllow is Claude Code's rule for ContractsCommand, as ClaudeAllow spells it: a
+// session on MCP mail is allowed it beside its tools.
+const ClaudeContractsAllow = "Bash(autodoc " + ContractsCommand + ":*)"
+
+// AgyContractsAllow is agy's rule for ContractsCommand: agy matches each of a command rule's words
+// in order, so the command with any arguments after it.
+const AgyContractsAllow = "command(autodoc " + ContractsCommand + ")"
 
 // ClaudeAllow is Claude Code's permissions.allow for the guide's commands: one Bash rule per
 // command, matching it and its arguments.
@@ -29,10 +43,12 @@ var earlierClaudeAllow = []string{}
 // for a tool is mcp(<server>/<tool>).
 const MCPServerName = "autodoc"
 
-// ClaudeMCPAllow is Claude Code's permissions.allow for the crew MCP server's tools: one exact
-// mcp__<server>__<tool> rule each, what a session on MCP mail is allowed in place of ClaudeAllow.
+// ClaudeMCPAllow is what a Claude Code session on MCP mail is allowed in place of ClaudeAllow: the
+// read-only contracts (ClaudeContractsAllow), and the crew MCP server's tools, one exact
+// mcp__<server>__<tool> rule each.
 func ClaudeMCPAllow() []string {
-	out := make([]string, 0, len(MCPToolArgs))
+	out := make([]string, 0, 1+len(MCPToolArgs))
+	out = append(out, ClaudeContractsAllow)
 	for _, name := range MCPToolNames() {
 		out = append(out, "mcp__"+MCPServerName+"__"+name)
 	}

@@ -137,10 +137,14 @@ var crewCommands = map[string]crewCommand{
 		call: func(c sessionContext, _ *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "crew.whoami", []any{c.Credential, c.Store}, nil, nil
 		}},
-	"crew list": {usage: "the addressbook: every codename, its scope, presence and reachability",
+	"crew list": {usage: "[--all]: the addressbook: every codename, its scope, presence and reachability; a profile whose session ended only with --all",
 		example: "autodoc crew list",
-		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
-			return "crew.list", nil, nil, nil
+		flags:   func(fs *flag.FlagSet) { fs.Bool("all", false, "also the profiles whose session ended") },
+		call: func(_ sessionContext, fs *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
+			if fs.Lookup("all").Value.(flag.Getter).Get().(bool) {
+				return "crew.list", nil, nil, nil
+			}
+			return "crew.list", nil, withoutEnded, nil
 		}},
 	"crew endpoint": {usage: "--claude | --codex-thread ID | --codex-here [--since T] [--wait D] | --opencode SESSION | <kind> <locator JSON>: register how this session is woken (--claude: Claude Code's SessionStart hook runs it; --codex-thread: a Codex agent, with its $CODEX_THREAD_ID; --codex-here: this folder's Codex session, found on Codex's app-server, which AutoDoc runs as a Codex agent starts; --opencode: AutoDoc's OpenCode plugin runs it)",
 		example: "autodoc crew endpoint --codex-thread \"$CODEX_THREAD_ID\"",
@@ -271,6 +275,12 @@ var crewCommands = map[string]crewCommand{
 		call: func(c sessionContext, fs *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "mail.inbox", []any{c.Credential, int64(intFlag(fs, "limit"))}, nil, nil
 		}},
+	"mail show": {usage: "<id>: a delivery you hold, read again (a body cut short); its lease stays as it was",
+		example: "autodoc mail show <id from mail receive>",
+		call: func(c sessionContext, fs *flag.FlagSet, args []string, stdin io.Reader) (string, []any, func(any) any, error) {
+			method, params, _, err := leaseCall("mail.show")(c, fs, args, stdin)
+			return method, params, shownItem, err
+		}},
 	"mail ack": {usage: "<id>: done with a delivery",
 		example: "autodoc mail ack <id from mail receive>",
 		call:    leaseCall("mail.ack")},
@@ -294,7 +304,7 @@ var crewCommands = map[string]crewCommand{
 			}
 			// one response per request: the delivery is the key, so a retry after a lost answer
 			// gets that response back
-			return "mail.reply", []any{c.Credential, d, l, body, mail.ReplyKey(d), strFlag(fs, "subject")}, nil, nil
+			return "mail.reply", []any{c.Credential, d, l, body, mail.ReplyKey(d), strFlag(fs, "subject")}, withoutEcho, nil
 		}},
 	"mail send": {usage: "<to>... [--kind request] [--subject S] [--ttl 1h] [--key K] --body TEXT|-: send mail; to is a codename, name@scope, user or session:<id>",
 		example: "autodoc mail send tifa-lockhart --kind request --subject \"Review\" --body \"Please review the plan in docs/plan.md.\"",
@@ -325,7 +335,7 @@ var crewCommands = map[string]crewCommand{
 			for i, a := range args {
 				to[i] = a
 			}
-			return "mail.send", []any{c.Credential, to, body, key, kind, subject, ttlSeconds(ttl)}, nil, nil
+			return "mail.send", []any{c.Credential, to, body, key, kind, subject, ttlSeconds(ttl)}, withoutEcho, nil
 		}},
 }
 
@@ -385,38 +395,94 @@ func sendKey(to []string, kind, subject, body string, ttl time.Duration) string 
 	return "cli:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// withHandles gives each received delivery the id the other commands take, delivery and lease,
-// and the command that answers it (answer): a request's reply, a message's ack. An agent runs the
-// command it is given, and builds no id of its own (a message's id with a delivery's lease is
-// none).
+// withHandles prints each received delivery as an agent needs it, its delivery named once (token
+// item 4): id, the delivery and the lease it holds, which the other commands take (the delivery's
+// id and lease aren't printed again); answer, the command that answers it with `<id>` in place of
+// that id; from; its attempts and lease_until; and its message, whose sender profile is left out
+// beside from. An agent builds no id of its own (a message's id with a delivery's lease is none).
 func withHandles(v any) any {
 	res, ok := v.(map[string]any)
 	if !ok {
 		return v
 	}
 	items, _ := res["deliveries"].([]any)
-	for _, it := range items {
-		item, ok := it.(map[string]any)
-		if !ok {
-			continue
+	for i, it := range items {
+		items[i] = handled(it)
+	}
+	return res
+}
+
+// shownItem is mail show's item, printed as mail receive prints one.
+func shownItem(v any) any { return handled(v) }
+
+// handled is one received item as withHandles prints it; anything else is left as it is.
+func handled(v any) any {
+	item, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	d, ok := item["delivery"].(map[string]any)
+	if !ok {
+		return v
+	}
+	id, _ := d["id"].(string)
+	lease, _ := d["lease"].(string)
+	out := map[string]any{"id": handle(id, lease), "answer": answerCommand(item), "from": item["from"],
+		"attempts": d["attempts"], "lease_until": d["lease_until"]}
+	if m, ok := item["message"].(map[string]any); ok {
+		if from, _ := item["from"].(string); from != "" {
+			delete(m, "sender")
 		}
-		if d, ok := item["delivery"].(map[string]any); ok {
-			id, _ := d["id"].(string)
-			lease, _ := d["lease"].(string)
-			item["id"] = handle(id, lease)
-			item["answer"] = answerCommand(item, handle(id, lease))
+		out["message"] = m
+	}
+	return out
+}
+
+// answerCommand is the command that answers a received item, run with its id in place of `<id>`:
+// a request is replied to (which acks it), anything else acked.
+func answerCommand(item map[string]any) string {
+	if m, _ := item["message"].(map[string]any); m != nil && m["kind"] == mail.KindRequest {
+		return `autodoc mail reply <id> --body "<your reply>"`
+	}
+	return "autodoc mail ack <id>"
+}
+
+// withoutEcho is a send's or a reply's result without what the caller already has (token item 3):
+// its message's body and sender (the caller), and of each delivery only its recipient and state.
+func withoutEcho(v any) any {
+	res, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	if m, ok := res["message"].(map[string]any); ok {
+		delete(m, "body")
+		delete(m, "sender")
+	}
+	if ds, ok := res["deliveries"].([]any); ok {
+		for i, d := range ds {
+			if d, ok := d.(map[string]any); ok {
+				ds[i] = map[string]any{"recipient": d["recipient"], "state": d["state"]}
+			}
 		}
 	}
 	return res
 }
 
-// answerCommand is the command that answers a received item h: a request is replied to (which acks
-// it), anything else acked.
-func answerCommand(item map[string]any, h string) string {
-	if m, _ := item["message"].(map[string]any); m != nil && m["kind"] == mail.KindRequest {
-		return "autodoc mail reply " + h + ` --body "<your reply>"`
+// withoutEnded is the addressbook without the profiles whose session ended (token item 5): who can
+// be reached, or may come back. crew list --all shows them.
+func withoutEnded(v any) any {
+	rows, ok := v.([]any)
+	if !ok {
+		return v
 	}
-	return "autodoc mail ack " + h
+	out := make([]any, 0, len(rows))
+	for _, r := range rows {
+		if e, ok := r.(map[string]any); ok && e["presence"] == crew.PresenceEnded {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // isCrewCommand reports whether args are an `autodoc crew|mail` subcommand, not the flag modes.
@@ -535,8 +601,7 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 		}
 		return 1
 	}
-	enc := json.NewEncoder(stdout)
-	enc.SetIndent("", "  ")
+	enc := json.NewEncoder(stdout) // one line: an agent reads it, each byte paid for (token item 4)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(res); err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)

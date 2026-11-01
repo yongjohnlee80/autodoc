@@ -754,7 +754,7 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string, via crew.MailV
 	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
 	b.WriteString(editorGuide)
 	b.WriteString("---\n\n")
-	b.WriteString(autodoc.AgentsGuide)
+	b.WriteString(autodoc.WrittenAgentsGuide())
 	return b.String()
 }
 

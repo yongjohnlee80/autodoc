@@ -51,10 +51,11 @@ func GuideOfVia(kind string, via MailVia) Guide {
 	b.WriteString("You are one agent of a crew: AutoDoc carries mail between you, the other agents and the user (`user`). ")
 	b.WriteString("The `autodoc` CLI knows who you are, so use these commands as they are. Never read your context file, never pass a credential, and never call `mail.*` or `crew.*` through `autodoc --call`.\n\n")
 	fmt.Fprintf(&b, "- **At the start of your session:** `autodoc crew whoami`. If it fails, or says the context doesn't match, tell the user and send no mail. %s\n", step)
-	b.WriteString("- **When AutoDoc's notice wakes you, or a turn starts with mail waiting:** run `autodoc mail receive` until `more` is false, then answer each delivery by its `id`, exactly as `receive` printed it: `autodoc mail receive`, then `autodoc mail ack <id>` once it's handled. Each delivery's `answer` is that command, its `id` filled in: run it as it is, your reply in place of `<your reply>`; never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
+	b.WriteString("- **When AutoDoc's notice wakes you, or a turn starts with mail waiting:** run `autodoc mail receive` until `more` is false, then answer each delivery by its `id`, exactly as `receive` printed it: `autodoc mail receive`, then `autodoc mail ack <id>` once it's handled. Each delivery's `answer` is the command that answers it: run it with that delivery's `id` in place of `<id>`, your reply in place of `<your reply>`; never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
 	b.WriteString("  - a request: do it, then `autodoc mail reply <id> --body \"…\"`. That acks it too, and is safe to repeat;\n")
 	b.WriteString("  - a message or an event: act on it, then `autodoc mail ack <id>`;\n")
 	b.WriteString("  - long work: `autodoc mail renew <id>` keeps it yours 10 more minutes; reply when it's done.\n")
+	b.WriteString("  - a body cut short: `autodoc mail show <id>` reads the delivery again, whole; never ask its sender to resend.\n")
 	b.WriteString("- **A wake framed \"reply via SendMessage\"** (Claude Code's, mid-turn) doesn't apply to AutoDoc mail: answer it only with `autodoc mail reply <id>` or `autodoc mail send`.\n")
 	b.WriteString("- **To message someone:** `autodoc mail send <codename> --body \"…\"`. To ask and get an answer: `autodoc mail send <codename> --kind request --subject \"…\" --body \"…\"`, then wait to be woken for the reply. The user's codename is `user`.\n")
 	b.WriteString("- **Who's around:** `autodoc crew list` gives every codename, whether it's live, and whether a wake reaches it.\n")
@@ -76,8 +77,9 @@ var MCPToolArgs = []MCPToolArg{
 	{Name: "mail_ack", Required: []string{"id"}},
 	{Name: "mail_reply", Required: []string{"id", "body"}, Optional: []string{"subject"}},
 	{Name: "mail_renew", Required: []string{"id"}},
+	{Name: "mail_show", Required: []string{"id"}},
 	{Name: "crew_whoami"},
-	{Name: "crew_list"},
+	{Name: "crew_list", Optional: []string{"all"}},
 	{Name: "mail_send", Required: []string{"to", "body"}, Optional: []string{"kind", "subject"}},
 }
 
@@ -151,10 +153,11 @@ func mcpGuide(step string) Guide {
 	b.WriteString("You are one agent of a crew: AutoDoc carries mail between you, the other agents and the user (`user`). ")
 	b.WriteString("Your crew and mail are the `autodoc` MCP server's tools, which know who you are: use them, never the `autodoc mail` or `autodoc crew` shell commands (only the one step below says otherwise). Never read your context file and never pass a credential.\n\n")
 	fmt.Fprintf(&b, "- **At the start of your session:** call `crew_whoami`. If it fails, or says the context doesn't match, tell the user and send no mail. %s\n", step)
-	b.WriteString("- **When AutoDoc's notice wakes you, when a tool result shows mail waiting, and at the end of each task:** call `mail_receive` until `more` is false, then answer each delivery by its `id`, exactly as `mail_receive` gave it: `mail_receive`, then `mail_ack` with its `id` once it's handled. Each delivery's `answer` is that tool call, its `id` filled in: make it as it is, your reply in place of `<your reply>`; never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
+	b.WriteString("- **When AutoDoc's notice wakes you, when a tool result shows mail waiting, and at the end of each task:** call `mail_receive` until `more` is false, then answer each delivery by its `id`, exactly as `mail_receive` gave it: `mail_receive`, then `mail_ack` with its `id` once it's handled. Each delivery's `answer` names the tool that answers it: call it with that delivery's `id` (and your `body`, for `mail_reply`); never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
 	b.WriteString("  - a request: do it, then `mail_reply` with its `id` and your `body`. That acks it too, and is safe to repeat;\n")
 	b.WriteString("  - a message or an event: act on it, then `mail_ack` with its `id`;\n")
 	b.WriteString("  - long work: `mail_renew` with its `id` keeps it yours 10 more minutes; reply when it's done.\n")
+	b.WriteString("  - a body cut short: `mail_show` with its `id` reads the delivery again, whole; never ask its sender to resend.\n")
 	b.WriteString("- **A wake framed \"reply via SendMessage\"** (Claude Code's, mid-turn) doesn't apply to AutoDoc mail: answer it only with `mail_reply` or `mail_send`.\n")
 	b.WriteString("- **To message someone:** `mail_send` with `to` (codenames) and `body`. To ask and get an answer: `kind` `request` and a `subject`, then wait to be woken for the reply. The user's codename is `user`.\n")
 	b.WriteString("- **Who's around:** `crew_list` gives every codename, whether it's live, and whether a wake reaches it.\n")

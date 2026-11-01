@@ -190,7 +190,7 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	if err != nil {
 		return err
 	}
-	allow := []string{"command(" + AgyBridgeCommand + ")"}
+	allow := []string{"command(" + AgyBridgeCommand + ")", AgyContractsAllow}
 	for _, sv := range in.Servers {
 		for _, t := range sv.Tools {
 			allow = append(allow, "mcp("+sv.Name+"/"+t+")")
@@ -269,9 +269,9 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 			return err
 		}
 		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
-		// least privilege: a session on MCP mail is allowed its tools alone, never the guide's shell
-		// commands, which it doesn't run
-		s.Allow = []string{}
+		// least privilege: a session on MCP mail is allowed its tools, and of the guide's shell commands
+		// only the read-only contracts, which its guide points to
+		s.Allow = []string{ClaudeContractsAllow}
 		for _, sv := range in.Servers {
 			for _, t := range sv.Tools {
 				s.Allow = append(s.Allow, "mcp__"+sv.Name+"__"+t)
