@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -39,6 +40,10 @@ type modelPanel struct {
 	removal     *modelRemoval
 	addMenu     func() []widget.MenuItemModel
 	tabMenu     func(widget.TerminalTabID) []widget.MenuItemModel
+	// starts runs a tab's starter at Start, as the terminal does, and keeps what each failed one
+	// said on its screen (reported, tab: error); unset, Start only marks the tab running
+	starts   bool
+	reported []string
 }
 
 func (p *modelPanel) SameOwner(other TerminalPanel) bool {
@@ -79,6 +84,13 @@ func (p *modelPanel) Select(id widget.TerminalTabID) error {
 func (p *modelPanel) Start(id widget.TerminalTabID) error {
 	if p.startErr != nil {
 		return p.startErr
+	}
+	if cfg, ok := p.configs[id]; ok && p.starts && cfg.Start != nil {
+		// as the terminal does: its starter's error is shown in the tab, which stays stopped
+		if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err != nil {
+			p.reported = append(p.reported, string(id)+": "+err.Error())
+			return err
+		}
 	}
 	for i := range p.tabs {
 		if p.tabs[i].ID == id {
