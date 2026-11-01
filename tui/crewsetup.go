@@ -45,15 +45,16 @@ func crewSetupOf(bin, config, kind, dir string, environ []string) (crew.Setup, e
 }
 
 // crewSetupArgs is crewSetupOf's command line: the config, the kind, the window's host, the agent's
-// own wrapper as the command its hooks and its MCP server run, and its folder. Never an environment
-// value of the profile's.
+// own wrapper as the command its hooks and its MCP server run, its folder, and --mail-via mcp (the
+// window registers the session with the mail_via it is answered). Never an environment value of
+// the profile's.
 func crewSetupArgs(config, kind, dir string) []string {
 	args := []string{}
 	if config != "" {
 		args = append(args, "--config", config)
 	}
 	return append(args, "crew", "setup", "--kind", kind, "--host", crew.HostWindow,
-		"--autodoc", shellQuote(filepath.Join(dir, "bin", "autodoc")), "--agent-dir", dir)
+		"--autodoc", shellQuote(filepath.Join(dir, "bin", "autodoc")), "--agent-dir", dir, "--mail-via", "mcp")
 }
 
 // askSetup runs kind's setup for the agent folder dir under environ off the loop, as the crew
