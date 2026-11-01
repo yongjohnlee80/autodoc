@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+
+	"github.com/yongjohnlee80/golib/errs"
 )
 
 // SetupSince, in an After step's argument, is the agent's start, as Unix seconds.
@@ -54,11 +56,16 @@ type MCPServer struct {
 }
 
 // FolderFile is a file a host writes into the agent's own folder (SetupInput.AgentDir): a CLI's
-// folder-scoped configuration, never a user-level file and never the user's project.
+// folder-scoped configuration, never a user-level file and never the user's project. Its Path is
+// local (filepath.IsLocal: relative, no "..", nothing outside the folder): SetupFor refuses any
+// other. A host writes it with mode 0600, since it may name the session's context.
 type FolderFile struct {
 	Path    string `json:"path"` // relative to SetupInput.AgentDir
 	Content string `json:"content"`
 }
+
+// ErrFolderFile is a setup whose folder file would land outside the agent's own folder.
+var ErrFolderFile = errs.Sentinel(errs.ErrInvalidArgument, "crew: a folder file's path must stay inside the agent's folder")
 
 // SetupFile is a user-level file a kind needs, outside AutoDoc's folders: reported with its state,
 // and installed only by its own command, at the user's say.
@@ -108,6 +115,11 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 	if f := kindSetups[in.Kind]; f != nil {
 		if err := f(in, cache, &s); err != nil {
 			return Setup{}, err
+		}
+	}
+	for _, f := range s.FolderFiles {
+		if !filepath.IsLocal(f.Path) || in.AgentDir == "" {
+			return Setup{}, fmt.Errorf("%w: %q", ErrFolderFile, f.Path)
 		}
 	}
 	return s, nil

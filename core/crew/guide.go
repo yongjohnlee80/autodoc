@@ -75,6 +75,16 @@ var MCPToolArgs = []MCPToolArg{
 	{Name: "mail_send", Required: []string{"to", "body"}, Optional: []string{"kind", "subject"}},
 }
 
+// MCPToolNames are MCPToolArgs' names, in order: the crew MCP server's tools, the one list a host's
+// setup spells its per-tool allow rules from (MCPServer.Tools).
+func MCPToolNames() []string {
+	names := make([]string, 0, len(MCPToolArgs))
+	for _, t := range MCPToolArgs {
+		names = append(names, t.Name)
+	}
+	return names
+}
+
 // MCPToolArg is one tool of MCPToolArgs: its name and its arguments, in the order the guide says them.
 type MCPToolArg struct {
 	Name               string
