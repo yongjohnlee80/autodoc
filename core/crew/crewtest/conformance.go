@@ -436,10 +436,20 @@ func Run(t *testing.T, h Harness) {
 		if _, err := m.Register(ctx, shifted); !errors.Is(err, crew.ErrInstanceReused) {
 			t.Errorf("a replay whose fields shift across the separator: %v, want ErrInstanceReused", err)
 		}
-		if _, err := m.Register(ctx, reg(e, "jarvis", "agent-2")); !errors.Is(err, crew.ErrCodenameBusy) {
-			t.Fatalf("a second live session of the codename: %v, want ErrCodenameBusy", err)
+		// The scope's owner registering the codename again under its epoch has lost the live session's
+		// process (a ghost): the new session supersedes it, which ends 'takeover'.
+		sup, err := m.Register(ctx, reg(e, "jarvis", "agent-4"))
+		if err != nil || sup.Profile != got.Profile || sup.Session == got.Session {
+			t.Fatalf("the owner's second live session of the codename: %+v, %v; want the first superseded", sup, err)
 		}
-		if err := m.Exit(ctx, scope, "run-a", e, got.Session, crew.EndedExit); err != nil {
+		var first crew.Session
+		if err := store.Read(ctx, func(tx crew.Tx) error { var err error; first, _, err = tx.Session(got.Session); return err }); err != nil {
+			t.Fatal(err)
+		}
+		if first.Ended == nil || first.EndedWhy != crew.EndedTakeover {
+			t.Fatalf("the superseded session: %+v, want ended 'takeover'", first)
+		}
+		if err := m.Exit(ctx, scope, "run-a", e, sup.Session, crew.EndedExit); err != nil {
 			t.Fatalf("exit: %v", err)
 		}
 		if _, err := m.Register(ctx, r); !errors.Is(err, crew.ErrInstanceReused) {
@@ -851,13 +861,14 @@ func Run(t *testing.T, h Harness) {
 			t.Fatal(err)
 		}
 		clock.Advance(91 * time.Second)
-		if got := list(); got[0].Presence != crew.PresenceOffline {
-			t.Fatalf("a lapsed host's agent: %s, want offline", got[0].Presence)
+		if got := list(); got[0].Presence != crew.PresenceOffline || got[0].Reachable || got[0].Why != crew.WhyHostGone {
+			t.Fatalf("a lapsed host's agent: %+v, want offline, unreachable, why %s", got[0], crew.WhyHostGone)
 		}
 		young := crew.New(store, crew.WithSessionEnder(enders), crew.WithStarted(clock.Now().Add(-10*time.Second)))
-		if got, err := young.List(ctx); err != nil || got[0].Presence != crew.PresenceReconnecting {
-			t.Fatalf("a lapsed host on a daemon 10 s old: %+v, %v; want reconnecting", got, err)
+		if got, err := young.List(ctx); err != nil || got[0].Presence != crew.PresenceReconnecting || !got[0].Reachable {
+			t.Fatalf("a lapsed host on a daemon 10 s old: %+v, %v; want reconnecting, still reachable (it may be coming back)", got, err)
 		}
+		clock.Advance(-91 * time.Second) // the host back within its lease: what its wakes say
 		setWake := func(failures int64, next *int64) {
 			t.Helper()
 			if err := store.Write(ctx, func(tx crew.Tx) error {
@@ -881,7 +892,6 @@ func Run(t *testing.T, h Harness) {
 		if got := list(); got[0].Reachable || got[0].Why != crew.WhyWakesFailing {
 			t.Fatalf("an agent after 5 failed wakes: %+v, want unreachable, %s", got[0], crew.WhyWakesFailing)
 		}
-		clock.Advance(-91 * time.Second) // the host back within its lease, to exit cleanly
 		if err := m.Exit(ctx, scope, "run-a", e, vision.Session, crew.EndedExit); err != nil {
 			t.Fatal(err)
 		}

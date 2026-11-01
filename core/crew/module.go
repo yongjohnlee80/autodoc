@@ -239,7 +239,7 @@ func (m *Manager) Verbs() []module.Verb {
 				return GuideOfVia(p.Kind, v), nil
 			}),
 		module.Handle(module.Contract{Verb: "crew.list", Since: Protocol, Audience: module.AudienceAgent,
-			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable, prompts_reported, why}]", Doc: "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>."},
+			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable, prompts_reported, why}]", Doc: "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>."},
 			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),
 		module.Handle(host("crew.exit", "{}",
 			"A session ended; its bound deliveries fail (session_ended).", CodeStaleEpoch, CodeBadCredential),

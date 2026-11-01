@@ -292,11 +292,19 @@ func (m *Manager) Reserve(ctx context.Context, session, run string, kinds []stri
 		if w.State != WakeIdle || w.PendingGen <= w.AnnouncedGen || (w.NextAt != nil && *w.NextAt > now) {
 			return nil
 		}
-		if _, err := guardSession(tx, session); err != nil {
+		s, err := guardSession(tx, session)
+		if err != nil {
 			if errors.Is(err, ErrBadCredential) || errors.Is(err, ErrStaleEpoch) {
 				return nil // ended or fenced meanwhile: nothing to wake
 			}
 			return err
+		}
+		if gone, err := m.hostGone(tx, s, time.Unix(0, now)); err != nil {
+			return err
+		} else if gone { // its process went with its host: tried again a lease later, never failed
+			later := now + int64(leaseTTL)
+			w.NextAt = &later
+			return tx.PutWake(w)
 		}
 		e, has, err := tx.Endpoint(session)
 		if err != nil || !has {

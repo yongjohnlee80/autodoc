@@ -97,7 +97,8 @@ func checkRegistration(r Registration) error {
 //   - a session for (scope, epoch, instance) exists: a replay, answered with the same session, only
 //     if its secret and immutable arguments match and it has not ended; else ErrInstanceReused;
 //   - otherwise the scope's active profile for the codename is found or made; a live session of
-//     it is ErrCodenameBusy; a profile found takes the new session's kind, since the codename may
+//     it under this host's epoch is the host's lost one (a ghost), ended 'takeover'; one under
+//     another epoch is ErrCodenameBusy; a profile found takes the new session's kind, since the codename may
 //     come back under another CLI; the new session is recorded with its wake row, pending_gen
 //     seeded when the profile already has mail it may receive.
 //
@@ -109,7 +110,7 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 		return Registered{}, err
 	}
 	var out Registered
-	err := m.store.Write(ctx, func(tx Tx) error {
+	err := m.write(ctx, func(tx Tx, after *afterCommit) error {
 		if err := guardHost(tx, r.Scope, r.Run, r.Epoch); err != nil {
 			return err
 		}
@@ -139,10 +140,19 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 				return err
 			}
 		}
-		if _, live, err := tx.LiveSession(p.ID); err != nil {
+		if old, live, err := tx.LiveSession(p.ID); err != nil {
 			return err
 		} else if live {
-			return ErrCodenameBusy
+			// The scope's current owner (guardHost passed) registering a codename whose live session
+			// is its own, under this epoch, has lost that session's process: a host wouldn't start an
+			// agent it still runs. The old session is superseded, so a ghost (a session left live
+			// because its host never sent crew.exit) frees its codename at the next start.
+			if old.Host != r.Scope || old.Epoch != r.Epoch {
+				return ErrCodenameBusy
+			}
+			if err := m.endSession(tx, after, old, EndedTakeover); err != nil {
+				return err
+			}
 		}
 		if p.Kind != r.Kind {
 			p.Kind = r.Kind

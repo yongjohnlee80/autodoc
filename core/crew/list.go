@@ -77,7 +77,7 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				default:
 					e.Presence = PresenceOffline
 				}
-				if e.Reachable, e.Why, err = m.reachability(tx, s.ID, now); err != nil {
+				if e.Reachable, e.Why, err = m.reachability(tx, s, now); err != nil {
 					return err
 				}
 				e.PromptsReported = m.promptsReported(p.Kind, s, now)
@@ -102,7 +102,25 @@ func (m *Manager) Reachable(tx Tx, profile string) (bool, error) {
 	if err != nil || !live {
 		return false, err
 	}
+	if gone, err := m.hostGone(tx, s, tx.Now()); err != nil || gone {
+		return false, err
+	}
 	return sessionReachable(tx, s.ID)
+}
+
+// hostGone reports whether session s's host is known gone at now: its process reference names a
+// dead process, or its lease lapsed while the daemon is older than a lease (a younger daemon can't
+// tell a host coming back from one gone). The session's process went with it: a window killed, with
+// no one left to send crew.exit.
+func (m *Manager) hostGone(tx Tx, s Session, now time.Time) (bool, error) {
+	h, ok, err := tx.Host(s.Host)
+	if err != nil || !ok {
+		return false, err
+	}
+	if procDead(h.Proc) {
+		return true, nil
+	}
+	return now.UnixNano()-h.Renewed > int64(leaseTTL) && now.Sub(m.started) >= leaseTTL, nil
 }
 
 // sessionReachable is whether live session id can be woken: it has an endpoint, and fewer than
@@ -116,8 +134,13 @@ func sessionReachable(tx Tx, id string) (bool, error) {
 	return w.Failures < UnreachableAfter, err
 }
 
-// reachability is sessionReachable, and why the live session id can't be woken now (Why*), at now.
-func (m *Manager) reachability(tx Tx, id string, now time.Time) (bool, string, error) {
+// reachability is sessionReachable, and why the live session s can't be woken now (Why*), at now:
+// its host gone first.
+func (m *Manager) reachability(tx Tx, s Session, now time.Time) (bool, string, error) {
+	if gone, err := m.hostGone(tx, s, now); err != nil || gone {
+		return false, WhyHostGone, err
+	}
+	id := s.ID
 	_, hasEndpoint, err := tx.Endpoint(id)
 	if err != nil || !hasEndpoint {
 		return false, WhyNoEndpoint, err

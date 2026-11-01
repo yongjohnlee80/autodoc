@@ -84,7 +84,7 @@ return {
       since = 37, scope = "global", audience = "agent",
       params = {},
       result = "[{codename, scope, kind, presence, reachable, prompts_reported, why}]",
-      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
+      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
     },
     ["crew.orphans"] = {
       since = 37, scope = "local-peer", audience = "user",
