@@ -17,17 +17,21 @@ import (
 	"time"
 )
 
-// TestThePluginWakesWithTheFixedNoticeAlone: the plugin's notice is WakeNotice, the one it
-// wakes with; it never reads text from a request (a stray connection of the user's can do no more
+// TestThePluginWakesWithTheFixedNoticeAlone: the plugin's notices are WakeNotice and
+// WakeNoticeMCP, and it wakes with the one its session's mail mode names (EnvMailVia mcp: the MCP
+// one; anything else: the CLI's); it never reads text from a request (a stray connection of the user's can do no more
 // than a spurious wake), bounds the request, acts on a whole line alone, refuses a session not its
 // own, keeps its socket in a folder only the user can reach, and never types into the TUI.
 func TestThePluginWakesWithTheFixedNoticeAlone(t *testing.T) {
 	t.Parallel()
 	src := string(opencodePlugin)
 	notice, _ := json.Marshal(WakeNotice)
+	noticeMCP, _ := json.Marshal(WakeNoticeMCP)
 	for what, want := range map[string]string{
 		"the notice is WakeNotice":               "const NOTICE = " + string(notice) + ";",
-		"it wakes with that notice":              `parts: [{ type: "text", text: NOTICE }]`,
+		"the MCP notice is WakeNoticeMCP":        "const NOTICE_MCP = " + string(noticeMCP) + ";",
+		"the mail mode picks it":                 "const notice = process.env." + EnvMailVia + ` === "mcp" ? NOTICE_MCP : NOTICE;`,
+		"it wakes with that notice":              `parts: [{ type: "text", text: notice }]`,
 		"the request is bounded":                 "if (s.data.buf.length > MAX_REQUEST) {",
 		"only a whole line is acted on":          `if (nl < 0) return;`,
 		"another session is refused":             `if (!session || req?.session !== session) return reply(s, { ok: false, refused:`,

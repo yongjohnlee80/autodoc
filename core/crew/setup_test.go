@@ -101,9 +101,11 @@ func TestSetupForOpenCodeLoadsAutoDocsPlugin(t *testing.T) {
 		Theme  string
 		Plugin []string
 	}
-	if err := json.Unmarshal([]byte(s.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil || !slices.Equal(keys, []string{"OPENCODE_CONFIG_CONTENT"}) ||
+	slices.Sort(keys)
+	if err := json.Unmarshal([]byte(s.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil || !slices.Equal(keys, []string{crew.EnvMailVia, "OPENCODE_CONFIG_CONTENT"}) ||
+		s.Env[crew.EnvMailVia] != "cli" ||
 		cfg.Theme != "x" || len(cfg.Plugin) != 1 || !strings.HasSuffix(cfg.Plugin[0], "/opencode/"+crew.OpenCodePluginName) || len(s.Argv) != 0 {
-		t.Errorf("OpenCode's setup: %+v %v, want OPENCODE_CONFIG_CONTENT alone, the agent's own kept and the plugin added", s, err)
+		t.Errorf("OpenCode's setup: %+v %v, want OPENCODE_CONFIG_CONTENT (the agent's own kept and the plugin added) and the plugin's mail mode, cli", s, err)
 	}
 }
 
@@ -407,7 +409,8 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 // TestSetupForOpenCodeTakesTheCrewMCPServer: an OpenCode agent given the crew's MCP server gets it in
 // OPENCODE_CONFIG_CONTENT's mcp key (a local server: its command and args as one list, enabled), the
 // user's own MCP servers and plugins kept, no permission written (OpenCode gates no MCP tool), and its
-// mail via MCP; without servers there is no mcp key, its mail via the CLI.
+// mail via MCP, its plugin told so (EnvMailVia, the wake's notice); without servers there is no mcp
+// key, its mail via the CLI, whatever the host's own environment says (the mutant: the mode unset).
 func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
 	own := `{"mcp":{"mine":{"type":"remote","url":"https://example.invalid/mcp"}},"plugin":["file:///p/mine.js"]}`
@@ -433,13 +436,14 @@ func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	if cfg.MCP["mine"]["url"] != "https://example.invalid/mcp" || !slices.Contains(cfg.Plugin, "file:///p/mine.js") {
 		t.Errorf("the user's own MCP server or plugin was lost: %+v", cfg)
 	}
-	if cfg.Permission != nil || s.MailVia != crew.MailViaMCP {
-		t.Errorf("permission %v, mail via %v: want none written and MCP", cfg.Permission, s.MailVia)
+	if cfg.Permission != nil || s.MailVia != crew.MailViaMCP || s.Env[crew.EnvMailVia] != "mcp" {
+		t.Errorf("permission %v, mail via %v, the plugin's mode %q: want none written and MCP, for the plugin too (its wake's notice)", cfg.Permission, s.MailVia, s.Env[crew.EnvMailVia])
 	}
 	in.Servers = nil
+	in.Env[crew.EnvMailVia] = "mcp" // the host's own value never decides the plugin's mode
 	without, err := crew.SetupFor(in, "")
-	if err != nil || strings.Contains(without.Env["OPENCODE_CONFIG_CONTENT"], `"autodoc":{`) || without.MailVia != crew.MailViaCLI {
-		t.Errorf("without servers: %v %v, want no autodoc MCP server and mail via the CLI", without.Env, err)
+	if err != nil || strings.Contains(without.Env["OPENCODE_CONFIG_CONTENT"], `"autodoc":{`) || without.MailVia != crew.MailViaCLI || without.Env[crew.EnvMailVia] != "cli" {
+		t.Errorf("without servers: %v %v, want no autodoc MCP server and mail via the CLI, for the plugin too", without.Env, err)
 	}
 }
 
