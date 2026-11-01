@@ -174,19 +174,29 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 		t.Fatalf("a saved page's text was sent: %q", got)
 	}
 
-	// unsaved changes: the page as it is now goes in, marked so
-	onLoop(r, func() bool { r.h.core.SetValue("an-unsaved-edit"); return true })
+	// unsaved changes (typed, as a user's are: SetValue loads a text, unmodified): the page as it is
+	// now goes in, marked so
+	// the hand-over brought the agent forward, its tab holding the keyboard: the page takes it back
+	onLoop(r, func() bool { return r.h.p.Call("editor", "forceActiveFocus") == nil })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	r.keys(t, key('i'))
+	r.keys(t, decltest.Type("an-unsaved-edit ")...)
+	r.keys(t, esc())
+	r.waitTyped(t)
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
 	}
 	r.instruct(t, "hand the page to heron", "check the edit")
 	r.s.WaitFor(t, "the unsaved page's request pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "File: plan.md (with unsaved changes: the text below is the page now)\nText:\nan-unsaved-edit\x1b[201~\r")
+		return strings.HasSuffix(reported(report), "File: plan.md (with unsaved changes: the text below is the page now)\n"+
+			"Text:\nan-unsaved-edit the-saved-page-text\n\x1b[201~\r")
 	})
 
 	before := reported(report)
-	// over 8 KiB unsaved: refused before anything is asked
-	onLoop(r, func() bool { r.h.core.SetValue(strings.Repeat("x", 8*1024+1)); return true })
+	// over 8 KiB, an untitled draft: refused before anything is asked
+	if err := r.newBufferRun("", strings.Repeat("x", 8*1024+1)); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +205,7 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 		t.Error("an instruction was asked for a page over the bound")
 	}
 
-	// an empty instruction, then Esc: nothing sent
+	// an empty instruction, then Esc: nothing sent (the draft, short now)
 	onLoop(r, func() bool { r.h.core.SetValue("short"); return true })
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
