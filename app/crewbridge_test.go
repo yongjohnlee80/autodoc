@@ -617,3 +617,37 @@ func TestTheBridgeRegistersAnywayAtItsBound(t *testing.T) {
 		t.Fatalf("an unreadable turn: %v before the registration, want it registered at once", got)
 	}
 }
+
+// TestTheBridgeEndsWithinALookOfItsSessionsEnd: the bridge's every-2-s look (watchPrompts) says
+// the reporter is alive with the session's credential; once the daemon refuses it (the window ended
+// the session: the agent's tab closed), that look stops the bridge, within a few ticks rather than at
+// the next 30-s look. A bridge that outlived its session kept answering wakes for an agent no longer
+// there (a re-parented orphan, cloud-strife's finding, 2026-11-01).
+func TestTheBridgeEndsWithinALookOfItsSessionsEnd(t *testing.T) {
+	f := newFakeBridge()
+	f.prompt = func(context.Context, int) (crew.AgyPrompt, int, error) { return crew.AgyPrompt{}, 0, nil }
+	f.refuse = "crew.attention"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tick := make(chan time.Time)
+	done := make(chan struct{})
+	go func() { defer close(done); f.watchPrompts(ctx, tick, &bytes.Buffer{}) }()
+	stopped := false
+	for i := 0; i < 3 && !stopped; i++ {
+		select {
+		case tick <- time.Now():
+		case <-done:
+			stopped = true
+		}
+	}
+	if !stopped {
+		select {
+		case <-done:
+			stopped = true
+		case <-time.After(2 * time.Second):
+		}
+	}
+	if !stopped {
+		t.Fatalf("the bridge's look kept running after the daemon refused its session's credential (calls %v)", f.calls)
+	}
+}
