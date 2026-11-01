@@ -203,30 +203,6 @@ func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
 	}
 }
 
-// TestSetupForTakesServersWithoutAKindChanging: the daemon's MCP servers (SetupInput.Servers) and the
-// agent's own folder (AgentDir) reach every kind's setup, and change no kind's answer until that
-// kind takes MCP servers: Codex's is the same with and without them, writes no folder file, and
-// reads its mail through the CLI.
-func TestSetupForTakesServersWithoutAKindChanging(t *testing.T) {
-	full := claudeOnPath(t, everyClaudeEvent...)
-	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
-	for _, k := range []string{crew.KindCodex} {
-		in := crew.SetupInput{Kind: k, Host: crew.HostNvim, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir()}
-		without, err := crew.SetupFor(in, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		in.Servers, in.AgentDir = servers, t.TempDir()
-		with, err := crew.SetupFor(in, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(with.Argv, without.Argv) || !maps.Equal(with.Env, without.Env) || len(with.FolderFiles) != 0 || with.MailVia != crew.MailViaCLI {
-			t.Errorf("%s: with servers %+v, without %+v: want the same until the kind takes MCP servers", k, with, without)
-		}
-	}
-}
-
 // TestSetupForAgyGivesItsMailAsMCPTools: an agy agent's setup puts the crew MCP servers' config in
 // its own folder (.agents/mcp_config.json, the servers' command, args and env), and on its command
 // line, for the session alone: each tool allowed by its exact mcp(<server>/<tool>) and the bridge by
@@ -463,5 +439,42 @@ func TestMailViaIsCLIOrMCPOnTheWire(t *testing.T) {
 	var v crew.MailVia
 	if err := v.UnmarshalText([]byte("smtp")); err == nil {
 		t.Error("an unknown mail mode was taken")
+	}
+}
+
+// TestSetupForCodexGetsItsOwnAppServer: a Codex agent given the crew's MCP server gets an app-server
+// of its own (Server, its socket in the agent's folder) with the server on its command line and each
+// crew tool approved by name, never the server's whole default; its TUI attaches to it (--remote);
+// its autodoc is told the socket (EnvCodexServer); its mail is MCP's; its registration step stays.
+// Without servers it is as before: the step alone, the CLI's mail (the mutants: a whole-server
+// default; the TUI given -c overrides, which runs it embedded, off every app-server).
+func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
+	agent := t.TempDir()
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "crew_whoami"}}}
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, AgentDir: agent, Servers: servers}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(agent, crew.CodexServerSocket)
+	want := []string{"codex", "app-server", "--listen", "unix://" + sock,
+		"-c", `mcp_servers.autodoc.command="/x/autodoc"`, "-c", `mcp_servers.autodoc.args=["crew","mcp"]`,
+		"-c", `mcp_servers.autodoc.tools.mail_receive.approval_mode="approve"`, "-c", `mcp_servers.autodoc.tools.crew_whoami.approval_mode="approve"`}
+	if !slices.Equal(s.Server, want) || s.ServerSocket != sock {
+		t.Fatalf("the server %q at %q, want %q at %q", s.Server, s.ServerSocket, want, sock)
+	}
+	if !slices.Equal(s.Argv, []string{"--remote", "unix://" + sock}) || s.Env[crew.EnvCodexServer] != sock || s.MailVia != crew.MailViaMCP {
+		t.Fatalf("argv %q, env %v, mail via %v: want the TUI on its server, its autodoc told it, MCP mail", s.Argv, s.Env, s.MailVia)
+	}
+	for _, a := range append(slices.Clone(s.Argv), s.Server...) {
+		if strings.Contains(a, "default_tools_approval_mode") {
+			t.Fatalf("a whole-server approval default: %q", a)
+		}
+	}
+	if len(s.After) != 1 || s.After[0][2] != "--codex-here" {
+		t.Fatalf("its registration step: %q", s.After)
+	}
+	cli, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, AgentDir: agent}, "")
+	if err != nil || len(cli.Server) != 0 || len(cli.Argv) != 0 || cli.MailVia != crew.MailViaCLI || len(cli.After) != 1 {
+		t.Fatalf("without servers: %+v %v, want the registration step alone and the CLI's mail", cli, err)
 	}
 }

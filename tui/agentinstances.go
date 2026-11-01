@@ -425,9 +425,36 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		}
 		c.Args = withCommandArgs(c.Args, instance.setup.Argv)
 	}
+	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
+	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
+	// the CLI's terminal if it ends first (agentserver.go)
+	var server *agentServer
+	if instance.crewed && len(instance.setup.Server) > 0 {
+		environ := append(instance.profile.environ(os.Environ()), "AUTODOC_CREW_CONTEXT="+instance.context)
+		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
+			environ = append(environ, k+"="+instance.setup.Env[k])
+		}
+		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, environ)
+		if err != nil {
+			return nil, err
+		}
+		server = srv
+	}
 	proc, err := a.spawn(c)
+	if server != nil {
+		if err != nil {
+			server.stop() // the CLI didn't start: nothing of its server is left
+		} else {
+			proc = bindServer(proc, server)
+		}
+	}
 	if err == nil && instance.crewed {
+		// the CLI's environment, its setup's included: a Codex agent's own app-server
+		// (crew.EnvCodexServer) is where its registration step looks
 		environ := instance.profile.environ(os.Environ())
+		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
+			environ = append(environ, k+"="+instance.setup.Env[k])
+		}
 		a.runAfterSteps(instance.setup.After, instance.context, c.Dir, environ, time.Now())
 	}
 	return proc, err
@@ -443,10 +470,11 @@ func (a *agents) runAfterSteps(after [][]string, ctxFile, dir string, environ []
 	if len(after) == 0 {
 		return
 	}
-	run := a.codexHere
-	if run == nil {
-		bin, config := a.agentBin(), a.agentConfig
-		run = func(args ...string) error { return runAgentAutodoc(bin, config, ctxFile, dir, environ, args...) }
+	run := func(args ...string) error {
+		return runAgentAutodoc(a.agentBin(), a.agentConfig, ctxFile, dir, environ, args...)
+	}
+	if a.codexHere != nil {
+		run = func(args ...string) error { return a.codexHere(environ, args...) }
 	}
 	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
 	for _, step := range after {
