@@ -25,7 +25,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	t.Helper()
 	c := newIdentityHost(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
-	a := newAgents(c, t.TempDir(), "")
+	a := testAgents(c, t.TempDir(), "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail
 	data := t.TempDir()

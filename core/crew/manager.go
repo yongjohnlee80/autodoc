@@ -19,6 +19,7 @@ type Manager struct {
 	started time.Time
 	sched   atomic.Pointer[Scheduler] // the daemon's scheduler, once NewScheduler made it: Watch hears its pokes
 	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
+	refused func(Registration, error) // each refused registration, its secret blanked (WithRefusals); nil tells no one
 
 	// secrets are the endpoint secrets a waker needs and the store never holds (an agy session's
 	// language-server token, docs/decisions/crew.md#wakers-and-the-wake-scheduler), by session,
@@ -178,6 +179,12 @@ func WithStoreID(id string) Option { return func(m *Manager) { m.storeID = id } 
 // WithLongPolls sets the daemon's long-poll limiter, which crew.wait enters: the same one the other
 // modules' long-polls share.
 func WithLongPolls(l *LongPolls) Option { return func(m *Manager) { m.polls = l } }
+
+// WithRefusals sets where each refused crew.register is told (the daemon's log): the registration,
+// its secret blanked, and why (a fenced or stale epoch, a codename taken, an invalid one).
+func WithRefusals(fn func(r Registration, err error)) Option {
+	return func(m *Manager) { m.refused = fn }
+}
 
 // WithSessionEnder sets the mail module's effect of a session's end.
 func WithSessionEnder(e SessionEnder) Option { return func(m *Manager) { m.ender = e } }
