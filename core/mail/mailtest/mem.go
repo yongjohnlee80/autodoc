@@ -31,17 +31,20 @@ type state struct {
 	messages   map[string]mail.Message
 	deliveries map[string]mail.Delivery
 	nextSeq    map[string]int64
+	jobs       map[string]mail.FallbackJob
+	fallbacks  map[string]int64 // crew_host.fallbacks: the epoch each host polled in
 }
 
 func (s state) clone() state {
 	return state{messages: maps.Clone(s.messages), deliveries: maps.Clone(s.deliveries),
-		nextSeq: maps.Clone(s.nextSeq)}
+		nextSeq: maps.Clone(s.nextSeq), jobs: maps.Clone(s.jobs), fallbacks: maps.Clone(s.fallbacks)}
 }
 
 // NewMem is an empty store whose transactions read the time from now.
 func NewMem(now func() time.Time) *Mem {
 	return &Mem{crew: crewtest.NewMem(now), st: state{messages: map[string]mail.Message{},
-		deliveries: map[string]mail.Delivery{}, nextSeq: map[string]int64{}}}
+		deliveries: map[string]mail.Delivery{}, nextSeq: map[string]int64{}, jobs: map[string]mail.FallbackJob{},
+		fallbacks: map[string]int64{}}}
 }
 
 // Write runs fn on copies of the crew and mail state, and commits both if fn succeeds.
@@ -232,6 +235,122 @@ func (t *memTx) NextDeadline() (int64, bool, error) {
 		}
 	}
 	return at, has, nil
+}
+
+// fallbackCandidate is a delivery FallbackDue may answer, whatever the time: queued, never leased,
+// with no job, its recipient live. unreachable says whether that live session can't be woken.
+func (t *memTx) fallbackCandidate(d mail.Delivery) (ok, unreachable bool) {
+	if d.State != mail.Queued || d.Attempts != 0 || d.Lease != "" {
+		return false, false
+	}
+	for _, j := range t.st.jobs {
+		if j.Delivery == d.ID {
+			return false, false
+		}
+	}
+	s, live, _ := t.LiveSession(d.Recipient)
+	if !live {
+		return false, false
+	}
+	p, _, _ := t.Profile(d.Recipient)
+	if takes, _ := t.TakesFallbacks(p.Scope); !takes {
+		return false, false
+	}
+	_, hasEndpoint, _ := t.Endpoint(s.ID)
+	w, _, _ := t.Wake(s.ID)
+	return true, !hasEndpoint || w.Failures >= crew.UnreachableAfter
+}
+
+func (t *memTx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]mail.Delivery, error) {
+	return t.where(func(d mail.Delivery) bool {
+		ok, unreachable := t.fallbackCandidate(d)
+		created := t.st.messages[d.Message].Created
+		return ok && (created <= unansweredBefore || unreachable && created <= unreachableBefore)
+	}, limit), nil
+}
+
+func (t *memTx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) {
+	var at int64
+	has := false
+	for _, d := range t.st.deliveries {
+		ok, gone := t.fallbackCandidate(d)
+		if !ok {
+			continue
+		}
+		due := t.st.messages[d.Message].Created + unanswered
+		if gone {
+			due = t.st.messages[d.Message].Created + unreachable
+		}
+		if !has || due < at {
+			at, has = due, true
+		}
+	}
+	return at, has, nil
+}
+
+func (t *memTx) TakeFallbacks(host string, epoch int64) error {
+	t.st.fallbacks[host] = epoch
+	return nil
+}
+
+func (t *memTx) TakesFallbacks(host string) (bool, error) {
+	h, ok, err := t.Host(host)
+	return ok && t.st.fallbacks[host] == h.Epoch, err
+}
+
+func (t *memTx) FallbackJob(id string) (mail.FallbackJob, bool, error) {
+	j, ok := t.st.jobs[id]
+	return j, ok, nil
+}
+
+// PutFallbackJob keeps mail_fallback's UNIQUE (delivery): a second job for one delivery fails.
+func (t *memTx) PutFallbackJob(j mail.FallbackJob) error {
+	for _, o := range t.st.jobs {
+		if o.Delivery == j.Delivery && o.ID != j.ID {
+			return fmt.Errorf("mailtest: delivery %s already has job %s", j.Delivery, o.ID)
+		}
+	}
+	t.st.jobs[j.ID] = j
+	t.Tx.(interface{ Poke() }).Poke() // a host's mail.fallbacks hears the job (crew.Signals.Wake)
+	return nil
+}
+
+func (t *memTx) FallbackOffers(host string, now int64, limit int) ([]mail.FallbackJob, error) {
+	var out []mail.FallbackJob
+	for _, j := range t.st.jobs {
+		if j.Host == host && (j.State == mail.JobOpen || j.State == mail.JobLeased && j.LeaseUntil != nil && *j.LeaseUntil <= now) {
+			out = append(out, j)
+		}
+	}
+	slices.SortFunc(out, func(a, b mail.FallbackJob) int {
+		return cmp.Or(cmp.Compare(a.Created, b.Created), strings.Compare(a.ID, b.ID))
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (t *memTx) NextFallbackLease(host string) (int64, bool, error) {
+	var at int64
+	has := false
+	for _, j := range t.st.jobs {
+		if j.Host == host && j.State == mail.JobLeased && j.LeaseUntil != nil && (!has || *j.LeaseUntil < at) {
+			at, has = *j.LeaseUntil, true
+		}
+	}
+	return at, has, nil
+}
+
+// Jobs is every fallback job, by creation.
+func (m *Mem) Jobs() []mail.FallbackJob {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := slices.Collect(maps.Values(m.st.jobs))
+	slices.SortFunc(out, func(a, b mail.FallbackJob) int {
+		return cmp.Or(cmp.Compare(a.Created, b.Created), strings.Compare(a.ID, b.ID))
+	})
+	return out
 }
 
 func unhandled(d mail.Delivery) bool { return d.State == mail.Queued || d.State == mail.Leased }

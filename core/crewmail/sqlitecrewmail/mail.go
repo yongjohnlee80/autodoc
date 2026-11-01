@@ -29,11 +29,16 @@ const (
 	cReadAt        col = "read_at"
 	cDoneAt        col = "done_at"
 	cWhy           col = "why"
+	cDelivery      col = "delivery"
+	cTries         col = "tries"
+	cOutcome       col = "outcome"
+	cFallbacks     col = "fallbacks"
 
 	bySeq     sort = "seq"
 	byLease   sort = "lease_until"
 	byExpires sort = "expires"
 	byDone    sort = "done_at"
+	byCreated sort = "created"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -47,6 +52,9 @@ type mailTables struct {
 	messages   *schema[*mail.Message]
 	recipients *schema[*recipientRow]
 	deliveries *schema[*mail.Delivery]
+	jobs       *schema[*mail.FallbackJob]
+	// takers is crew_host as mail writes it: only the epoch its host polled for fallbacks in
+	takers *schema[*fallbackTaker]
 }
 
 var mailDecl = store.Declare("crewmail-mail", newMailTables)
@@ -64,7 +72,8 @@ func newMailTables(c dao.DataConn) *mailTables {
 		dfs[n] = store.Col("mail_delivery", n, scan)
 	}
 	return &mailTables{
-		messages: sortedTable(c, "mail_message", map[sort]string{byExpires: `"mail_message"."expires"`}, map[col]func(*mail.Message) any{
+		messages: sortedTable(c, "mail_message", map[sort]string{byExpires: `"mail_message"."expires"`,
+			byCreated: `"mail_message"."created"`}, map[col]func(*mail.Message) any{
 			cID: func(r *mail.Message) any { return &r.ID }, cSender: func(r *mail.Message) any { return &r.Sender },
 			cSenderSession: func(r *mail.Message) any { return &r.SenderSession }, cIdemKey: func(r *mail.Message) any { return &r.IdemKey },
 			cDigest: func(r *mail.Message) any { return &r.Digest }, cKind: func(r *mail.Message) any { return &r.Kind },
@@ -83,6 +92,18 @@ func newMailTables(c dao.DataConn) *mailTables {
 				byLease: `"mail_delivery"."lease_until"`, byDone: `"mail_delivery"."done_at"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
 		),
+		jobs: sortedTable(c, "mail_fallback", map[sort]string{byCreated: `"mail_fallback"."created", "mail_fallback"."id"`,
+			byLease: `"mail_fallback"."lease_until"`}, map[col]func(*mail.FallbackJob) any{
+			cID: func(r *mail.FallbackJob) any { return &r.ID }, cDelivery: func(r *mail.FallbackJob) any { return &r.Delivery },
+			cMessage: func(r *mail.FallbackJob) any { return &r.Message }, cRecipient: func(r *mail.FallbackJob) any { return &r.Recipient },
+			cHost: func(r *mail.FallbackJob) any { return &r.Host }, cState: func(r *mail.FallbackJob) any { return &r.State },
+			cLease: func(r *mail.FallbackJob) any { return &r.Lease }, cLeaseUntil: func(r *mail.FallbackJob) any { return &r.LeaseUntil },
+			cTries: func(r *mail.FallbackJob) any { return &r.Tries }, cCreated: func(r *mail.FallbackJob) any { return &r.Created },
+			cDoneAt: func(r *mail.FallbackJob) any { return &r.DoneAt }, cOutcome: func(r *mail.FallbackJob) any { return &r.Outcome },
+		}, cID),
+		takers: table(c, "crew_host", map[col]func(*fallbackTaker) any{
+			cID: func(r *fallbackTaker) any { return &r.Host }, cFallbacks: func(r *fallbackTaker) any { return &r.Epoch },
+		}, cID),
 	}
 }
 

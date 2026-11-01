@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 41,
+  protocol = 42,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -521,7 +521,7 @@ return {
         { name = "fire", type = "bool", optional = true }
       },
       result = "{message}",
-      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.unreachable means nothing was left, so the text may be sent some other way; any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
+      doc = "Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.handed_over means the doorbell didn't ring and the host carries the message as a fallback job (mail.fallbacks), so it must be sent no other way; inbox.unreachable means nothing was left, so the text may be sent some other way. Any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
     },
     ["inbox.watch"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -603,6 +603,30 @@ return {
       },
       result = "{}",
       doc = "Done with a delivery under its lease. Replaying an ack of the same lease answers ok.",
+    },
+    ["mail.fallback_done"] = {
+      since = 42, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "job", type = "string" },
+        { name = "lease", type = "string" },
+        { name = "outcome", type = "string" }
+      },
+      result = "{}",
+      doc = "Report what came of a leased job: delivered, typed_not_sent (in the agent's input, waiting on the user's Enter), or unknown (the host can't tell; the user is shown the text). Once: replaying the same lease's report answers ok.",
+    },
+    ["mail.fallbacks"] = {
+      since = 42, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "timeout", type = "int", optional = true }
+      },
+      result = "{jobs[]}",
+      doc = "The host's fallback jobs: deliveries its scope's agents did not receive in time, leased to it for 60 s, each with its message, sender and recipient, answered as soon as there is one or at timeout (at most 25 s). Calling it is what makes the host take jobs, in its current epoch; a host that never calls it keeps its agents' mail queued. A job offered again (its lease lapsed) has tries above 0: deliver it only if the host's own record says it hasn't, else report it. A connection holds at most two long-polls.",
     },
     ["mail.inbox"] = {
       since = 37, scope = "global", audience = "agent",
@@ -1209,6 +1233,7 @@ return {
     { code = -32133, name = "inbox.key_reused", next = "retry the same reply with the same key, or use a new key" },
     { code = -32134, name = "inbox.too_large" },
     { code = -32135, name = "inbox.unreachable", next = "type the text into its prompt, or send without fire to leave it queued" },
+    { code = -32136, name = "inbox.handed_over", next = "send it no other way: the job mail.fallbacks brings the host delivers it" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

@@ -12,6 +12,9 @@ import (
 // (docs/decisions/crew.md#three-modules-and-one-protocol).
 const protocol = crew.Protocol
 
+// fallbackSince is the protocol the fallback's host verbs arrive in (rpc's Protocol 42).
+const fallbackSince = 42
+
 // Name is the module's name: its verbs are mail.*.
 func (m *Manager) Name() string { return "mail" }
 
@@ -64,6 +67,20 @@ type (
 		Credential string `param:"credential"`
 		Timeout    int64  `param:"timeout,optional" doc:"milliseconds to wait for mail, at most 25000"`
 	}
+	fallbacksParams struct {
+		Scope   string `param:"scope" doc:"the scope the host holds"`
+		Run     string `param:"run" doc:"the host's run token"`
+		Epoch   int64  `param:"epoch" doc:"the host's epoch"`
+		Timeout int64  `param:"timeout,optional" doc:"milliseconds to wait for a job, at most 25000"`
+	}
+	fallbackDoneParams struct {
+		Scope   string `param:"scope"`
+		Run     string `param:"run"`
+		Epoch   int64  `param:"epoch"`
+		Job     string `param:"job"`
+		Lease   string `param:"lease" doc:"the lease mail.fallbacks gave"`
+		Outcome string `param:"outcome" doc:"delivered, typed_not_sent, or unknown"`
+	}
 	inboxParams struct {
 		Credential string `param:"credential"`
 		Limit      int64  `param:"limit,optional" doc:"items to show, at most 1000; 0 counts only"`
@@ -113,6 +130,21 @@ type (
 	replyResult struct {
 		Message wireMessage `json:"message"`
 	}
+	wireJob struct {
+		ID         string      `json:"id"`
+		Lease      string      `json:"lease"`
+		LeaseUntil string      `json:"lease_until"`
+		Tries      int64       `json:"tries"` // leases of this job before this one: a retry knows it is one
+		Recipient  string      `json:"recipient"`
+		Codename   string      `json:"codename"` // the recipient's
+		Kind       string      `json:"kind"`     // the recipient's CLI kind
+		From       string      `json:"from"`     // the sender as the recipient would address an answer
+		Message    wireMessage `json:"message"`
+		Text       string      `json:"text"` // what the host types or files for the recipient (FallbackText)
+	}
+	fallbacksResult struct {
+		Jobs []wireJob `json:"jobs"`
+	}
 	readyResult struct {
 		Ready    bool `json:"ready"`
 		TimedOut bool `json:"timed_out"`
@@ -138,6 +170,16 @@ func toWireDelivery(d Delivery) wireDelivery {
 		LeaseUntil: stampOf(d.LeaseUntil), Attempts: d.Attempts, Why: d.Why}
 }
 
+func toWireJobs(offers []Offer) []wireJob {
+	out := make([]wireJob, 0, len(offers))
+	for _, o := range offers {
+		out = append(out, wireJob{ID: o.Job.ID, Lease: o.Job.Lease, LeaseUntil: stampOf(o.Job.LeaseUntil), Tries: o.Job.Tries,
+			Recipient: o.Job.Recipient, Codename: o.Codename, Kind: o.Kind, From: o.From, Message: toWireMessage(o.Message),
+			Text: FallbackText(o.From, o.Message)})
+	}
+	return out
+}
+
 func toWireItems(items []Item) []wireItem {
 	out := make([]wireItem, 0, len(items))
 	for _, it := range items {
@@ -152,6 +194,11 @@ func (m *Manager) Verbs() []module.Verb {
 	agent := func(verb string, effect module.Effect, result, doc string, codes ...int64) module.Contract {
 		return module.Contract{Verb: verb, Since: protocol, Audience: module.AudienceAgent, Effect: effect,
 			Result: result, Errors: append([]int64{crew.CodeBadCredential, crew.CodeStaleEpoch}, codes...), Doc: doc}
+	}
+	// a host's: the scope it holds, its run token and epoch, guarded in the write as crew's are
+	host := func(verb, result, doc string, codes ...int64) module.Contract {
+		return module.Contract{Verb: verb, Since: fallbackSince, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,
+			Effect: module.EffectWrite, Result: result, Errors: append([]int64{crew.CodeStaleEpoch}, codes...), Doc: doc}
 	}
 	return []module.Verb{
 		module.Handle(agent("mail.send", module.EffectWrite, "{message, deliveries[]}",
@@ -202,6 +249,24 @@ func (m *Manager) Verbs() []module.Verb {
 				defer leave()
 				r, err := m.Wait(ctx, p.Credential, time.Duration(p.Timeout)*time.Millisecond)
 				return readyResult{Ready: r.Ready, TimedOut: r.TimedOut}, err
+			}),
+		module.Handle(host("mail.fallbacks", "{jobs[]}",
+			"The host's fallback jobs: deliveries its scope's agents did not receive in time, leased to it for 60 s, each with its message, sender and recipient, answered as soon as there is one or at timeout (at most 25 s). Calling it is what makes the host take jobs, in its current epoch; a host that never calls it keeps its agents' mail queued. A job offered again (its lease lapsed) has tries above 0: deliver it only if the host's own record says it hasn't, else report it. A connection holds at most two long-polls.",
+			crew.CodeLongPollsBusy),
+			func(ctx context.Context, p fallbacksParams) (fallbacksResult, error) {
+				leave, err := m.polls.Enter(module.ConnFrom(ctx))
+				if err != nil {
+					return fallbacksResult{}, err
+				}
+				defer leave()
+				offers, err := m.Fallbacks(ctx, p.Scope, p.Run, p.Epoch, time.Duration(p.Timeout)*time.Millisecond)
+				return fallbacksResult{Jobs: toWireJobs(offers)}, err
+			}),
+		module.Handle(host("mail.fallback_done", "{}",
+			"Report what came of a leased job: delivered, typed_not_sent (in the agent's input, waiting on the user's Enter), or unknown (the host can't tell; the user is shown the text). Once: replaying the same lease's report answers ok.",
+			CodeLeaseLost),
+			func(ctx context.Context, p fallbackDoneParams) (struct{}, error) {
+				return struct{}{}, m.FallbackDone(ctx, p.Scope, p.Run, p.Epoch, p.Job, p.Lease, FallbackOutcome(p.Outcome))
 			}),
 		module.Handle(agent("mail.inbox", module.EffectRead, "{unread, items[]}", "A preview of the caller's eligible mail: never leases."),
 			func(ctx context.Context, p inboxParams) (inboxResult, error) {

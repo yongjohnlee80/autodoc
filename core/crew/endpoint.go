@@ -228,7 +228,7 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 		if !ok {
 			w = Wake{Session: s.ID}
 		}
-		if w.Failures >= unreachableAfter { // reachable again, by its new endpoint: the feed hears that too
+		if w.Failures >= UnreachableAfter { // reachable again, by its new endpoint: the feed hears that too
 			if err := tx.AddInboxChange(ChangeReachability, s.ID); err != nil {
 				return err
 			}

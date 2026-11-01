@@ -141,15 +141,19 @@ func (m *Manager) SendAsUser(ctx context.Context, scope, run string, epoch int64
 const fireBound = 5 * time.Second
 
 // fire rings sent's one recipient's doorbell (crew's Fire, bounded by fireBound): fired, the send
-// stands; not, its delivery is withdrawn and the send is ErrUnreachable. A delivery the recipient
-// leased or acked meanwhile was received: the send stands whatever the doorbell did. A replay of a
-// send already withdrawn is ErrUnreachable again, never a send that stands.
+// stands; not, its delivery is handed over (handOver): ErrHandedOver when its host carries it as a
+// job, else ErrUnreachable, nothing left. A delivery the recipient leased or acked meanwhile was received: the send stands
+// whatever the doorbell did. A replay of a send already withdrawn is ErrUnreachable again, never a
+// send that stands.
 func (m *Manager) fire(ctx context.Context, sent Sent) error {
 	if len(sent.Deliveries) != 1 {
 		return fmt.Errorf("mail: a send to fire has %d deliveries", len(sent.Deliveries))
 	}
 	d := sent.Deliveries[0]
-	if d.State == Withdrawn {
+	if d.State == Withdrawn { // a replay answers as the first send did
+		if d.Why == WhyFallback {
+			return ErrHandedOver
+		}
 		return ErrUnreachable
 	}
 	fctx, cancel := context.WithTimeout(ctx, fireBound)
@@ -158,55 +162,59 @@ func (m *Manager) fire(ctx context.Context, sent Sent) error {
 	if fired && ferr == nil {
 		return nil
 	}
-	// withdrawn, the send is unreachable whatever the doorbell's error was: nothing is left of it. A
-	// withdraw that fails leaves the delivery queued, its outcome unknown to the caller (the store's
-	// error): the next wake delivers it, so the caller must not send it some other way.
-	received, err := m.withdraw(context.WithoutCancel(ctx), d)
+	// handed over, the send is unreachable whatever the doorbell's error was: a host that takes
+	// fallbacks delivers the job, and the caller must not send it some other way; else nothing is
+	// left, and the caller may. A hand-over that fails leaves the delivery queued, its outcome
+	// unknown to the caller (the store's error): the next wake, or expire's fallback, delivers it.
+	received, handed, err := m.handOver(context.WithoutCancel(ctx), d)
 	switch {
 	case err != nil:
 		return err
 	case received:
 		return nil
+	case handed:
+		return ErrHandedOver
 	}
 	return ErrUnreachable
 }
 
-// withdraw ends delivery d, still queued, as Withdrawn: done, never receivable. received is true,
-// and nothing changes, when the recipient leased or acked it first. When the recipient has nothing
-// else queued, its wake is settled (crew's Settled: what was pending, not its failures), so no
-// later wake rings for mail that is gone.
-func (m *Manager) withdraw(ctx context.Context, d Delivery) (received bool, err error) {
+// handOver ends a send to fire whose doorbell never rang, in a write of its own: its recipient's
+// host carries it as a fallback job when that host takes them (TakesFallbacks: handed), else it is
+// withdrawn and the window that sent it types it, as a host that doesn't take jobs always has.
+// received is true, and nothing changes, when the recipient leased or acked it first.
+func (m *Manager) handOver(ctx context.Context, d Delivery) (received, handed bool, err error) {
 	err = m.store.Write(ctx, func(tx Tx) error {
-		cur, ok, err := tx.DeliveryOf(d.Message, d.Recipient)
+		takes, err := takesFallbacks(tx, d.Recipient)
 		if err != nil {
 			return err
 		}
-		if !ok || cur.State != Queued {
-			received = ok && (cur.State == Leased || cur.State == Acked)
-			return nil
-		}
-		now := tx.Now().UnixNano()
-		cur.State, cur.DoneAt, cur.Why = Withdrawn, &now, WhyWithdrawn
-		if err := tx.PutDelivery(cur); err != nil {
+		if takes {
+			received, err = m.fallBack(tx, d)
+			handed = !received
 			return err
 		}
-		// a leased delivery doesn't keep the wake due: its lease lapsing raises pending on its own
-		left, err := tx.Unhandled(cur.Recipient)
-		if err != nil {
-			return err
-		}
-		for _, d := range left {
-			if d.State == Queued {
-				return nil
-			}
-		}
-		s, live, err := tx.LiveSession(cur.Recipient)
-		if err != nil || !live {
-			return err
-		}
-		return m.crew.Settled(tx, s.ID)
+		received, err = m.withdraw(tx, d)
+		return err
 	})
-	return received, err
+	return received, handed, err
+}
+
+// withdraw ends delivery d, still queued, as Withdrawn: done, never receivable. received is true,
+// and nothing changes, when the recipient leased or acked it first.
+func (m *Manager) withdraw(tx Tx, d Delivery) (received bool, err error) {
+	cur, ok, err := tx.DeliveryOf(d.Message, d.Recipient)
+	if err != nil {
+		return false, err
+	}
+	if !ok || cur.State != Queued {
+		return ok && (cur.State == Leased || cur.State == Acked), nil
+	}
+	now := tx.Now().UnixNano()
+	cur.State, cur.DoneAt, cur.Why = Withdrawn, &now, WhyWithdrawn
+	if err := tx.PutDelivery(cur); err != nil {
+		return false, err
+	}
+	return false, m.settleIfDrained(tx, cur.Recipient)
 }
 
 // send is a send's write, in tx, from profile sender (its session senderSession, "" for the user)

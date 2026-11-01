@@ -144,8 +144,9 @@ func (m *Manager) notifySender(tx Tx, d Delivery, why string) error {
 
 // expire makes the time-driven changes real (docs/decisions/crew.md#the-crew-and-mail-tables),
 // first in every write that reads eligibility: a lapsed lease is queued again (its recipient
-// woken), or failed after MaxAttempts; a delivery past its message's expiry is expired. Each one's
-// sender is told.
+// woken), or failed after MaxAttempts; a delivery past its message's expiry is expired, each one's
+// sender told; then a delivery not received in time falls back to its recipient's host
+// (docs/decisions/crew.md#the-fallback-exactly-once).
 func (m *Manager) expire(tx Tx) error {
 	now := tx.Now().UnixNano()
 	for {
@@ -183,7 +184,7 @@ func (m *Manager) expire(tx Tx) error {
 			}
 		}
 		if len(gone) < expireBatch {
-			return nil
+			return m.fallBackDue(tx)
 		}
 	}
 }

@@ -175,7 +175,12 @@ import (
 // the host wrote the hooks that report a Claude session's prompts, without which its
 // prompts_reported is false; and a wake that finds the session's endpoint gone for certain makes it
 // unreachable at once.
-const Protocol int64 = 41
+// Protocol 42 is the fallback (docs/decisions/crew.md#the-fallback-exactly-once): mail.fallbacks,
+// a host's long-poll for the jobs of its scope's deliveries not received in time, which also makes
+// the host take them in its epoch, and mail.fallback_done, its report of each. A host below 42
+// never takes jobs, so its agents' mail stays queued, and an unrung inbox.send is withdrawn for the
+// window to type, as before.
+const Protocol int64 = 42
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

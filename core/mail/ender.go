@@ -172,7 +172,7 @@ func (m *Manager) NextDeadline(ctx crew.Tx) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	return tx.NextDeadline()
+	return m.nextDeadline(tx)
 }
 
 // UnhandledCount is how many of profile's deliveries are queued or leased, for crew.orphans.
