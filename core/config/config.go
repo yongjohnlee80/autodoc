@@ -35,6 +35,17 @@ type Log struct {
 	Level string `toml:"level"`
 }
 
+// ParseLogLevel is v as the logger's severity, any case. Any other name is an error that quotes v and
+// lists the six names, which every log-level setting refuses with (the config's, the server's,
+// --log-level), each behind its own prefix.
+func ParseLogLevel(v string) (logger.Severity, error) {
+	s, err := logger.ParseSeverity(v)
+	if err != nil {
+		return "", fmt.Errorf("%q: want debug, info, notice, warning, error or critical", v)
+	}
+	return s, nil
+}
+
 // Severity is the level as the logger's severity, "" when none is set.
 func (l Log) Severity() logger.Severity {
 	s, _ := logger.ParseSeverity(l.Level)
@@ -142,8 +153,8 @@ func (c *Config) normalize() error {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
 	}
 	if c.Log.Level != "" {
-		if _, err := logger.ParseSeverity(c.Log.Level); err != nil {
-			return fmt.Errorf("%w: log.level %q: want debug, info, notice, warning, error or critical", ErrInvalid, c.Log.Level)
+		if _, err := ParseLogLevel(c.Log.Level); err != nil {
+			return fmt.Errorf("%w: log.level %w", ErrInvalid, err)
 		}
 	}
 	return nil
