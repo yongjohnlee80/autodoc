@@ -1202,6 +1202,7 @@ return {
     { code = -32111, name = "mail.key_reused", next = "a retry sends the same content; new content takes a new key" },
     { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },
     { code = -32113, name = "mail.lease_lost", next = "mail.receive again: the delivery comes back if it is still unhandled" },
+    { code = -32114, name = "mail.ambiguous", next = "send to the one meant by name@scope, as the error names them" },
     { code = -32130, name = "inbox.already_answered", next = "inbox.list shows who answered, and when" },
     { code = -32131, name = "inbox.not_a_request", next = "inbox.ack a report" },
     { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },

@@ -222,7 +222,7 @@ func (m *Manager) Verbs() []module.Verb {
 			}),
 		module.Handle(host("inbox.send", "{message}",
 			"Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.unreachable means nothing was left, so the text may be sent some other way; any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
-			crew.CodeStaleEpoch, mail.CodeNoRecipient, CodeUnreachable, CodeKeyReused, CodeTooLarge),
+			crew.CodeStaleEpoch, mail.CodeNoRecipient, mail.CodeAmbiguous, CodeUnreachable, CodeKeyReused, CodeTooLarge),
 			func(ctx context.Context, p sendParams) (sentResult, error) {
 				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body,
 					Key: p.Key, Fire: p.Fire})
