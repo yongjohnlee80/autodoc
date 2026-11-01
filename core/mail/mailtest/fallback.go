@@ -347,3 +347,44 @@ func testTheUsersUnrungSendIsAJobOfAHostThatTakesThem(t *testing.T, h Harness) {
 			err, r2.st.Inspect.Jobs(), r2.delivery(sent.Deliveries[0].ID))
 	}
 }
+
+// The feed reads a job (inbox.fallback): whose mail it is, from whom, its text and state, and
+// whether its host holds its scope; once its host's lease lapses, the host is away. A delivered
+// job reads done and journals fallback_done; a job the daemon has no row of is ErrNoJob.
+func testTheFeedReadsAJobAndItsHost(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.poll()
+	r.send()
+	r.clock.Advance(30 * time.Second)
+	r.sweep()
+	jobs := r.st.Inspect.Jobs()
+	if len(jobs) != 1 {
+		t.Fatalf("jobs %+v, want one", jobs)
+	}
+	v, err := r.mm.Fallback(r.ctx, jobs[0].ID)
+	if err != nil || v.Job.State != mail.JobOpen || v.Codename != "gold" || v.Scope != "autodoc:w" || v.From != "user" ||
+		!strings.Contains(v.Text, "b") || !strings.Contains(v.Text, "user") || !v.HostPresent {
+		t.Fatalf("an open job, its host renewing: %+v %v", v, err)
+	}
+	r.clock.Advance(2 * time.Minute) // the host's lease (90 s) lapses unrenewed
+	if v, err := r.mm.Fallback(r.ctx, jobs[0].ID); err != nil || v.HostPresent {
+		t.Fatalf("an open job, its host away: %+v %v, want the host away", v, err)
+	}
+	if _, err := r.cm.Claim(r.ctx, "autodoc:w", r.run, ""); err != nil { // the same run reattaches: renewed
+		t.Fatal(err)
+	}
+	offers := r.poll()
+	if len(offers) != 1 {
+		t.Fatalf("offers %+v", offers)
+	}
+	if err := r.mm.FallbackDone(r.ctx, "autodoc:w", r.run, r.epoch, offers[0].Job.ID, offers[0].Job.Lease, mail.FallbackDelivered); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := r.mm.Fallback(r.ctx, jobs[0].ID); err != nil || v.Job.State != mail.JobDone || !v.HostPresent ||
+		r.told(mail.ChangeFallbackDone) != 1 {
+		t.Fatalf("a delivered job: %+v %v, told %d; want done, its host present, fallback_done journaled once", v, err, r.told(mail.ChangeFallbackDone))
+	}
+	if _, err := r.mm.Fallback(r.ctx, "no-such-job"); !errors.Is(err, mail.ErrNoJob) {
+		t.Fatalf("no such job: %v, want ErrNoJob", err)
+	}
+}

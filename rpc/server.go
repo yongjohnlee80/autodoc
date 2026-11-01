@@ -180,7 +180,12 @@ import (
 // the host take them in its epoch, and mail.fallback_done, its report of each. A host below 42
 // never takes jobs, so its agents' mail stays queued, and an unrung inbox.send is withdrawn for the
 // window to type, as before.
-const Protocol int64 = 42
+// Protocol 44 is the fallback in the human's feed (docs/decisions/crew.md#the-fallback-exactly-once):
+// inbox.fallback, the job a feed change of kind fallback, fallback_done or fallback_unknown names,
+// with whether its host holds its scope, so a window says a job waits for an absent host, and gives
+// the text of one whose outcome is unknown; mail.fallback_done of a delivered job journals
+// fallback_done. (43 is another change's.)
+const Protocol int64 = 44
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

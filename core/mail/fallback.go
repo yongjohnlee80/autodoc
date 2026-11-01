@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/golib/errs"
+
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
@@ -304,7 +306,7 @@ func (m *Manager) FallbackDone(ctx context.Context, scope, run string, epoch int
 		if j.State == JobUnknown {
 			return tx.AddInboxChange(ChangeFallbackUnknown, j.ID)
 		}
-		return nil
+		return tx.AddInboxChange(ChangeFallbackDone, j.ID)
 	})
 }
 
@@ -319,4 +321,51 @@ func FallbackText(from string, msg Message) string {
 	}
 	b.WriteString(msg.Body)
 	return b.String()
+}
+
+// ErrNoJob is a fallback job the daemon has no row of.
+var ErrNoJob = errs.Sentinel(errs.ErrInvalidArgument, "mail: no such fallback job")
+
+// FallbackView is one fallback job as the human's feed shows it: whose mail it is, from whom, the
+// text its host delivers, and whether that host holds its scope now.
+type FallbackView struct {
+	Job                         FallbackJob
+	Codename, Scope, From, Text string
+	Subject                     string
+	HostPresent                 bool
+}
+
+// Fallback is the job id, as the human's feed reads it (inbox.fallback): a window shows a job whose
+// host is away as waiting for it, and the text of one whose outcome is unknown.
+func (m *Manager) Fallback(ctx context.Context, id string) (FallbackView, error) {
+	var v FallbackView
+	err := m.store.Read(ctx, func(tx Tx) error {
+		j, ok, err := tx.FallbackJob(id)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%w: %q", ErrNoJob, id)
+		}
+		msg, _, err := tx.Message(j.Message)
+		if err != nil {
+			return err
+		}
+		p, _, err := tx.Profile(j.Recipient)
+		if err != nil {
+			return err
+		}
+		from, err := fromAddress(tx, p.Scope, msg.Sender)
+		if err != nil {
+			return err
+		}
+		h, held, err := tx.Host(j.Host)
+		if err != nil {
+			return err
+		}
+		v = FallbackView{Job: j, Codename: p.Codename, Scope: p.Scope, From: from, Subject: msg.Subject,
+			Text: FallbackText(from, msg), HostPresent: held && crew.HostHolds(h, tx.Now())}
+		return nil
+	})
+	return v, err
 }

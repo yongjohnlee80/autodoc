@@ -5,6 +5,8 @@ import (
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
+	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
 // THE HUMAN'S CREW INBOX IN A WINDOW (docs/decisions/crew.md#the-human-inbox).
@@ -97,11 +99,17 @@ type crewInbox struct {
 	attempt uint64
 	now     func() time.Time // the bell's clock
 	rang    time.Time        // the last ring
+	// fallbacks is the fallback jobs shown as waiting for their absent host, by job: each toast's
+	// text (crewInboxFallback); took says which jobs this window's own crew host took, and told the
+	// user of itself
+	fallbacks map[string]string
+	took      func(job string) bool
 }
 
 func newCrewInbox(c crewInboxCore, raise func(string) bool) *crewInbox {
 	return &crewInbox{c: c, raise: raise, open: map[string]crewOpen{}, reports: map[string]bool{},
-		requests: map[string]crewRequest{}, drafts: map[string]string{}, sending: map[string]uint64{}, now: time.Now}
+		requests: map[string]crewRequest{}, drafts: map[string]string{}, sending: map[string]uint64{}, now: time.Now,
+		fallbacks: map[string]string{}}
 }
 
 func (*crewInbox) Name() string            { return "crewInbox" }
@@ -116,6 +124,7 @@ func (x *crewInbox) Connected() {
 	x.genCtx, x.stopGen = context.WithCancel(context.Background())
 	x.cursor, x.parts, x.retry = 0, snapshotParts{}, 0
 	x.watch(x.gen, "")
+	x.recheckFallbacks() // what changed while the feed was away
 }
 
 // Stopped cancels the watch: the window is closing.
@@ -244,6 +253,8 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 			again = true // the open set may differ: read it again
 		case "focus":
 			x.raise(str(c, "ref")) // the human asked for this agent: raised when it is this window's
+		case mail.ChangeFallback, mail.ChangeFallbackDone, mail.ChangeFallbackUnknown:
+			x.readFallback(gen, str(c, "ref"), str(c, "kind"))
 		}
 	}
 	if again {
@@ -279,6 +290,9 @@ func (x *crewInbox) show(p snapshotParts) {
 		waiting[codename] = true
 		now["crew-attention:"+session] = crewOpen{text: x.waitText(a), rings: a.kind == "permission",
 			click: func() { x.raiseAttention(session, codename) }, done: x.c.Trf("autodoc.crew.no_longer_waits", codename)}
+	}
+	for job, text := range x.fallbacks { // a snapshot doesn't carry them: they stay until their job says
+		now[fallbackToast(job)] = crewOpen{text: text, done: x.open[fallbackToast(job)].done}
 	}
 	x.requests = requests
 	x.waiting = waiting

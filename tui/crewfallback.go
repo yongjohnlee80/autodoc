@@ -89,6 +89,10 @@ func fallbackJobsOf(v any) []fallbackJob {
 // run of the window, which may have typed it, so it is reported unknown and the user given the
 // text; otherwise the record is written, then the text typed.
 func (h *crewHost) takeJob(j fallbackJob) {
+	if h.taken == nil {
+		h.taken = map[string]bool{}
+	}
+	h.taken[j.ID] = true
 	if rec, ok := h.fallbackRecord(j.ID); ok {
 		outcome := rec
 		if outcome == fallbackTyping { // begun before a restart: the text reached the terminal or the user sees it
@@ -156,3 +160,6 @@ func (h *crewHost) writeFallbackRecord(id, state string) error {
 	}
 	return writeAtomic(p, []byte(state), 0o600)
 }
+
+// tookJob is whether this run took job, and so told the user of its outcome itself.
+func (h *crewHost) tookJob(job string) bool { return h.taken[job] }
