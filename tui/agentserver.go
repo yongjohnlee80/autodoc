@@ -25,8 +25,16 @@ import (
 // server: the next start in that folder stops it first, by its pid file, when that process's
 // command line still names the folder's socket.
 
-// serverPidFile is the agent server's pid, in the agent folder's crew folder (0700).
-const serverPidFile = ".autodoc-crew/server.pid"
+// serverPidFile is the agent server's pid, in the agent folder (0700). Never in its crew folder
+// (crew.ContextDir): that holds the session contexts alone, one file per session, and a file of
+// anything else there is read as one more context, so `autodoc crew` and `mail` in the folder
+// refused with "several session contexts".
+const serverPidFile = ".autodoc-server.pid"
+
+// legacyServerPidFile is where builds before it kept serverPidFile, in the crew folder: a start
+// stops the server it names, as it does serverPidFile's, and removes it, so a folder those builds
+// wrote reads its one context again.
+const legacyServerPidFile = ".autodoc-crew/server.pid"
 
 // serverReadyWait bounds the wait for a started server's socket; a server not listening by then is
 // stopped, and the CLI isn't started. A cell gives its own.
@@ -54,6 +62,7 @@ func startAgentServer(argv []string, socket, dir string, environ []string) (*age
 		return nil, errors.New("crew setup gave a server with no command or no socket")
 	}
 	pidFile := filepath.Join(dir, serverPidFile)
+	stopStaleServer(filepath.Join(dir, legacyServerPidFile), socket)
 	stopStaleServer(pidFile, socket)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = dir, environ

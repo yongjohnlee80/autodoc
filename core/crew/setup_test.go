@@ -452,6 +452,8 @@ func TestMailViaIsCLIOrMCPOnTheWire(t *testing.T) {
 // of its own (Server, its socket in the agent's folder) with the server on its command line and each
 // crew tool approved by name, never the server's whole default; its TUI attaches to it (--remote);
 // its autodoc is told the socket (EnvCodexServer); its mail is MCP's; its registration step stays.
+// The session's context reaches the MCP server by name (env_vars): Codex starts a stdio server with a
+// filtered environment, and `crew mcp` without it found no session (R4).
 // Without servers it is as before: the step alone, the CLI's mail (the mutants: a whole-server
 // default; the TUI given -c overrides, which runs it embedded, off every app-server).
 func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
@@ -464,6 +466,7 @@ func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
 	sock := filepath.Join(agent, crew.CodexServerSocket)
 	want := []string{"codex", "app-server", "--listen", "unix://" + sock,
 		"-c", `mcp_servers.autodoc.command="/x/autodoc"`, "-c", `mcp_servers.autodoc.args=["crew","mcp"]`,
+		"-c", `mcp_servers.autodoc.env_vars=["AUTODOC_CREW_CONTEXT"]`,
 		"-c", `mcp_servers.autodoc.tools.mail_receive.approval_mode="approve"`, "-c", `mcp_servers.autodoc.tools.crew_whoami.approval_mode="approve"`}
 	if !slices.Equal(s.Server, want) || s.ServerSocket != sock {
 		t.Fatalf("the server %q at %q, want %q at %q", s.Server, s.ServerSocket, want, sock)
