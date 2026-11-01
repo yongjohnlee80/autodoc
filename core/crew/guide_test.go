@@ -138,3 +138,33 @@ func TestTheGuideFollowsTheSessionsMailMode(t *testing.T) {
 		t.Error("GuideOf is not the kind's own mode's guide")
 	}
 }
+
+// TestTheGuideSaysAWakesSendMessageDoesntApply: a wake that reaches Claude Code mid-turn comes
+// framed "reply via SendMessage to the `from=` address", which is no way to answer AutoDoc mail
+// (the wake has no from= address; a reply goes by the delivery's id). Every guide, in both mail
+// modes, says that frame doesn't apply and names its own reply and send, in one line.
+func TestTheGuideSaysAWakesSendMessageDoesntApply(t *testing.T) {
+	for _, kind := range []string{crew.KindClaude, crew.KindCodex, crew.KindAgy, crew.KindOpenCode, "aider"} {
+		for _, mode := range []struct {
+			name    string
+			via     crew.MailVia
+			answers []string
+		}{
+			{"cli", crew.MailViaCLI, []string{"`autodoc mail reply <id>`", "`autodoc mail send`"}},
+			{"mcp", crew.MailViaMCP, []string{"`mail_reply`", "`mail_send`"}},
+		} {
+			g := crew.GuideOfVia(kind, mode.via).Markdown
+			var line string
+			for _, l := range strings.Split(g, "\n") {
+				if strings.Contains(l, "SendMessage") {
+					line = l
+				}
+			}
+			for _, must := range append([]string{"SendMessage", "doesn't apply"}, mode.answers...) {
+				if !strings.Contains(line, must) {
+					t.Errorf("%s's guide (mail via %s) has no line saying a wake's SendMessage doesn't apply with %q:\n%s", kind, mode.name, must, g)
+				}
+			}
+		}
+	}
+}
