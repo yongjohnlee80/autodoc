@@ -180,7 +180,11 @@ import (
 // the host take them in its epoch, and mail.fallback_done, its report of each. A host below 42
 // never takes jobs, so its agents' mail stays queued, and an unrung inbox.send is withdrawn for the
 // window to type, as before.
-const Protocol int64 = 42
+// Protocol 43 is each session's own mail mode (docs/decisions/crew.md#the-crew-mcp-server):
+// crew.register's mail_via (cli or mcp, as the session's setup delivered it), which its wake
+// notice follows, crew.list's mail_via, and crew.guide's mail_via. A session below 43 sends none,
+// and its mail is read as its kind's (crew.MailViaOf), as before.
+const Protocol int64 = 43
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

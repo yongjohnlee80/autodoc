@@ -34,12 +34,17 @@ func (m *Manager) GuideFor(kind string) Guide { return GuideOf(kind) }
 // step: its host rings it instead. A host writing its agent's guide from its own build (AutoDoc's
 // writeAgentGuide) calls it directly: the guide then describes the commands of the build the agent
 // runs.
-func GuideOf(kind string) Guide {
+func GuideOf(kind string) Guide { return GuideOfVia(kind, MailViaOf(kind)) }
+
+// GuideOfVia is the guide for a CLI kind whose session reads its mail via: the MCP form (its tools,
+// no shell command for its mail or crew) for MailViaMCP, the CLI's otherwise. A host writes the one
+// its session's setup delivered (Setup.MailVia).
+func GuideOfVia(kind string, via MailVia) Guide {
 	step, ok := endpointSteps[kind]
 	if !ok {
 		step = "Your CLI has no waker yet: your host tells you when mail is waiting."
 	}
-	if MailViaOf(kind) == MailViaMCP {
+	if via == MailViaMCP {
 		return mcpGuide(step)
 	}
 	var b strings.Builder

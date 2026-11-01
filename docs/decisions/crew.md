@@ -511,6 +511,15 @@ goes through shell commands its rules would have to allow.
   - agy shows the model no `notifications/message`: for agy the waiting line is how a busy agent
     hears of mail. agy also puts a wake into a running turn, as a system message, so a busy agy is
     woken mid-task as well; it receives the mail once either way.
+- A session reads its mail one way, the way its setup delivered: `crew setup` answers `mail_via`
+  (`mcp` only when the kind put the crew MCP server in its start), the host registers the session
+  with it (`crew.register`'s `mail_via`), and the daemon keeps it with the session. Its wake notice
+  (`crew.NoticeFor`), its guide (`crew.guide`'s `mail_via`) and `crew.list`'s `mail_via` follow it,
+  whatever its kind usually does. A host from before it says nothing, and its sessions read their
+  mail as their kind's do (`crew.MailViaOf`: agy's through MCP, the others' through the CLI). A
+  session on MCP mail is allowed its tools alone and no shell rule for its mail: Claude Code's exact
+  `mcp__autodoc__<tool>` rules in place of the guide's commands, OpenCode nothing, since it gates no
+  MCP tool.
 - The texts an agent reads per event (the wake notices, the waiting line) stay constant and short:
   they repeat for the life of a session, so a word added to one is paid on every wake or tool
   result. A cell pins each one's size, so growing one is a deliberate edit.

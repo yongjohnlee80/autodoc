@@ -40,6 +40,8 @@ type Entry struct {
 	PromptsReported bool `json:"prompts_reported"`
 	// Why is why the session can't be woken now (Why*): empty when it can.
 	Why string `json:"why,omitempty"`
+	// MailVia is how its live session reads its mail (cli, mcp: SessionMailVia), absent for none.
+	MailVia string `json:"mail_via,omitempty"`
 }
 
 // List is the addressbook (crew.list): every active profile, by scope then codename, with its
@@ -75,6 +77,11 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 					return err
 				}
 				e.PromptsReported = m.promptsReported(p.Kind, s, now)
+				via, err := SessionMailVia(s.MailVia, p.Kind).MarshalText()
+				if err != nil {
+					return err
+				}
+				e.MailVia = string(via)
 			}
 			out = append(out, e)
 		}

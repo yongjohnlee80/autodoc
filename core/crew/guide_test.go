@@ -106,3 +106,19 @@ func TestTheMCPGuideSaysEachToolsArguments(t *testing.T) {
 		t.Error("the CLI guide says the MCP tools' arguments")
 	}
 }
+
+// TestTheGuideFollowsTheSessionsMailMode: a kind's guide is in the form its session's mail mode
+// reads, whatever the kind usually does: Claude on MCP mail gets the tools' guide (mail_receive, no
+// `autodoc mail` command), on CLI mail the commands'; GuideOf is the kind's own mode's.
+func TestTheGuideFollowsTheSessionsMailMode(t *testing.T) {
+	mcp, cli := crew.GuideOfVia(crew.KindClaude, crew.MailViaMCP).Markdown, crew.GuideOfVia(crew.KindClaude, crew.MailViaCLI).Markdown
+	if !strings.Contains(mcp, "`mail_receive`") || strings.Contains(mcp, "`autodoc mail receive`") {
+		t.Errorf("Claude's guide on MCP mail names the shell command or not the tool:\n%s", mcp)
+	}
+	if !strings.Contains(cli, "`autodoc mail receive`") || strings.Contains(cli, "`mail_receive`") {
+		t.Errorf("Claude's guide on CLI mail names the tool or not the command:\n%s", cli)
+	}
+	if crew.GuideOf(crew.KindClaude).Markdown != cli || crew.GuideOf(crew.KindAgy).Markdown != crew.GuideOfVia(crew.KindAgy, crew.MailViaMCP).Markdown {
+		t.Error("GuideOf is not the kind's own mode's guide")
+	}
+}

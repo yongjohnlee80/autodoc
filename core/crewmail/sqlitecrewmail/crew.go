@@ -36,6 +36,7 @@ const (
 	cEnded       col = "ended"
 	cEndedWhy    col = "ended_why"
 	cPrompts     col = "prompts"
+	cMailVia     col = "mail_via"
 	cSession     col = "session"
 	cPendingGen  col = "pending_gen"
 	cAnnounced   col = "announced_gen"
@@ -144,7 +145,7 @@ func newCrewTables(c dao.DataConn) *crewTables {
 			cInstance: func(r *crew.Session) any { return &r.Instance }, cSecretHash: func(r *crew.Session) any { return &r.SecretHash },
 			cArgsDigest: func(r *crew.Session) any { return &r.ArgsDigest }, cStarted: func(r *crew.Session) any { return &r.Started },
 			cEnded: func(r *crew.Session) any { return &r.Ended }, cEndedWhy: func(r *crew.Session) any { return &r.EndedWhy },
-			cPrompts: func(r *crew.Session) any { return &r.Prompts },
+			cPrompts: func(r *crew.Session) any { return &r.Prompts }, cMailVia: func(r *crew.Session) any { return &r.MailVia },
 		}, cID),
 		wakes: table(c, "crew_wake", map[col]func(*crew.Wake) any{
 			cSession: func(r *crew.Wake) any { return &r.Session }, cPendingGen: func(r *crew.Wake) any { return &r.PendingGen },
@@ -290,7 +291,7 @@ func (t *Tx) LiveSessionsOfScope(scope string) ([]crew.Session, error) {
 func (t *Tx) PutSession(s crew.Session) error {
 	return t.t.sessions.On(t.tx).SetMap(map[col]any{cID: s.ID, cProfile: s.Profile, cHost: s.Host, cEpoch: s.Epoch,
 		cInstance: s.Instance, cSecretHash: blob(s.SecretHash), cArgsDigest: blob(s.ArgsDigest), cStarted: s.Started,
-		cEnded: s.Ended, cEndedWhy: s.EndedWhy, cPrompts: s.Prompts}).Upsert()
+		cEnded: s.Ended, cEndedWhy: s.EndedWhy, cPrompts: s.Prompts, cMailVia: s.MailVia}).Upsert()
 }
 
 func (t *Tx) Wake(session string) (crew.Wake, bool, error) {
