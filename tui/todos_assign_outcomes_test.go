@@ -13,8 +13,9 @@ import (
 // TestTheHandOverSaysHowItWent (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter):
 // the assignment stands whatever came of its hand-over, and the notice says which: sent; typed into
 // the agent's input for the user's Enter (ErrAgentTypedNotSent, wrapped too); refused by a program
-// that takes no bracketed paste; or not delivered, saying why (the user not starting the agent in
-// the catalog's words, any other refusal as it is).
+// that takes no bracketed paste; not delivered to a running agent in another workspace, naming it;
+// or not delivered, saying why (the user not starting the agent in the catalog's words, any other
+// refusal as it is).
 func TestTheHandOverSaysHowItWent(t *testing.T) {
 	for _, c := range []struct {
 		err  error
@@ -26,6 +27,8 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 		{widget.ErrTerminalPasteUnbracketed, "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task"},
 		{ErrAgentCancelled, "todos: assigned to autodoc:scribe, but not delivered (you didn't start it): start the agent, then A on the task to deliver it again"},
 		{errors.New("the tab closed"), "todos: assigned to autodoc:scribe, but not delivered (the tab closed): start the agent, then A on the task to deliver it again"},
+		// a running agent in another workspace: its workspace named to switch to, never "stale" or "start the agent"
+		{&agentElsewhere{workspace: "Finance", why: errNoDoorbell}, "todos: assigned to Scribe, but not delivered: it runs in workspace Finance, and its crew mail didn't reach it (no doorbell to ring); switch to Finance, then A on the task to deliver it again"},
 	} {
 		s := newScripted("kb")
 		newTodos(s).handedOver("Scribe", "autodoc:scribe", c.err)

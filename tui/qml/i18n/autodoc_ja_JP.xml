@@ -5399,6 +5399,10 @@ WHAT A KEY NEEDS
         <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
         <translation>ToDo: %1 に割り当てましたが、引き渡していません: そのプログラムはブラケットペーストを受け付けません。パネルを開いてタスクを貼り付けてください</translation>
     </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in">
+        <source>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</source>
+        <translation>ToDo: %1 に割り当てましたが、届けられませんでした: ワークスペース %2 で実行中で、クルーのメールが届きませんでした (%3)。%2 に切り替えて、タスク上で A を押して再送してください</translation>
+    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag">
         <source>todos: assigned to %1, but not delivered (%2): start the agent, then A on the task to deliver it again</source>
         <translation>ToDo: %1 に割り当てましたが、届けられませんでした (%2): エージェントを起動し、タスク上で A を押して再送してください</translation>
