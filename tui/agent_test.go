@@ -227,14 +227,15 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefault], got[prefAgentProfiles], def, profiles)
 }
 
-// A profile whose program is not installed is the shell's to report: its 127 says the command was
-// not found, and the next SPC g tries again.
+// A profile whose program is not installed is refused before its shell runs (commandOnPath): its
+// tab says its command isn't a program on its PATH, a notice says it did not start, and nothing runs.
 func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
-	r.s.WaitFor(t, "not found", func(string) bool {
-		return r.noticed("the agent gone's command was not found (127): check it in System › Agent profiles…")
-	})
+	r.s.WaitForText(t, `[terminal: its command "autodoc-no-such-agent" isn't a program on its`)
+	if !r.noticed(`gone did not start: its command "autodoc-no-such-agent" isn't a program on its PATH`) {
+		t.Fatal("no notice that gone did not start because its command isn't on its PATH")
+	}
 	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "" {
 		t.Fatalf("after its command was not found %q is running", n)
 	}

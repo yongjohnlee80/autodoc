@@ -42,6 +42,17 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	return a, c, w
 }
 
+// startingCrewAgents is crewAgents whose tabs' starts run their starter (runAgent), as the terminal
+// does, on a spawn that starts nothing: a start its starter refuses (a refused registration shown in
+// its tab) leaves the tab stopped, as the terminal leaves it.
+func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWindow) {
+	t.Helper()
+	a, c, w := crewAgents(t, profiles)
+	c.panel = &modelPanel{owner: c, starts: true}
+	a.spawn = func(pty.Cmd) (widget.TerminalProcess, error) { return nil, nil }
+	return a, c, w
+}
+
 const oneTwo = `[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`
 
 // readContext is the one session context in the agent folder dir (crew.ContextDir), and its file;
@@ -143,7 +154,7 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 // TestARefusedRegistrationStartsNothing: a registration the daemon refuses starts no process, writes
 // no context, says why, and is not kept to be replayed.
 func TestARefusedRegistrationStartsNothing(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwo)
+	a, c, w := startingCrewAgents(t, oneTwo)
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename is busy"}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -471,7 +482,7 @@ func calledTimes(w *crewWindow, verb string) int {
 // committed comes back, its credential the one the daemon holds, never a fresh registration that
 // the first would leave busy.
 func TestALostRegistrationReplyIsReplayed(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwo)
+	a, c, w := startingCrewAgents(t, oneTwo)
 	w.lost = map[string]int{"crew.register": 1}
 	p, _ := a.profile("one")
 	first, err := a.startInstance(p)
@@ -532,7 +543,7 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 		"another daemon": func(_ *testing.T, _ *agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			a, c, w := crewAgents(t, oneTwo)
+			a, c, w := startingCrewAgents(t, oneTwo)
 			// the start's setup answers at once; the daemon commits the registration, and its answer
 			// comes after the change
 			w.hold, w.late, w.skipHold = true, true, 1
