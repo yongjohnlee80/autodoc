@@ -75,6 +75,9 @@ type crewHost struct {
 	// is told each claim that held (crewInbox.recheckFallbacks)
 	taken   map[string]bool
 	onClaim func()
+	// todos is the window's assignment feed (crewtodos.go): the tasks assigned to its agents from
+	// outside the window, mailed to them
+	todos *todoFeed
 }
 
 // crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends it
@@ -116,8 +119,10 @@ func newCrewHost(c crewCore, agentDir string) *crewHost {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
-	return &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
+	h := &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
 		sessions: map[string]crewSession{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
+	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(agentDir), ".crew-todos"), start: time.Now()}
+	return h
 }
 
 func (*crewHost) Name() string                 { return "crew" }
@@ -132,6 +137,11 @@ func (h *crewHost) held() (scope string, epoch int64, ok bool) {
 // Connected claims the window's scope on the first connection, and reattaches on every later one:
 // a new connection is a new client token, never a new owner.
 func (h *crewHost) Connected() { h.claim() }
+
+// Kinds: a change to a todo store may be an assignment to one of the window's agents (crewtodos.go).
+func (*crewHost) Kinds() []string { return []string{"todos.changed"} }
+
+func (h *crewHost) Event(string, string, string) { h.todos.poll() }
 
 // claimed is a claim's answer.
 type claimed struct {
@@ -173,6 +183,7 @@ func (h *crewHost) claim() {
 		h.gen++
 		h.renewLater(h.gen)
 		h.pollFallbacks(h.gen)
+		h.todos.poll() // what was assigned to its agents while it was away
 		if h.onClaim != nil {
 			h.onClaim()
 		}

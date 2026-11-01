@@ -143,7 +143,13 @@ func (t *todos) assignSet(text string) {
 	assignee := assigneePrefix + a.agent.Ref.Codename
 	s, x := a.store, a.task
 	from := str(x, "status")
-	t.write(s, "todos.assign", []any{s.at, str(x, "id"), str(x, "rev"), assignee, instruction}, func(v any) {
+	params := []any{s.at, str(x, "id"), str(x, "rev"), assignee, instruction}
+	if w, ok := t.c.(windowScoped); ok {
+		if scope := w.windowScope(); scope != "" { // the window's own: its assignment feed leaves this one to handOver (crewtodos.go)
+			params = append(params, scope)
+		}
+	}
+	t.write(s, "todos.assign", params, func(v any) {
 		if !a.ws.Current() { // the assignment stands; another workspace's agent never hears of it
 			t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_the_workspac", assignee))
 			return
@@ -155,6 +161,10 @@ func (t *todos) assignSet(text string) {
 		t.handOver(a, s, task, assignee, instruction)
 	})
 }
+
+// windowScoped is a Core that knows the window's crew scope ("" while it holds none): A assigns
+// with it, so the window's assignment feed knows the assignment for one A hands over itself.
+type windowScoped interface{ windowScope() string }
 
 // handOver gives the task, as the assign wrote it, to the agent through HandTask. Its file is where
 // the assign left it (in-progress/ once an open task is assigned), so the path is the answer's, not

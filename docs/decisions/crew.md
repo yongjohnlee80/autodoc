@@ -452,8 +452,35 @@ messaging, which tries the agent's doorbell first and falls back to typing
 - A task is a request, subject `Task: <title>`, with its file, id and instruction in the body; a text
   is a plain message. Either way, the agent's guide says that mail from `user` is the user's own
   instruction.
-- An assignment made outside a window (the CLI, or Neovim before its host adopts the same
-  messaging) reaches no agent by itself: assign from a window, or message the agent.
+- An assignment to a window's agent made outside that window reaches it through the window's
+  assignment feed ([below](#an-assignment-reaches-a-window-agent)).
+
+## An assignment reaches a window agent
+
+A task assigned to a window's agent, `autodoc:<codename>`, from outside that window reaches the
+agent: a bare `autodoc --call todos.add` or `todos.assign` (an agent's, a script's), or Neovim's.
+Neovim's notifier never delivers `autodoc:` assignees, so the window does.
+
+- **The window reads the change log** (`todos.changes`) as its own consumer,
+  `autodoc-window:<scope>`. It reads at each claim (a start, a reconnect) and at each
+  `todos.changed` event. The scope is kept across restarts, so the daemon's cursor catches up on
+  what was assigned while the window was closed.
+- **Only its own agents:** an assignee with a crew profile in the window's scope. Another window's
+  agent is that window's to tell.
+- **Not the panel's own:** A in the todos panel assigns with the window's scope, and hands the task
+  over itself ([the user's own sends](#the-users-own-sends)). So the feed skips an assignment made
+  in its own scope, and only that: one made in another window's scope, or any scope a caller
+  passed, is delivered to the agent's own window, so no assignment falls between two windows.
+- **A notice, not the user's task:** the window mails it from `user`, kind message, subject
+  `[todos] task assigned to you: <title>`, with the task's id, title, file and the assigner's
+  reason in the body, as Neovim's notifier words its own. A peer may have made it, and a request
+  from `user` headed `Task:` is the user's own instruction.
+- **Queued, not fired:** the daemon wakes the agent as for any mail, and a stopped agent finds it
+  when it starts. The mail's key is the change's, `todo-<store>-<seq>`, so an ask after a lost
+  answer never mails it twice. A change whose send has no outcome stays unacked and is read again.
+- **A store the scope never read** would replay its whole retained log. There, assignments made
+  before the window's process started are skipped, once. The stores read are kept under
+  `<agentDir>/.crew-todos/`.
 
 ## The fallback, exactly once
 
