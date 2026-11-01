@@ -1231,6 +1231,14 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>La solicitud de %1 ya fue respondida, descartada o caducó.</translation>
     </message>
+    <message id="autodoc.crew.fallback_waits">
+        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
+        <translation>El correo de %1 para %2 espera a su anfitrión (%3), que no está</translation>
+    </message>
+    <message id="autodoc.crew.fallback_went">
+        <source>%1's mail that waited for its host was delivered</source>
+        <translation>El correo de %1 que esperaba a su anfitrión se entregó</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 ya no te espera</translation>

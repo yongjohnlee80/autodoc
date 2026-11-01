@@ -1231,6 +1231,14 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1의 요청은 이미 답변되었거나, 거절되었거나, 만료되었습니다.</translation>
     </message>
+    <message id="autodoc.crew.fallback_waits">
+        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
+        <translation>%1이(가) %2에게 보낸 메일이 자리를 비운 호스트(%3)를 기다립니다</translation>
+    </message>
+    <message id="autodoc.crew.fallback_went">
+        <source>%1's mail that waited for its host was delivered</source>
+        <translation>호스트를 기다리던 %1의 메일이 전달되었습니다</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1이(가) 더 이상 기다리지 않습니다</translation>

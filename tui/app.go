@@ -504,6 +504,8 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents.crew = h.crew
 	h.crew.deliverJob = h.agents.deliverFallback
 	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
+	h.crewInbox.took = h.crew.tookJob
+	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not
 	h.agents.inbox = h.crewInbox
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")

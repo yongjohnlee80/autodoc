@@ -1231,6 +1231,14 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1 的请求已被回复、驳回或已过期。</translation>
     </message>
+    <message id="autodoc.crew.fallback_waits">
+        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
+        <translation>%1 发给 %2 的邮件正在等待其主机（%3），该主机当前不在</translation>
+    </message>
+    <message id="autodoc.crew.fallback_went">
+        <source>%1's mail that waited for its host was delivered</source>
+        <translation>等待主机的 %1 的邮件已送达</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 不再等你了</translation>
