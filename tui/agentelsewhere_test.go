@@ -37,6 +37,7 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 			w.inboxSend = func(p []any) (any, error) { sends = append(sends, p); return map[string]any{"message": "m1"}, nil }
 			var heard []error
 			done := func(err error) { heard = append(heard, err) }
+			opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
 			var err error
 			if via == "HandTask" {
 				err = a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "Re-sync", Path: "/cyber/.todo-list/in-progress/t1.md", ID: "t1"}, "Go.", done)
@@ -56,8 +57,8 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 			if len(c.panel.pastes)+len(c.panel.keys) != 0 {
 				t.Fatalf("typed %q and pressed %q into another workspace's agent, want nothing", c.panel.pastes, c.panel.keys)
 			}
-			if len(c.opened)+len(c.panel.modes) != 0 {
-				t.Fatalf("brought another workspace's agent forward: opened %q, modes %q", c.opened, c.panel.modes)
+			if len(c.opened) != opened || len(c.panel.modes) != modes {
+				t.Fatalf("brought another workspace's agent forward: opened %q, modes %q", c.opened[opened:], c.panel.modes[modes:])
 			}
 		})
 	}
@@ -69,12 +70,13 @@ func TestARungTaskInTheWindowsWorkspaceIsPresented(t *testing.T) {
 	a, c, w := messagingRig(t)
 	w.inboxSend = func([]any) (any, error) { return map[string]any{"message": "m1"}, nil }
 	var heard []error
+	opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
 	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
-	if len(heard) != 1 || heard[0] != nil || !slices.Contains(c.opened, "agent") {
-		t.Fatalf("done heard %v, opened %q: want rung and the agents panel opened on it", heard, c.opened)
+	if len(heard) != 1 || heard[0] != nil || !slices.Contains(c.opened[opened:], "agent") || len(c.panel.modes) == modes {
+		t.Fatalf("done heard %v, opened %q, modes %q by the delivery: want rung, the agents panel opened on it, in input mode", heard, c.opened[opened:], c.panel.modes[modes:])
 	}
 }
 
