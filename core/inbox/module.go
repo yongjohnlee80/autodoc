@@ -44,9 +44,10 @@ type (
 		Key     string   `param:"key" doc:"the idempotency key: a retry with the same content answers the first send"`
 		Kind    string   `param:"kind,optional" doc:"message (the default) or request"`
 		Subject string   `param:"subject,optional"`
-		// Fire is the window's own sends: fired or nothing. The send stands once the agent's
-		// doorbell rang for it; otherwise nothing is left and the window types the text instead.
-		Fire bool `param:"fire,optional" doc:"one recipient: answer once its doorbell rang for this message, or leave nothing and refuse as unreachable"`
+		// Fire is the window's own sends: fired or handed over. The send stands once the agent's
+		// doorbell rang for it; otherwise it is the host's fallback job when the host takes them
+		// (inbox.handed_over), and else nothing is left and the window types the text instead.
+		Fire bool `param:"fire,optional" doc:"one recipient: answer once its doorbell rang for this message; else handed_over (its host's fallback job) or unreachable (nothing left)"`
 	}
 	messageParams struct {
 		Message string `param:"message"`
@@ -221,8 +222,8 @@ func (m *Manager) Verbs() []module.Verb {
 				return replyResult{Message: r.ID}, err
 			}),
 		module.Handle(host("inbox.send", "{message}",
-			"Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.unreachable means nothing was left, so the text may be sent some other way; any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
-			crew.CodeStaleEpoch, mail.CodeNoRecipient, mail.CodeAmbiguous, CodeUnreachable, CodeKeyReused, CodeTooLarge),
+			"Send the user's own message or request from the window that holds scope: its sender is the user, set by the daemon alone, and its recipients are woken as for any mail. With fire: inbox.handed_over means the doorbell didn't ring and the host carries the message as a fallback job (mail.fallbacks), so it must be sent no other way; inbox.unreachable means nothing was left, so the text may be sent some other way. Any other error leaves the outcome unknown (it may still be delivered), so it must not be. The key is the user's, across windows (use a fresh random one per send); the same key answers the first send, ringing again with fire.",
+			crew.CodeStaleEpoch, mail.CodeNoRecipient, mail.CodeAmbiguous, CodeUnreachable, CodeHandedOver, CodeKeyReused, CodeTooLarge),
 			func(ctx context.Context, p sendParams) (sentResult, error) {
 				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body,
 					Key: p.Key, Fire: p.Fire})

@@ -51,7 +51,7 @@ func NoticeFor(via MailVia) string {
 const (
 	wakePermits    = 4                // calls out at once, whatever the sessions
 	wakeCallLimit  = 10 * time.Second // one waker call's deadline
-	wakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out
+	WakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out; mail's fallback is due after it too
 	wakeLookBatch  = 64               // rows one look reserves from, before it looks again
 )
 
@@ -61,16 +61,16 @@ const (
 const ChangeReachability = "reachability"
 
 // failed counts one more consecutive failure of w and backs it off from now; the failure that
-// crosses unreachableAfter journals the loss in the same write, once. A gone endpoint's failure
+// crosses UnreachableAfter journals the loss in the same write, once. A gone endpoint's failure
 // counts as the one that crosses it, unless one did already.
 func failed(tx Tx, w *Wake, now time.Time, gone bool) error {
-	if gone && w.Failures < unreachableAfter-1 {
-		w.Failures = unreachableAfter - 1
+	if gone && w.Failures < UnreachableAfter-1 {
+		w.Failures = UnreachableAfter - 1
 	}
 	w.Failures++
 	at := now.Add(backoff(w.Failures)).UnixNano()
 	w.State, w.Token, w.NextAt = WakeIdle, "", &at
-	if w.Failures == unreachableAfter {
+	if w.Failures == UnreachableAfter {
 		return tx.AddInboxChange(ChangeReachability, w.Session)
 	}
 	return nil
@@ -91,7 +91,7 @@ var ErrWakeUnknown = errors.New("crew: the wake's outcome is unknown")
 
 // ErrEndpointGone is a wake that found nothing at the session's endpoint, for certain: its socket
 // gone, nothing listening there, or another process than the session's holding it. Classified
-// OutcomeGone: the session is unreachable at once, not after unreachableAfter failures, until it
+// OutcomeGone: the session is unreachable at once, not after UnreachableAfter failures, until it
 // registers an endpoint again. A failure that may pass (a deadline, a refusal, an error) is never
 // this.
 var ErrEndpointGone = errors.New("crew: the session's endpoint is gone")
@@ -318,7 +318,7 @@ func (m *Manager) Abandon(ctx context.Context, session, token string) error {
 
 // Outcome records an attempt's outcome, only while its token holds
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler): if the session received meanwhile, the
-// row is done; an accepted or unknown notice waits for a receive, at most wakeUnanswered; a failure
+// row is done; an accepted or unknown notice waits for a receive, at most WakeUnanswered; a failure
 // backs off. A late outcome, after a reset, matches nothing.
 func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome) error {
 	return m.store.Write(ctx, func(tx Tx) error {
@@ -336,7 +336,7 @@ func (m *Manager) Outcome(ctx context.Context, session, token string, o Outcome)
 				return err
 			}
 		default:
-			at := now.Add(wakeUnanswered).UnixNano()
+			at := now.Add(WakeUnanswered).UnixNano()
 			w.State, w.NextAt = WakeAwaiting, &at
 		}
 		return tx.PutWake(w)
@@ -353,7 +353,7 @@ func (m *Manager) Received(tx Tx, session string) error {
 	if err != nil || !found {
 		return err
 	}
-	if w.Failures >= unreachableAfter { // reachable again: the feed hears that too
+	if w.Failures >= UnreachableAfter { // reachable again: the feed hears that too
 		if err := tx.AddInboxChange(ChangeReachability, session); err != nil {
 			return err
 		}

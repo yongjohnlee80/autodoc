@@ -433,10 +433,12 @@ messaging, which tries the agent's doorbell first and falls back to typing
 - **The doorbell** is `inbox.send` from the window that holds the scope, with `fire`. It mails the
   message from `user` (the sender is the daemon's, never written by the window) and rings the
   agent now, through its kind's waker. If the doorbell rang, it answers the message. If it didn't
-  (no endpoint, the waker's error, a backoff, an unanswered earlier doorbell, or 5 s), the delivery is
-  withdrawn, never receivable, and it answers `inbox.unreachable`. Nothing is left behind, so the
-  fallback never delivers twice.
-- **The fallback** types the message into the agent's terminal as one bracketed paste and presses
+  (no endpoint, the waker's error, a backoff, an unanswered earlier doorbell, or 5 s), it answers
+  `inbox.unreachable`, and the delivery is handed over: to a window that takes fallback jobs it
+  comes back as one ([the fallback](#the-fallback-exactly-once)), and the window types it from
+  there; to an older window it is withdrawn, never receivable, and that window types it at once.
+  Either way the message is typed once, by one path.
+- **The base** types the message into the agent's terminal as one bracketed paste and presses
   Enter after it, only where the agent's prompts are reported (`crew.list`'s `prompts_reported` for
   its session in the window's scope) and none shows (no permission attention raised). Elsewhere the
   message stays typed for the user's Enter, and a notice says why. Only a doorbell that answers for
@@ -446,6 +448,30 @@ messaging, which tries the agent's doorbell first and falls back to typing
   instruction.
 - An assignment made outside a window (the CLI, or Neovim before its host adopts the same
   messaging) reaches no agent by itself: assign from a window, or message the agent.
+
+## The fallback, exactly once
+
+Mail an agent doesn't receive in time goes to it some other way, once: its host types it, or files
+it in its file mailbox.
+
+- **When.** A delivery falls back when it was never leased (an agent that leased it may have read
+  it), its recipient has a live session (an ended one's mail waits for the next), and either that
+  session has been unreachable (no endpoint, or 5 failed wakes) for 30 s since the message was
+  sent, or 2 min have passed since (the first ring unanswered).
+- **Only for a host that takes part.** A host takes fallback jobs by asking for them
+  (`mail.fallbacks`), and does so for its current epoch only. A host that never asks (an older
+  build) keeps its agents' mail queued, woken as before; one restarted into a new epoch takes part
+  again once it asks.
+- **One write.** The delivery is withdrawn (`why` fallback) and one job opened for its host, in the
+  same transaction: a receive that won the race leaves nothing to fall back, and a delivery has one
+  job ever. The user's feed is told (`fallback`).
+- **The host's verbs.** `mail.fallbacks` leases the host its scope's jobs for 60 s, each with its
+  message, its sender as an address and its recipient. `mail.fallback_done` reports each one once:
+  `delivered`, `typed_not_sent`, or `unknown`, which tells the user, with the text to send by hand.
+  A job whose lease lapses is offered again, its `tries` one higher; the host answers it from its
+  own record and never types twice.
+- **A host that took part and went away** leaves its jobs open: they wait for it, and the user was
+  told when each was made.
 
 ## The crew MCP server
 

@@ -45,7 +45,7 @@ func (m *Manager) Wait(ctx context.Context, credential string, wait time.Duratio
 				return err
 			}
 			ready = len(ds) > 0
-			at, has, err := tx.NextDeadline()
+			at, has, err := m.nextDeadline(tx)
 			if err == nil && has {
 				next = max(time.Duration(at-now), 0)
 			}

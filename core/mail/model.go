@@ -60,8 +60,9 @@ const (
 	Leased = "leased"
 	Acked  = "acked"
 	Failed = "failed"
-	// Withdrawn is a send to fire whose doorbell never rang (mail's SendAsUser): done, never
-	// receivable; the window typed its text into the agent's prompt instead.
+	// Withdrawn is a delivery handed to its recipient's host instead (WhyFallback, a fallback job),
+	// or, before the fallback, a send to fire whose doorbell never rang (WhyWithdrawn): done, never
+	// receivable.
 	Withdrawn = "withdrawn"
 	Expired   = "expired"
 	Merged    = "merged"
@@ -73,7 +74,8 @@ const (
 	WhyRecipientGone = "recipient_gone"
 	WhyReopened      = "reopened_by_adoption"
 	WhyDismissed     = "dismissed" // the human declined a request
-	WhyWithdrawn     = "withdrawn" // a send to fire whose doorbell never rang: typed into the prompt instead
+	WhyWithdrawn     = "withdrawn" // before the fallback: a send to fire whose doorbell never rang, typed by the window
+	WhyFallback      = "fallback"  // not received in time: handed to its recipient's host, as a fallback job
 )
 
 // The reserved profiles: the daemon, which sends every generated notice and is never a
@@ -95,6 +97,12 @@ const (
 	ChangeRead          = "read"
 	ChangeExpired       = "expired"
 	ChangeUndeliverable = "undeliverable"
+	// ChangeFallback is a fallback job made (its ref is the job): the human sees the mail went by
+	// its recipient's host, and that it waits while the host is away.
+	ChangeFallback = "fallback"
+	// ChangeFallbackUnknown is a job its host could not say it delivered (its ref is the job): the
+	// human gets the message's text, to send by hand.
+	ChangeFallbackUnknown = "fallback_unknown"
 )
 
 // Tx is one transaction over the crew and mail tables together: a crew verb's mail effect and a
@@ -133,6 +141,30 @@ type Tx interface {
 	// NextDeadline is the earliest instant a delivery changes by time alone: a lease's lease_until,
 	// or the expiry of a message with an unhandled delivery; false when there is none.
 	NextDeadline() (int64, bool, error)
+
+	// FallbackDue is the queued deliveries never leased (Attempts 0) with no fallback job, whose
+	// recipient has a live session and a scope whose host takes fallbacks (TakeFallbacks in its
+	// current epoch), and whose message was created at or before unansweredBefore,
+	// or at or before unreachableBefore with that session unreachable (no endpoint, or
+	// crew.UnreachableAfter failed wakes): in seq order, at most limit
+	// (docs/decisions/crew.md#the-fallback-exactly-once).
+	FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]Delivery, error)
+	// NextFallbackAt is the earliest instant a queued delivery with no job falls back by time alone,
+	// given its message's creation: created+unreachable when its recipient's live session is
+	// unreachable, else created+unanswered. false when there is none.
+	NextFallbackAt(unreachable, unanswered int64) (int64, bool, error)
+	// TakeFallbacks records that host, at epoch, takes fallback jobs (crew_host.fallbacks): its
+	// scope's deliveries may fall back from now on, until its epoch changes.
+	TakeFallbacks(host string, epoch int64) error
+	// TakesFallbacks is whether host took fallbacks (TakeFallbacks) in its current epoch.
+	TakesFallbacks(host string) (bool, error)
+	FallbackJob(id string) (FallbackJob, bool, error)
+	PutFallbackJob(FallbackJob) error
+	// FallbackOffers is host's jobs a host may take at now: open, or leased with lease_until at or
+	// before now, oldest first, at most limit.
+	FallbackOffers(host string, now int64, limit int) ([]FallbackJob, error)
+	// NextFallbackLease is the earliest lease_until of host's leased jobs; false when none.
+	NextFallbackLease(host string) (int64, bool, error)
 
 	// AddInboxChange (the human feed's journal) comes with crew.Tx.
 }

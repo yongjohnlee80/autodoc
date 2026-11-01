@@ -210,6 +210,10 @@ func (t *memTx) PutWake(w crew.Wake) error {
 	return nil
 }
 
+// Poke raises the transaction's Wake signal, as a write beside the crew tables that long-polls
+// must hear does (crew.Signals): mailtest's fallback jobs.
+func (t *memTx) Poke() { t.wake = true }
+
 // wakesWhere is the wake rows keep admits, by session, at most limit (0: all).
 func (t *memTx) wakesWhere(keep func(crew.Wake) bool, limit int) []crew.Wake {
 	var out []crew.Wake

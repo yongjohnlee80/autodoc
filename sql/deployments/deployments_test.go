@@ -843,3 +843,29 @@ func TestTheCrewSessionPromptsScript(t *testing.T) {
 		t.Fatalf("sessions after the revert: %s, %v; want the one kept", got, err)
 	}
 }
+
+// 000029 is the fallback's jobs (docs/decisions/crew.md#the-fallback-exactly-once): one job a
+// delivery, ever, and a host's fallbacks epoch, 0 for a host written without it, or before the
+// script, so no host takes jobs until it polls. The revert drops the table and the column, and
+// keeps the hosts.
+func TestTheMailFallbackScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO crew_host(id, epoch, renewed) VALUES ('autodoc:w', 1, 1)")
+	if got, err := first(db, "SELECT fallbacks FROM crew_host"); err != nil || got != "0" {
+		t.Fatalf("a host written without fallbacks: %q, %v; want 0", got, err)
+	}
+	exec(t, db, "INSERT INTO mail_fallback(id, delivery, message, recipient, host, state, created) VALUES ('j1', 'd1', 'm1', 'p1', 'autodoc:w', 'open', 1)")
+	if _, err := db.ExecContext(context.Background(), "INSERT INTO mail_fallback(id, delivery, message, recipient, host, state, created) VALUES ('j2', 'd1', 'm1', 'p1', 'autodoc:w', 'open', 2)"); err == nil {
+		t.Fatal("one delivery had two fallback jobs")
+	}
+	revertDownTo(t, db, 29)
+	if _, err := first(db, "SELECT count(*) FROM mail_fallback"); err == nil {
+		t.Fatal("the revert left mail_fallback")
+	}
+	if _, err := first(db, "SELECT fallbacks FROM crew_host"); err == nil {
+		t.Fatal("the revert left crew_host.fallbacks")
+	}
+	if got, err := first(db, "SELECT count(*) FROM crew_host"); err != nil || got != "1" {
+		t.Fatalf("hosts after the revert: %s, %v; want the one kept", got, err)
+	}
+}
