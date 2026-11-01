@@ -542,7 +542,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `app` | `stats` |
 | `clipboard` | `read`, `write` |
 | `plugin` | `run` |
-| `ui` | `card`, `charts`, `pick`, `width` |
+| `ui` | `card`, `charts`, `input`, `pick`, `width` |
 
 | Call | Answers |
 |---|---|
