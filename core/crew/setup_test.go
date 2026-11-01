@@ -4,6 +4,7 @@ package crew_test
 
 import (
 	"encoding/json"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -325,5 +326,31 @@ func TestSetupForAgyWithoutServersStartsWithANotice(t *testing.T) {
 		if err != nil || len(s.Notices) != 1 || len(s.Argv)+len(s.FolderFiles)+len(s.Env)+len(s.Allow) != 0 || s.Prompts {
 			t.Errorf("servers %d, folder %q: %+v %v, want a notice alone", len(in.Servers), in.AgentDir, s, err)
 		}
+	}
+}
+
+// TestSetupForRefusesADataDirThatIsntAbsolute: a setup asked with a relative data folder, for any
+// kind, or with none for OpenCode (whose plugin is a file of AutoDoc's own), is ErrDataDir, and
+// writes nothing into the process's working folder; an absolute one keeps the plugin there.
+func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	for _, k := range []string{crew.KindClaude, crew.KindCodex, crew.KindOpenCode, crew.KindAgy} {
+		if _, err := crew.SetupFor(crew.SetupInput{Kind: k, Host: crew.HostWindow, DataDir: "data", Env: map[string]string{"PATH": "/x"}}, ""); !errors.Is(err, crew.ErrDataDir) {
+			t.Errorf("%s with a relative data folder: %v, want ErrDataDir", k, err)
+		}
+	}
+	if _, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindOpenCode, Host: crew.HostWindow, Env: map[string]string{"PATH": "/x"}}, ""); !errors.Is(err, crew.ErrDataDir) {
+		t.Errorf("OpenCode with no data folder: %v, want ErrDataDir", err)
+	}
+	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
+		t.Errorf("the working folder holds %d entries after the refused setups, want none", len(entries))
+	}
+	data := t.TempDir()
+	if _, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindOpenCode, Host: crew.HostWindow, DataDir: data, Env: map[string]string{"PATH": "/x"}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "opencode", crew.OpenCodePluginName)); err != nil {
+		t.Errorf("OpenCode's plugin isn't in its absolute data folder: %v", err)
 	}
 }

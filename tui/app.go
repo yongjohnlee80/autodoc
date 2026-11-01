@@ -407,6 +407,9 @@ type Options struct {
 	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
 	// reaches the TUI's store (agent.go). "" is the default config.
 	ConfigPath string
+	// DataDir is that config's data folder, absolute (endpoint.DataDir): where a crew agent's setup
+	// keeps AutoDoc's own files. "" gives a setup none, so it writes none.
+	DataDir string
 	// ThemeDir holds the user's complete Theme files beside config.toml. Empty offers built-ins only.
 	ThemeDir string
 	// KeymapFile is the user's key-mapping scheme (golib's tui/keymap), keymap.xml beside config.toml:
@@ -496,6 +499,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
+	h.agents.dataDir = opt.DataDir
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
 	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)

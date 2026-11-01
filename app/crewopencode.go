@@ -51,19 +51,15 @@ func opencodePluginDir(configPath string) (string, error) {
 	return filepath.Join(data, "opencode"), nil
 }
 
-// crewDataDir is the data folder of the config at configPath ("" for the default config): the
-// store's folder, server.data_dir when it is set. A crew command that keeps a file of AutoDoc's own
-// keeps it there, so an AutoDoc run on another config never writes into the default one's folder.
+// crewDataDir is the data folder of the config at configPath ("" for the default config,
+// endpoint.DataDir). A crew command that keeps a file of AutoDoc's own keeps it there, so an AutoDoc
+// run on another config never writes into the default one's folder.
 func crewDataDir(configPath string) (string, error) {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return "", err
 	}
-	store, err := e.Store()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(store), nil
+	return e.DataDir()
 }
 
 // crewPluginMain runs `autodoc crew plugin --opencode [--print-env] [--dir D]`: it writes AutoDoc's

@@ -382,7 +382,9 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 // What a step must wait for, it waits for itself (`crew endpoint --codex-here --wait`), raising the
 // session's attention when it can't, so the window shows it.
 func (a *agents) runAfterSteps(kind, ctxFile, dir string, environ []string, started time.Time) {
-	s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow}, "")
+	// the config's data folder, as `crew setup` gives it: a setup that keeps a file of AutoDoc's own
+	// (OpenCode's plugin) keeps it there, never in this process's working folder
+	s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, DataDir: a.dataDir}, "")
 	if err != nil || len(s.After) == 0 {
 		return
 	}
