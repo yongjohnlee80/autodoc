@@ -37,8 +37,11 @@ func (c *codexStatusConn) call(_ context.Context, method string, params, result 
 	c.calls = append(c.calls, fmt.Sprintf("%s %v %v", method, p["threadId"], p["includeTurns"]))
 	s := c.statuses[min(c.n, len(c.statuses)-1)]
 	c.n++
-	if s == "fail" {
+	switch s {
+	case "fail":
 		return errors.New("the read failed")
+	case "not loaded": // the app-server's answer for a thread it has no longer
+		return &codexRPCError{Method: method, Code: -32600, Message: "thread not loaded: " + fmt.Sprint(p["threadId"])}
 	}
 	return json.Unmarshal([]byte(`{"thread":{"status":`+s+`}}`), result)
 }
@@ -358,5 +361,64 @@ func TestARegisteredCodexSessionStartsItsBridge(t *testing.T) {
 		if code != c.answer || !slices.EqualFunc(runs, c.want, slices.Equal) {
 			t.Errorf("%s: exit %d, runs %q, want %d and %q", c.name, code, runs, c.answer, c.want)
 		}
+	}
+}
+
+// TestTheCodexBridgeStopsWhenItsAgentEnds (no orphan bridge): a thread whose TUI quit stays loaded
+// and idle on the shared app-server (codex-cli 0.163.0, live), so the bridge stops when the
+// session's context file is gone (its host removes it as the agent ends), at the next look, before
+// any read; and when the thread is gone, the app-server answering "thread not loaded" or a
+// notLoaded status, for bridgeRefusals looks in a row, a read between starting the count again; the
+// connection stands through a thread that isn't loaded (the mutants: the context not looked at;
+// "thread not loaded" not taken for gone; notLoaded not counted; the count not reset by a read;
+// one look taken for gone).
+func TestTheCodexBridgeStopsWhenItsAgentEnds(t *testing.T) {
+	t.Run("the context gone", func(t *testing.T) {
+		ctxFile := filepath.Join(t.TempDir(), "session")
+		if err := os.WriteFile(ctxFile, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		conn := &codexStatusConn{statuses: []string{`{"type":"idle"}`}}
+		d, dials := &daemonCalls{}, 0
+		b := testCodexBridge(conn, d, &dials)
+		b.ctxFile = ctxFile
+		st := looks(t, b, nil, 1)
+		if err := os.Remove(ctxFile); err != nil {
+			t.Fatal(err)
+		}
+		d.take()
+		err := b.look(context.Background(), st, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "context") {
+			t.Fatalf("a look after the context went: %v, want the bridge stopped", err)
+		}
+		if len(conn.calls) != 1 || len(d.take()) != 0 {
+			t.Errorf("the look after the context went read %d times in all and told the daemon something; want nothing more", len(conn.calls))
+		}
+	})
+	for _, c := range []struct{ name, gone string }{
+		{"the app-server answers thread not loaded", "not loaded"},
+		{"the status is notLoaded", `{"type":"notLoaded"}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			conn := &codexStatusConn{statuses: []string{c.gone, c.gone, `{"type":"idle"}`, c.gone, c.gone, c.gone}}
+			d, dials := &daemonCalls{}, 0
+			b := testCodexBridge(conn, d, &dials)
+			st := &codexLookState{unknown: true}
+			var err error
+			n := 0
+			for ; n < 6 && err == nil; n++ {
+				err = b.look(context.Background(), st, io.Discard)
+			}
+			if !errors.Is(err, errCodexThreadGone) || n != 6 {
+				t.Fatalf("stopped with %v after %d looks, want the thread gone after 6: two gone, a read, three gone", err, n)
+			}
+			if dials != 1 {
+				t.Errorf("%d dials, want the one connection: the server answered every look", dials)
+			}
+			// only the one read said anything: its clear (the first) and alive; a gone thread, nothing
+			if got := d.take(); !slices.Equal(got, []string{"crew.attention clear", "crew.attention alive"}) {
+				t.Errorf("the daemon was told %q, want the read's clear and alive alone", got)
+			}
+		})
 	}
 }

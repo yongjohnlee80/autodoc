@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -40,6 +41,15 @@ var codexThreadEvery = codexWaitEvery
 // errCodexServerGone is an app-server that isn't there: its socket gone, or refusing connections.
 var errCodexServerGone = errors.New("the Codex app-server is gone")
 
+// errCodexThreadGone is a thread the app-server no longer has loaded: deleted, or unloaded. A
+// thread whose TUI quit stays loaded on the shared app-server, idle (codex-cli 0.163.0, live
+// 2026-11-01): there the session's context file going is what ends the bridge.
+var errCodexThreadGone = errors.New("the Codex thread is gone")
+
+// codexThreadNotLoaded is the app-server's refusal of thread/read for a thread it hasn't loaded:
+// JSON-RPC's invalid request, "thread not loaded: <id>".
+const codexThreadNotLoaded = -32600
+
 // codexConn is one connection to the app-server.
 type codexConn interface {
 	codexRPC
@@ -70,9 +80,10 @@ func (s codexStatus) prompt() (asks string, showing bool) {
 
 // codexBridge is one session's bridge: its context, as read when it started, and its thread.
 type codexBridge struct {
-	c      sessionContext
-	thread string
-	bound  time.Duration // a look's bound (codexBridgeLook)
+	c       sessionContext
+	thread  string
+	ctxFile string        // the session's context file, which its host removes when the agent ends
+	bound   time.Duration // a look's bound (codexBridgeLook)
 
 	// server is the app-server's socket, resolved and bounded to Codex's socket folder (codexServer)
 	server func() (string, error)
@@ -80,11 +91,11 @@ type codexBridge struct {
 	call   func(ctx context.Context, method string, params ...any) (any, error) // the daemon
 }
 
-func newCodexBridge(c sessionContext, thread string, getenv func(string) string) (*codexBridge, error) {
+func newCodexBridge(c sessionContext, thread, ctxFile string, getenv func(string) string) (*codexBridge, error) {
 	if c.Kind != "" && c.Kind != "codex" {
 		return nil, fmt.Errorf("this session is a %s session, not a Codex one", c.Kind)
 	}
-	b := &codexBridge{c: c, thread: thread, bound: codexBridgeLook}
+	b := &codexBridge{c: c, thread: thread, ctxFile: ctxFile, bound: codexBridgeLook}
 	b.server = func() (string, error) { return codexServer(getenv) }
 	b.dial = func(ctx context.Context, server string) (codexConn, error) { return dialCodexServer(ctx, server) }
 	b.call = func(ctx context.Context, method string, params ...any) (any, error) {
@@ -100,6 +111,7 @@ type codexLookState struct {
 	unknown bool      // an attention an earlier bridge of this session raised may stand
 	failing bool      // the last look failed (logged once until one succeeds)
 	gone    int       // looks in a row that found the app-server gone
+	unseen  int       // looks in a row that found the thread gone
 }
 
 // run reports the thread's prompts, a look at each tick, until ctx ends or a look stops it.
@@ -128,18 +140,34 @@ func (b *codexBridge) run(ctx context.Context, tick <-chan time.Time, log io.Wri
 // permission attention, saying what it waits on (again if another took its place), and none showing
 // clears what was raised. A look that read the status then says the reporter is alive. A look that
 // fails (a server outside Codex's socket folder included: never dialed) raises nothing, clears
-// nothing and says nothing alive. It answers an error, which stops the bridge, when the session's
-// credential is refused (the session ended, or its folder now holds another's), or when the
-// app-server has been gone for bridgeRefusals looks in a row (an agent's own server ends with its
-// CLI).
+// nothing and says nothing alive. It answers an error, which stops the bridge, when the session has
+// ended: its context file gone (its host removes it as the agent ends, whatever server it was on),
+// or its credential refused (or its folder now holds another's); or when, for bridgeRefusals looks
+// in a row, the app-server is gone (an agent's own server ends with its CLI) or the thread is.
 func (b *codexBridge) look(ctx context.Context, st *codexLookState, log io.Writer) error {
+	if b.ctxFile != "" {
+		if _, err := os.Stat(b.ctxFile); errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("the session's context %s is gone: the agent ended", b.ctxFile)
+		}
+	}
 	lctx, cancel := context.WithTimeout(ctx, b.bound)
 	defer cancel()
 	status, err := b.read(lctx, &st.conn)
+	if err == nil && status.Type == "notLoaded" {
+		err = fmt.Errorf("%w: its status is notLoaded", errCodexThreadGone)
+	}
+	if !errors.Is(err, errCodexThreadGone) {
+		st.unseen = 0
+	}
 	if err != nil {
 		if errors.Is(err, errCodexServerGone) {
 			if st.gone++; st.gone >= bridgeRefusals {
 				return fmt.Errorf("%w: %d looks in a row", err, st.gone)
+			}
+		}
+		if errors.Is(err, errCodexThreadGone) {
+			if st.unseen++; st.unseen >= bridgeRefusals {
+				return fmt.Errorf("%w: %d looks in a row", err, st.unseen)
 			}
 		}
 		if !st.failing && ctx.Err() == nil {
@@ -198,6 +226,10 @@ func (b *codexBridge) read(ctx context.Context, conn *codexConn) (codexStatus, e
 		} `json:"thread"`
 	}
 	if err := (*conn).call(ctx, "thread/read", map[string]any{"threadId": b.thread, "includeTurns": false}, &r); err != nil {
+		var re *codexRPCError
+		if errors.As(err, &re) && re.Code == codexThreadNotLoaded && strings.HasPrefix(re.Message, "thread not loaded") {
+			return codexStatus{}, fmt.Errorf("%w: %v", errCodexThreadGone, err) // the server answered: the connection stands
+		}
 		(*conn).close()
 		*conn = nil
 		return codexStatus{}, err
@@ -265,7 +297,7 @@ func crewCodexBridgeMain(ctx context.Context, c sessionContext, envFile, cwd str
 		fmt.Fprintln(stderr, "autodoc: the Codex bridge found no thread:", err)
 		return 1
 	}
-	b, err := newCodexBridge(c, thread, os.Getenv)
+	b, err := newCodexBridge(c, thread, contextFile(envFile, cwd, c), os.Getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
