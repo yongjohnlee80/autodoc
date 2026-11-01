@@ -17,6 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	coreconfig "github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/golib/logger"
 )
@@ -697,9 +698,9 @@ func (v *validator) log(f file) Log {
 		}
 	}
 	if f.Log.Level != "" {
-		s, err := logger.ParseSeverity(f.Log.Level)
+		s, err := coreconfig.ParseLogLevel(f.Log.Level)
 		if err != nil {
-			v.refuse("log.level", "%q: want debug, info, notice, warning, error or critical", f.Log.Level)
+			v.refuse("log.level", "%v", err)
 		}
 		l.Level = s
 	}
