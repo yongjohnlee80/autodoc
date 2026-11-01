@@ -7,17 +7,29 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 
+	"github.com/yongjohnlee80/autodoc/core/diagram"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// ValidateFrontmatter checks src's frontmatter as the index does at path (doc.validate): a task in
-// a todo store by its todo format, every other file by kb, the workspace's schema
-// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format). So the editor's diagnostics and
-// index.documents' agree.
-func (x *Indexer) ValidateFrontmatter(path string, src []byte, kb *schema.Schema) schema.Result {
-	return frontmatterOf(path, kind.ParseMarkdown(src), src, kb, x.mode(path).Store)
+// ValidateDocument checks src as the index does at path (doc.validate): its frontmatter, a task in a
+// todo store by its todo format, every other file by kb, the workspace's schema
+// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format), and its Mermaid diagrams by the
+// viewer's parser (docs/decisions/search.md#diagrams-the-viewer-cant-draw). So the editor's
+// diagnostics and index.documents' agree.
+func (x *Indexer) ValidateDocument(path string, src []byte, kb *schema.Schema) schema.Result {
+	return checkedOf(path, kind.ParseMarkdown(src), src, kb, x.mode(path).Store)
+}
+
+// checkedOf is doc at path checked: its frontmatter (frontmatterOf), then its Mermaid diagrams the
+// viewer can't draw (diagram.Diagnostics), except at a path kb exempts, which it doesn't judge.
+func checkedOf(path string, doc *markdown.Document, src []byte, kb *schema.Schema, st *TodoStore) schema.Result {
+	r := frontmatterOf(path, doc, src, kb, st)
+	if st != nil || !kb.Exempts(path) {
+		r.Diagnostics = append(r.Diagnostics, diagram.Diagnostics(doc)...)
+	}
+	return r
 }
 
 // frontmatterOf is the frontmatter of doc at path checked: by the store's todo format for a task,

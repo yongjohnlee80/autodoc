@@ -8,9 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/core/diagram"
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/core/lab"
-	"github.com/yongjohnlee80/golib/parse/markdown"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
@@ -63,31 +62,12 @@ func diagramsIn(file string) ([]checkDiagram, error) {
 	if lang != "" {
 		return []checkDiagram{{file: file, line: 1, lang: lang, src: string(data)}}, nil
 	}
-	// the fences are golib's Markdown parser's (kind.ParseMarkdown), as the export and the TUI find
-	// them: a fence shown inside a longer one is text, and one in a block quote or a list is a fence
+	// the fences are every reader's (diagram.Fences): golib's Markdown parser's, as the export, the
+	// TUI and doc.validate find them
 	var out []checkDiagram
-	doc := kind.ParseMarkdown(data)
-	var walk func(*markdown.Node)
-	walk = func(n *markdown.Node) {
-		for c := n.FirstChild; c != nil; c = c.Next {
-			if c.Kind != markdown.KindCodeBlock || c.Fence() == 0 {
-				walk(c)
-				continue
-			}
-			lang := lab.FenceLang(string(c.Info()))
-			if lang == "vegalite" {
-				lang = "vega-lite"
-			}
-			if lang != "mermaid" && lang != "vega-lite" {
-				continue
-			}
-			// the source starts the line after its opening fence's, as the parser counts lines
-			// (\n, \r\n or a lone \r)
-			line := doc.Position(c.Span.Start).Line + 1
-			out = append(out, checkDiagram{file: file, line: line, lang: lang, src: string(c.Literal)})
-		}
+	for _, f := range diagram.Fences(kind.ParseMarkdown(data)) {
+		out = append(out, checkDiagram{file: file, line: f.Line, lang: f.Lang, src: f.Src})
 	}
-	walk(doc.Root)
 	return out, nil
 }
 
@@ -126,12 +106,17 @@ func checkDiagrams(files []string, out io.Writer) int {
 	return code
 }
 
-// errorLine is how far into its source golib's error is: a Mermaid syntax error's line, less one (the
-// diagram's first line is its file's line already); 0 for an error with no line.
+// errorLine is how far into its source golib's error is: the line of a Mermaid syntax error, or of
+// what its parser refused, less one (the diagram's first line is its file's line already); 0 for an
+// error with no line.
 func errorLine(err error) int {
 	var se *pm.SyntaxError
-	if errors.As(err, &se) && se.Line > 0 {
+	var nd *pm.NotDrawnError
+	switch {
+	case errors.As(err, &se) && se.Line > 0:
 		return se.Line - 1
+	case errors.As(err, &nd) && nd.Line > 0:
+		return nd.Line - 1
 	}
 	return 0
 }

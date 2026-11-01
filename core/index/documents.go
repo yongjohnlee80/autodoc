@@ -65,8 +65,9 @@ type DocumentsOpts struct {
 	Paths   []string            // a document is under one of these folders, or is one of these files
 	Facets  map[string][]string // a document has one of the values of each field (the schema's facets)
 	Missing []string            // a document lacks one of these frontmatter fields: the backfill's scan
-	// Diagnosed keeps the documents whose frontmatter the schema diagnoses (malformed YAML, a missing
-	// or refused field), each with its diagnostics: the scan for every problem, not only absences.
+	// Diagnosed keeps the documents with a diagnostic (frontmatter the schema diagnoses: malformed
+	// YAML, a missing or refused field; a Mermaid diagram the viewer can't draw), each with its
+	// diagnostics: the scan for every problem, not only absences.
 	Diagnosed bool
 	After     string // the previous page's Next; "" from the start
 	Limit     int    // MaxDocumentsPage at most; 100 when zero

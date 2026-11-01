@@ -6,6 +6,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
 
+	"github.com/yongjohnlee80/autodoc/core/diagram"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
@@ -135,7 +136,7 @@ func (s *Server) docVerbs() []module.Verb {
 		// Markdown has frontmatter.
 		module.Handle(module.Contract{Verb: "doc.validate", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{diagnostics: [{field, line, rule, message}]}", Errors: []int64{CodeNoSuchWorkspace},
-			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry."},
+			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. A task in a todo store is checked by the todo format instead: rule todo-malformed for a file it can't read, todo-<code> for each errors[] entry. Each fenced mermaid diagram the viewer can't draw is rule mermaid, at the line of what golib's parser refused or found malformed, field empty. A path the schema exempts gets no diagnostic."},
 			func(ctx context.Context, p docValidate) (*diagnosticsJSON, error) {
 				w := workspaceOf(ctx)
 				if len(p.Content) > docs.MaxSize {
@@ -147,10 +148,13 @@ func (s *Server) docVerbs() []module.Verb {
 				switch idx := w.Index(); {
 				case idx == nil:
 					ds = sch.ValidateFile(p.Content).Diagnostics
+					if !sch.Exempts(p.Path) { // its diagrams too, as the index checks them
+						ds = append(ds, diagram.Diagnostics(kind.ParseMarkdown(p.Content))...)
+					}
 				case idx.Kind(p.Path).Traits().Frontmatter:
 					// as the index checks the path: a task in a todo store by its todo format
 					// (docs/decisions/todos.md#tasks-are-checked-by-the-todo-format)
-					ds = idx.ValidateFrontmatter(p.Path, p.Content, sch).Diagnostics
+					ds = idx.ValidateDocument(p.Path, p.Content, sch).Diagnostics
 				}
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
 			}),

@@ -17,7 +17,7 @@ import (
 // Identity is a document.indexer string read back
 // (docs/decisions/search.md#indexer-identity-strings):
 //
-//	built-in   = "c" CHUNKV ".s" SCHEMA ".t" TOKENS [".f" SCHEMAFP]
+//	built-in   = "c" CHUNKV ".s" SCHEMA ".t" TOKENS [".f" SCHEMAFP] [".r" N] [".a" N] [".m" N]
 //	registered = "c" EXT "@" VERSION ".s" SCHEMA ".t" TOKENS
 //	derived    = "d" EXT ":" DERIVER "@" VERSION "+" built-in
 //
@@ -35,10 +35,10 @@ type Identity struct {
 	// Built is a derived document's built-in identity: its text is Markdown, chunked as such.
 	Built             string
 	Chunker, SchemaFP string // built-in: golib's chunker version, and Markdown's schema fingerprint
-	// built-in Markdown: the relations reading ("r1") and the abstract chunk ("a1") it was indexed
-	// with; "" when it was not
-	Relations, Abstract string
-	Schema, Tokens      int // built-in and registered
+	// built-in Markdown: the relations reading ("r1"), the abstract chunk ("a1") and the Mermaid
+	// diagrams' check ("m1") it was indexed with; "" when it was not
+	Relations, Abstract, Diagrams string
+	Schema, Tokens                int // built-in and registered
 }
 
 // Form is which of document.indexer's forms a string is.
@@ -103,14 +103,15 @@ func ParseIdentity(s string) (Identity, error) {
 		if !ok || !ok1 {
 			return Identity{}, bad
 		}
-		// TOKENS, then in this order, each optional: ".f" FP, ".r" N (relations), ".a" N (abstract)
+		// TOKENS, then in this order, each optional: ".f" FP, ".r" N (relations), ".a" N (abstract),
+		// ".m" N (diagrams)
 		parts := strings.Split(rest, ".")
 		tokens, ok2 := digits(parts[0])
 		if !ok2 {
 			return Identity{}, bad
 		}
 		id := Identity{Form: BuiltIn, Chunker: chunker, Schema: schema, Tokens: tokens}
-		order := "fra"
+		order := "fram"
 		for _, part := range parts[1:] {
 			if part == "" {
 				return Identity{}, bad
@@ -136,6 +137,11 @@ func ParseIdentity(s string) (Identity, error) {
 					return Identity{}, bad
 				}
 				id.Abstract = part
+			case 'm':
+				if _, ok := digits(v); !ok {
+					return Identity{}, bad
+				}
+				id.Diagrams = part
 			}
 		}
 		return id, nil

@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 5
+revision: 6
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
@@ -156,8 +156,11 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
   Each type adds its own fields.
 - **Check a draft before writing it:**
   `autodoc --call doc.validate '["'"$AUTODOC_WORKSPACE"'", "<path>", "<full text>"]'`. It answers
-  `{diagnostics: [{field, line, rule, message}]}`. Diagnostics never block a write, but fix them.
-- **Find the documents the schema diagnoses:**
+  `{diagnostics: [{field, line, rule, message}]}`. It checks the frontmatter against the schema, and
+  each fenced `mermaid` diagram AutoDoc's viewer can't draw: rule `mermaid`, at the line it refused,
+  with the reason (in a label, `<br>` is the only HTML it draws). Diagnostics never block a write,
+  but fix them.
+- **Find the diagnosed documents** (their frontmatter or their diagrams):
   `autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"diagnosed": true, "limit": 500}]'`.
   Each listed document carries its `diagnostics`. Narrow the list with `"paths": ["<folder>"]`, and
   page through it with `"after": <next>` (pass `next` back unread). `index.status`'s `diagnosed` is

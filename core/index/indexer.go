@@ -805,7 +805,7 @@ var cutters = kind.NewTable(map[kind.Kind]cutter{
 })
 
 // cutMarkdown parses a workspace's Markdown once, for its chunks (and its abstract), its links and
-// relations, its ADR number, and its frontmatter, validated from the same parse
+// relations, its ADR number, and its frontmatter and diagrams, checked from the same parse
 // (docs/decisions/search.md#frontmatter-schemas).
 func cutMarkdown(x *Indexer, p *prepared, s source) error {
 	doc := kind.ParseMarkdown(s.text)
@@ -828,7 +828,7 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 		p.links = append(p.links, extractRelations(doc, p.path)...)
 	}
 	p.adr = adrNumber(p.meta.FrontmatterJSON)
-	p.frontmatter = frontmatterOf(p.path, doc, s.text, s.schema, s.mode.Store)
+	p.frontmatter = checkedOf(p.path, doc, s.text, s.schema, s.mode.Store)
 	return nil
 }
 

@@ -48,8 +48,9 @@ func registeredVersion(ext, version string, tokens int) string {
 
 // docVersion is what document.indexer records for one path. Markdown files add the fingerprint of
 // the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to;
-// ".r1", the frontmatter relations read into links; and ".a1" while the abstract is a chunk of its
-// own. Each rebuild keeps the unchanged chunks' vectors, which are keyed by text.
+// ".r1", the frontmatter relations read into links; ".a1" while the abstract is a chunk of its
+// own; and ".m1", its Mermaid diagrams checked (docs/decisions/search.md#diagrams-the-viewer-cant-draw).
+// Each rebuild keeps the unchanged chunks' vectors, which are keyed by text.
 func docVersion(base string, markdown bool, schemaFP string, abstract bool) string {
 	if !markdown {
 		return base
@@ -62,7 +63,7 @@ func docVersion(base string, markdown bool, schemaFP string, abstract bool) stri
 	if abstract {
 		v += ".a1"
 	}
-	return v
+	return v + ".m1"
 }
 
 // retrieval is the workspace's retrieval settings.
@@ -307,8 +308,9 @@ type Status struct {
 	// UnparsedFrontmatter lists the documents whose frontmatter did not parse or evaluate; their
 	// bodies are indexed all the same.
 	UnparsedFrontmatter []string
-	// Diagnosed counts the documents whose frontmatter has a diagnostic: malformed YAML, or a field
-	// its workspace's schema does not admit. Their bodies are indexed all the same.
+	// Diagnosed counts the documents with a diagnostic: their frontmatter's (malformed YAML, or a field
+	// its workspace's schema does not admit) or a Mermaid diagram's the viewer can't draw. Their
+	// bodies are indexed all the same.
 	Diagnosed int64
 	// Failing lists the jobs whose last attempt failed: a read being retried, or a file over
 	// MaxFileSize waiting for its file to change. They are counted in PendingJobs too.
