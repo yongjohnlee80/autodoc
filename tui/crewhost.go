@@ -68,6 +68,9 @@ type crewHost struct {
 	// the daemon has not confirmed, by id: asked again until it answers.
 	pending map[string]*crewRegistration
 	owed    map[string]crewOwedExit
+	// deliverJob types a fallback job's text into codename's terminal through the agents' base,
+	// done hearing what came of it (crewfallback.go); nil takes no jobs
+	deliverJob func(codename, text string, done func(error))
 }
 
 // crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends it
@@ -164,6 +167,7 @@ func (h *crewHost) claim() {
 		h.scope, h.epoch = r.scope, r.epoch
 		h.gen++
 		h.renewLater(h.gen)
+		h.pollFallbacks(h.gen)
 		h.settle()
 		h.offerOrphans()
 	})

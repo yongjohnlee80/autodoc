@@ -498,6 +498,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
+	h.crew.deliverJob = h.agents.deliverFallback
 	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
 	h.agents.inbox = h.crewInbox
 	if opt.ConfigPath != "" {
