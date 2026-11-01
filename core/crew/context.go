@@ -16,6 +16,9 @@ import (
 // own file.
 const ContextDir = ".autodoc-crew"
 
+// EnvContext names the agent's own session context file, ContextPath, to every autodoc it runs.
+const EnvContext = "AUTODOC_CREW_CONTEXT"
+
 // Context is a session's context, written by its host (the AutoDoc window, Neovim) before the agent
 // starts and read by `autodoc crew|mail`: which daemon and store, and the session's credential.
 type Context struct {

@@ -61,11 +61,15 @@ type agentInstance struct {
 	// crewed whether its starts are crew sessions' (its window held a scope when it was started);
 	// context the file of the session its next process runs under, told it at its start
 	// (AUTODOC_CREW_CONTEXT, runAgent), "" while there is none.
-	starting         bool
-	session          crewSession
-	crewed           bool
-	context          string
-	setup            crew.Setup // its crew start's setup (crew setup's answer): what its process starts with
+	starting bool
+	session  crewSession
+	crewed   bool
+	context  string
+	setup    crew.Setup // its crew start's setup (crew setup's answer): what its process starts with
+	// env is what its process is started with over AutoDoc's own environment: its profile's env,
+	// then AutoDoc's (agentEnv), as its command line sets them (agentArgv); its setup's server is
+	// started with the same (runAgent)
+	env              []string
 	tab              widget.TerminalTabID
 	token            string
 	workspace        wsInfo
@@ -291,7 +295,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.instances[p.Codename] = instance
 		a.instanceOrder = append(a.instanceOrder, p.Codename)
 	}
-	instance.profile, instance.workspace, instance.crewed = p, ws, crewed
+	instance.profile, instance.workspace, instance.crewed, instance.env = p, ws, crewed, env
 	instance.refusal = nil
 	if a.commandCheck != nil {
 		if err := a.commandCheck(fillAgentCommand(p.Command, ws), env); err != nil { // nothing set up or registered for it
@@ -496,10 +500,14 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 	}
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
 	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
-	// the CLI's terminal if it ends first (agentserver.go)
+	// the CLI's terminal if it ends first (agentserver.go). Its environment is the CLI's, layer for
+	// layer, as agentArgv and the lines above give the CLI: AutoDoc's own without its spawner's
+	// identity, the profile's and AutoDoc's (instance.env: the daemon, the agent's PATH, the editor
+	// socket and the agent's token there), the session's context, then the setup's. A Codex shell
+	// runs under this server, not the CLI, so `autodoc --editor` there needs it.
 	var server *agentServer
 	if instance.crewed && len(instance.setup.Server) > 0 {
-		environ := append(instance.profile.environ(os.Environ()), "AUTODOC_CREW_CONTEXT="+instance.context)
+		environ := slices.Concat(ownEnviron(), instance.env, []string{crew.EnvContext + "=" + instance.context})
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
 			environ = append(environ, k+"="+instance.setup.Env[k])
 		}

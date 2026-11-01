@@ -202,6 +202,122 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	}
 }
 
+// TestTheServersPidFileStaysOutOfTheContextsFolder: the server's pid file is in the agent folder,
+// never in its crew folder, which holds the session contexts alone: a file of anything else there
+// was read as a second context, and `autodoc crew` and `mail` in the folder refused with "several
+// session contexts" (R4). A server a build before it left, its pid in the crew folder, is stopped
+// at the next start and that file removed, so the folder reads its one context again.
+func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
+	dir, socket := serverDir(t)
+	contexts := filepath.Join(dir, crew.ContextDir)
+	if err := os.WriteFile(filepath.Join(contexts, "s1"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stale := exec.Command("sh", "-c", "while :; do sleep 1; done", "sh", socket)
+	stale.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := stale.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(-stale.Process.Pid, syscall.SIGKILL); _, _ = stale.Process.Wait() })
+	namesItsSocket(t, stale.Process.Pid, socket)
+	var reaped sync.WaitGroup
+	reaped.Add(1)
+	go func() { _, _ = stale.Process.Wait(); reaped.Done() }()
+	if err := os.WriteFile(filepath.Join(contexts, "server.pid"), []byte(strconv.Itoa(stale.Process.Pid)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.stop()
+	done := make(chan struct{})
+	go func() { reaped.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server a build before it left, its pid in the crew folder, still runs after the next start")
+	}
+	var names []string
+	es, err := os.ReadDir(contexts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range es {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{"s1"}) {
+		t.Fatalf("the crew folder holds %q, want its one session context alone", names)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, serverPidFile)); err != nil || strings.TrimSpace(string(b)) != strconv.Itoa(s.cmd.Process.Pid) {
+		t.Fatalf("the pid file in the agent folder: %q %v, want %d", b, err, s.cmd.Process.Pid)
+	}
+}
+
+// TestTheServerIsStartedWithTheCLIsEnvironment, end to end through runAgent: a crew Codex agent's
+// server runs the shell commands of its agent, so it is started with what its CLI is: every
+// variable the CLI's command line sets (the daemon, the agent's PATH, the editor socket and the
+// agent's token there, the session's context), and none of the window's spawner identity (R4).
+func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
+	t.Setenv("AUTO_AGENTS_MAILBOX_ID", "agent:the-window:1") // the window's spawner identity
+	a, c, _ := crewAgents(t, crewKinds)
+	a.editorPath = func() string { return "/run/the-editor.sock" }
+	p, _ := a.profile("codex-one")
+	var socket, envFile string
+	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
+		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
+		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
+		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
+	}
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	awaitStart(t, c, instance)
+	cfg := c.panel.configs[instance.tab]
+	var spawned []string // the CLI's command line, as runAgent gives it
+	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c.Args; return newFakeTerminal(), nil }
+	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = proc.Close() }()
+	b, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := map[string]string{}
+	for _, kv := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		k, v, _ := strings.Cut(kv, "=")
+		server[k] = v
+	}
+	// the CLI's: its command line is env [-u NAME]... NAME=VALUE... sh -c COMMAND
+	cli := map[string]string{}
+	for i := 0; i < len(spawned) && spawned[i] != "/bin/sh"; i++ {
+		if spawned[i] == "-u" {
+			i++
+			continue
+		}
+		if k, v, ok := strings.Cut(spawned[i], "="); ok {
+			cli[k] = v
+		}
+	}
+	for _, k := range []string{crew.EnvContext, "AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH"} {
+		if cli[k] == "" {
+			t.Fatalf("fixture: the CLI's command line sets no %s: %q", k, spawned)
+		}
+	}
+	for k, v := range cli {
+		if server[k] != v {
+			t.Errorf("the server's %s is %q, the CLI's %q", k, server[k], v)
+		}
+	}
+	if v, ok := server["AUTO_AGENTS_MAILBOX_ID"]; ok {
+		t.Errorf("the server has the window's spawner identity: AUTO_AGENTS_MAILBOX_ID=%s", v)
+	}
+}
+
 // fakeTerminal is an agent CLI's process: Wait returns once ended, Close records the terminal closed.
 type fakeTerminal struct {
 	widget.TerminalProcess
