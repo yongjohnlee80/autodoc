@@ -88,8 +88,9 @@ func TestTheMCPGuideSaysEachToolsArguments(t *testing.T) {
 		"\n  - `mail_ack`: `id`\n",
 		"\n  - `mail_reply`: `id` and `body`; optionally `subject`\n",
 		"\n  - `mail_renew`: `id`\n",
+		"\n  - `mail_show`: `id`\n",
 		"\n  - `crew_whoami`: none\n",
-		"\n  - `crew_list`: none\n",
+		"\n  - `crew_list`: optionally `all`\n",
 		"\n  - `mail_send`: `to` and `body`; optionally `kind` and `subject`\n",
 	} {
 		if !strings.Contains(g, line) {

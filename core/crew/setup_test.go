@@ -253,7 +253,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		if err := json.Unmarshal([]byte(s.Argv[1]), &settings); err != nil {
 			t.Fatal(err)
 		}
-		rules := []string{"command(autodoc crew bridge --agy)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
+		rules := []string{"command(autodoc crew bridge --agy)", "command(autodoc --contracts)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
 		trusted := []string{"/a"} // the window's working folder is the agent's folder
 		if host == crew.HostNvim {
 			trusted = []string{"/a", "/p"} // Neovim's is the user's project, the agent's folder added
@@ -348,7 +348,7 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
-	rules := []string{"mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
+	rules := []string{"Bash(autodoc --contracts:*)", "mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
 		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), Servers: servers}
 		s, err := crew.SetupFor(in, "")
@@ -365,7 +365,7 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
 			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
 		}
-		if !slices.Equal(s.Allow, rules) { // least privilege: its tools, and no shell rule for its mail
+		if !slices.Equal(s.Allow, rules) { // least privilege: its tools and the read-only contracts, no shell rule for its mail
 			t.Errorf("%s: Allow %q, want exactly %q", host, s.Allow, rules)
 		}
 		if slices.ContainsFunc(s.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") && strings.Contains(r, "*") }) {
