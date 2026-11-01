@@ -1239,6 +1239,14 @@
         <source>%1's mail that waited for its host was delivered</source>
         <translation>%1's mail that waited for its host was delivered</translation>
     </message>
+    <message id="autodoc.crew.fallback_typed">
+        <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
+        <translation>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</translation>
+    </message>
+    <message id="autodoc.crew.fallback_unknown_ended">
+        <source>%1's mail that waited for its host may not have arrived: its text is in a notice</source>
+        <translation>%1's mail that waited for its host may not have arrived: its text is in a notice</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 no longer waits on you</translation>

@@ -1239,6 +1239,14 @@
         <source>%1's mail that waited for its host was delivered</source>
         <translation>等待主机的 %1 的邮件已送达</translation>
     </message>
+    <message id="autodoc.crew.fallback_typed">
+        <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
+        <translation>等待主机的 %1 的邮件已输入到其提示符中：在那里按 Enter 发送</translation>
+    </message>
+    <message id="autodoc.crew.fallback_unknown_ended">
+        <source>%1's mail that waited for its host may not have arrived: its text is in a notice</source>
+        <translation>等待主机的 %1 的邮件可能未送达：其文本在通知中</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 不再等你了</translation>
