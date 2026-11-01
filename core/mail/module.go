@@ -20,6 +20,8 @@ func (m *Manager) Errors() []module.PublicError {
 	return []module.PublicError{
 		{Err: ErrNoRecipient, Code: CodeNoRecipient, Name: "mail.no_recipient", Message: "an address names no active profile or live session",
 			Next: "crew.list the addressbook, and send to a name it shows"},
+		{Err: ErrAmbiguous, Code: CodeAmbiguous, Name: "mail.ambiguous", Message: "a bare name more than one other scope has a profile of",
+			Next: "send to the one meant by name@scope, as the error names them"},
 		{Err: ErrKeyReused, Code: CodeKeyReused, Name: "mail.key_reused", Message: "the key already names another message",
 			Next: "a retry sends the same content; new content takes a new key"},
 		{Err: ErrTooLarge, Code: CodeTooLarge, Name: "mail.too_large", Message: "the body is past 64 KiB",
@@ -154,7 +156,7 @@ func (m *Manager) Verbs() []module.Verb {
 	return []module.Verb{
 		module.Handle(agent("mail.send", module.EffectWrite, "{message, deliveries[]}",
 			"Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
-			CodeNoRecipient, CodeKeyReused, CodeTooLarge),
+			CodeNoRecipient, CodeAmbiguous, CodeKeyReused, CodeTooLarge),
 			func(ctx context.Context, p sendParams) (sentResult, error) {
 				s, err := m.Send(ctx, p.Credential, Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body, Key: p.Key,
 					TTL: time.Duration(p.TTL) * time.Second})

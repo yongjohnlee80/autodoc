@@ -45,6 +45,7 @@ func Run(t *testing.T, h Harness) {
 		{"ASendIsReceivedLeasedAndAcked", testASendIsReceivedLeasedAndAcked},
 		{"ASendsKeyMakesOneMessage", testASendsKeyMakesOneMessage},
 		{"ASendsAddresses", testASendsAddresses},
+		{"ABareNameReachesTheOneOtherScope", testABareNameReachesTheOneOtherScope},
 		{"ALapsedLeaseIsRedeliveredThenFails", testALapsedLeaseIsRedeliveredThenFails},
 		{"ARenewKeepsTheLease", testARenewKeepsTheLease},
 		{"AnExpiredMessageEnds", testAnExpiredMessageEnds},
@@ -309,6 +310,57 @@ func testASendsAddresses(t *testing.T, h Harness) {
 	}
 	if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{"gold"}, Body: strings.Repeat("x", mail.MaxBody+1), Key: "big"}); !errors.Is(err, mail.ErrTooLarge) {
 		t.Fatalf("a body past the limit: %v", err)
+	}
+}
+
+// One daemon is one crew (docs/decisions/crew.md#one-daemon-is-one-crew): a bare name the sender's
+// scope has no profile of reaches the one other scope's profile of it; the sender's own scope's wins
+// over another's; two or more other scopes' are ambiguous, the error naming each by the address that
+// reaches it, and nothing is stored; a gone scope's profile never counts, so one that is the only
+// one is no recipient; the daemon's profile never resolves.
+func testABareNameReachesTheOneOtherScope(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	recipients := func(s mail.Sent) string {
+		var got []string
+		for _, d := range s.Deliveries {
+			got = append(got, d.Recipient)
+		}
+		return strings.Join(got, " ")
+	}
+	r.profile("p-zen", "autodoc:w1", "zen", "s-zen")
+	if got := recipients(r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "b", Key: "k-zen"})); got != "p-zen" {
+		t.Fatalf("zen, in one other scope alone: delivered to %q, want p-zen", got)
+	}
+	r.profile("p-gold-w1", "autodoc:w1", "gold", "s-gold-w1")
+	if got := recipients(r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k-gold"})); got != "p-gold" {
+		t.Fatalf("gold, in the sender's own scope and another: delivered to %q, want the sender's scope's p-gold", got)
+	}
+	r.profile("p-zen-q", "autovim:q", "zen", "s-zen-q")
+	before := len(r.st.Inspect.Messages())
+	_, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{"zen"}, Body: "b", Key: "k-zen-2"})
+	if !errors.Is(err, mail.ErrAmbiguous) || !strings.Contains(err.Error(), "zen@autodoc:w1") || !strings.Contains(err.Error(), "zen@q") {
+		t.Fatalf("zen, in two other scopes: %v, want ErrAmbiguous naming zen@autodoc:w1 and zen@q", err)
+	}
+	if len(r.st.Inspect.Messages()) != before {
+		t.Fatal("an ambiguous send stored a message")
+	}
+	if got := recipients(r.send("s-jarvis", mail.Send{To: []string{"zen@q"}, Body: "b", Key: "k-zen-q"})); got != "p-zen-q" {
+		t.Fatalf("zen@q: delivered to %q, want p-zen-q: the address the error named reaches it", got)
+	}
+	r.profile("p-kai", "autodoc:w2", "kai", "s-kai")
+	r.write(func(tx mail.Tx) error {
+		if err := tx.PutScope(crew.Scope{ID: "autovim:q", Kind: "autovim", State: crew.ScopeGone}); err != nil {
+			return err
+		}
+		return tx.PutScope(crew.Scope{ID: "autodoc:w2", Kind: "autodoc", State: crew.ScopeGone})
+	})
+	if got := recipients(r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "b", Key: "k-zen-3"})); got != "p-zen" {
+		t.Fatalf("zen, the other scope gone: delivered to %q, want p-zen: a gone scope's profile doesn't count", got)
+	}
+	for _, to := range []string{"kai", "autodoc", "nobody"} {
+		if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{to}, Body: "b", Key: "k-none-" + to}); !errors.Is(err, mail.ErrNoRecipient) {
+			t.Errorf("%s (only in a gone scope, the daemon's, or no one's): %v, want ErrNoRecipient", to, err)
+		}
 	}
 }
 

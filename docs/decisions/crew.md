@@ -210,9 +210,24 @@ scope has one owner at a time: one process of its host, fenced by an epoch.
 - An AutoDoc window keeps the scope ids it claimed, not secrets, in `<agentDir>/.crew-scopes/`, so a
   crashed window's successor claims the old scope back once its lease lapses.
 - Addresses: a bare codename resolves in the sender's scope, `name@project` or `name@<scope>`
-  crosses scopes, and `user` is you.
+  crosses scopes, and `user` is you (one daemon is one crew, below).
 
 In the code: `core/crew/claim.go`, `core/crew/proc.go`, `tui/crewhost.go`
+
+## One daemon is one crew
+
+Agents in an AutoDoc window and in Neovim reach each other by codename, wherever each runs: one
+daemon is one crew.
+
+- A bare name resolves in the sender's own scope first.
+- When that scope has no profile of the name, the name resolves daemon-wide, to the one active
+  profile of it in another scope. Gone scopes and the daemon's own profile don't count.
+- When two or more other scopes have it, the send is refused as `mail.ambiguous`, which names each
+  one by the address that reaches it (`name@project`, or `name@<scope>`). Nothing is sent.
+- Nothing links scopes: no table, nothing recorded when a host claims. A reply goes back by the
+  sender's own address (`name@scope`), so it never needs resolving again.
+
+In the code: `core/mail/send.go` (`resolveAddress`, `uniqueProfileNamed`), `core/mail/errors.go`
 
 ## Orphan scopes are offered to the user
 

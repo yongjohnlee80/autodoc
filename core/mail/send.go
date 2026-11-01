@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -321,6 +322,44 @@ func addresses(tx Tx, scope string, to []string) ([]address, error) {
 	return out, nil
 }
 
+// uniqueProfileNamed is the one active profile of codename name in a scope other than scope, live
+// (its scope not gone) and not the daemon's: ok false when there is none, ErrAmbiguous naming each
+// as name@scope when two or more have it, so the sender can say which.
+func uniqueProfileNamed(tx Tx, scope, name string) (crew.Profile, bool, error) {
+	all, err := tx.ActiveProfiles()
+	if err != nil {
+		return crew.Profile{}, false, err
+	}
+	var found []crew.Profile
+	for _, p := range all {
+		if p.Codename != name || p.Scope == scope || p.ID == DaemonProfile {
+			continue
+		}
+		gone, err := scopeGone(tx, p.Scope)
+		if err != nil {
+			return crew.Profile{}, false, err
+		}
+		if !gone {
+			found = append(found, p)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return crew.Profile{}, false, nil
+	case 1:
+		return found[0], true, nil
+	}
+	names := make([]string, len(found))
+	for i, p := range found {
+		names[i] = name + "@" + p.Scope // the address that reaches it: an AutoVim project's by its name
+		if proj, ok := strings.CutPrefix(p.Scope, "autovim:"); ok {
+			names[i] = name + "@" + proj
+		}
+	}
+	slices.Sort(names)
+	return crew.Profile{}, false, fmt.Errorf("%w: %s is %s", ErrAmbiguous, name, strings.Join(names, " or "))
+}
+
 func resolveAddress(tx Tx, scope, to string) (address, error) {
 	if id, ok := strings.CutPrefix(to, "session:"); ok {
 		s, ok, err := tx.Session(id)
@@ -342,6 +381,11 @@ func resolveAddress(tx Tx, scope, to string) (address, error) {
 		scope = "autovim:" + in // jarvis@mcat: an AutoVim project by name (docs/decisions/crew.md#scopes-and-fenced-ownership)
 	}
 	p, ok, err := tx.ActiveProfile(scope, name)
+	if err == nil && !ok && !cross && name != "" && name != UserCodename {
+		// one daemon is one crew (docs/decisions/crew.md#one-daemon-is-one-crew): a bare name the
+		// sender's scope has no profile of reaches the one other scope's that has it
+		p, ok, err = uniqueProfileNamed(tx, scope, name)
+	}
 	if err != nil {
 		return address{}, err
 	}
