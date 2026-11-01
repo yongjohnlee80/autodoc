@@ -98,6 +98,24 @@ func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 	s.stop() // again: nothing more
 }
 
+// TestStoppingAServerEndsItsWholeGroup: a server whose child outlives the SIGTERM (it ignores it,
+// as a slow MCP child may) leaves no process once stopped: the group is killed after its leader
+// ends (the mutant: the stop ends at the leader's end, and the child is an orphan).
+func TestStoppingAServerEndsItsWholeGroup(t *testing.T) {
+	dir, socket := serverDir(t)
+	child := `sh -c 'trap "" TERM; touch "$1"; while :; do sleep 1; done' child "$1" & exec sleep 300`
+	s, err := startAgentServer([]string{"sh", "-c", child, "sh", socket}, socket, dir, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pgid := s.cmd.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
+	s.stop()
+	if !eventually(t, func() bool { return len(processesNaming(socket)) == 0 }) {
+		t.Fatalf("the server's child outlives its stop: %v", processesNaming(socket))
+	}
+}
+
 // TestAServerThatNeverListensIsStoppedAndRefused: a server whose socket doesn't appear within
 // serverReadyWait is stopped, its pid file removed, and the start refused (the mutant: left running).
 func TestAServerThatNeverListensIsStoppedAndRefused(t *testing.T) {
