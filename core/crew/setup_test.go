@@ -203,12 +203,12 @@ func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
 
 // TestSetupForTakesServersWithoutAKindChanging: the daemon's MCP servers (SetupInput.Servers) and the
 // agent's own folder (AgentDir) reach every kind's setup, and change no kind's answer until that
-// kind takes MCP servers: Claude's, Codex's and OpenCode's are the same with and without them, and
-// none writes a folder file yet.
+// kind takes MCP servers: Codex's is the same with and without them, writes no folder file, and
+// reads its mail through the CLI.
 func TestSetupForTakesServersWithoutAKindChanging(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
-	for _, k := range []string{crew.KindClaude, crew.KindCodex, crew.KindOpenCode} {
+	for _, k := range []string{crew.KindCodex} {
 		in := crew.SetupInput{Kind: k, Host: crew.HostNvim, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir()}
 		without, err := crew.SetupFor(in, "")
 		if err != nil {
@@ -219,7 +219,7 @@ func TestSetupForTakesServersWithoutAKindChanging(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Equal(with.Argv, without.Argv) || !maps.Equal(with.Env, without.Env) || len(with.FolderFiles) != 0 {
+		if !slices.Equal(with.Argv, without.Argv) || !maps.Equal(with.Env, without.Env) || len(with.FolderFiles) != 0 || with.MailVia != crew.MailViaCLI {
 			t.Errorf("%s: with servers %+v, without %+v: want the same until the kind takes MCP servers", k, with, without)
 		}
 	}
@@ -352,5 +352,113 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, "opencode", crew.OpenCodePluginName)); err != nil {
 		t.Errorf("OpenCode's plugin isn't in its absolute data folder: %v", err)
+	}
+}
+
+// TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on its
+// command line on both hosts (--mcp-config, the server's command and args, no env of its own), never
+// --strict-mcp-config (which would take the user's own servers away), each tool allowed by its exact
+// mcp__<server>__<tool> (Neovim's --settings carries them), and its mail via MCP; without servers it
+// is as before, its mail via the CLI.
+func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
+	full := claudeOnPath(t, everyClaudeEvent...)
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
+	rules := []string{"mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), Servers: servers}
+		s, err := crew.SetupFor(in, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(s.Argv, "--mcp-config")
+		if i < 0 || i+1 >= len(s.Argv) || slices.Contains(s.Argv, "--strict-mcp-config") {
+			t.Fatalf("%s: argv %q, want --mcp-config and never --strict-mcp-config", host, s.Argv)
+		}
+		var cfg struct {
+			Servers map[string]map[string]any `json:"mcpServers"`
+		}
+		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
+			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
+		}
+		for _, r := range rules {
+			if !slices.Contains(s.Allow, r) {
+				t.Errorf("%s: Allow %q lacks %s", host, s.Allow, r)
+			}
+		}
+		if slices.ContainsFunc(s.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") && strings.Contains(r, "*") }) {
+			t.Errorf("%s: a wildcard MCP rule in %q", host, s.Allow)
+		}
+		if host == crew.HostNvim {
+			j := slices.Index(s.Argv, "--settings")
+			if j < 0 || !strings.Contains(s.Argv[j+1], `"mcp__autodoc__mail_receive"`) {
+				t.Errorf("nvim: --settings %q, want its allow to carry the MCP rules", s.Argv)
+			}
+		}
+		if s.MailVia != crew.MailViaMCP {
+			t.Errorf("%s: mail via %v, want MCP", host, s.MailVia)
+		}
+		in.Servers = nil
+		without, err := crew.SetupFor(in, "")
+		if err != nil || slices.Contains(without.Argv, "--mcp-config") || without.MailVia != crew.MailViaCLI || slices.ContainsFunc(without.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") }) {
+			t.Errorf("%s without servers: %+v %v, want no MCP and mail via the CLI", host, without, err)
+		}
+	}
+}
+
+// TestSetupForOpenCodeTakesTheCrewMCPServer: an OpenCode agent given the crew's MCP server gets it in
+// OPENCODE_CONFIG_CONTENT's mcp key (a local server: its command and args as one list, enabled), the
+// user's own MCP servers and plugins kept, no permission written (OpenCode gates no MCP tool), and its
+// mail via MCP; without servers there is no mcp key, its mail via the CLI.
+func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
+	own := `{"mcp":{"mine":{"type":"remote","url":"https://example.invalid/mcp"}},"plugin":["file:///p/mine.js"]}`
+	in := crew.SetupInput{Kind: crew.KindOpenCode, Host: crew.HostWindow, DataDir: t.TempDir(), Servers: servers,
+		Env: map[string]string{"PATH": "/x", "OPENCODE_CONFIG_CONTENT": own}}
+	s, err := crew.SetupFor(in, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		MCP        map[string]map[string]any `json:"mcp"`
+		Plugin     []string                  `json:"plugin"`
+		Permission any                       `json:"permission"`
+	}
+	if err := json.Unmarshal([]byte(s.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.MCP["autodoc"]
+	cmd, _ := a["command"].([]any)
+	if a["type"] != "local" || a["enabled"] != true || len(cmd) != 3 || cmd[0] != "/x/autodoc" || cmd[1] != "crew" || cmd[2] != "mcp" || a["environment"] != nil {
+		t.Errorf("the autodoc server %v, want local, enabled, its command and args, no environment", a)
+	}
+	if cfg.MCP["mine"]["url"] != "https://example.invalid/mcp" || !slices.Contains(cfg.Plugin, "file:///p/mine.js") {
+		t.Errorf("the user's own MCP server or plugin was lost: %+v", cfg)
+	}
+	if cfg.Permission != nil || s.MailVia != crew.MailViaMCP {
+		t.Errorf("permission %v, mail via %v: want none written and MCP", cfg.Permission, s.MailVia)
+	}
+	in.Servers = nil
+	without, err := crew.SetupFor(in, "")
+	if err != nil || strings.Contains(without.Env["OPENCODE_CONFIG_CONTENT"], `"autodoc":{`) || without.MailVia != crew.MailViaCLI {
+		t.Errorf("without servers: %v %v, want no autodoc MCP server and mail via the CLI", without.Env, err)
+	}
+}
+
+// TestMailViaIsCLIOrMCPOnTheWire: a mail mode reads and writes as cli or mcp, a setup's answer names
+// it as mail_via, and any other name is refused, never taken as the CLI's.
+func TestMailViaIsCLIOrMCPOnTheWire(t *testing.T) {
+	for v, name := range map[crew.MailVia]string{crew.MailViaCLI: "cli", crew.MailViaMCP: "mcp"} {
+		b, err := json.Marshal(crew.Setup{MailVia: v})
+		if err != nil || !strings.Contains(string(b), `"mail_via":"`+name+`"`) {
+			t.Errorf("%v: %s %v, want mail_via %q", v, b, err, name)
+		}
+		var back crew.MailVia
+		if err := back.UnmarshalText([]byte(name)); err != nil || back != v {
+			t.Errorf("%q reads as %v, %v", name, back, err)
+		}
+	}
+	var v crew.MailVia
+	if err := v.UnmarshalText([]byte("smtp")); err == nil {
+		t.Error("an unknown mail mode was taken")
 	}
 }
