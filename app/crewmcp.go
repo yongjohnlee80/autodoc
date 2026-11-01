@@ -41,15 +41,10 @@ type mcpTool struct {
 	args        func(in map[string]any) (command string, args []string, err error)
 }
 
-// MCPTools are the crew MCP server's tools, by name: the one table a host's setup spells its
-// per-tool allow rules from (agy's mcp(autodoc/<tool>), Claude's mcp__autodoc__<tool>).
-func MCPTools() []string {
-	names := make([]string, 0, len(crewMCPTools))
-	for _, t := range crewMCPTools {
-		names = append(names, t.Name)
-	}
-	return names
-}
+// MCPTools are the crew MCP server's tools, by name: crew.MCPToolNames, the one list a host's setup
+// spells its per-tool allow rules from (agy's mcp(autodoc/<tool>), Claude's mcp__autodoc__<tool>),
+// which the server's own table (crewMCPTools) is held to by a cell.
+func MCPTools() []string { return crew.MCPToolNames() }
 
 // MCPServerName is the name hosts register the crew MCP server under: no slash, since agy's rule
 // for a tool is mcp(<server>/<tool>).

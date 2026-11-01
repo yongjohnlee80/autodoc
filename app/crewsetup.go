@@ -29,12 +29,20 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 	host := fs.String("host", crew.HostNvim, "the host: nvim (Claude's settings on its command line) or window")
 	program := fs.String("program", "", "the CLI the agent's command runs (default the kind's own name)")
 	autodoc := fs.String("autodoc", "autodoc", "the command the agent's hooks run AutoDoc with, as a shell reads it")
+	agentDir := fs.String("agent-dir", "", "the folder the host owns for the agent, where a kind's folder files go (never the user's project)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *kind == "" || fs.NArg() != 0 || (*host != crew.HostNvim && *host != crew.HostWindow) {
-		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD]")
+		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR]")
 		return 2
+	}
+	// a command its words can't be read from offers no MCP server: the setup goes on without it, and
+	// says why, since a kind without MCP still works through the CLI
+	var servers []crew.MCPServer
+	server, serverErr := crewMCPServer(*autodoc)
+	if serverErr == nil {
+		servers = append(servers, server)
 	}
 	env := map[string]string{}
 	for _, kv := range environ {
@@ -53,10 +61,13 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 		return 1
 	}
 	s, err := crew.SetupFor(crew.SetupInput{Kind: *kind, Program: *program, Host: *host, Autodoc: *autodoc, Env: env,
-		DataDir: data, Dir: dir}, filepath.Join(data, "claude-hooks.json"))
+		DataDir: data, Dir: dir, AgentDir: *agentDir, Servers: servers}, filepath.Join(data, "claude-hooks.json"))
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
+	}
+	if serverErr != nil {
+		s.Notices = append(s.Notices, "AutoDoc's MCP server isn't offered: "+serverErr.Error())
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -65,4 +76,77 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 	}
 	fmt.Fprintln(stdout, string(b))
 	return 0
+}
+
+// crewMCPServer is the crew's own MCP server for a session (autodoc crew mcp), as SetupFor's kinds
+// are given it: run by the agent's own autodoc (autodoc, as a shell reads it), its tools
+// crew.MCPToolNames. It takes no env of its own: started by the agent's CLI, it inherits the
+// agent's environment, $AUTODOC_CREW_CONTEXT with it, so it acts as that session.
+func crewMCPServer(autodoc string) (crew.MCPServer, error) {
+	argv, err := shellFields(autodoc)
+	if err != nil || len(argv) == 0 {
+		return crew.MCPServer{}, fmt.Errorf("--autodoc %q: not a command: %v", autodoc, err)
+	}
+	return crew.MCPServer{Name: MCPServerName, Command: append(argv, "crew", "mcp"), Env: map[string]string{},
+		Tools: crew.MCPToolNames()}, nil
+}
+
+// shellFields splits s into words as a POSIX shell does for a plain command: blanks separate, single
+// quotes keep everything, double quotes keep all but a backslash before \, " or $, and a backslash
+// outside quotes keeps the next character. Anything a shell would expand ($, `, globs) is refused, as
+// is an unterminated quote: a command must mean what it says.
+func shellFields(s string) ([]string, error) {
+	var out []string
+	var w strings.Builder
+	in, quote := false, rune(0)
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
+		switch {
+		case quote == '\'':
+			if r == '\'' {
+				quote = 0
+			} else {
+				w.WriteRune(r)
+			}
+		case quote == '"':
+			switch {
+			case r == '"':
+				quote = 0
+			case r == '\\' && i+1 < len(rs) && strings.ContainsRune(`\"$`, rs[i+1]):
+				i++
+				w.WriteRune(rs[i])
+			case r == '$' || r == '`':
+				return nil, fmt.Errorf("%q would be expanded by a shell", string(r))
+			default:
+				w.WriteRune(r)
+			}
+		case r == ' ' || r == '\t' || r == '\n':
+			if in {
+				out, in = append(out, w.String()), false
+				w.Reset()
+			}
+		case r == '\'' || r == '"':
+			quote, in = r, true
+		case r == '\\':
+			if i+1 == len(rs) {
+				return nil, fmt.Errorf("a trailing backslash")
+			}
+			i++
+			w.WriteRune(rs[i])
+			in = true
+		case strings.ContainsRune("$`*?[]{}~;&|<>()#", r):
+			return nil, fmt.Errorf("%q would be read by a shell, not passed", string(r))
+		default:
+			w.WriteRune(r)
+			in = true
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("an unterminated %c quote", quote)
+	}
+	if in {
+		out = append(out, w.String())
+	}
+	return out, nil
 }
