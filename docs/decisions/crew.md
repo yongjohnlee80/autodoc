@@ -560,8 +560,12 @@ reads it, never in your own CLI configuration:
   agent prompts for the guide's commands, as its own policy says.
 - Codex and Antigravity: none yet, until each shows a per-session place for it.
 
-Every kind's setup has one source, `crew.SetupFor`, which a host other than AutoDoc's window asks
-with `autodoc crew setup --kind K --host nvim`, run under the agent's environment. It answers JSON:
+Every kind's setup has one source, `crew.SetupFor`, which every host asks with `autodoc crew setup
+--kind K --host window|nvim --autodoc <the agent's autodoc> --agent-dir <its folder>`, run as the
+agent's own build under the agent's environment, at every crew start: AutoDoc's window as Neovim
+does. The window writes the guide in the mode the setup answers (`mail_via`), the setup's folder
+files, and for Claude Code its own hooks with the setup's allowance; it registers the session with
+`mail_via`, and starts the agent with the setup's env and arguments. It answers JSON:
 the arguments to append (Claude's `--settings`), AutoDoc's environment to merge after the profile's
 (OpenCode's `OPENCODE_CONFIG_CONTENT`), the user-level files the kind needs, whether the setup
 reports the session's permission prompts (which its `crew.register` says), and notices for the user.

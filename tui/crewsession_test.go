@@ -26,6 +26,13 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	c := newIdentityHost(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	a := newAgents(c, t.TempDir(), "")
+	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
+	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail
+	data := t.TempDir()
+	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
+			DataDir: data, Dir: dir, AgentDir: dir}, "")
+	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	a.crew = newCrewHost(w, t.TempDir())
 	a.crew.Connected()
@@ -719,7 +726,7 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 { // a second write changes nothing
-		if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor()); err != nil {
+		if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor(), crew.ClaudeAllow()); err != nil {
 			t.Fatal(err)
 		}
 	}

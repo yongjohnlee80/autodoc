@@ -116,10 +116,6 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		return err
 	}
 	configPath, stateDir, sock, storePath := e.ConfigPath, p.StateDir, p.Socket, p.Store
-	dataDir, err := e.DataDir()
-	if err != nil {
-		return err
-	}
 	spawn := o.Spawn
 	if spawn == nil {
 		spawn = client.SpawnServe
@@ -178,7 +174,6 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		// the user's Lua commands, beside the config as the plugins are
 		LuaDir:          filepath.Join(filepath.Dir(configPath), "lua"),
 		ConfigPath:      configPath,
-		DataDir:         dataDir,
 		ThemeDir:        filepath.Join(filepath.Dir(configPath), "themes"),
 		KeymapFile:      filepath.Join(filepath.Dir(configPath), "keymap.xml"),
 		ProgramOptions:  o.ProgramOptions,

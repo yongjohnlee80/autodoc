@@ -61,7 +61,7 @@ func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, erro
 		}
 		reg, err := d.m.Register(ctx, crew.Registration{Scope: p[0].(string), Run: p[1].(string), Epoch: p[2].(int64),
 			Codename: p[3].(string), Kind: p[4].(string), Workspace: p[5].(string), Instance: p[6].(string), Secret: p[7].(string),
-			Prompts: p[8].(bool)})
+			Prompts: p[8].(bool), MailVia: optString(p, 9)})
 		if err != nil {
 			return nil, crewWire(err)
 		}
@@ -378,4 +378,13 @@ func (w *crewWindow) Trf(id string, args ...any) string {
 		return markedText(id, args...)
 	}
 	return fill(englishText(id), args...)
+}
+
+// optString is p's i-th parameter as a string, "" when it isn't sent (an optional one).
+func optString(p []any, i int) string {
+	if i < len(p) {
+		s, _ := p[i].(string)
+		return s
+	}
+	return ""
 }

@@ -1,12 +1,13 @@
 package tui
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,7 +31,6 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 	for codename, kind := range map[string]string{"codex-one": "codex", "agy-one": "agy", "opencode-one": "opencode", "claude-one": "claude"} {
 		t.Run(kind, func(t *testing.T) {
 			a, c, _ := crewAgents(t, crewKinds)
-			a.pluginEnv = func() (string, error) { return `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`, nil }
 			p, _ := a.profile(codename)
 			instance, err := a.startInstance(p)
 			if err == nil {
@@ -40,7 +40,7 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 				t.Fatalf("start: %v", err)
 			}
 			dir := c.panel.configs[instance.tab].Dir
-			want := crew.GuideOf(kind).Markdown
+			want := crew.GuideOfVia(kind, instance.setup.MailVia).Markdown // the mode its setup delivered
 			for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 				b, err := os.ReadFile(filepath.Join(dir, name))
 				if err != nil {
@@ -73,172 +73,168 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 		}
 	}
 	// outside a crew scope: no crew procedure
-	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", ""); strings.Contains(g, "## Mail and your crew") {
+	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", "", crew.MailViaCLI); strings.Contains(g, "## Mail and your crew") {
 		t.Fatal("an agent outside a crew scope is told the crew procedure")
 	}
 }
 
-// TestACrewOpenCodeAgentLoadsTheAutoDocPlugin: a crew OpenCode agent starts with the
-// OPENCODE_CONFIG_CONTENT that loads AutoDoc's plugin; another CLI's doesn't, and doesn't run the
-// plugin's setup; a plugin that can't be had refuses the start, rather than start an agent no mail
-// can reach.
+// TestACrewOpenCodeAgentLoadsTheAutoDocPlugin: a crew OpenCode agent starts with its setup's
+// OPENCODE_CONFIG_CONTENT (AutoDoc's plugin; on MCP mail its server too); a setup that gives none,
+// or one that fails, starts nothing, rather than an agent no mail can reach.
 func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
-	const env = `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`
-	a, c, _ := crewAgents(t, crewKinds)
-	calls := 0
-	a.pluginEnv = func() (string, error) { calls++; return env, nil }
-	p, _ := a.profile("opencode-one")
+	const v = `{"plugin":["file:///p/autodoc-crew.js"]}`
+	for name, tc := range map[string]struct {
+		setup crew.Setup
+		err   error
+		runs  bool
+	}{
+		"its setup's env":    {setup: crew.Setup{Env: map[string]string{"OPENCODE_CONFIG_CONTENT": v}}, runs: true},
+		"a setup with none":  {setup: crew.Setup{}},
+		"a setup that fails": {err: errors.New("crew setup: exit status 1")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, c, _ := crewAgents(t, crewKinds)
+			a.setupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
+			p, _ := a.profile("opencode-one")
+			instance, err := a.startInstance(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitStart(t, c, instance)
+			if instance.running != tc.runs {
+				t.Fatalf("running %v, want %v (notes %v)", instance.running, tc.runs, c.notes)
+			}
+			if tc.runs {
+				if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, "OPENCODE_CONFIG_CONTENT="+v) {
+					t.Fatalf("the spawn: %v, args %v; want the setup's env", err, args)
+				}
+			}
+		})
+	}
+}
+
+// TestTheWindowAsksTheAgentsOwnCrewSetup: crewSetupOf runs the agent's own autodoc as `crew setup
+// --kind K --host window --autodoc <its wrapper> --agent-dir <its folder>` on the TUI's config, in
+// the agent's folder, the profile's environment its own: no value of the profile's is on its command
+// line, which any user can read. Its answer is the setup, mail_via included; output that is no setup
+// is refused.
+func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
+	rec, agentDir := t.TempDir(), t.TempDir()
+	bin := filepath.Join(rec, "autodoc")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(filepath.Join(rec, "args")) + "\nenv > " + shellQuote(filepath.Join(rec, "env")) +
+		"\npwd > " + shellQuote(filepath.Join(rec, "pwd")) + "\necho '{\"argv\":[],\"env\":{},\"mail_via\":\"mcp\"}'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s, err := crewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value"})
+	if err != nil || s.MailVia != crew.MailViaMCP {
+		t.Fatalf("crewSetupOf: %+v %v, want its answer, mail via MCP", s, err)
+	}
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join(rec, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	want := strings.Join([]string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
+		"--autodoc", shellQuote(filepath.Join(agentDir, "bin", "autodoc")), "--agent-dir", agentDir}, "\n") + "\n"
+	if got := read("args"); got != want {
+		t.Errorf("its command line:\n%s\nwant\n%s", got, want)
+	}
+	if strings.Contains(read("args"), "s3cr3t") || !strings.Contains(read("env"), "ANTHROPIC_API_KEY=s3cr3t-value") {
+		t.Error("the profile's value is on the command line, or not in the environment")
+	}
+	if got := strings.TrimSpace(read("pwd")); got != agentDir {
+		t.Errorf("it ran in %q, want the agent's folder %q", got, agentDir)
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'something else'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := crewSetupOf(bin, "", crew.KindClaude, agentDir, nil); err == nil {
+		t.Error("output that is no setup was taken")
+	}
+}
+
+// TestTwoAgentsOfOneKindAskTheirOwnSetup: every crew start asks its own setup, with its own folder
+// (agy's trust and folder files, an MCP server's command name it), and starts with its own answer:
+// nothing one start's setup answered is kept for another's.
+func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
+	a, c, _ := crewAgents(t, `[{"name":"One","command":"opencode","codename":"oc-one"},{"name":"Two","command":"opencode","codename":"oc-two"}]`)
+	var dirs []string
+	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		dirs = append(dirs, dir)
+		return crew.Setup{Env: map[string]string{"OPENCODE_CONFIG_CONTENT": `{"for":"` + filepath.Base(dir) + `"}`}}, nil
+	}
+	for _, codename := range []string{"oc-one", "oc-two"} {
+		p, _ := a.profile(codename)
+		instance, err := a.startInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitStart(t, c, instance)
+		args, _, err := startedEnv(a, c, instance)
+		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.dir) + `"}`
+		if err != nil || !slices.Contains(args, want) {
+			t.Fatalf("%s's spawn: %v, args %v; want its own setup's %s", codename, err, args, want)
+		}
+	}
+	if len(dirs) != 2 || dirs[0] == dirs[1] {
+		t.Fatalf("the setups asked: %q, want one each, with their own folders", dirs)
+	}
+}
+
+// TestACrewClaudeAgentOnMCPMailStartsWithItsServer: a Claude agent whose setup delivers the crew MCP
+// server starts with it on its command line (--mcp-config); its folder's settings allow exactly the
+// crew MCP tools, never a guide shell command (least privilege); its guide is the MCP form; and its
+// session is registered as reading its mail via MCP, which crew.list says.
+func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
+	a, c, w := crewAgents(t, crewKinds)
+	data := t.TempDir()
+	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
+			DataDir: data, Dir: dir, AgentDir: dir, Servers: []crew.MCPServer{{Name: crew.MCPServerName,
+				Command: []string{filepath.Join(dir, "bin", "autodoc"), "crew", "mcp"}, Tools: crew.MCPToolNames()}}}, "")
+	}
+	p, _ := a.profile("claude-one")
 	instance, err := a.startInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
 	args, _, err := startedEnv(a, c, instance)
-	if err != nil || !slices.Contains(args, env) || calls != 1 {
-		t.Fatalf("the OpenCode agent's start: %v, plugin setups %d, args %v", err, calls, args)
+	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") {
+		t.Fatalf("the spawn: %v, args %v; want --mcp-config on its command line, never --strict-mcp-config", err, args)
 	}
-
-	calls = 0
-	p, _ = a.profile("claude-one")
-	claude, err := a.startInstance(p)
+	b, err := os.ReadFile(filepath.Join(instance.dir, ".claude", "settings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	args, _, err = startedEnv(a, c, claude)
-	if err != nil || calls != 0 || slices.ContainsFunc(args, func(s string) bool { return strings.HasPrefix(s, "OPENCODE_CONFIG_CONTENT=") }) {
-		t.Fatalf("the Claude agent's start: %v, plugin setups %d, args %v", err, calls, args)
+	var settings struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+		} `json:"permissions"`
 	}
-
-	a.pluginEnv, a.pluginAnswer = func() (string, error) { return "", errors.New("no data folder") }, nil
-	if _, spawned, err := startedEnv(a, c, instance); err == nil || spawned || !strings.Contains(err.Error(), "OpenCode plugin") {
-		t.Fatalf("a plugin that can't be had: %v, spawned %v; want the start refused", err, spawned)
+	if err := json.Unmarshal(b, &settings); err != nil || !slices.Equal(settings.Permissions.Allow, crew.ClaudeMCPAllow()) {
+		t.Errorf("the folder's allow %q (%v), want exactly the crew MCP tools %q", settings.Permissions.Allow, err, crew.ClaudeMCPAllow())
 	}
-}
-
-// TestTheOpenCodePluginEnvIsTheAgentsBuilds: opencodeEnv runs the agent's own autodoc (its build,
-// on the TUI's config) as `crew setup --kind opencode --host window`, and passes on its setup's
-// OPENCODE_CONFIG_CONTENT; output that is no setup, or a setup with none, is refused.
-func TestTheOpenCodePluginEnvIsTheAgentsBuilds(t *testing.T) {
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "autodoc")
-	script := "#!/bin/sh\n" +
-		"[ \"$*\" = \"--config /c/autodoc.toml crew setup --kind opencode --host window\" ] || { echo \"args: $*\" >&2; exit 3; }\n" +
-		"echo '{\"argv\":[],\"env\":{\"OPENCODE_CONFIG_CONTENT\":\"{\\\"plugin\\\":[\\\"file:///p/autodoc-crew.js\\\"]}\"},\"files\":[],\"prompts\":false,\"notices\":[],\"after\":[]}'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	g, err := os.ReadFile(filepath.Join(instance.dir, "AGENTS.md"))
+	if err != nil || !strings.Contains(string(g), crew.GuideOfVia(crew.KindClaude, crew.MailViaMCP).Markdown) {
+		t.Errorf("the guide isn't the MCP form (%v)", err)
 	}
-	env, err := opencodeEnv(bin, "/c/autodoc.toml")
-	if err != nil || env != `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}` {
-		t.Fatalf("opencodeEnv: %q %v", env, err)
-	}
-	for _, out := range []string{"something else", `{"env":{}}`} {
-		if err := os.WriteFile(bin, []byte("#!/bin/sh\necho '"+out+"'\n"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := opencodeEnv(bin, "/c/autodoc.toml"); err == nil {
-			t.Fatalf("%q was passed on", out)
-		}
-	}
-}
-
-// TestTheOpenCodePluginEnvRunsOnceOffTheLoop: the plugin's env is the process's one run, started
-// off the loop when the agents feature starts with an OpenCode profile (Started returns while it
-// runs; a window with none runs none); every crew OpenCode
-// spawn takes that answer, one waiting for it only while it is on its way; a failure is not kept,
-// so the next spawn runs it again.
-func TestTheOpenCodePluginEnvRunsOnceOffTheLoop(t *testing.T) {
-	const env = `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`
-	a, c, _ := crewAgents(t, crewKinds)
-	var runs atomic.Int32
-	release := make(chan struct{})
-	a.pluginEnv = func() (string, error) { runs.Add(1); <-release; return env, nil }
-	a.Started() // returns with the run still held: it is off the loop
-	for deadline := time.Now().Add(2 * time.Second); runs.Load() == 0; time.Sleep(time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("the feature's start never ran it")
-		}
-	}
-	p, _ := a.profile("opencode-one")
-	instance, err := a.startInstance(p)
+	entries, err := w.d.m.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	close(release)
-	awaitStart(t, c, instance)
-	for range 2 {
-		if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) {
-			t.Fatalf("an OpenCode spawn: %v, args %v", err, args)
+	for _, e := range entries {
+		if e.Codename == "claude-one" && e.MailVia != "mcp" {
+			t.Errorf("crew.list says claude-one reads its mail via %q, want mcp", e.MailVia)
 		}
-	}
-	if runs.Load() != 1 {
-		t.Fatalf("two spawns after the warm-up ran it %d times, want the one", runs.Load())
-	}
-	// a crew window with no OpenCode profile runs none: nothing it starts needs it
-	b, _, _ := crewAgents(t, oneTwo)
-	var others atomic.Int32
-	b.pluginEnv = func() (string, error) { others.Add(1); return env, nil }
-	b.Started()
-	time.Sleep(50 * time.Millisecond)
-	if others.Load() != 0 || b.pluginAnswer != nil {
-		t.Fatalf("a window with no OpenCode profile warmed the plugin's env (%d runs)", others.Load())
-	}
-	// a failure is not kept: the next spawn runs it again, and takes its answer
-	fails := atomic.Int32{}
-	a.pluginEnv, a.pluginAnswer = func() (string, error) {
-		if fails.Add(1) == 1 {
-			return "", errors.New("no data folder")
-		}
-		return env, nil
-	}, nil
-	if _, spawned, err := startedEnv(a, c, instance); err == nil || spawned {
-		t.Fatalf("the failing run: %v, spawned %v", err, spawned)
-	}
-	if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) || fails.Load() != 2 {
-		t.Fatalf("after a failure: %v, args %v, %d runs", err, args, fails.Load())
 	}
 }
 
-// TestAnOpenCodeStartContinuesOnThePluginsAnswer: a crew OpenCode agent whose registration is
-// answered while the plugin's env is still on its way is not started, and no timer is set to look
-// again: the start continues when the env's answer posts, never waiting on the loop, and takes
-// that answer.
-func TestAnOpenCodeStartContinuesOnThePluginsAnswer(t *testing.T) {
-	const env = `OPENCODE_CONFIG_CONTENT={"plugin":["file:///p/autodoc-crew.js"]}`
-	a, c, _ := crewAgents(t, crewKinds)
-	release := make(chan struct{})
-	a.pluginEnv = func() (string, error) { <-release; return env, nil }
-	p, _ := a.profile("opencode-one")
-	instance, err := a.startInstance(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if instance.running || !instance.starting || len(c.afters) != 0 {
-		t.Fatalf("before the env's answer: running %v, starting %v, %d waits; want it starting, and no timer",
-			instance.running, instance.starting, len(c.afters))
-	}
-	close(release)
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
-		c.postMu.Lock()
-		n := len(c.posts)
-		c.postMu.Unlock()
-		if n > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the env's answer posted nothing to the loop")
-		}
-	}
-	c.drainPosts()
-	if !instance.running || instance.starting || len(c.afters) != 0 {
-		t.Fatalf("after the env's answer: running %v, starting %v, %d waits; want it running", instance.running, instance.starting, len(c.afters))
-	}
-	if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, env) {
-		t.Fatalf("the spawn: %v, args %v; want the env's answer", err, args)
-	}
-}
-
-// awaitStart runs what the loop is posted until instance's crew start is answered: an OpenCode
-// start continues when the plugin's env answers (whenStartable), which posts from off the loop.
+// awaitStart runs what the loop is posted until instance's crew start is answered: a crew start
+// continues when its setup and then its registration answer, which post from off the loop.
 func awaitStart(t *testing.T, c *identityHost, instance *agentInstance) {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); instance.starting; time.Sleep(time.Millisecond) {
