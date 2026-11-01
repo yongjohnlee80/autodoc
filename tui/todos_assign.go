@@ -162,6 +162,19 @@ func (t *todos) assignSet(text string) {
 	})
 }
 
+// crewPeers is a Core whose window holds a crew scope and can hand a task to another host's agent:
+// peerAgents answers, on the loop, the live crew agents of every other scope (crew.list), and
+// sendTask sends codename@scope the task as the user's request (inbox.send from the window's
+// scope, never rung: queued and woken as any mail).
+type crewPeers interface {
+	peerAgents(then func([]AgentEntry))
+	sendTask(codename, scope, subject, body, key string, then func(error))
+}
+
+// peersOf are crew.list's rows (rows) A may hand a task to beside the window's own agents: every
+// live agent of a scope other than own.
+func peersOf(rows any, own string) []AgentEntry { return nil } // red: not yet
+
 // windowScoped is a Core that knows the window's crew scope ("" while it holds none): A assigns
 // with it, so the window's assignment feed knows the assignment for one A hands over itself.
 type windowScoped interface{ windowScope() string }
