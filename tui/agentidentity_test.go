@@ -68,7 +68,7 @@ func (c *identityHost) Keep(err error) {
 func TestLegacyCodenamesAreUniqueDeterministicAndPersisted(t *testing.T) {
 	raw := `[{"name":"Claude Opus","command":"one"},{"name":"claude_opus","command":"two"},{"name":"Claude Opus","command":"three"}]`
 	c := newIdentityHost(raw)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	before := a.profiles()
 	if !reflect.DeepEqual(before, agentProfilesOf(raw)) || before[0].Codename != "claude-opus" || before[1].Codename != "claude-opus-2" || before[2].Codename != "claude-opus-3" {
 		t.Fatalf("migration is not deterministic in stored order: %+v", before)
@@ -96,7 +96,7 @@ func TestLegacyCodenamesAreUniqueDeterministicAndPersisted(t *testing.T) {
 func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
 	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	a.startEditAgent(1)
 	a.saveAgent("Renamed", "two")
 	profiles := a.profiles()
@@ -112,7 +112,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 	for _, row := range []int{0, 1} {
 		c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
 		c.ws = wsInfo{name: "kb", root: t.TempDir()}
-		a := newAgents(c, t.TempDir(), "")
+		a := testAgents(c, t.TempDir(), "")
 		before := a.profiles()
 		a.startEditAgent(row)
 		a.saveAgentProfile("Same", before[row].Command+" edited", before[row].Codename)
@@ -157,7 +157,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 
 func TestGoneProfileActionsLeaveOtherRunningInstancesAlone(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Same","command":"one"}]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	retainModelInstance(a, c, "orphan", "orphan label")
 	a.startEditAgent(-1)
 	a.makeAgentDefault(9)
@@ -172,7 +172,7 @@ func TestGoneProfileActionsLeaveOtherRunningInstancesAlone(t *testing.T) {
 func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
 	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "foo-2"}, false)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "three" {
 		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
 	}
@@ -199,7 +199,7 @@ func TestMigrationDoesNotStealAnExplicitPersistedCodename(t *testing.T) {
 
 func TestAnEditedProfileSnapshotCannotOverwriteANewerRecord(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	a.startEditAgent(0)
 	profiles := a.profiles()
 	profiles[0].Command = "changed elsewhere"
@@ -237,7 +237,7 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
 				c := newIdentityHost(`[]`)
 				c.p = p
-				if got := newAgents(c, "", "").defaultProfile(); got != tc.want {
+				if got := testAgents(c, "", "").defaultProfile(); got != tc.want {
 					t.Fatalf("restart default %q, want %q", got, tc.want)
 				}
 			}
@@ -253,7 +253,7 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 
 func TestRunningOrphanReservesItsCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	retainModelInstance(a, c, "reserved", "removed profile")
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
 	if len(a.profiles()) != 0 || !strings.Contains(c.state["App.agentFormError"].(string), "held by a running agent") {
@@ -270,7 +270,7 @@ func TestRunningOrphanReservesItsCodename(t *testing.T) {
 
 func TestLiveProfileCodenameCannotChangeUntilItStops(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Original","command":"one","codename":"original"}]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	retainModelInstance(a, c, "original", "Original")
 	a.startEditAgent(0)
 	a.saveAgentProfile("Original", "one", "renamed")
@@ -286,7 +286,7 @@ func TestLiveProfileCodenameCannotChangeUntilItStops(t *testing.T) {
 func TestARefusedStopDoesNotReleaseTheRunningCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
 	c.stopErr = errors.New("stop refused")
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	retainModelInstance(a, c, "reserved", "removed profile")
 	if a.stopAgent() || a.agentRunning != "reserved" {
 		t.Fatal("a failed stop released the running identity")
@@ -303,7 +303,7 @@ func TestARefusedStopDoesNotReleaseTheRunningCodename(t *testing.T) {
 
 func TestExplicitCodenamesRefuseInvalidAndDuplicateTargets(t *testing.T) {
 	c := newIdentityHost(`[{"name":"First","command":"one","codename":"taken"}]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	for _, name := range []string{"UPPER", "two--words", "trailing-", "taken"} {
 		a.saveAgentProfile("Second", "two", name)
 		if len(a.profiles()) != 1 {
@@ -318,7 +318,7 @@ func TestExplicitCodenamesRefuseInvalidAndDuplicateTargets(t *testing.T) {
 
 func TestProfileFormSaveKeepsAnExplicitDeliveryIdentity(t *testing.T) {
 	c := newIdentityHost(`[]`)
-	a := newAgents(c, "", "")
+	a := testAgents(c, "", "")
 	args := []qml.SpecValue{
 		{Kind: qml.SpecValueString, Raw: "Display Label"},
 		{Kind: qml.SpecValueString, Raw: "command"},

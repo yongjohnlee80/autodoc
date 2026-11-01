@@ -52,6 +52,10 @@ var agentIncarnation atomic.Uint64
 type agentInstance struct {
 	profile agentProfile
 	dir     string // the folder its tab's process runs in (agentFolder)
+	// refusal is why its last start was refused before its process ran (its command not on its
+	// PATH, its crew registration refused): its tab's start answers it, so the terminal shows it,
+	// until the next start
+	refusal error
 	// starting is a start whose crew session is being registered: the process starts once the
 	// session's context is written. session is the crew session it runs under, when it has one;
 	// crewed whether its starts are crew sessions' (its window held a scope when it was started);
@@ -288,6 +292,14 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.instanceOrder = append(a.instanceOrder, p.Codename)
 	}
 	instance.profile, instance.workspace, instance.crewed = p, ws, crewed
+	instance.refusal = nil
+	if a.commandCheck != nil {
+		if err := a.commandCheck(fillAgentCommand(p.Command, ws), env); err != nil { // nothing set up or registered for it
+			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
+			a.refuse(panel, instance, err)
+			return instance, nil
+		}
+	}
 	if crewed {
 		// registered first (docs/decisions/crew.md#sessions-and-the-guard): the process starts only
 		// once its session's context is written, and a refused registration starts nothing. The
@@ -334,6 +346,55 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	return instance, nil
 }
 
+// refuse keeps why instance's start was refused and shows it in its tab: the tab's start answers it
+// (runAgent), which the terminal writes on its screen, and the tab is selected; nothing runs.
+func (a *agents) refuse(panel TerminalPanel, instance *agentInstance, why error) {
+	instance.refusal, instance.starting = why, false
+	_ = panel.Start(instance.tab) // the terminal shows the refusal, and the tab stays stopped
+	a.c.Keep(a.selectInstance(instance))
+	a.listAgents()
+}
+
+// commandOnPath refuses a command whose program isn't on the PATH in env (the agent's: its own
+// autodoc's link, then its profile's), naming it. AutoDoc runs the command with /bin/sh -c, which
+// reads none of the user's shell aliases or functions: an alias for another account's Claude Code
+// (cloud-strife's claude-work) is not found there. A command in shell syntax (an assignment first,
+// a pipe, a substitution, a redirection) can't be judged by its first word, and passes.
+func commandOnPath(command string, env []string) error {
+	if strings.ContainsAny(command, ";&|$`()<>\\'\"") {
+		return nil
+	}
+	fields := strings.Fields(command)
+	if len(fields) == 0 || strings.Contains(fields[0], "=") {
+		return nil
+	}
+	word, path := fields[0], ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			path = v // the last one: what the agent gets
+		}
+	}
+	if strings.Contains(word, "/") {
+		if executable(word) {
+			return nil
+		}
+		return fmt.Errorf("its command %s is not an executable file", word)
+	}
+	for _, dir := range filepath.SplitList(path) {
+		if dir != "" && executable(filepath.Join(dir, word)) {
+			return nil
+		}
+	}
+	return fmt.Errorf("its command %q isn't a program on its PATH. AutoDoc runs the command with /bin/sh -c, which sees none of your shell's aliases or functions. "+
+		"For another account's Claude Code, use the program itself: command claude, with CLAUDE_CONFIG_DIR=<that account's folder> in the profile's environment (Space G; tutorial 12, the agents panel)", word)
+}
+
+// executable reports whether path is a regular file someone may execute.
+func executable(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
+}
+
 // registerCrew registers instance's crew session, as its setup said it reads its mail
 // (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
 // starts its process once the session's context is written; a refused registration starts nothing.
@@ -354,7 +415,7 @@ func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p ag
 		}
 		if err != nil {
 			a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
-			a.listAgents()
+			a.refuse(panel, instance, fmt.Errorf("its crew session was not registered: %s", wireMessage(err)))
 			return
 		}
 		if err := a.start(panel, instance); err != nil {
@@ -410,6 +471,9 @@ var errCrewStartHere = errors.New("this agent runs as a crew session: start it f
 // registers its session and wakes it: without it the session is never reachable, so a plugin that
 // can't be had refuses the start.
 func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalProcess, error) {
+	if instance.refusal != nil {
+		return nil, instance.refusal
+	}
 	if instance.crewed {
 		if instance.context == "" {
 			return nil, errCrewStartHere

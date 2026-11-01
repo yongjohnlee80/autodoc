@@ -63,7 +63,7 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 	c := newIdentityHost(oneTwo)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
-	a := newAgents(c, filepath.Join(t.TempDir(), "agents:odd"), "")
+	a := testAgents(c, filepath.Join(t.TempDir(), "agents:odd"), "")
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},

@@ -46,6 +46,14 @@ type modelPanel struct {
 	reported []string
 }
 
+// testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
+// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it.
+func testAgents(c agentHost, dir, config string) *agents {
+	a := newAgents(c, dir, config)
+	a.commandCheck = nil
+	return a
+}
+
 func (p *modelPanel) SameOwner(other TerminalPanel) bool {
 	peer, ok := other.(*modelPanel)
 	return ok && p == peer
@@ -229,7 +237,7 @@ func modelAgents(t *testing.T) (*agents, *identityHost) {
 	t.Helper()
 	c := newIdentityHost(`[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`)
 	c.ws = wsInfo{name: "kb", root: t.TempDir()}
-	a := newAgents(c, t.TempDir(), "")
+	a := testAgents(c, t.TempDir(), "")
 	return a, c
 }
 

@@ -550,7 +550,10 @@ func crewModules(d *moduleDeps) {
 		Wake: func() { d.crew.Poke() }}))
 	port := &crewPort{}
 	d.mail = mail.New(st.Mail(), port, mail.WithLongPolls(polls))
-	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID), crew.WithLongPolls(polls))
+	d.crew = crew.New(st, crew.WithSessionEnder(d.mail), crew.WithStoreID(d.storeID), crew.WithLongPolls(polls),
+		crew.WithRefusals(func(r crew.Registration, err error) {
+			logger.Warning(d.log, err, fmt.Sprintf("crew.register refused: %s@%s (%s, epoch %d, instance %s)", r.Codename, r.Scope, r.Kind, r.Epoch, r.Instance))
+		}))
 	port.Manager = d.crew
 	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls))
 }

@@ -105,3 +105,39 @@ func TestAGoneHostsSessionIsUnreachableAndNotWoken(t *testing.T) {
 		t.Fatalf("after the host came back: %d wakes, want 1", r.w.count())
 	}
 }
+
+// Each refused crew.register is told to the daemon's log (WithRefusals), its secret blanked: one
+// from an epoch its host no longer holds (a host stuck on a fenced epoch), and an invalid one. A
+// registration that succeeds is told nothing.
+func TestARefusedRegistrationIsTold(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	var told []string
+	m := crew.New(mem, crew.WithSessionEnder(&crewtest.Enders{}), crew.WithRefusals(func(r crew.Registration, err error) {
+		told = append(told, r.Codename+"|"+r.Secret+"|"+err.Error())
+	}))
+	ctx := context.Background()
+	e, err := m.Claim(ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := func(epoch int64, codename, instance string) crew.Registration {
+		return crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: epoch, Codename: codename, Kind: "fake",
+			Workspace: "w", Instance: instance, Secret: strings.Repeat("s", 40)}
+	}
+	if _, err := m.Register(ctx, reg(e, "gold", "i-1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(told) != 0 {
+		t.Fatalf("a registration that succeeded was told: %v", told)
+	}
+	if _, err := m.Register(ctx, reg(e-1, "vision", "i-2")); !errors.Is(err, crew.ErrStaleEpoch) {
+		t.Fatalf("a register from a fenced epoch: %v", err)
+	}
+	if _, err := m.Register(ctx, reg(e, "", "i-3")); err == nil {
+		t.Fatal("a registration with no codename was taken")
+	}
+	if len(told) != 2 || !strings.HasPrefix(told[0], "vision||") || !strings.Contains(told[0], "epoch") || !strings.HasPrefix(told[1], "||") {
+		t.Fatalf("told %q, want the fenced and the invalid registration, each with its secret blanked", told)
+	}
+}
