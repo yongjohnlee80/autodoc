@@ -175,7 +175,7 @@ func (r *codexServerRPC) call(ctx context.Context, method string, params, result
 			continue
 		}
 		if m.Error != nil {
-			return fmt.Errorf("%s: %s (%d)", method, m.Error.Message, m.Error.Code)
+			return &codexRPCError{Method: method, Code: m.Error.Code, Message: m.Error.Message}
 		}
 		if result == nil {
 			return nil
@@ -185,6 +185,17 @@ func (r *codexServerRPC) call(ctx context.Context, method string, params, result
 }
 
 func (r *codexServerRPC) close() { _ = r.c.Close(ws.StatusNormalClosure, "") }
+
+// codexRPCError is the app-server's answer to a call that failed: its JSON-RPC code and message.
+type codexRPCError struct {
+	Method  string
+	Code    int64
+	Message string
+}
+
+func (e *codexRPCError) Error() string {
+	return fmt.Sprintf("%s: %s (%d)", e.Method, e.Message, e.Code)
+}
 
 // codexHereBound bounds `crew endpoint --codex-here`'s look on the app-server: its dial, its
 // handshake and its reads together. The window runs it again until its own bound.
