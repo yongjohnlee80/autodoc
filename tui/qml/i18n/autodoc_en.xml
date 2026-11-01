@@ -3012,10 +3012,11 @@ THE PANELS
   starts another too.
   The strip's _, + and x, at its right end, hide the panel, maximize it (again to restore), or stop
   every agent and close it, asked once while any runs.
-  SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
-  the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
-  card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
-  bracketed paste holds it all at its prompt; elsewhere each line break is Enter.
+  SPC a b (:agent-buffer) hands the page to an agent, and SPC a f (:agent-forward) the selection,
+  else the clipboard: to the agent running, or one chosen; SPC a is the agents' card, g and G on
+  it the panel and the profiles. Each asks what the agent should do with it, and sends that as a
+  request from you: a saved page as its workspace, path and version, never its text; a page with
+  unsaved changes, the draft, a selection or the clipboard as text, 8 KiB at most.
   The terminal (SPC `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
@@ -3138,10 +3139,11 @@ THE PANELS
   starts another too.
   The strip's _, + and x, at its right end, hide the panel, maximize it (again to restore), or stop
   every agent and close it, asked once while any runs.
-  SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
-  the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
-  card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
-  bracketed paste holds it all at its prompt; elsewhere each line break is Enter.
+  SPC a b (:agent-buffer) hands the page to an agent, and SPC a f (:agent-forward) the selection,
+  else the clipboard: to the agent running, or one chosen; SPC a is the agents' card, g and G on
+  it the panel and the profiles. Each asks what the agent should do with it, and sends that as a
+  request from you: a saved page as its workspace, path and version, never its text; a page with
+  unsaved changes, the draft, a selection or the clipboard as text, 8 KiB at most.
   The terminal (SPC `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:

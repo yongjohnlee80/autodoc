@@ -3014,10 +3014,11 @@ THE PANELS
   starts another too.
   The strip's _, + and x, at its right end, hide the panel, maximize it (again to restore), or stop
   every agent and close it, asked once while any runs.
-  SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
-  the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
-  card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
-  bracketed paste holds it all at its prompt; elsewhere each line break is Enter.
+  SPC a b (:agent-buffer) hands the page to an agent, and SPC a f (:agent-forward) the selection,
+  else the clipboard: to the agent running, or one chosen; SPC a is the agents' card, g and G on
+  it the panel and the profiles. Each asks what the agent should do with it, and sends that as a
+  request from you: a saved page as its workspace, path and version, never its text; a page with
+  unsaved changes, the draft, a selection or the clipboard as text, 8 KiB at most.
   The terminal (SPC `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
@@ -3141,10 +3142,12 @@ OS PAINÉIS
   também inicia outro.
   O _, o + e o x na ponta direita da faixa ocultam o painel, o maximizam (de novo para restaurá-lo)
   ou param todos os agentes e o fecham, com uma só pergunta enquanto algum roda.
-  SPC a b (:agent-buffer) cola a página no prompt de um agente, e SPC a f (:agent-forward)
-  a seleção, senão a área de transferência: no agente em execução, ou num escolhido; SPC a é o cartão
-  dos agentes, g e G nele o painel e os perfis. Nenhum Enter é adicionado: uma CLI de agente que aceita
-  bracketed paste guarda tudo no prompt; nas outras, cada quebra de linha é um Enter.
+  SPC a b (:agent-buffer) entrega a página a um agente, e SPC a f (:agent-forward) a seleção,
+  senão a área de transferência: ao agente em execução, ou a um escolhido; SPC a é o cartão dos
+  agentes, g e G nele o painel e os perfis. Cada um pergunta o que o agente deve fazer com ela e a
+  envia como um pedido seu: uma página salva, como seu espaço de trabalho, caminho e versão, nunca
+  seu texto; uma página com alterações não salvas, o rascunho, uma seleção ou a área de
+  transferência, como texto, no máximo 8 KiB.
   O terminal (SPC `, Ir › Terminal) roda seus shells na pasta do espaço de trabalho, embaixo
   ou onde Preferências o puser (em cima, à esquerda, à direita ou centralizado), cada lugar com seu tamanho.
   Um shell inicia quando ele abre sem nenhum, e continua rodando enquanto oculto. Cada shell tem uma aba:

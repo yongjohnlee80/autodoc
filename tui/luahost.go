@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -33,8 +34,10 @@ import (
 //	                                       its own Ctrl+Z (or a SIGTSTP from elsewhere) runs again; a
 //	                                       running one is not disturbed. err "stale", "unavailable",
 //	                                       or why
-//	autodoc.agents.send(ref, text, cb)     text as one bracketed paste to an agent, no Enter added
-//	                                       (Core.SendText): ref a codename, or { codename, instance }
+//	autodoc.agents.send(ref, text, cb)     text to an agent as a plain message (Core.SendText); with
+//	                                       {subject, body} in its place, a request it answers
+//	                                       (agents.SendRequest): subject one line, both required.
+//	                                       ref a codename, or { codename, instance }
 //	                                       for that exact incarnation. A stopped agent is started once
 //	                                       the user agrees. cb(true) once typed, or cb(nil, err): err
 //	                                       "cancelled", "stale" (that incarnation is gone),
@@ -50,6 +53,7 @@ type luaHost interface {
 	readText(done func(text string, err error)) error
 	agentEntries() []AgentEntry
 	sendText(to AgentRef, text string, done func(error)) error
+	sendRequest(to AgentRef, subject, body string, done func(error)) error
 	resumeAgent(to AgentRef) error
 	post(fn func())
 }
@@ -68,7 +72,7 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	L.SetFuncs(clip, map[string]lua.LGFunction{"write": s.luaClipWrite, "read": s.luaClipRead})
 	L.SetField(eng.Global(), "clipboard", clip)
 	ui := L.NewTable()
-	L.SetFuncs(ui, map[string]lua.LGFunction{"pick": s.luaPick})
+	L.SetFuncs(ui, map[string]lua.LGFunction{"pick": s.luaPick, "input": s.luaInput})
 	L.SetField(eng.Global(), "ui", ui)
 	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
 	eng.SetFunction("widgets", s.luaWidgets)
@@ -224,6 +228,50 @@ func (s *scripting) luaPick(L *lua.LState) int {
 	return 0
 }
 
+// luaInput is autodoc.ui.input(spec, cb): a line asked of the user (LuaInput.qml), spec's title,
+// label (what it asks), text (the line's start) and placeholder. cb(text) once Enter is pressed, or
+// cb(nil, "cancelled") on Esc; "busy" while another script's line is open.
+func (s *scripting) luaInput(L *lua.LState) int {
+	spec := L.CheckTable(1)
+	cb := L.CheckFunction(2)
+	if s.inputCB != nil {
+		s.later("ui.input", cb, nil, "busy")
+		return 0
+	}
+	title := lua.LVAsString(spec.RawGetString("title"))
+	if title == "" {
+		title = "answer"
+	}
+	s.inputCB = cb
+	s.c.Set("App.luaInputTitle", title)
+	s.c.Set("App.luaInputLabel", lua.LVAsString(spec.RawGetString("label")))
+	s.c.Set("App.luaInputPlaceholder", lua.LVAsString(spec.RawGetString("placeholder")))
+	s.c.Set("App.luaInputText", "\x00") // moved away first, so the same start twice still sets it
+	s.c.Set("App.luaInputText", lua.LVAsString(spec.RawGetString("text")))
+	s.c.Open("luaInput")
+	return 0
+}
+
+// inputSet is the line accepted: its script hears the text, once.
+func (s *scripting) inputSet(text string) {
+	s.c.Close("luaInput")
+	cb := s.inputCB
+	s.inputCB = nil
+	if cb != nil {
+		s.callback("ui.input", cb, lua.LString(text), "")
+	}
+}
+
+// inputCancel is the line closed by Esc: its script hears "cancelled", once (nothing after an
+// answer).
+func (s *scripting) inputCancel() {
+	cb := s.inputCB
+	s.inputCB = nil
+	if cb != nil {
+		s.callback("ui.input", cb, nil, "cancelled")
+	}
+}
+
 func (s *scripting) luaAgentsList(L *lua.LState) int {
 	out := L.NewTable()
 	if s.host != nil {
@@ -263,7 +311,21 @@ func luaAgentRef(L *lua.LState, n int, verb string, optional bool) AgentRef {
 
 func (s *scripting) luaAgentsSend(L *lua.LState) int {
 	ref := luaAgentRef(L, 1, "send", false)
-	text := L.CheckString(2)
+	// a string is a plain message; {subject=, body=} a request, which the agent answers
+	var text, subject, body string
+	request := false
+	switch m := L.Get(2).(type) {
+	case lua.LString:
+		text = string(m)
+	case *lua.LTable:
+		request = true
+		subject, body = lua.LVAsString(m.RawGetString("subject")), lua.LVAsString(m.RawGetString("body"))
+		if subject == "" || strings.ContainsAny(subject, "\r\n") || body == "" {
+			L.ArgError(2, "send's request needs a subject (one line) and a body")
+		}
+	default:
+		L.ArgError(2, "send needs a text, or a request: {subject=, body=}")
+	}
 	cb := L.OptFunction(3, nil)
 	if s.host == nil {
 		s.later("agents.send", cb, nil, "unavailable")
@@ -280,13 +342,20 @@ func (s *scripting) luaAgentsSend(L *lua.LState) int {
 			s.later("agents.send", cb, nil, agentErr(err))
 		}
 	}
-	if err := s.host.sendText(ref, text, func(err error) {
+	sent := func(err error) {
 		if err != nil {
 			failed(err, true)
 			return
 		}
 		s.callback("agents.send", cb, lua.LTrue, "")
-	}); err != nil {
+	}
+	var err error
+	if request {
+		err = s.host.sendRequest(ref, subject, body, sent)
+	} else {
+		err = s.host.sendText(ref, text, sent)
+	}
+	if err != nil {
 		failed(err, false)
 	}
 	return 0
