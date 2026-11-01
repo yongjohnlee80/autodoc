@@ -91,8 +91,10 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 		t.Errorf("AUTODOC_ROOT %q, want AutoDoc's workspace root", got["AUTODOC_ROOT"])
 	}
 	parts := filepath.SplitList(got["PATH"])
-	if len(parts) < 2 || filepath.Base(parts[0]) != "bin" || parts[1] != extra || strings.Join(parts[2:], ":") != path {
-		t.Fatalf("PATH %q, want the agent's own bin, then the profile's %s:%s", got["PATH"], extra, path)
+	link, _ := os.Readlink(parts[0])
+	if len(parts) < 2 || filepath.Base(filepath.Dir(parts[0])) != ".bin" || filepath.Base(link) != "bin" || parts[1] != extra ||
+		strings.Join(parts[2:], ":") != path {
+		t.Fatalf("PATH %q (its first folder links to %q), want the link to the agent's own bin, then the profile's %s:%s", got["PATH"], link, extra, path)
 	}
 	if _, err := os.Stat(filepath.Join(parts[0], "autodoc")); err != nil {
 		t.Errorf("PATH's first folder %s holds no autodoc: %v", parts[0], err)
