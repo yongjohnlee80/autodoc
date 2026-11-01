@@ -1015,6 +1015,7 @@ Window {
     AgentAssign { id: agentAssignPicker }
     AuditAgent { id: auditAgentPicker }
     LuaPick { id: luaPicker }
+    LuaInput { id: luaInput }
     TodoStatus { id: todoStatusPicker }
     RegistryBrowse { id: registryPicker }
     TerminalLook { id: terminalLook }

@@ -382,8 +382,8 @@ The rest, and the long names of `:w`, `:q` and `:x`:
 :lua [chunk]            A Lua shell, or run Lua
 :lua-reload             Reload the Lua scripts
 :lua-install <name or git URL>  Install a Lua package
-:agent-buffer           Send the page to an agent
-:agent-forward          Send the selection, or the clipboard, to an agent
+:agent-buffer           Hand the page to an agent, with your instruction
+:agent-forward          Hand the selection, or the clipboard, to an agent, with your instruction
 :usage                  What AutoDoc uses
 ```
 
