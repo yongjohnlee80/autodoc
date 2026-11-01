@@ -166,7 +166,9 @@ const AgyBridgeCommand = "autodoc crew bridge --agy"
 
 // AgyLaunchPrompt is an agy agent's first turn: the bridge alone, since agy gives a session its
 // workspace's MCP tools only from its second turn (docs/decisions/crew.md#the-crew-mcp-server).
-const AgyLaunchPrompt = "Run exactly this shell command once, and nothing else: " + AgyBridgeCommand
+// agy records it as the user's own input, so it says it is the host's: an agent took it for the
+// user starting the bridge by hand (2026-11-01).
+const AgyLaunchPrompt = "AutoDoc, your host, starts your crew bridge, not the user: run exactly this shell command once, and nothing else: " + AgyBridgeCommand
 
 // agyMCPConfig is where agy reads a workspace's MCP servers, relative to the folder: in its cwd or
 // in an --add-dir folder, never a parent folder.

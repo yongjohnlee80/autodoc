@@ -274,6 +274,12 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 	if !strings.Contains(crew.AgyLaunchPrompt, crew.AgyBridgeCommand) || !strings.Contains(crew.GuideOf(crew.KindAgy).Markdown, "`"+crew.AgyBridgeCommand+"`") {
 		t.Error("the launch prompt and the guide don't name the bridge's command, the one its rule allows")
 	}
+	// agy records the launch prompt as the user's own input (USER_EXPLICIT): it says it is AutoDoc's,
+	// the host's, so the agent never takes it for the user starting the bridge by hand (2026-11-01,
+	// tifa-lockhart), and it still ends with the exact command the rule allows
+	if !strings.HasPrefix(crew.AgyLaunchPrompt, "AutoDoc, your host") || !strings.HasSuffix(crew.AgyLaunchPrompt, ": "+crew.AgyBridgeCommand) {
+		t.Errorf("the launch prompt %q, want it to say it comes from AutoDoc, the host, and end with the bridge's exact command", crew.AgyLaunchPrompt)
+	}
 }
 
 // TestSetupForAgyTrustsNeovimsWorkingFolderOnlyWhenItIsAPath: from Neovim, the working folder is
