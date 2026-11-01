@@ -1,13 +1,19 @@
 package crew
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 )
@@ -293,26 +299,40 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 
 // codexSetup is one step after the start: Codex starts its thread on its app-server without
 // telling anyone, so the agent's autodoc looks for the folder's thread until it is found, then
-// registers it (crew endpoint --codex-here --wait). Given the crew MCP server, the agent gets an
-// app-server of its own (Server), started by the host with the server on its command line and
+// registers it (crew endpoint --codex-here --wait). Given its own folder, the agent gets an
+// app-server of its own (Server) in every mail mode, so its commands run with its own environment
+// and never in Codex's shared daemon (started by whichever agent came first, and kept with that
+// one's identity). Given the crew MCP server too, that server is on its command line, with
 // each crew tool approved by name (`tools.<tool>.approval_mode`, never the server's whole default:
 // least privilege, as Claude's exact rules), and the TUI attaches to it (`--remote`). None of it is
 // written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a TUI given any
 // runs embedded, off every app-server: codex-cli 0.163.0), is left alone. AUTODOC_CODEX_SERVER names
-// the agent's server to its autodoc, for codex-here and the waker's locator.
+// the agent's server to its autodoc, for codex-here and the waker's locator. With no folder of its
+// own, a Codex that takes --no-daemon is given it (codexHasNoDaemon), and has no step: there is no
+// server to find its thread on, so it isn't woken, and the setup says so.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
-	s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
-	if len(in.Servers) == 0 {
-		return nil
-	}
-	if in.AgentDir == "" { // its server's socket lives in the agent's own folder: with none, the CLI's mail
-		s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
-		return nil
-	}
 	program := in.Program
 	if program == "" {
 		program = "codex"
 	}
+	register := []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait}
+	if in.AgentDir == "" {
+		// its own server's socket lives in the agent's own folder: with none, the TUI runs its own,
+		// never Codex's shared daemon, which keeps the environment of whichever agent started it
+		if len(in.Servers) > 0 {
+			s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
+		}
+		if codexHasNoDaemon(program, in.Env["PATH"], in.Dir) {
+			s.Argv = append(s.Argv, "--no-daemon")
+			s.Notices = append(s.Notices, "Codex has no folder of its own for its app-server, so crew mail can't wake it: it reads its mail when asked")
+			return nil
+		}
+		s.After = append(s.After, register) // a Codex before --no-daemon has no shared daemon to keep off
+		return nil
+	}
+	// its own app-server, in every mail mode: what its commands run in (its environment, its context),
+	// and where its thread is found to wake it
+	s.After = append(s.After, register)
 	sock := filepath.Join(in.AgentDir, CodexServerSocket)
 	// its commands run in this server, never as a login shell: a login shell sources the user's
 	// profile, whose PATH (~/.local/bin first) would run the user's own autodoc ahead of the agent's
@@ -349,9 +369,49 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 	s.Server, s.ServerSocket = server, sock
 	s.Argv = append(s.Argv, "--remote", "unix://"+sock)
 	s.Env[EnvCodexServer] = sock
-	s.MailVia = MailViaMCP
+	if len(in.Servers) > 0 {
+		s.MailVia = MailViaMCP
+	}
 	return nil
 }
+
+// codexNoDaemon is, by binary (its path and modification time), whether that Codex takes --no-daemon.
+var codexNoDaemon sync.Map
+
+// codexHasNoDaemon is whether the Codex program runs, found as a shell in dir with PATH path finds
+// it, takes --no-daemon (its --help names it): a Codex before it would refuse the flag and not start.
+// One it can't find or run is taken not to.
+func codexHasNoDaemon(program, path, dir string) bool {
+	bin := program
+	if !strings.Contains(program, "/") {
+		found := lookAll(program, path, dir)
+		if len(found) == 0 {
+			return false
+		}
+		bin = found[0]
+	} else if !filepath.IsAbs(bin) {
+		bin = filepath.Join(dir, bin)
+	}
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return false
+	}
+	key := bin + "\x00" + fi.ModTime().String()
+	if v, ok := codexNoDaemon.Load(key); ok {
+		return v.(bool)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), codexHelpTimeout)
+	defer cancel()
+	help := exec.CommandContext(ctx, bin, "--help")
+	help.Dir, help.Env = dir, append(os.Environ(), "PATH="+path)
+	out, err := help.Output()
+	has := err == nil && bytes.Contains(out, []byte("--no-daemon"))
+	codexNoDaemon.Store(key, has)
+	return has
+}
+
+// codexHelpTimeout bounds codexHasNoDaemon's one run of the CLI (a mise shim runs mise first).
+const codexHelpTimeout = 5 * time.Second
 
 // CodexServerSocket is a Codex agent's own app-server socket, in its folder (Codex makes it a link
 // to the socket it binds in its own socket folder, CodexSocketDirs).

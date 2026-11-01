@@ -561,8 +561,60 @@ func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
 	if len(s.After) != 1 || s.After[0][2] != "--codex-here" {
 		t.Fatalf("its registration step: %q", s.After)
 	}
+}
+
+// TestSetupForCodexOnCLIMailGetsItsOwnAppServerToo: a Codex agent with its own folder and no crew MCP
+// server (CLI mail: the user's choice, or a daemon that offers none) still gets its own app-server,
+// the TUI on it, and its registration step: its commands run with its own environment, and its
+// thread is found there to wake it, never on Codex's shared daemon (item 14, N1).
+func TestSetupForCodexOnCLIMailGetsItsOwnAppServerToo(t *testing.T) {
+	agent := t.TempDir()
+	sock := filepath.Join(agent, crew.CodexServerSocket)
 	cli, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, AgentDir: agent}, "")
-	if err != nil || len(cli.Server) != 0 || len(cli.Argv) != 0 || cli.MailVia != crew.MailViaCLI || len(cli.After) != 1 {
-		t.Fatalf("without servers: %+v %v, want the registration step alone and the CLI's mail", cli, err)
+	if err != nil || !slices.Equal(cli.Server, []string{"codex", "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false"}) || cli.ServerSocket != sock {
+		t.Fatalf("CLI mail: the server %q at %q (%v), want its own app-server with no MCP server", cli.Server, cli.ServerSocket, err)
+	}
+	if !slices.Equal(cli.Argv, []string{"--remote", "unix://" + sock}) || cli.Env[crew.EnvCodexServer] != sock || cli.MailVia != crew.MailViaCLI {
+		t.Fatalf("CLI mail: argv %q, env %v, mail via %v: want the TUI on its server, its autodoc told it, the CLI's mail", cli.Argv, cli.Env, cli.MailVia)
+	}
+	if len(cli.After) != 1 || cli.After[0][2] != "--codex-here" || len(cli.Notices) != 0 {
+		t.Fatalf("CLI mail: steps %q, notices %q: want its registration, nothing to say", cli.After, cli.Notices)
+	}
+	p, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Program: "/opt/codex/bin/codex", AgentDir: agent}, "")
+	if err != nil || len(p.Server) == 0 || p.Server[0] != "/opt/codex/bin/codex" {
+		t.Fatalf("a program by path: the server %q (%v), want it started by that program", p.Server, err)
+	}
+}
+
+// TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon: a Codex agent with no folder of its own has
+// no server of its own. A Codex that takes --no-daemon (its --help says) is started with it, so it
+// runs its own embedded server, never Codex's shared daemon with another agent's identity; it has no
+// registration step, since there is no server to find its thread on, and the setup says once that
+// it can't be woken. A Codex before the flag is started as before (the step, no flag): it would
+// refuse the flag, and it has no shared daemon to keep off.
+func TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon(t *testing.T) {
+	codexOnPath := func(help string) string {
+		bin := t.TempDir()
+		script := "#!/bin/sh\n[ \"$1\" = --help ] && printf '%s\\n' \"" + help + "\"\nexit 0\n"
+		if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return bin
+	}
+	newer := codexOnPath("      --no-daemon   Run without the shared background server")
+	for _, servers := range [][]crew.MCPServer{nil, {{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": newer}, Dir: t.TempDir(), Servers: servers}, "")
+		if err != nil || !slices.Equal(s.Argv, []string{"--no-daemon"}) || len(s.Server) != 0 || len(s.After) != 0 || s.MailVia != crew.MailViaCLI {
+			t.Fatalf("no folder, %d servers: %+v %v; want --no-daemon, no server, no step, the CLI's mail", len(servers), s, err)
+		}
+		woken := slices.IndexFunc(s.Notices, func(n string) bool { return strings.Contains(n, "can't wake it") })
+		if woken < 0 || slices.IndexFunc(s.Notices[woken+1:], func(n string) bool { return strings.Contains(n, "can't wake it") }) >= 0 {
+			t.Fatalf("no folder, %d servers: notices %q; want it said once that crew mail can't wake it", len(servers), s.Notices)
+		}
+	}
+	older := codexOnPath("      --remote <ADDR>   Connect the TUI to a remote app server endpoint")
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": older}, Dir: t.TempDir()}, "")
+	if err != nil || len(s.Argv) != 0 || len(s.After) != 1 || s.After[0][2] != "--codex-here" {
+		t.Fatalf("a Codex without --no-daemon: %+v %v; want no flag and the registration step, as before", s, err)
 	}
 }
