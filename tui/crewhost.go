@@ -68,6 +68,8 @@ type crewHost struct {
 	// the daemon has not confirmed, by id: asked again until it answers.
 	pending map[string]*crewRegistration
 	owed    map[string]crewOwedExit
+	// exitWaiters is what waits on an owed exit's answer, by session id (whenExited)
+	exitWaiters map[string][]func()
 	// deliverJob types a fallback job's text into codename's terminal through the agents' base,
 	// done hearing what came of it (crewfallback.go); nil takes no jobs
 	deliverJob func(codename, text string, done func(error))
@@ -492,6 +494,7 @@ func (h *crewHost) sendExit(id string) {
 		_, err := h.c.Call(ctx, "crew.exit", o.s.Scope, h.run, o.s.Epoch, o.s.ID, o.why)
 		return err
 	}, func(v any) {
+		defer h.exitAnswered(id)
 		o, ok := h.owed[id]
 		if !ok {
 			return
@@ -503,6 +506,30 @@ func (h *crewHost) sendExit(id string) {
 		o.inflight = false
 		h.owed[id] = o
 	})
+}
+
+// whenExited runs fn once the daemon has answered session id's crew.exit (now, when none is owed):
+// a Restart registers its new session after the old one's exit, which would otherwise find the
+// codename still taken. An exit that failed is owed still, but fn runs at its answer all the same:
+// the new registration then says what is wrong, rather than waiting on settle.
+func (h *crewHost) whenExited(id string, fn func()) {
+	if _, owed := h.owed[id]; !owed {
+		fn()
+		return
+	}
+	if h.exitWaiters == nil {
+		h.exitWaiters = map[string][]func(){}
+	}
+	h.exitWaiters[id] = append(h.exitWaiters[id], fn)
+}
+
+// exitAnswered runs what waited on session id's exit.
+func (h *crewHost) exitAnswered(id string) {
+	waiting := h.exitWaiters[id]
+	delete(h.exitWaiters, id)
+	for _, fn := range waiting {
+		fn()
+	}
 }
 
 // settle asks the daemon again for what the window owes it, each time it answers a renewal or a
