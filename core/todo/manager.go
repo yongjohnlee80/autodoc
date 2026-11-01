@@ -377,8 +377,10 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 				info.Roots = append(info.Roots, root)
 			}
 		}
-		if len(info.Roots) == 0 && strings.HasSuffix(rec.Path, "/"+todoDir) {
-			info.Roots = append(info.Roots, strings.TrimSuffix(rec.Path, "/"+todoDir))
+		// a <root>/.todo-list no root record names is its root's, unless that root's override took
+		// it elsewhere: then the record is what the move left behind, and no root reaches it
+		if root, ok := strings.CutSuffix(rec.Path, "/"+todoDir); ok && len(info.Roots) == 0 && st.Roots[root].Override == "" {
+			info.Roots = append(info.Roots, root)
 		}
 		out = append(out, info)
 	}
