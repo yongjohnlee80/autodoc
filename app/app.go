@@ -51,6 +51,7 @@ import (
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
+	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
@@ -373,9 +374,9 @@ func logLevelFlag(v string) (logger.Severity, error) {
 	if v == "" {
 		return "", nil
 	}
-	s, err := logger.ParseSeverity(v)
+	s, err := config.ParseLogLevel(v)
 	if err != nil {
-		return "", fmt.Errorf("--log-level %q: want debug, info, notice, warning, error or critical", v)
+		return "", fmt.Errorf("--log-level %w", err)
 	}
 	return s, nil
 }
