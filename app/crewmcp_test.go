@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // mcpClient is a client of `autodoc crew mcp` run as the session whose context path names: it
@@ -313,5 +315,48 @@ func TestTheCrewMCPServerEndsWithItsInput(t *testing.T) {
 	// NOTE: the bound is the property: a watch left in its long-poll would hold the server 25 s.
 	case <-time.After(5 * time.Second):
 		t.Fatal("the server did not end within 5 s of its input closing: its mail watch outlives it")
+	}
+}
+
+// TestTheMCPToolsTakeWhatTheGuideSays: every tool's schema takes exactly the arguments
+// crew.MCPToolArgs says, required as it says, in its order of tools; and what the agent is told
+// (the guide's line a tool, the wake notice, the waiting note, the server's instructions) says them
+// too, so an agent never needs a schema, and the two can't drift.
+func TestTheMCPToolsTakeWhatTheGuideSays(t *testing.T) {
+	if len(crewMCPTools) != len(crew.MCPToolArgs) {
+		t.Fatalf("%d tools, %d in crew.MCPToolArgs", len(crewMCPTools), len(crew.MCPToolArgs))
+	}
+	guide := crew.GuideOf("agy").Markdown
+	for i, tool := range crewMCPTools {
+		want := crew.MCPToolArgs[i]
+		if tool.Name != want.Name {
+			t.Errorf("tool %d is %s, crew.MCPToolArgs says %s", i, tool.Name, want.Name)
+			continue
+		}
+		var props []string
+		for p := range tool.Schema["properties"].(map[string]any) {
+			props = append(props, p)
+		}
+		required, _ := tool.Schema["required"].([]string)
+		all := append(slices.Clone(want.Required), want.Optional...)
+		slices.Sort(props)
+		slices.Sort(all)
+		if !slices.Equal(props, all) || !slices.Equal(required, want.Required) {
+			t.Errorf("%s's schema takes %v, requires %v; crew.MCPToolArgs says %v, requiring %v", tool.Name, props, required, all, want.Required)
+		}
+		if line := fmt.Sprintf("\n  - `%s`: %s\n", tool.Name, want.Says()); !strings.Contains(guide, line) {
+			t.Errorf("the guide lacks %s's arguments line %q", tool.Name, line)
+		}
+		if !strings.Contains(mcpInstructions, "`"+tool.Name+"`: "+want.Says()) {
+			t.Errorf("the server's instructions lack %s's arguments: %q", tool.Name, mcpInstructions)
+		}
+	}
+	if recv, _ := crew.MCPToolArgsOf("mail_receive"); recv.Says() != "none" {
+		t.Fatalf("mail_receive takes %s; the notices say it takes no arguments", recv.Says())
+	}
+	for what, text := range map[string]string{"the wake notice": crew.WakeNoticeMCP, "the waiting note": mcpWaitingNote} {
+		if !strings.Contains(text, "call mail_receive, a tool of the autodoc MCP server, with no arguments,") {
+			t.Errorf("%s doesn't say mail_receive takes no arguments: %q", what, text)
+		}
 	}
 }

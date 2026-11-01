@@ -76,3 +76,33 @@ func TestTheGuideAcksRightAfterReceiving(t *testing.T) {
 		}
 	}
 }
+
+// TestTheMCPGuideSaysEachToolsArguments: the MCP guide says, one line a tool, what each tool takes,
+// so an agent calls it without looking its schema up (agy's model lists a lazy MCP tool's schema
+// folder in the shell to find it, a command its rules don't allow); the CLI guide says no such lines.
+func TestTheMCPGuideSaysEachToolsArguments(t *testing.T) {
+	g := crew.GuideOf("agy").Markdown
+	for _, line := range []string{
+		"- **Each tool's arguments**, all you need to call it (there is no schema to look up):\n",
+		"\n  - `mail_receive`: none\n",
+		"\n  - `mail_ack`: `id`\n",
+		"\n  - `mail_reply`: `id` and `body`; optionally `subject`\n",
+		"\n  - `mail_renew`: `id`\n",
+		"\n  - `crew_whoami`: none\n",
+		"\n  - `crew_list`: none\n",
+		"\n  - `mail_send`: `to` and `body`; optionally `kind` and `subject`\n",
+	} {
+		if !strings.Contains(g, line) {
+			t.Errorf("agy's guide lacks the line %q:\n%s", line, g)
+		}
+	}
+	if s := crew.MCPArgumentsSentence(); !strings.Contains(s, "`mail_receive`: none. `mail_ack`: `id`.") || !strings.Contains(s, "`mail_send`: `to` and `body`; optionally `kind` and `subject`.") {
+		t.Errorf("the arguments sentence: %q", s)
+	}
+	if !strings.Contains(crew.WakeNoticeMCP, "call mail_receive, a tool of the autodoc MCP server, with no arguments,") {
+		t.Errorf("the MCP wake notice doesn't say mail_receive takes no arguments: %q", crew.WakeNoticeMCP)
+	}
+	if strings.Contains(crew.GuideOf("claude").Markdown, "Each tool's arguments") {
+		t.Error("the CLI guide says the MCP tools' arguments")
+	}
+}

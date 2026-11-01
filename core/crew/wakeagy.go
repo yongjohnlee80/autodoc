@@ -18,8 +18,8 @@ import (
 
 // AgyWaker wakes an Antigravity session through its language server
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler): the server's SendAgentMessage puts the
-// notice into the session's conversation, and an idle session starts a turn, a busy one holds it
-// until its turn ends. The server is on loopback and answers only a request carrying its CSRF
+// notice into the session's conversation, and an idle session starts a turn, while a busy one gets
+// it inside its running turn, as a system message. The server is on loopback and answers only a request carrying its CSRF
 // token, which the session's bridge gave the daemon with its endpoint and the daemon holds in
 // memory alone (Manager.EndpointSecret).
 //
