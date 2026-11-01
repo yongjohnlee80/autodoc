@@ -360,3 +360,22 @@ func TestTheMCPToolsTakeWhatTheGuideSays(t *testing.T) {
 		}
 	}
 }
+
+// TestThePerEventTextsKeepTheirSize (docs/decisions/crew.md#the-crew-mcp-server): the texts an agent
+// reads on every wake or tool result are pinned to their size in bytes, since each byte is paid for
+// the life of every session; changing one means changing its size here, on purpose.
+func TestThePerEventTextsKeepTheirSize(t *testing.T) {
+	for _, c := range []struct {
+		what, text string
+		size       int
+	}{
+		{"the CLI wake notice (crew.WakeNotice), per wake", crew.WakeNotice, 58},
+		{"the MCP wake notice (crew.WakeNoticeMCP), per wake", crew.WakeNoticeMCP, 125},
+		{"the waiting line with nothing waiting, per MCP tool result", waitingLine(0), 10},
+		{"the waiting line with mail waiting, per MCP tool result", waitingLine(1), 132},
+	} {
+		if len(c.text) != c.size {
+			t.Errorf("%s is %d bytes, pinned at %d: %q", c.what, len(c.text), c.size, c.text)
+		}
+	}
+}
