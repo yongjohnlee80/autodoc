@@ -87,8 +87,8 @@ func startAgentServer(argv []string, socket, dir string, environ []string) (*age
 	}
 }
 
-// stop ends the server's group (SIGTERM, then SIGKILL after serverStopWait) and removes its pid
-// file; it is safe to call again.
+// stop ends the server's group (SIGTERM, then SIGKILL after serverStopWait, and SIGKILL to what is
+// left of the group once its leader has ended) and removes its pid file; it is safe to call again.
 func (s *agentServer) stop() {
 	s.once.Do(func() {
 		pgid := s.cmd.Process.Pid
@@ -100,6 +100,8 @@ func (s *agentServer) stop() {
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 			<-s.done
 		}
+		// the leader's end isn't its group's: a child that outlived the SIGTERM is killed too
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		_ = os.Remove(s.pidFile)
 	})
 }
