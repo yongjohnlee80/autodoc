@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
 // writeFiles writes each name's text under a new directory, and answers the directory.
@@ -78,6 +80,82 @@ func TestDiagramsAreFoundInFiles(t *testing.T) {
 const diagramShapes = "Text example:\n\n````text\n```mermaid\npie\n  \"a\": 1\n```\n````\n\n" +
 	"> ```mermaid\n> pie\n>   \"a\": 1\n> ```\n\n" +
 	"```mermaid\nflowchart LR\n  A --> B\n```   \nAfter the fence, prose.\n"
+
+// checkDiagrams reports each file's diagrams, a line each, at the file line of what was refused:
+// a diagram's line plus golib's own line into its source, for a Mermaid syntax error and for a
+// construct the parser won't draw alike. An unreadable file, a file of no diagram kind, and any
+// diagram not drawn make the run exit 1; a .md without diagrams is said and isn't a failure, and a
+// run whose every diagram is drawn exits 0. layDiagram is golib's Mermaid parser here, the check
+// the GUI build's layout begins with, so the cell runs in every build.
+func TestCheckDiagramsReportsEachDiagramAtItsFileLine(t *testing.T) {
+	was := layDiagram
+	t.Cleanup(func() { layDiagram = was })
+	var laid []string
+	layDiagram = func(lang, src string) error {
+		laid = append(laid, lang)
+		_, err := pm.Parse(src)
+		return err
+	}
+	// report.md: the fence's source starts on line 4; its third line is refused, so file line 6
+	report := "# Notes\n\n```mermaid\nflowchart TD\n  A --> B\n  B --> C[\"x <job id> y\"]\n```\n"
+	dir := writeFiles(t, map[string]string{
+		"ok.mmd":     "flowchart TD\n  A --> B\n",
+		"broken.mmd": "flowchart TD\n  A --> B\n  C -->\n",
+		"report.md":  report,
+		"plain.md":   "# No diagrams\n",
+		"notes.txt":  "x",
+	})
+	at := func(name string) string { return filepath.Join(dir, name) }
+	var out strings.Builder
+	code := checkDiagrams([]string{at("ok.mmd"), at("broken.mmd"), at("report.md"), at("plain.md"), at("notes.txt"), at("gone.mmd")}, &out)
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	want := []string{
+		at("ok.mmd") + ":1: ok (mermaid)",
+		at("broken.mmd") + ":3: not drawn: mermaid: line 3, column 8: expected a node id",
+		at("report.md") + ":6: not drawn: mermaid: not drawn natively: HTML in a label (line 3)",
+		at("plain.md") + ": no mermaid or vega-lite diagrams",
+		at("notes.txt") + ": not a diagram: a .mmd, .mermaid, .chart.json, .vl.json or .md file is",
+	}
+	if code != diagramsNotDrawn || len(lines) != len(want)+1 {
+		t.Fatalf("exit %d, %d lines; want %d and %d lines:\n%s", code, len(lines), diagramsNotDrawn, len(want)+1, out.String())
+	}
+	for i, w := range want {
+		if lines[i] != w {
+			t.Errorf("line %d: %q\nwant      %q", i+1, lines[i], w)
+		}
+	}
+	if gone := lines[len(want)]; !strings.HasPrefix(gone, at("gone.mmd")+": ") || !strings.Contains(gone, "no such file") {
+		t.Errorf("an unreadable file: %q; want its read error", gone)
+	}
+	if len(laid) != 3 {
+		t.Errorf("diagrams laid out: %v; want the three files' three diagrams, no more", laid)
+	}
+
+	out.Reset()
+	if code := checkDiagrams([]string{at("ok.mmd"), at("plain.md")}, &out); code != diagramsDrawn {
+		t.Errorf("every diagram drawn: exit %d; want %d:\n%s", code, diagramsDrawn, out.String())
+	}
+}
+
+// errorLine is how far into its source golib's error is: a syntax error's or a refusal's line less
+// one, and 0 for an error with no line (a refusal of the whole diagram) or that isn't golib's.
+func TestErrorLineIsGolibsLineIntoTheSource(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want int
+	}{
+		{&pm.SyntaxError{Line: 3, Col: 8, Msg: "expected a node id"}, 2},
+		{&pm.NotDrawnError{Line: 1, What: "HTML in a label"}, 0},
+		{&pm.NotDrawnError{Line: 5, What: "HTML in a label"}, 4},
+		{&pm.NotDrawnError{What: `"gantt" diagrams`}, 0},
+		{&pm.SyntaxError{Msg: "no line"}, 0},
+		{os.ErrNotExist, 0},
+	} {
+		if got := errorLine(c.err); got != c.want {
+			t.Errorf("errorLine(%v) = %d; want %d", c.err, got, c.want)
+		}
+	}
+}
 
 // --check-diagram with no file says what it takes, and exits 2.
 func TestCheckDiagramWithoutFiles(t *testing.T) {
