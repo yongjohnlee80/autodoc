@@ -25,8 +25,9 @@ func elsewhereRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
 
 // A task for a running agent started in another workspace than the window's is rung all the same:
 // one inbox.send, to its codename in the window's scope, with the task; done hears nil once, and
-// nothing is typed or pressed into its tab (the mutant: the early ErrAgentStale return before the
-// doorbell, restored, ends it stale and unsent).
+// nothing is typed or pressed into its tab, nor is it brought forward, since its tab works in the
+// other workspace (the mutants: the early ErrAgentStale return before the doorbell, restored, ends
+// it stale and unsent; a rung task presented opens the agents panel on it).
 func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 	for _, via := range []string{"HandTask", "SendText"} {
 		t.Run(via, func(t *testing.T) {
@@ -55,7 +56,25 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 			if len(c.panel.pastes)+len(c.panel.keys) != 0 {
 				t.Fatalf("typed %q and pressed %q into another workspace's agent, want nothing", c.panel.pastes, c.panel.keys)
 			}
+			if len(c.opened)+len(c.panel.modes) != 0 {
+				t.Fatalf("brought another workspace's agent forward: opened %q, modes %q", c.opened, c.panel.modes)
+			}
 		})
+	}
+}
+
+// The same task rung into an agent in the window's own workspace is brought forward, as before:
+// what the cell above refuses is the other workspace, not the presenting.
+func TestARungTaskInTheWindowsWorkspaceIsPresented(t *testing.T) {
+	a, c, w := messagingRig(t)
+	w.inboxSend = func([]any) (any, error) { return map[string]any{"message": "m1"}, nil }
+	var heard []error
+	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
+		t.Fatal(err)
+	}
+	settleMessaging(c, w)
+	if len(heard) != 1 || heard[0] != nil || !slices.Contains(c.opened, "agent") {
+		t.Fatalf("done heard %v, opened %q: want rung and the agents panel opened on it", heard, c.opened)
 	}
 }
 
