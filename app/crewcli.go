@@ -227,13 +227,15 @@ var crewCommands = map[string]crewCommand{
 			fs.Bool("print-env", false, "print OPENCODE_CONFIG_CONTENT=<json>, which loads it, instead of its path")
 			fs.String("dir", "", "the plugin's folder (default AutoDoc's data folder, never a project's)")
 		}}, // run by crewPluginMain: it needs no session, so it is no call
-	"crew setup": {usage: "--kind K [--host window|nvim] [--program P] [--autodoc CMD]: print a crew agent's setup as JSON (argv to append, env to merge after the profile's, user-level files, prompts, notices) for a host's agent launch; the agent's env, the profile's included, is the one it runs under (never its command line), read and never printed back",
+	"crew setup": {usage: "--kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR] [--mail-via mcp|cli]: print a crew agent's setup as JSON (argv to append, env to merge after the profile's, user-level files, prompts, folder files, mail_via, notices) for a host's agent launch; the agent's env, the profile's included, is the one it runs under (never its command line), read and never printed back. --mail-via mcp: the host registers the mail_via it is answered, so the crew MCP server is offered (agy is offered it either way)",
 		example: "autodoc crew setup --kind claude --host nvim --autodoc /path/to/autodoc",
 		flags: func(fs *flag.FlagSet) {
 			fs.String("kind", "", "the agent's crew kind")
 			fs.String("host", crew.HostNvim, "nvim or window")
 			fs.String("program", "", "the CLI the agent's command runs")
 			fs.String("autodoc", "autodoc", "the command the hooks run AutoDoc with")
+			fs.String("agent-dir", "", "the folder the host owns for the agent")
+			fs.String("mail-via", "", "mcp: the host registers the mail_via it is answered")
 		}}, // run by crewSetupMain: it needs no session, so it is no call
 	"crew claude-settings": {usage: "[--claude PATH] [--autodoc CMD] [--prompts]: print a crew Claude agent's settings for `claude --settings`, only the hooks the installed Claude Code knows (for a host's agent launch; nothing is written), or with --prompts whether they report its permission prompts, which its crew.register says",
 		example: "autodoc crew claude-settings --claude ~/.local/bin/claude > crew-claude.json",

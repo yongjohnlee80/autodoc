@@ -30,19 +30,26 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 	program := fs.String("program", "", "the CLI the agent's command runs (default the kind's own name)")
 	autodoc := fs.String("autodoc", "autodoc", "the command the agent's hooks run AutoDoc with, as a shell reads it")
 	agentDir := fs.String("agent-dir", "", "the folder the host owns for the agent, where a kind's folder files go (never the user's project)")
+	mailVia := fs.String("mail-via", "", "mcp: the host registers the session with the mail_via this setup answers (crew.register's), so a kind that can read its mail through the crew MCP server is given it; absent or cli: the CLI's setup. agy, whose mail is MCP alone, is given the server either way")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *kind == "" || fs.NArg() != 0 || (*host != crew.HostNvim && *host != crew.HostWindow) {
-		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR]")
+	if *kind == "" || fs.NArg() != 0 || (*host != crew.HostNvim && *host != crew.HostWindow) || (*mailVia != "" && *mailVia != "cli" && *mailVia != "mcp") {
+		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR] [--mail-via mcp|cli]")
 		return 2
 	}
-	// a command its words can't be read from offers no MCP server: the setup goes on without it, and
-	// says why, since a kind without MCP still works through the CLI
+	// the crew MCP server only for a host that registers the mail mode it is answered (--mail-via
+	// mcp), or for a kind whose mail is MCP alone (agy), which its kind's default already says: a
+	// host that registers none would otherwise have a session allowed the MCP tools alone while its
+	// notice and guide name the CLI's commands. A command its words can't be read from offers none:
+	// the setup goes on without it, and says why
 	var servers []crew.MCPServer
-	server, serverErr := crewMCPServer(*autodoc)
-	if serverErr == nil {
-		servers = append(servers, server)
+	var serverErr error
+	if *mailVia == "mcp" || crew.MailViaOf(*kind) == crew.MailViaMCP {
+		var server crew.MCPServer
+		if server, serverErr = crewMCPServer(*autodoc); serverErr == nil {
+			servers = append(servers, server)
+		}
 	}
 	env := map[string]string{}
 	for _, kv := range environ {

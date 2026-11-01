@@ -561,9 +561,14 @@ reads it, never in your own CLI configuration:
 - Codex and Antigravity: none yet, until each shows a per-session place for it.
 
 Every kind's setup has one source, `crew.SetupFor`, which every host asks with `autodoc crew setup
---kind K --host window|nvim --autodoc <the agent's autodoc> --agent-dir <its folder>`, run as the
+--kind K --host window|nvim --autodoc <the agent's autodoc> --agent-dir <its folder> --mail-via mcp`, run as the
 agent's own build under the agent's environment, at every crew start: AutoDoc's window as Neovim
-does. The window writes the guide in the mode the setup answers (`mail_via`), the setup's folder
+does. `--mail-via mcp` is the host's promise that it registers the session with the `mail_via` the setup
+answers; only then does the setup offer a kind the crew MCP server (and its allowance), since a
+host that registers none would leave a session allowed the MCP tools alone while its notice and
+guide name the CLI's commands. Without it the setup is the CLI's. agy, whose mail is MCP alone, is
+offered the server either way: its kind's own mode is MCP, which a host that registers none gets.
+The window writes the guide in the mode the setup answers (`mail_via`), the setup's folder
 files, and for Claude Code its own hooks with the setup's allowance; it registers the session with
 `mail_via`, and starts the agent with the setup's env and arguments. It answers JSON:
 the arguments to append (Claude's `--settings`), AutoDoc's environment to merge after the profile's
