@@ -105,6 +105,7 @@ type Setup struct {
 //     it), and the OPENCODE_CONFIG_CONTENT that loads it, in.Env's own value extended.
 //   - Codex: one step after its start, the agent's autodoc registering the folder's thread, looking
 //     until it is found (crew endpoint --codex-here --wait).
+//   - Antigravity (agy): its mail as in.Servers' tools (agySetup).
 //   - the other kinds: nothing yet.
 //
 // Each kind's is its kindSetups entry; a new kind, or a kind taking in.Servers, changes only its own.
@@ -135,6 +136,65 @@ var kindSetups = map[string]kindSetup{
 	KindClaude:   claudeSetup,
 	KindCodex:    codexSetup,
 	KindOpenCode: opencodeSetup,
+	KindAgy:      agySetup,
+}
+
+// AgyBridgeCommand is the one shell command an agy crew agent runs, its guide's wake step and its
+// launch prompt: so the one its session's rules allow, exactly.
+const AgyBridgeCommand = "autodoc crew bridge --agy"
+
+// AgyLaunchPrompt is an agy agent's first turn: the bridge alone, since agy gives a session its
+// workspace's MCP tools only from its second turn (docs/decisions/crew.md#the-crew-mcp-server).
+const AgyLaunchPrompt = "Run exactly this shell command once, and nothing else: " + AgyBridgeCommand
+
+// agyMCPConfig is where agy reads a workspace's MCP servers, relative to the folder: in its cwd or
+// in an --add-dir folder, never a parent folder.
+const agyMCPConfig = ".agents/mcp_config.json"
+
+// agySetup gives an Antigravity agent its crew mail as in.Servers' tools
+// (docs/decisions/crew.md#the-crew-mcp-server): their config in the agent's folder (FolderFiles,
+// .agents/mcp_config.json, which agy finds in its cwd or, from Neovim, the --add-dir folder); and
+// on its command line, for this session alone, its rules (each tool by its exact mcp(<server>/<tool>),
+// and the bridge's exact command), the agent's folder trusted, and the launch prompt that runs the
+// bridge. agy writes nothing of this into the user's settings. Its bridge reports its prompts.
+// Without servers or a folder its mail can't be set up: it still starts, with a notice.
+func agySetup(in SetupInput, _ string, s *Setup) error {
+	if len(in.Servers) == 0 || in.AgentDir == "" {
+		s.Notices = append(s.Notices, "Antigravity's crew mail needs the crew MCP server and the agent's own folder, which this host didn't give: the agent starts without its mail")
+		return nil
+	}
+	servers := map[string]any{}
+	allow := []string{"command(" + AgyBridgeCommand + ")"}
+	for _, sv := range in.Servers {
+		if len(sv.Command) == 0 {
+			return fmt.Errorf("crew: MCP server %q has no command", sv.Name)
+		}
+		server := map[string]any{"command": sv.Command[0], "args": sv.Command[1:]}
+		if len(sv.Env) > 0 { // none: it inherits the agent's, its session's context included
+			server["env"] = sv.Env
+		}
+		servers[sv.Name] = server
+		for _, t := range sv.Tools {
+			allow = append(allow, "mcp("+sv.Name+"/"+t+")")
+		}
+	}
+	cfg, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return err
+	}
+	settings, err := json.Marshal(map[string]any{"permissions": map[string]any{"allow": allow}, "trustedWorkspaces": []string{in.AgentDir}})
+	if err != nil {
+		return err
+	}
+	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: agyMCPConfig, Content: string(cfg)})
+	s.Argv = append(s.Argv, "--settings", string(settings))
+	if in.Host == HostNvim { // Neovim's agent runs in the user's project: its folder is added, not its cwd
+		s.Argv = append(s.Argv, "--add-dir", in.AgentDir)
+	}
+	s.Argv = append(s.Argv, "-i", AgyLaunchPrompt)
+	s.Allow = allow
+	s.Prompts = true
+	return nil
 }
 
 // claudeSetup is crew.ClaudeSettings for the Claude Code on in.Env's PATH, the guide's commands

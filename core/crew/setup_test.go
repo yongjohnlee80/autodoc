@@ -109,7 +109,7 @@ func TestSetupForOpenCodeLoadsAutoDocsPlugin(t *testing.T) {
 // TestSetupForAnotherKindIsNothing: a kind with no setup yet answers nothing to add, as a value a
 // host can always merge.
 func TestSetupForAnotherKindIsNothing(t *testing.T) {
-	for _, k := range []string{"agy", "generic"} {
+	for _, k := range []string{"generic"} {
 		s, err := crew.SetupFor(crew.SetupInput{Kind: k, Host: crew.HostNvim, Env: map[string]string{"PATH": "/x"}}, "")
 		if err != nil || s.Argv == nil || s.Env == nil || s.Files == nil || s.Notices == nil || s.After == nil || s.FolderFiles == nil ||
 			len(s.Argv)+len(s.Env)+len(s.Files)+len(s.Notices)+len(s.After) != 0 || s.Prompts {
@@ -220,6 +220,87 @@ func TestSetupForTakesServersWithoutAKindChanging(t *testing.T) {
 		}
 		if !slices.Equal(with.Argv, without.Argv) || !maps.Equal(with.Env, without.Env) || len(with.FolderFiles) != 0 {
 			t.Errorf("%s: with servers %+v, without %+v: want the same until the kind takes MCP servers", k, with, without)
+		}
+	}
+}
+
+// TestSetupForAgyGivesItsMailAsMCPTools: an agy agent's setup puts the crew MCP servers' config in
+// its own folder (.agents/mcp_config.json, the servers' command, args and env), and on its command
+// line, for the session alone: each tool allowed by its exact mcp(<server>/<tool>) and the bridge by
+// its exact command, nothing by a wildcard; the agent's folder trusted; from Neovim, that folder
+// added (its cwd is the user's project); and the launch prompt that runs the bridge alone. Its
+// prompts are reported (the bridge), and nothing goes in its env.
+func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"},
+		Env: map[string]string{"AUTODOC_CREW_CONTEXT": "/c/ctx"}, Tools: []string{"mail_receive", "mail_ack"}}}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: host, AgentDir: "/a", Servers: servers,
+			Env: map[string]string{"PATH": "/x", "SECRET": "s3"}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".agents/mcp_config.json" {
+			t.Fatalf("%s: folder files %+v, want .agents/mcp_config.json alone", host, s.FolderFiles)
+		}
+		var cfg map[string]map[string]struct {
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			Env     map[string]string `json:"env"`
+		}
+		if err := json.Unmarshal([]byte(s.FolderFiles[0].Content), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if a := cfg["mcpServers"]["autodoc"]; a.Command != "/x/autodoc" || !slices.Equal(a.Args, []string{"crew", "mcp"}) || a.Env["AUTODOC_CREW_CONTEXT"] != "/c/ctx" || len(a.Env) != 1 {
+			t.Errorf("%s: the folder's MCP config %s, want the server's command, args and its env alone", host, s.FolderFiles[0].Content)
+		}
+		want := []string{"--settings", "", "-i", crew.AgyLaunchPrompt}
+		if host == crew.HostNvim {
+			want = []string{"--settings", "", "--add-dir", "/a", "-i", crew.AgyLaunchPrompt}
+		}
+		if len(s.Argv) != len(want) {
+			t.Fatalf("%s: argv %q, want the shape %q", host, s.Argv, want)
+		}
+		for i, w := range want {
+			if w != "" && s.Argv[i] != w {
+				t.Errorf("%s: argv[%d] %q, want %q", host, i, s.Argv[i], w)
+			}
+		}
+		var settings struct {
+			Permissions struct {
+				Allow []string `json:"allow"`
+			} `json:"permissions"`
+			Trusted []string `json:"trustedWorkspaces"`
+		}
+		if err := json.Unmarshal([]byte(s.Argv[1]), &settings); err != nil {
+			t.Fatal(err)
+		}
+		rules := []string{"command(autodoc crew bridge --agy)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
+		if !slices.Equal(settings.Permissions.Allow, rules) || !slices.Equal(s.Allow, rules) || !slices.Equal(settings.Trusted, []string{"/a"}) {
+			t.Errorf("%s: --settings %s (Allow %q), want exactly %q and the agent's folder trusted", host, s.Argv[1], s.Allow, rules)
+		}
+		if !s.Prompts || len(s.Env) != 0 || strings.Contains(strings.Join(s.Argv, " "), "s3") {
+			t.Errorf("%s: prompts %v, env %v, argv %q: want prompts reported, no env, the profile's env nowhere", host, s.Prompts, s.Env, s.Argv)
+		}
+	}
+	// the crew's own server has no env of its own (it inherits the agent's): its config says none
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostWindow, AgentDir: "/a",
+		Servers: []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}}, "")
+	if err != nil || len(s.FolderFiles) != 1 || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
+		t.Errorf("a server with no env: %+v %v, want its config without an env", s.FolderFiles, err)
+	}
+	if !strings.Contains(crew.AgyLaunchPrompt, crew.AgyBridgeCommand) || !strings.Contains(crew.GuideOf(crew.KindAgy).Markdown, "`"+crew.AgyBridgeCommand+"`") {
+		t.Error("the launch prompt and the guide don't name the bridge's command, the one its rule allows")
+	}
+}
+
+// TestSetupForAgyWithoutServersStartsWithANotice: a host that gives no MCP servers, or no folder of
+// the agent's, starts its agy agent all the same, with a notice, and nothing else.
+func TestSetupForAgyWithoutServersStartsWithANotice(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
+	for _, in := range []crew.SetupInput{{Kind: crew.KindAgy, Host: crew.HostNvim, AgentDir: "/a"}, {Kind: crew.KindAgy, Host: crew.HostNvim, Servers: servers}} {
+		s, err := crew.SetupFor(in, "")
+		if err != nil || len(s.Notices) != 1 || len(s.Argv)+len(s.FolderFiles)+len(s.Env)+len(s.Allow) != 0 || s.Prompts {
+			t.Errorf("servers %d, folder %q: %+v %v, want a notice alone", len(in.Servers), in.AgentDir, s, err)
 		}
 	}
 }
