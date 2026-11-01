@@ -91,4 +91,5 @@ Dialog {
     }
     onAccepted: App.pickAccept(name, list.currentIndex, field.text)
     onRejected: App.pickCancel(name)
+    onClosed: App.pickClosed(name)
 }
