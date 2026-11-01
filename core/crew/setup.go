@@ -112,13 +112,15 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 		if err != nil {
 			return Setup{}, err
 		}
-		if v, err = OpenCodeWithAllow(v); err != nil {
-			return Setup{}, err
+		if openCodeAllowProven {
+			if v, err = OpenCodeWithAllow(v); err != nil {
+				return Setup{}, err
+			}
+			for rule := range OpenCodeAllow() {
+				s.Allow = append(s.Allow, rule)
+			}
+			slices.Sort(s.Allow)
 		}
-		for rule := range OpenCodeAllow() {
-			s.Allow = append(s.Allow, rule)
-		}
-		slices.Sort(s.Allow)
 		s.Env["OPENCODE_CONFIG_CONTENT"] = v
 	}
 	return s, nil

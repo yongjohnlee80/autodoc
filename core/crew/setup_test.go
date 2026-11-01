@@ -131,11 +131,11 @@ func TestSetupForCodexIsTheWaitingRegistration(t *testing.T) {
 	}
 }
 
-// TestSetupForAllowsTheGuidesCommandsInTheSessionAlone: Claude's and OpenCode's setups carry the
-// allowance (exactly crew.ClaudeAllow, crew.OpenCodeAllow) where the session's own CLI reads it:
-// Neovim's --settings, the session's OPENCODE_CONFIG_CONTENT (a rule of the agent's own value
-// kept), and Setup.Allow for a window to merge into the agent's folder. Nothing is written beyond
-// AutoDoc's own data folder.
+// TestSetupForAllowsTheGuidesCommandsInTheSessionAlone: Claude's setup carries the allowance
+// (exactly crew.ClaudeAllow) where the session's own CLI reads it: Neovim's --settings, and
+// Setup.Allow for a window to merge into the agent's folder. OpenCode's carries none until its
+// compound-command probe passes: the agent's own rules alone. Nothing is written beyond AutoDoc's
+// own data folder.
 func TestSetupForAllowsTheGuidesCommandsInTheSessionAlone(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindClaude, Host: crew.HostNvim, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir()}, "")
@@ -169,12 +169,9 @@ func TestSetupForAllowsTheGuidesCommandsInTheSessionAlone(t *testing.T) {
 	if err := json.Unmarshal([]byte(o.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"git push*": "ask"}
-	for k, v := range crew.OpenCodeAllow() {
-		want[k] = v.(string)
-	}
-	if !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || len(o.Allow) != len(crew.OpenCodeAllow()) {
-		t.Errorf("OpenCode's allowance: %+v, Allow %q; want the guide's commands added, the agent's own rules kept", cfg.Permission, o.Allow)
+	// OpenCode's rules wait on its compound-command probe (crew's openCodeAllowProven): none written
+	if want := map[string]string{"git push*": "ask"}; !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || len(o.Allow) != 0 {
+		t.Errorf("OpenCode's setup: %+v, Allow %q; want the agent's own rules alone, none of AutoDoc's until OpenCode's probe passes", cfg.Permission, o.Allow)
 	}
 	if es, _ := os.ReadDir(home); len(es) != 0 {
 		t.Errorf("the setup wrote into the user's home: %v", es)

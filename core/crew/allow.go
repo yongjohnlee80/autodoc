@@ -32,6 +32,14 @@ func IsClaudeAllow(rule string) bool {
 	return slices.Contains(ClaudeAllow(), rule) || slices.Contains(earlierClaudeAllow, rule)
 }
 
+// openCodeAllowProven is whether SetupFor writes OpenCode's allowance (OpenCodeWithAllow) into a
+// session's OPENCODE_CONFIG_CONTENT. An allow rule is the one place the crew widens an agent's
+// permissions, so it ships only once a live probe shows a compound command can't ride it: the KB
+// crew harness's probe-compound.sh, run on OpenCode. Claude Code's passed; OpenCode's hasn't run
+// yet (no model was available), so OpenCode agents keep their own policy and prompt for the
+// guide's commands. A passing probe flips this, with its ledger.
+const openCodeAllowProven = false
+
 // OpenCodeAllow is OpenCode's permission.bash for the guide's commands: two allows per command,
 // the command alone and the command with arguments, so neither matches another command that
 // merely starts with its name (`autodoc mail sendmail`).
