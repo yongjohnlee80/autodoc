@@ -1050,6 +1050,25 @@ func (c core) windowScope() string {
 	return scope
 }
 
+// peerAgents are the live crew agents of every other scope, for todos' A (todos_assign.go): none
+// while the window holds no scope, since it couldn't send them anything.
+func (c core) peerAgents(then func([]AgentEntry)) {
+	if c.h.crew == nil {
+		then(nil)
+		return
+	}
+	c.h.crew.peerAgents(then)
+}
+
+// sendTask sends another host's agent a task as the user's request (todos_assign.go).
+func (c core) sendTask(codename, scope, subject, body, key string, then func(error)) {
+	if c.h.crew == nil {
+		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		return
+	}
+	c.h.crew.sendTask(codename, scope, subject, body, key, then)
+}
+
 func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	return c.h.agents.HandTask(to, task, instruction, done)
 }
