@@ -401,3 +401,37 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 		}
 	}
 }
+
+// scopedAgentCore is agentCore in a window holding the crew scope scope ("" for none).
+type scopedAgentCore struct {
+	*agentCore
+	scope string
+}
+
+func (c *scopedAgentCore) windowScope() string { return c.scope }
+
+// TestTodosAssignCarriesTheWindowsScope: A assigns with the window's crew scope, so the window's
+// assignment feed (crewtodos.go) leaves this assignment to the hand-over A makes itself; a window
+// holding no scope assigns with none, as before.
+func TestTodosAssignCarriesTheWindowsScope(t *testing.T) {
+	for _, scope := range []string{"autodoc:0123456789abcdef", ""} {
+		ac, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+		c := &scopedAgentCore{agentCore: ac, scope: scope}
+		v := newTodos(c)
+		v.list()
+		onTask(t, v, "open")
+		v.assign()
+		v.assignPick.accept(0, "")
+		v.assignSet("Go.")
+		if len(*assigned) != 1 {
+			t.Fatalf("scope %q: todos.assign called %d times", scope, len(*assigned))
+		}
+		p := (*assigned)[0]
+		if scope != "" && (len(p) != 6 || p[5] != scope) || scope == "" && len(p) != 5 {
+			t.Errorf("scope %q: todos.assign params %v", scope, p)
+		}
+		if len(ac.handed) != 1 {
+			t.Errorf("scope %q: handed over %d times, want once, by A itself", scope, len(ac.handed))
+		}
+	}
+}

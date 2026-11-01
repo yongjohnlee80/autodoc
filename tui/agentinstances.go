@@ -895,6 +895,16 @@ func (a *agents) Stopping() {
 }
 
 func (c core) AgentEntries() []AgentEntry { return c.h.agents.AgentEntries() }
+
+// windowScope is the crew scope the window holds, "" for none (todos_assign.go).
+func (c core) windowScope() string {
+	if c.h.crew == nil {
+		return ""
+	}
+	scope, _, _ := c.h.crew.held()
+	return scope
+}
+
 func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	return c.h.agents.HandTask(to, task, instruction, done)
 }
