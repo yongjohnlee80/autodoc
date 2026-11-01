@@ -10,7 +10,7 @@ Dialog {
     Flex {
         direction: Tui.Vertical
         Text { text: App.luaInputLabel }
-        TextField { id: luaInputField; text: App.luaInputText; placeholderText: App.luaInputPlaceholder; onAccepted: App.luaInputSet(text) }
+        TextField { id: luaInputField; text: App.luaInputText; onAccepted: App.luaInputSet(text) }
     }
     onRejected: App.luaInputCancel()
 }

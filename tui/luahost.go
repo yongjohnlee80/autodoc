@@ -229,7 +229,8 @@ func (s *scripting) luaPick(L *lua.LState) int {
 }
 
 // luaInput is autodoc.ui.input(spec, cb): a line asked of the user (LuaInput.qml), spec's title,
-// label (what it asks), text (the line's start) and placeholder. cb(text) once Enter is pressed, or
+// label (what it asks) and text (the line's start). No placeholder: a TextField takes one only as
+// it is built, so the one dialog can't carry each script's. cb(text) once Enter is pressed, or
 // cb(nil, "cancelled") on Esc; "busy" while another script's line is open.
 func (s *scripting) luaInput(L *lua.LState) int {
 	spec := L.CheckTable(1)
@@ -245,7 +246,6 @@ func (s *scripting) luaInput(L *lua.LState) int {
 	s.inputCB = cb
 	s.c.Set("App.luaInputTitle", title)
 	s.c.Set("App.luaInputLabel", lua.LVAsString(spec.RawGetString("label")))
-	s.c.Set("App.luaInputPlaceholder", lua.LVAsString(spec.RawGetString("placeholder")))
 	s.c.Set("App.luaInputText", "\x00") // moved away first, so the same start twice still sets it
 	s.c.Set("App.luaInputText", lua.LVAsString(spec.RawGetString("text")))
 	s.c.Open("luaInput")
