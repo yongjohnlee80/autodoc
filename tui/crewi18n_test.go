@@ -10,7 +10,7 @@ import (
 )
 
 // crewFiles are the crew's own sources: everything they show a person goes through the catalog.
-var crewFiles = []string{"crewhost.go", "crewinbox.go", "crewreply.go", "crewbell.go", "creworphans.go", "agentclaude.go"}
+var crewFiles = []string{"crewhost.go", "crewinbox.go", "crewinboxfallback.go", "crewfallback.go", "crewreply.go", "crewbell.go", "creworphans.go", "agentclaude.go"}
 
 // TestTheCrewSpeaksThroughItsCatalog: no notice, toast, title or button in the crew's sources is a
 // literal or a Sprintf (each is Tr or Trf of an autodoc.crew.* id), every id they and the agents'
