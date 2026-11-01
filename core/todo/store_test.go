@@ -839,3 +839,38 @@ func TestCheckFileJudgesATaskByItsFormat(t *testing.T) {
 		t.Errorf("a task with an errors[] entry: %+v, want one %snot-found on adr[0]", withErr.Diagnostics, todo.RuleTaskError)
 	}
 }
+
+// A project whose store set_dir moved elsewhere names only the store it resolves to: the record its
+// old <root>/.todo-list left behind lists no root, so no client offers it as the project's second
+// list (seen as two LabelManager lists in the todos panel, 2026-11-01).
+func TestAStoreARootMovedAwayFromListsNoRoot(t *testing.T) {
+	e := newEnv(t)
+	project := todo.At{Root: "/src/lm"}
+	e.disk.MkdirAll("/src/lm/.todo-list/open")
+	if _, err := e.m.Register(ctx, "/src/lm"); err != nil {
+		t.Fatal(err)
+	}
+	old, err := e.m.Resolve(ctx, project)
+	if err != nil || old.Store != "/src/lm/.todo-list" {
+		t.Fatalf("resolve before the move: %+v %v", old, err)
+	}
+	e.disk.MkdirAll("/src/lm/kb/.todo-list/open")
+	moved, err := e.m.SetDir(ctx, project, "/src/lm/kb/.todo-list")
+	if err != nil || moved.StoreID == old.StoreID {
+		t.Fatalf("set_dir: %+v %v", moved, err)
+	}
+	stores, err := e.m.Stores(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := map[string][]string{}
+	for _, s := range stores {
+		roots[s.ID] = s.Roots
+	}
+	if r := roots[old.StoreID]; len(r) != 0 {
+		t.Errorf("the store the root moved away from still lists it: %v", r)
+	}
+	if r := roots[moved.StoreID]; len(r) != 1 || r[0] != "/src/lm" {
+		t.Errorf("the store the root moved to: %v", r)
+	}
+}

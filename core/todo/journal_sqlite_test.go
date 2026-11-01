@@ -115,6 +115,7 @@ var sqliteSuites = []struct {
 	{"PriorityNormalIsTheLegacySpellingOfMedium", TestPriorityNormalIsTheLegacySpellingOfMedium},
 	{"NewProjectOrder", TestNewProjectOrder},
 	{"Where", TestWhere},
+	{"AStoreARootMovedAwayFromListsNoRoot", TestAStoreARootMovedAwayFromListsNoRoot},
 	{"Confinement", TestConfinement},
 	{"MoveStoreKeepsTheStore", TestMoveStoreKeepsTheStore},
 	{"ArchivesAreReadOnRequestOnly", TestArchivesAreReadOnRequestOnly},
