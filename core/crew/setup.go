@@ -396,15 +396,19 @@ func opencodeSetup(in SetupInput, _ string, s *Setup) error {
 		return err
 	}
 	if openCodeAllowProven {
-		if v, err = OpenCodeWithAllow(v); err != nil {
+		rules := OpenCodeAllow()
+		if len(in.Servers) > 0 { // on MCP mail it runs none of the mail commands: the contracts alone
+			rules = OpenCodeContractsAllow()
+		}
+		if v, err = openCodeWithRules(v, rules); err != nil {
 			return err
 		}
-		for rule := range OpenCodeAllow() {
+		for rule := range rules {
 			s.Allow = append(s.Allow, rule)
 		}
 		slices.Sort(s.Allow)
 	}
-	if len(in.Servers) > 0 { // OpenCode gates no MCP tool: the server is all it needs, no allowance
+	if len(in.Servers) > 0 { // OpenCode gates no MCP tool: the server is all it needs, no tool rule
 		if v, err = OpenCodeWithMCP(v, in.Servers); err != nil {
 			return err
 		}

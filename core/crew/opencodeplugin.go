@@ -70,6 +70,11 @@ func pluginURL(path string) (string, error) {
 // never the user's opencode.json. A bash that is one action for every command ("ask") stays that
 // action for the rest ("*"); a permission that is no object is left as it is, with no allowance.
 func OpenCodeWithAllow(content string) (string, error) {
+	return openCodeWithRules(content, OpenCodeAllow())
+}
+
+// openCodeWithRules is OpenCodeWithAllow with rules in place of the guide's commands.
+func openCodeWithRules(content string, rules map[string]any) (string, error) {
 	cfg := map[string]any{}
 	d := json.NewDecoder(bytes.NewReader([]byte(content)))
 	d.UseNumber()
@@ -93,7 +98,7 @@ func OpenCodeWithAllow(content string) (string, error) {
 	if bash == nil {
 		bash = map[string]any{}
 	}
-	for rule, v := range OpenCodeAllow() {
+	for rule, v := range rules {
 		bash[rule] = v
 	}
 	perm["bash"], cfg["permission"] = bash, perm

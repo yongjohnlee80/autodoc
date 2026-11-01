@@ -66,17 +66,22 @@ func IsClaudeAllow(rule string) bool {
 // openCodeAllowProven is whether SetupFor writes OpenCode's allowance (OpenCodeWithAllow) into a
 // session's OPENCODE_CONFIG_CONTENT. An allow rule is the one place the crew widens an agent's
 // permissions, so it ships only once a live probe shows a compound command can't ride it: the KB
-// crew harness's probe-compound.sh, run on OpenCode. Claude Code's passed; OpenCode's hasn't run
-// yet (no model was available), so OpenCode agents keep their own policy and prompt for the
-// guide's commands. A passing probe flips this, with its ledger.
-const openCodeAllowProven = false
+// crew harness's probe-compound.sh, run on OpenCode. It passed on OpenCode 1.18.31 (KB ledger
+// 2026-11-01-probe-compound-contracts-PASS), as on Claude Code.
+const openCodeAllowProven = true
 
 // OpenCodeAllow is OpenCode's permission.bash for the guide's commands: two allows per command,
 // the command alone and the command with arguments, so neither matches another command that
 // merely starts with its name (`autodoc mail sendmail`).
-func OpenCodeAllow() map[string]any {
-	out := make(map[string]any, 2*len(GuideCommands))
-	for _, c := range GuideCommands {
+func OpenCodeAllow() map[string]any { return openCodeAllowOf(GuideCommands) }
+
+// OpenCodeContractsAllow is OpenCodeAllow for ContractsCommand alone: what an OpenCode session on
+// MCP mail is allowed, which runs none of the mail commands (least privilege, as Claude's).
+func OpenCodeContractsAllow() map[string]any { return openCodeAllowOf([]string{ContractsCommand}) }
+
+func openCodeAllowOf(commands []string) map[string]any {
+	out := make(map[string]any, 2*len(commands))
+	for _, c := range commands {
 		out["autodoc "+c] = "allow"
 		out["autodoc "+c+" *"] = "allow"
 	}
