@@ -26,7 +26,7 @@ func pathOf(args []string) string {
 // autodoc in that environment finds it. A crew agent's folder holds the window's scope in its name
 // (autodoc:<id>), so that folder can't be the entry itself: split there, PATH's first entries named
 // nothing, and every bare `autodoc` an agent ran (agy's bridge, its mail) was the user's installed
-// one (gold-man's finding, 2026-11-01).
+// one.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
 	p, _ := a.profile("one")
