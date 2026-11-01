@@ -491,6 +491,27 @@ func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
 	}
 }
 
+// TestTheCodexServerRunsCommandsWithoutALoginShell: the app-server a Codex agent's commands run in is
+// started with allow_login_shell=false, on its own command line (never in ~/.codex): a login shell
+// sources the user's profile, whose PATH (~/.local/bin first) puts the user's own autodoc ahead of the
+// agent's, so the agent spoke to the crew through another build than its host's.
+func TestTheCodexServerRunsCommandsWithoutALoginShell(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, AgentDir: t.TempDir(), Servers: servers}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := slices.Index(s.Server, "allow_login_shell=false")
+		if at < 1 || s.Server[at-1] != "-c" {
+			t.Fatalf("%s: its server %q, want -c allow_login_shell=false", host, s.Server)
+		}
+		if slices.Contains(s.Argv, "allow_login_shell=false") {
+			t.Errorf("%s: the TUI's argv %q has it too: a TUI given -c runs embedded, off its own server", host, s.Argv)
+		}
+	}
+}
+
 // TestSetupForCodexGetsItsOwnAppServer: a Codex agent given the crew's MCP server gets an app-server
 // of its own (Server, its socket in the agent's folder) with the server on its command line and each
 // crew tool approved by name, never the server's whole default; its TUI attaches to it (--remote);
@@ -507,7 +528,7 @@ func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	sock := filepath.Join(agent, crew.CodexServerSocket)
-	want := []string{"codex", "app-server", "--listen", "unix://" + sock,
+	want := []string{"codex", "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false",
 		"-c", `mcp_servers.autodoc.command="/x/autodoc"`, "-c", `mcp_servers.autodoc.args=["crew","mcp"]`,
 		"-c", `mcp_servers.autodoc.env_vars=["AUTODOC_CREW_CONTEXT"]`,
 		"-c", `mcp_servers.autodoc.tools.mail_receive.approval_mode="approve"`, "-c", `mcp_servers.autodoc.tools.crew_whoami.approval_mode="approve"`}

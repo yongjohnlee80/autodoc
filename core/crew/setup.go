@@ -313,7 +313,9 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		program = "codex"
 	}
 	sock := filepath.Join(in.AgentDir, CodexServerSocket)
-	server := []string{program, "app-server", "--listen", "unix://" + sock}
+	// its commands run in this server, never as a login shell: a login shell sources the user's
+	// profile, whose PATH (~/.local/bin first) would run the user's own autodoc ahead of the agent's
+	server := []string{program, "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false"}
 	for _, sv := range in.Servers {
 		if len(sv.Command) == 0 {
 			return fmt.Errorf("crew: MCP server %q has no command", sv.Name)
