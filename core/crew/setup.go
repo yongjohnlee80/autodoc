@@ -327,6 +327,9 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 			args = []string{}
 		}
 		server = append(server, "-c", key+".command="+tomlValue(sv.Command[0]), "-c", key+".args="+tomlValue(args))
+		// Codex starts a stdio MCP server with a filtered environment: the session's context, which
+		// the host gives the app-server, passes on by name, or `crew mcp` finds no session of its own
+		server = append(server, "-c", key+".env_vars="+tomlValue([]string{EnvContext}))
 		for _, k := range slices.Sorted(maps.Keys(sv.Env)) {
 			if !codexBareKey.MatchString(k) {
 				return fmt.Errorf("crew: MCP server %q env name %q isn't a bare TOML key", sv.Name, k)
