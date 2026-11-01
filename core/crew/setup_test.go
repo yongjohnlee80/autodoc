@@ -190,7 +190,7 @@ func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
 		Permission struct{ Bash map[string]string }
 	}
 	if err != nil || json.Unmarshal([]byte(got), &cfg) != nil || cfg.Permission.Bash["*"] != "ask" ||
-		cfg.Permission.Bash["autodoc mail receive*"] != "allow" || len(cfg.Permission.Bash) != len(crew.OpenCodeAllow())+1 {
+		cfg.Permission.Bash["autodoc mail receive *"] != "allow" || len(cfg.Permission.Bash) != len(crew.OpenCodeAllow())+1 {
 		t.Errorf("a bash of one action: %s %v, want it as \"*\" and the guide's commands allowed", got, err)
 	}
 	for _, kept := range []string{`{"permission":"allow"}`, `{"permission":{"bash":["x"]}}`} {

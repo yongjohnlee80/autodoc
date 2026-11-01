@@ -21,7 +21,8 @@ func TestTheAllowanceIsExactlyTheGuidesCommands(t *testing.T) {
 	ocWant := map[string]any{}
 	for _, c := range theGuidesCommands {
 		claude = append(claude, "Bash(autodoc "+c+":*)")
-		ocWant["autodoc "+c+"*"] = "allow"
+		ocWant["autodoc "+c] = "allow"
+		ocWant["autodoc "+c+" *"] = "allow"
 	}
 	if got := crew.ClaudeAllow(); !slices.Equal(got, claude) {
 		t.Errorf("Claude's allowance %q, want exactly %q", got, claude)
@@ -40,7 +41,8 @@ func TestTheAllowanceIsExactlyTheGuidesCommands(t *testing.T) {
 			t.Errorf("a rule %q is too wide or not read as AutoDoc's", r)
 		}
 	}
-	for _, user := range []string{"Bash(git status:*)", "Bash(autodocx:*)", "Read(~/notes/**)", "Bash(autodoc search:*"} {
+	for _, user := range []string{"Bash(git status:*)", "Bash(autodocx:*)", "Read(~/notes/**)", "Bash(autodoc search:*)",
+		"Bash(autodoc --call:*)", "Bash(autodoc mail send)", "Bash(autodoc mail:*)"} {
 		if crew.IsClaudeAllow(user) {
 			t.Errorf("%q, the user's, is read as AutoDoc's: a host would take it out", user)
 		}
