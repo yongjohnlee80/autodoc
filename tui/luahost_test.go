@@ -79,6 +79,137 @@ end }`)
 	r.s.WaitFor(t, "cancelled", func(string) bool { return r.noticed("picked nil cancelled") })
 }
 
+// A script's line or picker closed some way other than Enter or Esc (close(), which answers
+// nothing) answers it "cancelled", so the next is not "busy" for good; a callback that asks a new
+// line or pick as the old one closes, by a choice, Enter or Esc, keeps it, and it answers.
+func TestScriptsHearALineOrPickClosedAnyWay(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.luaLoad(t, `
+local function said(tag) return function(v, err) autodoc.notify(tag .. " " .. tostring(v) .. " " .. tostring(err)) end end
+autodoc.command{ name = "ask", run = function() autodoc.ui.input({ title = "a bird", label = "which bird?" }, said("answered")) end }
+autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ title = "pick a bird", items = { "alpha-kestrel" } }, said("picked")) end }
+autodoc.command{ name = "reask", run = function()
+  autodoc.ui.input({ label = "first line?" }, function(v, err)
+    autodoc.notify("first " .. tostring(err))
+    autodoc.ui.input({ label = "second line?" }, said("second"))
+  end)
+end }
+autodoc.command{ name = "repick", run = function()
+  autodoc.ui.pick({ title = "first pick", items = { "one-item" } }, function(v, err)
+    autodoc.notify("first pick " .. tostring(v))
+    autodoc.ui.pick({ title = "second pick", items = { "two-item" } }, said("second pick"))
+  end)
+end }`)
+	closeDialog := func(id string) { onLoop(r, func() bool { r.h.closeDialog(id); return true }) }
+
+	r.mustRun(t, "ask")
+	r.s.WaitForText(t, "which bird?")
+	closeDialog("luaInput")
+	r.s.WaitFor(t, "the closed line cancelled", func(string) bool { return r.noticed("answered nil cancelled") })
+	r.mustRun(t, "ask")
+	r.s.WaitForText(t, "which bird?")
+	r.keys(t, decltest.Type("wren")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the next line answered, not busy", func(string) bool { return r.noticed("answered wren nil") })
+
+	r.mustRun(t, "pk")
+	r.s.WaitForText(t, "alpha-kestrel")
+	closeDialog("luaPicker")
+	r.s.WaitFor(t, "the closed picker cancelled", func(string) bool { return r.noticed("picked nil cancelled") })
+	r.mustRun(t, "pk")
+	r.s.WaitForText(t, "alpha-kestrel")
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the next pick answered, not busy", func(string) bool { return r.noticed("picked alpha-kestrel nil") })
+
+	// Esc's callback asks a new line before the old dialog's closed is raised: the new one stays
+	r.mustRun(t, "reask")
+	r.s.WaitForText(t, "first line?")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the first line cancelled", func(string) bool { return r.noticed("first cancelled") })
+	r.s.WaitForText(t, "second line?")
+	r.keys(t, decltest.Type("owl")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the second line answered", func(string) bool { return r.noticed("second owl nil") })
+	if r.noticed("second nil cancelled") {
+		t.Fatal("the first line's close cancelled the line its callback asked")
+	}
+
+	// a choice is made after its dialog closed; the pick its callback asks stays
+	r.mustRun(t, "repick")
+	r.s.WaitForText(t, "one-item")
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the first pick chosen", func(string) bool { return r.noticed("first pick one-item") })
+	r.s.WaitForText(t, "two-item")
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the second pick chosen", func(string) bool { return r.noticed("second pick two-item nil") })
+	if r.noticed("second pick nil cancelled") {
+		t.Fatal("the first pick's close cancelled the pick its callback asked")
+	}
+
+	// and Esc's callback, which runs before the dialog's closed is raised
+	r.clearNotices()
+	r.mustRun(t, "repick")
+	r.s.WaitForText(t, "one-item")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the first pick dismissed", func(string) bool { return r.noticed("first pick nil") })
+	r.s.WaitForText(t, "two-item")
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the second pick chosen after Esc", func(string) bool { return r.noticed("second pick two-item nil") })
+	if r.noticed("second pick nil cancelled") {
+		t.Fatal("the first pick's Esc cancelled the pick its callback asked")
+	}
+
+	// only an answer's own closed is passed over: a later close() is heard again
+	r.clearNotices()
+	r.mustRun(t, "ask")
+	r.s.WaitForText(t, "which bird?")
+	closeDialog("luaInput")
+	r.s.WaitFor(t, "a line closed after an Esc cancelled", func(string) bool { return r.noticed("answered nil cancelled") })
+	r.mustRun(t, "pk")
+	r.s.WaitForText(t, "alpha-kestrel")
+	closeDialog("luaPicker")
+	r.s.WaitFor(t, "a picker closed after a choice cancelled", func(string) bool { return r.noticed("picked nil cancelled") })
+}
+
+// :lua-reload closes a line or picker the old scripts left open, and drops its callback, another
+// engine's: the new scripts' line and pick are asked, never "busy".
+func TestScriptsReloadEndsTheirOpenLineAndPick(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	old := `
+autodoc.command{ name = "ask", run = function() autodoc.ui.input({ label = "before the reload?" }, function() end) end }
+autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ items = { "before-kestrel" } }, function() end) end }`
+	fresh := `
+local function said(tag) return function(v, err) autodoc.notify(tag .. " " .. tostring(v) .. " " .. tostring(err)) end end
+autodoc.command{ name = "ask", run = function() autodoc.ui.input({ label = "after the reload?" }, said("after")) end }
+autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ items = { "after-heron" } }, said("after pick")) end }`
+
+	r.luaLoad(t, old)
+	r.mustRun(t, "ask")
+	r.s.WaitForText(t, "before the reload?")
+	r.mustRun(t, "lua-reload")
+	r.s.WaitFor(t, "the old line closed", func(sc string) bool { return !strings.Contains(sc, "before the reload?") })
+	r.luaLoad(t, fresh)
+	r.mustRun(t, "ask")
+	r.s.WaitForText(t, "after the reload?")
+	r.keys(t, decltest.Type("swift")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the new line answered", func(string) bool { return r.noticed("after swift nil") })
+
+	r.mustRun(t, "lua-reload")
+	r.luaLoad(t, old)
+	r.mustRun(t, "pk")
+	r.s.WaitForText(t, "before-kestrel")
+	r.mustRun(t, "lua-reload")
+	r.s.WaitFor(t, "the old picker closed", func(sc string) bool { return !strings.Contains(sc, "before-kestrel") })
+	r.luaLoad(t, fresh)
+	r.mustRun(t, "pk")
+	r.s.WaitForText(t, "after-heron")
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the new pick answered", func(string) bool { return r.noticed("after pick after-heron nil") })
+}
+
 // autodoc.agents lists the agents and sends one text as a bracketed paste, typed and not submitted;
 // agents.lua's :agent-buffer sends the page to the one running, and :agent-forward the selection.
 func TestScriptsSendTextToAnAgent(t *testing.T) {

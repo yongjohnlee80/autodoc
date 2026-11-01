@@ -71,6 +71,11 @@ type pick[T any] struct {
 	submit func(text string)
 	// cancel, when set, runs when the dialog is dismissed without a choice
 	cancel func()
+	// lost, when set, runs when the dialog closed with no choice: Esc (after cancel), or a close()
+	// from elsewhere, which answers nothing. answering is that a choice is under way, so the
+	// dialog's closed, which comes before choose runs, is not lost.
+	lost      func()
+	answering bool
 }
 
 // open opens the picker over its items, the field emptied and every item listed.
@@ -213,9 +218,22 @@ func (p *pick[T]) accept(i int, text string) {
 // Dialog closed by close() emits neither accepted nor rejected, so dismiss does not run.
 func (p *pick[T]) take(x T) {
 	p.c.Ticket(&p.seq, p.scope)
+	p.answering = true
 	p.c.Close(p.dialog)
 	if p.choose != nil {
 		p.choose(x)
+	}
+}
+
+// closedDialog is the picker's dialog closed, however: after a choice, nothing more; else lost
+// hears it.
+func (p *pick[T]) closedDialog() {
+	if p.answering {
+		p.answering = false
+		return
+	}
+	if p.lost != nil {
+		p.lost()
 	}
 }
 
@@ -257,6 +275,7 @@ type picker interface {
 	enterRow(i int)
 	accept(i int, text string)
 	dismiss()
+	closedDialog()
 }
 
 // cursorAt is byte at of text as the editor's cursorPosition counts it: characters (grapheme
@@ -334,6 +353,14 @@ func pickCommands(picks map[string]picker) map[string]Command {
 				p, err := named(a[0].Raw)
 				if err == nil {
 					p.dismiss()
+				}
+				return err
+			}},
+		"App.pickClosed": {Args: []qml.SpecValueKind{argStr}, What: "a picker's name",
+			Run: func(a []qml.SpecValue) error {
+				p, err := named(a[0].Raw)
+				if err == nil {
+					p.closedDialog()
 				}
 				return err
 			}},
