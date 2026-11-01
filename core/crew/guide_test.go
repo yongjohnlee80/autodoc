@@ -107,6 +107,22 @@ func TestTheMCPGuideSaysEachToolsArguments(t *testing.T) {
 	}
 }
 
+// TestMCPToolArgsOfLooksEachToolUp: MCPToolArgsOf finds each tool of MCPToolArgs by its name, and
+// answers false, with nothing required, for a name that is no tool: a CLI verb's, or none.
+func TestMCPToolArgsOfLooksEachToolUp(t *testing.T) {
+	for _, want := range crew.MCPToolArgs {
+		got, ok := crew.MCPToolArgsOf(want.Name)
+		if !ok || got.Name != want.Name || !slices.Equal(got.Required, want.Required) || !slices.Equal(got.Optional, want.Optional) {
+			t.Errorf("%s: %+v, %v; want %+v", want.Name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"mail_inbox", "mail receive", ""} {
+		if got, ok := crew.MCPToolArgsOf(name); ok || got.Name != "" || len(got.Required) != 0 || len(got.Optional) != 0 {
+			t.Errorf("%q: %+v, %v; want no tool", name, got, ok)
+		}
+	}
+}
+
 // TestTheGuideFollowsTheSessionsMailMode: a kind's guide is in the form its session's mail mode
 // reads, whatever the kind usually does: Claude on MCP mail gets the tools' guide (mail_receive, no
 // `autodoc mail` command), on CLI mail the commands'; GuideOf is the kind's own mode's.
