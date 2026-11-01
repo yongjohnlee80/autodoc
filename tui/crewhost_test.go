@@ -17,6 +17,8 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
+	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
 // crewDaemon answers a window's crew verbs with a real crew.Manager on the in-memory store, its
@@ -32,6 +34,9 @@ type crewDaemon struct {
 	orphans   []any
 	settled   [][]any
 	settleErr error
+	// todos, when set, answers the todos verbs, in their wire form: the stores a window's assignment
+	// feed reads (crewtodos_test.go)
+	todos *todo.Manager
 }
 
 func newCrewDaemonForHost() *crewDaemon {
@@ -42,6 +47,17 @@ func newCrewDaemonForHost() *crewDaemon {
 func (d *crewDaemon) call(ctx context.Context, verb string, p ...any) (any, error) {
 	if d.none {
 		return nil, &golibrpc.Error{Code: golibrpc.CodeMethodNotFound, Message: "unknown method: " + verb}
+	}
+	if d.todos != nil && strings.HasPrefix(verb, "todos.") {
+		for _, v := range d.todos.Verbs() {
+			if v.Contract.Verb == verb {
+				r, err := v.Call(ctx, p)
+				if err != nil {
+					return nil, err
+				}
+				return module.Wire(r)
+			}
+		}
 	}
 	if verb == "crew.claim" && d.failing != "" && p[0] == d.failing {
 		return nil, errors.New("the store is unavailable")
