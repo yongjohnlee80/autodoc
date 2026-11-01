@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 44,
+  protocol = 45,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -691,6 +691,16 @@ return {
       },
       result = "{message, deliveries[]}",
       doc = "Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
+    },
+    ["mail.show"] = {
+      since = 45, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "delivery", type = "string" },
+        { name = "lease", type = "string" }
+      },
+      result = "{from, delivery, message}",
+      doc = "A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged.",
     },
     ["mail.wait"] = {
       since = 37, scope = "global", audience = "agent",

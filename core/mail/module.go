@@ -15,6 +15,9 @@ const protocol = crew.Protocol
 // fallbackSince is the protocol the fallback's host verbs arrive in (rpc's Protocol 42).
 const fallbackSince = 42
 
+// showSince is the protocol mail.show arrives in (rpc's Protocol 45).
+const showSince = 45
+
 // Name is the module's name: its verbs are mail.*.
 func (m *Manager) Name() string { return "mail" }
 
@@ -183,9 +186,13 @@ func toWireJobs(offers []Offer) []wireJob {
 func toWireItems(items []Item) []wireItem {
 	out := make([]wireItem, 0, len(items))
 	for _, it := range items {
-		out = append(out, wireItem{From: it.From, Delivery: toWireDelivery(it.Delivery), Message: toWireMessage(it.Message)})
+		out = append(out, toWireItem(it))
 	}
 	return out
+}
+
+func toWireItem(it Item) wireItem {
+	return wireItem{From: it.From, Delivery: toWireDelivery(it.Delivery), Message: toWireMessage(it.Message)}
 }
 
 // Verbs are the mail module's verbs: an agent's, on its own credential
@@ -200,6 +207,10 @@ func (m *Manager) Verbs() []module.Verb {
 		return module.Contract{Verb: verb, Since: fallbackSince, Scope: module.ScopeLocalPeer, Audience: module.AudienceUser,
 			Effect: module.EffectWrite, Result: result, Errors: append([]int64{crew.CodeStaleEpoch}, codes...), Doc: doc}
 	}
+	show := agent("mail.show", module.EffectRead, "{from, delivery, message}",
+		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged.",
+		CodeLeaseLost)
+	show.Since = showSince
 	return []module.Verb{
 		module.Handle(agent("mail.send", module.EffectWrite, "{message, deliveries[]}",
 			"Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained.",
@@ -225,6 +236,14 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(agent("mail.renew", module.EffectWrite, "{}", "Extend a lease the caller holds by 10 minutes.", CodeLeaseLost),
 			func(ctx context.Context, p leaseParams) (struct{}, error) {
 				return struct{}{}, m.Renew(ctx, p.Credential, p.Delivery, p.Lease)
+			}),
+		module.Handle(show,
+			func(ctx context.Context, p leaseParams) (wireItem, error) {
+				it, err := m.Show(ctx, p.Credential, p.Delivery, p.Lease)
+				if err != nil {
+					return wireItem{}, err
+				}
+				return toWireItem(it), nil
 			}),
 		module.Handle(agent("mail.ack", module.EffectWrite, "{}",
 			"Done with a delivery under its lease. Replaying an ack of the same lease answers ok.", CodeLeaseLost),

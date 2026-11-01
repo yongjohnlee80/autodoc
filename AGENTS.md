@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 44; the daemon serves sessions from protocol 12.
+Verbs at protocol 45; the daemon serves sessions from protocol 12.
 
 ### `crew`
 
@@ -341,6 +341,7 @@ Verbs at protocol 44; the daemon serves sessions from protocol 12.
 | `mail.renew` | `credential` string, `delivery` string, `lease` string (the lease mail.receive gave) | `{}` — Extend a lease the caller holds by 10 minutes. Codes: -32094, -32091, -32113. | 37 | agent | write |
 | `mail.reply` | `credential` string, `delivery` string (the request's delivery), `lease` string, `body` string, `key` string (the reply's idempotency key), `subject`? string | `{message}` — Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it. Codes: -32094, -32091, -32113, -32111, -32112. | 37 | agent | write |
 | `mail.send` | `credential` string (the session context's "<session id>.<secret>"), `to` []string (names in the scope, name@scope, user, or session:<id>), `body` string (at most 64 KiB), `key` string (the idempotency key: a retry with the same content answers the first send), `kind`? string (message (the default) or request), `subject`? string, `ttl`? int (seconds until the message expires; 0 never) | `{message, deliveries[]}` — Store a message and its deliveries in one transaction. The same key answers the first result while the message is retained. Codes: -32094, -32091, -32110, -32114, -32111, -32112. | 37 | agent | write |
+| `mail.show` | `credential` string, `delivery` string, `lease` string (the lease mail.receive gave) | `{from, delivery, message}` — A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. Codes: -32094, -32091, -32113. | 45 | agent | read |
 | `mail.wait` | `credential` string, `timeout`? int (milliseconds to wait for mail, at most 25000) | `{ready, timed_out}` — Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls. Codes: -32094, -32091, -32064. | 37 | agent | read |
 
 ### `preference`
