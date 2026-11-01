@@ -83,6 +83,9 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 			return 1
 		}
 		argv, env := bridgeChild(exe, contextFile(envFile, cwd, c), c.Session, []string{"--agy"}, os.Environ())
+		if ref := agyProcRef(); ref != "" { // the detached bridge is re-parented at once: it is told whose it is
+			env = append(env, agyProcEnv+"="+ref)
+		}
 		pid, logPath, err := detachBridge(dir, "agy", c.Session, argv, env)
 		if err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
@@ -109,14 +112,49 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	// tells no one but its own client.
 	prompts := time.NewTicker(bridgePromptEvery)
 	defer prompts.Stop()
+	if ref := os.Getenv(agyProcEnv); ref != "" {
+		b.agyGone = func() bool { return crew.ProcGone(ref) }
+	} else if ref := agyProcRef(); ref != "" { // run in the foreground from agy's own shell
+		b.agyGone = func() bool { return crew.ProcGone(ref) }
+	} else {
+		fmt.Fprintln(stderr, "autodoc: the agy process this bridge runs under is unknown; it ends with its session or its language server")
+	}
+	// the prompts' look, every bridgePromptEvery, also ends the bridge: its session ended, or its agy
+	// gone; either stops the other loop too
+	running, stopRunning := context.WithCancel(ctx)
 	watching, stopWatching := context.WithCancel(ctx)
-	watched := make(chan struct{})
-	go func() { defer close(watched); b.watchPrompts(watching, prompts.C, stderr) }()
-	err = b.run(ctx, tick.C, stderr)
+	watched := make(chan error, 1)
+	go func() {
+		err := b.watchPrompts(watching, prompts.C, stderr)
+		stopRunning()
+		watched <- err
+	}()
+	err = b.run(running, tick.C, stderr)
 	stopWatching()
-	<-watched
+	if werr := <-watched; errors.Is(err, context.Canceled) && werr != nil && !errors.Is(werr, context.Canceled) {
+		err = werr // the look that ended the bridge says why
+	}
+	stopRunning()
 	fmt.Fprintln(stderr, "autodoc: the agy bridge stops:", err)
 	return 0
+}
+
+// agyProcEnv carries, to the detached bridge, the process reference of the agy its launcher ran
+// under (crew.ProcRef): the bridge ends when that process does.
+const agyProcEnv = "AUTODOC_AGY_PROC"
+
+// agyProcRef is the reference of the agy process this one runs under (its nearest ancestor named
+// agy), "" when none is known.
+func agyProcRef() string {
+	pid, ok := crew.AncestorNamed("agy")
+	if !ok {
+		return ""
+	}
+	ref, err := crew.ProcRef(pid)
+	if err != nil {
+		return ""
+	}
+	return ref
 }
 
 // pinnedContext is the session context as findSessionContext finds it, refused when session is
@@ -178,6 +216,9 @@ type agyBridge struct {
 	turnEvery, turnBound time.Duration
 	sleep                func(ctx context.Context, d time.Duration) bool
 	now                  func() time.Time
+	// agyGone reports whether the agy process the bridge was started under has ended; nil when that
+	// process isn't known. The detached bridge is re-parented at once, so its parent says nothing.
+	agyGone func() bool
 }
 
 // The first registration's wait for the launch turn (awaitLaunchTurn): how often it looks, and for
@@ -352,15 +393,20 @@ const bridgePromptEvery = 2 * time.Second
 // may have). Each look that read the language server says the reporter is alive (crew.attention
 // alive), so a window trusts the session's prompts only while this runs. Each look is bounded
 // (b.bound); a look that fails changes nothing, says nothing, and is logged once until one succeeds.
-func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log io.Writer) {
+// It answers why the bridge stops: the session's credential refused at a look (the session ended),
+// or the agy process it was started under gone (agyGone); else ctx's end.
+func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log io.Writer) error {
 	// unknown: an attention an earlier bridge of this session raised is cleared at the first look that
 	// finds no prompt, since nothing else would
 	offset, raised, unknown, failing := 0, "", true, false
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case <-tick:
+		}
+		if b.agyGone != nil && b.agyGone() {
+			return errors.New("its agy process is gone")
 		}
 		lctx, cancel := context.WithTimeout(ctx, b.bound)
 		p, next, err := b.prompt(lctx, offset)
@@ -384,8 +430,11 @@ func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log
 			}
 		}
 		// the look read the language server: the prompts are reported (crew.list's prompts_reported)
-		_, _ = b.call(lctx, "crew.attention", b.c.Credential, "alive")
+		_, err = b.call(lctx, "crew.attention", b.c.Credential, "alive")
 		cancel()
+		if ended(err) { // the session ended (its tab closed, its window gone): the bridge goes with it
+			return fmt.Errorf("the session's credential is refused: %w", err)
+		}
 	}
 }
 

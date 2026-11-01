@@ -651,3 +651,46 @@ func TestTheBridgeEndsWithinALookOfItsSessionsEnd(t *testing.T) {
 		t.Fatalf("the bridge's look kept running after the daemon refused its session's credential (calls %v)", f.calls)
 	}
 }
+
+// TestTheBridgeSaysWhyItsLookEndedIt: the every-2-s look ends the bridge, saying why: the session's
+// credential refused (its session ended), or the agy process it was started under gone (agyGone),
+// seen at the next tick before anything else is read, since its language server goes with it. A
+// live agy, or one not known (agyGone nil), ends nothing.
+func TestTheBridgeSaysWhyItsLookEndedIt(t *testing.T) {
+	look := func(f *fakeBridge, ticks int) error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		tick := make(chan time.Time)
+		done := make(chan error, 1)
+		go func() { done <- f.watchPrompts(ctx, tick, &bytes.Buffer{}) }()
+		for i := 0; i < ticks; i++ {
+			select {
+			case tick <- time.Now():
+			case err := <-done:
+				return err
+			}
+		}
+		cancel()
+		return <-done
+	}
+	reads := 0
+	noPrompt := func(context.Context, int) (crew.AgyPrompt, int, error) { reads++; return crew.AgyPrompt{}, 0, nil }
+
+	f := newFakeBridge()
+	f.prompt, f.refuse = noPrompt, "crew.attention"
+	if err := look(f, 3); err == nil || !strings.Contains(err.Error(), "credential is refused") {
+		t.Errorf("a refused heartbeat: %v, want the bridge ended by its session's end", err)
+	}
+
+	alive := true
+	f = newFakeBridge()
+	reads = 0
+	f.prompt, f.agyGone = noPrompt, func() bool { return !alive }
+	if err := look(f, 3); !errors.Is(err, context.Canceled) {
+		t.Fatalf("agy alive: %v, want the bridge still running", err)
+	}
+	alive, reads = false, 0
+	if err := look(f, 3); err == nil || !strings.Contains(err.Error(), "agy process is gone") || reads != 0 {
+		t.Errorf("agy gone: %v after %d reads, want the bridge ended at the next tick, reading nothing", err, reads)
+	}
+}
