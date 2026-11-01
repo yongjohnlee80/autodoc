@@ -129,7 +129,7 @@ func TestTheCodexBridgeRaisesAndClearsByTheThreadsStatus(t *testing.T) {
 		{"the same approval still", `{"type":"active","activeFlags":["waitingOnApproval"]}`, []string{alive}},
 		{"waiting on the user's input", `{"type":"active","activeFlags":["waitingOnUserInput"]}`, []string{"crew.attention raise permission Codex waits on your input", alive}},
 		{"idle once answered", `{"type":"idle"}`, []string{"crew.attention clear", alive}},
-		{"not loaded", `{"type":"notLoaded"}`, []string{alive}},
+		{"not loaded: the thread gone, nothing said", `{"type":"notLoaded"}`, nil},
 	} {
 		conn.mu.Lock()
 		conn.statuses, conn.n = []string{step.status}, 0
