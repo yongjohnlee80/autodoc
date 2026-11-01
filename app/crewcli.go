@@ -212,10 +212,12 @@ var crewCommands = map[string]crewCommand{
 			}
 			return "crew.endpoint", []any{c.Credential, args[0], args[1]}, nil, nil
 		}},
-	"crew bridge": {usage: "--agy: an Antigravity session's bridge, run once from the agent's shell: it detaches, registers how the session is woken, and registers again whenever the daemon restarts",
+	"crew bridge": {usage: "--agy | --codex [--since T]: --agy, an Antigravity session's bridge, run once from the agent's shell: it detaches, registers how the session is woken, and registers again whenever the daemon restarts; --codex, a Codex session's prompt reporter, which crew endpoint --codex-here --wait starts: it detaches and reports the thread's permission prompts",
 		example: "autodoc crew bridge --agy",
 		flags: func(fs *flag.FlagSet) {
 			fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
+			fs.Bool("codex", false, "a Codex session's prompt reporter (crew endpoint --codex-here --wait starts it)")
+			fs.Int64("since", 0, "with --codex: the session's thread was made at or after this Unix time (seconds)")
 			fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
 			fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 		}}, // run by crewBridgeMain: it stays, so it is no one call

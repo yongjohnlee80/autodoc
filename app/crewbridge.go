@@ -45,13 +45,15 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs := flag.NewFlagSet("autodoc crew bridge", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	agy := fs.Bool("agy", false, "an Antigravity session's bridge, from the agent's shell")
+	codex := fs.Bool("codex", false, "a Codex session's prompt reporter (crew endpoint --codex-here --wait starts it)")
+	since := fs.Int64("since", 0, "with --codex: the session's thread was made at or after this Unix time (seconds)")
 	foreground := fs.Bool("foreground", false, "run here, not detached (what the detached bridge runs)")
 	session := fs.String("session", "", "the session the bridge was started for (the detached bridge's): another is refused")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if !*agy || fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: autodoc crew bridge --agy")
+	if *agy == *codex || fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: autodoc crew bridge --agy | --codex [--since T]")
 		return 2
 	}
 	cwd, err := os.Getwd()
@@ -65,6 +67,9 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
+	if *codex {
+		return crewCodexBridgeMain(ctx, c, envFile, cwd, *since, *foreground, stdout, stderr)
+	}
 	b, err := newAgyBridge(c, os.Getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
@@ -77,8 +82,8 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}
-		argv, env := bridgeChild(exe, contextFile(envFile, cwd, c), c.Session, os.Environ())
-		pid, logPath, err := detachBridge(dir, c.Session, argv, env)
+		argv, env := bridgeChild(exe, contextFile(envFile, cwd, c), c.Session, []string{"--agy"}, os.Environ())
+		pid, logPath, err := detachBridge(dir, "agy", c.Session, argv, env)
 		if err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
@@ -86,7 +91,7 @@ func crewBridgeMain(ctx context.Context, args []string, stdout, stderr io.Writer
 		fmt.Fprintf(stdout, "the agy bridge runs in the background (pid %d); its log is %s\n", pid, logPath)
 		return 0
 	}
-	unlock, err := lockBridge(dir, c.Session)
+	unlock, err := lockBridge(dir, "agy", c.Session)
 	if errors.Is(err, errBridgeRunning) {
 		fmt.Fprintln(stderr, "autodoc: this session's agy bridge is already running")
 		return 0
@@ -138,11 +143,12 @@ func contextFile(envFile, cwd string, c sessionContext) string {
 }
 
 // bridgeChild is the detached bridge's command line and environment: this executable run again in
-// the foreground, pinned to the context the parent read (path, as $AUTODOC_CREW_CONTEXT, so it
-// reads that file or none, never one found anew in the working directory) and to its session. The
-// token stays in the environment, inherited, never in an argument.
-func bridgeChild(exe, path, session string, environ []string) (argv, env []string) {
-	argv = []string{exe, "crew", "bridge", "--agy", "--foreground", "--session", session}
+// the foreground with the kind's flags (kindArgs: --agy, or --codex and its --since), pinned to the
+// context the parent read (path, as $AUTODOC_CREW_CONTEXT, so it reads that file or none, never one
+// found anew in the working directory) and to its session. The token stays in the environment,
+// inherited, never in an argument.
+func bridgeChild(exe, path, session string, kindArgs, environ []string) (argv, env []string) {
+	argv = append(append([]string{exe, "crew", "bridge"}, kindArgs...), "--foreground", "--session", session)
 	for _, kv := range environ {
 		if !strings.HasPrefix(kv, "AUTODOC_CREW_CONTEXT=") {
 			env = append(env, kv)
@@ -408,8 +414,8 @@ func bridgeDir(envFile, cwd string) string {
 	return dir
 }
 
-// bridgeFiles are the session's bridge lock and log in dir, named by the session, so a later session
-// in the same folder has its own.
-func bridgeFiles(dir, session string) (lock, log string) {
-	return filepath.Join(dir, "agy-bridge-"+session+".lock"), filepath.Join(dir, "agy-bridge-"+session+".log")
+// bridgeFiles are the session's bridge lock and log in dir, named by its kind (agy, codex) and the
+// session, so a later session in the same folder has its own.
+func bridgeFiles(dir, kind, session string) (lock, log string) {
+	return filepath.Join(dir, kind+"-bridge-"+session+".lock"), filepath.Join(dir, kind+"-bridge-"+session+".log")
 }

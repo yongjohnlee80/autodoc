@@ -19,7 +19,8 @@ const codexWaitEvery = 2 * time.Second
 // as its Codex agent starts. It registers the folder's Codex session as `crew endpoint
 // --codex-here` does, looking again every codexWaitEvery until the thread is found or D has passed;
 // then it raises the session's attention, blocked, saying AutoDoc can't wake it (`crew attention
-// raise blocked`), and fails. A session that ended meanwhile (its context, $AUTODOC_CREW_CONTEXT,
+// raise blocked`), and fails. Once registered, it starts the session's Codex bridge, which reports
+// its permission prompts (crew bridge --codex, detached). A session that ended meanwhile (its context, $AUTODOC_CREW_CONTEXT,
 // gone) stops it with nothing raised. Every host's Codex agent registers the same way, with
 // nothing to loop itself. A usage error is answered at once.
 func crewEndpointWaitMain(ctx context.Context, configPath string, args []string, stdout, stderr io.Writer) int {
@@ -54,7 +55,33 @@ func crewEndpointWaitMain(ctx context.Context, configPath string, args []string,
 		return crewMainIn(context.WithoutCancel(ctx), configPath, args, nil, stdout, stderr)
 	}
 	ctxFile := os.Getenv("AUTODOC_CREW_CONTEXT")
-	return codexWaitLoop(ctx, rest, wait, codexWaitEvery, ctxFile, run, stdout, stderr)
+	return codexRegisterThenReport(ctx, rest, wait, codexWaitEvery, ctxFile, run, stdout, stderr)
+}
+
+// codexRegisterThenReport is codexWaitLoop, then, once the session is registered, the start of its
+// Codex bridge (`crew bridge --codex`, with rest's --since: crewCodexBridgeMain, which detaches), so
+// its permission prompts are reported from then on. A bridge that fails to start leaves the
+// registration standing: its prompts read as unreported, and no Enter is pressed into them.
+func codexRegisterThenReport(ctx context.Context, rest []string, wait, every time.Duration, ctxFile string,
+	run func(args []string, stdout, stderr io.Writer) int, stdout, stderr io.Writer) int {
+	code := codexWaitLoop(ctx, rest, wait, every, ctxFile, run, stdout, stderr)
+	if code == 0 {
+		_ = run(append([]string{"crew", "bridge", "--codex"}, sinceArgs(rest)...), stdout, stderr)
+	}
+	return code
+}
+
+// sinceArgs are rest's --since and its value, as the bridge takes them (none when rest has none).
+func sinceArgs(rest []string) []string {
+	for i, a := range rest {
+		if v, ok := strings.CutPrefix(a, "--since="); ok {
+			return []string{"--since", v}
+		}
+		if a == "--since" && i+1 < len(rest) {
+			return []string{"--since", rest[i+1]}
+		}
+	}
+	return nil
 }
 
 // codexWaitLoop is crewEndpointWaitMain's loop over `crew endpoint <rest>`, each run by run: every

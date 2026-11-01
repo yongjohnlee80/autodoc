@@ -222,21 +222,21 @@ func TestTheBridgeEndsWithItsLanguageServer(t *testing.T) {
 func TestTheBridgeLockIsItsSessions(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	unlock, err := lockBridge(dir, "s1")
+	unlock, err := lockBridge(dir, "agy", "s1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lockBridge(dir, "s1"); !errors.Is(err, errBridgeRunning) {
+	if _, err := lockBridge(dir, "agy", "s1"); !errors.Is(err, errBridgeRunning) {
 		t.Errorf("a second bridge for s1: %v, want errBridgeRunning", err)
 	}
-	other, err := lockBridge(dir, "s2")
+	other, err := lockBridge(dir, "agy", "s2")
 	if err != nil {
 		t.Errorf("s2's bridge beside s1's: %v", err)
 	} else {
 		other()
 	}
 	unlock()
-	again, err := lockBridge(dir, "s1")
+	again, err := lockBridge(dir, "agy", "s1")
 	if err != nil {
 		t.Errorf("s1's lock after its holder let go: %v", err)
 	} else {
@@ -285,7 +285,7 @@ func TestTheBridgesFilesAreBesideTheContexts(t *testing.T) {
 	if got := bridgeDir("", "/here"); got != "/here" {
 		t.Errorf("with no $AUTODOC_CREW_CONTEXT the bridge's folder is %s, want the working directory", got)
 	}
-	unlock, err := lockBridge(bridgeDir(path, "/elsewhere"), "s1")
+	unlock, err := lockBridge(bridgeDir(path, "/elsewhere"), "agy", "s1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +379,7 @@ func TestTheDetachedBridgeIsPinnedToItsSession(t *testing.T) {
 	if err != nil || parent.Session != "sa" {
 		t.Fatalf("the parent's context: %+v %v", parent, err)
 	}
-	argv, env := bridgeChild("/bin/autodoc", contextFile("", agent, parent), parent.Session,
+	argv, env := bridgeChild("/bin/autodoc", contextFile("", agent, parent), parent.Session, []string{"--agy"},
 		[]string{"AUTODOC_CREW_CONTEXT=/elsewhere", "ANTIGRAVITY_CSRF_TOKEN=tok"})
 	child := func() (string, string) {
 		envFile, session := "", ""
