@@ -42,7 +42,7 @@ func TestTheModuleDeclaresItsVerbs(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"mail.send", "mail.receive", "mail.renew", "mail.ack", "mail.reply", "mail.inbox"} {
+	for _, want := range []string{"mail.send", "mail.receive", "mail.renew", "mail.ack", "mail.reply", "mail.inbox", "mail.show"} {
 		if !seen[want] {
 			t.Errorf("no %s", want)
 		}
