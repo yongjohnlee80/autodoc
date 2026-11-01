@@ -82,6 +82,10 @@ func OpenCodeSocketDirs(uid int) []string {
 	return []string{"/run/user/" + u + "/autodoc-opencode", "/tmp/autodoc-opencode-" + u}
 }
 
+// CodexServerOK reports whether path, a resolved app-server socket, lies in one of roots (Codex's
+// socket folders, CodexSocketDirs): the bound a server named by a link or a variable must keep.
+func CodexServerOK(path string, roots []string) bool { return under(path, roots...) }
+
 // CodexSocketDirs are the folders Codex's app-server binds its sockets in, for user uid.
 func CodexSocketDirs(uid int) []string { return []string{"/tmp/codex-daemon-" + strconv.Itoa(uid)} }
 

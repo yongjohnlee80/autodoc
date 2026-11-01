@@ -47,7 +47,7 @@ type agents struct {
 	claudeWarned  map[string]bool
 	// codexHere replaces runAfterSteps's runs of the agent's autodoc (a setup's after-steps, a cell's);
 	// nil in production
-	codexHere  func(args ...string) error
+	codexHere  func(environ []string, args ...string) error
 	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
