@@ -9,11 +9,16 @@ const (
 	CodeKeyReused   int64 = -32111 // an idempotency key already names another message
 	CodeTooLarge    int64 = -32112 // a body past MaxBody
 	CodeLeaseLost   int64 = -32113 // the caller no longer holds the delivery's lease
+	CodeAmbiguous   int64 = -32114 // a bare name that two or more scopes' profiles have, none the sender's
 )
 
 var (
 	// ErrNoRecipient is an address that resolves to nothing: no active profile, or no live session.
 	ErrNoRecipient = errs.Sentinel(errs.ErrInvalidArgument, "mail: no such recipient")
+
+	// ErrAmbiguous is a bare name the sender's scope has no profile of, that two or more other
+	// scopes do: the message names each one as name@scope, the address that reaches it.
+	ErrAmbiguous = errs.Sentinel(errs.ErrInvalidArgument, "mail: the name is ambiguous")
 
 	// ErrUnreachable is a send to fire (Send.Fire) whose recipient's doorbell didn't ring: nothing
 	// was stored, or its delivery was withdrawn.
