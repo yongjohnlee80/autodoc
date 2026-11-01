@@ -140,7 +140,8 @@ until you size it; the size and the side you leave it at are kept).
 
 - **Store Selector Bar (`S`, `N`, `O`, `L`, `R`, `M`)**: Along the top, a dropdown
   chooses the store shown among the ones AutoDoc knows (the workspace's first), by its label or its
-  name; under it, buttons make a new store (New), load one from a folder (Load), rename the store
+  name. A project's old `.todo-list`, left behind when `todos.set_dir` pointed the project at
+  another store, is not listed: no project reaches it any more. Under it, buttons make a new store (New), load one from a folder (Load), rename the store
   shown (Edit: its label, AutoDoc's own) and refresh it (Refresh), framed. A label is persisted in preferences by stable store ID, so it survives directory moves. `M` moves the store to a new directory.
 - **Bucket & Variable Tabs (`1`–`6`, `[` / `]`)**: then the tabs, Open, In
   progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
