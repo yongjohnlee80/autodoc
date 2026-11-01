@@ -22,6 +22,10 @@ const (
 	WhyBackoffUntil = "backoff_until" // reachable, but its last wake failed: "backoff_until <RFC 3339 time>", the next try
 )
 
+// WhyHostGone is why a session whose host is gone can't be woken (hostGone): its process went with
+// its host, which is the one that would have said so.
+const WhyHostGone = "host_gone"
+
 // UnreachableAfter is how many consecutive failed wakes make a session unreachable
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler). Mail's fallback reads the same bound
 // (docs/decisions/crew.md#the-fallback-exactly-once).
