@@ -320,6 +320,13 @@ type Focused struct {
 // owner at call time (its live session's host, or the owner of the attention it raised), never a
 // toast's stale field, and journals a focus change that owner raises the agent for. An ended
 // session is ErrNotFound.
+// Fallback is inbox.fallback: the fallback job a feed change of kind fallback, fallback_done or
+// fallback_unknown names, so a window can say a job waits for its host, or give the text of one
+// whose outcome is unknown.
+func (m *Manager) Fallback(ctx context.Context, job string) (mail.FallbackView, error) {
+	return m.mail.Fallback(ctx, job)
+}
+
 func (m *Manager) Focus(ctx context.Context, session string) (Focused, error) {
 	var out Focused
 	err := m.store.Write(ctx, func(tx Tx) error {

@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 43,
+  protocol = 44,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -480,6 +480,14 @@ return {
       },
       result = "{}",
       doc = "Decline a request; its sender is told. Replaying a dismiss answers ok.",
+    },
+    ["inbox.fallback"] = {
+      since = 44, scope = "local-peer", audience = "user",
+      params = {
+        { name = "job", type = "string" }
+      },
+      result = "{job, state, outcome, tries, recipient, scope, host_present, from, subject, text}",
+      doc = "A fallback job a feed change names: whose mail it is and from whom, its state, whether its host holds its scope now (a job whose host is away waits for it), and the text its host delivers.",
     },
     ["inbox.focus"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -1236,6 +1244,7 @@ return {
     { code = -32134, name = "inbox.too_large" },
     { code = -32135, name = "inbox.unreachable", next = "type the text into its prompt, or send without fire to leave it queued" },
     { code = -32136, name = "inbox.handed_over", next = "send it no other way: the job mail.fallbacks brings the host delivers it" },
+    { code = -32137, name = "inbox.no_job", next = "a feed change names a job the daemon still has: read the feed again" },
     { code = -32601, name = "rpc.method_not_found", next = "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call" },
     { code = -32602, name = "rpc.invalid_params", next = "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out" },
     { code = -32603, name = "rpc.internal", next = "a failure the daemon's log details: retry, or report it" },

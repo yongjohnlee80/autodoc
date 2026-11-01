@@ -71,6 +71,10 @@ type crewHost struct {
 	// deliverJob types a fallback job's text into codename's terminal through the agents' base,
 	// done hearing what came of it (crewfallback.go); nil takes no jobs
 	deliverJob func(codename, text string, done func(error))
+	// taken is the fallback jobs this run took, which it told the user of itself (tookJob); onClaim
+	// is told each claim that held (crewInbox.recheckFallbacks)
+	taken   map[string]bool
+	onClaim func()
 }
 
 // crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends it
@@ -168,6 +172,9 @@ func (h *crewHost) claim() {
 		h.gen++
 		h.renewLater(h.gen)
 		h.pollFallbacks(h.gen)
+		if h.onClaim != nil {
+			h.onClaim()
+		}
 		h.settle()
 		h.offerOrphans()
 	})

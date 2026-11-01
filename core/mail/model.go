@@ -103,6 +103,9 @@ const (
 	// ChangeFallbackUnknown is a job its host could not say it delivered (its ref is the job): the
 	// human gets the message's text, to send by hand.
 	ChangeFallbackUnknown = "fallback_unknown"
+	// ChangeFallbackDone is a job its host delivered (its ref is the job): a window showing it as
+	// waiting for its host closes that.
+	ChangeFallbackDone = "fallback_done"
 )
 
 // Tx is one transaction over the crew and mail tables together: a crew verb's mail effect and a

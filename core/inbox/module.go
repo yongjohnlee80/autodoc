@@ -18,6 +18,9 @@ const protocol = crew.Protocol
 // sendSince is the protocol inbox.send arrives in (rpc's Protocol 41), after the crew's 37.
 const sendSince = 41
 
+// fallbackSince is the protocol inbox.fallback arrives in (rpc's Protocol 44).
+const fallbackSince = 44
+
 // The verbs' params, in their positional order.
 type (
 	watchParams struct {
@@ -54,6 +57,9 @@ type (
 	}
 	focusParams struct {
 		Session string `param:"session" doc:"the session whose agent to raise"`
+	}
+	fallbackParams struct {
+		Job string `param:"job" doc:"the job a feed change of kind fallback, fallback_done or fallback_unknown names"`
 	}
 )
 
@@ -113,6 +119,18 @@ type (
 	focusResult struct {
 		Session string `json:"session"`
 		Owner   string `json:"owner"`
+	}
+	fallbackResult struct {
+		Job         string `json:"job"`
+		State       string `json:"state"`             // open | leased | done | unknown
+		Outcome     string `json:"outcome,omitempty"` // as its host reported it
+		Tries       int64  `json:"tries"`
+		Recipient   string `json:"recipient"` // the recipient's codename
+		Scope       string `json:"scope"`     // the recipient's scope, which its host holds
+		HostPresent bool   `json:"host_present"`
+		From        string `json:"from"`
+		Subject     string `json:"subject,omitempty"`
+		Text        string `json:"text"` // what its host delivers, to send by hand when its outcome is unknown
 	}
 )
 
@@ -238,6 +256,21 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(user("inbox.ack", module.EffectWrite, "{}", "Mark a report read. Replaying an ack answers ok.", CodeExpired),
 			func(ctx context.Context, p messageParams) (struct{}, error) {
 				return struct{}{}, m.Ack(ctx, p.Message)
+			}),
+		module.Handle(func() module.Contract {
+			c := user("inbox.fallback", module.EffectRead, "{job, state, outcome, tries, recipient, scope, host_present, from, subject, text}",
+				"A fallback job a feed change names: whose mail it is and from whom, its state, whether its host holds its scope now (a job whose host is away waits for it), and the text its host delivers.",
+				CodeNoJob)
+			c.Since = fallbackSince
+			return c
+		}(),
+			func(ctx context.Context, p fallbackParams) (fallbackResult, error) {
+				v, err := m.Fallback(ctx, p.Job)
+				if err != nil {
+					return fallbackResult{}, err
+				}
+				return fallbackResult{Job: v.Job.ID, State: v.Job.State, Outcome: string(v.Job.Outcome), Tries: v.Job.Tries,
+					Recipient: v.Codename, Scope: v.Scope, HostPresent: v.HostPresent, From: v.From, Subject: v.Subject, Text: v.Text}, nil
 			}),
 		module.Handle(user("inbox.focus", module.EffectWrite, "{session, owner}",
 			"Ask the session's current owner to raise its agent: the owner's host hears a focus change.", codeNotFound),

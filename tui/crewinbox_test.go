@@ -42,6 +42,8 @@ type inboxWindow struct {
 	// by verb, in order (an error, or nil for success); none left is success
 	verbs       [][]any
 	verbAnswers map[string][]error
+	// jobs answers inbox.fallback, by job (crewinboxfallback_test.go); nil is a daemon before it
+	jobs map[string]map[string]any
 }
 
 func newInboxWindow() *inboxWindow {
@@ -52,6 +54,13 @@ func newInboxWindow() *inboxWindow {
 // Call answers inbox.watch from the script. A next page's answer echoes the cursor it was asked
 // at, as the daemon's does (inbox.Manager.snapshotPage), whatever the script says.
 func (w *inboxWindow) Call(ctx context.Context, verb string, p ...any) (any, error) {
+	if verb == "inbox.fallback" {
+		w.verbs = append(w.verbs, append([]any{verb}, p...))
+		if w.jobs == nil {
+			return nil, &golibrpc.Error{Code: golibrpc.CodeMethodNotFound, Message: "unknown method: inbox.fallback"}
+		}
+		return w.jobs[p[0].(string)], nil
+	}
 	if verb != "inbox.watch" {
 		w.verbs = append(w.verbs, append([]any{verb}, p...))
 		if as := w.verbAnswers[verb]; len(as) > 0 {

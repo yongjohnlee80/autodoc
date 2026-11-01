@@ -18,6 +18,7 @@ const (
 	CodeTooLarge        int64 = -32134 // a body past mail.MaxBody
 	CodeUnreachable     int64 = -32135 // inbox.send's fire: the agent's doorbell didn't ring, and nothing was left
 	CodeHandedOver      int64 = -32136 // inbox.send's fire: the agent's doorbell didn't ring; its host carries it as a fallback job
+	CodeNoJob           int64 = -32137 // inbox.fallback: no such fallback job
 	// codeNotFound is the daemon's shared code (rpc's CodeNotFound).
 	codeNotFound int64 = -32061
 )
@@ -53,6 +54,8 @@ func (m *Manager) Errors() []module.PublicError {
 			Next:    "send it no other way: the job mail.fallbacks brings the host delivers it"},
 		{Err: mail.ErrUnreachable, Code: CodeUnreachable, Name: "inbox.unreachable",
 			Message: "the agent's doorbell didn't ring: nothing was left for it", Next: "type the text into its prompt, or send without fire to leave it queued"},
+		{Err: mail.ErrNoJob, Code: CodeNoJob, Name: "inbox.no_job", Message: "no such fallback job",
+			Next: "a feed change names a job the daemon still has: read the feed again"},
 		{Err: ErrNotFound, Code: codeNotFound, Name: "inbox.not_found", Message: "no such live session",
 			Next: "the agent exited: nothing to raise"},
 		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "inbox.long_polls_busy",
