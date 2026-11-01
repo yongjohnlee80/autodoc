@@ -7829,6 +7829,30 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>todos: assigned to %1, and sent to it</source>
         <translation>ToDo: %1 に割り当てて送信しました</translation>
     </message>
+    <message id="autodoc.text.todos_assign.peer_can_be_woken">
+        <source>a wake reaches it</source>
+        <translation>起こせます</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_cant_be_woken_now">
+        <source>can't be woken now (%1)</source>
+        <translation>今は起こせません（%1）</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_pane">
+        <source>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</source>
+        <translation>別のホストのエージェント（%1）：%2。A はタスクをあなたの依頼として送り、起こせるまでキューに入れます。</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>タスク：%1 に割り当てて送信しました</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_queued">
+        <source>todos: assigned to %1, queued: it can't be woken now (%2)</source>
+        <translation>タスク：%1 に割り当て、キューに入れました：今は起こせません（%2）</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent">
+        <source>todos: assigned to %1, but not sent: %2</source>
+        <translation>タスク：%1 に割り当てましたが、送信できませんでした：%2</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
         <source>audit of %1 sent to %2; click to install or cancel</source>
         <translation>%1 の監査を %2 に送信しました。クリックしてインストールまたはキャンセル</translation>
