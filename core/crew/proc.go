@@ -61,3 +61,12 @@ func ProcRef(pid int) (string, error) {
 	}
 	return p.String(), nil
 }
+
+// ProcGone reports whether the process ref names is known to be gone (procDead): another boot, no
+// such pid, or the pid held by a later process. "" or an unreadable reference is not gone.
+func ProcGone(ref string) bool { return procDead(ref) }
+
+// AncestorNamed is the nearest ancestor of this process whose command is name (its comm, or its
+// argv[0]'s base name), and false when none is, or the platform can't tell: an agy agent's bridge
+// finds the agy it runs under, to end with it.
+func AncestorNamed(name string) (int, bool) { return ancestorNamed(name) }

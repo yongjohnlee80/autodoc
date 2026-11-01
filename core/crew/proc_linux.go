@@ -94,3 +94,36 @@ func (l linuxProcs) dead(p procRef) bool {
 	}
 	return start != p.start // the pid now belongs to a later process
 }
+
+// ancestorNamed walks /proc from this process's parent up to pid 1 (each one's ppid, field 4 of its
+// stat) for the first whose comm (field 2) or argv[0]'s base name is name.
+func ancestorNamed(name string) (int, bool) {
+	for pid, seen := os.Getppid(), 0; pid > 1 && seen < 64; seen++ {
+		b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		if err != nil {
+			return 0, false
+		}
+		s := string(b)
+		open, close := strings.IndexByte(s, '('), strings.LastIndexByte(s, ')')
+		if open < 0 || close < open {
+			return 0, false
+		}
+		comm := s[open+1 : close]
+		argv0 := ""
+		if c, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline"); err == nil {
+			first, _, _ := strings.Cut(string(c), "\x00")
+			argv0 = first[strings.LastIndexByte(first, '/')+1:]
+		}
+		if comm == name || argv0 == name {
+			return pid, true
+		}
+		fields := strings.Fields(s[close+1:]) // field 3 (state) onwards: field 4 is the ppid
+		if len(fields) < 2 {
+			return 0, false
+		}
+		if pid, err = strconv.Atoi(fields[1]); err != nil {
+			return 0, false
+		}
+	}
+	return 0, false
+}

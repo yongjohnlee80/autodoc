@@ -3,7 +3,9 @@
 package crew
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -95,5 +97,38 @@ func TestProcRefOfThisProcess(t *testing.T) {
 	p.start += "1"
 	if !procDead(p.String()) {
 		t.Fatalf("this pid with another start time, %s, answered live", p)
+	}
+}
+
+// TestAncestorNamedFindsTheProcessItRunsUnder: run under `bash -c`, a process finds that bash as its
+// nearest ancestor named bash, and finds none named for something it doesn't run under.
+func TestAncestorNamedFindsTheProcessItRunsUnder(t *testing.T) {
+	if os.Getenv("CREW_ANCESTOR_CHILD") == "1" {
+		pid, ok := AncestorNamed("bash")
+		_, other := AncestorNamed("no-such-ancestor")
+		fmt.Printf("%d %v %v\n", pid, ok, other)
+		return
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	cmd := exec.Command(bash, "-c", `"$0" -test.run '^TestAncestorNamedFindsTheProcessItRunsUnder$'; echo "bash $$"`, os.Args[0])
+	cmd.Env = append(os.Environ(), "CREW_ANCESTOR_CHILD=1")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("the child: %v: %s", err, out)
+	}
+	var pid, shell int
+	var ok, other bool
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "bash ") {
+			shell, _ = strconv.Atoi(strings.TrimPrefix(line, "bash "))
+		} else if n, _ := fmt.Sscanf(line, "%d %v %v", &pid, &ok, &other); n == 3 {
+			continue
+		}
+	}
+	if !ok || pid != shell || shell == 0 || other {
+		t.Fatalf("the child under bash %d found %d (%v); no-such-ancestor found %v; output:\n%s", shell, pid, ok, other, out)
 	}
 }
