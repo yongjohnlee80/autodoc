@@ -68,6 +68,16 @@ func (in inspector) Messages() []mail.Message {
 	return out
 }
 
+func (in inspector) Jobs() []mail.FallbackJob {
+	var out []mail.FallbackJob
+	in.read(func(tx *Tx) error {
+		var err error
+		out, err = jobs(tx.m.jobs.On(tx.tx).OrderBy(dao.Asc(byCreated)).Select())
+		return err
+	})
+	return out
+}
+
 func (in inspector) Changes() []crewtest.InboxChange {
 	var out []crewtest.InboxChange
 	in.read(func(tx *Tx) error {

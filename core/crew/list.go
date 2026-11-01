@@ -22,9 +22,10 @@ const (
 	WhyBackoffUntil = "backoff_until" // reachable, but its last wake failed: "backoff_until <RFC 3339 time>", the next try
 )
 
-// unreachableAfter is how many consecutive failed wakes make a session unreachable
-// (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
-const unreachableAfter = 5
+// UnreachableAfter is how many consecutive failed wakes make a session unreachable
+// (docs/decisions/crew.md#wakers-and-the-wake-scheduler). Mail's fallback reads the same bound
+// (docs/decisions/crew.md#the-fallback-exactly-once).
+const UnreachableAfter = 5
 
 // Entry is one row of the addressbook.
 type Entry struct {
@@ -94,14 +95,14 @@ func (m *Manager) Reachable(tx Tx, profile string) (bool, error) {
 }
 
 // sessionReachable is whether live session id can be woken: it has an endpoint, and fewer than
-// unreachableAfter consecutive failed wakes.
+// UnreachableAfter consecutive failed wakes.
 func sessionReachable(tx Tx, id string) (bool, error) {
 	_, hasEndpoint, err := tx.Endpoint(id)
 	if err != nil || !hasEndpoint {
 		return false, err
 	}
 	w, _, err := tx.Wake(id)
-	return w.Failures < unreachableAfter, err
+	return w.Failures < UnreachableAfter, err
 }
 
 // reachability is sessionReachable, and why the live session id can't be woken now (Why*), at now.
@@ -115,7 +116,7 @@ func (m *Manager) reachability(tx Tx, id string, now time.Time) (bool, string, e
 		return false, "", err
 	}
 	switch {
-	case w.Failures >= unreachableAfter:
+	case w.Failures >= UnreachableAfter:
 		if c := m.cause(id); c != "" {
 			return false, WhyWakesFailing + ": " + c, nil
 		}

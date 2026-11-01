@@ -21,8 +21,13 @@ var (
 	ErrAmbiguous = errs.Sentinel(errs.ErrInvalidArgument, "mail: the name is ambiguous")
 
 	// ErrUnreachable is a send to fire (Send.Fire) whose recipient's doorbell didn't ring: nothing
-	// was stored, or its delivery was withdrawn.
+	// was stored, or its delivery was withdrawn (or handed over: ErrHandedOver).
 	ErrUnreachable = errs.Sentinel(errs.ErrPrecondition, "mail: the recipient's doorbell didn't ring")
+
+	// ErrHandedOver is a send to fire whose doorbell didn't ring, handed to its recipient's host as a
+	// fallback job (docs/decisions/crew.md#the-fallback-exactly-once): the host delivers it, so the
+	// caller must not send it any other way. It is an ErrUnreachable too.
+	ErrHandedOver = errs.Sentinel(ErrUnreachable, "its host carries it as a fallback job")
 
 	// ErrKeyReused is a send or reply whose key a different message already holds.
 	ErrKeyReused = errs.Sentinel(errs.ErrPrecondition, "mail: the key names another message")

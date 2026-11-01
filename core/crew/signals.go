@@ -12,6 +12,8 @@ type Signals struct {
 	// and every long-poll (mail.wait, crew.wait) checks again. Every change is told, not only a row
 	// left due: a send to a session whose row is in_flight raises pending_gen without making the row
 	// due, and a waiter must still hear it. A poke is idempotent, so the superset costs a re-check.
+	// Mail's fallback jobs raise it too (a job made, taken or done), so a host's mail.fallbacks
+	// hears a job wherever it was made.
 	Wake func()
 }
 

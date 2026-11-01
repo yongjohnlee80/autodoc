@@ -26,6 +26,7 @@ type Stores struct {
 type Inspector interface {
 	Deliveries() []mail.Delivery
 	Messages() []mail.Message
+	Jobs() []mail.FallbackJob
 	Changes() []crewtest.InboxChange
 }
 
@@ -65,6 +66,12 @@ func Run(t *testing.T, h Harness) {
 		{"NextDeadlineIsTheEarliestLive", testNextDeadlineIsTheEarliestLive},
 		{"AnItemNamesItsSenderAsAnAddress", testAnItemNamesItsSenderAsAnAddress},
 		{"TheUsersSendIsTheWindowsHostsAndFiredOrNothing", testTheUsersSendIsTheWindowsHostsAndFiredOrNothing},
+		{"AFallbackIsDueAtItsBoundaries", testAFallbackIsDueAtItsBoundaries},
+		{"AHostTakesFallbacksOnlyOnceItPollsInItsEpoch", testAHostTakesFallbacksOnlyOnceItPollsInItsEpoch},
+		{"AReceiveRacingAFallbackLeavesOneOutcome", testAReceiveRacingAFallbackLeavesOneOutcome},
+		{"ALeasedOrEndedRecipientsMailNeverFallsBack", testALeasedOrEndedRecipientsMailNeverFallsBack},
+		{"AJobIsLeasedReofferedAndReportedOnce", testAJobIsLeasedReofferedAndReportedOnce},
+		{"TheUsersUnrungSendIsAJobOfAHostThatTakesThem", testTheUsersUnrungSendIsAJobOfAHostThatTakesThem},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -1171,16 +1178,22 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 
 // fireWaker is a doorbell that answers err, counting its calls.
 type fireWaker struct {
-	mu    sync.Mutex
-	err   error
-	calls int
+	mu     sync.Mutex
+	err    error
+	calls  int
+	during func() // run inside the ring, before it answers: the agent acting meanwhile
 }
 
 func (w *fireWaker) Wake(context.Context, crew.Endpoint, string) error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	during := w.during
 	w.calls++
-	return w.err
+	err := w.err
+	w.mu.Unlock()
+	if during != nil {
+		during()
+	}
+	return err
 }
 
 func (w *fireWaker) answer(err error) (calls int) {
