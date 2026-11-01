@@ -50,14 +50,25 @@ func (v *MailVia) UnmarshalText(b []byte) error {
 	return fmt.Errorf("crew: mail mode %q is neither cli nor mcp", b)
 }
 
-// MailViaOf is how a session of kind reads its mail: agy's through the MCP tools its setup gives
-// it, every other kind's through the CLI. A session's setup will say it per session, when a host
-// turns MCP on for a kind.
+// MailViaOf is how a session of kind reads its mail when its registration doesn't say
+// (SessionMailVia): agy's through the MCP tools its setup gives it, every other kind's through the
+// CLI. A session whose setup delivered the crew MCP server says so (Setup.MailVia, crew.register's
+// mail_via), and its notice and guide follow that.
 func MailViaOf(kind string) MailVia {
 	if kind == KindAgy {
 		return MailViaMCP
 	}
 	return MailViaCLI
+}
+
+// SessionMailVia is how a session reads its mail: as its registration said (via, a wire name), else
+// as its kind's do (MailViaOf), for a host that didn't say and a session from before it could.
+func SessionMailVia(via, kind string) MailVia {
+	var v MailVia
+	if via != "" && v.UnmarshalText([]byte(via)) == nil {
+		return v
+	}
+	return MailViaOf(kind)
 }
 
 // NoticeFor is the one wake text for a session that reads its mail via: every waker sends it, and
@@ -307,23 +318,33 @@ func (m *Manager) Reserve(ctx context.Context, session, run string, kinds []stri
 // StillCurrent reports whether an attempt may still make its call: its token holds, its session is
 // live under its host's epoch, and its endpoint's generation is the one it reserved.
 func (m *Manager) StillCurrent(ctx context.Context, session, token string, generation int64) (bool, error) {
+	ok, _, err := m.stillCurrent(ctx, session, token, generation)
+	return ok, err
+}
+
+// stillCurrent is StillCurrent, and the session's own mail mode as its registration gave it ("" for
+// its kind's), read with it: what the wake about to be sent says follows it (SessionMailVia).
+func (m *Manager) stillCurrent(ctx context.Context, session, token string, generation int64) (bool, string, error) {
 	var ok bool
+	var via string
 	err := m.store.Read(ctx, func(tx Tx) error {
 		w, found, err := tx.Wake(session)
 		if err != nil || !found || w.State != WakeInFlight || w.Token != token {
 			return err
 		}
-		if _, err := guardSession(tx, session); err != nil {
+		s, err := guardSession(tx, session)
+		if err != nil {
 			if errors.Is(err, ErrBadCredential) || errors.Is(err, ErrStaleEpoch) {
 				return nil
 			}
 			return err
 		}
+		via = s.MailVia
 		e, has, err := tx.Endpoint(session)
 		ok = err == nil && has && e.Generation == generation
 		return err
 	})
-	return ok, err
+	return ok, via, err
 }
 
 // Abandon gives up an attempt that never made its call: its row goes idle, its deadline kept.

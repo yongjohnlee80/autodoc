@@ -416,6 +416,7 @@ func Run(t *testing.T, h Harness) {
 			"another kind":      func(r *crew.Registration) { r.Kind = "codex" },
 			"another workspace": func(r *crew.Registration) { r.Workspace = "ws-2" },
 			"another prompts":   func(r *crew.Registration) { r.Prompts = true },
+			"another mail_via":  func(r *crew.Registration) { r.MailVia = "mcp" },
 		} {
 			bad := r
 			change(&bad)
@@ -465,6 +466,55 @@ func Run(t *testing.T, h Harness) {
 		}
 		if p.Kind != "codex" {
 			t.Fatalf("the profile's kind after a codex session registered: %q, want codex", p.Kind)
+		}
+	})
+
+	t.Run("mail_via: as registered, its kind's without", func(t *testing.T) {
+		m, store, _, _ := setup(t)
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		onMCP := reg(e, "jarvis", "agent-1")
+		onMCP.MailVia = "mcp"
+		a, err := m.Register(ctx, onMCP)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again, err := m.Register(ctx, onMCP); err != nil || again != a {
+			t.Fatalf("a replay with the same mail_via: %+v, %v", again, err)
+		}
+		b, err := m.Register(ctx, reg(e, "vision", "agent-2")) // a host from before mail_via
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sa, sb crew.Session
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			var err error
+			if sa, _, err = tx.Session(a.Session); err != nil {
+				return err
+			}
+			sb, _, err = tx.Session(b.Session)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if sa.MailVia != "mcp" || sb.MailVia != "" {
+			t.Fatalf("stored mail_via %q and %q, want mcp and empty (its kind's)", sa.MailVia, sb.MailVia)
+		}
+		if crew.SessionMailVia(sb.MailVia, "claude") != crew.MailViaCLI || crew.SessionMailVia(sb.MailVia, "agy") != crew.MailViaMCP {
+			t.Fatal("a session that didn't say reads its mail as its kind's do")
+		}
+		entries, err := m.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		vias := map[string]string{}
+		for _, en := range entries {
+			vias[en.Codename] = en.MailVia
+		}
+		if vias["jarvis"] != "mcp" || vias["vision"] != "cli" {
+			t.Fatalf("crew.list's mail_via: %v, want jarvis mcp, vision cli (a claude session that didn't say)", vias)
 		}
 	})
 

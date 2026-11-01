@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 42,
+  protocol = 43,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -74,10 +74,11 @@ return {
     ["crew.guide"] = {
       since = 37, scope = "local-peer", audience = "user",
       params = {
-        { name = "kind", type = "string" }
+        { name = "kind", type = "string" },
+        { name = "mail_via", type = "string", optional = true }
       },
       result = "{markdown, protocol}",
-      doc = "The crew and mail procedure for a CLI kind, for a host's agent guide.",
+      doc = "The crew and mail procedure for a CLI kind, for a host's agent guide: in the form its mail mode reads (mail_via), its kind's when absent.",
     },
     ["crew.list"] = {
       since = 37, scope = "global", audience = "agent",
@@ -102,7 +103,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "instance", type = "string" },
         { name = "secret", type = "string" },
-        { name = "prompts", type = "bool", optional = true }
+        { name = "prompts", type = "bool", optional = true },
+        { name = "mail_via", type = "string", optional = true }
       },
       result = "{session, profile}",
       doc = "Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret).",

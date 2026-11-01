@@ -61,6 +61,7 @@ type (
 		Instance  string `param:"instance" doc:"the host's spawn id"`
 		Secret    string `param:"secret" doc:"host-generated, 32+ random bytes; only its hash is kept"`
 		Prompts   bool   `param:"prompts,optional" doc:"the host wrote the hooks that report the session's permission prompts (Claude's): prompts_reported trusts them only then (protocol 41)"`
+		MailVia   string `param:"mail_via,optional" doc:"how the session reads its mail, as its setup delivered it: cli or mcp (crew setup's mail_via); absent, its kind's. Its wake notice and its guide follow it (protocol 43)"`
 	}
 	whoamiParams struct {
 		Credential string `param:"credential" doc:"the session context's \"<session id>.<secret>\""`
@@ -92,7 +93,8 @@ type (
 		Text       string `param:"text,optional" doc:"for raise: what the session waits on"`
 	}
 	guideParams struct {
-		Kind string `param:"kind" doc:"the CLI: claude, codex, agy, opencode …"`
+		Kind    string `param:"kind" doc:"the CLI: claude, codex, agy, opencode …"`
+		MailVia string `param:"mail_via,optional" doc:"how the session reads its mail, cli or mcp (crew setup's mail_via); absent, its kind's (protocol 43)"`
 	}
 	exitParams struct {
 		Scope   string `param:"scope"`
@@ -154,8 +156,14 @@ func (m *Manager) Verbs() []module.Verb {
 			"Start a session for (scope, codename) with a host-generated secret. Idempotent on (host, epoch, instance, secret).",
 			CodeStaleEpoch, CodeCodenameBusy, CodeInstanceReused),
 			func(ctx context.Context, p registerParams) (Registered, error) {
+				if p.MailVia != "" { // a mode it doesn't know is refused, never taken as the CLI's
+					var v MailVia
+					if err := v.UnmarshalText([]byte(p.MailVia)); err != nil {
+						return Registered{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+					}
+				}
 				return m.Register(ctx, Registration{Scope: p.Scope, Run: p.Run, Epoch: p.Epoch, Codename: p.Codename,
-					Kind: p.Kind, Workspace: p.Workspace, Instance: p.Instance, Secret: p.Secret, Prompts: p.Prompts})
+					Kind: p.Kind, Workspace: p.Workspace, Instance: p.Instance, Secret: p.Secret, Prompts: p.Prompts, MailVia: p.MailVia})
 			}),
 		module.Handle(host("crew.renew", "{}", "The host still holds its scope: its lease runs another 90 s.", CodeStaleEpoch),
 			func(ctx context.Context, p hostParams) (struct{}, error) {
@@ -219,8 +227,17 @@ func (m *Manager) Verbs() []module.Verb {
 			}),
 		module.Handle(module.Contract{Verb: "crew.guide", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "{markdown, protocol}",
-			Doc: "The crew and mail procedure for a CLI kind, for a host's agent guide."},
-			func(_ context.Context, p guideParams) (Guide, error) { return m.GuideFor(p.Kind), nil }),
+			Doc: "The crew and mail procedure for a CLI kind, for a host's agent guide: in the form its mail mode reads (mail_via), its kind's when absent."},
+			func(_ context.Context, p guideParams) (Guide, error) {
+				if p.MailVia == "" {
+					return m.GuideFor(p.Kind), nil
+				}
+				var v MailVia
+				if err := v.UnmarshalText([]byte(p.MailVia)); err != nil {
+					return Guide{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+				}
+				return GuideOfVia(p.Kind, v), nil
+			}),
 		module.Handle(module.Contract{Verb: "crew.list", Since: Protocol, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "[{codename, scope, kind, presence, reachable, prompts_reported, why}]", Doc: "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>."},
 			func(ctx context.Context, _ struct{}) ([]Entry, error) { return m.List(ctx) }),

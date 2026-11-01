@@ -51,6 +51,7 @@ type (
 		Ended      *int64
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
 		Prompts    bool   // its permission prompts are reported, as its registration said (crew.register's prompts)
+		MailVia    string // how it reads its mail, as its registration said (cli, mcp); "" for its kind's (SessionMailVia)
 	}
 
 	// Endpoint is how a session is woken (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
