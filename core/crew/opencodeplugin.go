@@ -112,6 +112,37 @@ func encodeOpenCodeConfig(cfg map[string]any) (string, error) {
 	return string(bytes.TrimSuffix(b.Bytes(), []byte("\n"))), nil
 }
 
+// OpenCodeWithMCP is OPENCODE_CONFIG_CONTENT v with servers in its mcp key, each a local server
+// (its command and args as one list, its env, enabled): the user's own MCP servers are kept, and one
+// of the same name is AutoDoc's.
+func OpenCodeWithMCP(v string, servers []MCPServer) (string, error) {
+	cfg := map[string]any{}
+	d := json.NewDecoder(strings.NewReader(v))
+	d.UseNumber()
+	if err := d.Decode(&cfg); err != nil || cfg == nil {
+		return "", fmt.Errorf("OPENCODE_CONFIG_CONTENT is not a JSON object: %v", err)
+	}
+	mcp, ok := cfg["mcp"].(map[string]any)
+	if cfg["mcp"] != nil && !ok {
+		return "", errors.New("OPENCODE_CONFIG_CONTENT's mcp is not an object")
+	}
+	if mcp == nil {
+		mcp = map[string]any{}
+	}
+	for _, sv := range servers {
+		if len(sv.Command) == 0 {
+			return "", fmt.Errorf("crew: MCP server %q has no command", sv.Name)
+		}
+		server := map[string]any{"type": "local", "command": slices.Clone(sv.Command), "enabled": true}
+		if len(sv.Env) > 0 {
+			server["environment"] = sv.Env
+		}
+		mcp[sv.Name] = server
+	}
+	cfg["mcp"] = mcp
+	return encodeOpenCodeConfig(cfg)
+}
+
 // OpenCodeConfigContent is $OPENCODE_CONFIG_CONTENT with the plugin at path in its plugin list:
 // existing, a value already set (the user's, or another tool's), kept whole and its list extended,
 // never replaced. OpenCode merges it over the user's own configuration. A plugin whose path holds a
