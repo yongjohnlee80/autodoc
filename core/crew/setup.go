@@ -243,7 +243,7 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 	}
 	settings, prompts := ClaudeSettings(in.Autodoc, k)
 	s.Prompts = prompts
-	s.Allow = ClaudeAllow()
+	s.Allow = ClaudeAllow() // the guide's commands, for a session on CLI mail
 	if len(in.Servers) > 0 {
 		// the crew MCP server on its command line, on both hosts (a folder's .mcp.json would have the
 		// user approve its servers first), each tool allowed by its exact mcp__<server>__<tool>; never
@@ -257,6 +257,9 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 			return err
 		}
 		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
+		// least privilege: a session on MCP mail is allowed its tools alone, never the guide's shell
+		// commands, which it doesn't run
+		s.Allow = []string{}
 		for _, sv := range in.Servers {
 			for _, t := range sv.Tools {
 				s.Allow = append(s.Allow, "mcp__"+sv.Name+"__"+t)

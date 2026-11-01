@@ -25,6 +25,9 @@ type Registration struct {
 	// Prompts is that the host wrote what reports the session's permission prompts (Claude's
 	// hooks, ClaudeHookCommands): crew.list's prompts_reported trusts a hooks reporter only then.
 	Prompts bool
+	// MailVia is how the session reads its mail, as its setup delivered it (Setup.MailVia's wire name,
+	// cli or mcp); "" from a host that doesn't say, and the session's mail is then its kind's (MailViaOf).
+	MailVia string
 }
 
 // Registered is the session a registration made (or found again, on a replay).
@@ -35,12 +38,16 @@ type Registered struct {
 
 // argsDigest is the digest of a registration's immutable arguments: a replay must match them.
 // Each field is length-prefixed, so no two argument tuples encode alike, whatever bytes they hold.
-// Prompts joins them only when set, so a registration without it digests as one from before it.
+// Prompts and MailVia join them only when set, so a registration without them digests as one from
+// before them.
 func argsDigest(r Registration) []byte {
 	h := sha256.New()
 	fields := []string{r.Codename, r.Kind, r.Workspace}
 	if r.Prompts {
 		fields = append(fields, "prompts")
+	}
+	if r.MailVia != "" {
+		fields = append(fields, "mail_via:"+r.MailVia)
 	}
 	for _, f := range fields {
 		_ = binary.Write(h, binary.BigEndian, uint64(len(f)))
@@ -148,7 +155,7 @@ func (m *Manager) Register(ctx context.Context, r Registration) (Registered, err
 			return err
 		}
 		s = Session{ID: id, Profile: p.ID, Host: r.Scope, Epoch: r.Epoch, Instance: r.Instance,
-			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now, Prompts: r.Prompts}
+			SecretHash: sha(r.Secret), ArgsDigest: argsDigest(r), Started: now, Prompts: r.Prompts, MailVia: r.MailVia}
 		if err := tx.PutSession(s); err != nil {
 			return err
 		}

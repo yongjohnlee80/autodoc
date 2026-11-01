@@ -357,9 +357,10 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 
 // TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on its
 // command line on both hosts (--mcp-config, the server's command and args, no env of its own), never
-// --strict-mcp-config (which would take the user's own servers away), each tool allowed by its exact
-// mcp__<server>__<tool> (Neovim's --settings carries them), and its mail via MCP; without servers it
-// is as before, its mail via the CLI.
+// --strict-mcp-config (which would take the user's own servers away), exactly its tools allowed by
+// their mcp__<server>__<tool> rules and no shell rule for its mail (least privilege; Neovim's
+// --settings carries them), and its mail via MCP; without servers it keeps the guide's commands
+// allowed (P6's), its mail via the CLI.
 func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
@@ -380,10 +381,8 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
 			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
 		}
-		for _, r := range rules {
-			if !slices.Contains(s.Allow, r) {
-				t.Errorf("%s: Allow %q lacks %s", host, s.Allow, r)
-			}
+		if !slices.Equal(s.Allow, rules) { // least privilege: its tools, and no shell rule for its mail
+			t.Errorf("%s: Allow %q, want exactly %q", host, s.Allow, rules)
 		}
 		if slices.ContainsFunc(s.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") && strings.Contains(r, "*") }) {
 			t.Errorf("%s: a wildcard MCP rule in %q", host, s.Allow)
@@ -399,8 +398,8 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		}
 		in.Servers = nil
 		without, err := crew.SetupFor(in, "")
-		if err != nil || slices.Contains(without.Argv, "--mcp-config") || without.MailVia != crew.MailViaCLI || slices.ContainsFunc(without.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") }) {
-			t.Errorf("%s without servers: %+v %v, want no MCP and mail via the CLI", host, without, err)
+		if err != nil || slices.Contains(without.Argv, "--mcp-config") || without.MailVia != crew.MailViaCLI || !slices.Equal(without.Allow, crew.ClaudeAllow()) {
+			t.Errorf("%s without servers: %+v %v, want no MCP, the guide's commands allowed (P6's), and mail via the CLI", host, without, err)
 		}
 	}
 }

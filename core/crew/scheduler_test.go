@@ -103,6 +103,23 @@ func (r *wakeRig) session(codename string) crew.Registered {
 	return reg
 }
 
+// sessionVia is session(codename) registered as reading its mail via (crew.register's mail_via).
+func (r *wakeRig) sessionVia(codename, via string) crew.Registered {
+	r.t.Helper()
+	reg, err := r.m.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: "host", Epoch: r.epoch, Codename: codename,
+		Kind: "fake", Workspace: "w", Instance: "i-" + codename, Secret: strings.Repeat("s", 40), MailVia: via})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.write(func(tx crew.Tx) error {
+		if err := tx.PutEndpoint(crew.Endpoint{Session: reg.Session, Generation: 1, Kind: "fake"}); err != nil {
+			return err
+		}
+		return r.m.RaisePending(tx, reg.Profile)
+	})
+	return reg
+}
+
 func (r *wakeRig) write(fn func(crew.Tx) error) {
 	r.t.Helper()
 	if err := r.mem.Write(r.ctx, fn); err != nil {
@@ -699,5 +716,33 @@ func TestATimeoutCountsTowardFive(t *testing.T) {
 	w, e = r.wake(s.Session), r.entry("gold")
 	if w.Failures != 5 || e.Reachable || e.Why != crew.WhyWakesFailing+": crew: dialing the socket: "+context.DeadlineExceeded.Error() {
 		t.Fatalf("after five timeouts: %d failures, %+v; want 5, unreachable, why naming the timeout", w.Failures, e)
+	}
+}
+
+// TestAWakeFollowsTheSessionsOwnMailMode: a session's wake says how that session reads its mail, as
+// its registration said (mail_via), whatever its kind's is: of two sessions of one kind, the one
+// registered on MCP mail is told to call mail_receive, the one that didn't say gets its kind's notice.
+func TestAWakeFollowsTheSessionsOwnMailMode(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	mcp := r.sessionVia("gold", "mcp")
+	cli := r.sessionVia("lector", "")
+	r.look()
+	if r.w.count() != 2 {
+		t.Fatalf("the waker: %v %q, want two calls", r.w.calls, r.w.notes)
+	}
+	for i, s := range r.w.calls {
+		want := crew.WakeNotice // the fake kind's, which reads its mail via the CLI
+		if s == mcp.Session {
+			want = crew.WakeNoticeMCP
+		} else if s != cli.Session {
+			t.Fatalf("a wake for %s, neither session", s)
+		}
+		if r.w.notes[i] != want {
+			t.Errorf("session %s was told %q, want %q", s, r.w.notes[i], want)
+		}
+	}
+	if crew.SessionMailVia("", crew.KindAgy) != crew.MailViaMCP || crew.SessionMailVia("cli", crew.KindAgy) != crew.MailViaCLI ||
+		crew.SessionMailVia("", crew.KindClaude) != crew.MailViaCLI || crew.SessionMailVia("smtp", crew.KindClaude) != crew.MailViaCLI {
+		t.Error("SessionMailVia: a session's own mode wins, and with none (or one not known) its kind's")
 	}
 }
