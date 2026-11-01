@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,13 +22,26 @@ import (
 )
 
 // fakeServer is a server's argv that makes socket (a file stands in) and runs until stopped, its
-// command line naming socket as a real one's does; "never" listens never makes it.
+// command line naming socket for as long as it runs, as a real one's does (`codex app-server
+// --listen unix://<socket>`); "never" listens never makes it. The shell stays: an `exec sleep`
+// would put sleep's command line in its place, which names no socket, so the server would be taken
+// for another process by whatever looked after the exec (a flake, 1 in 5 under -race, 2026-11-01).
 func fakeServer(socket string, listens bool) []string {
-	script := "exec sleep 300"
+	script := "while :; do sleep 1; done"
 	if listens {
-		script = `touch "$1"; exec sleep 300`
+		script = `touch "$1"; while :; do sleep 1; done`
 	}
 	return []string{"sh", "-c", script, "sh", socket}
+}
+
+// namesItsSocket fails the cell unless pid's command line still names socket a while after its
+// start: the fixture's premise, which stopStaleServer's identification rests on.
+func namesItsSocket(t *testing.T, pid int, socket string) {
+	t.Helper()
+	time.Sleep(200 * time.Millisecond) // past a shell's exec, which would have replaced the command line
+	if !slices.Contains(processesNaming(socket), strconv.Itoa(pid)) {
+		t.Fatalf("the fake server %d no longer names %s: the cell would test nothing", pid, socket)
+	}
 }
 
 // processesNaming are the live processes whose command line names s (/proc, as stopStaleServer reads).
@@ -152,6 +166,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 		return cmd
 	}
 	stale := start(fakeServer(socket, false))
+	namesItsSocket(t, stale.Process.Pid, socket)
 	var reaped sync.WaitGroup
 	reaped.Add(1)
 	go func() { _, _ = stale.Process.Wait(); reaped.Done() }()
