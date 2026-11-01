@@ -74,3 +74,40 @@ func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 		t.Fatalf("an agent folder under %q: %v, want the start refused for its PATH", a.agentDir, err)
 	}
 }
+
+// The agent's PATH link is made again at each start: one left pointing elsewhere (another folder,
+// one since removed) or at nothing is replaced, so the agent's first PATH folder is its own bin.
+func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
+	for _, stale := range []string{"elsewhere", "nowhere"} {
+		t.Run(stale, func(t *testing.T) {
+			a, c, _ := crewAgents(t, oneTwo)
+			p, _ := a.profile("one")
+			dir := a.agentFolder(c.ws, "one")
+			link := a.agentPathDir(dir)
+			if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(t.TempDir(), "gone")
+			if stale == "elsewhere" {
+				target = t.TempDir()
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Fatal(err)
+			}
+			instance, err := a.startInstance(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := os.Readlink(link); err != nil || got != filepath.Join(instance.dir, "bin") {
+				t.Fatalf("the agent's PATH link after its start: %q, %v; want %s", got, err, filepath.Join(instance.dir, "bin"))
+			}
+			args, _, err := startedEnv(a, c, instance)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if first, _, _ := strings.Cut(pathOf(args), string(os.PathListSeparator)); first != link {
+				t.Fatalf("the agent's PATH starts %q, want its link %q", first, link)
+			}
+		})
+	}
+}

@@ -147,7 +147,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	if b, err := os.ReadFile(report); err != nil {
 		t.Fatal(err)
 	} else if want := "cwd=" + folder + "\nargs=--root " + root + " --ws kb\nenv=kb|" + root + "|hi" +
-		"\nAGENTS.md\nCLAUDE.md\nbin\nautodoc=" + filepath.Join(folder, "bin", "autodoc") + "\n"; string(b) != want {
+		"\nAGENTS.md\nCLAUDE.md\nbin\nautodoc=" + filepath.Join(r.h.agents.agentPathDir(folder), "autodoc") + "\n"; string(b) != want {
 		t.Fatalf("the agent reported\n%s\nwant\n%s", b, want)
 	}
 	// Its autodoc, with none installed, is the TUI's build on the TUI's config, not the default one.

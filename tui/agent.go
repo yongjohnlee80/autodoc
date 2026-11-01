@@ -2,6 +2,7 @@ package tui
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -511,7 +512,7 @@ func withCommandArgs(args, extra []string) []string {
 
 // agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
 // the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
-// folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
+// folder holds the autodoc that runs them (agentWrapper, through agentPathDir's link), so `autodoc --call` reaches the TUI's
 // store, not the default config's, and is found when no autodoc is installed, the rest p's own
 // (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
 // is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
@@ -523,7 +524,7 @@ func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
-		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + p.agentPath(),
+		"PATH=" + h.agentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(),
 	}
 	// the page in this TUI's editor, for `autodoc --editor`
 	// (docs/decisions/crew.md#the-editor-socket)
@@ -533,6 +534,43 @@ func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
 		}
 	}
 	return env
+}
+
+// agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv):
+// <agentDir>/.bin/<the first 16 hex digits of dir's sha256>, a link to dir/bin (linkAgentPath). A crew
+// agent's folder holds the window's scope in its name (autodoc:<id>), and a PATH entry can't hold
+// the PATH separator: split there, the entry named nothing, and the agent's bare autodoc was the
+// user's installed one, not this build on this config.
+func (h *agents) agentPathDir(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return filepath.Join(agentBase(h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
+}
+
+// linkAgentPath makes link a symbolic link to target (the agent folder's bin), replacing one that
+// points elsewhere or nowhere, through a temporary link renamed over it. A link whose own path holds
+// the PATH separator (an agent folder under such a path) is refused: the agent would get a PATH
+// whose autodoc is someone else's, so it isn't started on one.
+func linkAgentPath(link, target string) error {
+	if strings.ContainsRune(link, os.PathListSeparator) {
+		return fmt.Errorf("the agent's PATH folder %s holds %q, which splits a PATH: move AutoDoc's agent folder to a path without it", link, string(os.PathListSeparator))
+	}
+	if cur, err := os.Readlink(link); err == nil && cur == target {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+		return err
+	}
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	tmp := link + ".new-" + hex.EncodeToString(b)
+	if err := os.Symlink(target, tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, link); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // editorToken is codename's secret on the editor socket: random, made once a run.
@@ -628,6 +666,9 @@ func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string, via crew.
 		if err := writeAtomic(filepath.Join(dir, f.name), []byte(f.text), f.mode); err != nil {
 			return "", err
 		}
+	}
+	if err := linkAgentPath(h.agentPathDir(dir), filepath.Join(dir, "bin")); err != nil {
+		return "", err
 	}
 	// the workspace notice, for a Claude agent (agenthook.go): without it the agent still starts, and
 	// asks editor.workspace by the guide's rule
