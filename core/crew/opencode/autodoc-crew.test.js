@@ -83,7 +83,10 @@ beforeEach(() => {
     join(fake, "autodoc"),
     `#!/bin/sh
 d=$(dirname "$0"); id="$4"
-if [ "$2" = attention ]; then echo "$3 $4 $5" >> "$d/attention"; exit 0; fi
+if [ "$2" = attention ]; then echo "$3 $4 $5" >> "$d/attention"
+  if [ -e "$d/attention-fail" ]; then echo "crew attention takes raise <permission|blocked> [text], or clear" >&2; exit 2; fi
+  exit 0
+fi
 echo "start $id $$" >> "$d/log"
 while [ ! -e "$d/go-$id" ]; do sleep 0.02; done
 code=$(cat "$d/go-$id")
@@ -398,6 +401,27 @@ test("the plugin says it is alive while it runs, and stops once disposed", async
   const after = alive();
   await Bun.sleep(150);
   expect(alive()).toBe(after);
+});
+
+test("a failing heartbeat is logged once, and again only if it fails anew after one went through", async () => {
+  writeFileSync(join(fake, "attention-fail"), "");
+  await start({ heartbeatMs: 30 });
+  const alive = () => attentions().filter((l) => l.trimEnd() === "alive").length;
+  const told = () => client.logs.filter((m) => m.includes("heartbeat"));
+  await until(() => alive() >= 4);
+  await Bun.sleep(20); // the last run's outcome
+  expect(told().length).toBe(1);
+  expect(told()[0]).toContain("exit 2");
+  expect(told()[0]).toContain("takes raise");
+  rmSync(join(fake, "attention-fail"));
+  let n = alive();
+  await until(() => alive() >= n + 3);
+  expect(told().length).toBe(1);
+  writeFileSync(join(fake, "attention-fail"), "");
+  n = alive();
+  await until(() => alive() >= n + 3);
+  await Bun.sleep(20);
+  expect(told().length).toBe(2);
 });
 
 test("a wake names the model opencode was started with, in any of its flag's spellings, and none when it was started on none", async () => {
