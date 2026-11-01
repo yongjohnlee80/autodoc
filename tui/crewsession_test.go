@@ -533,7 +533,9 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, c, w := crewAgents(t, oneTwo)
-			w.hold, w.late = true, true // the daemon commits the registration; its answer comes after the change
+			// the start's setup answers at once; the daemon commits the registration, and its answer
+			// comes after the change
+			w.hold, w.late, w.skipHold = true, true, 1
 			p, _ := a.profile("one")
 			instance, err := a.startInstance(p)
 			if err != nil || !instance.starting {

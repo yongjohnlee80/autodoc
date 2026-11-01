@@ -380,6 +380,10 @@ func (a *agents) applySetup(ws wsInfo, p agentProfile, dir string, setup crew.Se
 	if _, err := a.writeAgentGuide(ws, p.Codename, kind, setup.MailVia); err != nil {
 		return false, err
 	}
+	if kind == crew.KindOpenCode && setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
+		// its plugin registers its session and wakes it: without it no mail could reach it
+		return false, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
+	}
 	if err := writeFolderFiles(dir, setup.FolderFiles); err != nil {
 		return false, err
 	}
