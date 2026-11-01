@@ -661,6 +661,16 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	return a.sendMessage(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
 }
 
+// SendRequest sends one agent incarnation a request, subject (one line) and body, through the
+// window's agent messaging, as HandTask sends a task: what the user hands an agent with an
+// instruction (agents.lua's :agent-buffer and :agent-forward), which it answers.
+func (a *agents) SendRequest(to AgentRef, subject, body string, done func(error)) error {
+	if subject == "" || strings.ContainsAny(subject, "\r\n") || body == "" {
+		return ErrAgentText
+	}
+	return a.sendMessage(to, AgentMessage{Kind: MessageRequest, Subject: subject, Body: body}, done)
+}
+
 // present brings instance forward for a task typed into it, so the user sees it start
 // (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter): the agents panel
 // open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is

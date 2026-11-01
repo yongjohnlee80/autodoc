@@ -178,6 +178,9 @@ func (l luaHostOf) agentEntries() []AgentEntry { return l.h.agents.AgentEntries(
 func (l luaHostOf) sendText(to AgentRef, text string, done func(error)) error {
 	return l.h.agents.SendText(to, text, done)
 }
+func (l luaHostOf) sendRequest(to AgentRef, subject, body string, done func(error)) error {
+	return l.h.agents.SendRequest(to, subject, body, done)
+}
 func (l luaHostOf) resumeAgent(to AgentRef) error { return l.h.agents.Resume(to) }
 func (l luaHostOf) post(fn func())                { l.h.p.Post(fn) }
 

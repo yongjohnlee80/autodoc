@@ -549,6 +549,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `autodoc.clipboard.write(text)` | `ok, err` at once: the system clipboard set (a terminal's, by OSC 52) |
 | `autodoc.clipboard.read(cb)` | `cb(text, err)`: `""` for an empty clipboard or one holding no text; `err` `"unsupported"` where AutoDoc cannot read it (in a terminal, its own paste is the way in), `"timeout"`, `"closed"` |
 | `autodoc.ui.pick({title, items}, cb)` | a picker over `items`, each a string or `{label, detail, value}` (`detail` is previewed, `value` given to `cb`, the item itself without one): `cb(value)`; `err` `"cancelled"` (Esc), or `"busy"` while another script's picker is open |
+| `autodoc.ui.input({title, label, text, placeholder}, cb)` | one line asked of the user, `label` saying what it asks and `text` its start: `cb(text)` once Enter is pressed; `err` `"cancelled"` (Esc), or `"busy"` while another script's line is open |
 | `autodoc.ui.card{title, text, every, tick}` | at once, the card's handle: the card panel (at the right) shows `text`, Markdown, drawn as it reads in the window's Rendered view, where a ```` ```vega-lite ```` fence is a chart; a terminal shows the Markdown. `tick(card)` runs every `every` ms (250 at least; none without `every`) while the panel is open, its first on the next turn. One card at a time: a new one replaces the one shown. `:lua-reload` ends it and closes the panel |
 | `card:set(text)` | the panel shows `text` now; a replaced or ended card's does nothing |
 | `card:close()` | the panel closes and the card ends: its tick stops, and `set` and `close` do nothing after |
@@ -559,7 +560,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
 | `autodoc.plugin.run(id, args…)` | at once, `ok, err`: from a plugin's own Lua package only (its `lua/`, loaded as `plugin:<name>`, [docs/plugins.md](../plugins.md#a-plugins-lua-package-lua)), one of its plugin's `[[commands]]` run with `args` (strings), the plugin started when it is not running. `err` `"autodoc.plugin.run: not a plugin's package"` for any other script, `"unknown: <id>"` for an id its manifest does not declare; arguments need the plugin's `protocol = 7` |
 | `autodoc.agents.resume([agent])` | at once, `ok, err`: a SIGCONT to the agent's tab, `agent` as `send`'s, none for the agents panel's tab now. An agent CLI stopped by a suspend runs again; a running one isn't disturbed. `err` `"stale"`, `"unavailable"`, or why |
-| `autodoc.agents.send(agent, text, cb)` | `text` pasted into the agent's prompt, no Enter added after it: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, `"elsewhere"` (it runs in another workspace, and its crew mail didn't reach it), `"unbracketed"`, or why |
+| `autodoc.agents.send(agent, text, cb)` | `text` sent to the agent as a plain message; `{subject, body}` in its place sends a request, which the agent answers (`subject` one line, both required, else the script's error), its subject heading the paste where it is typed: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, `"elsewhere"` (it runs in another workspace, and its crew mail didn't reach it), `"unbracketed"`, or why |
 
 The text goes as one bracketed paste, or not at all. An agent CLI that asked for bracketed paste
 gets it whole, held at its prompt for Enter. A program that didn't gets nothing, and `err` is
@@ -577,9 +578,13 @@ agent the send started is given up to 10 seconds to ask for it.
   inside a Lua string) is `editor.run`'s error, never `{"ok": true}`. For long text, a Lua command
   file (`editor.add_command`) avoids the double escaping.
 
-AutoDoc's own `usage.lua` is `:usage`: a card of the daemon's and the app's memory and CPU and the workspace's index, ticking each second, with charts in the window. Its `agents.lua` uses the others: `:agent-buffer` sends the
+AutoDoc's own `usage.lua` is `:usage`: a card of the daemon's and the app's memory and CPU and the workspace's index, ticking each second, with charts in the window. Its `agents.lua` uses the others: `:agent-buffer` hands the
 page, and `:agent-forward` the selection, else the clipboard, to the agent running (with several,
-or none, a picker asks which; one not running is started once you agree).
+or none, a picker asks which; one not running is started once you agree). Each asks what the agent
+should do with it (`autodoc.ui.input`), then sends that as a request from the user, its body saying
+which command sent it: a saved page as its workspace, path and version (`doc.read`'s), never its
+text; a page with unsaved changes, the untitled draft, a selection or the clipboard as text, at
+most 8 KiB of it, and more is refused.
 
 ## The daemon's verbs
 

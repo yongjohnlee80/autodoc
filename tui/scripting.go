@@ -66,10 +66,12 @@ type scripting struct {
 	rows     menuRows
 	menuRows *tuidecl.ListModel
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
-	// autodoc.ui.pick's picker, pickCB the callback of the one open
-	host   luaHost
-	pick   *pick[luaItem]
-	pickCB *lua.LFunction
+	// autodoc.ui.pick's picker, pickCB the callback of the one open; inputCB is the callback of
+	// autodoc.ui.input's line while it is open (LuaInput.qml)
+	host    luaHost
+	pick    *pick[luaItem]
+	pickCB  *lua.LFunction
+	inputCB *lua.LFunction
 	// card is the card autodoc.ui.card shows (luacard.go), nil for none; cardGen the latest card's
 	// number, cardEpoch the panel's opening, which a tick chain belongs to
 	card      *luaCard
@@ -142,14 +144,17 @@ func (s *scripting) State() map[string]any {
 	st := map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
 		"App.luaKeysText": s.luaKeysText(), "App.luaMenus": s.luaMenuRows(),
 		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
-		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0}
+		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0,
+		"App.luaInputTitle": "", "App.luaInputLabel": "", "App.luaInputText": "", "App.luaInputPlaceholder": ""}
 	maps.Copy(st, s.cardState())
 	return st
 }
 func (s *scripting) Commands() map[string]Command {
 	return map[string]Command{
-		"App.luaKey":  oneString("a Lua key's letter", s.luaKey),
-		"App.luaMenu": oneString("a Lua menu row", s.luaMenu),
+		"App.luaKey":         oneString("a Lua key's letter", s.luaKey),
+		"App.luaMenu":        oneString("a Lua menu row", s.luaMenu),
+		"App.luaInputSet":    oneString("a script's answer", s.inputSet),
+		"App.luaInputCancel": none(s.inputCancel),
 	}
 }
 

@@ -104,15 +104,20 @@ end }`)
 	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reported(report), first) })
 	r.s.WaitFor(t, "an unknown agent refused", func(string) bool { return r.noticed("nobody unavailable") })
 
+	// :agent-buffer asks the instruction, then sends a request: the untitled draft's text goes in it
 	onLoop(r, func() bool { r.h.core.SetValue("page-text-for-the-agent"); return true })
 	if err := r.luaRun("agent-buffer"); err != nil {
 		t.Fatal(err)
 	}
+	r.instruct(t, "hand the page to heron", "summarise it")
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
-	r.s.WaitFor(t, "the page pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~page-text-for-the-agent\x1b[201~\r")
+	r.s.WaitFor(t, "the page's request pasted", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~Page: the untitled draft (unsaved)\n"+
+			"From: SPC a b (:agent-buffer), sent by the user\nInstruction: summarise it\n"+
+			"File: the untitled draft (never saved)\nText:\npage-text-for-the-agent\x1b[201~\r")
 	})
 
+	// :agent-forward: the selection, with its lines, in a request
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
 	onLoop(r, func() bool {
 		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
@@ -121,9 +126,141 @@ end }`)
 	if err := r.luaRun("agent-forward"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.HasSuffix(reported(report), "\x1b[200~selected-part\x1b[201~\r") })
+	r.instruct(t, "hand the selection to heron", "explain this")
+	r.s.WaitFor(t, "the selection's request pasted", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~Selection: the untitled draft, lines 1 to 1\n"+
+			"From: SPC a f (:agent-forward), sent by the user\nInstruction: explain this\n"+
+			"File: the untitled draft, lines 1 to 1\nText:\nselected-part\x1b[201~\r")
+	})
 	if got := reported(report); strings.Contains(got, "ignored") || strings.Count(got, "\r") != 3 {
 		t.Errorf("more than the selection, or other than one Enter per send, was sent: %q", got)
+	}
+}
+
+// instruct answers the instruction line agents.lua asks (autodoc.ui.input), titled title, with text.
+func (r *running) instruct(t *testing.T, title, text string) {
+	t.Helper()
+	r.s.WaitForText(t, title)
+	r.keys(t, decltest.Type(text)...)
+	r.keys(t, enter())
+}
+
+// TestAPageIsHandedOverByItsPathNeverItsText (the 2026-11-01 report: SPC a b sent a 36 KB page as
+// mail from the user, with no instruction): a saved page is handed over as its workspace, path and
+// version, its text left out; a page with unsaved changes goes with its text; one over 8 KiB is
+// refused, nothing asked; an empty instruction, or Esc, sends nothing (the mutants: the text sent
+// for a saved page; no instruction asked; no bound; an empty instruction sent).
+func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
+	agent, report := recordingAgent(t, true)
+	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
+		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
+	r.h.p.Post(func() { r.h.openPath("plan.md") })
+	r.s.WaitFor(t, "plan.md open", func(string) bool { return onLoop(r, func() bool { return r.h.core.Value() == "the-saved-page-text\n" }) })
+
+	if err := r.luaRun("agent-buffer"); err != nil {
+		t.Fatal(err)
+	}
+	r.instruct(t, "hand the page to heron", "review it")
+	r.s.WaitFor(t, "the saved page's request pasted", func(string) bool {
+		got := reported(report)
+		return strings.Contains(got, "\x1b[200~Page: plan.md in kb\nFrom: SPC a b (:agent-buffer), sent by the user\n"+
+			"Instruction: review it\nWorkspace: kb\nFile: plan.md\nVersion: ") &&
+			strings.HasSuffix(got, "Its text is not in this message: read the file in the workspace.\x1b[201~\r")
+	})
+	if got := reported(report); strings.Contains(got, "the-saved-page-text") {
+		t.Fatalf("a saved page's text was sent: %q", got)
+	}
+
+	// unsaved changes: the page as it is now goes in, marked so
+	onLoop(r, func() bool { r.h.core.SetValue("an-unsaved-edit"); return true })
+	if err := r.luaRun("agent-buffer"); err != nil {
+		t.Fatal(err)
+	}
+	r.instruct(t, "hand the page to heron", "check the edit")
+	r.s.WaitFor(t, "the unsaved page's request pasted", func(string) bool {
+		return strings.HasSuffix(reported(report), "File: plan.md (with unsaved changes: the text below is the page now)\nText:\nan-unsaved-edit\x1b[201~\r")
+	})
+
+	before := reported(report)
+	// over 8 KiB unsaved: refused before anything is asked
+	onLoop(r, func() bool { r.h.core.SetValue(strings.Repeat("x", 8*1024+1)); return true })
+	if err := r.luaRun("agent-buffer"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the bound said", func(string) bool { return r.noticed("is over 8 KiB, too much to send as text") })
+	if strings.Contains(r.s.String(), "hand the page to heron") {
+		t.Error("an instruction was asked for a page over the bound")
+	}
+
+	// an empty instruction, then Esc: nothing sent
+	onLoop(r, func() bool { r.h.core.SetValue("short"); return true })
+	if err := r.luaRun("agent-buffer"); err != nil {
+		t.Fatal(err)
+	}
+	r.instruct(t, "hand the page to heron", "   ")
+	r.s.WaitFor(t, "the empty instruction refused", func(string) bool { return r.noticed("not sent: say what heron should do with the page") })
+	if err := r.luaRun("agent-buffer"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "hand the page to heron")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the line closed", func(sc string) bool { return !strings.Contains(sc, "hand the page to heron") })
+	if got := reported(report); got != before {
+		t.Errorf("a refused, empty or cancelled hand-over sent something: %q", strings.TrimPrefix(got, before))
+	}
+}
+
+// TestScriptsAskALineAndSendARequest: autodoc.ui.input asks one line and gives the callback the
+// text; Esc gives it "cancelled"; a second line while one is open is "busy". autodoc.agents.send
+// with {subject, body} sends a request (its subject heading the paste); a subject with a line
+// break, or none, is the script's error, nothing sent.
+func TestScriptsAskALineAndSendARequest(t *testing.T) {
+	agent, report := recordingAgent(t, true)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitForText(t, "ready")
+	r.luaLoad(t, `
+autodoc.command{ name = "ask", run = function()
+  autodoc.ui.input({ title = "a bird", label = "which bird?", text = "kes" }, function(v, err) autodoc.notify("answered " .. tostring(v) .. " " .. tostring(err)) end)
+  autodoc.ui.input({ title = "another" }, function(v, err) autodoc.notify("second " .. tostring(err)) end)
+end }
+autodoc.command{ name = "req", run = function()
+  autodoc.agents.send("heron", { subject = "Task: count", body = "count the birds" }, function(ok, err) autodoc.notify("request " .. tostring(ok) .. " " .. tostring(err)) end)
+end }`)
+	if err := r.luaRun("ask"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "which bird?")
+	r.s.WaitFor(t, "a second line is busy", func(string) bool { return r.noticed("second busy") })
+	r.keys(t, decltest.Type("trel")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the line's text", func(string) bool { return r.noticed("answered kestrel nil") })
+	if err := r.luaRun("ask"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "which bird?")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "cancelled", func(string) bool { return r.noticed("answered nil cancelled") })
+
+	if err := r.luaRun("req"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the request sent", func(string) bool { return r.noticed("request true nil") })
+	r.s.WaitFor(t, "its paste, the subject first", func(string) bool {
+		return strings.HasSuffix(reported(report), "\x1b[200~Task: count\ncount the birds\x1b[201~\r")
+	})
+	before := reported(report)
+	for _, bad := range []string{`{ subject = "two\nlines", body = "b" }`, `{ body = "no subject" }`, `{ subject = "no body" }`} {
+		if err := r.luaRun(`:lua autodoc.agents.send("heron", ` + bad + `)`); err == nil {
+			t.Errorf("a bad request %s ran as ok", bad)
+		}
+	}
+	if got := reported(report); got != before {
+		t.Errorf("a bad request sent something: %q", strings.TrimPrefix(got, before))
 	}
 }
 
@@ -235,8 +372,8 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	}
 }
 
-// SPC a opens the agents' card, its keys listed; b sends the page to the agent running, f the
-// selection, and Backspace goes back to SPC's card.
+// SPC a opens the agents' card, its keys listed; b hands the page to the agent running, f the
+// selection, each with the instruction asked, and Backspace goes back to SPC's card.
 func TestTheAgentsCardSendsThePage(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
@@ -256,7 +393,10 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 		}
 	}
 	r.keys(t, key('b'))
-	r.s.WaitFor(t, "the page pasted", func(string) bool { return strings.Contains(reported(report), "\x1b[200~card-sent-page\x1b[201~") })
+	r.instruct(t, "hand the page to heron", "read it")
+	r.s.WaitFor(t, "the page's request pasted", func(string) bool {
+		return strings.Contains(reported(report), "Instruction: read it\nFile: the untitled draft (never saved)\nText:\ncard-sent-page\x1b[201~")
+	})
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 
 	// f: the selection
@@ -268,7 +408,10 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.leader(t, 'a')
 	r.s.WaitForText(t, "SPC a — agents")
 	r.keys(t, key('f'))
-	r.s.WaitFor(t, "the selection pasted", func(string) bool { return strings.Contains(reported(report), "\x1b[200~card-selected\x1b[201~") })
+	r.instruct(t, "hand the selection to heron", "use it")
+	r.s.WaitFor(t, "the selection's request pasted", func(string) bool {
+		return strings.Contains(reported(report), "Instruction: use it\nFile: the untitled draft, lines 1 to 1\nText:\ncard-selected\x1b[201~")
+	})
 
 	// g: the agent panel, hidden; G: the profiles
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
