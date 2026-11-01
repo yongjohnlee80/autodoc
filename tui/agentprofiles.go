@@ -5,11 +5,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // THE AGENT PROFILES — System › Agent profiles…: the profiles, each a name and a command, the
 // default marked; Add…, Edit…, Make default, Use and Remove…. A refused save opens the form again,
-// saying why.
+// saying why. The form sets a profile's kind too: the command's, or a CLI's by name (agentKinds).
 
 // openAgentProfiles lists the profiles and opens the dialog.
 func (h *agents) openAgentProfiles() {
@@ -100,7 +104,41 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.SetFormText("App.agentCodename", a.Codename)
 	h.c.SetFormText("App.agentCommand", a.Command)
 	h.c.SetFormText("App.agentEnv", formatProfileEnv(a.Env))
+	h.formKind = a.Kind
+	h.kindList().Reset(h.kindChoices())
+	h.c.Set("App.agentKindIndex", -1) // moved away first, so the same row twice still moves it
+	h.c.Set("App.agentKindIndex", max(slices.Index(agentKinds, a.Kind), 0))
 	h.c.Open("agentEdit")
+}
+
+// kindList is the form's dropdown of kinds (agentKinds): one model, its rows reset as the form opens.
+func (h *agents) kindList() *tuidecl.ListModel {
+	if h.kindRows == nil {
+		h.kindRows = tuidecl.NewListModel("key", "label")
+	}
+	return h.kindRows
+}
+
+// kindChoices are the dropdown's rows, agentKinds' order: the command's first, then each CLI by name.
+func (h *agents) kindChoices() []rowOf {
+	names := map[string]string{crew.KindClaude: "Claude Code", crew.KindCodex: "Codex", crew.KindAgy: "Antigravity",
+		crew.KindOpenCode: "OpenCode"}
+	rows := make([]rowOf, len(agentKinds))
+	for i, k := range agentKinds {
+		label := names[k]
+		if k == "" {
+			label = h.c.Tr("autodoc.text.agentprofiles.kind_from_the_command")
+		}
+		rows[i] = rowOf{"key": k, "label": label}
+	}
+	return rows
+}
+
+// agentKindPicked is the form's dropdown at row i: the kind its Save keeps.
+func (h *agents) agentKindPicked(i int) {
+	if i >= 0 && i < len(agentKinds) {
+		h.formKind = agentKinds[i]
+	}
 }
 
 // saveAgent keeps the selected profile's identity when a legacy caller edits its label.
@@ -112,27 +150,28 @@ func (h *agents) saveAgent(name, command string) {
 	h.saveAgentProfile(name, command, codename)
 }
 
-// saveAgentProfile is App.saveAgentProfile, a caller that names no env: the edited profile keeps
-// its own (saveAgentProfileWithEnv).
+// saveAgentProfile is App.saveAgentProfile, a caller that names no env or kind: the edited profile
+// keeps its own.
 func (h *agents) saveAgentProfile(name, command, codename string) {
-	env := ""
+	env, kind := "", ""
 	if p, ok := h.profile(h.editingAgent); ok && h.editingAgent != "" {
-		env = formatProfileEnv(p.Env)
+		env, kind = formatProfileEnv(p.Env), p.Kind
 	}
-	h.saveAgentProfileWithEnv(name, command, codename, env)
+	h.storeAgentProfile(name, command, codename, env, kind)
 }
 
-// saveAgentProfileWithEnv is the profile form's Save (App.saveAgentProfileWithEnv): storeAgentProfile,
-// its answer read by nothing, since a refusal has already reopened the form with its reason.
+// saveAgentProfileWithEnv is the profile form's Save (App.saveAgentProfileWithEnv), with the kind its
+// dropdown is at: storeAgentProfile, its answer read by nothing, since a refusal has already reopened
+// the form with its reason.
 func (h *agents) saveAgentProfileWithEnv(name, command, codename, env string) {
-	h.storeAgentProfile(name, command, codename, env)
+	h.storeAgentProfile(name, command, codename, env, h.formKind)
 }
 
-// storeAgentProfile is the form's save, including the explicit stable identity and the env as the
-// form's field has it (parseProfileEnv).
+// storeAgentProfile is the form's save, including the explicit stable identity, the env as the
+// form's field has it (parseProfileEnv) and the kind (agentKinds: one it doesn't know is refused).
 // It returns the profile it stored and true, or false when it refused: the one save path, the form's
 // and the agent setup's (agentsetup.go), so both share every validation and neither infers success.
-func (h *agents) storeAgentProfile(name, command, codename, envText string) (agentProfile, bool) {
+func (h *agents) storeAgentProfile(name, command, codename, envText, kind string) (agentProfile, bool) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	codename = strings.TrimSpace(codename)
 	if codename == "" {
@@ -152,6 +191,9 @@ func (h *agents) storeAgentProfile(name, command, codename, envText string) (age
 	env, err := parseProfileEnv(envText)
 	if err != nil {
 		return refuse(h.envRefusal(err))
+	}
+	if !slices.Contains(agentKinds, kind) {
+		return refuse(h.c.Trf("autodoc.text.agentprofiles.not_a_kind", kind))
 	}
 	agents := h.profiles()
 	at := -1
@@ -178,17 +220,17 @@ func (h *agents) storeAgentProfile(name, command, codename, envText string) (age
 		if def == agents[at].Codename {
 			def = codename
 		}
-		agents[at] = agentProfile{Name: name, Command: command, Codename: codename, Env: env}
+		agents[at] = agentProfile{Name: name, Command: command, Codename: codename, Kind: kind, Env: env}
 	} else {
-		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename, Env: env})
+		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename, Kind: kind, Env: env})
 		if def == "" {
 			def = codename
 		}
 	}
 	h.keepAgents(agents, def)
-	h.editingAgent, h.editingAgentProfile = "", nil
+	h.editingAgent, h.editingAgentProfile, h.formKind = "", nil, ""
 	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
-	return agentProfile{Name: name, Command: command, Codename: codename, Env: env}, true
+	return agentProfile{Name: name, Command: command, Codename: codename, Kind: kind, Env: env}, true
 }
 
 // envRefusal is why the form's env field was refused (parseProfileEnv), in the catalog's language.

@@ -1455,6 +1455,10 @@
         <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
         <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.kind">
+        <source>kind: what AutoDoc sets it up as</source>
+        <translation>종류: AutoDoc이 무엇으로 설정할지</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>이름</translation>
@@ -5823,6 +5827,10 @@ WHAT A KEY NEEDS
         <source>%1 is not NAME=value</source>
         <translation>%1은(는) NAME=value 형식이 아닙니다</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.kind_from_the_command">
+        <source>the command's</source>
+        <translation>명령에서 판단</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>기본값으로 지정하면 SPC g로 여는 에이전트가 됩니다</translation>
@@ -5830,6 +5838,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t">
         <source>no profiles yet: Add… one, a name and the command that starts the agent</source>
         <translation>아직 프로필이 없습니다: 추가…로 이름과 에이전트 시작 명령을 지정하세요</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.not_a_kind">
+        <source>%1 is not a kind AutoDoc knows</source>
+        <translation>%1은(는) AutoDoc이 모르는 종류입니다</translation>
     </message>
     <message id="autodoc.text.agentprofiles.not_saved">
         <source>not saved: %1</source>

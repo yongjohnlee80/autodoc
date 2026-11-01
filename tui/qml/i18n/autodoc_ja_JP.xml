@@ -1455,6 +1455,10 @@
         <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
         <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.kind">
+        <source>kind: what AutoDoc sets it up as</source>
+        <translation>種類: AutoDoc が何として設定するか</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>名前</translation>
@@ -5827,6 +5831,10 @@ WHAT A KEY NEEDS
         <source>%1 is not NAME=value</source>
         <translation>%1 は NAME=value の形ではありません</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.kind_from_the_command">
+        <source>the command's</source>
+        <translation>コマンドから判断</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>既定にする で SPC g で開くものを指定</translation>
@@ -5834,6 +5842,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t">
         <source>no profiles yet: Add… one, a name and the command that starts the agent</source>
         <translation>プロファイルがまだありません: 追加… で名前とエージェントを起動するコマンドを登録してください</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.not_a_kind">
+        <source>%1 is not a kind AutoDoc knows</source>
+        <translation>%1 は AutoDoc が知らない種類です</translation>
     </message>
     <message id="autodoc.text.agentprofiles.not_saved">
         <source>not saved: %1</source>

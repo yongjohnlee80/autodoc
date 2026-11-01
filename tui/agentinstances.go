@@ -272,7 +272,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	crewKind := ""
 	if crewed {
-		crewKind = agentKind(p.Command)
+		crewKind = p.kind()
 	}
 	dir, err := a.writeAgentGuide(ws, p.Codename, crewKind, crew.MailViaOf(crewKind)) // a crew start's is written again in its setup's mode
 	if err != nil {
@@ -408,7 +408,7 @@ func executable(path string) bool {
 // (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
 // starts its process once the session's context is written; a refused registration starts nothing.
 func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p agentProfile, ws wsInfo, dir, token string, prompts bool, stale func() bool) {
-	a.crew.register(p.Codename, agentKind(p.Command), prompts, instance.setup.MailVia, ws.id, token, dir, func(s crewSession, err error) {
+	a.crew.register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.id, token, dir, func(s crewSession, err error) {
 		instance.starting = false
 		if stale() {
 			if err == nil {
@@ -446,7 +446,7 @@ func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p ag
 // wake's hooks (the window's, from what its Claude Code knows) with the setup's allowance, which on
 // MCP mail is its tools alone. prompts is that the hooks that report its prompts were written.
 func (a *agents) applySetup(ws wsInfo, p agentProfile, dir string, setup crew.Setup) (prompts bool, err error) {
-	kind := agentKind(p.Command)
+	kind := p.kind()
 	for _, n := range setup.Notices { // what the host tells the user, once: the setup's own words
 		a.c.Notify(n)
 	}
@@ -490,7 +490,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
 		// its setup's: AutoDoc's env (OpenCode's OPENCODE_CONFIG_CONTENT, its plugin and its MCP
 		// server), and its arguments (Claude Code's --mcp-config) after the program's own
-		if agentKind(instance.profile.Command) == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
+		if instance.profile.kind() == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
 			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
