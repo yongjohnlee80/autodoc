@@ -172,9 +172,17 @@ func TestSetupForAllowsTheGuidesCommandsInTheSessionAlone(t *testing.T) {
 	if err := json.Unmarshal([]byte(o.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	// OpenCode's rules wait on its compound-command probe (crew's openCodeAllowProven): none written
-	if want := map[string]string{"git push*": "ask"}; !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || len(o.Allow) != 0 {
-		t.Errorf("OpenCode's setup: %+v, Allow %q; want the agent's own rules alone, none of AutoDoc's until OpenCode's probe passes", cfg.Permission, o.Allow)
+	// OpenCode's probe passed (KB ledger 2026-11-01-probe-compound-contracts-PASS): the guide's
+	// commands are allowed beside the agent's own rules, which stay
+	want := map[string]string{"git push*": "ask"}
+	var rules []string
+	for rule := range crew.OpenCodeAllow() {
+		want[rule] = "allow"
+		rules = append(rules, rule)
+	}
+	slices.Sort(rules)
+	if !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || !slices.Equal(o.Allow, rules) {
+		t.Errorf("OpenCode's setup: %+v, Allow %q; want the agent's own rules and the guide's commands %q", cfg.Permission, o.Allow, rules)
 	}
 	if es, _ := os.ReadDir(home); len(es) != 0 {
 		t.Errorf("the setup wrote into the user's home: %v", es)
@@ -405,7 +413,9 @@ func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	var cfg struct {
 		MCP        map[string]map[string]any `json:"mcp"`
 		Plugin     []string                  `json:"plugin"`
-		Permission any                       `json:"permission"`
+		Permission struct {
+			Bash map[string]string `json:"bash"`
+		} `json:"permission"`
 	}
 	if err := json.Unmarshal([]byte(s.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
 		t.Fatal(err)
@@ -418,8 +428,13 @@ func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	if cfg.MCP["mine"]["url"] != "https://example.invalid/mcp" || !slices.Contains(cfg.Plugin, "file:///p/mine.js") {
 		t.Errorf("the user's own MCP server or plugin was lost: %+v", cfg)
 	}
-	if cfg.Permission != nil || s.MailVia != crew.MailViaMCP || s.Env[crew.EnvMailVia] != "mcp" {
-		t.Errorf("permission %v, mail via %v, the plugin's mode %q: want none written and MCP, for the plugin too (its wake's notice)", cfg.Permission, s.MailVia, s.Env[crew.EnvMailVia])
+	// least privilege, as Claude's: on MCP mail none of the guide's mail commands, only the read-only
+	// contracts its guide points to (OpenCode gates no MCP tool)
+	contracts := map[string]string{"autodoc --contracts": "allow", "autodoc --contracts *": "allow"}
+	if !maps.Equal(cfg.Permission.Bash, contracts) || !slices.Equal(s.Allow, []string{"autodoc --contracts", "autodoc --contracts *"}) ||
+		s.MailVia != crew.MailViaMCP || s.Env[crew.EnvMailVia] != "mcp" {
+		t.Errorf("permission.bash %v, Allow %q, mail via %v, the plugin's mode %q: want the contracts alone and MCP, for the plugin too (its wake's notice)",
+			cfg.Permission.Bash, s.Allow, s.MailVia, s.Env[crew.EnvMailVia])
 	}
 	in.Servers = nil
 	in.Env[crew.EnvMailVia] = "mcp" // the host's own value never decides the plugin's mode
