@@ -388,13 +388,21 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     alive`, every 5 s and every look). Their sessions' prompts count as reported only within 15 s of
     the last heartbeat, which the daemon keeps in memory alone: a reporter that stopped, or a daemon
     that restarted, reads as unreported, and no Enter is pressed.
-  - Codex doesn't report them yet.
+  - Codex's bridge (`autodoc crew bridge --codex`), which `crew endpoint --codex-here --wait`
+    starts once it has registered the session, reads the thread's status every 1 s on the
+    app-server its TUI is attached to (`thread/read`, metadata only: no resume and no subscription,
+    so no approval is routed to it). An active thread waiting on an approval (a command, a patch,
+    an MCP tool's elicitation) or on the user's input raises the attention; anything else clears
+    it. It says it is alive after each look that read the status, so it counts as reported on the
+    same 15 s rule. A server outside Codex's socket folder is never dialed, and its looks raise
+    nothing. The bridge stops when the session's credential is refused, or when the app-server is
+    gone for 3 looks in a row (an agent's own server ends with its CLI).
 - The Codex waker joins once a background probe finds a `codex` with the queue. A session whose CLI
   has no waker is watch-only: its host tells it.
 
 In the code: `core/crew/scheduler.go`, `core/crew/scheduler_run.go`, `core/crew/wakeclaude.go`,
 `core/crew/wakecodex.go`, `core/crew/wakeagy.go`, `core/crew/wakeopencode.go`,
-`app/crewbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
+`app/crewbridge.go`, `app/crewcodexbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
 `core/crew/opencode/autodoc-crew.js`, `app/serve.go`
 
 ## The human inbox

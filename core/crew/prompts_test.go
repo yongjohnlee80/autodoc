@@ -12,9 +12,9 @@ import (
 
 // TestPromptsAreReportedWhileTheirReporterIsThere: crew.list's prompts_reported is a live session's
 // prompts being reported now: Claude's whenever it is live, if its host wrote the hooks that report
-// them (crew.register's prompts), never assumed without; OpenCode's and
-// agy's only while their reporter's heartbeat (crew.attention alive) is within 15 s, by the store's
-// clock, and never before one; Codex's never. A session that ended reports none.
+// them (crew.register's prompts), never assumed without; OpenCode's, agy's and Codex's only while
+// their reporter's heartbeat (crew.attention alive) is within 15 s, by the store's clock, and never
+// before one. A session that ended reports none.
 func TestPromptsAreReportedWhileTheirReporterIsThere(t *testing.T) {
 	ctx := context.Background()
 	clock := crewtest.NewClock()
@@ -65,14 +65,14 @@ func TestPromptsAreReportedWhileTheirReporterIsThere(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	check("just after a heartbeat", map[string]bool{crew.KindClaude + "-one": true, crew.KindOpenCode + "-one": true, crew.KindAgy + "-one": true, crew.KindCodex + "-one": false, "claude-bare": false})
+	check("just after a heartbeat", map[string]bool{crew.KindClaude + "-one": true, crew.KindOpenCode + "-one": true, crew.KindAgy + "-one": true, crew.KindCodex + "-one": true, "claude-bare": false})
 	clock.Advance(15 * time.Second)
-	check("15 s on", map[string]bool{crew.KindOpenCode + "-one": true, crew.KindAgy + "-one": true, "claude-bare": false})
+	check("15 s on", map[string]bool{crew.KindOpenCode + "-one": true, crew.KindAgy + "-one": true, crew.KindCodex + "-one": true, "claude-bare": false})
 	clock.Advance(time.Second)
 	if err := m.ReporterAlive(ctx, creds[crew.KindAgy]); err != nil {
 		t.Fatal(err)
 	}
-	check("16 s on, agy's heartbeat again", map[string]bool{crew.KindClaude + "-one": true, crew.KindOpenCode + "-one": false, crew.KindAgy + "-one": true, "claude-bare": false})
+	check("16 s on, agy's heartbeat again", map[string]bool{crew.KindClaude + "-one": true, crew.KindOpenCode + "-one": false, crew.KindAgy + "-one": true, crew.KindCodex + "-one": false, "claude-bare": false})
 	if err := m.ReporterAlive(ctx, "nobody.secret"); err == nil {
 		t.Fatal("a heartbeat with no session's credential was taken")
 	}

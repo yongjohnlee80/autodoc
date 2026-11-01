@@ -30,6 +30,7 @@ var reporters = map[string]promptReporter{
 	KindClaude:   reportsHooks,     // AutoDoc's hooks: PermissionRequest raises; its own PostToolUse, UserPromptSubmit and Stop clear
 	KindOpenCode: reportsHeartbeat, // AutoDoc's plugin: permission.asked raises, the last permission.replied clears
 	KindAgy:      reportsHeartbeat, // the agy bridge: a trajectory step waiting on a permission raises, none clears
+	KindCodex:    reportsHeartbeat, // the Codex bridge: a thread waiting on an approval or the user's input raises, none clears
 }
 
 // reporterStale is how long a reporter's heartbeat (crew.attention alive) stands: a reporter that
