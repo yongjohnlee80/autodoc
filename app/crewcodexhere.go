@@ -33,15 +33,13 @@ const codexLooks = 64
 // one, or another folder's is all there is.
 var errNoCodexThreadHere = errors.New("no Codex thread for this folder on the app-server yet")
 
-// codexThreadHere is dir's Codex thread: the newest one on the app-server whose cwd is dir, created
-// at or after since (Unix seconds: a thread a session before this one left is not this session's).
-// It asks thread/list for dir's threads first (the cwd filter: no other folder's thread is read):
-// a TUI's thread, made as it starts, isn't among the server's loaded threads until its first turn
-// (codex-cli 0.163.0, live 2026-11-01), so a look at those alone never finds a fresh agent's. A
-// server that refuses that filter, or lists none since, is looked at as before: its newest loaded
-// threads, read one by one, an unreadable one (archived meanwhile) passed over. With none, the
-// refusal says what was looked at (codexLook), so a miss names its cause; another folder's thread
-// is counted, never named.
+// codexThreadHere is dir's Codex thread: the newest one loaded on the app-server whose cwd is dir,
+// created at or after since (Unix seconds: a thread a session before this one left is not this
+// session's). A thread that can't be read (archived meanwhile) is passed over, and counted. A TUI's
+// thread is loaded as it starts, before its first turn, and thread/list never lists it then
+// (codex-cli 0.163.0, live 2026-11-01), so the loaded threads are the ones to look at. With none,
+// the refusal says what was looked at (codexLook), so a miss names its cause; another folder's
+// thread is counted, never named.
 // The newest thread there need not be the agent's own: a sub-thread it started, or the user's own
 // Codex run in that folder. The agent's folder is AutoDoc's and its codename's alone, so neither is
 // to be expected; a wrong one is woken, and its wake goes unanswered.
@@ -51,10 +49,6 @@ func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64)
 		real = r
 	}
 	var look codexLook
-	id, err := codexListedHere(ctx, rpc, dir, real, since, &look)
-	if id != "" || ctx.Err() != nil {
-		return id, err
-	}
 	var ids []string
 	cursor := ""
 	for range 16 { // pages: a server with more loaded threads than that is past what is looked at
@@ -112,57 +106,17 @@ func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64)
 	return "", fmt.Errorf("%w (%s)", errNoCodexThreadHere, look.String(since))
 }
 
-// codexListLimit is how many of the folder's threads thread/list is asked for, newest first: the
-// folder is one agent's, so its newest is the one wanted.
-const codexListLimit = 8
-
-// codexListedHere is dir's newest thread made since, as thread/list answers for dir (or real):
-// "" when it lists none since, its refusal kept in look (an older server without the cwd filter).
-func codexListedHere(ctx context.Context, rpc codexRPC, dir, real string, since int64, look *codexLook) (string, error) {
-	cwds := []string{dir}
-	if real != dir {
-		cwds = append(cwds, real)
-	}
-	var page struct {
-		Data []struct {
-			ID        string `json:"id"`
-			Cwd       string `json:"cwd"`
-			CreatedAt int64  `json:"createdAt"`
-		} `json:"data"`
-	}
-	params := map[string]any{"cwd": cwds, "sortKey": "created_at", "sortDirection": "desc", "limit": codexListLimit}
-	if err := rpc.call(ctx, "thread/list", params, &page); err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		look.listErr = err
-		return "", nil
-	}
-	look.listed = len(page.Data)
-	for _, t := range page.Data { // newest first, but the order is the server's: every one is checked
-		if (t.Cwd == dir || t.Cwd == real) && t.CreatedAt >= since && t.ID != "" {
-			return t.ID, nil
-		}
-	}
-	return "", nil
-}
-
-// codexLook is what one codexThreadHere saw: the folder's threads thread/list gave (or its
-// refusal), the loaded threads, how many it read, and of those that read how many were this
-// folder's but older than its spawn, how many another folder's, and how many failed to read (the
-// first failure kept).
+// codexLook is what one codexThreadHere saw: the loaded threads, how many it read, and of those
+// that read how many were this folder's but older than its spawn, how many another folder's, and
+// how many failed to read (the first failure kept).
 type codexLook struct {
-	listed, loaded, read, failed, older, elsewhere int
-	newestOlder                                    int64
-	listErr, firstFail                             error
+	loaded, read, failed, older, elsewhere int
+	newestOlder                            int64
+	firstFail                              error
 }
 
 func (l codexLook) String(since int64) string {
-	s := fmt.Sprintf("thread/list: %d of this folder's, none made since %d", l.listed, since)
-	if l.listErr != nil {
-		s = fmt.Sprintf("thread/list refused: %v", l.listErr)
-	}
-	s += fmt.Sprintf("; %d loaded, %d read: %d another folder's, %d this folder's made before %d", l.loaded, l.read, l.elsewhere, l.older, since)
+	s := fmt.Sprintf("%d loaded, %d read: %d another folder's, %d this folder's made before %d", l.loaded, l.read, l.elsewhere, l.older, since)
 	if l.older > 0 {
 		s += fmt.Sprintf(" (the newest at %d)", l.newestOlder)
 	}

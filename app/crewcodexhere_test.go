@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,36 +24,17 @@ type codexThread struct {
 }
 
 // fakeCodexRPC answers thread/loaded/list (in pages of page ids) and thread/read from threads; ids
-// in unreadable answer an error. thread/list answers listed, filtered by its cwd and newest first,
-// as Codex's does (a thread listed, not loaded: a TUI's before its first turn), or refuses when
-// listRefused.
+// in unreadable answer an error.
 type fakeCodexRPC struct {
-	threads     []codexThread
-	page        int
-	unreadable  map[string]bool
-	reads       []string
-	listed      []codexThread
-	listRefused bool
-	lists       []map[string]any
+	threads    []codexThread
+	page       int
+	unreadable map[string]bool
+	reads      []string
 }
 
 func (f *fakeCodexRPC) call(_ context.Context, method string, params, result any) error {
 	p := params.(map[string]any)
 	switch method {
-	case "thread/list":
-		f.lists = append(f.lists, p)
-		if f.listRefused {
-			return errors.New("thread/list: unknown field cwd")
-		}
-		cwds, _ := p["cwd"].([]string)
-		var out []codexThread
-		for _, t := range f.listed {
-			if slices.Contains(cwds, t.Cwd) {
-				out = append(out, t)
-			}
-		}
-		slices.SortFunc(out, func(a, b codexThread) int { return cmp.Compare(b.CreatedAt, a.CreatedAt) })
-		return remarshal(map[string]any{"data": out}, result)
 	case "thread/loaded/list":
 		start := 0
 		if c, ok := p["cursor"].(string); ok {
@@ -129,51 +108,22 @@ func TestCodexThreadHereFindsTheFoldersNewestThread(t *testing.T) {
 	}
 }
 
-// TestCodexThreadHereFindsAFreshTurnlessThread: a Codex TUI's thread, made as it starts, is listed
-// for its folder (thread/list's cwd filter) but isn't among the server's loaded threads until its
-// first turn (codex-cli 0.163.0, live: "2 loaded, 2 read: 2 another folder's"). It is found by the
-// list, asked for the folder alone and newest first, and no other folder's thread is read (the
-// mutant: the loaded threads looked at alone, as before, finds none).
-func TestCodexThreadHereFindsAFreshTurnlessThread(t *testing.T) {
-	dir := t.TempDir()
-	f := &fakeCodexRPC{page: 10,
-		threads: []codexThread{{ID: "01a1-0001", Cwd: "/elsewhere", CreatedAt: 100}, {ID: "01a1-0002", Cwd: "/other", CreatedAt: 200}},
-		listed:  []codexThread{{ID: "01a1-0001", Cwd: "/elsewhere", CreatedAt: 100}, {ID: "01a1-0003", Cwd: dir, CreatedAt: 300}}}
-	got, err := codexThreadHere(context.Background(), f, dir, 298)
-	if err != nil || got != "01a1-0003" {
-		t.Fatalf("the fresh thread: %q %v, want 01a1-0003", got, err)
-	}
-	if len(f.reads) != 0 || len(f.lists) != 1 {
-		t.Fatalf("read %v, listed %d times: want one list and no thread read", f.reads, len(f.lists))
-	}
-	if cwds, _ := f.lists[0]["cwd"].([]string); !slices.Contains(cwds, dir) || f.lists[0]["sortKey"] != "created_at" || f.lists[0]["sortDirection"] != "desc" {
-		t.Fatalf("thread/list asked %v: want the folder's threads, newest first", f.lists[0])
-	}
-}
-
-// TestCodexThreadHereSaysWhatItSaw: a folder whose only listed thread is older than the spawn takes
-// none of it, looks at the loaded threads too, and its refusal names both looks; a server refusing
-// thread/list's filter is looked at as before, and its refusal says so; an unreadable loaded
-// thread is counted with its error, never passed over silently.
+// TestCodexThreadHereSaysWhatItSaw: a folder whose thread isn't there names, in its refusal, what
+// the look saw: the loaded threads, how many it read, how many were another folder's, how many this
+// folder's but older than the spawn (the newest's time), and how many it couldn't read, with the
+// first error. A failed read is counted, never passed over silently (the mutants: either dropped).
 func TestCodexThreadHereSaysWhatItSaw(t *testing.T) {
 	dir := t.TempDir()
-	f := &fakeCodexRPC{page: 10,
-		threads:    []codexThread{{ID: "01a1-0001", Cwd: "/elsewhere", CreatedAt: 100}, {ID: "01a1-0002", Cwd: "/other", CreatedAt: 200}, {ID: "01a1-0009", Cwd: dir, CreatedAt: 900}},
-		unreadable: map[string]bool{"01a1-0009": true},
-		listed:     []codexThread{{ID: "01a1-0000", Cwd: dir, CreatedAt: 50}}}
+	f := &fakeCodexRPC{page: 10, unreadable: map[string]bool{"01a1-0009": true}, threads: []codexThread{
+		{ID: "01a1-0000", Cwd: dir, CreatedAt: 50}, {ID: "01a1-0001", Cwd: "/elsewhere", CreatedAt: 100},
+		{ID: "01a1-0002", Cwd: "/other", CreatedAt: 200}, {ID: "01a1-0009", Cwd: dir, CreatedAt: 900}}}
 	_, err := codexThreadHere(context.Background(), f, dir, 250)
-	for _, want := range []string{"thread/list: 1 of this folder's, none made since 250", "3 loaded, 3 read: 2 another folder's",
-		"1 unreadable (the first: thread/read: no rollout found)"} {
-		if !errors.Is(err, errNoCodexThreadHere) || err == nil || !strings.Contains(err.Error(), want) {
-			t.Fatalf("an old listed thread, an unreadable loaded one: %v, want errNoCodexThreadHere saying %q", err, want)
-		}
+	want := "4 loaded, 4 read: 2 another folder's, 1 this folder's made before 250 (the newest at 50), 1 unreadable (the first: thread/read: no rollout found)"
+	if !errors.Is(err, errNoCodexThreadHere) || !strings.Contains(err.Error(), want) {
+		t.Fatalf("a miss: %v, want errNoCodexThreadHere saying %q", err, want)
 	}
-	f = &fakeCodexRPC{page: 10, listRefused: true, threads: []codexThread{{ID: "01a1-0001", Cwd: "/elsewhere", CreatedAt: 100}, {ID: "01a1-0003", Cwd: dir, CreatedAt: 300}}}
-	if got, err := codexThreadHere(context.Background(), f, dir, 250); err != nil || got != "01a1-0003" {
-		t.Fatalf("a server refusing thread/list's filter: %q %v, want the loaded 01a1-0003", got, err)
-	}
-	if _, err := codexThreadHere(context.Background(), f, t.TempDir(), 0); err == nil || !strings.Contains(err.Error(), "thread/list refused: thread/list: unknown field cwd") {
-		t.Fatalf("its refusal: %v, want it to say thread/list was refused", err)
+	if strings.Contains(err.Error(), "/elsewhere") || strings.Contains(err.Error(), "/other") {
+		t.Fatalf("a miss named another folder: %v", err)
 	}
 }
 

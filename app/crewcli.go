@@ -182,13 +182,14 @@ var crewCommands = map[string]crewCommand{
 				if len(args) != 0 {
 					return "", nil, nil, errors.New("crew endpoint --codex-here takes no arguments")
 				}
+				// a look that finds nothing yet is no usage error: --wait looks again (codexWaitLoop)
 				thread, err := codexThreadOfThisFolder(fs.Lookup("since").Value.(flag.Getter).Get().(int64))
 				if err != nil {
-					return "", nil, nil, err
+					return "", nil, nil, &crewRuntimeError{err}
 				}
 				loc, err := codexLocator(thread, os.Getenv)
 				if err != nil {
-					return "", nil, nil, err
+					return "", nil, nil, &crewRuntimeError{err}
 				}
 				return "crew.endpoint", []any{c.Credential, "codex", loc}, nil, nil
 			}
@@ -552,6 +553,14 @@ func (e *crewUsageError) Error() string {
 }
 func (e *crewUsageError) Unwrap() error { return e.err }
 
+// crewRuntimeError is a command's failure while building its call that is no usage error: the
+// arguments were right, and what they name isn't there yet (crew endpoint --codex-here: the
+// folder's Codex thread). It exits 1, which a waiting caller looks again on, never 2, which ends it.
+type crewRuntimeError struct{ err error }
+
+func (e *crewRuntimeError) Error() string { return e.err.Error() }
+func (e *crewRuntimeError) Unwrap() error { return e.err }
+
 // sessionHere is the session the CLI acts as: $AUTODOC_CREW_CONTEXT's, or the working folder's.
 func sessionHere() (sessionContext, error) {
 	cwd, err := os.Getwd()
@@ -583,6 +592,10 @@ func runCrewCommand(ctx context.Context, name string, args []string, stdin io.Re
 		return nil, err
 	}
 	method, params, shape, err := cmd.call(c, fs, fs.Args(), stdin)
+	var runtimeErr *crewRuntimeError
+	if errors.As(err, &runtimeErr) {
+		return nil, runtimeErr.err
+	}
 	if err != nil {
 		return nil, &crewUsageError{err}
 	}
