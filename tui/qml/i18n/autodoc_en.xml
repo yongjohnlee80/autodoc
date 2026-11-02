@@ -7607,6 +7607,10 @@ The last connect failed:
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</translation>
     </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</translation>
+    </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>
         <translation>root: the directory it indexes (Browse… picks one)</translation>

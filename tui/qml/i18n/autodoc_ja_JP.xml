@@ -7213,6 +7213,10 @@ The last connect failed:
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>ルート: %1 (ワークスペースのルートは変更できません: 別のディレクトリは独自のワークスペースとして追加してください)</translation>
     </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ このルートは AutoDoc 自身のフォルダーを含むか、その中にあります: %1。ファイルへのアクセスを許可されたスクリプトは、保護パスの一覧がなければそれらに届きます: ルートを移動するか、狭めてください。</translation>
+    </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>
         <translation>ルート: インデックスするディレクトリ (参照… で選択)</translation>
