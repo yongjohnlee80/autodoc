@@ -4208,8 +4208,8 @@ WHAT A KEY NEEDS
         <translation>copied %1 %2's details</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.ended">
-        <source>%1 %2 ended</source>
-        <translation>%1 %2 ended</translation>
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.gone">
         <source>%1 %2 had already ended</source>
@@ -4220,8 +4220,8 @@ WHAT A KEY NEEDS
         <translation>%1 %2: %3 of its processes still ran after it was killed</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.killed">
-        <source>%1 %2 ignored the stop and was killed</source>
-        <translation>%1 %2 ignored the stop and was killed</translation>
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.not_killed">
         <source>%1 %2 not killed: %3</source>
@@ -6128,6 +6128,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.crew_bridges.older_daemon">
         <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
         <translation>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>orphan, %1 still running: the daemon stopped trying, it's yours to end</translation>
     </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
