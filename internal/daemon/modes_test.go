@@ -379,10 +379,18 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 		entered chan struct{} // closed as the reader starts this read
 		release chan struct{} // this read answers once it is closed
 		fail    bool
+		reg     TodoRegistry // what it answers
 	}
 	var mu sync.Mutex
 	var plan []*read // the reads after SetTodoStores's own, in order
 	var reads atomic.Int32
+	var failRevalidation atomic.Bool
+	m.revalidateAll = func() error { // set before the reader starts
+		if failRevalidation.Swap(false) {
+			return errors.New("revalidation failed")
+		}
+		return nil
+	}
 	m.SetTodoStores(func(context.Context) (TodoRegistry, error) {
 		n := int(reads.Add(1)) - 2 // SetTodoStores's own first read is -1: it answers at once
 		if n < 0 {
@@ -396,7 +404,7 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 		if r.fail {
 			return TodoRegistry{}, errors.New("the registry could not be read")
 		}
-		return TodoRegistry{}, nil
+		return r.reg, nil
 	})
 	next := func(fail bool) *read {
 		r := &read{entered: make(chan struct{}), release: make(chan struct{}), fail: fail}
@@ -414,6 +422,9 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 		return done
 	}
 	notYet := func(what string, done chan error) {
+		if want := m.storesWant.Load(); m.storesDone.Load() >= want {
+			t.Fatalf("%s: the change is marked read (%d of %d) before its read succeeded", what, m.storesDone.Load(), want)
+		}
 		select {
 		case err := <-done:
 			t.Fatalf("%s: settled (%v) before its read succeeded", what, err)
@@ -443,7 +454,30 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// a new registry read whose revalidation fails: the retry reads the same registry, and still
+	// revalidates before it settles
+	moved := TodoRegistry{Vars: map[string]map[string]string{"/kb": {"PROJECT_ROOT": "/src"}}}
+	changedRead := next(false)
+	changedRead.reg = moved
+	sameRead := next(false)
+	sameRead.reg = moved
+	failRevalidation.Store(true)
+	m.TodoStoresChanged()
+	done = settled()
+	<-changedRead.entered
+	close(changedRead.release) // read, published, and its revalidation fails
+	<-sameRead.entered         // tried again: the same registry
+	notYet("a failed revalidation", done)
+	close(sameRead.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if m.storesRevalidate {
+		t.Error("the revalidation is still marked to do again after it succeeded")
+	}
+
 	stuck := next(false)
+	stuck.reg = moved
 	m.TodoStoresChanged()
 	<-stuck.entered
 	bounded, cancel := context.WithCancel(ctx)
