@@ -13,6 +13,17 @@ const (
 	KindOpenCode = "opencode"
 )
 
+// StartsWithItsEndpoint is whether a session of kind registers its endpoint only once its CLI is
+// past its own startup, so that a live session with none may be showing a startup question no
+// hook reports. Claude Code's SessionStart hook registers it, and runs only once its folder-trust
+// question is answered Yes (the question's default is "No, exit"). Until then nothing may be typed
+// into it, and its mail never falls back (docs/decisions/crew.md#the-fallback-exactly-once): it
+// waits, queued, for the session's first receive.
+func StartsWithItsEndpoint(kind string) bool { return kind == KindClaude }
+
+// EndpointStartedKinds is every kind StartsWithItsEndpoint answers true for, for a store's query.
+var EndpointStartedKinds = []string{KindClaude}
+
 // A permission prompt's report (docs/decisions/crew.md#the-human-inbox): a kind's adapter raises
 // the session's permission attention when the agent shows a prompt, and clears it once answered.
 // A window may press Enter after typing to an agent only while its prompts are reported and none
@@ -22,7 +33,7 @@ type promptReporter int
 
 const (
 	reportsNone      promptReporter = iota
-	reportsHooks                    // the CLI's own hooks, which the host writes: whenever its session is live and registered with prompts
+	reportsHooks                    // the CLI's own hooks, which the host writes: whenever its session is live, started, and registered with prompts
 	reportsHeartbeat                // a process of the agent's (a plugin, a bridge) that says it is alive
 )
 
@@ -57,13 +68,14 @@ func (m *Manager) ReporterAlive(ctx context.Context, credential string) error {
 }
 
 // promptsReported is whether live session s, of kind, has its permission prompts reported at now:
-// Claude's hooks report whenever it is live, if its host wrote them (its registration's prompts,
-// which a Claude Code too old for those hooks doesn't get: never assumed); a heartbeat reporter
-// while its last heartbeat is within reporterStale; any other kind never.
-func (m *Manager) promptsReported(kind string, s Session, now time.Time) bool {
+// Claude's hooks report once it has started (started: its endpoint registered, StartsWithItsEndpoint),
+// if its host wrote them (its registration's prompts, which a Claude Code too old for those hooks
+// doesn't get: never assumed); a heartbeat reporter while its last heartbeat is within
+// reporterStale; any other kind never.
+func (m *Manager) promptsReported(kind string, s Session, started bool, now time.Time) bool {
 	switch reporters[kind] {
 	case reportsHooks:
-		return s.Prompts
+		return s.Prompts && started
 	case reportsHeartbeat:
 		m.aliveMu.Lock()
 		at, ok := m.alive[s.ID]

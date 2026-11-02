@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -109,6 +110,58 @@ func (h *crewHost) sendTask(codename, scope, subject, body, key string, then fun
 	}, func(v any) {
 		err, _ := v.(error)
 		then(err)
+	})
+}
+
+// queueSend mails codename, the window's own agent, a message from the user as userSend does, but
+// never fired: it waits, queued, for the agent's first receive (an agent that hasn't started yet,
+// which nothing may be typed into). then hears nil once it is stored.
+func (h *crewHost) queueSend(codename, kind, subject, body string, then func(error)) {
+	scope, epoch, ok := h.held()
+	if !ok || codename == "" {
+		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		return
+	}
+	key := newSecret()
+	h.c.Go(func(ctx context.Context) any {
+		_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []any{codename}, body, key, kind, subject, false)
+		return err
+	}, func(v any) {
+		err, _ := v.(error)
+		then(err)
+	})
+}
+
+// startedOf asks the crew whether codename's session in the window's scope is past its CLI's
+// startup, for a kind that starts with its endpoint (crew.StartsWithItsEndpoint): only what proves
+// the endpoint registered says so, crew.list's reachable, or a why that only a session with an
+// endpoint has (wakes_failing, backoff_until). Every other why fails closed: host_gone is read
+// before the endpoint is, so it says nothing of one. then hears it on the loop; a window holding no
+// scope, a failed ask or no such session hears false: nothing is typed into what isn't known to
+// have started.
+func (h *crewHost) startedOf(codename string, then func(started bool)) {
+	scope, _, ok := h.held()
+	if !ok || codename == "" {
+		then(false)
+		return
+	}
+	h.c.Go(func(ctx context.Context) any {
+		v, err := h.c.Call(ctx, "crew.list")
+		if err != nil {
+			return nil
+		}
+		return v
+	}, func(v any) {
+		for _, e := range asList(v) {
+			m := asMap(e)
+			if str(m, "scope") == scope && str(m, "codename") == codename {
+				reachable, _ := m["reachable"].(bool)
+				why := str(m, "why")
+				then(reachable || strings.HasPrefix(why, crew.WhyWakesFailing) || strings.HasPrefix(why, crew.WhyBackoffUntil))
+				return
+			}
+		}
+		then(false)
 	})
 }
 

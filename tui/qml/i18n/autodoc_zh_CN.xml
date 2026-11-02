@@ -1219,6 +1219,14 @@
         <source>%1 did not start: %2</source>
         <translation>%1 未启动：%2</translation>
     </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 尚未在 %2 中完成启动：Claude Code 可能正在其标签页中询问是否信任该文件夹。在它启动之前不会向其输入任何内容，其团队邮件会等待它。</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 在 Claude Code 于 %3 中启动之前退出（代码 %2）：它可能拒绝了信任文件夹的提问。请再次启动它，并选择信任该文件夹。</translation>
+    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>已为 %2 丢弃 %1 条消息；会通知每位发送者。</translation>

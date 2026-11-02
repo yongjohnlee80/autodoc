@@ -50,6 +50,7 @@ const (
 	cGeneration  col = "generation"
 	cLocator     col = "locator"
 	cRegistered  col = "registered"
+	cFirst       col = "first_registered"
 	cOwner       col = "owner"
 	cText        col = "text"
 	cRaised      col = "raised"
@@ -160,7 +161,7 @@ func newCrewTables(c dao.DataConn) *crewTables {
 		ends: table(c, "crew_endpoint", map[col]func(*crew.Endpoint) any{
 			cSession: func(r *crew.Endpoint) any { return &r.Session }, cGeneration: func(r *crew.Endpoint) any { return &r.Generation },
 			cKind: func(r *crew.Endpoint) any { return &r.Kind }, cLocator: func(r *crew.Endpoint) any { return &r.Locator },
-			cRegistered: func(r *crew.Endpoint) any { return &r.Registered },
+			cRegistered: func(r *crew.Endpoint) any { return &r.Registered }, cFirst: func(r *crew.Endpoint) any { return &r.First },
 		}, cSession),
 		attn: table(c, "crew_attention", map[col]func(*crew.Attention) any{
 			cSession: func(r *crew.Attention) any { return &r.Session }, cOwner: func(r *crew.Attention) any { return &r.Owner },
@@ -406,7 +407,7 @@ func (t *Tx) Endpoint(session string) (crew.Endpoint, bool, error) {
 
 func (t *Tx) PutEndpoint(e crew.Endpoint) error {
 	return t.t.ends.On(t.tx).SetMap(map[col]any{cSession: e.Session, cGeneration: e.Generation, cKind: e.Kind,
-		cLocator: e.Locator, cRegistered: e.Registered}).Upsert()
+		cLocator: e.Locator, cRegistered: e.Registered, cFirst: e.First}).Upsert()
 }
 
 func (t *Tx) DeleteEndpoint(session string) error {

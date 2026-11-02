@@ -1219,6 +1219,14 @@
         <source>%1 did not start: %2</source>
         <translation>%1 は起動しませんでした: %2</translation>
     </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 は %2 でまだ起動を終えていません。Claude Code がタブでそのフォルダーを信頼するか尋ねている可能性があります。起動するまで何も入力されず、クルーのメールはそれを待ちます。</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 は %3 で Claude Code が起動する前に終了しました (コード %2)。フォルダーを信頼するかの質問を断った可能性があります。もう一度起動し、フォルダーを信頼するを選んでください。</translation>
+    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>%2 宛ての %1 件のメッセージを破棄しました。各送信者に知らせます。</translation>
