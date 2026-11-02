@@ -866,15 +866,21 @@ In the code: `lua/autodoc/kb/scaffold.lua`, `lua/autodoc/kb/templates/`
 ## Managed KB files
 
 `KB_OPERATIONS.md` and `_schema/frontmatter.yaml` belong to AutoDoc, not to the KB. Each is stamped
-with the AutoDoc version that wrote it, and a KB's copy is replaced only when it is from an older
-version; a KB's own rules go in `AGENTS.md`. A release that changes either file bumps the version,
-and one that changes the operations surface also bumps `KB_OPERATIONS.md`'s `revision:`, which tells
-agents to read it again. The Neovim plugin hands each build's copies to auto-core, the one writer
+with the version of AutoDoc whose release last changed them, and a KB's copy is replaced only when it
+is from an older version; a KB's own rules go in `AGENTS.md`. A release that changes either file
+bumps the version, and one that changes the operations surface also bumps `KB_OPERATIONS.md`'s
+`revision:`, which tells agents to read it again.
+
+`lua/autodoc/kb/version.lua` is the one source of that stamp: the Neovim side reads it, and the
+daemon embeds it, so a KB either side scaffolds carries the same version (not the build's, which
+would replace an unchanged copy at every release and leave an older one when the two disagree). It
+also holds the two files' digest, and a test fails when either changes without a new version, so the
+bump can't be forgotten. The Neovim plugin hands each build's copies to auto-core, the one writer
 that brings a KB up to them, so an agent always starts on the installed AutoDoc's operations
 document.
 
 In the code: `lua/autodoc/kb/managed.lua`, `lua/autodoc/kb/version.lua`,
-`lua/autodoc/kb/templates/KB_OPERATIONS.md`
+`lua/autodoc/kb/templates/KB_OPERATIONS.md`, `kbversion.go`
 
 ## One frontmatter schema
 
