@@ -862,9 +862,10 @@ the session doesn't start until someone answers it.
   found again, which costs a stat when nothing changed.
 - mise can be held up while other agents start: a wrapper that runs `mise use` on each launch takes
   mise's lock, or checks its remote. So `mise which` is bounded at 5 s, and asked once more, bounded
-  at 15 s, when that runs out. When mise still can't answer, the binary the same lookup (program,
-  PATH, folder) last resolved to is taken, if it's still there and still reads as a Claude Code:
-  this process's answer, else the one kept in the file beside the store.
+  at 15 s, when that runs out. When mise still can't answer, nothing is taken in its place, not even
+  the binary an earlier lookup found: the launcher may run another one now (the user's mise selection
+  changed), and settings naming hooks that one doesn't know can stall its start. The floor is safe;
+  a guessed binary isn't.
 - The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
   what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
   `SessionStart` alone, and registers without `prompts`.

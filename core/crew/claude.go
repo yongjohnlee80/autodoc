@@ -197,9 +197,6 @@ type claudeCached struct {
 	Size  int64           `json:"size"`
 	MTime int64           `json:"mtime"`
 	Knows map[string]bool `json:"knows"`
-	// For are the lookups (claudeLookup) that last resolved to this binary: what ClaudeOf takes when
-	// a later run of the same lookup can't ask mise (lastClaude).
-	For []string `json:"for,omitempty"`
 }
 
 func readClaudeCache(cache string) []claudeCached {
@@ -229,20 +226,8 @@ func keepClaudeHooks(cache string, key claudeBinary, k ClaudeHooks) {
 	if cache == "" {
 		return
 	}
-	var kept []string // the lookups the path's earlier entry was the answer for
-	all := slices.DeleteFunc(readClaudeCache(cache), func(c claudeCached) bool {
-		if c.Path == key.path {
-			kept = c.For
-		}
-		return c.Path == key.path
-	})
-	all = append(all, claudeCached{Path: key.path, Size: key.size, MTime: key.mtime, Knows: k, For: kept})
-	writeClaudeCache(cache, all)
-}
-
-// writeClaudeCache writes all into cache, the oldest dropped past claudeCacheLimit, through a
-// temporary file renamed over it.
-func writeClaudeCache(cache string, all []claudeCached) {
+	all := slices.DeleteFunc(readClaudeCache(cache), func(c claudeCached) bool { return c.Path == key.path })
+	all = append(all, claudeCached{Path: key.path, Size: key.size, MTime: key.mtime, Knows: k})
 	if len(all) > claudeCacheLimit {
 		all = all[len(all)-claudeCacheLimit:]
 	}
@@ -334,64 +319,15 @@ var (
 	claudeFindRetry   = 15 * time.Second
 )
 
-// claudeLookup is one lookup of ClaudeOf: the program, the PATH and the folder it's found from.
-func claudeLookup(program, path, dir string) string { return program + "\x00" + path + "\x00" + dir }
-
-// claudeLast is the binary each lookup (claudeLookup) last resolved to, in this process.
-var claudeLast sync.Map
-
-// rememberClaude keeps bin as the answer to lookup: in this process, and in cache (claudeCached.For),
-// for a later process.
-func rememberClaude(cache, lookup, bin string) {
-	claudeLast.Store(lookup, bin)
-	if cache == "" {
-		return
-	}
-	real, err := filepath.EvalSymlinks(bin)
-	if err != nil {
-		return
-	}
-	all, found := readClaudeCache(cache), false
-	for i := range all {
-		all[i].For = slices.DeleteFunc(all[i].For, func(f string) bool { return f == lookup })
-		if all[i].Path == real {
-			all[i].For, found = append(all[i].For, lookup), true
-		}
-	}
-	if found {
-		writeClaudeCache(cache, all)
-	}
-}
-
-// lastClaude is the binary lookup last resolved to, and what it knows, when that binary is still
-// there and still reads as a Claude Code: this process's answer first, else cache's.
-func lastClaude(cache, lookup string) (string, ClaudeHooks, bool) {
-	var cands []string
-	if v, ok := claudeLast.Load(lookup); ok {
-		cands = append(cands, v.(string))
-	}
-	for _, c := range readClaudeCache(cache) {
-		if slices.Contains(c.For, lookup) {
-			cands = append(cands, c.Path)
-		}
-	}
-	for _, bin := range cands {
-		if k, err := ClaudeKnowsIn(bin, cache); err == nil {
-			return bin, k, true
-		}
-	}
-	return "", nil, false
-}
-
 // ClaudeOf is the Claude Code binary program runs, and what it knows (ClaudeKnowsIn, cache), found
 // as a shell in dir with PATH path finds it: a path (relative to dir) is that file; a name is the
 // first file on path that reads as a Claude Code. A mise shim (a link to mise) is the tool mise runs
 // for it there (`mise which`). A file that doesn't read as one (a wrapper script) is taken to run the
 // same CLI as mise's or a later one on path, which are tried next: mise's tool for the name, then
-// the later files on path. The binary a name resolves to is remembered (rememberClaude): when mise
-// can't answer (it timed out or failed, as it can while other agents start), the binary the same
-// lookup resolved to last is taken, if it's still there and still reads as a Claude Code. The error
-// says first why mise didn't answer, if it didn't, then names every file tried.
+// the later files on path. When mise can't answer (it timed out or failed, as it can while other
+// agents start), nothing is taken in its place: a binary an earlier lookup resolved to may no longer
+// be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
+// The error says first why mise didn't answer, if it didn't, then names every file tried.
 func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	if strings.Contains(program, "/") {
 		bin := program
@@ -429,11 +365,6 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		}
 		return w
 	}
-	lookup := claudeLookup(program, path, dir)
-	found := func(bin string, k ClaudeHooks) (string, ClaudeHooks, error) {
-		rememberClaude(cache, lookup, bin)
-		return bin, k, nil
-	}
 	for i, hit := range hits {
 		real, err := filepath.EvalSymlinks(hit)
 		if err != nil {
@@ -446,20 +377,17 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			}
 		}
 		if k, ok := try(bin); ok {
-			return found(bin, k)
+			return bin, k, nil
 		}
 		if i == 0 && !triedMise && len(mise) > 0 { // a wrapper first: mise's own, before the later ones
 			if w := which(mise[0]); w != "" {
 				if k, ok := try(w); ok {
-					return found(w, k)
+					return w, k, nil
 				}
 			}
 		}
 	}
 	if miseFailed != "" {
-		if bin, k, ok := lastClaude(cache, lookup); ok {
-			return bin, k, nil
-		}
 		return "", nil, fmt.Errorf("crew: %s, and none of %s reads as a Claude Code", miseFailed, strings.Join(tried, ", "))
 	}
 	return "", nil, fmt.Errorf("crew: none of %s reads as a Claude Code", strings.Join(tried, ", "))
