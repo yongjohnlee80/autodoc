@@ -364,7 +364,8 @@ page's offset, which the last page leaves out. An offset past the end is an empt
 read whole on each call, so pages are offsets into its order, with no snapshot across them. A large
 KB's unresolved links ran to a megabyte in one reply, too much for an agent to read. A session
 below 47 keeps the one-reply list, and is refused `limit` and `offset`. The relations drawers, the
-window's and Neovim's, read every page for a document's supersession loops.
+window's and Neovim's, read every page for a document's supersession loops, up to 1000 pages each;
+past that, they show the loops of the pages read.
 
 In the code: `rpc/graph.go`, `rpc/unresolvedpages_test.go`, `tui/relations.go`,
 `lua/autodoc/relations.lua`

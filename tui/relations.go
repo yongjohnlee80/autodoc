@@ -268,7 +268,7 @@ func (r *related) load(ws, p string) {
 		}
 		// the supersession relations of the workspace that resolve or not, and loop: this one's, on
 		// every page (protocol 47; a daemon before it answers the whole list)
-		for offset, pages := int64(0), 0; ; pages++ {
+		for offset, pages := int64(0), 1; ; pages++ { // pages: the calls made, this one included
 			opts := map[string]any{"kinds": []any{"supersedes", "superseded_by"}}
 			if offset > 0 {
 				opts["offset"] = offset
@@ -385,8 +385,9 @@ func (r *related) depth() {
 	r.ofPage()
 }
 
-// maxUnresolvedPages bounds the pages the drawer reads of graph.unresolved, so a daemon that never
-// ends its pages can't hold the drawer's read forever.
+// maxUnresolvedPages bounds the calls the drawer makes of graph.unresolved, so a daemon that never
+// ends its pages can't hold the drawer's read forever: 1000, as Neovim's relations.load. A KB past
+// it shows the loops of the pages read.
 const maxUnresolvedPages = 1000
 
 // unresolvedPageOf is one graph.unresolved answer: its rows, and the next page's offset when there
