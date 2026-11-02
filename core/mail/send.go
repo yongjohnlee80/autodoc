@@ -827,13 +827,16 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 				out.Items = append(out.Items, Item{Delivery: d, Message: msg, From: from})
 			}
 		}
-		bound, err := tx.BoundTo(s.ID)
+		// held: the session's mail (its profile's, unbound or bound to it, as owned reads a
+		// delivery) leased under a lease that hasn't lapsed; a delivery doesn't record the session
+		// that leased it, and a profile has one live session
+		unhandled, err := tx.Unhandled(s.Profile)
 		if err != nil {
 			return err
 		}
 		now := tx.Now().UnixNano()
-		for _, d := range bound {
-			if d.State == Leased && d.LeaseUntil != nil && *d.LeaseUntil > now {
+		for _, d := range unhandled {
+			if (d.Session == "" || d.Session == s.ID) && d.State == Leased && d.LeaseUntil != nil && *d.LeaseUntil > now {
 				out.Held++
 			}
 		}
