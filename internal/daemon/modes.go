@@ -119,7 +119,12 @@ func (m *Workspaces) SetTodoStores(list TodoStores) {
 				return
 			case <-m.storesDirty:
 				seen := m.storesWant.Load() // every change asked before this read is in it
-				m.rereadTodoStores()
+				if err := m.rereadTodoStores(); err != nil {
+					// not read, or not re-indexed: the waiting verbs are not told it was, and it is
+					// read again shortly (their wait is bounded, and logs)
+					time.AfterFunc(storesRetry, m.signalStores)
+					continue
+				}
 				m.storesReadThrough(seen)
 			case <-poll.C:
 				if m.varsFilesChanged() {
@@ -154,6 +159,14 @@ func (m *Workspaces) varsFilesChanged() bool {
 // reads it once for every call made while it was reading.
 func (m *Workspaces) TodoStoresChanged() {
 	m.storesWant.Add(1)
+	m.signalStores()
+}
+
+// storesRetry is how soon a read of the registry that failed is tried again.
+const storesRetry = time.Second
+
+// signalStores wakes the reader, never waiting.
+func (m *Workspaces) signalStores() {
 	select {
 	case m.storesDirty <- struct{}{}:
 	default: // a read is pending already: it sees this change too
@@ -194,9 +207,10 @@ func (m *Workspaces) TodoStoresSettled(ctx context.Context) error {
 // rereadTodoStores reads the registry again. When what the workspaces see changed, every served
 // workspace re-indexes the documents whose mode or store changed: their indexer version tells
 // them, no file changed (docs/decisions/todos.md#which-paths-are-graph-only).
-func (m *Workspaces) rereadTodoStores() {
-	if !m.readTodoStores() {
-		return
+func (m *Workspaces) rereadTodoStores() error {
+	changed, err := m.readTodoStores()
+	if err != nil || !changed {
+		return err
 	}
 	m.mu.Lock()
 	var ids []int64
@@ -204,31 +218,35 @@ func (m *Workspaces) rereadTodoStores() {
 		ids = append(ids, s.id)
 	}
 	m.mu.Unlock()
+	var first error
 	for _, id := range ids {
-		m.revalidate(id)
+		if err := m.revalidate(id); err != nil && first == nil {
+			first = err
+		}
 	}
+	return first
 }
 
 // readTodoStores reads the registry into the snapshot every workspace's modes read, and reports
-// whether it changed.
-func (m *Workspaces) readTodoStores() bool {
+// whether it changed, or why it could not be read (the workspaces keep the stores they had).
+func (m *Workspaces) readTodoStores() (bool, error) {
 	m.mu.Lock()
 	list := m.todoStores
 	m.mu.Unlock()
 	if list == nil {
-		return false
+		return false, nil
 	}
 	got, err := list(m.ctx)
 	if err != nil {
 		logger.Warning(m.opts.Log, err, "reading the todo stores: the workspaces keep the stores they had")
-		return false
+		return false, err
 	}
 	g := newRegistry(got)
 	if old := m.stores.Load(); old != nil && old.same(g) {
-		return false
+		return false, nil
 	}
 	m.stores.Store(g)
-	return true
+	return true, nil
 }
 
 // taskCheck is the registry's check of a task file's frontmatter; nil before it is read.
