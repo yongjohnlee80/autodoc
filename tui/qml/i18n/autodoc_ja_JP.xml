@@ -5365,6 +5365,30 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>テーマ: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 はタスクとともに %2 に移動しました: バッファも追従します</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 はタスクとともに %2 に移動しました: バッファも追従し、未保存の編集は保持されます。移動先のテキストが異なるため、次に開くか保存するときに確認します</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 はタスクとともに %2 に移動しましたが、そのファイルは別のバッファで開かれています: このバッファは未保存の編集を保持し、保存は拒否されます</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1 のタスクは削除されました: バッファを閉じました</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1 のタスクは削除されました: 未保存の編集は保持されますが、タスクが再び書き込まれないよう保存は拒否されます</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 は保存されません: タスクが移動または削除されており、ここに書き込むとタスクの 2 つ目のファイルができてしまいます</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>ToDo: %1 に新しいストアを作成</translation>

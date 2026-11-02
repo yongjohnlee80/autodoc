@@ -459,6 +459,7 @@ func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *st
 	b.file.raw = raw
 	b.file.derived = derivedOf(p, raw)
 	b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // read or written just now
+	b.file.taskGone = false
 	h.watchFile(b)
 	b.buf.SetName(docKey(fileRef{ws, p}))
 	if b != h.active {
@@ -597,11 +598,13 @@ func (h *Host) recheckFile() {
 
 // recheckBuffer checks b's file against the disk: kept as it is at the version it was read at; read
 // again, the cursor where it was, when it changed and has no unsaved changes (one that has finds
-// out at its save, as a conflict); when it is gone, closed, after asking over unsaved changes, whose
-// save writes it anew. A save that lands while it reads moves b's version on, and the read, older,
-// is dropped.
+// out at its save, as a conflict); when it is gone, it follows its task if it was a todo task's
+// (todomove.go), and is otherwise closed, after asking over unsaved changes, whose save writes it
+// anew. A save that lands while it reads moves b's version on, and the read, older, is dropped.
 func (h *Host) recheckBuffer(b *openBuffer) {
 	tk, ws, p, read, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.version, b.file.raw
+	abs := h.pathOnDisk(ws, p)
+	hint := h.todoMoveOf(abs)
 	// where it went, a sentence each, as every language says them
 	gone, ask := "autodoc.notice.files.is_gone_from_the_workspace_closed", "close_gone_from_the_workspace"
 	if ws == "" {
@@ -609,10 +612,14 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 	}
 	type answer struct {
 		content, version string
+		fate             taskFate // gone: what became of its task
 		err              error
 	}
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(ctx, ws, p, raw)
+		if code(err) == rpc.CodeNotFound {
+			return answer{err: err, fate: h.taskFateOf(ctx, ws, p, abs, raw, hint)}
+		}
 		if err != nil {
 			return answer{err: err}
 		}
@@ -624,6 +631,9 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 			return
 		}
 		switch {
+		case code(a.err) == rpc.CodeNotFound && b.file.taskGone:
+			// settled already: its task is gone from this path for good
+		case code(a.err) == rpc.CodeNotFound && h.followTask(b, a.fate):
 		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
 			if !b.file.dirty {
 				h.dropBuffer(b)
@@ -782,6 +792,12 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		return
 	case who.gated() && ws != "" && ws != who.ws:
 		h.notify(fmt.Sprintf("%s is outside the workspace: a script may not save it", p))
+		return
+	}
+	if b.file.taskGone {
+		// a todo task's file gone for good (todomove.go): written again, it would be a second file
+		// of the task, or a removed one back
+		h.notify(h.trf("autodoc.notice.todomove.save_refused", p))
 		return
 	}
 	if b.file.disk == diskDeleted {

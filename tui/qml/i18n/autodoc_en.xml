@@ -5459,6 +5459,30 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>theme: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 moved to %2 with its task: the buffer follows it</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1's task was removed: its buffer is closed</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>todos: a new store in %1</translation>

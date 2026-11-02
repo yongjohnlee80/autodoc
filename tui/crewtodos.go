@@ -44,6 +44,9 @@ import (
 // skipped (a resync's snapshot too), and the stores read are kept in <agentDir>/.crew-todos/<scope>
 // once their history is behind the cursor.
 //
+// The same read tells the open buffers each task file a change moved, rewrote or removed, so a buffer
+// on a moved task's file follows it (docs/decisions/editor.md#a-tasks-file-follows-its-task).
+//
 // It reads at each claim (a start, a reconnect) and at each todos.changed event. An assignment whose
 // send has no outcome yet (a lost answer, a dropped connection) leaves its change unacked, and the
 // feed reads again todoFeedRetry later.
@@ -69,8 +72,12 @@ type todoFeed struct {
 	retrying bool      // a read again is set for todoFeedRetry
 }
 
-// todoFeedRead is what a read left for the loop: whether a send had no outcome.
-type todoFeedRead struct{ retry bool }
+// todoFeedRead is what a read left for the loop: whether a send had no outcome, and the task files
+// its changes moved, rewrote or removed, for the open buffers (todomove.go).
+type todoFeedRead struct {
+	retry bool
+	files []todoFileChange
+}
 
 // poll reads every store's changes, one read at a time: asked during a read, it reads once more
 // after it. A window holding no scope reads nothing.
@@ -87,7 +94,11 @@ func (f *todoFeed) poll() {
 	run, start := f.h.run, f.start
 	f.h.c.Go(func(ctx context.Context) any { return f.read(ctx, scope, run, epoch, start) }, func(v any) {
 		f.polling = false
-		if r, _ := v.(todoFeedRead); r.retry && !f.retrying {
+		r, _ := v.(todoFeedRead)
+		if len(r.files) > 0 && f.h.onTodoFiles != nil {
+			f.h.onTodoFiles(r.files)
+		}
+		if r.retry && !f.retrying {
 			f.retrying = true
 			f.h.c.After(todoFeedRetry, func() { f.retrying = false; f.poll() })
 		}
@@ -139,6 +150,8 @@ func (f *todoFeed) read(ctx context.Context, scope, run string, epoch int64, sta
 		}
 		s.news = !seen[s.id]
 		outcome, past := d.store(ctx, s, start)
+		out.files = append(out.files, d.files...)
+		d.files = nil
 		if outcome == todoRetry {
 			out.retry = true
 		}
@@ -159,7 +172,8 @@ type todoDelivery struct {
 	scope string
 	run   string
 	epoch int64
-	own   map[string]bool // the codenames of the crew profiles in the scope; nil until asked
+	own   map[string]bool  // the codenames of the crew profiles in the scope; nil until asked
+	files []todoFileChange // the store's task files its changes moved, rewrote or removed
 }
 
 // store reads one store's changes after the consumer's cursor and acks what it handled. past is
@@ -204,6 +218,9 @@ func (d *todoDelivery) store(ctx context.Context, s todoFeedStore, start time.Ti
 			old := s.news && beforeStart(str(c, "at"), start)
 			if !old {
 				past = true
+				if from := str(c, "from_path"); from != "" { // a creation names no file a buffer could be on
+					d.files = append(d.files, todoFileChange{store: s.path, from: from, to: str(c, "to_path"), removed: str(c, "op") == "delete"})
+				}
 			}
 			if str(c, "kind") == "assign" && !old {
 				key := fmt.Sprintf("todo-%s-%d", s.id, seq)

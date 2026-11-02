@@ -121,7 +121,28 @@ Archived) and a Variables tab. Active buckets list from the read cache; the Arch
 months with their counts and decodes a month only when it is opened, since archives grow to
 thousands of files.
 
+A write the daemon refuses (a task changed meanwhile, or a create refused as a second file of a
+task) reads the store again, so the view never keeps showing a row as it was before the refusal.
+
 In the code: `tui/todos.go`, `tui/todos_status.go`, `tui/todos_vars.go`
+
+## A task's file is written at one path
+
+The daemon moves a task's file between buckets itself, through the store's own documents. A client
+can also write a store's files, with `doc.write`, `doc.write_raw` or `file.write`. When such a
+write creates a new file in a bucket (or an archive month) and the file's frontmatter `id` matches,
+byte for byte, a task that is at another path, the daemon refuses it with a conflict that names the
+task and where it is.
+
+The check never blocks the daemon's own moves and restores, nor a save of a task's file at its own
+path.
+
+Why: an editor holding a task's file open after the daemon moved it would otherwise write the task
+back into its old bucket, which leaves one task in two files. The editor follows the move itself
+(see [editor: A task's file follows its task](editor.md#a-tasks-file-follows-its-task)); this check
+catches every other client.
+
+In the code: `core/todo/onepath.go`, `rpc/doc.go`, `rpc/files.go`, `app/serve.go`
 
 ## AutoDoc assigns to its own agents, and to another host's through the crew
 

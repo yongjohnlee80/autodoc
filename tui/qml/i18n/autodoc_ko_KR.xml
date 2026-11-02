@@ -5361,6 +5361,30 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>테마: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동됨: 버퍼가 따라갑니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동됨: 버퍼가 따라가며 저장하지 않은 편집은 유지됩니다. 그곳의 텍스트가 달라 다음에 열거나 저장할 때 묻습니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동했으며 그 파일은 다른 버퍼에 열려 있습니다: 이 버퍼는 저장하지 않은 편집을 유지하고, 저장은 거부됩니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1의 작업이 제거됨: 버퍼를 닫았습니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1의 작업이 제거됨: 저장하지 않은 편집은 유지되지만, 작업이 다시 기록되지 않도록 저장은 거부됩니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1은(는) 저장되지 않음: 작업이 이동되었거나 제거되었으며, 여기에 쓰면 작업의 두 번째 파일이 생깁니다</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>할 일: %1에 새 저장소</translation>
