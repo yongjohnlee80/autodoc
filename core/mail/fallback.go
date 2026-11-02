@@ -49,9 +49,17 @@ const (
 )
 
 // When a delivery falls back (docs/decisions/crew.md#the-fallback-exactly-once): it was never
-// leased, its recipient has a live session, and either that session has been unreachable since
-// fallbackUnreachable after the message was sent, or crew.WakeUnanswered has passed since.
+// leased, its recipient has a live session, and, counted from the later of the message's creation
+// and that session's start, either fallbackUnreachable has passed with the session unreachable, or
+// FallbackAfter has. From the session's start too, so a message that waited across its recipient's
+// restart gets the whole window in the new session.
 const fallbackUnreachable = 30 * time.Second
+
+// FallbackAfter is how long a delivery to a reachable live session waits to be received before it
+// falls back. Its own window, longer than a ring's (crew.WakeUnanswered): an agent busy in a long
+// step is rung again after each unanswered wait, backing off (at 0:00, 2:05, 4:35 and 8:35), before
+// its host is handed the message.
+const FallbackAfter = 10 * time.Minute
 
 // fallbackLease is how long a host holds a job it took before the job is offered to it again.
 const fallbackLease = 60 * time.Second
@@ -73,7 +81,7 @@ const fallbackBatch = expireBatch
 func (m *Manager) fallBackDue(tx Tx) error {
 	now := tx.Now()
 	unreachable := now.Add(-fallbackUnreachable).UnixNano()
-	unanswered := now.Add(-crew.WakeUnanswered).UnixNano()
+	unanswered := now.Add(-FallbackAfter).UnixNano()
 	for {
 		due, err := tx.FallbackDue(unreachable, unanswered, fallbackBatch)
 		if err != nil {
@@ -158,7 +166,7 @@ func (m *Manager) nextDeadline(tx Tx) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	fb, ok, err := tx.NextFallbackAt(int64(fallbackUnreachable), int64(crew.WakeUnanswered))
+	fb, ok, err := tx.NextFallbackAt(int64(fallbackUnreachable), int64(FallbackAfter))
 	if err != nil || !ok {
 		return at, has, err
 	}

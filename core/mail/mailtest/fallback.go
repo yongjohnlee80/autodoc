@@ -59,7 +59,7 @@ func newFallbackRig(t *testing.T, h Harness) *fbRig {
 // fallbackWindow is how long a delivery to a reachable live session waits to be received before it
 // falls back (mail.FallbackAfter), counted from the later of its message's creation and that
 // session's start.
-const fallbackWindow = 10 * time.Minute
+const fallbackWindow = mail.FallbackAfter
 
 // restart registers gold again in the same epoch, as its host does when the agent's process was
 // lost: its old session is superseded and the new one is gold's live session from now.

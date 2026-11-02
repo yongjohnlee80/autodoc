@@ -238,34 +238,34 @@ func (t *memTx) NextDeadline() (int64, bool, error) {
 }
 
 // fallbackCandidate is a delivery FallbackDue may answer, whatever the time: queued, never leased,
-// with no job, its recipient live. unreachable says whether that live session can't be woken.
-func (t *memTx) fallbackCandidate(d mail.Delivery) (ok, unreachable bool) {
+// with no job, its recipient live. unreachable says whether that live session can't be woken; since
+// is when its window opens, the later of the message's creation and that session's start.
+func (t *memTx) fallbackCandidate(d mail.Delivery) (ok, unreachable bool, since int64) {
 	if d.State != mail.Queued || d.Attempts != 0 || d.Lease != "" {
-		return false, false
+		return false, false, 0
 	}
 	for _, j := range t.st.jobs {
 		if j.Delivery == d.ID {
-			return false, false
+			return false, false, 0
 		}
 	}
 	s, live, _ := t.LiveSession(d.Recipient)
 	if !live {
-		return false, false
+		return false, false, 0
 	}
 	p, _, _ := t.Profile(d.Recipient)
 	if takes, _ := t.TakesFallbacks(p.Scope); !takes {
-		return false, false
+		return false, false, 0
 	}
 	_, hasEndpoint, _ := t.Endpoint(s.ID)
 	w, _, _ := t.Wake(s.ID)
-	return true, !hasEndpoint || w.Failures >= crew.UnreachableAfter
+	return true, !hasEndpoint || w.Failures >= crew.UnreachableAfter, max(t.st.messages[d.Message].Created, s.Started)
 }
 
 func (t *memTx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]mail.Delivery, error) {
 	return t.where(func(d mail.Delivery) bool {
-		ok, unreachable := t.fallbackCandidate(d)
-		created := t.st.messages[d.Message].Created
-		return ok && (created <= unansweredBefore || unreachable && created <= unreachableBefore)
+		ok, unreachable, since := t.fallbackCandidate(d)
+		return ok && (since <= unansweredBefore || unreachable && since <= unreachableBefore)
 	}, limit), nil
 }
 
@@ -273,13 +273,13 @@ func (t *memTx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, erro
 	var at int64
 	has := false
 	for _, d := range t.st.deliveries {
-		ok, gone := t.fallbackCandidate(d)
+		ok, gone, since := t.fallbackCandidate(d)
 		if !ok {
 			continue
 		}
-		due := t.st.messages[d.Message].Created + unanswered
+		due := since + unanswered
 		if gone {
-			due = t.st.messages[d.Message].Created + unreachable
+			due = since + unreachable
 		}
 		if !has || due < at {
 			at, has = due, true

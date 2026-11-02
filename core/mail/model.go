@@ -147,14 +147,15 @@ type Tx interface {
 
 	// FallbackDue is the queued deliveries never leased (Attempts 0) with no fallback job, whose
 	// recipient has a live session and a scope whose host takes fallbacks (TakeFallbacks in its
-	// current epoch), and whose message was created at or before unansweredBefore,
-	// or at or before unreachableBefore with that session unreachable (no endpoint, or
-	// crew.UnreachableAfter failed wakes): in seq order, at most limit
+	// current epoch), and whose message was created, and that session started, at or before
+	// unansweredBefore, or both at or before unreachableBefore with that session unreachable (no
+	// endpoint, or crew.UnreachableAfter failed wakes): in seq order, at most limit
 	// (docs/decisions/crew.md#the-fallback-exactly-once).
 	FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]Delivery, error)
 	// NextFallbackAt is the earliest instant a queued delivery with no job falls back by time alone,
-	// given its message's creation: created+unreachable when its recipient's live session is
-	// unreachable, else created+unanswered. false when there is none.
+	// from the later of its message's creation and its recipient's live session's start (since):
+	// since+unreachable when that session is unreachable, else since+unanswered. false when there is
+	// none. Never earlier than FallbackDue would answer: the scheduler's timer waits for it.
 	NextFallbackAt(unreachable, unanswered int64) (int64, bool, error)
 	// TakeFallbacks records that host, at epoch, takes fallback jobs (crew_host.fallbacks): its
 	// scope's deliveries may fall back from now on, until its epoch changes.

@@ -84,7 +84,7 @@ func NoticeFor(via MailVia) string {
 const (
 	wakePermits    = 4                // calls out at once, whatever the sessions
 	wakeCallLimit  = 10 * time.Second // one waker call's deadline
-	WakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out; mail's fallback is due after it too
+	WakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out, as a failed wake (mail's fallback has its own window, mail.FallbackAfter)
 	wakeLookBatch  = 64               // rows one look reserves from, before it looks again
 )
 

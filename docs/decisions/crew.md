@@ -361,7 +361,7 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   the state. Registrations after a daemon restart don't wait.
 - The scheduler is one state machine per session (idle, in flight, awaiting a receive), driven by
   pokes after each committed write and by one timer on the earliest deadline. At most 4 calls run at
-  once, each with a 10 s deadline. An accepted notice waits 2 minutes for a receive. Failures back
+  once, each with a 10 s deadline. An accepted notice waits 2 minutes for a receive, then counts as a failed wake. Failures back
   off 5 s, 30 s, 2 minutes, then every 10 minutes; after 5 in a row the session shows as unreachable,
   and your inbox hears of it. Attempts an earlier daemon run left in flight are retried at start.
 - A wake that finds the endpoint gone for certain makes the session unreachable at once: its socket
@@ -529,9 +529,16 @@ Mail an agent doesn't receive in time goes to it some other way, once: its host 
 it in its file mailbox.
 
 - **When.** A delivery falls back when it was never leased (an agent that leased it may have read
-  it), its recipient has a live session (an ended one's mail waits for the next), and either that
-  session has been unreachable (no endpoint, or 5 failed wakes) for 30 s since the message was
-  sent, or 2 min have passed since (the first ring unanswered).
+  it), its recipient has a live session (an ended one's mail waits for the next), and, counted from
+  the later of the message's creation and that session's start, either the session has been
+  unreachable (no endpoint, or 5 failed wakes) for 30 s, or 10 min have passed (`FallbackAfter`).
+- **Why 10 min, and from the session's start.** A ring's own wait (2 min) is not the fallback's: an
+  agent busy in a long step accepts its notice and receives only when the step ends. Each
+  unanswered wait counts as a failed wake, so it is rung again, backing off: at 0:00, 2:05, 4:35 and
+  8:35, four rings before its fallback, and 4 failures, fewer than the 5 that would make it
+  unreachable first. A profile has one live session (registering again supersedes the old one), and
+  its start counts: a message that waited across its recipient's restart gets the whole window in
+  the new session.
 - **Only for a host that takes part.** A host takes fallback jobs by asking for them
   (`mail.fallbacks`), and does so for its current epoch only. A host that never asks (an older
   build) keeps its agents' mail queued, woken as before; one restarted into a new epoch takes part
