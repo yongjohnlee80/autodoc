@@ -71,6 +71,9 @@ type openedFile struct {
 	// the newer version a change found, diskAsked the one the user was last asked about
 	disk                   diskState
 	diskVersion, diskAsked string
+	// taskGone is a todo task's file gone from its path for good, its task removed or open in
+	// another buffer (todomove.go): its save is refused, never a second file of the task
+	taskGone bool
 }
 
 // untitled is the draft's name wherever a file's path would show.
