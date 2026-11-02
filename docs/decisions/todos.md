@@ -141,7 +141,7 @@ agents of one codename are two rows. A window holding no crew scope lists its ow
   fallback, nothing typed into another host's terminal. An agent no wake reaches now stays
   choosable; the notice says it is queued and why.
 - Only this choice sends a `Task:` request to another scope as the user. An assignment made
-  anywhere else reaches only the window's own agents, forwarded, never as the user's instruction.
+  anywhere else reaches only the window's own agents, as a notice that states the assignment.
 
 An assignee another tool wrote keeps that tool's form.
 
