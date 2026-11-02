@@ -296,7 +296,10 @@ func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
 // error in it as golib wrote it.
 func TestThePanesChartNoticeIsInTheUIsLanguage(t *testing.T) {
 	r, m := paneDrawer(t, &fakeBrowser{})
-	onLoop(r, func() bool { r.h.useLanguage("ko_KR"); return true })
+	// chosen as the user chooses it (Options › Language): the start's preference.list, still in
+	// flight, can't put English back over it, as it could over a bare useLanguage (1 in 10, canary
+	// f5563fe)
+	onLoop(r, func() bool { r.h.setLanguage("ko_KR"); return true })
 	req := guiwidget.DiagramRequest{Lang: "vega-lite", Src: `{"data":{"values":[]},"mark":"bar","transform":[]}`, Width: 400, Scale: 1}
 	ready := make(chan struct{}, 1)
 	a := onLoop(r, func() guiwidget.DiagramAnswer {
