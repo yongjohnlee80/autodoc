@@ -342,7 +342,7 @@ and its arguments, so there is no schema to look up), since its rules allow the 
 command.
 
 The notice names who the mail is from, so an agent can tell a request from the user from a peer's
-note before it receives: "AutoDoc mail is waiting for you: 1 from gold-man (claude), 1 from user.
+note before it receives: "AutoDoc mail is waiting for you: 1 from gold (claude), 1 from user.
 Run: autodoc mail receive", and the MCP form likewise.
 - Only daemon-set fields are named: each sender's address as `mail receive` gives it (a codename,
   `user`, `codename@project`) and its profile's kind. Nothing a peer wrote (no subject, no body)
