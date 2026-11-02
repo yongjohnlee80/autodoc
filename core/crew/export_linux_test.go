@@ -2,7 +2,11 @@
 
 package crew
 
-import "golang.org/x/sys/unix"
+import (
+	"context"
+
+	"golang.org/x/sys/unix"
+)
 
 // ReuseObservedChild makes the next descendant walk see parent's child from as process to: as if
 // from ended, and its pid went to to, between the walk's observation and its opens. to keeps
@@ -92,5 +96,5 @@ func OpenObserved(pid, ppid, pgid int, start string, uid int) bool {
 // CodexServerOf is what a Codex endpoint's registration records of its server: its socket and the
 // process listening there.
 func (m *Manager) CodexServerOf(kind, locator string) (string, string) {
-	return m.codexServerOf(kind, locator)
+	return m.codexServerOf(context.Background(), kind, locator)
 }
