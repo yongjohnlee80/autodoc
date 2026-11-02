@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -113,4 +114,35 @@ func TestUnresolvedPagesAreBounded(t *testing.T) {
 	}
 	refused(old, map[string]any{"limit": int64(2)}, "protocol 47")
 	refused(old, map[string]any{"offset": int64(2)}, "protocol 47")
+}
+
+// TestUnresolvedPagesHoldFiveHundredByDefault: with no limit, a page holds 500 rows; a list of 501
+// comes in two pages, the second at offset 500 holding the last row.
+func TestUnresolvedPagesHoldFiveHundredByDefault(t *testing.T) {
+	r := serve(t)
+	links := make([]string, 501)
+	for i := range links {
+		links[i] = fmt.Sprintf("[[gone-%03d]]", i)
+	}
+	if _, err := r.fsys.WriteFile(context.Background(), "many.md",
+		strings.NewReader("# Many\n\n"+strings.Join(links, " ")+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	cur, _, err := helloAs(r, Protocol, "a-new-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "many.md's 501 links indexed", func() bool {
+		res, err := cur.Call(context.Background(), "graph.unresolved", "kb", map[string]any{"limit": int64(2000)})
+		page, _ := res.(map[string]any)
+		return err == nil && page["count"] == int64(501)
+	})
+	first := call(t, cur, "graph.unresolved", "kb").(map[string]any)
+	if n := len(first["unresolved"].([]any)); n != 500 || first["count"] != int64(501) || first["next"] != int64(500) {
+		t.Fatalf("the first page: %d rows, count %v, next %v; want 500, 501, 500", n, first["count"], first["next"])
+	}
+	last := call(t, cur, "graph.unresolved", "kb", map[string]any{"offset": int64(500)}).(map[string]any)
+	if _, more := last["next"]; more || len(last["unresolved"].([]any)) != 1 {
+		t.Errorf("the page at 500: %v, want the last row and no next", last)
+	}
 }

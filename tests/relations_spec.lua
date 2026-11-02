@@ -168,6 +168,25 @@ t.section("load: the loops on every page of graph.unresolved", function()
   t.eq(offsets, { 0, 1 }, "pages asked at offset 0, then 1")
 end)
 
+t.section("load: at most 1000 pages of graph.unresolved", function()
+  -- a daemon whose pages never end: load stops after 1000 calls, the window's bound too
+  -- (tui/relations_unit_test.go), never one more, and still has the loops it read
+  t.eq(relations.MAX_UNRESOLVED_PAGES, 1000, "the bound is 1000 pages")
+  local calls = 0
+  local function request(method, params, cb)
+    if method ~= "graph.unresolved" then return vim.schedule(function() cb({}, nil) end) end
+    calls = calls + 1
+    local offset = (params[2] or {}).offset or 0
+    vim.schedule(function()
+      cb({ unresolved = { { src = "doc.md", raw = "loop.md", reason = "cycle" } }, count = 2 ^ 40, next = offset + 1 }, nil)
+    end)
+  end
+  local rows, _, err = t.await(60000, function(done) relations.load("kb", "doc.md", false, done, request) end)
+  t.ok(err == nil, "no error", err and err.message)
+  t.eq(calls, 1000, "graph.unresolved asked 1000 times")
+  t.ok(vim.tbl_contains(texts(rows), "loop.md  (supersession goes round a loop)"), "the loops read are shown")
+end)
+
 local view
 local function rel_rows() return vim.tbl_filter(function(r) return r.section == "relations" end, view._rows()) end
 local function rel_texts()
