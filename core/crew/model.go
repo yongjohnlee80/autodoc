@@ -52,6 +52,11 @@ type (
 		EndedWhy   string // exit | takeover | reclaim | adopted | start_failed
 		Prompts    bool   // its permission prompts are reported, as its registration said (crew.register's prompts)
 		MailVia    string // how it reads its mail, as its registration said (cli, mcp); "" for its kind's (SessionMailVia)
+		// Server and ServerRef are a Codex session's own app-server, as its endpoint named it when it
+		// registered: its socket (socketKey) and its process (ProcRef). Kept after the session ends,
+		// they prove a server still running to be this store's (crew.bridges); "" for any other.
+		Server    string
+		ServerRef string
 	}
 
 	// Endpoint is how a session is woken (docs/decisions/crew.md#wakers-and-the-wake-scheduler):
@@ -141,6 +146,8 @@ type Tx interface {
 	SessionByInstance(host string, epoch int64, instance string) (Session, bool, error)
 	LiveSession(profile string) (Session, bool, error)
 	LiveSessionsOfScope(scope string) ([]Session, error)
+	// SessionsByServer are the sessions, live or ended, whose endpoint named server (a socketKey).
+	SessionsByServer(server string) ([]Session, error)
 	PutSession(Session) error
 
 	Wake(session string) (Wake, bool, error)

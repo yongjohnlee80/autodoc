@@ -4,9 +4,11 @@ package crew
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -139,6 +141,80 @@ func readHelper(pid, uid int, boot int64) (helperProc, bool) {
 		p.context = environValue(dir+"/environ", EnvContext) // the host gives its server the session's context
 	}
 	return p, true
+}
+
+// listenerProof is the process holding the unix socket at path, proven for its lifetime: the
+// socket's own peer pidfd (SO_PEERPIDFD), which names the process that listened there and goes
+// dead with it, never a number a later process could hold. Its pid is read from the pidfd, and its
+// reference (ProcRef) while the pidfd shows it alive, before and after: so the reference is that
+// process's own. false when nothing answers, the kernel has no pidfd for the peer, or the peer has
+// ended (a listener that handed its socket to a child and exited proves nothing). Its user is not
+// checked here: codexServerOf takes only a process the scan lists, the store's user's.
+func listenerProof(ctx context.Context, path string) (int, string, bool) {
+	var d net.Dialer
+	c, err := d.DialContext(ctx, "unix", path)
+	if err != nil {
+		return 0, "", false
+	}
+	defer func() { _ = c.Close() }()
+	uc, ok := c.(*net.UnixConn)
+	if !ok {
+		return 0, "", false
+	}
+	raw, err := uc.SyscallConn()
+	if err != nil {
+		return 0, "", false
+	}
+	pidfd, gerr := -1, error(nil)
+	if cerr := raw.Control(func(fd uintptr) {
+		pidfd, gerr = unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_PEERPIDFD)
+	}); cerr != nil || gerr != nil || pidfd < 0 {
+		return 0, "", false
+	}
+	defer func() { _ = unix.Close(pidfd) }()
+	pid := pidfdPID(pidfd)
+	// alive: the pidfd's process runs, and is no zombie (one that ended, not yet reaped, still
+	// takes a signal and keeps its pid); the pid still names it after the state is read, so the
+	// state read was that process's
+	alive := func() bool {
+		if unix.PidfdSendSignal(pidfd, 0, nil, 0) != nil {
+			return false
+		}
+		st, err := readStat(pid)
+		return err == nil && st.state != 'Z' && pidfdPID(pidfd) == pid
+	}
+	if pid <= 0 || !alive() {
+		return 0, "", false
+	}
+	looked := reusedLookup(pid)
+	ref, err := ProcRef(looked)
+	if err != nil || ref == "" || !alive() {
+		return 0, "", false
+	}
+	return looked, ref, true
+}
+
+// reusedLookup, a test's, stands for what a pid number names when the process is looked up: the
+// same pid, except where a test makes it another process's (a reused pid).
+var reusedLookup = func(pid int) int { return pid }
+
+// pidfdPID is the pid pidfd names, from /proc/self/fdinfo; -1 once its process has ended, 0 when it
+// can't be read.
+func pidfdPID(pidfd int) int {
+	b, err := os.ReadFile("/proc/self/fdinfo/" + strconv.Itoa(pidfd))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "Pid:"); ok {
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil {
+				return 0
+			}
+			return n
+		}
+	}
+	return 0
 }
 
 // maxHelperContext is the most of a session context file the scan reads: one is far smaller.

@@ -7913,6 +7913,10 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
         <translation>보조 프로세스 %1개, 그중 고아 %2개. 10분 동안 고아로 남은 프로세스는 데몬이 종료합니다.</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>고아, %1개 아직 실행 중: 데몬이 더 시도하지 않으니 직접 종료하세요</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
         <translation>고아, %1분 후 종료</translation>
@@ -7958,12 +7962,12 @@ H J K L, Shift+화살표   크기 조절</translation>
         <translation>%1 %2의 세부 정보를 복사했습니다</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.ended">
-        <source>%1 %2 ended</source>
-        <translation>%1 %2이(가) 종료되었습니다</translation>
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2이(가) 종료되었습니다. 보유한 모든 프로세스와 함께 종료되었습니다(리더가 종료된 뒤 생성된 프로세스는 추적되지 않습니다)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.killed">
-        <source>%1 %2 ignored the stop and was killed</source>
-        <translation>%1 %2이(가) 중지 요청을 무시해 강제 종료했습니다</translation>
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2이(가) 중지를 무시하여 강제 종료되었습니다. 보유한 모든 프로세스와 함께 종료되었습니다(리더가 종료된 뒤 생성된 프로세스는 추적되지 않습니다)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.gone">
         <source>%1 %2 had already ended</source>

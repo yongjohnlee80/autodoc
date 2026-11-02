@@ -1,4 +1,4 @@
--- 000031 — who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it): the
+-- 000032 — who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it): the
 -- agent whose verified crew session called todos.assign or todos.add, as codename@scope, or the
 -- unverified marker, on its change and on the snapshot row of the task it assigned; '' for the
 -- user's surface, a legacy assignment, or an assignee changed by anything but an assign. The

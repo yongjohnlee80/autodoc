@@ -80,7 +80,14 @@ was killed never removes its own, so each TUI at its start removes the `<pid>.so
 folder that refuse a connection. A socket that answers is another TUI's, and stays.
 
 - An agent calls it as `autodoc --editor <verb> [params]`. Its environment names the socket
-  (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`).
+  (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
+  named `*TOKEN*`, so a Codex agent's token is also a 0600 file in its own folder, which
+  `AUTODOC_EDITOR_CREDENTIAL_FILE` names. `autodoc --editor` reads that file when the token variable
+  is missing, and refuses it if it is a link, isn't a regular file, another user owns it, others can
+  open it, or it holds more than 256 bytes. It opens the file once, without following a link or
+  waiting on a FIFO, checks the file it opened, and reads the token from that same file, so a file
+  put in its place meanwhile is never read. The token itself never appears in a variable Codex's
+  tools can see.
 - The verbs read, find, insert, replace and delete text, list buffers and commands, open a file, and
   run a command line. Each runs on the UI loop, each edit is one undo step, and an edit given the
   revision it read is refused when the text has changed since.
@@ -268,9 +275,14 @@ all, for the daemon's user on its machine:
 - The scan sees every helper of the user's, and several daemons, each with its own store, can run
   at once. A helper missing from this store's rows is no proof of an orphan: it may be another
   daemon's live helper. So an orphan is only a helper this store is proven to own: a bridge whose
-  `--session` is one of this store's sessions, or a Codex server whose own session context (the
-  `AUTODOC_CREW_CONTEXT` the host gives it) names this store and one of its sessions. Any other
-  helper is `foreign` too, "not one of this store's sessions".
+  `--session` is one of this store's sessions, or a Codex server this store recorded. When a
+  Codex session's endpoint registers, its session row keeps the server's socket and the process
+  listening there (its process reference), and keeps them after the session ends. A running
+  server is this store's when a session of the store recorded both that socket and that very
+  process; the socket alone could be a later server's. While the server's own session context
+  file lasts (the `AUTODOC_CREW_CONTEXT` the host gives it, naming this store and one of its
+  sessions), that proves it too. Any other helper is `foreign` too, "not one of this store's
+  sessions".
 - The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
   in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
   between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
@@ -288,9 +300,11 @@ all, for the daemon's user on its machine:
   how many survived, and the window says so. Nothing is claimed ended that wasn't seen to end.
   `term` and `kill` say that every process the kill held ended, no more: a process forked into the
   group after its leader was gone is never taken in, so it can outlive a kill that answers `term`.
-  Taking it in by its group number would risk another group's processes. The daemon's reclaim
-  journals an incomplete kill with its survivors and keeps the orphan's clock, so the next look
-  ends what still runs.
+  Taking it in by its group number would risk another group's processes. The window's notice says
+  so. The daemon's reclaim journals an incomplete kill with its survivors and tries again at the
+  look 10 minutes on, at most 3 times. Then the orphan is flagged for the user ("the daemon
+  stopped trying, it's yours to end", with how many still run), and the daemon neither kills it
+  nor journals it again.
   A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
   helper that leads its own process group is ended with its group. Any other, such as a server
   Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is

@@ -1,4 +1,4 @@
--- 000031 on PostgreSQL, the twin of SQLite's: who made an assignment
+-- 000032 on PostgreSQL, the twin of SQLite's: who made an assignment
 -- (docs/decisions/todos.md#an-assignment-says-who-made-it), codename@scope or the unverified
 -- marker, on its change and its task's snapshot row; '' for the user's surface, a legacy
 -- assignment, or an assignee changed by anything but an assign. The snapshot's id index covers it.

@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -30,6 +32,13 @@ const (
 	cellSpawn = "AUTODOC_BRIDGE_CELL_SPAWN"
 	cellPids  = "AUTODOC_BRIDGE_CELL_PIDS"
 	cellTerm  = "AUTODOC_BRIDGE_CELL_TERM"
+	// cellListen makes the stand-in listen on a unix socket at that path, as a Codex server binds its
+	cellListen = "AUTODOC_BRIDGE_CELL_LISTEN"
+	// cellHandOff (with cellListen): the stand-in listens, starts a child of the same command line
+	// holding the listening socket (cellInherit), writes the child's pid to cellPids, and exits:
+	// the socket's creator gone, a child serving it
+	cellHandOff = "AUTODOC_BRIDGE_CELL_HANDOFF"
+	cellInherit = "AUTODOC_BRIDGE_CELL_INHERIT"
 )
 
 func TestMain(m *testing.M) {
@@ -44,6 +53,61 @@ func TestMain(m *testing.M) {
 func cellProcess() {
 	if os.Getenv(cellTerm) == "ignore" {
 		signal.Ignore(syscall.SIGTERM)
+	}
+	if os.Getenv(cellInherit) != "" {
+		ln, err := net.FileListener(os.NewFile(3, "listener"))
+		if err != nil {
+			os.Exit(5)
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				_ = c.Close()
+			}
+		}()
+	} else if path := os.Getenv(cellListen); path != "" {
+		ln, err := net.Listen("unix", path)
+		if err != nil {
+			os.Exit(4)
+		}
+		if os.Getenv(cellHandOff) != "" {
+			f, err := ln.(*net.UnixListener).File()
+			if err != nil {
+				os.Exit(4)
+			}
+			exe, _ := os.Executable()
+			c := exec.Command(exe)
+			c.Args = os.Args
+			for _, kv := range os.Environ() {
+				if !strings.HasPrefix(kv, cellHandOff+"=") && !strings.HasPrefix(kv, cellListen+"=") {
+					c.Env = append(c.Env, kv)
+				}
+			}
+			c.Env = append(c.Env, cellInherit+"=1")
+			c.ExtraFiles = []*os.File{f}
+			if err := c.Start(); err != nil {
+				os.Exit(3)
+			}
+			pf, err := os.OpenFile(os.Getenv(cellPids), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+			if err != nil {
+				os.Exit(3)
+			}
+			_, _ = pf.WriteString(strconv.Itoa(c.Process.Pid) + "\n")
+			_ = pf.Close()
+			os.Exit(0) // the creator ends; its child serves the socket
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				_ = c.Close()
+			}
+		}()
 	}
 	var chain [][]string
 	_ = json.Unmarshal([]byte(os.Getenv(cellSpawn)), &chain)
@@ -77,7 +141,9 @@ func cellProcess() {
 type cellProc struct {
 	cmd      *exec.Cmd
 	pid      int
-	children []int // the chain, in order: children[0] is pid's child
+	pidFile  string // where it and its chain write their children's pids
+	children []int  // the chain, in order: children[0] is pid's child
+	reap     func() // lets its Wait run: at once, but for a held stand-in (startCellHeld)
 }
 
 // startCell starts argv as a stand-in, leading its own session (setsid, as detachBridge starts a
@@ -90,6 +156,19 @@ func startCell(t *testing.T, argv []string, setsid, ignoreTerm bool, chain ...[]
 
 // startCellEnv is startCell with env added to the stand-in's environment.
 func startCellEnv(t *testing.T, env []string, argv []string, setsid, ignoreTerm bool, chain ...[]string) *cellProc {
+	t.Helper()
+	return startCellReaped(t, true, env, argv, setsid, ignoreTerm, chain...)
+}
+
+// startCellHeld is startCellEnv (its own group, no chain) for a stand-in the test reaps itself
+// (its reap): until then, once it ends, it stays a zombie.
+func startCellHeld(t *testing.T, env []string, argv []string) *cellProc {
+	t.Helper()
+	return startCellReaped(t, false, env, argv, false, false)
+}
+
+// startCellReaped is startCellEnv, its stand-in reaped as it ends when reap holds.
+func startCellReaped(t *testing.T, reap bool, env []string, argv []string, setsid, ignoreTerm bool, chain ...[]string) *cellProc {
 	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
@@ -107,14 +186,19 @@ func startCellEnv(t *testing.T, env []string, argv []string, setsid, ignoreTerm 
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
-	p := &cellProc{cmd: c, pid: c.Process.Pid}
+	hold := make(chan struct{})
+	p := &cellProc{cmd: c, pid: c.Process.Pid, pidFile: pidFile, reap: sync.OnceFunc(func() { close(hold) })}
 	waited := make(chan struct{})
-	go func() { _ = c.Wait(); close(waited) }()
+	go func() { <-hold; _ = c.Wait(); close(waited) }()
+	if reap {
+		p.reap()
+	}
 	t.Cleanup(func() {
 		_ = syscall.Kill(-p.pid, syscall.SIGKILL)
 		for _, k := range p.children {
 			_ = syscall.Kill(k, syscall.SIGKILL)
 		}
+		p.reap()
 		<-waited
 	})
 	deadline := time.Now().Add(10 * time.Second)
@@ -265,6 +349,18 @@ func writeContext(t *testing.T, session string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// waitFor polls cond for up to 10 s.
+func waitFor(cond func() bool) bool {
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return cond()
 }
 
 func agyArgv(session string) []string {
@@ -768,5 +864,157 @@ func TestAGroupKillsTermCoversWhatItHeldOnly(t *testing.T) {
 	}
 	if !running(late) {
 		t.Fatal("a process that appeared in the group after its leader was gone was signalled")
+	}
+}
+
+// An orphan whose reclaim leaves processes running is tried
+// again at the look 10 minutes on, at most 3 times, each journaled with its survivors; then it is
+// flagged for the user (reclaim_stopped, with the survivors) and the daemon neither kills nor
+// journals it again.
+func TestAnIncompleteReclaimIsRetriedThreeTimesThenFlagged(t *testing.T) {
+	r := newBridgeRig(t)
+	orphan := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false)
+	crew.SpareFromSignals(t, orphan.pid) // nothing ends it
+	t0 := time.Now()
+	look := func(at time.Duration) []crew.Reclaimed {
+		t.Helper()
+		got, err := r.m.Reclaim(r.ctx, t0.Add(at))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	look(0)
+	for i, at := range []time.Duration{10, 20, 30, 40} {
+		got := look(at * time.Minute)
+		if len(got) != 1 || got[0].Outcome != crew.KilledIncomplete || got[0].Survivors != 1 {
+			t.Fatalf("try %d, at %d min: %+v, want one incomplete reclaim, 1 survivor", i+1, at, got)
+		}
+		if look(at*time.Minute+9*time.Minute) != nil {
+			t.Fatalf("try %d retried before the look 10 minutes on", i+1)
+		}
+	}
+	for _, at := range []time.Duration{50, 60, 120} {
+		if got := look(at * time.Minute); len(got) != 0 {
+			t.Fatalf("at %d min, after 3 retries: %+v, want nothing", at, got)
+		}
+	}
+	row, _ := r.row(orphan.pid)
+	if !row.ReclaimStopped || row.Survivors != 1 || row.ReclaimAt != 0 || row.State != crew.BridgeOrphan {
+		t.Fatalf("the orphan the daemon gave up on: %+v, want flagged, 1 survivor, no reclaim_at", row)
+	}
+	if !running(orphan.pid) {
+		t.Fatal("the spared orphan ended")
+	}
+}
+
+// A Codex server whose session context is gone (its host removed it at the session's end, or a
+// crashed host's folder was swept) is still proven this store's by what its endpoint recorded:
+// the socket AND the very process (ProcRef). Such a server is an orphan once its session ends,
+// and reclaimed at 10 minutes. Another process at the same socket path is not proven (a later
+// server), and neither is a server another store recorded: both foreign.
+func TestACodexServerIsProvenThisStoresByItsRecordedProcess(t *testing.T) {
+	r, other := newBridgeRig(t), newBridgeRig(t)
+	agent, sockets := t.TempDir(), t.TempDir()
+	bound := filepath.Join(sockets, "abc.sock")
+	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
+		t.Fatal(err)
+	}
+	// an older process naming the same socket, not listening there (a server since replaced), is
+	// already running when the registration looks: it must never be the one recorded
+	stale := startCell(t, codexServerArgv(agent), false, false)
+	server := startCellEnv(t, []string{cellListen + "=" + bound}, codexServerArgv(agent), false, false)
+	if !waitFor(func() bool { _, err := os.Stat(bound); return err == nil }) {
+		t.Fatal("the server never listened")
+	}
+	loc, _ := json.Marshal(map[string]string{"server": filepath.Join(agent, crew.CodexServerSocket), "thread": "th-1"})
+	socket, ref := r.m.CodexServerOf("codex", string(loc))
+	want, _ := crew.ProcRef(server.pid)
+	staleRef, _ := crew.ProcRef(stale.pid)
+	if socket == "" || ref != want || ref == staleRef {
+		t.Fatalf("what a registration records: %q %q, want the socket and %q, the listener's (never %q, the older process's)", socket, ref, want, staleRef)
+	}
+	record := func(rig *bridgeRig, codename, server, serverRef string) {
+		t.Helper()
+		id := rig.session(codename, "codex", true)
+		if err := rig.mem.Write(rig.ctx, func(tx crew.Tx) error {
+			s, _, err := tx.Session(id)
+			if err != nil {
+				return err
+			}
+			s.Server, s.ServerRef = server, serverRef
+			return tx.PutSession(s)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record(r, "tifa", socket, ref)
+	if row, _ := r.row(server.pid); row.State != crew.BridgeOrphan || row.Why != crew.OrphanNoEndpoint || row.Owner != "tifa@autodoc:w" {
+		t.Fatalf("this store's recorded server, its session ended, no context: %+v, want an orphan, tifa's", row)
+	}
+	if row, _ := other.row(server.pid); row.State != crew.BridgeForeign {
+		t.Fatalf("the same server, seen by a store that never recorded it: %+v, want foreign", row)
+	}
+	later := startCell(t, codexServerArgv(agent), false, false) // another process at the same socket path
+	if row, _ := r.row(later.pid); row.State != crew.BridgeForeign || row.Why != crew.ForeignUnowned {
+		t.Fatalf("another process at the recorded socket: %+v, want foreign (the socket alone proves nothing)", row)
+	}
+	t0 := time.Now()
+	for _, at := range []time.Duration{0, 10 * time.Minute} {
+		if _, err := r.m.Reclaim(r.ctx, t0.Add(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !waitEnded(server.pid) {
+		t.Fatal("this store's orphaned server wasn't reclaimed at 10 minutes")
+	}
+	if !running(later.pid) {
+		t.Fatal("the unproven process at the same socket was reclaimed")
+	}
+}
+
+// The socket's own peer names the process proven to hold it, for that process's lifetime. Here
+// the server that listened has handed its socket to a child and ended, and its pid is taken to name
+// that child now (as a reused pid would). The child is a Codex server naming the socket, known to
+// the scan, but nothing proves it the listener: the registration records no process. So while the
+// ended listener is a zombie (not yet reaped: its pidfd still takes a signal and names its pid), and
+// once it's reaped.
+func TestADeadListenersSocketProvesNoServer(t *testing.T) {
+	r := newBridgeRig(t)
+	agent, sockets := t.TempDir(), t.TempDir()
+	bound := filepath.Join(sockets, "abc.sock")
+	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
+		t.Fatal(err)
+	}
+	creator := startCellHeld(t, []string{cellListen + "=" + bound, cellHandOff + "=1"}, codexServerArgv(agent))
+	var child int
+	if !waitFor(func() bool {
+		b, _ := os.ReadFile(creator.pidFile)
+		child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		return child > 0
+	}) {
+		t.Fatal("the creator never handed its socket to a child")
+	}
+	t.Cleanup(func() { _ = syscall.Kill(child, syscall.SIGKILL) })
+	if !waitEnded(creator.pid) {
+		t.Fatal("the creator still runs")
+	}
+	if row, ok := r.row(child); !ok || row.Kind != crew.BridgeCodexServer {
+		t.Fatalf("the premise: the child is a Codex server the scan knows: %+v (listed %v)", row, ok)
+	}
+	if _, err := os.Stat("/proc/" + strconv.Itoa(creator.pid)); err != nil {
+		t.Fatalf("the premise: the ended creator is a zombie until the cell reaps it: %v", err)
+	}
+	crew.ReuseLookup(t, creator.pid, child)
+	loc, _ := json.Marshal(map[string]string{"server": filepath.Join(agent, crew.CodexServerSocket), "thread": "th-1"})
+	if socket, ref := r.m.CodexServerOf("codex", string(loc)); socket == "" || ref != "" {
+		t.Fatalf("a registration whose socket's listener has ended (a zombie) recorded %q %q, want the socket and no process", socket, ref)
+	}
+	creator.reap()
+	if !waitFor(func() bool { _, err := os.Stat("/proc/" + strconv.Itoa(creator.pid)); return err != nil }) {
+		t.Fatal("the creator was never reaped")
+	}
+	if socket, ref := r.m.CodexServerOf("codex", string(loc)); socket == "" || ref != "" {
+		t.Fatalf("a registration whose socket's listener has ended (reaped) recorded %q %q, want the socket and no process", socket, ref)
 	}
 }

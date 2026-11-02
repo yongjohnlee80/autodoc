@@ -92,6 +92,10 @@ type BridgeRow struct {
 	// ReclaimAt is when the daemon reclaims this orphan if it stays one for the same reason, Unix
 	// seconds; 0 until the daemon's own look has seen it orphaned, and for every other row.
 	ReclaimAt int64 `json:"reclaim_at,omitempty"`
+	// ReclaimStopped is an orphan whose reclaims left processes running reclaimRetries+1 times: the
+	// daemon tries no more, and the user ends it (or not). Survivors is how many its last left.
+	ReclaimStopped bool `json:"reclaim_stopped,omitempty"`
+	Survivors      int  `json:"survivors,omitempty"`
 }
 
 // BridgeKilled is what crew.bridge_kill did.
@@ -192,7 +196,16 @@ func (m *Manager) Bridges(ctx context.Context) ([]BridgeRow, error) {
 	}
 	m.bridgeMu.Lock()
 	for i := range rows {
-		if first, ok := m.bridgeSeen[reclaimKey(rows[i])]; ok && rows[i].State == BridgeOrphan {
+		if rows[i].State != BridgeOrphan {
+			continue
+		}
+		k := reclaimKey(rows[i])
+		rows[i].Survivors = m.bridgeLeft[k]
+		if m.bridgeTries[k] > reclaimRetries {
+			rows[i].ReclaimStopped = true // the daemon gave up on it: the user's to end
+			continue
+		}
+		if first, ok := m.bridgeSeen[k]; ok {
 			rows[i].ReclaimAt = first.Add(reclaimAfter).Unix()
 		}
 	}
@@ -292,10 +305,59 @@ func (m *Manager) joinBridge(tx Tx, r *BridgeRow, p helperProc, servers map[stri
 	return nil
 }
 
-// serverOwner is the session of this store that a Codex server's own session context names, ""
-// when none is proven: no context, an unreadable one, another store's, or a session this store
-// doesn't hold.
+// codexServerOf is a Codex endpoint's own app-server: its socket (socketKey) and the process
+// holding it now (ProcRef), "" for another kind or a locator naming no server. The process is the
+// one the socket itself names (listenerProof: its peer's pidfd, alive while it is read), and only
+// when the helper scan knows that very process (its pid and reference) as a Codex app-server naming
+// this socket. Any doubt (no listener, a peer gone or unreadable, a platform with no pidfd for it, a
+// process the scan doesn't know) records no process, and so proves nothing: never the first process
+// whose command line merely names the path.
+func (m *Manager) codexServerOf(ctx context.Context, kind, locator string) (string, string) {
+	if kind != "codex" {
+		return "", ""
+	}
+	var l codexLocator
+	if json.Unmarshal([]byte(locator), &l) != nil || l.Server == "" {
+		return "", ""
+	}
+	server := socketKey(l.Server)
+	ctx, cancel := context.WithTimeout(ctx, listenerWait)
+	defer cancel()
+	pid, ref, ok := listenerProof(ctx, l.Server)
+	if !ok {
+		return server, ""
+	}
+	procs, err := scanHelpers(m.uid)
+	if err != nil {
+		return server, ""
+	}
+	for _, p := range procs {
+		if p.pid == pid && p.ref == ref && p.kind == BridgeCodexServer && socketKey(p.socket) == server {
+			return server, ref
+		}
+	}
+	return server, ""
+}
+
+// listenerWait bounds codexServerOf's connection to a Codex server's socket.
+const listenerWait = 2 * time.Second
+
+// serverOwner is the session of this store that a Codex server is proven to serve, "" when none
+// is: first a session, live or ended, whose endpoint recorded this socket AND this very process
+// (its ProcRef: a socket path alone could be a later server's); else the session its own session
+// context names, while that file lasts: this store's, and one this store holds.
 func (m *Manager) serverOwner(tx Tx, p helperProc) (string, error) {
+	if p.ref != "" {
+		recorded, err := tx.SessionsByServer(socketKey(p.socket))
+		if err != nil {
+			return "", err
+		}
+		for _, s := range recorded {
+			if s.ServerRef == p.ref {
+				return s.ID, nil
+			}
+		}
+	}
 	if p.context == "" {
 		return "", nil
 	}

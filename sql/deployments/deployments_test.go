@@ -870,7 +870,7 @@ func TestTheMailFallbackScript(t *testing.T) {
 	}
 }
 
-// 000031 records who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
+// 000032 records who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
 // empty for a change or a snapshot row written without it, and the snapshot's id index covers it.
 // The revert drops both columns, keeps the rows, and leaves the index as 000025 made it.
 func TestTheTodoAssignByScript(t *testing.T) {
@@ -885,7 +885,7 @@ func TestTheTodoAssignByScript(t *testing.T) {
 	if got, err := first(db, "SELECT count(*) FROM pragma_index_info('todo_snapshot_id') WHERE name = 'assigned_by'"); err != nil || got != "1" {
 		t.Fatalf("the snapshot's id index on assigned_by: %s, %v", got, err)
 	}
-	revertDownTo(t, db, 31)
+	revertDownTo(t, db, 32)
 	for _, q := range []string{"SELECT assigned_by FROM todo_change", "SELECT assigned_by FROM todo_snapshot"} {
 		if _, err := first(db, q); err == nil {
 			t.Fatalf("the revert left %s", q)

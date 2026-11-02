@@ -415,7 +415,7 @@ func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, 
 		ctx, cancel := context.WithTimeout(context.Background(), codexProbeTimeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, bin, arg)
-		cmd.Dir, cmd.Env, cmd.WaitDelay = dir, environ, codexProbeTimeout // a child holding its output is cut off too
+		cmd.Dir, cmd.Env, cmd.WaitDelay = dir, environ, codexProbeWaitDelay // a child holding its output is cut off too
 		out, err := cmd.Output()
 		if err != nil {
 			return nil, fmt.Errorf("%s %s: %w", bin, arg, err)
@@ -444,6 +444,11 @@ func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, 
 
 // codexProbeTimeout bounds each of codexHasNoDaemon's runs of the CLI (a mise shim runs mise first).
 var codexProbeTimeout = 5 * time.Second
+
+// codexProbeWaitDelay is how long a run of codexHasNoDaemon waits, once the CLI has exited or been
+// killed, for a child still holding its output: short, so a run never takes much past
+// codexProbeTimeout.
+const codexProbeWaitDelay = time.Second
 
 // CodexServerSocket is a Codex agent's own app-server socket, in its folder (Codex makes it a link
 // to the socket it binds in its own socket folder, CodexSocketDirs).
