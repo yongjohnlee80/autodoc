@@ -220,7 +220,9 @@ end)`))
 	if h := got(); len(h) != 2 || h[1] != "false clipboard" {
 		t.Fatalf("after the second card: heard %q, want its answer, false clipboard", h)
 	}
-	if !onLoop(r, func() bool { return r.h.prefs.luaGrants["pkg"]["workspace.read"] && !r.h.prefs.luaGrants["pkg"]["clipboard"] }) {
+	if !onLoop(r, func() bool {
+		return r.h.prefs.luaGrants["pkg"]["workspace.read"] && !r.h.prefs.luaGrants["pkg"]["clipboard"]
+	}) {
 		t.Fatalf("grants %v, want workspace.read only", onLoop(r, func() map[string]bool { return r.h.prefs.luaGrants["pkg"] }))
 	}
 }
