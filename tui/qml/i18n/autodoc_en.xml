@@ -1584,8 +1584,8 @@
         <translation>&amp;Copy</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>&amp;Kill</translation>
+        <source>Ki&amp;ll</source>
+        <translation>Ki&amp;ll</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>
@@ -3692,8 +3692,8 @@ WHAT A KEY NEEDS
         <translation>Copy</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
-        <translation>Crew &amp;bridges…</translation>
+        <source>Cr&amp;ew bridges…</source>
+        <translation>Cr&amp;ew bridges…</translation>
     </message>
     <message id="autodoc.main.details">
         <source>details</source>

@@ -7867,16 +7867,16 @@ H J K L, Shift+方向键   调整大小</translation>
         <translation>AutoDoc 目前看不到 %1 的权限提示，因此消息已输入但未发送：请在那里按 Enter</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
-        <translation>团队桥接(&amp;B)…</translation>
+        <source>Cr&amp;ew bridges…</source>
+        <translation>团队桥接(&amp;E)…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.title">
         <source>Crew Bridges</source>
         <translation>团队桥接</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>终止(&amp;K)</translation>
+        <source>Ki&amp;ll</source>
+        <translation>终止(&amp;L)</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>

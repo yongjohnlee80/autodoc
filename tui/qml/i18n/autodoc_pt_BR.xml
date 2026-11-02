@@ -7881,20 +7881,20 @@ H J K L, Shift+setas   redimensionam</translation>
         <translation>O AutoDoc não consegue ver agora os avisos de permissão de %1, então a mensagem foi digitada mas não enviada: pressione Enter lá</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
-        <translation>Po&amp;ntes da equipe…</translation>
+        <source>Cr&amp;ew bridges…</source>
+        <translation>Pontes da &amp;equipe…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.title">
         <source>Crew Bridges</source>
         <translation>Pontes da equipe</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>&amp;Encerrar</translation>
+        <source>Ki&amp;ll</source>
+        <translation>Fina&amp;lizar</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>
-        <translation>Encerrar ó&amp;rfãos…</translation>
+        <translation>Finalizar órfã&amp;os…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.copy">
         <source>&amp;Copy</source>

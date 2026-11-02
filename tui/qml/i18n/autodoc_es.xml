@@ -7882,7 +7882,7 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <translation>AutoDoc no puede ver ahora los avisos de permiso de %1, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
+        <source>Cr&amp;ew bridges…</source>
         <translation>Pu&amp;entes del equipo…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.title">
@@ -7890,12 +7890,12 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <translation>Puentes del equipo</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>&amp;Terminar</translation>
+        <source>Ki&amp;ll</source>
+        <translation>Fina&amp;lizar</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>
-        <translation>Terminar &amp;huérfanos…</translation>
+        <translation>Finalizar huérfan&amp;os…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.copy">
         <source>&amp;Copy</source>

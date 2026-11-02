@@ -7878,16 +7878,16 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <translation>AutoDoc は今 %1 の権限プロンプトを確認できないため、メッセージは入力済みですが送信していません: そこで Enter を押してください</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
-        <translation>クルーのブリッジ(&amp;b)…</translation>
+        <source>Cr&amp;ew bridges…</source>
+        <translation>クルーのブリッジ(&amp;e)…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.title">
         <source>Crew Bridges</source>
         <translation>クルーのブリッジ</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>終了(&amp;k)</translation>
+        <source>Ki&amp;ll</source>
+        <translation>終了(&amp;l)</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>

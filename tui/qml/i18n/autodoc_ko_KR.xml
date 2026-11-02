@@ -7874,16 +7874,16 @@ H J K L, Shift+화살표   크기 조절</translation>
         <translation>AutoDoc이 지금 %1의 권한 프롬프트를 볼 수 없어 메시지는 입력했지만 보내지 않았습니다: 그곳에서 Enter를 누르세요</translation>
     </message>
     <message id="autodoc.main.crew_bridges">
-        <source>Crew &amp;bridges…</source>
-        <translation>크루 브리지(&amp;b)…</translation>
+        <source>Cr&amp;ew bridges…</source>
+        <translation>크루 브리지(&amp;e)…</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.title">
         <source>Crew Bridges</source>
         <translation>크루 브리지</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill">
-        <source>&amp;Kill</source>
-        <translation>종료(&amp;k)</translation>
+        <source>Ki&amp;ll</source>
+        <translation>종료(&amp;l)</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.kill_orphans">
         <source>Kill &amp;orphans…</source>
