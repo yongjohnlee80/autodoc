@@ -306,7 +306,7 @@ func (s *Scheduler) attempt(ctx context.Context, session, tok string, ep Endpoin
 // the call came to; an attempt abandoned before its call is a failure to its caller.
 func (s *Scheduler) attemptWith(call, record context.Context, session, tok string, ep Endpoint) Outcome {
 	defer func() { <-s.permits; s.wg.Done(); s.Poke() }() // the permit returns only when this call does
-	current, via, err := s.m.stillCurrent(record, session, tok, ep.Generation)
+	current, why, err := s.m.stillCurrent(record, session, tok, ep.Generation)
 	if err != nil || !current {
 		if err != nil {
 			s.report(err)
@@ -320,7 +320,7 @@ func (s *Scheduler) attemptWith(call, record context.Context, session, tok strin
 	werr := errNoWaker
 	if w := s.wakerFor(ep.Kind); w != nil {
 		cctx, cancel := context.WithTimeout(call, wakeCallLimit)
-		werr = w.Wake(cctx, ep, NoticeFor(SessionMailVia(via, ep.Kind)))
+		werr = w.Wake(cctx, ep, why.notice(ep.Kind))
 		cancel()
 	}
 	o := classify(werr)

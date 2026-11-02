@@ -6,8 +6,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// The mail module is crew's SessionEnder: the effects of a session's end, an adoption and a discard.
-var _ crew.SessionEnder = (*Manager)(nil)
+// The mail module is crew's SessionEnder: the effects of a session's end, an adoption and a discard;
+// and the senders its wake notices name.
+var (
+	_ crew.SessionEnder   = (*Manager)(nil)
+	_ crew.WaitingSenders = (*Manager)(nil)
+)
 
 // mailTx is tx as the mail module's: the crew module calls these effects inside its own write, on
 // the engine's one transaction, which is both. Any other is a wiring fault, answered as an error.
@@ -154,6 +158,55 @@ func (m *Manager) EligibleFor(ctx crew.Tx, profile, session string) (bool, error
 	}
 	ds, err := tx.Eligible(profile, session, tx.Now().UnixNano(), 1)
 	return len(ds) > 0, err
+}
+
+// noticeLook is how many of a session's eligible deliveries its wake notice's senders are read from.
+const noticeLook = 64
+
+// WaitingSenders is who s's waiting mail is from, for its wake notice (crew.WaitingSenders): the
+// senders of its eligible deliveries, as mail.receive would name each (fromAddress) and its
+// profile's kind, in seq order of each one's first, and whether more than noticeLook wait. Read
+// only: it runs in the scheduler's read, so mail a lapsed lease would queue again waits for the
+// next write's expire, as receive's own does.
+func (m *Manager) WaitingSenders(ctx crew.Tx, s crew.Session) ([]crew.Sender, bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	scope, err := receiverScope(tx, s)
+	if err != nil {
+		return nil, false, err
+	}
+	ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), noticeLook+1)
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(ds) > noticeLook
+	if more {
+		ds = ds[:noticeLook]
+	}
+	var out []crew.Sender
+	at := map[string]int{} // a sender's index in out
+	for _, d := range ds {
+		msg, ok, err := tx.Message(d.Message)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
+		}
+		from, p, err := senderOf(tx, scope, msg.Sender)
+		if err != nil {
+			return nil, false, err
+		}
+		if i, seen := at[from]; seen {
+			out[i].Count++
+			continue
+		}
+		at[from] = len(out)
+		out = append(out, crew.Sender{From: from, Kind: p.Kind, Count: 1})
+	}
+	return out, more, nil
 }
 
 // Expire is mail's time-driven changes, for the wake scheduler's writes (crew.SessionEnder).

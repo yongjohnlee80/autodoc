@@ -333,14 +333,29 @@ In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `
 
 ## Wakers and the wake scheduler
 
-The daemon wakes an agent through its CLI's own channel with a constant notice, and retries until
-the agent receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every
-waker sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the
-crew MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the
-autodoc MCP server, with no arguments, until more is false" (naming the server, as agy finds MCP tools
-by it, and its arguments, so there is no schema to look up), since its rules allow the tool, not the
-shell command. Either names no sender and
-no subject, so nothing a peer wrote reaches the agent except through a receive.
+The daemon wakes an agent through its CLI's own channel with a notice, and retries until the agent
+receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every waker
+sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the crew
+MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc
+MCP server, with no arguments, until more is false" (naming the server, as agy finds MCP tools by it,
+and its arguments, so there is no schema to look up), since its rules allow the tool, not the shell
+command.
+
+The notice names who the mail is from, so an agent can tell a request from the user from a peer's
+note before it receives: "AutoDoc mail is waiting for you: 1 from gold-man (claude), 1 from user.
+Run: autodoc mail receive", and the MCP form likewise.
+- Only daemon-set fields are named: each sender's address as `mail receive` gives it (a codename,
+  `user`, `codename@project`) and its profile's kind. Nothing a peer wrote (no subject, no body)
+  reaches the agent except through a receive.
+- The senders are read from the session's waiting (eligible) deliveries, in the scheduler's own
+  read of the attempt (`crew.WaitingSenders`, which the mail module implements).
+- An address that isn't a plain name (letters, digits, `.`, `_`, `-`, an `@project`) is never
+  printed, only counted, so no address can read as an instruction, a command, a path or a variable.
+  A kind the crew doesn't know is left out.
+- At most three senders are named, then "and N more" (messages).
+- With no sender to name, the notice is the plain text above, byte for byte.
+- A burst still rings one wake: the notice is read when the attempt is made.
+- OpenCode's plugin wakes with its own copy of the plain notice, never text it is sent.
 Each channel queues a busy agent itself, so no waker needs to wait for the agent to be idle.
 
 | CLI | Channel | Registered by | Bound by |
@@ -598,9 +613,10 @@ rules in its first 24,000 bytes too.
   session on MCP mail is allowed its tools alone and no shell rule for its mail: Claude Code's exact
   `mcp__autodoc__<tool>` rules in place of the guide's commands, OpenCode nothing, since it gates no
   MCP tool.
-- The texts an agent reads per event (the wake notices, the waiting line) stay constant and short:
-  they repeat for the life of a session, so a word added to one is paid on every wake or tool
-  result. A cell pins each one's size, so growing one is a deliberate edit.
+- The texts an agent reads per event (the wake notices, the waiting line) stay short: they repeat
+  for the life of a session, so a word added to one is paid on every wake or tool result. A cell
+  pins each one's size (the plain notices, one naming a single sender, and one at the cap of three
+  senders and more), so growing one is a deliberate edit.
 - Each kind's setup is given the server (`crew setup` builds it: the agent's own autodoc plus
   `crew mcp`, named `autodoc`, its tools `crew.MCPToolNames`, the one list its schemas and every
   kind's per-tool rules come from), and delivers it its own way. The server takes no environment of
