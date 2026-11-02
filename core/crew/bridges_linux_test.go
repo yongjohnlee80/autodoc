@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -30,6 +31,8 @@ const (
 	cellSpawn = "AUTODOC_BRIDGE_CELL_SPAWN"
 	cellPids  = "AUTODOC_BRIDGE_CELL_PIDS"
 	cellTerm  = "AUTODOC_BRIDGE_CELL_TERM"
+	// cellListen makes the stand-in listen on a unix socket at that path, as a Codex server binds its
+	cellListen = "AUTODOC_BRIDGE_CELL_LISTEN"
 )
 
 func TestMain(m *testing.M) {
@@ -44,6 +47,21 @@ func TestMain(m *testing.M) {
 func cellProcess() {
 	if os.Getenv(cellTerm) == "ignore" {
 		signal.Ignore(syscall.SIGTERM)
+	}
+	if path := os.Getenv(cellListen); path != "" {
+		ln, err := net.Listen("unix", path)
+		if err != nil {
+			os.Exit(4)
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				_ = c.Close()
+			}
+		}()
 	}
 	var chain [][]string
 	_ = json.Unmarshal([]byte(os.Getenv(cellSpawn)), &chain)
@@ -265,6 +283,18 @@ func writeContext(t *testing.T, session string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// waitFor polls cond for up to 10 s.
+func waitFor(cond func() bool) bool {
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return cond()
 }
 
 func agyArgv(session string) []string {
@@ -821,17 +851,22 @@ func TestACodexServerIsProvenThisStoresByItsRecordedProcess(t *testing.T) {
 	r, other := newBridgeRig(t), newBridgeRig(t)
 	agent, sockets := t.TempDir(), t.TempDir()
 	bound := filepath.Join(sockets, "abc.sock")
-	if err := os.WriteFile(bound, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
 		t.Fatal(err)
 	}
-	server := startCell(t, codexServerArgv(agent), false, false) // no session context in its environment
+	// an older process naming the same socket, not listening there (a server since replaced), is
+	// already running when the registration looks: it must never be the one recorded
+	stale := startCell(t, codexServerArgv(agent), false, false)
+	server := startCellEnv(t, []string{cellListen + "=" + bound}, codexServerArgv(agent), false, false)
+	if !waitFor(func() bool { _, err := os.Stat(bound); return err == nil }) {
+		t.Fatal("the server never listened")
+	}
 	loc, _ := json.Marshal(map[string]string{"server": filepath.Join(agent, crew.CodexServerSocket), "thread": "th-1"})
 	socket, ref := r.m.CodexServerOf("codex", string(loc))
-	if want, _ := crew.ProcRef(server.pid); socket == "" || ref != want {
-		t.Fatalf("what a registration records: %q %q, want the socket and %q, the server's", socket, ref, want)
+	want, _ := crew.ProcRef(server.pid)
+	staleRef, _ := crew.ProcRef(stale.pid)
+	if socket == "" || ref != want || ref == staleRef {
+		t.Fatalf("what a registration records: %q %q, want the socket and %q, the listener's (never %q, the older process's)", socket, ref, want, staleRef)
 	}
 	record := func(rig *bridgeRig, codename, server, serverRef string) {
 		t.Helper()
