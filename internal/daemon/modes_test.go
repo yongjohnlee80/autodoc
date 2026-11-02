@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -363,8 +362,10 @@ func TestAViewWithoutModesReportsTheDefaults(t *testing.T) {
 
 // TestTodoStoresSettledWaitsForTheReadOfAChange: a todo verb that made a store waits on
 // TodoStoresSettled, and it returns only once the reader has read every change told before it
-// (and revalidated): not while the read is under way. With nothing pending it returns at once, and
-// with no reader running (no registry given) it never waits.
+// (and revalidated): not while that read is under way, and not after a read that failed, which is
+// tried again (storesRetry) and settles only when it succeeds. With nothing pending it returns at
+// once, with no reader running (no registry given) it never waits, and a wait whose ctx ends while
+// the reader is held answers that.
 func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 	ctx := context.Background()
 	idle, _ := open(t)
@@ -374,38 +375,81 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 	}
 
 	m, _ := open(t)
-	var calls atomic.Int32
-	gate := make(chan struct{})
+	type read struct {
+		entered chan struct{} // closed as the reader starts this read
+		release chan struct{} // this read answers once it is closed
+		fail    bool
+	}
+	var mu sync.Mutex
+	var plan []*read // the reads after SetTodoStores's own, in order
+	var reads atomic.Int32
 	m.SetTodoStores(func(context.Context) (TodoRegistry, error) {
-		if calls.Add(1) > 1 { // SetTodoStores's own first read runs; the reader's waits for the gate
-			<-gate
+		n := int(reads.Add(1)) - 2 // SetTodoStores's own first read is -1: it answers at once
+		if n < 0 {
+			return TodoRegistry{}, nil
+		}
+		mu.Lock()
+		r := plan[n]
+		mu.Unlock()
+		close(r.entered)
+		<-r.release
+		if r.fail {
+			return TodoRegistry{}, errors.New("the registry could not be read")
 		}
 		return TodoRegistry{}, nil
 	})
+	next := func(fail bool) *read {
+		r := &read{entered: make(chan struct{}), release: make(chan struct{}), fail: fail}
+		mu.Lock()
+		plan = append(plan, r)
+		mu.Unlock()
+		return r
+	}
 	if err := m.TodoStoresSettled(ctx); err != nil {
 		t.Fatalf("nothing pending: %v", err)
 	}
-	m.TodoStoresChanged()
-	done := make(chan error, 1)
-	go func() { done <- m.TodoStoresSettled(ctx) }()
-	select {
-	case err := <-done:
-		t.Fatalf("settled (%v) while the reader was still reading the change", err)
-	case <-time.After(100 * time.Millisecond): // NOTE: a bound on a failing run only
+	settled := func() chan error {
+		done := make(chan error, 1)
+		go func() { done <- m.TodoStoresSettled(ctx) }()
+		return done
 	}
-	close(gate)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
+	notYet := func(what string, done chan error) {
+		select {
+		case err := <-done:
+			t.Fatalf("%s: settled (%v) before its read succeeded", what, err)
+		default:
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("never settled once the read ended")
 	}
+
+	held := next(false)
+	m.TodoStoresChanged()
+	done := settled()
+	<-held.entered // the reader is in its read of the change
+	notYet("the read under way", done)
+	close(held.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	failing, retried := next(true), next(false)
+	m.TodoStoresChanged()
+	done = settled()
+	<-failing.entered
+	close(failing.release) // the read fails
+	<-retried.entered      // and is tried again: until it answers, nothing settled
+	notYet("a failed read", done)
+	close(retried.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	stuck := next(false)
+	m.TodoStoresChanged()
+	<-stuck.entered
 	bounded, cancel := context.WithCancel(ctx)
 	cancel()
-	m.TodoStoresChanged() // read at once now: the gate is open
-	if err := m.TodoStoresSettled(bounded); err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("a cancelled wait: %v", err)
+	if err := m.TodoStoresSettled(bounded); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled wait while the reader is held: %v, want context.Canceled", err)
 	}
+	close(stuck.release)
 }
