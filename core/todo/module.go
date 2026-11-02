@@ -2,6 +2,7 @@ package todo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
@@ -31,6 +32,10 @@ const protocolMigrateRefs = 22
 // workspace.of and todos.set_kb; a variable's source "kb" and its conflict. A session below it
 // reads "store" for "kb".
 const protocolWorkspaceVars = 24
+
+// protocolListSummary is the protocol todos.list's opts.summary arrived in
+// (docs/decisions/todos.md#a-lists-summary): a session below it is refused summary.
+const protocolListSummary = 47
 
 // Name is the module's name: its verbs are todos.*.
 func (m *Manager) Name() string { return "todos" }
@@ -80,7 +85,7 @@ type (
 	}
 	listParams struct {
 		At   At       `param:"at"`
-		Opts ListOpts `param:"opts,optional" doc:"{buckets, tag, assignee, priority, has_errors}; buckets [\"archived\"] lists the months, [\"archived/YYYY/MM\"] one month"`
+		Opts ListOpts `param:"opts,optional" doc:"{buckets, tag, assignee, priority, has_errors, summary (protocol 47)}; buckets [\"archived\"] lists the months, [\"archived/YYYY/MM\"] one month; summary answers each task without its text"`
 	}
 	idParams struct {
 		At At     `param:"at"`
@@ -226,8 +231,22 @@ func (m *Manager) Verbs() []module.Verb {
 			user, append(writes, CodeExists)...)),
 			func(ctx context.Context, p moveParams) (Resolved, error) { return m.MoveStore(ctx, p.At, p.To) })),
 		module.Handle(read("todos.list", "{tasks: ["+task+"], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-			"The active buckets' tasks; archives only by month, on request.", CodeNotAStore, CodeInvalid),
-			func(ctx context.Context, p listParams) (Listing, error) { return m.List(ctx, p.At, p.Opts) }),
+			"The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 47), each task is "+
+				"{id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: "+
+				"what an agent reads to pick a task, then todos.get for the one it needs.", CodeNotAStore, CodeInvalid),
+			func(ctx context.Context, p listParams) (any, error) {
+				if p.Opts.Summary {
+					if pr := module.ProtocolFrom(ctx); pr != 0 && pr < protocolListSummary {
+						return nil, &module.ParamError{Verb: "todos.list", Param: "opts.summary",
+							Want: fmt.Sprintf("sent at protocol %d or later", protocolListSummary)}
+					}
+				}
+				l, err := m.List(ctx, p.At, p.Opts)
+				if err != nil || !p.Opts.Summary {
+					return l, err
+				}
+				return l.Summary(), nil
+			}),
 		module.Handle(read("todos.get", task, "One task, with its rev and body.", CodeNoTask, CodeNotAStore),
 			func(ctx context.Context, p idParams) (Task, error) { return m.Get(ctx, p.At, p.ID) }),
 		module.Handle(write("todos.add", task,

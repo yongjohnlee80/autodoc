@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 45,
+  protocol = 47,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -454,8 +454,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "[{src, raw, reason}]",
-      doc = "Links that name no file.",
+      result = "{unresolved: [{src, raw, reason}], count, next?} (protocol 47; below it [{src, raw, reason}], the whole list)",
+      doc = "Links that name no file, a page at a time: opts.limit (1 to 2000, default 500) rows after opts.offset, the whole list's count, and next, the next page's offset, absent on the last. A session below 47 gets the whole list in one reply.",
     },
     ["host.probe"] = {
       since = 31, scope = "global", audience = "user",
@@ -928,7 +928,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-      doc = "The active buckets' tasks; archives only by month, on request.",
+      doc = "The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 47), each task is {id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: what an agent reads to pick a task, then todos.get for the one it needs.",
     },
     ["todos.migrate_refs"] = {
       since = 22, scope = "global", audience = "user",

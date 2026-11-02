@@ -349,6 +349,17 @@ machine-only, settles it; a machine row alone does not.
 
 In the code: `core/todo/storevars.go`, `core/todo/daily.go`, `core/todo/types.go`
 
+## A list's summary
+
+`todos.list` with `opts.summary` (protocol 47) answers each task without its text: `id`, `status`,
+`title`, `due`, `priority`, `assignee`, `tags`, `updated`, `error_count`, `path` and `rev`. The
+description, the body and the other fields stay out. That is what an agent reads to pick a task;
+it then reads the one it needs with `todos.get`. A store's whole list with every description was
+too big for an agent's turn. The default answer is still the whole task. A session below 47 is
+refused `summary` rather than sent whole tasks it didn't ask for.
+
+In the code: `core/todo/module.go`, `core/todo/types.go`, `core/todo/module_test.go`
+
 ## A CLI call says who runs it
 
 `autodoc --call` sends its pid, its working directory and, when it has one, its agent's mailbox id in

@@ -192,7 +192,12 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-const Protocol int64 = 45
+// Protocol 47 is the summary and the pages an agent reads within its turn: todos.list's
+// opts.summary (docs/decisions/todos.md#a-lists-summary), each task without its text, and
+// graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with
+// opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 47
+// is refused both options and keeps the one-reply list.
+const Protocol int64 = 47
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

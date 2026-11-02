@@ -68,6 +68,8 @@ type ListOpts struct {
 	Assignee  string   `json:"assignee,omitempty"`
 	Priority  string   `json:"priority,omitempty"`
 	HasErrors bool     `json:"has_errors,omitempty"`
+	// Summary answers each task as a TaskSummary, without its text (protocol 47)
+	Summary bool `json:"summary,omitempty"`
 }
 
 // Listing is a store's tasks and the files that are not tasks; Partitions answers a request for
@@ -77,6 +79,40 @@ type Listing struct {
 	Malformed  []Malformed `json:"malformed"`
 	Partitions []Partition `json:"partitions,omitempty"`
 	Cursor     int64       `json:"cursor"`
+}
+
+// TaskSummary is a task as a list's summary gives it: what picks it out and where it is, without
+// its text (description, extra fields, references), which todos.get reads.
+type TaskSummary struct {
+	ID       string   `json:"id"`
+	Status   string   `json:"status"`
+	Title    string   `json:"title"`
+	Due      string   `json:"due,omitempty"`
+	Priority string   `json:"priority,omitempty"`
+	Assignee string   `json:"assignee,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Updated  string   `json:"updated"`
+	Errors   int      `json:"error_count,omitempty"` // how many errors[] entries it has
+	Path     string   `json:"path"`
+	Rev      string   `json:"rev"`
+}
+
+// ListingSummary is a Listing whose tasks are TaskSummary rows (todos.list's opts.summary).
+type ListingSummary struct {
+	Tasks      []TaskSummary `json:"tasks"`
+	Malformed  []Malformed   `json:"malformed"`
+	Partitions []Partition   `json:"partitions,omitempty"`
+	Cursor     int64         `json:"cursor"`
+}
+
+// Summary is l with each task as its TaskSummary.
+func (l Listing) Summary() ListingSummary {
+	out := ListingSummary{Tasks: make([]TaskSummary, len(l.Tasks)), Malformed: l.Malformed, Partitions: l.Partitions, Cursor: l.Cursor}
+	for i, t := range l.Tasks {
+		out.Tasks[i] = TaskSummary{ID: t.ID, Status: t.Status, Title: t.Title, Due: t.Due, Priority: t.Priority, Assignee: t.Assignee,
+			Tags: t.Tags, Updated: t.Updated, Errors: len(t.Errors), Path: t.Path, Rev: t.Rev}
+	}
+	return out
 }
 
 // Malformed is a file in a bucket that does not decode or validate.

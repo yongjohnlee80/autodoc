@@ -153,6 +153,10 @@ end
 
 local CODE_NOT_FOUND = -32061
 
+---MAX_UNRESOLVED_PAGES bounds the pages load reads of graph.unresolved, so a daemon that never ends
+---its pages can't hold the read forever.
+M.MAX_UNRESOLVED_PAGES = 1000
+
 ---load reads what rel of workspace ws is connected to, and its second ring when deep. A document
 ---not indexed yet has none. `cb(rows, neighbours, err)`; request is the caller's (a view passes its
 ---own, which drops a superseded reply).
@@ -174,19 +178,32 @@ function M.load(ws, rel, deep, cb, request)
   local function done() cb(M.rows(ws, rel, data)) end
   step("graph.links", { ws, rel }, function(r) data.out = edges_of(r) end, function()
     step("graph.backlinks", { ws, rel }, function(r) data["in"] = edges_of(r) end, function()
-      -- the workspace's supersession relations that loop: this document's
-      step("graph.unresolved", { ws, { kinds = { "supersedes", "superseded_by" } } }, function(r)
-        data.cycles = {}
-        for _, u in ipairs(type(r) == "table" and r or {}) do
-          if u.src == rel and u.reason == "cycle" then data.cycles[#data.cycles + 1] = u.raw end
-        end
-      end, function()
+      -- the workspace's supersession relations that loop: this document's, on every page
+      -- (protocol 47: {unresolved, count, next}; a daemon before it answers the whole list)
+      data.cycles = {}
+      local function after()
         if not deep then return done() end
         step("graph.neighborhood", { ws, rel, 2 }, function(r)
           data.edges = {}
           for _, e in ipairs(type(r) == "table" and r.edges or {}) do data.edges[#data.edges + 1] = { e.src, e.dst, e.kind } end
         end, done)
-      end)
+      end
+      local function page(offset, pages)
+        local opts = { kinds = { "supersedes", "superseded_by" } }
+        if offset > 0 then opts.offset = offset end
+        local nxt
+        step("graph.unresolved", { ws, opts }, function(r)
+          local rows = type(r) == "table" and (r.unresolved or (r.count == nil and r)) or {}
+          for _, u in ipairs(rows) do
+            if u.src == rel and u.reason == "cycle" then data.cycles[#data.cycles + 1] = u.raw end
+          end
+          if type(r) == "table" and type(r.next) == "number" and r.next > offset then nxt = r.next end
+        end, function()
+          if nxt and pages < M.MAX_UNRESOLVED_PAGES then return page(nxt, pages + 1) end
+          after()
+        end)
+      end
+      page(0, 1)
     end)
   end)
 end
