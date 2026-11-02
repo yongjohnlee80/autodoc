@@ -309,7 +309,8 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 // runs embedded, off every app-server: codex-cli 0.163.0), is left alone. AUTODOC_CODEX_SERVER names
 // the agent's server to its autodoc, for codex-here and the waker's locator. With no folder of its
 // own, a Codex that takes --no-daemon is given it (codexHasNoDaemon), and has no step: there is no
-// server to find its thread on, so it isn't woken, and the setup says so.
+// server to find its thread on, so it isn't woken, and the setup says so. One whose Codex can't be
+// read (not found, failing, or slow) is refused: either way of starting it could be wrong.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
 	program := in.Program
 	if program == "" {
@@ -322,7 +323,13 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		if len(in.Servers) > 0 {
 			s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
 		}
-		if codexHasNoDaemon(program, in.Env["PATH"], in.Dir) {
+		has, err := codexHasNoDaemon(program, in.Env, in.Dir)
+		if err != nil {
+			// unknown is neither: a start without the flag would run in the shared daemon, and one
+			// with it would fail on a Codex before it
+			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no folder of its own off Codex's shared daemon (%w): give the agent a folder of its own, or start it again", err)
+		}
+		if has {
 			s.Argv = append(s.Argv, "--no-daemon")
 			s.Notices = append(s.Notices, "Codex has no folder of its own for its app-server, so crew mail can't wake it: it reads its mail when asked")
 			return nil
@@ -375,18 +382,22 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 	return nil
 }
 
-// codexNoDaemon is, by binary (its path and modification time), whether that Codex takes --no-daemon.
+// codexNoDaemon is, by Codex (its binary, modification time and --version line), whether it takes
+// --no-daemon. Only an answer is kept, never a failure: a shim that failed once, or was slow, may
+// answer the next time.
 var codexNoDaemon sync.Map
 
-// codexHasNoDaemon is whether the Codex program runs, found as a shell in dir with PATH path finds
-// it, takes --no-daemon (its --help names it): a Codex before it would refuse the flag and not start.
-// One it can't find or run is taken not to.
-func codexHasNoDaemon(program, path, dir string) bool {
+// codexHasNoDaemon is whether the Codex program, found as a shell in dir with env's PATH finds it,
+// takes --no-daemon (its --help names it): a Codex before it would refuse the flag and not start. It
+// runs as the agent's start will, in dir with env (the profile's) over the daemon's own, since a shim
+// (mise's) picks the Codex by both, so its path tells nothing. An error is unknown: one it can't
+// find, run or read within codexProbeTimeout.
+func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, error) {
 	bin := program
 	if !strings.Contains(program, "/") {
-		found := lookAll(program, path, dir)
+		found := lookAll(program, env["PATH"], dir)
 		if len(found) == 0 {
-			return false
+			return false, fmt.Errorf("no %s on PATH", program)
 		}
 		bin = found[0]
 	} else if !filepath.IsAbs(bin) {
@@ -394,24 +405,45 @@ func codexHasNoDaemon(program, path, dir string) bool {
 	}
 	fi, err := os.Stat(bin)
 	if err != nil {
-		return false
+		return false, err
 	}
-	key := bin + "\x00" + fi.ModTime().String()
-	if v, ok := codexNoDaemon.Load(key); ok {
-		return v.(bool)
+	environ := os.Environ()
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		environ = append(environ, k+"="+env[k]) // a later entry wins
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), codexHelpTimeout)
-	defer cancel()
-	help := exec.CommandContext(ctx, bin, "--help")
-	help.Dir, help.Env = dir, append(os.Environ(), "PATH="+path)
-	out, err := help.Output()
-	has := err == nil && bytes.Contains(out, []byte("--no-daemon"))
-	codexNoDaemon.Store(key, has)
-	return has
+	run := func(arg string) ([]byte, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), codexProbeTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, arg)
+		cmd.Dir, cmd.Env, cmd.WaitDelay = dir, environ, codexProbeTimeout // a child holding its output is cut off too
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("%s %s: %w", bin, arg, err)
+		}
+		return out, nil
+	}
+	// the Codex the shim runs here: with no version, the answer is this start's alone
+	version, verr := run("--version")
+	key := ""
+	if v := bytes.TrimSpace(version); verr == nil && len(v) > 0 {
+		key = bin + "\x00" + fi.ModTime().String() + "\x00" + string(v)
+		if has, ok := codexNoDaemon.Load(key); ok {
+			return has.(bool), nil
+		}
+	}
+	help, err := run("--help")
+	if err != nil {
+		return false, err
+	}
+	has := bytes.Contains(help, []byte("--no-daemon"))
+	if key != "" {
+		codexNoDaemon.Store(key, has)
+	}
+	return has, nil
 }
 
-// codexHelpTimeout bounds codexHasNoDaemon's one run of the CLI (a mise shim runs mise first).
-const codexHelpTimeout = 5 * time.Second
+// codexProbeTimeout bounds each of codexHasNoDaemon's runs of the CLI (a mise shim runs mise first).
+var codexProbeTimeout = 5 * time.Second
 
 // CodexServerSocket is a Codex agent's own app-server socket, in its folder (Codex makes it a link
 // to the socket it binds in its own socket folder, CodexSocketDirs).
