@@ -13,6 +13,9 @@ import (
 // #50's 34 and AP-5's and AP-6's 35 and 36; rpc's Protocol and its catalog test move with it.
 const Protocol = 37
 
+// AccessSince is the protocol crew.access arrives in (rpc's Protocol 46).
+const AccessSince = 46
+
 // Name is the module's name: its verbs are crew.*.
 func (m *Manager) Name() string { return "crew" }
 
@@ -174,6 +177,13 @@ func (m *Manager) Verbs() []module.Verb {
 			Errors: []int64{CodeBadCredential, CodeContextMismatch, CodeStaleEpoch}, Doc: "Who the credential belongs to."},
 			func(ctx context.Context, p whoamiParams) (Identity, error) {
 				return m.Whoami(ctx, p.Credential, p.Store)
+			}),
+		module.Handle(module.Contract{Verb: "crew.access", Since: AccessSince, Audience: module.AudienceAgent,
+			Effect: module.EffectRead, Result: "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
+			Errors: []int64{CodeBadCredential, CodeContextMismatch},
+			Doc:    "What the calling session's crew access holds now (since 46): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue."},
+			func(ctx context.Context, p whoamiParams) (Access, error) {
+				return m.AccessOf(ctx, p.Credential, p.Store)
 			}),
 		module.Handle(module.Contract{Verb: "crew.orphans", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "[{scope, profiles, unread}]",

@@ -44,7 +44,7 @@ func TestTheModuleDeclaresItsVerbs(t *testing.T) {
 	}
 	for _, want := range []string{"crew.claim", "crew.takeover", "crew.release", "crew.register", "crew.renew", "crew.exit",
 		"crew.whoami", "crew.list", "crew.orphans", "crew.adopt", "crew.discard", "crew.endpoint", "crew.attention",
-		"crew.guide"} {
+		"crew.guide", "crew.access"} {
 		if !seen[want] {
 			t.Errorf("no %s", want)
 		}

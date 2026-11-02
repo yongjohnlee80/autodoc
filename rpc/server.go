@@ -192,7 +192,11 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-const Protocol int64 = 45
+// Protocol 46 is crew.access (docs/decisions/crew.md#re-issuing-a-bridge): what the calling
+// session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
+// reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
+// session below 46 has no such verb.
+const Protocol int64 = 46
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

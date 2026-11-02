@@ -222,12 +222,13 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 45; the daemon serves sessions from protocol 12.
+Verbs at protocol 46; the daemon serves sessions from protocol 12.
 
 ### `crew`
 
 | verb | params | result | since | audience | effect |
 | --- | --- | --- | --- | --- | --- |
+| `crew.access` | `credential` string (the session context's "<session id>.<secret>"), `store`? string (the store id the session context names) | `{session, why?, codename, kind, scope, host, endpoint?, generation?, store}` — What the calling session's crew access holds now (since 46): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue. Codes: -32094, -32095. | 46 | agent | read |
 | `crew.adopt` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and move its mail here. Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
 | `crew.attention` | `credential` string, `op` string (raise or clear), `kind`? string (for raise: permission or blocked), `text`? string (for raise: what the session waits on) | `{}` — Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41). Codes: -32094, -32091. | 37 | agent | write |
 | `crew.claim` | `scope` string (autovim:<project>, nvim:<key> or autodoc:<id>), `run` string (the host process's run token, held in memory only), `proc`? string (<boot id>:<pid ns>:<pid>:<start time>; "" when unknown) | `{epoch}` — Claim or reattach a scope with the process's run token. Idempotent. Codes: -32090. | 37 | for people's tools; unix socket only | write |
