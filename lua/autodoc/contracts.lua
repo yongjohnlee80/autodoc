@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 47,
+  protocol = 46,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -26,6 +26,25 @@ return {
       },
       result = "{}",
       doc = "Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41).",
+    },
+    ["crew.bridge_kill"] = {
+      since = 46, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "pid", type = "int" },
+        { name = "start", type = "string" },
+        { name = "confirmed", type = "bool", optional = true }
+      },
+      result = "{outcome, survivors}",
+      doc = "End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill.",
+    },
+    ["crew.bridges"] = {
+      since = 46, scope = "local-peer", audience = "user",
+      params = {},
+      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+      doc = "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned.",
     },
     ["crew.claim"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -454,8 +473,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{unresolved: [{src, raw, reason}], count, next?} (protocol 47; below it [{src, raw, reason}], the whole list)",
-      doc = "Links that name no file, a page at a time: opts.limit (1 to 2000, default 500) rows after opts.offset, the whole list's count, and next, the next page's offset, absent on the last. A session below 47 gets the whole list in one reply.",
+      result = "[{src, raw, reason}]",
+      doc = "Links that name no file.",
     },
     ["host.probe"] = {
       since = 31, scope = "global", audience = "user",
@@ -928,7 +947,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-      doc = "The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 47), each task is {id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: what an agent reads to pick a task, then todos.get for the one it needs.",
+      doc = "The active buckets' tasks; archives only by month, on request.",
     },
     ["todos.migrate_refs"] = {
       since = 22, scope = "global", audience = "user",
@@ -1242,6 +1261,8 @@ return {
     { code = -32094, name = "crew.bad_credential", next = "the session ended: its host registers a new one" },
     { code = -32095, name = "crew.context_mismatch", next = "fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew" },
     { code = -32096, name = "crew.bad_endpoint", next = "register an endpoint of a known kind, with its locator" },
+    { code = -32097, name = "crew.bridge_confirm", next = "ask the user, naming the agent it cuts off, then send confirmed" },
+    { code = -32098, name = "crew.bridges_unsupported", next = "list and end the crew's helpers by hand" },
     { code = -32110, name = "mail.no_recipient", next = "crew.list the addressbook, and send to a name it shows" },
     { code = -32111, name = "mail.key_reused", next = "a retry sends the same content; new content takes a new key" },
     { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },

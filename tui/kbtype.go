@@ -343,7 +343,7 @@ func (h *Host) applyKBType(ctx context.Context, ws string, plan []kbtype.Write) 
 
 // kbPlan is t's plan for a KB, AutoDoc's own KB_OPERATIONS.md included.
 func (h *Host) kbPlan(s *stagedKBType) []kbtype.Write {
-	return s.t.Plan(kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: h.aboutInfo.Version,
+	return s.t.Plan(kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: h.aboutInfo.Version, ManagedVersion: autodoc.KBManagedVersion(),
 		URL: s.url, Commit: s.commit}, autodoc.KBOperations)
 }
 

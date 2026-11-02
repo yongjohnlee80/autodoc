@@ -265,6 +265,7 @@ Window {
             MenuItem { text: qsTrId("autodoc.main.search_models"); onTriggered: App.openAIModels() }
             MenuItem { text: qsTrId("autodoc.main.agent_profiles"); onTriggered: App.openAgentProfiles() }
             MenuItem { text: qsTrId("autodoc.main.set_up_an_agent"); onTriggered: App.openAgentSetup() }
+            MenuItem { text: qsTrId("autodoc.main.crew_bridges"); onTriggered: App.openCrewBridges() }
             MenuSeparator {}
             // the window's memory monitor and the daemon's, started and stopped at runtime (profiling.go)
             Menu {
@@ -1053,6 +1054,7 @@ Window {
     Mismatch { id: mismatch }
     Registrations { id: registrations }
     Vectors { id: vectorsDialog }
+    CrewBridges { id: crewBridges }
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
     BufferCard { id: buffer }

@@ -192,12 +192,17 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-// Protocol 47 is the summary and the pages an agent reads within its turn: todos.list's
+// Protocol 46 is Crew Bridges (docs/decisions/crew.md#crew-bridges): crew.bridges, the crew's
+// helper processes on the machine (agy and Codex bridges, Codex servers, Codex's shared daemon),
+// each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
+// verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
+// as crew.bridge_reclaimed. A session below 46 has neither verb.
+// Protocol 50 is the summary and the pages an agent reads within its turn: todos.list's
 // opts.summary (docs/decisions/todos.md#a-lists-summary), each task without its text, and
 // graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with
-// opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 47
+// opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 50
 // is refused both options and keeps the one-reply list.
-const Protocol int64 = 47
+const Protocol int64 = 50
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
