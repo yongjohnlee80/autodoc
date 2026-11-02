@@ -140,6 +140,8 @@ jobs:
       # the URL is missing (AUTODOC_TEST_PG_REQUIRED, not CI: the macOS job runs
       # core/... too and has no service container to give it one). The plugin's Bun cells are
       # required here too (AUTODOC_TEST_BUN_REQUIRED), where the step above installed it.
+      # -timeout is per package: core/index alone takes 12-13 min a count under -race, so -count=2
+      # sat on go test's 30 m line and failed by the runner's speed (a timeout, not a hang).
       - name: test
         env:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
@@ -148,7 +150,7 @@ jobs:
         run: |
           go list -tags server ./... | awk '$0 != "github.com/yongjohnlee80/autodoc/tui"' > "$RUNNER_TEMP/test-packages"
           mapfile -t packages < "$RUNNER_TEMP/test-packages"
-          go test -race -count=2 -timeout 30m -tags server "${packages[@]}"
+          go test -race -count=2 -timeout 45m -tags server "${packages[@]}"
 
       # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
       # builds and polls its roots instead of watching them; the release builds
