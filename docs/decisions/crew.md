@@ -412,8 +412,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     identical calls that both prompt are two); its own `PostToolUse`, or `PostToolUseFailure` when
     the approved tool fails, closes one, while another tool's, a parallel one, doesn't. A prompt
     that collects an answer widens the input its tool runs with (`AskUserQuestion` adds `answers`),
-    so a `PostToolUse` also closes the oldest open prompt of its tool whose input it holds with
-    every value unchanged; `UserPromptSubmit` (after
+    so for such a tool alone a `PostToolUse` also closes the oldest open prompt of its tool whose
+    input it holds with every value unchanged. Any other tool's wider input is another call (a
+    parallel `Bash` with the same command and a timeout), and closes nothing; `UserPromptSubmit` (after
     a denial) and `Stop` close them all; an idle `Notification` changes nothing. The attention is
     raised while any is open. What the daemon was last told is kept, written only once told, so a
     raise or clear that failed is retried by the next hook; until then that prompt is unreported.
