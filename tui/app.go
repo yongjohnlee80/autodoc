@@ -270,6 +270,9 @@ type Host struct {
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
 	diskFS  func(dir string) (vfs.FS, error)
+	// todoMoves are the latest task moves the todo feed read, oldest first, to name where a gone
+	// file went (todomove.go)
+	todoMoves []todoFileChange
 	// openNewBuffer: File › Open's next choice opens in a buffer of its own (openPickerNewBuffer),
 	// passed to that open alone (openRefWith)
 	openNewBuffer bool
@@ -504,6 +507,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
 	h.crew.deliverJob = h.agents.deliverFallback
+	h.crew.onTodoFiles = h.todoFilesChanged
 	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
 	h.crewInbox.took = h.crew.tookJob
 	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not

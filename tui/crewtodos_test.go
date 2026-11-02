@@ -438,3 +438,35 @@ func TestAResyncForwardsAPeersAssignment(t *testing.T) {
 		t.Errorf("the resync's forward %v, want the task by store and id, keyed by the resync", p)
 	}
 }
+
+// The feed tells the open buffers each task file its changes moved or removed (todomove.go): a move
+// with its old path and new, a removal with its old path alone; a creation names no file.
+func TestTheFeedTellsTheBuffersTheTaskFilesItsChangesMoved(t *testing.T) {
+	a, c, w, task, _ := todoFeedRig(t)
+	var told []todoFileChange
+	a.crew.onTodoFiles = func(cs []todoFileChange) { told = append(told, cs...) }
+	ctx := context.Background()
+	a.crew.Connected() // the store read once: what follows is news
+	settleMessaging(c, w)
+	told = nil
+	moved, err := w.d.todos.Status(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "deferred")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.crew.Event("todos.changed", "kb", task.ID)
+	settleMessaging(c, w)
+	stores, _ := w.d.todos.Stores(ctx)
+	want := todoFileChange{store: stores[0].Path, from: task.Path, to: moved.Path}
+	if !slices.Contains(told, want) {
+		t.Fatalf("told %+v, want the move %+v", told, want)
+	}
+	told = nil
+	if err := w.d.todos.Remove(ctx, todo.At{Workspace: "kb"}, task.ID, moved.Rev); err != nil {
+		t.Fatal(err)
+	}
+	a.crew.Event("todos.changed", "kb", task.ID)
+	settleMessaging(c, w)
+	if want := (todoFileChange{store: stores[0].Path, from: moved.Path, removed: true}); !slices.Contains(told, want) {
+		t.Fatalf("told %+v, want the removal %+v", told, want)
+	}
+}

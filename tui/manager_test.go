@@ -18,6 +18,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -50,8 +51,10 @@ func startManagedIncluding(t *testing.T, roots map[string]string, include []stri
 	return startManagedIncludes(t, roots, include, serving.Options{}, serving.Supplied{})
 }
 
-// startManagedIncludes is startManagedRanking with include, nil for the default.
-func startManagedIncludes(t *testing.T, roots map[string]string, include []string, o serving.Options, supplied serving.Supplied) *managedDaemon {
+// startManagedIncludes is startManagedRanking with include, nil for the default; mods are more
+// modules it serves, each made over its workspaces (a todo store's, say).
+func startManagedIncludes(t *testing.T, roots map[string]string, include []string, o serving.Options, supplied serving.Supplied,
+	mods ...func(*serving.Workspaces) module.Module) *managedDaemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := openDaemonStore(t)
@@ -101,9 +104,13 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	}
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking),
-		rpc.WithFiles(diskFiles(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations))))
+		rpc.WithFiles(diskFiles(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))}
+	for _, mod := range mods {
+		opts = append(opts, rpc.WithModules(mod(ws)))
+	}
+	srv := rpc.New(ws, "v-test", opts...)
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {

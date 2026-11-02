@@ -80,6 +80,9 @@ type crewHost struct {
 	// todos is the window's assignment feed (crewtodos.go): the tasks assigned to its agents from
 	// outside the window, mailed to them
 	todos *todoFeed
+	// onTodoFiles is told the task files each read of the feed found moved, rewritten or removed
+	// (todomove.go: the open buffers on them follow); nil tells no one
+	onTodoFiles func([]todoFileChange)
 }
 
 // crewRegistration is one registration's tuple, everything crew.register is sent: a replay sends it
