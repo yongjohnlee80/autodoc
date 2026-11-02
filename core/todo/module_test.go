@@ -2,6 +2,7 @@ package todo_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -305,4 +306,87 @@ func TestForUnscopedReaderWithholdsOnlyScopedAssignees(t *testing.T) {
 	if page.Changes[0].To != "agent:x" || page.Snapshot[0].Assignee != "agent:x" {
 		t.Error("the original page was changed")
 	}
+}
+
+// wireOf is v as the wire carries it: its JSON, read back into maps.
+func wireOf(t *testing.T, v any) map[string]any {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestAListsSummaryLeavesOutTheText: todos.list with opts.summary answers each task without its
+// text (description, body, the fields a reader needs the task itself for), keeping what picks it
+// out: id, title, status, priority, assignee, tags, due, updated, path, rev. The default answer is
+// the whole task, as before; a session below protocol 47 is refused summary, not answered whole.
+func TestAListsSummaryLeavesOutTheText(t *testing.T) {
+	e := claimed(t)
+	call := func(c context.Context, params ...any) (any, error) {
+		return verb(t, e.m, "todos.list").Call(c, params)
+	}
+	text := strings.Repeat("A long description, the bulk of a task. ", 40)
+	added, err := verb(t, e.m, "todos.add").Call(ctx, []any{"kb", map[string]any{"title": "Summarize the list", "description": text,
+		"priority": "high", "assignee": "agent:ada", "tags": []any{"repo:autodoc"}, "due": "2026-12-01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := added.(todo.Task)
+
+	out, err := call(ctx, "kb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := wireOf(t, out)["tasks"].([]any)[0].(map[string]any)
+	if full["description"] != text {
+		t.Fatalf("the default list lost the description: %v", full)
+	}
+
+	out, err = call(ctx, "kb", map[string]any{"summary": true})
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	listing := wireOf(t, out)
+	if _, ok := listing["cursor"]; !ok {
+		t.Errorf("the summary listing has no cursor: %v", listing)
+	}
+	rows := listing["tasks"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("summary rows %v", rows)
+	}
+	row := rows[0].(map[string]any)
+	want := map[string]any{"id": task.ID, "title": "Summarize the list", "status": "in-progress", "priority": "high",
+		"assignee": "agent:ada", "tags": []any{"repo:autodoc"}, "due": "2026-12-01", "updated": task.Updated,
+		"path": task.Path, "rev": task.Rev}
+	for k, v := range want {
+		if got := row[k]; !reflectEqual(got, v) {
+			t.Errorf("summary %s = %v, want %v", k, got, v)
+		}
+	}
+	for _, k := range []string{"description", "body", "created", "status_changed", "extra", "adr", "review", "blocked"} {
+		if _, ok := row[k]; ok {
+			t.Errorf("the summary row carries %s", k)
+		}
+	}
+
+	if _, err := call(module.WithProtocol(ctx, 45), "kb", map[string]any{"summary": true}); !errors.Is(err, module.ErrInvalidParams) ||
+		!strings.Contains(err.Error(), "47") {
+		t.Errorf("summary at protocol 45: %v, want invalid params naming protocol 47", err)
+	}
+	if out, err := call(module.WithProtocol(ctx, 45), "kb"); err != nil || wireOf(t, out)["tasks"].([]any)[0].(map[string]any)["description"] != text {
+		t.Errorf("the list at protocol 45: %v %v, want the whole task", out, err)
+	}
+}
+
+// reflectEqual compares two wire values.
+func reflectEqual(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
 }

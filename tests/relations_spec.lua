@@ -146,6 +146,28 @@ t.section("load: the sections, against the daemon", function()
   t.eq(none, {}, "a document not indexed has none")
 end)
 
+t.section("load: the loops on every page of graph.unresolved", function()
+  -- from protocol 47 graph.unresolved answers a page ({unresolved, count, next}): the loop of
+  -- doc.md on the second page is found, another document's on the first is not, each page asked
+  -- by its offset
+  local offsets = {}
+  local function request(method, params, cb)
+    if method ~= "graph.unresolved" then return cb({}, nil) end
+    local offset = (params[2] or {}).offset or 0
+    offsets[#offsets + 1] = offset
+    if offset == 0 then
+      return cb({ unresolved = { { src = "z.md", raw = "y.md", reason = "cycle" } }, count = 2, next = 1 }, nil)
+    end
+    cb({ unresolved = { { src = "doc.md", raw = "loop.md", reason = "cycle" } }, count = 2 }, nil)
+  end
+  local rows, _, err = t.await(10000, function(done) relations.load("kb", "doc.md", false, done, request) end)
+  t.ok(err == nil, "no error", err and err.message)
+  local got = texts(rows)
+  t.ok(vim.tbl_contains(got, "loop.md  (supersession goes round a loop)"), "the loop on the second page", vim.inspect(got))
+  t.ok(not vim.tbl_contains(got, "y.md  (supersession goes round a loop)"), "not another document's", vim.inspect(got))
+  t.eq(offsets, { 0, 1 }, "pages asked at offset 0, then 1")
+end)
+
 local view
 local function rel_rows() return vim.tbl_filter(function(r) return r.section == "relations" end, view._rows()) end
 local function rel_texts()

@@ -208,3 +208,35 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 		t.Fatalf("opened %v", c.files)
 	}
 }
+
+// graph.unresolved comes in pages (protocol 47): the drawer reads every page for the document's
+// supersession loops, one on a later page as much as the first's, and asks for each by its offset.
+func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
+	c := newScripted("kb")
+	scriptedGraph(c)
+	var offsets []int64
+	c.answers["graph.unresolved"] = func(params []any) (any, error) {
+		var offset int64
+		if len(params) > 1 {
+			offset, _ = asMap(params[1])["offset"].(int64)
+		}
+		offsets = append(offsets, offset)
+		if offset == 0 {
+			return map[string]any{"unresolved": []any{map[string]any{"src": "z.md", "raw": "y.md", "reason": "cycle"}},
+				"count": int64(2), "next": int64(1)}, nil
+		}
+		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
+			"count": int64(2)}, nil
+	}
+	r := newRelated(c)
+	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	if !slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "loop.md") }) {
+		t.Fatalf("a.md's loop on the second page is not shown: %q", r.labels())
+	}
+	if slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "y.md") }) {
+		t.Errorf("another document's loop is shown: %q", r.labels())
+	}
+	if !slices.Equal(offsets, []int64{0, 1}) {
+		t.Errorf("pages asked at offsets %v, want 0 then 1", offsets)
+	}
+}
