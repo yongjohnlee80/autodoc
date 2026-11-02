@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -49,6 +50,8 @@ func Run(t *testing.T, h Harness) {
 		{"ABareNameReachesTheOneOtherScope", testABareNameReachesTheOneOtherScope},
 		{"ALapsedLeaseIsRedeliveredThenFails", testALapsedLeaseIsRedeliveredThenFails},
 		{"ARenewKeepsTheLease", testARenewKeepsTheLease},
+		{"AShowReadsAHeldDeliveryAgain", testAShowReadsAHeldDeliveryAgain},
+		{"AShowNeverReadsAnExpiredMessage", testAShowNeverReadsAnExpiredMessage},
 		{"AnExpiredMessageEnds", testAnExpiredMessageEnds},
 		{"AReplyAnswersARequestOnce", testAReplyAnswersARequestOnce},
 		{"AMessagesIDWithItsLeaseNamesTheItem", testAMessagesIDWithItsLeaseNamesTheItem},
@@ -419,6 +422,72 @@ func testARenewKeepsTheLease(t *testing.T, h Harness) {
 	}
 	if got := r.delivery(d.ID); got.Attempts != 0 {
 		t.Fatalf("attempts %d after a renew", got.Attempts)
+	}
+}
+
+// A show reads a delivery the caller holds again, read-only: the same message and sender as its
+// receive gave, by its delivery's id or its message's (with the lease), and its lease, lease_until
+// and attempts are as they were. Another session's show, another lease, a lapsed lease and an acked
+// delivery are each a lost lease.
+func testAShowReadsAHeldDeliveryAgain(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Subject: "plan", Body: "the whole plan", Key: "k"})
+	got := r.receive("s-gold").Items[0]
+	d := got.Delivery
+	r.clock.Advance(time.Minute)
+	for _, id := range []string{d.ID, got.Message.ID} {
+		shown, err := r.m.Show(r.ctx, "s-gold", id, d.Lease)
+		if err != nil {
+			t.Fatalf("show by %s: %v", id, err)
+		}
+		if !reflect.DeepEqual(shown.Message, got.Message) || shown.From != got.From || shown.Delivery.ID != d.ID || shown.Delivery.Lease != d.Lease {
+			t.Fatalf("show by %s: %+v, want the received %+v", id, shown, got)
+		}
+	}
+	if after := r.delivery(d.ID); after.Lease != d.Lease || *after.LeaseUntil != *d.LeaseUntil || after.Attempts != d.Attempts || after.State != mail.Leased {
+		t.Fatalf("after a show the delivery is %+v, want its lease as received %+v", after, d)
+	}
+	for what, call := range map[string]func() error{
+		"another session's": func() error { _, err := r.m.Show(r.ctx, "s-jarvis", d.ID, d.Lease); return err },
+		"another lease's":   func() error { _, err := r.m.Show(r.ctx, "s-gold", d.ID, "not-the-lease"); return err },
+		"no lease's":        func() error { _, err := r.m.Show(r.ctx, "s-gold", d.ID, ""); return err },
+	} {
+		if err := call(); !errors.Is(err, mail.ErrLeaseLost) {
+			t.Errorf("%s show: %v, want a lost lease", what, err)
+		}
+	}
+	r.clock.Advance(mail.LeaseFor)
+	if _, err := r.m.Show(r.ctx, "s-gold", d.ID, d.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Errorf("a show after the lease lapsed: %v, want a lost lease", err)
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "next", Key: "k2"})
+	next := r.receive("s-gold").Items
+	var held mail.Delivery
+	for _, it := range next {
+		if it.Message.Body == "next" {
+			held = it.Delivery
+		}
+	}
+	if err := r.m.Ack(r.ctx, "s-gold", held.ID, held.Lease); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.m.Show(r.ctx, "s-gold", held.ID, held.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Errorf("a show after the ack: %v, want a lost lease", err)
+	}
+}
+
+// A show never reads a message past its expiry, though the lease that holds it is live: the message
+// has ended, as a receive would say, and the show writes nothing (the next write expires it).
+func testAShowNeverReadsAnExpiredMessage(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k", TTL: time.Minute})
+	d := r.receive("s-gold").Items[0].Delivery
+	r.clock.Advance(2 * time.Minute) // the lease (LeaseFor) is live, the message expired
+	if _, err := r.m.Show(r.ctx, "s-gold", d.ID, d.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Errorf("a show of an expired message: %v, want a lost lease", err)
+	}
+	if got := r.delivery(d.ID); got.State != mail.Leased || got.Lease != d.Lease {
+		t.Errorf("the show wrote the delivery: %+v", got)
 	}
 }
 

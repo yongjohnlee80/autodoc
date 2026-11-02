@@ -1455,6 +1455,10 @@
         <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
         <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.kind">
+        <source>kind: what AutoDoc sets it up as</source>
+        <translation>tipo: como o AutoDoc o configura</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>nome</translation>
@@ -5830,6 +5834,10 @@ O QUE UMA TECLA PRECISA
         <source>%1 is not NAME=value</source>
         <translation>%1 não é NOME=valor</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.kind_from_the_command">
+        <source>the command's</source>
+        <translation>o do comando</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>Tornar padrão marca o que SPC g abre</translation>
@@ -5837,6 +5845,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t">
         <source>no profiles yet: Add… one, a name and the command that starts the agent</source>
         <translation>nenhum perfil ainda: Adicionar… um, com um nome e o comando que inicia o agente</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.not_a_kind">
+        <source>%1 is not a kind AutoDoc knows</source>
+        <translation>%1 não é um tipo que o AutoDoc conhece</translation>
     </message>
     <message id="autodoc.text.agentprofiles.not_saved">
         <source>not saved: %1</source>
@@ -7819,6 +7831,30 @@ H J K L, Shift+setas   redimensionam</translation>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
         <source>todos: assigned to %1, and sent to it</source>
         <translation>tarefas: atribuída a %1, e enviada</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_can_be_woken">
+        <source>a wake reaches it</source>
+        <translation>um aviso o acorda</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_cant_be_woken_now">
+        <source>can't be woken now (%1)</source>
+        <translation>não pode ser acordado agora (%1)</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_pane">
+        <source>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</source>
+        <translation>Agente de outro host, em %1: %2. A envia a tarefa como seu pedido, na fila até que um aviso o acorde.</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>tarefas: atribuída a %1 e enviada</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_queued">
+        <source>todos: assigned to %1, queued: it can't be woken now (%2)</source>
+        <translation>tarefas: atribuída a %1, na fila: não pode ser acordado agora (%2)</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent">
+        <source>todos: assigned to %1, but not sent: %2</source>
+        <translation>tarefas: atribuída a %1, mas não enviada: %2</translation>
     </message>
     <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
         <source>audit of %1 sent to %2; click to install or cancel</source>

@@ -27,11 +27,17 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	a := testAgents(c, t.TempDir(), "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
-	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail
+	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
+	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),
+	// played by a stand-in that makes its socket: no Codex is installed where the cells run.
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
-		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
+		s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
+		if err == nil && len(s.Server) > 0 {
+			s.Server = fakeServer(s.ServerSocket, true)
+		}
+		return s, err
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	a.crew = newCrewHost(w, t.TempDir())

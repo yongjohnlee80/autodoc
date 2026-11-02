@@ -10,8 +10,8 @@ import (
 
 // theGuidesCommands is the allowance's list as ruled (docs/decisions/crew.md#wake-acceptance-not-tool-approvals),
 // written out here rather than read from crew.GuideCommands, so a command added there fails a cell.
-var theGuidesCommands = []string{"mail receive", "mail ack", "mail reply", "mail send", "mail inbox",
-	"crew whoami", "crew list", "crew endpoint", "crew attention", "crew bridge"}
+var theGuidesCommands = []string{"mail receive", "mail ack", "mail reply", "mail send", "mail inbox", "mail show",
+	"crew whoami", "crew list", "crew endpoint", "crew attention", "crew bridge", "--contracts"}
 
 // TestTheAllowanceIsExactlyTheGuidesCommands: each kind's allowance names exactly the guide's own
 // commands, each one, never `autodoc *` or any other: Claude's as Bash rules (and only those read as

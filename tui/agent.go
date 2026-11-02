@@ -58,6 +58,8 @@ type agents struct {
 	editorTokens        map[string]string
 	editingAgent        string
 	editingAgentProfile *agentProfile // exact record shown in the form; stale edits are refused
+	formKind            string        // the kind the form's dropdown is at (agentKinds)
+	kindRows            *tuidecl.ListModel
 	// the setup card (agentsetup.go): the CLIs it lists
 	setupFound     []agentCLI
 	setupCLIs      *tuidecl.ListModel
@@ -101,6 +103,8 @@ func (a *agents) State() map[string]any {
 		"App.agentCodename":       "",
 		"App.agentCommand":        "",
 		"App.agentEnv":            "",
+		"App.agentKinds":          a.kindList(),
+		"App.agentKindIndex":      0,
 		"App.agentSwitchQuestion": "",
 	}
 	return st
@@ -158,6 +162,7 @@ func (a *agents) Commands() map[string]Command {
 		"App.saveAgent":               twoStrings("a name and a command", a.saveAgent),
 		"App.saveAgentProfile":        threeStrings("a name, command and codename", a.saveAgentProfile),
 		"App.saveAgentProfileWithEnv": fourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
+		"App.agentKindPicked":         oneNumber("a row", a.agentKindPicked),
 		"App.removeAgent":             oneNumber("a row", a.removeAgent),
 		"App.makeAgentDefault":        oneNumber("a row", a.makeAgentDefault),
 		"App.openAgentSetup":          none(a.openAgentSetup),
@@ -207,6 +212,9 @@ type agentProfile struct {
 	Name     string `json:"name"`
 	Command  string `json:"command"`
 	Codename string `json:"codename,omitempty"`
+	// Kind is the crew kind the agent is (agentKinds), "" for the one its command names (agentKind):
+	// a CLI started under another name, a wrapper or a script, is still Claude Code or Codex.
+	Kind string `json:"kind,omitempty"`
 	// Env is set on the agent's process over AutoDoc's environment (agentprofileenv.go): plain text
 	// in the preferences, never for secrets.
 	Env map[string]string `json:"env,omitempty"`
@@ -222,6 +230,9 @@ func agentProfilesOf(s string) []agentProfile {
 	for _, p := range all {
 		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
 			p.Env = keptProfileEnv(p.Env) // a key written by hand that a profile can't set is dropped
+			if !slices.Contains(agentKinds, p.Kind) {
+				p.Kind = "" // a kind written by hand that AutoDoc doesn't know: the command's
+			}
 			out = append(out, p)
 		}
 	}
@@ -306,6 +317,17 @@ func fillAgentCommand(command string, ws wsInfo) string {
 
 // shellQuote is s as one shell word.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// agentKinds are the kinds a profile can be set to, "" first: the command's (agentKind).
+var agentKinds = []string{"", crew.KindClaude, crew.KindCodex, crew.KindAgy, crew.KindOpenCode}
+
+// kind is the profile's crew kind: the one it was set to, or else the one its command names.
+func (p agentProfile) kind() string {
+	if p.Kind != "" {
+		return p.Kind
+	}
+	return agentKind(p.Command)
+}
 
 // agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): the name of
 // the program its first simple command runs, its words read as the shell reads them, past any
@@ -732,7 +754,7 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string, via crew.MailV
 	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
 	b.WriteString(editorGuide)
 	b.WriteString("---\n\n")
-	b.WriteString(autodoc.AgentsGuide)
+	b.WriteString(autodoc.WrittenAgentsGuide())
 	return b.String()
 }
 

@@ -18,9 +18,11 @@ import (
 
 // codexThread is one thread as the stand-in app-server holds it.
 type codexThread struct {
-	ID        string `json:"id"`
-	Cwd       string `json:"cwd"`
-	CreatedAt int64  `json:"createdAt"`
+	ID        string  `json:"id"`
+	Cwd       string  `json:"cwd"`
+	CreatedAt int64   `json:"createdAt"`
+	Ephemeral bool    `json:"ephemeral"`
+	Parent    *string `json:"parentThreadId"`
 }
 
 // fakeCodexRPC answers thread/loaded/list (in pages of page ids) and thread/read from threads; ids
@@ -105,6 +107,29 @@ func TestCodexThreadHereFindsTheFoldersNewestThread(t *testing.T) {
 	}
 	if _, err := codexThreadHere(context.Background(), f, t.TempDir(), 0); !errors.Is(err, errNoCodexThreadHere) {
 		t.Fatalf("another folder: %v, want errNoCodexThreadHere", err)
+	}
+}
+
+// TestCodexThreadHereNeverTakesASubThread: a thread Codex starts beside the agent's own, in its
+// folder and newer (an ephemeral one, or a sub-agent's, which names its parent), is never the
+// folder's thread: an ephemeral one refuses every queued wake ("ephemeral thread does not support
+// queued submissions", codex-cli 0.163.0, live 2026-11-02), so registering it left the agent
+// unwakeable. The agent's own thread, older than either, is taken; with only sub-threads since the
+// spawn there is none, and the refusal counts them.
+func TestCodexThreadHereNeverTakesASubThread(t *testing.T) {
+	dir := t.TempDir()
+	own := "01a1-0001"
+	f := &fakeCodexRPC{page: 10, threads: []codexThread{
+		{ID: own, Cwd: dir, CreatedAt: 100},
+		{ID: "01a1-0002", Cwd: dir, CreatedAt: 200, Ephemeral: true},
+		{ID: "01a1-0003", Cwd: dir, CreatedAt: 300, Parent: &own},
+	}}
+	if got, err := codexThreadHere(context.Background(), f, dir, 50); err != nil || got != own {
+		t.Fatalf("the folder's thread: %q %v, want the agent's own %s, never a sub-thread", got, err, own)
+	}
+	_, err := codexThreadHere(context.Background(), f, dir, 150)
+	if !errors.Is(err, errNoCodexThreadHere) || !strings.Contains(err.Error(), "2 sub-threads") {
+		t.Fatalf("only sub-threads since the spawn: %v, want errNoCodexThreadHere counting 2 sub-threads", err)
 	}
 }
 

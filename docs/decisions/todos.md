@@ -123,14 +123,29 @@ thousands of files.
 
 In the code: `tui/todos.go`, `tui/todos_status.go`, `tui/todos_vars.go`
 
-## AutoDoc assigns only to its own agents
+## AutoDoc assigns to its own agents, and to another host's through the crew
 
 AutoDoc handles tasks; agents stay with the tool that runs them. The `assignee` field is free-form in
 the daemon, and a client checks a name against its own agents. AutoDoc's Assign (`A` in the todos
-view) targets AutoDoc's own agents and writes the assignee as `autodoc:<codename>`. An assignee
-another tool wrote keeps that tool's form, and AutoDoc never delivers to it.
+view) lists the window's own agents, then every other host's live crew agent (`crew.list`: another
+scope's live or reconnecting profiles, never an ended one), labelled `codename@project`; two scopes'
+agents of one codename are two rows. A window holding no crew scope lists its own agents alone.
 
-In the code: `tui/todos_assign.go`, `tui/agentinstances.go`
+- To the window's own agent, the assignee is `autodoc:<codename>`, handed over by the window's agent
+  messaging.
+- To another host's agent, the assignee is its host's own form, the bare codename, written with the
+  window's scope; every Neovim's notifier skips a bare assignee whose change another scope made, so
+  the window is the one deliverer. It sends the agent the task as the user's request (`Task:
+  <title>`, the task's file, id and instruction) to `codename@scope`, the exact address, keyed by
+  the assignment, never rung: queued and woken as any mail, a stopped agent reached by its host's
+  fallback, nothing typed into another host's terminal. An agent no wake reaches now stays
+  choosable; the notice says it is queued and why.
+- Only this choice sends a `Task:` request to another scope as the user. An assignment made
+  anywhere else reaches only the window's own agents, as a notice that states the assignment.
+
+An assignee another tool wrote keeps that tool's form.
+
+In the code: `tui/todos_assign.go`, `tui/crewsend.go`, `tui/agentinstances.go`
 
 ## Text reaches an agent only as a bracketed paste
 

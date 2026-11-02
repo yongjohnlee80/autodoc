@@ -1,6 +1,9 @@
 package crew
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Owe and PayOwed expose the scheduler's owed ends to the external cells.
 func (s *Scheduler) Owe(session, token string, o Outcome) { s.owe(session, token, owedEnd{outcome: o}) }
@@ -36,4 +39,11 @@ func KeptCauses(m *Manager) int {
 	m.aliveMu.Lock()
 	defer m.aliveMu.Unlock()
 	return len(m.causes)
+}
+
+// SetCodexProbeTimeout bounds the Codex probe's runs by d for the test's length.
+func SetCodexProbeTimeout(t interface{ Cleanup(func()) }, d time.Duration) {
+	was := codexProbeTimeout
+	codexProbeTimeout = d
+	t.Cleanup(func() { codexProbeTimeout = was })
 }

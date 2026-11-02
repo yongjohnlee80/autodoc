@@ -77,6 +77,41 @@ func doorbellNotSent(err error) bool {
 	return false
 }
 
+// peerAgents answers, on the loop, the live crew agents of every scope but the window's (peersOf):
+// none while it holds no scope, or when the crew can't be asked.
+func (h *crewHost) peerAgents(then func([]AgentEntry)) {
+	scope, _, ok := h.held()
+	if !ok {
+		then(nil)
+		return
+	}
+	h.c.Go(func(ctx context.Context) any {
+		v, err := h.c.Call(ctx, "crew.list")
+		if err != nil {
+			return nil
+		}
+		return v
+	}, func(v any) { then(peersOf(v, scope)) })
+}
+
+// sendTask sends codename@scope (another host's agent) a request as the user, from the window's
+// scope (inbox.send), keyed by key: never rung, so it is queued and woken as any mail, and a stopped
+// agent gets its own host's fallback; the window never types into another host's terminal.
+func (h *crewHost) sendTask(codename, scope, subject, body, key string, then func(error)) {
+	own, epoch, ok := h.held()
+	if !ok {
+		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		return
+	}
+	h.c.Go(func(ctx context.Context) any {
+		_, err := h.c.Call(ctx, "inbox.send", own, h.run, epoch, []any{codename + "@" + scope}, body, key, mail.KindRequest, subject, false)
+		return err
+	}, func(v any) {
+		err, _ := v.(error)
+		then(err)
+	})
+}
+
 // promptsReported asks the crew whether codename's session in the window's scope has its permission
 // prompts reported now (crew.list's prompts_reported: a live session whose reporter is there, the
 // daemon's rule). then hears it on the loop; a window holding no scope, a failed ask or no such

@@ -1,13 +1,19 @@
 package crew
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 )
@@ -190,7 +196,7 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	if err != nil {
 		return err
 	}
-	allow := []string{"command(" + AgyBridgeCommand + ")"}
+	allow := []string{"command(" + AgyBridgeCommand + ")", AgyContractsAllow}
 	for _, sv := range in.Servers {
 		for _, t := range sv.Tools {
 			allow = append(allow, "mcp("+sv.Name+"/"+t+")")
@@ -211,7 +217,8 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	if err != nil {
 		return err
 	}
-	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: agyMCPConfig, Content: string(cfg)})
+	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: agyMCPConfig, Content: string(cfg)},
+		FolderFile{Path: AgyRulesPath, Content: AgyRules()}) // the must-keep rules, always on, never truncated
 	s.Argv = append(s.Argv, "--settings", string(settings))
 	if in.Host == HostNvim { // Neovim's agent runs in the user's project: its folder is added, not its cwd
 		s.Argv = append(s.Argv, "--add-dir", in.AgentDir)
@@ -269,9 +276,9 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 			return err
 		}
 		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
-		// least privilege: a session on MCP mail is allowed its tools alone, never the guide's shell
-		// commands, which it doesn't run
-		s.Allow = []string{}
+		// least privilege: a session on MCP mail is allowed its tools, and of the guide's shell commands
+		// only the read-only contracts, which its guide points to
+		s.Allow = []string{ClaudeContractsAllow}
 		for _, sv := range in.Servers {
 			for _, t := range sv.Tools {
 				s.Allow = append(s.Allow, "mcp__"+sv.Name+"__"+t)
@@ -292,28 +299,51 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 
 // codexSetup is one step after the start: Codex starts its thread on its app-server without
 // telling anyone, so the agent's autodoc looks for the folder's thread until it is found, then
-// registers it (crew endpoint --codex-here --wait). Given the crew MCP server, the agent gets an
-// app-server of its own (Server), started by the host with the server on its command line and
+// registers it (crew endpoint --codex-here --wait). Given its own folder, the agent gets an
+// app-server of its own (Server) in every mail mode, so its commands run with its own environment
+// and never in Codex's shared daemon (started by whichever agent came first, and kept with that
+// one's identity). Given the crew MCP server too, that server is on its command line, with
 // each crew tool approved by name (`tools.<tool>.approval_mode`, never the server's whole default:
 // least privilege, as Claude's exact rules), and the TUI attaches to it (`--remote`). None of it is
 // written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a TUI given any
 // runs embedded, off every app-server: codex-cli 0.163.0), is left alone. AUTODOC_CODEX_SERVER names
-// the agent's server to its autodoc, for codex-here and the waker's locator.
+// the agent's server to its autodoc, for codex-here and the waker's locator. With no folder of its
+// own, a Codex that takes --no-daemon is given it (codexHasNoDaemon), and has no step: there is no
+// server to find its thread on, so it isn't woken, and the setup says so. One whose Codex can't be
+// read (not found, failing, or slow) is refused: either way of starting it could be wrong.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
-	s.After = append(s.After, []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait})
-	if len(in.Servers) == 0 {
-		return nil
-	}
-	if in.AgentDir == "" { // its server's socket lives in the agent's own folder: with none, the CLI's mail
-		s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
-		return nil
-	}
 	program := in.Program
 	if program == "" {
 		program = "codex"
 	}
+	register := []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait}
+	if in.AgentDir == "" {
+		// its own server's socket lives in the agent's own folder: with none, the TUI runs its own,
+		// never Codex's shared daemon, which keeps the environment of whichever agent started it
+		if len(in.Servers) > 0 {
+			s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
+		}
+		has, err := codexHasNoDaemon(program, in.Env, in.Dir)
+		if err != nil {
+			// unknown is neither: a start without the flag would run in the shared daemon, and one
+			// with it would fail on a Codex before it
+			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no folder of its own off Codex's shared daemon (%w): give the agent a folder of its own, or start it again", err)
+		}
+		if has {
+			s.Argv = append(s.Argv, "--no-daemon")
+			s.Notices = append(s.Notices, "Codex has no folder of its own for its app-server, so crew mail can't wake it: it reads its mail when asked")
+			return nil
+		}
+		s.After = append(s.After, register) // a Codex before --no-daemon has no shared daemon to keep off
+		return nil
+	}
+	// its own app-server, in every mail mode: what its commands run in (its environment, its context),
+	// and where its thread is found to wake it
+	s.After = append(s.After, register)
 	sock := filepath.Join(in.AgentDir, CodexServerSocket)
-	server := []string{program, "app-server", "--listen", "unix://" + sock}
+	// its commands run in this server, never as a login shell: a login shell sources the user's
+	// profile, whose PATH (~/.local/bin first) would run the user's own autodoc ahead of the agent's
+	server := []string{program, "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false"}
 	for _, sv := range in.Servers {
 		if len(sv.Command) == 0 {
 			return fmt.Errorf("crew: MCP server %q has no command", sv.Name)
@@ -346,9 +376,74 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 	s.Server, s.ServerSocket = server, sock
 	s.Argv = append(s.Argv, "--remote", "unix://"+sock)
 	s.Env[EnvCodexServer] = sock
-	s.MailVia = MailViaMCP
+	if len(in.Servers) > 0 {
+		s.MailVia = MailViaMCP
+	}
 	return nil
 }
+
+// codexNoDaemon is, by Codex (its binary, modification time and --version line), whether it takes
+// --no-daemon. Only an answer is kept, never a failure: a shim that failed once, or was slow, may
+// answer the next time.
+var codexNoDaemon sync.Map
+
+// codexHasNoDaemon is whether the Codex program, found as a shell in dir with env's PATH finds it,
+// takes --no-daemon (its --help names it): a Codex before it would refuse the flag and not start. It
+// runs as the agent's start will, in dir with env (the profile's) over the daemon's own, since a shim
+// (mise's) picks the Codex by both, so its path tells nothing. An error is unknown: one it can't
+// find, run or read within codexProbeTimeout.
+func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, error) {
+	bin := program
+	if !strings.Contains(program, "/") {
+		found := lookAll(program, env["PATH"], dir)
+		if len(found) == 0 {
+			return false, fmt.Errorf("no %s on PATH", program)
+		}
+		bin = found[0]
+	} else if !filepath.IsAbs(bin) {
+		bin = filepath.Join(dir, bin)
+	}
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return false, err
+	}
+	environ := os.Environ()
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		environ = append(environ, k+"="+env[k]) // a later entry wins
+	}
+	run := func(arg string) ([]byte, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), codexProbeTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, arg)
+		cmd.Dir, cmd.Env, cmd.WaitDelay = dir, environ, codexProbeTimeout // a child holding its output is cut off too
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("%s %s: %w", bin, arg, err)
+		}
+		return out, nil
+	}
+	// the Codex the shim runs here: with no version, the answer is this start's alone
+	version, verr := run("--version")
+	key := ""
+	if v := bytes.TrimSpace(version); verr == nil && len(v) > 0 {
+		key = bin + "\x00" + fi.ModTime().String() + "\x00" + string(v)
+		if has, ok := codexNoDaemon.Load(key); ok {
+			return has.(bool), nil
+		}
+	}
+	help, err := run("--help")
+	if err != nil {
+		return false, err
+	}
+	has := bytes.Contains(help, []byte("--no-daemon"))
+	if key != "" {
+		codexNoDaemon.Store(key, has)
+	}
+	return has, nil
+}
+
+// codexProbeTimeout bounds each of codexHasNoDaemon's runs of the CLI (a mise shim runs mise first).
+var codexProbeTimeout = 5 * time.Second
 
 // CodexServerSocket is a Codex agent's own app-server socket, in its folder (Codex makes it a link
 // to the socket it binds in its own socket folder, CodexSocketDirs).
@@ -394,15 +489,19 @@ func opencodeSetup(in SetupInput, _ string, s *Setup) error {
 		return err
 	}
 	if openCodeAllowProven {
-		if v, err = OpenCodeWithAllow(v); err != nil {
+		rules := OpenCodeAllow()
+		if len(in.Servers) > 0 { // on MCP mail it runs none of the mail commands: the contracts alone
+			rules = OpenCodeContractsAllow()
+		}
+		if v, err = openCodeWithRules(v, rules); err != nil {
 			return err
 		}
-		for rule := range OpenCodeAllow() {
+		for rule := range rules {
 			s.Allow = append(s.Allow, rule)
 		}
 		slices.Sort(s.Allow)
 	}
-	if len(in.Servers) > 0 { // OpenCode gates no MCP tool: the server is all it needs, no allowance
+	if len(in.Servers) > 0 { // OpenCode gates no MCP tool: the server is all it needs, no tool rule
 		if v, err = OpenCodeWithMCP(v, in.Servers); err != nil {
 			return err
 		}

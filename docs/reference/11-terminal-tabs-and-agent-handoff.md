@@ -127,9 +127,9 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
 
 ## 4. Separation of Concerns: `autodoc:<codename>` vs. Other Tools' Agents
 
-A critical architectural boundary ([AutoDoc assigns only to its own agents](../decisions/todos.md#autodoc-assigns-only-to-its-own-agents)) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage:
+A critical architectural boundary ([AutoDoc assigns to its own agents, and to another host's through the crew](../decisions/todos.md#autodoc-assigns-to-its-own-agents-and-to-another-hosts-through-the-crew)) is that **AutoDoc manages only its own embedded terminal agents**; an agent another tool runs is that tool's to manage, and reaches it only as crew mail:
 
-- **Assignee Namespace Isolation**: When you assign a task via `A` in AutoDoc's Todos Panel, the `assignee` field is always prefixed with `autodoc:<codename>` (for example, `autodoc:claude` or `autodoc:gemini`). An assignee written by another tool keeps that tool's own form (for example `agent:<name>`), and AutoDoc never delivers to it.
+- **Assignee Namespace Isolation**: When you assign a task via `A` in AutoDoc's Todos Panel to one of AutoDoc's own agents, the `assignee` field is prefixed with `autodoc:<codename>` (for example, `autodoc:claude`). `A` also lists other hosts' live crew agents as `codename@project`: one of those is assigned by its bare codename, its host's own form, and sent the task as your request through the crew (`codename@scope`), never typed into its terminal. An assignee written by another tool keeps that tool's own form.
 - **Durable Record vs. Best-Effort Terminal Delivery**: The `todos.assign` write in `.todo-list/` is the durable record of ownership; `HandTask` is a best-effort UI delivery side effect. If you decline to start a stopped agent (`ErrAgentCancelled`), or if you switch workspaces before the RPC write returns, the task remains durably assigned to `autodoc:<codename>` in `.todo-list/in-progress/` and AutoDoc displays an actionable toast:
   `"todos: assigned to autodoc:claude, but not delivered (you didn't start it): start the agent, then A on the task to deliver it again"`. Pressing `A` a second time re-delivers the payload cleanly.
 

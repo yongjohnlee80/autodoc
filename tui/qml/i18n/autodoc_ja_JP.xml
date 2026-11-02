@@ -1455,6 +1455,10 @@
         <source>CLAUDE_CONFIG_DIR=~/.claude-work</source>
         <translation>CLAUDE_CONFIG_DIR=~/.claude-work</translation>
     </message>
+    <message id="autodoc.dialog.agentEdit.kind">
+        <source>kind: what AutoDoc sets it up as</source>
+        <translation>種類: AutoDoc が何として設定するか</translation>
+    </message>
     <message id="autodoc.dialog.agentEdit.name">
         <source>name</source>
         <translation>名前</translation>
@@ -5827,6 +5831,10 @@ WHAT A KEY NEEDS
         <source>%1 is not NAME=value</source>
         <translation>%1 は NAME=value の形ではありません</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.kind_from_the_command">
+        <source>the command's</source>
+        <translation>コマンドから判断</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>既定にする で SPC g で開くものを指定</translation>
@@ -5834,6 +5842,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t">
         <source>no profiles yet: Add… one, a name and the command that starts the agent</source>
         <translation>プロファイルがまだありません: 追加… で名前とエージェントを起動するコマンドを登録してください</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.not_a_kind">
+        <source>%1 is not a kind AutoDoc knows</source>
+        <translation>%1 は AutoDoc が知らない種類です</translation>
     </message>
     <message id="autodoc.text.agentprofiles.not_saved">
         <source>not saved: %1</source>
@@ -7816,6 +7828,30 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
         <source>todos: assigned to %1, and sent to it</source>
         <translation>ToDo: %1 に割り当てて送信しました</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_can_be_woken">
+        <source>a wake reaches it</source>
+        <translation>起こせます</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_cant_be_woken_now">
+        <source>can't be woken now (%1)</source>
+        <translation>今は起こせません（%1）</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_pane">
+        <source>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</source>
+        <translation>別のホストのエージェント（%1）：%2。A はタスクをあなたの依頼として送り、起こせるまでキューに入れます。</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>タスク：%1 に割り当てて送信しました</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_queued">
+        <source>todos: assigned to %1, queued: it can't be woken now (%2)</source>
+        <translation>タスク：%1 に割り当て、キューに入れました：今は起こせません（%2）</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent">
+        <source>todos: assigned to %1, but not sent: %2</source>
+        <translation>タスク：%1 に割り当てましたが、送信できませんでした：%2</translation>
     </message>
     <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
         <source>audit of %1 sent to %2; click to install or cancel</source>

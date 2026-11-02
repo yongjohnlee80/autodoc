@@ -91,7 +91,7 @@ var (
 
 var crewMCPTools = []mcpTool{
 	{Name: "mail_receive", Description: "Lease your next mail deliveries, at most 8; call it again until more is false. " +
-		"Each item's answer names the tool and arguments that answer it.",
+		"Each item's answer names the tool that answers it, called with the item's id.",
 		Schema: toolSchema("mail_receive", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "mail receive", nil, nil }},
 	{Name: "mail_ack", Description: "Done with a delivery (a message or an event), by the id mail_receive gave.",
@@ -120,12 +120,29 @@ var crewMCPTools = []mcpTool{
 			id, err := strArg(in, "id", true)
 			return "mail renew", []string{"--", id}, err
 		}},
+	{Name: "mail_show", Description: "Read a delivery you hold again, by the id mail_receive gave (a body cut short); its lease stays as it was.",
+		Schema: toolSchema("mail_show", map[string]any{"id": idProp}),
+		args: func(in map[string]any) (string, []string, error) {
+			id, err := strArg(in, "id", true)
+			return "mail show", []string{"--", id}, err
+		}},
 	{Name: "crew_whoami", Description: "Who you are in the crew: your codename, scope, session and store.",
 		Schema: toolSchema("crew_whoami", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "crew whoami", nil, nil }},
-	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it.",
-		Schema: toolSchema("crew_list", map[string]any{}),
-		args:   func(map[string]any) (string, []string, error) { return "crew list", nil, nil }},
+	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it; a profile whose session ended only with all.",
+		Schema: toolSchema("crew_list", map[string]any{"all": map[string]any{"type": "boolean", "description": "also the profiles whose session ended"}}),
+		args: func(in map[string]any) (string, []string, error) {
+			switch all := in["all"].(type) {
+			case nil:
+			case bool:
+				if all {
+					return "crew list", []string{"--all"}, nil
+				}
+			default:
+				return "", nil, errors.New("all is true or false")
+			}
+			return "crew list", nil, nil
+		}},
 	{Name: "mail_send", Description: "Send mail: to a codename, name@scope, user (the person you work for) or session:<id>. " +
 		"kind request asks for an answer, which wakes you when it comes.",
 		Schema: toolSchema("mail_send", map[string]any{
@@ -167,8 +184,8 @@ var crewMCPTools = []mcpTool{
 		}},
 }
 
-// toolAnswers rewrites each received item's answer, the CLI's command, as the tool call that
-// answers it: an agent on MCP calls a tool, and types no command.
+// toolAnswers rewrites each received item's answer, the CLI's command, as the tool that answers
+// it, called with the item's id: an agent on MCP calls a tool, and types no command.
 func toolAnswers(v any) any {
 	res, ok := v.(map[string]any)
 	if !ok {
@@ -176,18 +193,23 @@ func toolAnswers(v any) any {
 	}
 	items, _ := res["deliveries"].([]any)
 	for _, it := range items {
-		item, ok := it.(map[string]any)
-		if !ok {
-			continue
-		}
-		id, _ := item["id"].(string)
-		if m, _ := item["message"].(map[string]any); m != nil && m["kind"] == mail.KindRequest {
-			item["answer"] = fmt.Sprintf(`mail_reply {"id": %q, "body": "<your reply>"}`, id)
-		} else {
-			item["answer"] = fmt.Sprintf(`mail_ack {"id": %q}`, id)
-		}
+		toolAnswer(it)
 	}
 	return res
+}
+
+// toolAnswer is toolAnswers for one item.
+func toolAnswer(v any) any {
+	item, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	if m, _ := item["message"].(map[string]any); m != nil && m["kind"] == mail.KindRequest {
+		item["answer"] = "mail_reply"
+	} else {
+		item["answer"] = "mail_ack"
+	}
+	return item
 }
 
 // mcpRequest is one JSON-RPC message from the client; a notification has no id.
@@ -441,12 +463,18 @@ func callMCPTool(ctx context.Context, name string, args map[string]any, session 
 	case err != nil:
 		return failed(err.Error())
 	}
-	if name == "mail_receive" {
+	switch name {
+	case "mail_receive":
 		res = toolAnswers(res)
+	case "mail_show":
+		res = toolAnswer(res)
 	}
-	b, err := json.MarshalIndent(res, "", "  ")
-	if err != nil {
+	// compact, as the CLI prints it, and nothing HTML-escaped (token item 4)
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(res); err != nil {
 		return failed(err.Error())
 	}
-	return map[string]any{"content": []map[string]any{{"type": "text", "text": string(b)}}}
+	return map[string]any{"content": []map[string]any{{"type": "text", "text": strings.TrimSuffix(b.String(), "\n")}}}
 }

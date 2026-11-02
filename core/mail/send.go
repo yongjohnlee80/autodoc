@@ -524,6 +524,48 @@ func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string)
 	})
 }
 
+// Show is a delivery the caller holds, read again: its message, under the lease it holds, with the
+// lease and its attempts unchanged (mail.show).
+// Another session's, another lease, one that lapsed, or a delivery done is ErrLeaseLost. It writes
+// nothing: a lapsed lease is read as lapsed, and left for the next write to expire.
+func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) (Item, error) {
+	var out Item
+	err := m.store.Read(ctx, func(tx Tx) error {
+		s, err := m.crew.Authenticate(tx, credential)
+		if err != nil {
+			return err
+		}
+		d, _, err := owned(tx, s, delivery, lease)
+		if err != nil {
+			return err
+		}
+		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
+			return ErrLeaseLost
+		}
+		msg, ok, err := tx.Message(d.Message)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
+		}
+		if msg.Expires != nil && *msg.Expires <= tx.Now().UnixNano() {
+			return ErrLeaseLost // the message ended though its lease is live; the next write expires it
+		}
+		scope, err := receiverScope(tx, s)
+		if err != nil {
+			return err
+		}
+		from, err := fromAddress(tx, scope, msg.Sender)
+		if err != nil {
+			return err
+		}
+		out = Item{Delivery: d, Message: msg, From: from}
+		return nil
+	})
+	return out, err
+}
+
 // Ack is done with a delivery under its lease. Replaying an ack of the same lease answers ok;
 // another lease, or one that lapsed, is ErrLeaseLost.
 func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) error {

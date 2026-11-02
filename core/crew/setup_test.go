@@ -7,10 +7,12 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -121,12 +123,14 @@ func TestSetupForAnotherKindIsNothing(t *testing.T) {
 	}
 }
 
-// TestSetupForCodexIsTheWaitingRegistration: a Codex agent's setup is one step after its start, for
-// any host: the agent's autodoc registering the folder's thread, looking until it is found (crew
-// endpoint --codex-here --wait), since the start; nothing on its command line or in its env.
+// TestSetupForCodexIsTheWaitingRegistration: a Codex agent's setup (here one before --no-daemon,
+// with no folder of its own) is one step after its start, for any host: the agent's autodoc
+// registering the folder's thread, looking until it is found (crew endpoint --codex-here --wait),
+// since the start; nothing on its command line or in its env.
 func TestSetupForCodexIsTheWaitingRegistration(t *testing.T) {
+	older := codexOnPath(t, codexOlderHelp)
 	for _, host := range []string{crew.HostNvim, crew.HostWindow} {
-		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, Env: map[string]string{"PATH": "/x"}}, "")
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, Env: map[string]string{"PATH": older}, Dir: t.TempDir()}, "")
 		want := []string{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}
 		if err != nil || len(s.After) != 1 || !slices.Equal(s.After[0], want) || len(s.Argv)+len(s.Env) != 0 || s.Prompts {
 			t.Errorf("%s: %+v %v, want the one step %q", host, s, err, want)
@@ -172,9 +176,17 @@ func TestSetupForAllowsTheGuidesCommandsInTheSessionAlone(t *testing.T) {
 	if err := json.Unmarshal([]byte(o.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	// OpenCode's rules wait on its compound-command probe (crew's openCodeAllowProven): none written
-	if want := map[string]string{"git push*": "ask"}; !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || len(o.Allow) != 0 {
-		t.Errorf("OpenCode's setup: %+v, Allow %q; want the agent's own rules alone, none of AutoDoc's until OpenCode's probe passes", cfg.Permission, o.Allow)
+	// OpenCode's probe passed (KB ledger 2026-11-01-probe-compound-contracts-PASS): the guide's
+	// commands are allowed beside the agent's own rules, which stay
+	want := map[string]string{"git push*": "ask"}
+	var rules []string
+	for rule := range crew.OpenCodeAllow() {
+		want[rule] = "allow"
+		rules = append(rules, rule)
+	}
+	slices.Sort(rules)
+	if !maps.Equal(cfg.Permission.Bash, want) || cfg.Permission.Edit != "ask" || !slices.Equal(o.Allow, rules) {
+		t.Errorf("OpenCode's setup: %+v, Allow %q; want the agent's own rules and the guide's commands %q", cfg.Permission, o.Allow, rules)
 	}
 	if es, _ := os.ReadDir(home); len(es) != 0 {
 		t.Errorf("the setup wrote into the user's home: %v", es)
@@ -218,8 +230,8 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".agents/mcp_config.json" {
-			t.Fatalf("%s: folder files %+v, want .agents/mcp_config.json alone", host, s.FolderFiles)
+		if len(s.FolderFiles) != 2 || s.FolderFiles[0].Path != ".agents/mcp_config.json" || s.FolderFiles[1].Path != ".agents/rules/autodoc-crew.md" {
+			t.Fatalf("%s: folder files %+v, want .agents/mcp_config.json and its crew rules", host, s.FolderFiles)
 		}
 		var cfg map[string]map[string]struct {
 			Command string            `json:"command"`
@@ -253,7 +265,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		if err := json.Unmarshal([]byte(s.Argv[1]), &settings); err != nil {
 			t.Fatal(err)
 		}
-		rules := []string{"command(autodoc crew bridge --agy)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
+		rules := []string{"command(autodoc crew bridge --agy)", "command(autodoc --contracts)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
 		trusted := []string{"/a"} // the window's working folder is the agent's folder
 		if host == crew.HostNvim {
 			trusted = []string{"/a", "/p"} // Neovim's is the user's project, the agent's folder added
@@ -268,7 +280,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 	// the crew's own server has no env of its own (it inherits the agent's): its config says none
 	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostWindow, AgentDir: "/a",
 		Servers: []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}}, "")
-	if err != nil || len(s.FolderFiles) != 1 || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
+	if err != nil || len(s.FolderFiles) != 2 || s.FolderFiles[0].Path != ".agents/mcp_config.json" || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
 		t.Errorf("a server with no env: %+v %v, want its config without an env", s.FolderFiles, err)
 	}
 	if !strings.Contains(crew.AgyLaunchPrompt, crew.AgyBridgeCommand) || !strings.Contains(crew.GuideOf(crew.KindAgy).Markdown, "`"+crew.AgyBridgeCommand+"`") {
@@ -348,7 +360,7 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
-	rules := []string{"mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
+	rules := []string{"Bash(autodoc --contracts:*)", "mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
 		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), Servers: servers}
 		s, err := crew.SetupFor(in, "")
@@ -365,7 +377,7 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
 			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
 		}
-		if !slices.Equal(s.Allow, rules) { // least privilege: its tools, and no shell rule for its mail
+		if !slices.Equal(s.Allow, rules) { // least privilege: its tools and the read-only contracts, no shell rule for its mail
 			t.Errorf("%s: Allow %q, want exactly %q", host, s.Allow, rules)
 		}
 		if slices.ContainsFunc(s.Allow, func(r string) bool { return strings.HasPrefix(r, "mcp__") && strings.Contains(r, "*") }) {
@@ -405,7 +417,9 @@ func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	var cfg struct {
 		MCP        map[string]map[string]any `json:"mcp"`
 		Plugin     []string                  `json:"plugin"`
-		Permission any                       `json:"permission"`
+		Permission struct {
+			Bash map[string]string `json:"bash"`
+		} `json:"permission"`
 	}
 	if err := json.Unmarshal([]byte(s.Env["OPENCODE_CONFIG_CONTENT"]), &cfg); err != nil {
 		t.Fatal(err)
@@ -418,8 +432,13 @@ func TestSetupForOpenCodeTakesTheCrewMCPServer(t *testing.T) {
 	if cfg.MCP["mine"]["url"] != "https://example.invalid/mcp" || !slices.Contains(cfg.Plugin, "file:///p/mine.js") {
 		t.Errorf("the user's own MCP server or plugin was lost: %+v", cfg)
 	}
-	if cfg.Permission != nil || s.MailVia != crew.MailViaMCP || s.Env[crew.EnvMailVia] != "mcp" {
-		t.Errorf("permission %v, mail via %v, the plugin's mode %q: want none written and MCP, for the plugin too (its wake's notice)", cfg.Permission, s.MailVia, s.Env[crew.EnvMailVia])
+	// least privilege, as Claude's: on MCP mail none of the guide's mail commands, only the read-only
+	// contracts its guide points to (OpenCode gates no MCP tool)
+	contracts := map[string]string{"autodoc --contracts": "allow", "autodoc --contracts *": "allow"}
+	if !maps.Equal(cfg.Permission.Bash, contracts) || !slices.Equal(s.Allow, []string{"autodoc --contracts", "autodoc --contracts *"}) ||
+		s.MailVia != crew.MailViaMCP || s.Env[crew.EnvMailVia] != "mcp" {
+		t.Errorf("permission.bash %v, Allow %q, mail via %v, the plugin's mode %q: want the contracts alone and MCP, for the plugin too (its wake's notice)",
+			cfg.Permission.Bash, s.Allow, s.MailVia, s.Env[crew.EnvMailVia])
 	}
 	in.Servers = nil
 	in.Env[crew.EnvMailVia] = "mcp" // the host's own value never decides the plugin's mode
@@ -485,9 +504,30 @@ func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
 			t.Errorf("%s: %v, server %q; want refused with %q and no server", name, err, s.Server, c.want)
 		}
 	}
-	nf, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Servers: server(nil)}, "")
+	nf, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": codexOnPath(t, codexOlderHelp)}, Dir: t.TempDir(), Servers: server(nil)}, "")
 	if err != nil || len(nf.Server) != 0 || nf.MailVia != crew.MailViaCLI || len(nf.Notices) != 1 || !strings.Contains(nf.Notices[0], "needs the agent's own folder") {
 		t.Fatalf("no agent folder: %+v %v; want no server, the CLI's mail, and it said once", nf, err)
+	}
+}
+
+// TestTheCodexServerRunsCommandsWithoutALoginShell: the app-server a Codex agent's commands run in is
+// started with allow_login_shell=false, on its own command line (never in ~/.codex): a login shell
+// sources the user's profile, whose PATH (~/.local/bin first) puts the user's own autodoc ahead of the
+// agent's, so the agent spoke to the crew through another build than its host's.
+func TestTheCodexServerRunsCommandsWithoutALoginShell(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, AgentDir: t.TempDir(), Servers: servers}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := slices.Index(s.Server, "allow_login_shell=false")
+		if at < 1 || s.Server[at-1] != "-c" {
+			t.Fatalf("%s: its server %q, want -c allow_login_shell=false", host, s.Server)
+		}
+		if slices.Contains(s.Argv, "allow_login_shell=false") {
+			t.Errorf("%s: the TUI's argv %q has it too: a TUI given -c runs embedded, off its own server", host, s.Argv)
+		}
 	}
 }
 
@@ -507,7 +547,7 @@ func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	sock := filepath.Join(agent, crew.CodexServerSocket)
-	want := []string{"codex", "app-server", "--listen", "unix://" + sock,
+	want := []string{"codex", "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false",
 		"-c", `mcp_servers.autodoc.command="/x/autodoc"`, "-c", `mcp_servers.autodoc.args=["crew","mcp"]`,
 		"-c", `mcp_servers.autodoc.env_vars=["AUTODOC_CREW_CONTEXT"]`,
 		"-c", `mcp_servers.autodoc.tools.mail_receive.approval_mode="approve"`, "-c", `mcp_servers.autodoc.tools.crew_whoami.approval_mode="approve"`}
@@ -525,8 +565,181 @@ func TestSetupForCodexGetsItsOwnAppServer(t *testing.T) {
 	if len(s.After) != 1 || s.After[0][2] != "--codex-here" {
 		t.Fatalf("its registration step: %q", s.After)
 	}
+}
+
+// TestSetupForCodexOnCLIMailGetsItsOwnAppServerToo: a Codex agent with its own folder and no crew MCP
+// server (CLI mail: the user's choice, or a daemon that offers none) still gets its own app-server,
+// the TUI on it, and its registration step: its commands run with its own environment, and its
+// thread is found there to wake it, never on Codex's shared daemon (item 14, N1).
+func TestSetupForCodexOnCLIMailGetsItsOwnAppServerToo(t *testing.T) {
+	agent := t.TempDir()
+	sock := filepath.Join(agent, crew.CodexServerSocket)
 	cli, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, AgentDir: agent}, "")
-	if err != nil || len(cli.Server) != 0 || len(cli.Argv) != 0 || cli.MailVia != crew.MailViaCLI || len(cli.After) != 1 {
-		t.Fatalf("without servers: %+v %v, want the registration step alone and the CLI's mail", cli, err)
+	if err != nil || !slices.Equal(cli.Server, []string{"codex", "app-server", "--listen", "unix://" + sock, "-c", "allow_login_shell=false"}) || cli.ServerSocket != sock {
+		t.Fatalf("CLI mail: the server %q at %q (%v), want its own app-server with no MCP server", cli.Server, cli.ServerSocket, err)
+	}
+	if !slices.Equal(cli.Argv, []string{"--remote", "unix://" + sock}) || cli.Env[crew.EnvCodexServer] != sock || cli.MailVia != crew.MailViaCLI {
+		t.Fatalf("CLI mail: argv %q, env %v, mail via %v: want the TUI on its server, its autodoc told it, the CLI's mail", cli.Argv, cli.Env, cli.MailVia)
+	}
+	if len(cli.After) != 1 || cli.After[0][2] != "--codex-here" || len(cli.Notices) != 0 {
+		t.Fatalf("CLI mail: steps %q, notices %q: want its registration, nothing to say", cli.After, cli.Notices)
+	}
+	p, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Program: "/opt/codex/bin/codex", AgentDir: agent}, "")
+	if err != nil || len(p.Server) == 0 || p.Server[0] != "/opt/codex/bin/codex" {
+		t.Fatalf("a program by path: the server %q (%v), want it started by that program", p.Server, err)
+	}
+}
+
+// TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon: a Codex agent with no folder of its own has
+// no server of its own. A Codex that takes --no-daemon (its --help says) is started with it, so it
+// runs its own embedded server, never Codex's shared daemon with another agent's identity; it has no
+// registration step, since there is no server to find its thread on, and the setup says once that
+// it can't be woken. A Codex before the flag is started as before (the step, no flag): it would
+// refuse the flag, and it has no shared daemon to keep off.
+func TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon(t *testing.T) {
+	newer := codexOnPath(t, codexNewerHelp)
+	for _, servers := range [][]crew.MCPServer{nil, {{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": newer}, Dir: t.TempDir(), Servers: servers}, "")
+		if err != nil || !slices.Equal(s.Argv, []string{"--no-daemon"}) || len(s.Server) != 0 || len(s.After) != 0 || s.MailVia != crew.MailViaCLI {
+			t.Fatalf("no folder, %d servers: %+v %v; want --no-daemon, no server, no step, the CLI's mail", len(servers), s, err)
+		}
+		woken := slices.IndexFunc(s.Notices, func(n string) bool { return strings.Contains(n, "can't wake it") })
+		if woken < 0 || slices.IndexFunc(s.Notices[woken+1:], func(n string) bool { return strings.Contains(n, "can't wake it") }) >= 0 {
+			t.Fatalf("no folder, %d servers: notices %q; want it said once that crew mail can't wake it", len(servers), s.Notices)
+		}
+	}
+	older := codexOnPath(t, codexOlderHelp)
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": older}, Dir: t.TempDir()}, "")
+	if err != nil || len(s.Argv) != 0 || len(s.After) != 1 || s.After[0][2] != "--codex-here" {
+		t.Fatalf("a Codex without --no-daemon: %+v %v; want no flag and the registration step, as before", s, err)
+	}
+}
+
+// The --help lines of a Codex that takes --no-daemon, and of one before it.
+const (
+	codexNewerHelp = "      --no-daemon   Run without the shared background server"
+	codexOlderHelp = "      --remote <ADDR>   Connect the TUI to a remote app server endpoint"
+)
+
+// codexOnPath is a folder holding an executable named codex whose --help prints help and whose
+// --version names a build, to stand as an agent's PATH.
+func codexOnPath(t *testing.T, help string) string {
+	t.Helper()
+	return codexScript(t, "case \"$1\" in --version) echo 'codex-cli 0.0.0-test';; --help) printf '%s\\n' \""+help+"\";; esac\nexit 0\n")
+}
+
+// codexScript is a folder holding an executable named codex that runs body as a shell script. It
+// runs with that folder as its whole PATH, so body uses builtins alone, or a command's full path
+// (sleepCmd).
+func codexScript(t *testing.T, body string) string {
+	t.Helper()
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// sleepCmd is sleep's full path, for a script whose PATH holds no sleep.
+func sleepCmd(t *testing.T) string {
+	t.Helper()
+	p, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// TestSetupForCodexWithNoFolderRefusesACodexItCantRead: with no folder of its own, the setup must
+// know whether the Codex takes --no-daemon, since a start without it runs in Codex's shared daemon,
+// with whichever agent's identity started that. A Codex that isn't found, whose --help fails, or
+// that doesn't answer within the probe's time, is unknown: the start is refused, saying why, never
+// taken as a Codex before the flag (no flag, the registration step).
+func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
+	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
+	for name, path := range map[string]string{
+		"not found":    t.TempDir(),
+		"help fails":   codexScript(t, "exit 1\n"),
+		"help hangs":   codexScript(t, "[ \"$1\" = --help ] && exec "+sleepCmd(t)+" 5\necho codex-cli 0.163.0\n"),
+		"version only": codexScript(t, "[ \"$1\" = --version ] && echo codex-cli 0.163.0 && exit 0\nexit 2\n"),
+	} {
+		start := time.Now()
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": path}, Dir: t.TempDir()}, "")
+		if err == nil || !strings.Contains(err.Error(), "--no-daemon") || !strings.Contains(err.Error(), "folder of its own") {
+			t.Errorf("%s: %+v %v; want the start refused, naming --no-daemon and the agent's own folder", name, s, err)
+		}
+		took := time.Since(start)
+		if took > 3*time.Second {
+			t.Errorf("%s: the setup took %v, want it bounded by the probe's time", name, took)
+		}
+		if name == "help hangs" && took < 300*time.Millisecond {
+			t.Errorf("%s: the setup took %v, under the probe's time: the stand-in failed, it didn't hang", name, took)
+		}
+	}
+}
+
+// TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe: a probe that failed, or ran out of time, is
+// not what that Codex is: once the same Codex answers, the next setup reads it and gives it
+// --no-daemon.
+func TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe(t *testing.T) {
+	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
+	for name, failing := range map[string]string{"fails": "exit 1", "hangs": "exec " + sleepCmd(t) + " 5"} {
+		// its --version answers throughout: the failed --help is of a Codex the probe can name
+		bin := codexScript(t, "[ \"$1\" = --help ] && [ -f \"${0%/*}/broken\" ] && "+failing+"\n"+
+			"case \"$1\" in --version) echo codex-cli 0.163.0;; --help) printf '%s\\n' \""+codexNewerHelp+"\";; esac\n")
+		broken := filepath.Join(bin, "broken")
+		if err := os.WriteFile(broken, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		in := crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: t.TempDir()}
+		if s, err := crew.SetupFor(in, ""); err == nil {
+			t.Fatalf("%s: %+v; want the start refused while its Codex can't be read", name, s)
+		}
+		if err := os.Remove(broken); err != nil {
+			t.Fatal(err)
+		}
+		s, err := crew.SetupFor(in, "")
+		if err != nil || !slices.Equal(s.Argv, []string{"--no-daemon"}) || len(s.After) != 0 {
+			t.Errorf("%s, then answering: %+v %v; want --no-daemon and no step (the failure wasn't kept)", name, s, err)
+		}
+	}
+}
+
+// TestSetupForCodexWithNoFolderReadsEachProjectsOwnCodex: one shim (mise's, say) runs another Codex
+// by the project it starts in and by the profile's env, though its own path and time don't change.
+// Each setup reads the Codex its start will run: the newer one gets --no-daemon, in whichever order,
+// and the older one never gets the flag it would refuse, nor the newer one's step.
+func TestSetupForCodexWithNoFolderReadsEachProjectsOwnCodex(t *testing.T) {
+	shim := codexScript(t, "if [ -f .codex-newer ] || [ \"$CODEX_PICK\" = newer ]; then v=0.163.0 h='"+codexNewerHelp+"'; else v=0.150.0 h='"+codexOlderHelp+"'; fi\n"+
+		"case \"$1\" in --version) echo \"codex-cli $v\";; --help) printf '%s\\n' \"$h\";; esac\n")
+	older, newer := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(newer, ".codex-newer"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	type start struct {
+		name, dir, pick string
+		flag            bool
+	}
+	for _, c := range []start{
+		{"the older project", older, "", false},
+		{"the newer project", newer, "", true},
+		{"the older project again", older, "", false},
+		{"a project whose profile picks the newer", t.TempDir(), "newer", true},
+		{"a project picking none", t.TempDir(), "", false},
+	} {
+		env := map[string]string{"PATH": shim}
+		if c.pick != "" {
+			env["CODEX_PICK"] = c.pick
+		}
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: env, Dir: c.dir}, "")
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := slices.Equal(s.Argv, []string{"--no-daemon"}) && len(s.After) == 0; got != c.flag {
+			t.Errorf("%s: %+v; want --no-daemon and no step: %v", c.name, s, c.flag)
+		}
+		if !c.flag && (len(s.Argv) != 0 || len(s.After) != 1) {
+			t.Errorf("%s: %+v; want no flag and the registration step", c.name, s)
+		}
 	}
 }

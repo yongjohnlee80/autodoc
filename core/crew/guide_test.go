@@ -88,8 +88,9 @@ func TestTheMCPGuideSaysEachToolsArguments(t *testing.T) {
 		"\n  - `mail_ack`: `id`\n",
 		"\n  - `mail_reply`: `id` and `body`; optionally `subject`\n",
 		"\n  - `mail_renew`: `id`\n",
+		"\n  - `mail_show`: `id`\n",
 		"\n  - `crew_whoami`: none\n",
-		"\n  - `crew_list`: none\n",
+		"\n  - `crew_list`: optionally `all`\n",
 		"\n  - `mail_send`: `to` and `body`; optionally `kind` and `subject`\n",
 	} {
 		if !strings.Contains(g, line) {
@@ -163,6 +164,25 @@ func TestTheGuideSaysAWakesSendMessageDoesntApply(t *testing.T) {
 			for _, must := range append([]string{"SendMessage", "doesn't apply"}, mode.answers...) {
 				if !strings.Contains(line, must) {
 					t.Errorf("%s's guide (mail via %s) has no line saying a wake's SendMessage doesn't apply with %q:\n%s", kind, mode.name, must, g)
+				}
+			}
+		}
+	}
+}
+
+// TestTheGuideSaysHowToReadAHeldDeliveryAgain (token item 8): a body the agent's reader cut short is
+// read again by its id, in the guide's own form, never by asking its sender to resend; and an item's
+// answer is run with that item's id.
+func TestTheGuideSaysHowToReadAHeldDeliveryAgain(t *testing.T) {
+	for _, kind := range []string{crew.KindClaude, crew.KindCodex, crew.KindAgy, crew.KindOpenCode, "aider"} {
+		for via, musts := range map[crew.MailVia][]string{
+			crew.MailViaCLI: {"`autodoc mail show <id>`", "in place of `<id>`"},
+			crew.MailViaMCP: {"`mail_show` with its `id`", "with that delivery's `id`"},
+		} {
+			g := crew.GuideOfVia(kind, via).Markdown
+			for _, must := range musts {
+				if !strings.Contains(g, must) {
+					t.Errorf("%s's guide (mail via %d) lacks %q:\n%s", kind, via, must, g)
 				}
 			}
 		}

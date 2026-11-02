@@ -71,7 +71,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [A pull-based change log](todos.md#a-pull-based-change-log)
 - [An assignment carries its assigner's scope](todos.md#an-assignment-carries-its-assigners-scope)
 - [AutoDoc's own todos view](todos.md#autodocs-own-todos-view)
-- [AutoDoc assigns only to its own agents](todos.md#autodoc-assigns-only-to-its-own-agents)
+- [AutoDoc assigns to its own agents, and to another host's through the crew](todos.md#autodoc-assigns-to-its-own-agents-and-to-another-hosts-through-the-crew)
 - [Text reaches an agent only as a bracketed paste](todos.md#text-reaches-an-agent-only-as-a-bracketed-paste)
 - [A message to an agent is sent, never left for Enter](todos.md#a-message-to-an-agent-is-sent-never-left-for-enter)
 - [Graph-only indexing](todos.md#graph-only-indexing)

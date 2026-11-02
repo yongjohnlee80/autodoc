@@ -40,9 +40,12 @@ var errNoCodexThreadHere = errors.New("no Codex thread for this folder on the ap
 // (codex-cli 0.163.0, live 2026-11-01), so the loaded threads are the ones to look at. With none,
 // the refusal says what was looked at (codexLook), so a miss names its cause; another folder's
 // thread is counted, never named.
-// The newest thread there need not be the agent's own: a sub-thread it started, or the user's own
-// Codex run in that folder. The agent's folder is AutoDoc's and its codename's alone, so neither is
-// to be expected; a wrong one is woken, and its wake goes unanswered.
+// The newest thread there need not be the agent's own. A sub-thread Codex started beside it (an
+// ephemeral one, which refuses a queued wake, or a sub-agent's, which names its parent) is passed
+// over: an agent on CLI mail made one with its first command (codex-cli 0.163.0, live 2026-11-02),
+// and registering it left the agent unwakeable. The user's own Codex run in that folder is not to be
+// expected, the folder being AutoDoc's and its codename's alone; a wrong one is woken, and its wake
+// goes unanswered.
 func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64) (string, error) {
 	real := dir // the folder as Codex may have recorded it, its links resolved
 	if r, err := filepath.EvalSymlinks(dir); err == nil {
@@ -77,9 +80,11 @@ func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64)
 		look.read++
 		var read struct {
 			Thread struct {
-				ID        string `json:"id"`
-				Cwd       string `json:"cwd"`
-				CreatedAt int64  `json:"createdAt"`
+				ID        string  `json:"id"`
+				Cwd       string  `json:"cwd"`
+				CreatedAt int64   `json:"createdAt"`
+				Ephemeral bool    `json:"ephemeral"`
+				Parent    *string `json:"parentThreadId"`
 			} `json:"thread"`
 		}
 		if err := rpc.call(ctx, "thread/read", map[string]any{"threadId": id, "includeTurns": false}, &read); err != nil {
@@ -94,6 +99,8 @@ func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64)
 		}
 		here := read.Thread.Cwd == dir || read.Thread.Cwd == real
 		switch {
+		case here && (read.Thread.Ephemeral || read.Thread.Parent != nil):
+			look.sub++ // one Codex started beside the agent's: never woken, and never its own
 		case here && read.Thread.CreatedAt >= since:
 			return read.Thread.ID, nil
 		case here:
@@ -107,18 +114,21 @@ func codexThreadHere(ctx context.Context, rpc codexRPC, dir string, since int64)
 }
 
 // codexLook is what one codexThreadHere saw: the loaded threads, how many it read, and of those
-// that read how many were this folder's but older than its spawn, how many another folder's, and
-// how many failed to read (the first failure kept).
+// that read how many were this folder's but older than its spawn, how many another folder's, how
+// many this folder's sub-threads, and how many failed to read (the first failure kept).
 type codexLook struct {
-	loaded, read, failed, older, elsewhere int
-	newestOlder                            int64
-	firstFail                              error
+	loaded, read, failed, older, elsewhere, sub int
+	newestOlder                                 int64
+	firstFail                                   error
 }
 
 func (l codexLook) String(since int64) string {
 	s := fmt.Sprintf("%d loaded, %d read: %d another folder's, %d this folder's made before %d", l.loaded, l.read, l.elsewhere, l.older, since)
 	if l.older > 0 {
 		s += fmt.Sprintf(" (the newest at %d)", l.newestOlder)
+	}
+	if l.sub > 0 {
+		s += fmt.Sprintf(", %d sub-threads of this folder's (ephemeral or a sub-agent's)", l.sub)
 	}
 	if l.failed > 0 {
 		s += fmt.Sprintf(", %d unreadable (the first: %v)", l.failed, l.firstFail)
