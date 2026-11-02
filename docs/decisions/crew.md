@@ -499,8 +499,10 @@ messaging, which tries the agent's doorbell first and falls back to typing
   message stays typed for the user's Enter, and a notice says why. A Claude agent's prompts are
   reported only once it has started (its endpoint registered), and the base types nothing at all
   into a Claude agent the crew doesn't say has started: a paste into its folder-trust question may
-  act on its keys. An agent just started is asked again while it comes up; one that hasn't started
-  ends the delivery `ErrAgentNotStarted`, and a notice, once a session, names its folder. A Claude
+  act on its keys. An agent just started is asked again while it comes up. To one that hasn't started,
+  your own send is mailed instead, never fired, so its first receive gets it; anything else (a
+  fallback job from an older daemon) ends `ErrAgentNotStarted`. A notice, once a session, names its
+  folder. A Claude
   agent that exits before it started may have declined that question: a notice says so, with its
   exit code. Only a doorbell that answers for
   certain it didn't ring falls back; one whose answer is lost is asked again with the same key.

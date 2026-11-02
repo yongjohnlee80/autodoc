@@ -856,6 +856,10 @@ type deliverOpts struct {
 	// attempt does (finished, the workspace, the instance, its tab's owner): what submit waits for
 	// lets any of them change, so it presses nothing unless still answers nil.
 	submit func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error))
+	// queue, when set, mails the delivery instead, queued for the agent's first receive, when nothing
+	// may be typed into it because it hasn't started (ErrAgentNotStarted), and the delivery finishes
+	// with its answer
+	queue func(finish func(error))
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal
@@ -970,6 +974,9 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 					attempt(tries)
 				case tries > 0:
 					c.After(agentReadyPoll, func() { attempt(tries - 1) })
+				case o.queue != nil:
+					a.tellNotStarted(instance)
+					o.queue(finish)
 				default:
 					a.tellNotStarted(instance)
 					finish(ErrAgentNotStarted)

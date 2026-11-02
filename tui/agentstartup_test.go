@@ -2,10 +2,14 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 )
 
 // A crew Claude agent is past its startup once Claude Code ran its SessionStart hook, which
@@ -93,16 +97,29 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 }
 
 // The user's own send to a Claude that hasn't started, when its doorbell can't ring, types nothing
-// either: the base checks it as it checks a fallback job.
-func TestTheUsersSendIsNotTypedIntoAClaudeThatHasntStarted(t *testing.T) {
+// either: the base checks it as it checks a fallback job, and mails it instead, never fired, so the
+// agent's first receive once started gets it (the mutant: refused, the message gone).
+func TestTheUsersSendToAClaudeThatHasntStartedWaitsAsMail(t *testing.T) {
 	a, c, w, _ := claudeRig(t)
+	var fired []bool
+	w.inboxSend = func(p []any) (any, error) {
+		fire, _ := p[len(p)-1].(bool)
+		fired = append(fired, fire)
+		if fire { // no endpoint: nothing to ring, nothing stored
+			return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "no endpoint"}
+		}
+		return map[string]any{"message": "m"}, nil
+	}
 	var heard []error
 	if err := a.SendText(AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
-	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 || len(heard) != 1 || heard[0] == nil {
-		t.Fatalf("pasted %q, pressed %q, heard %v: want nothing typed, the send ended unsent", c.panel.pastes, c.panel.keys, heard)
+	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
+		t.Fatalf("pasted %q, pressed %q: want nothing typed", c.panel.pastes, c.panel.keys)
+	}
+	if len(heard) != 1 || heard[0] != nil || !slices.Equal(fired, []bool{true, false}) {
+		t.Fatalf("heard %v, inbox.send fired %v: want the doorbell, then the message mailed unfired, done once", heard, fired)
 	}
 }
 

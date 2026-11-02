@@ -112,6 +112,25 @@ func (h *crewHost) sendTask(codename, scope, subject, body, key string, then fun
 	})
 }
 
+// queueSend mails codename, the window's own agent, a message from the user as userSend does, but
+// never fired: it waits, queued, for the agent's first receive (an agent that hasn't started yet,
+// which nothing may be typed into). then hears nil once it is stored.
+func (h *crewHost) queueSend(codename, kind, subject, body string, then func(error)) {
+	scope, epoch, ok := h.held()
+	if !ok || codename == "" {
+		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		return
+	}
+	key := newSecret()
+	h.c.Go(func(ctx context.Context) any {
+		_, err := h.c.Call(ctx, "inbox.send", scope, h.run, epoch, []any{codename}, body, key, kind, subject, false)
+		return err
+	}, func(v any) {
+		err, _ := v.(error)
+		then(err)
+	})
+}
+
 // startedOf asks the crew whether codename's session in the window's scope is past its CLI's
 // startup: its session live with its endpoint registered (crew.list's why is neither ended nor
 // no_endpoint), for a kind that starts with it (crew.StartsWithItsEndpoint). then hears it on the

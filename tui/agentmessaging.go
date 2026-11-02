@@ -89,7 +89,8 @@ func (d crewDoorbell) ring(to AgentRef, m AgentMessage, answer func(rang bool, e
 const submitDelay = 60 * time.Millisecond
 
 // sendMessage delivers m to the agent to through the window's one delivery: its doorbell first when
-// the window has one, else the base. An immediate error rejects it without calling done; accepted,
+// the window has one, else the base, or, to a crew agent that hasn't started, mail queued for its
+// first receive. An immediate error rejects it without calling done; accepted,
 // done is called once on the UI loop: nil when it reached the agent (rang, or typed and sent),
 // ErrAgentTypedNotSent when it was typed but left for the user's Enter, else why it didn't.
 func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) error {
@@ -107,6 +108,8 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 	var refused error // the doorbell's certain refusal, told once the base has typed the message
 	o := deliverOpts{present: m.Kind == MessageRequest, submit: a.submitter(to, func() error { return refused })}
 	if a.crew != nil {
+		// an agent that hasn't started gets it as mail, for its first receive: never typed
+		o.queue = func(finish func(error)) { a.crew.queueSend(to.Codename, m.Kind, m.Subject, m.Body, finish) }
 		var bell agentDoorbell = crewDoorbell{crew: a.crew}
 		o.ring = func(answer func(rang bool, err error)) {
 			bell.ring(to, m, func(rang bool, err error) {
