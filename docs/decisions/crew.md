@@ -251,6 +251,33 @@ Discard or Keep.
 
 In the code: `core/crew/adopt.go`, `core/mail/ender.go`, `tui/creworphans.go`
 
+## Crew bridges
+
+The crew starts helper processes that can outlive their agents: agy and Codex prompt bridges
+(`autodoc crew bridge … --foreground`), and each Codex agent's own app-server. Codex's shared
+managed daemon is Codex's own, started by whichever Codex came first. `crew.bridges` lists them
+all, for the daemon's user on its machine:
+
+- The daemon scans the processes itself (`/proc`; only Linux for now), matching each kind's command
+  line, so there is no pid file to go stale. A helper's start is its process reference, so a kill
+  never reaches a later process holding its pid.
+- Each helper is joined to the session it serves: a bridge by its `--session`, a Codex server by
+  the live endpoint naming its socket. It is `live`, or an `orphan` with why (its session ended, its
+  host is gone, no endpoint names its socket, its language server is gone). Codex's shared daemon
+  is `foreign`: the crew never started it and can't know what else uses it.
+- The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
+  in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
+  between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
+- `crew.bridge_kill` is the user's kill, from a window's System > Crew Bridges: a host verb, so no
+  agent can call it. The helper is opened by a pidfd and checked again before it is signalled.
+  A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
+  helper that leads its own process group is ended with its group. Any other, such as a server
+  Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is
+  never signalled.
+
+In the code: `core/crew/bridges.go`, `core/crew/bridges_linux.go`, `core/crew/reclaim.go`,
+`app/serve.go`, `tui/crewbridges.go`
+
 ## Sessions and the guard
 
 Before starting an agent, the host generates a secret (32 random bytes) and calls `crew.register`
