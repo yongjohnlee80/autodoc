@@ -65,6 +65,9 @@ type Edit struct {
 	// changed: a scope belongs only to the assign that set the assignee
 	// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope).
 	Scope *string
+	// By is who made that assign (Change.By), given to its Put rows as Scope is, by the same rule
+	// (docs/decisions/todos.md#an-assignment-says-who-made-it).
+	By *string
 }
 
 // Scoped is e's Put rows with their scopes: e.Scope when set, else each row's task's prior scope
