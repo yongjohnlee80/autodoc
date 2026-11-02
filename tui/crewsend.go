@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -132,10 +133,12 @@ func (h *crewHost) queueSend(codename, kind, subject, body string, then func(err
 }
 
 // startedOf asks the crew whether codename's session in the window's scope is past its CLI's
-// startup: its session live with its endpoint registered (crew.list's why is neither ended nor
-// no_endpoint), for a kind that starts with it (crew.StartsWithItsEndpoint). then hears it on the
-// loop; a window holding no scope, a
-// failed ask or no such session hears false: nothing is typed into what isn't known to have started.
+// startup, for a kind that starts with its endpoint (crew.StartsWithItsEndpoint): only what proves
+// the endpoint registered says so, crew.list's reachable, or a why that only a session with an
+// endpoint has (wakes_failing, backoff_until). Every other why fails closed: host_gone is read
+// before the endpoint is, so it says nothing of one. then hears it on the loop; a window holding no
+// scope, a failed ask or no such session hears false: nothing is typed into what isn't known to
+// have started.
 func (h *crewHost) startedOf(codename string, then func(started bool)) {
 	scope, _, ok := h.held()
 	if !ok || codename == "" {
@@ -152,8 +155,9 @@ func (h *crewHost) startedOf(codename string, then func(started bool)) {
 		for _, e := range asList(v) {
 			m := asMap(e)
 			if str(m, "scope") == scope && str(m, "codename") == codename {
+				reachable, _ := m["reachable"].(bool)
 				why := str(m, "why")
-				then(why != crew.WhyEnded && why != crew.WhyNoEndpoint)
+				then(reachable || strings.HasPrefix(why, crew.WhyWakesFailing) || strings.HasPrefix(why, crew.WhyBackoffUntil))
 				return
 			}
 		}

@@ -62,6 +62,7 @@ type (
 		Kind       string // claude | codex | agy | opencode
 		Locator    string // JSON, kind-specific
 		Registered int64
+		First      int64 // when its first generation registered, kept by every later one; 0 for one older than it
 	}
 
 	// Attention is a session waiting on the user: a permission prompt, or blocked

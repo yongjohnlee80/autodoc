@@ -240,7 +240,8 @@ func (t *memTx) NextDeadline() (int64, bool, error) {
 // fallbackCandidate is a delivery FallbackDue may answer, whatever the time: queued, never leased,
 // with no job, its recipient live and past its CLI's startup (crew.StartsWithItsEndpoint).
 // unreachable says whether that live session can't be woken; since is when its window opens, the
-// later of the message's creation, that session's start and its endpoint's registration.
+// later of the message's creation and that session's start, or its first endpoint's registration for
+// a kind that starts with it.
 func (t *memTx) fallbackCandidate(d mail.Delivery) (ok, unreachable bool, since int64) {
 	if d.State != mail.Queued || d.Attempts != 0 || d.Lease != "" {
 		return false, false, 0
@@ -262,8 +263,12 @@ func (t *memTx) fallbackCandidate(d mail.Delivery) (ok, unreachable bool, since 
 	if !hasEndpoint && crew.StartsWithItsEndpoint(p.Kind) {
 		return false, false, 0
 	}
+	opened := s.Started
+	if hasEndpoint && crew.StartsWithItsEndpoint(e.Kind) {
+		opened = max(opened, e.First)
+	}
 	w, _, _ := t.Wake(s.ID)
-	return true, !hasEndpoint || w.Failures >= crew.UnreachableAfter, max(t.st.messages[d.Message].Created, s.Started, e.Registered)
+	return true, !hasEndpoint || w.Failures >= crew.UnreachableAfter, max(t.st.messages[d.Message].Created, opened)
 }
 
 func (t *memTx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]mail.Delivery, error) {

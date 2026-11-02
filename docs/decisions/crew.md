@@ -553,9 +553,11 @@ it in its file mailbox.
 
 - **When.** A delivery falls back when it was never leased (an agent that leased it may have read
   it), its recipient has a live session (an ended one's mail waits for the next) that is past its
-  CLI's startup, and, counted from the later of the message's creation, that session's start and its
-  endpoint's registration, either the session has been unreachable (no endpoint, or 5 failed wakes)
-  for 30 s, or 10 min have passed (`FallbackAfter`).
+  CLI's startup, and, counted from the later of the message's creation and that session's start (for
+  a Claude session, its endpoint's first registration, when later), either the session has been
+  unreachable (no endpoint, or 5 failed wakes) for 30 s, or 10 min have passed (`FallbackAfter`).
+  A later registration of the endpoint (a resume, a compaction) moves nothing, nor does another
+  kind's endpoint.
 - **Not before the agent has started.** A Claude session registers its endpoint from Claude Code's
   SessionStart hook, which runs only once Claude Code is past its startup: in a folder it hasn't
   trusted yet, its folder-trust question, whose default is "No, exit". Its host registers the session

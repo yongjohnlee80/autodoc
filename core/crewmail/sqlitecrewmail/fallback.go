@@ -66,12 +66,14 @@ func sentBy(at int64) dao.Predicate {
 
 // windowOpenBy is a delivery whose fallback window opened at or before at: its message was created
 // then, its recipient's live session had started (a profile has one live session: registering
-// again supersedes the old), and that session's endpoint, if it has one, was registered then. A
-// message that waited across a restart counts from the new session, one that waited out a Claude's
-// startup from its endpoint.
+// again supersedes the old), and, for a kind that starts with its endpoint, that endpoint's first
+// generation had registered then. A message that waited across a restart counts from the new
+// session, one that waited out a Claude's startup from its first endpoint; another kind's endpoint,
+// and a later generation of any, move nothing.
 func windowOpenBy(at int64) dao.Predicate {
 	return dao.And(sentBy(at), liveRecipient(dao.Lte(`"crew_session"."started"`, at),
-		store.Correlated(true, "crew_endpoint", "session", "crew_session", "id", dao.Gt(`"crew_endpoint"."registered"`, at))))
+		store.Correlated(true, "crew_endpoint", "session", "crew_session", "id",
+			dao.In(`"crew_endpoint"."kind"`, endpointStartedKinds()), dao.Gt(`"crew_endpoint"."first_registered"`, at))))
 }
 
 func (t *Tx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]mail.Delivery, error) {
@@ -83,9 +85,10 @@ func (t *Tx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) (
 		OrderBy(dao.Asc(bySeq)).Limit(uint64(limit)).Select())
 }
 
-// NextFallbackAt is the earliest max(created, started, registered)+after over the candidates, per
-// live session: a delivery's window opens at the later of its message's creation, its recipient's
-// session's start and that session's endpoint's registration, so for each live session the earliest-created message of its candidates (and of its
+// NextFallbackAt is the earliest max(created, opened)+after over the candidates, per live session:
+// a delivery's window opens at the later of its message's creation and its recipient's session's
+// opening, its start, or its first endpoint's for a kind that starts with it (windowOpenBy), so for
+// each live session the earliest-created message of its candidates (and of its
 // unreachable ones) decides, read by mail_message's own column. One ordered one-row read per live
 // session and kind, the crew's size. Never earlier than FallbackDue answers, so the timer never
 // wakes to find nothing due and asks again for the same instant.
@@ -101,6 +104,10 @@ func (t *Tx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) 
 		if err != nil {
 			return 0, false, err
 		}
+		opened := s.Started
+		if crew.StartsWithItsEndpoint(e.Kind) {
+			opened = max(opened, e.First)
+		}
 		for _, c := range []struct {
 			cond  []dao.Predicate
 			after int64
@@ -115,7 +122,7 @@ func (t *Tx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) 
 			if !ok {
 				continue
 			}
-			if due := max(msg.Created, s.Started, e.Registered) + c.after; !has || due < at {
+			if due := max(msg.Created, opened) + c.after; !has || due < at {
 				at, has = due, true
 			}
 		}

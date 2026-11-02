@@ -221,8 +221,13 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 			return err
 		}
 		gen = e.Generation + 1
+		now := tx.Now().UnixNano()
+		first := e.First // a Claude's startup ended at its first: a resume or a compaction doesn't move it
+		if gen == 1 {
+			first = now
+		}
 		if err := tx.PutEndpoint(Endpoint{Session: s.ID, Generation: gen, Kind: kind, Locator: canon,
-			Registered: tx.Now().UnixNano()}); err != nil {
+			Registered: now, First: first}); err != nil {
 			return err
 		}
 		w, ok, err := tx.Wake(s.ID)

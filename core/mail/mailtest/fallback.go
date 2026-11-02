@@ -97,11 +97,11 @@ func (r *fbRig) look() {
 func (r *fbRig) reachable() {
 	r.t.Helper()
 	now := r.clock.Now().UnixNano()
-	r.putEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: r.kind, Registered: now})
+	r.putEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: r.kind, Registered: now, First: now})
 }
 
 // reregistered is gold's endpoint registered again now (a resume, a compaction): its generation one
-// higher.
+// higher, its first registration kept, as crew.endpoint keeps it.
 func (r *fbRig) reregistered() {
 	r.t.Helper()
 	var e crew.Endpoint
