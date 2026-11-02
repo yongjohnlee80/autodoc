@@ -376,6 +376,32 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	}
 }
 
+// An attempt whose endpoint was replaced before its call (the session re-registered how it's woken:
+// another generation) sends nothing, answers failed, and gives its row back: idle, not left in
+// flight for its lease to lapse, so the next look can wake the session through its new endpoint.
+func TestAnAttemptForAReplacedEndpointIsAbandoned(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
+		t.Fatalf("the premise, the reserved row in flight under its token: %+v", w)
+	}
+	r.write(func(tx crew.Tx) error { return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"}) })
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for a replaced endpoint", n)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Token != "" {
+		t.Fatalf("the replaced endpoint's row: %+v; want it idle with no token (abandoned)", w)
+	}
+}
+
 // faultStore is a crew.Store whose nth write (counting from 1) fails once, as a store's transient
 // error would.
 type faultStore struct {
