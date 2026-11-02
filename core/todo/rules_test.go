@@ -471,9 +471,38 @@ func TestADescriptionSentBackWholeIsNotStacked(t *testing.T) {
 		t.Fatalf("after its next write the stacked file holds %d headers, want 1:\n%s", headers(), e.read(p))
 	}
 
+	older := strings.Replace(body()[:strings.Index(body(), "the text")], "autodoc.todo", "auto-core.todo", 1)
+	e.disk.WriteFile(p, []byte(strings.Replace(e.read(p), "<!--", older+"<!--", 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	got = e.get(task.ID)
+	if _, err := e.m.Update(ctx, kb, got.ID, got.Rev, todo.Patch{"priority": "high"}); err != nil {
+		t.Fatal(err)
+	}
+	if headers() != 1 || e.get(task.ID).Description != "the text" {
+		t.Fatalf("a file stacked with the older writer's header: %d headers after a write, description %q:\n%s",
+			headers(), e.get(task.ID).Description, e.read(p))
+	}
+
 	sent := e.add(todo.Spec{Title: "u", Description: body()})
 	if sent.Description != "the text" {
 		t.Errorf("todos.add with a body for a description: %q, want the text alone", sent.Description)
+	}
+	if n := strings.Count(e.read(kbStore+"/"+sent.Path), "todo schema v1 — managed file"); n != 1 {
+		t.Errorf("todos.add with a body for a description: its file holds %d headers, want 1", n)
+	}
+
+	// A comment of the user's own that opens like the header but closes on its own "-->" is text:
+	// nothing up to a later comment's close is taken for a header, through a read or a later write.
+	mine := "<!-- ─── autodoc.todo schema v1 notes -->\nKeep this explanation.\n<!-- ─── -->\n# User heading\n\nKeep tail."
+	kept := e.add(todo.Spec{Title: "w", Description: mine})
+	if kept.Description != mine {
+		t.Fatalf("a description opening with a comment of the user's own: %q, want it whole", kept.Description)
+	}
+	if _, err := e.m.Update(ctx, kb, kept.ID, kept.Rev, todo.Patch{"priority": "low"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.get(kept.ID).Description; got != mine {
+		t.Fatalf("after an unrelated write, the user's comment: %q, want it whole", got)
 	}
 	own := e.add(todo.Spec{Title: "v", Description: "# My heading\n\nmine"})
 	if own.Description != "# My heading\n\nmine" {
