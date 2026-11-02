@@ -93,6 +93,18 @@ func OpenObserved(pid, ppid, pgid int, start string, uid int) bool {
 	return ok
 }
 
+// ReuseLookup makes a looked-up pid from another process's, to: as if from had ended and its
+// number gone to to (listenerProof's lookup).
+func ReuseLookup(t interface{ Cleanup(func()) }, from, to int) {
+	reusedLookup = func(pid int) int {
+		if pid == from {
+			return to
+		}
+		return pid
+	}
+	t.Cleanup(func() { reusedLookup = func(pid int) int { return pid } })
+}
+
 // CodexServerOf is what a Codex endpoint's registration records of its server: its socket and the
 // process listening there.
 func (m *Manager) CodexServerOf(kind, locator string) (string, string) {

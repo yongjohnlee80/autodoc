@@ -33,6 +33,11 @@ const (
 	cellTerm  = "AUTODOC_BRIDGE_CELL_TERM"
 	// cellListen makes the stand-in listen on a unix socket at that path, as a Codex server binds its
 	cellListen = "AUTODOC_BRIDGE_CELL_LISTEN"
+	// cellHandOff (with cellListen): the stand-in listens, starts a child of the same command line
+	// holding the listening socket (cellInherit), writes the child's pid to cellPids, and exits:
+	// the socket's creator gone, a child serving it
+	cellHandOff = "AUTODOC_BRIDGE_CELL_HANDOFF"
+	cellInherit = "AUTODOC_BRIDGE_CELL_INHERIT"
 )
 
 func TestMain(m *testing.M) {
@@ -48,10 +53,50 @@ func cellProcess() {
 	if os.Getenv(cellTerm) == "ignore" {
 		signal.Ignore(syscall.SIGTERM)
 	}
-	if path := os.Getenv(cellListen); path != "" {
+	if os.Getenv(cellInherit) != "" {
+		ln, err := net.FileListener(os.NewFile(3, "listener"))
+		if err != nil {
+			os.Exit(5)
+		}
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				_ = c.Close()
+			}
+		}()
+	} else if path := os.Getenv(cellListen); path != "" {
 		ln, err := net.Listen("unix", path)
 		if err != nil {
 			os.Exit(4)
+		}
+		if os.Getenv(cellHandOff) != "" {
+			f, err := ln.(*net.UnixListener).File()
+			if err != nil {
+				os.Exit(4)
+			}
+			exe, _ := os.Executable()
+			c := exec.Command(exe)
+			c.Args = os.Args
+			for _, kv := range os.Environ() {
+				if !strings.HasPrefix(kv, cellHandOff+"=") && !strings.HasPrefix(kv, cellListen+"=") {
+					c.Env = append(c.Env, kv)
+				}
+			}
+			c.Env = append(c.Env, cellInherit+"=1")
+			c.ExtraFiles = []*os.File{f}
+			if err := c.Start(); err != nil {
+				os.Exit(3)
+			}
+			pf, err := os.OpenFile(os.Getenv(cellPids), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+			if err != nil {
+				os.Exit(3)
+			}
+			_, _ = pf.WriteString(strconv.Itoa(c.Process.Pid) + "\n")
+			_ = pf.Close()
+			os.Exit(0) // the creator ends; its child serves the socket
 		}
 		go func() {
 			for {
@@ -95,7 +140,8 @@ func cellProcess() {
 type cellProc struct {
 	cmd      *exec.Cmd
 	pid      int
-	children []int // the chain, in order: children[0] is pid's child
+	pidFile  string // where it and its chain write their children's pids
+	children []int  // the chain, in order: children[0] is pid's child
 }
 
 // startCell starts argv as a stand-in, leading its own session (setsid, as detachBridge starts a
@@ -125,7 +171,7 @@ func startCellEnv(t *testing.T, env []string, argv []string, setsid, ignoreTerm 
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
-	p := &cellProc{cmd: c, pid: c.Process.Pid}
+	p := &cellProc{cmd: c, pid: c.Process.Pid, pidFile: pidFile}
 	waited := make(chan struct{})
 	go func() { _ = c.Wait(); close(waited) }()
 	t.Cleanup(func() {
@@ -904,5 +950,39 @@ func TestACodexServerIsProvenThisStoresByItsRecordedProcess(t *testing.T) {
 	}
 	if !running(later.pid) {
 		t.Fatal("the unproven process at the same socket was reclaimed")
+	}
+}
+
+// The socket's own peer names the process proven to hold it, for that process's lifetime. Here
+// the server that listened has handed its socket to a child and ended, and its pid is taken to name
+// that child now (as a reused pid would). The child is a Codex server naming the socket, known to
+// the scan, but nothing proves it the listener: the registration records no process.
+func TestADeadListenersSocketProvesNoServer(t *testing.T) {
+	r := newBridgeRig(t)
+	agent, sockets := t.TempDir(), t.TempDir()
+	bound := filepath.Join(sockets, "abc.sock")
+	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
+		t.Fatal(err)
+	}
+	creator := startCellEnv(t, []string{cellListen + "=" + bound, cellHandOff + "=1"}, codexServerArgv(agent), false, false)
+	var child int
+	if !waitFor(func() bool {
+		b, _ := os.ReadFile(creator.pidFile)
+		child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		return child > 0
+	}) {
+		t.Fatal("the creator never handed its socket to a child")
+	}
+	t.Cleanup(func() { _ = syscall.Kill(child, syscall.SIGKILL) })
+	if !waitEnded(creator.pid) {
+		t.Fatal("the creator still runs")
+	}
+	if row, ok := r.row(child); !ok || row.Kind != crew.BridgeCodexServer {
+		t.Fatalf("the premise: the child is a Codex server the scan knows: %+v (listed %v)", row, ok)
+	}
+	crew.ReuseLookup(t, creator.pid, child)
+	loc, _ := json.Marshal(map[string]string{"server": filepath.Join(agent, crew.CodexServerSocket), "thread": "th-1"})
+	if socket, ref := r.m.CodexServerOf("codex", string(loc)); socket == "" || ref != "" {
+		t.Fatalf("a registration whose socket's listener has ended recorded %q %q, want the socket and no process", socket, ref)
 	}
 }
