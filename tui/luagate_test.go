@@ -122,18 +122,21 @@ func TestALuaGrantNamesEachCapability(t *testing.T) {
 	}
 }
 
-// grantHeard is a script that hears the grant event, as who: each answer it hears is a line to
-// autodoc.heard (the test's own function), "<who> <allowed> <capabilities>".
+// grantHeard is a script that hears the grant event, as who, and retries the read it was refused:
+// each answer it hears is a line to autodoc.heard (the test's own function), "<who> <allowed>
+// <capabilities> <the retried read's refusal, nil once granted>".
 func grantHeard(who string) string {
 	return `autodoc.on("grant", function(ed, info)
-  autodoc.heard("` + who + ` " .. tostring(info.allowed) .. " " .. table.concat(info.capabilities, ","))
+  local _, err = autodoc.doc.read(autodoc.current_workspace(), "a.md", function() end)
+  autodoc.heard("` + who + ` " .. tostring(info.allowed) .. " " .. table.concat(info.capabilities, ",") .. " " .. tostring(err))
 end)`
 }
 
 // TestAGatedScriptHearsItsGrantAnswered: a package that asked for capabilities hears the user's
 // answer as the grant event, so it can resume rather than poll: Not now and a card closed
-// unanswered as allowed false, Allow as true, one event per card. Neither another gated script
-// nor an ungated one hears it.
+// unanswered as allowed false, its retried read still refused; Allow as true, the grant already in
+// force for the read its handler retries. One event per card; neither another gated script nor an
+// ungated one hears it.
 func TestAGatedScriptHearsItsGrantAnswered(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x\n"}})
 	r := attached(t, d)
@@ -161,9 +164,9 @@ func TestAGatedScriptHearsItsGrantAnswered(t *testing.T) {
 		answer func()
 		want   string
 	}{
-		{"closed", func() { r.h.asker.closed() }, "pkg false workspace.read,clipboard"},
-		{"not now", func() { r.h.asker.rejected(); r.h.asker.closed() }, "pkg false workspace.read,clipboard"},
-		{"allow", func() { r.h.asker.accepted(); r.h.asker.closed() }, "pkg true workspace.read,clipboard"},
+		{"closed", func() { r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"not now", func() { r.h.asker.rejected(); r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"allow", func() { r.h.asker.accepted(); r.h.asker.closed() }, "pkg true workspace.read,clipboard nil"},
 	} {
 		if i > 0 { // Not now is not remembered: the package's requires asks again, as at its next start
 			onLoop(r, func() bool { luaGrants{r.h}.Request("pkg", []string{"workspace.read", "clipboard"}); return true })
