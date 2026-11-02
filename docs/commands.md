@@ -49,6 +49,7 @@ configuration. `editor.commands` lists them with the rest.
 | `buffer.show_7` |  |  | show the 7th buffer |
 | `buffer.show_8` |  |  | show the 8th buffer |
 | `buffer.show_9` |  |  | show the 9th buffer |
+| `crew.bridges` |  |  | crew bridges |
 | `editor.context_menu` |  |  | the right-click menu |
 | `editor.mode` |  |  | the editor mode (Vim, Text) |
 | `editor.vim_keys` |  |  | the Vim keys' card |

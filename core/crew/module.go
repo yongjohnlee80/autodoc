@@ -13,6 +13,9 @@ import (
 // #50's 34 and AP-5's and AP-6's 35 and 36; rpc's Protocol and its catalog test move with it.
 const Protocol = 37
 
+// bridgesSince is the protocol crew.bridges and crew.bridge_kill arrive in (rpc's Protocol 46).
+const bridgesSince = 46
+
 // Name is the module's name: its verbs are crew.*.
 func (m *Manager) Name() string { return "crew" }
 
@@ -36,6 +39,11 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "register an endpoint of a known kind, with its locator"},
 		{Err: ErrLongPollsBusy, Code: CodeLongPollsBusy, Name: "crew.long_polls_busy",
 			Message: "a connection holds at most two long-polls", Next: "finish one first, or open another connection"},
+		{Err: ErrBridgeConfirm, Code: CodeBridgeConfirm, Name: "crew.bridge_confirm",
+			Message: "killing a live helper, or Codex's shared daemon, needs the user's confirmation",
+			Next:    "ask the user, naming the agent it cuts off, then send confirmed"},
+		{Err: ErrNoBridges, Code: CodeNoBridges, Name: "crew.bridges_unsupported",
+			Message: "this daemon can't read the machine's processes", Next: "list and end the crew's helpers by hand"},
 	}
 }
 
@@ -50,6 +58,14 @@ type (
 		Scope string `param:"scope"`
 		Run   string `param:"run"`
 		Epoch int64  `param:"epoch"`
+	}
+	bridgeKillParams struct {
+		Scope     string `param:"scope"`
+		Run       string `param:"run"`
+		Epoch     int64  `param:"epoch"`
+		PID       int    `param:"pid" doc:"the helper's pid, as crew.bridges listed it"`
+		Start     string `param:"start" doc:"its process reference, as crew.bridges listed it: a pid another process holds now is never signalled"`
+		Confirmed bool   `param:"confirmed,optional" doc:"the user agreed: required for a live or foreign row"`
 	}
 	registerParams struct {
 		Scope     string `param:"scope"`
@@ -179,6 +195,19 @@ func (m *Manager) Verbs() []module.Verb {
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "[{scope, profiles, unread}]",
 			Doc: "AutoDoc scopes with a free holder and unhandled mail."},
 			func(ctx context.Context, _ struct{}) ([]Orphan, error) { return m.Orphans(ctx) }),
+		module.Handle(module.Contract{Verb: "crew.bridges", Since: bridgesSince, Scope: module.ScopeLocalPeer,
+			Audience: module.AudienceUser, Effect: module.EffectRead,
+			Result: "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+			Errors: []int64{CodeNoBridges},
+			Doc:    "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned."},
+			func(ctx context.Context, _ struct{}) ([]BridgeRow, error) { return m.Bridges(ctx) }),
+		module.Handle(module.Contract{Verb: "crew.bridge_kill", Since: bridgesSince, Scope: module.ScopeLocalPeer,
+			Audience: module.AudienceUser, Effect: module.EffectWrite, Result: "{outcome, survivors}",
+			Errors: []int64{CodeStaleEpoch, CodeBridgeConfirm, CodeNoBridges},
+			Doc:    "End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill."},
+			func(ctx context.Context, p bridgeKillParams) (BridgeKilled, error) {
+				return m.BridgeKill(ctx, p.Scope, p.Run, p.Epoch, p.PID, p.Start, p.Confirmed)
+			}),
 		module.Handle(host("crew.adopt", "{}", "Fence an orphan scope and move its mail here.", CodeScopeBusy, CodeStaleEpoch),
 			func(ctx context.Context, p adoptParams) (struct{}, error) {
 				return struct{}{}, m.Adopt(ctx, p.From, p.To, p.Run, p.Epoch)

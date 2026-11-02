@@ -7866,5 +7866,125 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc 目前看不到 %1 的权限提示，因此消息已输入但未发送：请在那里按 Enter</translation>
     </message>
+    <message id="autodoc.main.crew_bridges">
+        <source>Cr&amp;ew bridges…</source>
+        <translation>团队桥接(&amp;E)…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.title">
+        <source>Crew Bridges</source>
+        <translation>团队桥接</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill">
+        <source>Ki&amp;ll</source>
+        <translation>终止(&amp;L)</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill_orphans">
+        <source>Kill &amp;orphans…</source>
+        <translation>终止孤儿进程(&amp;O)…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.copy">
+        <source>&amp;Copy</source>
+        <translation>复制(&amp;C)</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>关闭(&amp;Q)</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.listing">
+        <source>listing the crew's helper processes…</source>
+        <translation>正在列出团队的辅助进程…</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.not_listed">
+        <source>not listed: %1</source>
+        <translation>无法列出：%1</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.none">
+        <source>no crew helper is running</source>
+        <translation>没有正在运行的团队辅助进程</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.count">
+        <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
+        <translation>%1 个辅助进程，其中 %2 个孤儿。孤儿状态持续 10 分钟的进程由守护进程终止。</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
+        <source>orphan, ends in %1 min</source>
+        <translation>孤儿，%1 分钟后终止</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.detail">
+        <source>command: %1 · socket: %2 · session: %3 · why: %4</source>
+        <translation>命令：%1 · 套接字：%2 · 会话：%3 · 原因：%4</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_orphans">
+        <source>no orphan to kill</source>
+        <translation>没有需要终止的孤儿进程</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_scope">
+        <source>the window holds no crew scope yet: try again in a moment</source>
+        <translation>此窗口尚未持有团队范围：请稍后再试</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_title">
+        <source>Kill the helper?</source>
+        <translation>终止此辅助进程？</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 不属于这个 AutoDoc 的任何会话：它可能在为另一个 AutoDoc 的代理服务，终止后该代理会失去它。要终止吗？</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_live">
+        <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
+        <translation>%1 %2 正在为运行中的 %3 服务：终止后，该智能体在重新启动前收不到邮件。要终止吗？</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_foreign">
+        <source>Codex's shared daemon (%1) wasn't started by the crew: any Codex running outside the crew uses it, and loses it. Kill it?</source>
+        <translation>Codex 的共享守护进程（%1）不是由团队启动的：团队之外运行的任何 Codex 都在使用它，并会失去它。要终止吗？</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans_title">
+        <source>Kill the orphans?</source>
+        <translation>终止孤儿进程？</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans">
+        <source>End %1 orphaned helper(s)? Each is checked again as it ends.</source>
+        <translation>终止 %1 个孤儿辅助进程？每个进程在终止时都会再次检查。</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.copied">
+        <source>copied %1 %2's details</source>
+        <translation>已复制 %1 %2 的详细信息</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.ended">
+        <source>%1 %2 ended</source>
+        <translation>%1 %2 已结束</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.killed">
+        <source>%1 %2 ignored the stop and was killed</source>
+        <translation>%1 %2 忽略了停止请求，已被强制终止</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.gone">
+        <source>%1 %2 had already ended</source>
+        <translation>%1 %2 已经结束</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2：终止后仍有 %3 个进程在运行</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.not_killed">
+        <source>%1 %2 not killed: %3</source>
+        <translation>未能终止 %1 %2：%3</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges">
+        <source>crew bridges</source>
+        <translation>团队桥接</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges.help">
+        <source>crew bridges</source>
+        <translation>团队桥接</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>团队桥接目前仅在 Linux 上读取团队的进程：在此系统上请手动查找并终止它们（ps、kill）。守护进程在这里不会回收任何进程。</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>守护进程早于团队桥接：请重启后端（系统 › 重启后端…）</translation>
+    </message>
 </context>
 </TS>
