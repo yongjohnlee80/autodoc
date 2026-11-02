@@ -74,8 +74,8 @@ func splitFrontmatter(src string) (fm, body string, err error) {
 // cleanBody is md.lua's clean_body: the description is the body without the managed header, a
 // leading H1, and the blank lines around it.
 func cleanBody(body string) string {
-	if loc := headerRe.FindStringIndex(body); loc != nil {
-		body = body[:loc[0]] + body[loc[1]:]
+	if loc := headerRe.FindStringIndex(body); loc != nil && strings.Count(body[loc[0]:loc[1]], "-->") == 1 {
+		body = body[:loc[0]] + body[loc[1]:] // one comment, closing on its own ─── -->: never past another's close
 	}
 	if loc := h1Re.FindStringIndex(body); loc != nil {
 		body = body[loc[1]:]
