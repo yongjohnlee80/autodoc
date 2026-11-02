@@ -2,7 +2,10 @@
 
 package crew
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Off Linux the daemon can't read the machine's processes yet: crew.bridges answers ErrNoBridges,
 // and nothing is reclaimed.
@@ -20,3 +23,6 @@ func (*otherHelper) close() {}
 func (*otherHelper) end(time.Duration) (BridgeKilled, error) { return BridgeKilled{}, ErrNoBridges }
 
 func readHelperContext(string) (Context, bool) { return Context{}, false }
+
+// listenerProof: no pidfd for a socket's peer off Linux, so nothing is proven.
+func listenerProof(context.Context, string) (int, string, bool) { return 0, "", false }
