@@ -86,7 +86,10 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   revision it read is refused when the text has changed since.
 - Each agent is held to grants as a Lua package is (`editor.read`, `editor.write`, `commands`). An
   ungranted call is refused at once, never held open, and the user is asked; an Allow works for the
-  next call. `editor.workspace` and `editor.commands` need no grant. `editor.add_command` asks every
+  next call. When the window holds a crew scope, the user's answer reaches the agent as the user's own
+  mail (allowed: call again; not allowed, or the card closed: don't), and the refusal says it will, so
+  the agent waits for it rather than retrying blind. `editor.workspace` and `editor.commands` need
+  no grant. `editor.add_command` asks every
   time, shows the whole source, and creates the Lua file only at the user's yes.
 
 The TUI serves the page rather than the daemon, because the unsaved text, cursor and undo history

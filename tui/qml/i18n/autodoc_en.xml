@@ -1255,6 +1255,10 @@
         <source>%1's mail that waited for its host was delivered</source>
         <translation>%1's mail that waited for its host was delivered</translation>
     </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</translation>
+    </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</translation>
