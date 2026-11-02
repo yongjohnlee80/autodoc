@@ -61,7 +61,7 @@ Three rules hold throughout:
 
 | what | how |
 |---|---|
-| the GPU and its memory, the RAM, the free disk, Ollama's version (`""` when no Ollama answers) | `autodoc --call host.probe` |
+| the GPU and its memory, the RAM, the free disk, Ollama's version (`""` when no Ollama answers: not installed, or installed and not running) | `autodoc --call host.probe` |
 | an NVIDIA GPU's compute capability | `nvidia-smi --query-gpu=name,compute_cap,memory.total --format=csv,noheader` |
 | a container runtime this user can use | `docker info`: a `permission denied` on `/var/run/docker.sock` means Docker is there but this user can't reach it (step 5) |
 | whether the runtime and Ollama start at boot | `systemctl is-enabled docker.service docker.socket ollama.service` |
@@ -73,16 +73,17 @@ Tell the user what you found and what you propose, in plain words, before step 2
 
 **2. Run each privileged command the user's way.** Say first what the command does and that the system will ask for their password.
 
-- **A desktop with a polkit authentication agent:** run it with `pkexec`, and the system's own dialog asks. Put the whole sequence in one call, so the user sees one dialog, and stop at the first failure. Wrap it in `timeout`, because an unanswered dialog otherwise waits for ever. On Arch, for example:
+- **A desktop with a polkit authentication agent:** run it with `pkexec --disable-internal-agent`, and the system's own dialog asks; the flag stops `pkexec` falling back to a password prompt in the agent's own shell, where the user can't answer. Put the whole sequence in one call, so the user sees one dialog, and stop at the first failure. Wrap it in `timeout`, which bounds the dialog and the commands together, because an unanswered dialog otherwise waits for ever. On Arch, for example:
 
   ```sh
-  timeout 120 pkexec /bin/bash -c 'set -euo pipefail
+  timeout 300 pkexec --disable-internal-agent /bin/bash -c 'set -euo pipefail
   pacman -S --needed --noconfirm nvidia-container-toolkit
   nvidia-ctk runtime configure --runtime=docker
   systemctl restart docker.service'
   ```
 
-- **No polkit agent** (`pkexec` answers `no authentication agent found`), **no graphical session, or over SSH:** show the exact command and ask the user to run it in their own terminal, with `sudo`, and to say when it has finished. Never run `sudo` from the agent's own shell: it has no terminal to ask in, and it hangs.
+- **Otherwise:** when `pkexec` fails for any reason (no authentication agent, no graphical session, over SSH, the dialog dismissed or timed out), don't retry it: show the exact command and ask the user to run it in their own terminal, with `sudo`, and to say when it has finished. Never run `sudo` from the agent's own shell: it has no terminal to ask in, and it hangs.
+- Restarting `docker.service` stops the containers running at that moment; say so before, and run it when nothing the user needs is running.
 
 **3. Install the minimum.**
 
@@ -99,11 +100,13 @@ systemctl enable --now ollama.service
 
 The second is for Ollama installed as a system service; Ollama in a container needs only the first. Tell the user which units you enabled. Check with `systemctl is-enabled docker.service ollama.service`, and again after the next reboot (step 7).
 
-**5. The docker group, only if `docker info` was refused.** Before suggesting it, say plainly: **membership of the `docker` group is equivalent to root.** Anything running as this user can then control the whole machine through Docker. Offer the alternative too, rootless Docker or Podman, which run containers without root (they change the steps above; `tei-rerank.sh` runs `docker compose`). If the user chooses the group, add them through step 2:
+**5. The docker group, only if `docker info` was refused.** Before suggesting it, say plainly: **membership of the `docker` group is equivalent to root.** Anything running as this user can then control the whole machine through Docker. Offer the alternative too, rootless Docker or Podman, which run containers without root (they change the steps above; `tei-rerank.sh` runs `docker compose`). If the user chooses the group, add them through step 2, with the user's name expanded before the command is elevated (inside a root shell `$USER` is `root`):
 
 ```sh
-usermod -aG docker "$USER"
+pkexec --disable-internal-agent usermod -aG docker "$USER"
 ```
+
+(or `sudo usermod -aG docker "$USER"` in the user's own terminal).
 
 The running session doesn't see a new group until the user logs out and in again. Until then, `newgrp docker` starts a shell that has it, and an agent can pipe its commands into one (`sg` is missing on some systems, Arch among them):
 
@@ -111,7 +114,7 @@ The running session doesn't see a new group until the user logs out and in again
 echo 'docker info' | newgrp docker
 ```
 
-**6. A reranker: the TEI image tag must match the GPU.** Each TEI GPU image is built for one compute capability and refuses every other at start. `shell/tei/tei-rerank.sh up` reads the capability and picks the tag; prefer it to a `docker run` of your own. The bare version tag (`:1.9`, or the `:1.5` older instructions show) is not generic: it is the Ampere 8.0 (A100) build, and anywhere else it stops with `Runtime compute cap N is not compatible with compile time compute cap 80`. That message means the wrong image, never unsupported hardware: N is the GPU, the other number the image. Take the tag from the [table below](#starting-local-ollama-and-tei-servers).
+**6. A reranker: the TEI image tag must match the GPU.** Each TEI GPU image is built for one compute capability and refuses every other at start. `shell/tei/tei-rerank.sh up` reads the capability and picks the tag; prefer it to a `docker run` of your own. The bare version tag (`:1.9`, or the `:1.5` older instructions show) is not generic: it is the Ampere 8.0 (A100) build. A few newer GPUs can run an older build (TEI 1.9 lets 8.6 and 8.9 run the 8.0 build, and 8.9 the 8.6 one), but most GPUs stop with `Runtime compute cap N is not compatible with compile time compute cap M`, where N is the GPU and M the image. That message means this image doesn't fit this GPU, not that the GPU is unsupported: take the tag built for N. Take the tag from the [table below](#starting-local-ollama-and-tei-servers).
 
 **7. Verify end to end,** not by a container having started:
 
