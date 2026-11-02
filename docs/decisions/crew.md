@@ -413,8 +413,11 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   lost lease, which says nothing of anyone else's mail.
 - `mail.show` (protocol 45) reads a delivery the caller holds again, under its lease, which stays as
   it was (lease, deadline, attempts): an agent whose reader cut a body short reads it whole, never
-  asking its sender to resend. Another session's, another lease, a lapsed one or a done delivery is a
-  lost lease. It writes nothing.
+  asking its sender to resend. The caller's own delivery that is done says so (protocol 51):
+  `mail.done` when it was acked or replied to, so an agent can tell its ack landed; `mail.ended` when
+  it failed, expired, was merged, or was withdrawn (handed to its host as a fallback), or its message
+  passed its expiry though no write has expired it yet. Another session's, another lease, or a lapsed
+  lease on a live message is a lost lease. It writes nothing.
 - What an agent reads of its mail costs only what it needs, since each byte is paid for in every
   session. The CLI and the MCP tools print one line of JSON, no indent and nothing HTML-escaped. A
   received item names its delivery once, as its `id`: the delivery's own id and lease aren't printed

@@ -212,7 +212,7 @@ func (m *Manager) Verbs() []module.Verb {
 			Effect: module.EffectWrite, Result: result, Errors: append([]int64{crew.CodeStaleEpoch}, codes...), Doc: doc}
 	}
 	show := agent("mail.show", module.EffectRead, "{from, delivery, message}",
-		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 52): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
+		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 51): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
 		CodeLeaseLost, CodeDone, CodeEnded)
 	show.Since = showSince
 	return []module.Verb{

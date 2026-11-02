@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 50,
+  protocol = 51,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -112,7 +112,7 @@ return {
       since = 37, scope = "global", audience = "agent",
       params = {},
       result = "[{codename, scope, kind, presence, reachable, prompts_reported, why}]",
-      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), host (since 52: a host's own session, kind host, a forwarder never woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
+      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), host (since 51: a host's own session, kind host, a forwarder never woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
     },
     ["crew.orphans"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -746,7 +746,7 @@ return {
         { name = "lease", type = "string" }
       },
       result = "{from, delivery, message}",
-      doc = "A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 52): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
+      doc = "A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 51): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
     },
     ["mail.wait"] = {
       since = 37, scope = "global", audience = "agent",
