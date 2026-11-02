@@ -26,6 +26,15 @@ const (
 // its host, which is the one that would have said so.
 const WhyHostGone = "host_gone"
 
+// KindHost is the kind of a host's own session (Neovim's gateway): it forwards mail for its window
+// and takes no replies, so it registers no way to wake it by design. crew.list gives its live session
+// why WhyHost, not no_endpoint, which would read as a fault; an agent's addressbook (`crew list`,
+// crew_list) leaves it out unless all is asked.
+const KindHost = "host"
+
+// WhyHost is why a host's own session can't be woken: it is a host, not an agent (KindHost).
+const WhyHost = "host"
+
 // UnreachableAfter is how many consecutive failed wakes make a session unreachable
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler). Mail's fallback reads the same bound
 // (docs/decisions/crew.md#the-fallback-exactly-once).
@@ -80,6 +89,9 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				}
 				if e.Reachable, e.Why, err = m.reachability(tx, s, now); err != nil {
 					return err
+				}
+				if p.Kind == KindHost && e.Why != WhyHostGone {
+					e.Reachable, e.Why = false, WhyHost // a forwarder, never woken: not a fault to report
 				}
 				_, started, err := tx.Endpoint(s.ID)
 				if err != nil {
