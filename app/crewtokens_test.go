@@ -191,3 +191,53 @@ func TestTheMCPToolsAnswerCompactly(t *testing.T) {
 		t.Errorf("crew_list all: %s, want jarvis too", text)
 	}
 }
+
+// TestAHostsSessionAndADoneDeliveryAreSaidAsSuch (the crew-mail lead's D8, D9): a host's own
+// session (kind host, Neovim's gateway) is left out of crew_list unless all is true, and with it
+// reads why host, never no_endpoint, which would read as a fault. mail_show of a delivery the
+// caller acked answers mail.done, so an agent can tell its ack landed, not lease_lost.
+func TestAHostsSessionAndADoneDeliveryAreSaidAsSuch(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir())
+	gold, jarvis := d.agent("gold", "agent-1", "store-1"), d.agent("jarvis", "agent-2", "store-1")
+	d.agentOfKind("gateway", "host-1", "store-1", crew.KindHost)
+	g, j := d.mcp(gold), d.mcp(jarvis)
+
+	if text, _ := g.tool("crew_list", nil); strings.Contains(text, `"gateway"`) || !strings.Contains(text, `"jarvis"`) {
+		t.Errorf("crew_list: %s, want jarvis and no host's session", text)
+	}
+	text, failed := g.tool("crew_list", map[string]any{"all": true})
+	if failed {
+		t.Fatal(text)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(strings.SplitN(text, "\n", 2)[0]), &rows); err != nil {
+		t.Fatalf("crew_list all: %v in %s", err, text)
+	}
+	seen := false
+	for _, r := range rows {
+		if r["codename"] == "gateway" {
+			seen = true
+			if r["why"] != crew.WhyHost || r["reachable"] != false || r["kind"] != crew.KindHost {
+				t.Errorf("crew_list all, the host's session: %v, want why %q, unreachable", r, crew.WhyHost)
+			}
+		}
+	}
+	if !seen {
+		t.Errorf("crew_list all: %s, want the host's session too", text)
+	}
+
+	g.tool("mail_send", map[string]any{"to": []string{"jarvis"}, "body": "a report"})
+	text, failed = j.tool("mail_receive", nil)
+	if failed {
+		t.Fatal(text)
+	}
+	id, _ := compact(t, "mail_receive's result", text)["deliveries"].([]any)[0].(map[string]any)["id"].(string)
+	if text, failed = j.tool("mail_ack", map[string]any{"id": id}); failed {
+		t.Fatal(text)
+	}
+	text, failed = j.tool("mail_show", map[string]any{"id": id})
+	if !failed || !strings.Contains(text, "the delivery is acked") || strings.Contains(text, "no longer holds") {
+		t.Errorf("mail_show of a delivery acked: %s (error %v), want mail.done, not lease_lost", text, failed)
+	}
+}
