@@ -68,9 +68,15 @@ type Workspaces struct {
 	// docs/decisions/todos.md#graph-only-indexing
 	todoStores  TodoStores
 	stores      atomic.Pointer[registry]
-	storesDirty chan struct{}     // TodoStoresChanged's signal to the reader, one pending at most
-	varsStamps  map[string]string // each variable file's size and modification time, the reader's alone
-	modes       map[int64]*modes
+	storesDirty chan struct{} // TodoStoresChanged's signal to the reader, one pending at most
+	// storesWant counts TodoStoresChanged's calls, storesDone the count the reader had seen when
+	// its last read (and the revalidation after it) finished; storesRead closes when it does, and
+	// is made anew (TodoStoresSettled). storesReader says the reader runs (SetTodoStores).
+	storesWant, storesDone atomic.Int64
+	storesRead             chan struct{}
+	storesReader           bool
+	varsStamps             map[string]string // each variable file's size and modification time, the reader's alone
+	modes                  map[int64]*modes
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -170,7 +176,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
 		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
-		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1)}
+		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1), storesRead: make(chan struct{})}
 	m.queue = newEmbeddingQueue(m)
 	if o.Guard != nil {
 		o.Guard.SetServed(m.boundsRoots)

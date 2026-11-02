@@ -104,6 +104,7 @@ func (g *registry) varsOf(abs string, st *TodoStore) *index.Vars {
 func (m *Workspaces) SetTodoStores(list TodoStores) {
 	m.mu.Lock()
 	m.todoStores = list
+	m.storesReader = true
 	m.mu.Unlock()
 	m.readTodoStores()
 	m.varsFilesChanged()
@@ -117,7 +118,9 @@ func (m *Workspaces) SetTodoStores(list TodoStores) {
 			case <-m.ctx.Done():
 				return
 			case <-m.storesDirty:
+				seen := m.storesWant.Load() // every change asked before this read is in it
 				m.rereadTodoStores()
+				m.storesReadThrough(seen)
 			case <-poll.C:
 				if m.varsFilesChanged() {
 					m.rereadTodoStores()
@@ -150,9 +153,41 @@ func (m *Workspaces) varsFilesChanged() bool {
 // waits: the todo system calls it from its verbs, and reading the registry can write it. The reader
 // reads it once for every call made while it was reading.
 func (m *Workspaces) TodoStoresChanged() {
+	m.storesWant.Add(1)
 	select {
 	case m.storesDirty <- struct{}{}:
 	default: // a read is pending already: it sees this change too
+	}
+}
+
+// storesReadThrough records that every change up to seen has been read, and wakes TodoStoresSettled.
+func (m *Workspaces) storesReadThrough(seen int64) {
+	m.storesDone.Store(seen)
+	m.mu.Lock()
+	close(m.storesRead)
+	m.storesRead = make(chan struct{})
+	m.mu.Unlock()
+}
+
+// TodoStoresSettled returns once the reader has read every change TodoStoresChanged was told of
+// before the call, and re-indexed what it moved, or when ctx ends: what a todo verb that made or
+// moved a store waits on, its own locks released, so it answers only when the index and
+// doc.validate see the store (read-your-writes). With no reader (no registry given) it returns at
+// once.
+func (m *Workspaces) TodoStoresSettled(ctx context.Context) error {
+	want := m.storesWant.Load()
+	for {
+		m.mu.Lock()
+		reading, read := m.storesReader, m.storesRead
+		m.mu.Unlock()
+		if !reading || m.storesDone.Load() >= want {
+			return nil
+		}
+		select {
+		case <-read:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 

@@ -251,7 +251,7 @@ func (d *process) startWorkspaces() error {
 	// index reads the todo stores, so its first pass indexes their tasks graph-only
 	// (docs/decisions/todos.md#graph-only-indexing)
 	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
-		onStores: d.ws.TodoStoresChanged}
+		onStores: d.ws.TodoStoresChanged, storesSettled: d.ws.TodoStoresSettled}
 	d.mods = modules(d.deps)
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
@@ -574,6 +574,9 @@ type moduleDeps struct {
 	// workspaces read the stores again (docs/decisions/todos.md#which-paths-are-graph-only). nil: no
 	// one is.
 	onStores func()
+	// storesSettled is waited on after each todo verb: it returns once the workspaces have read every
+	// stores change (read-your-writes for doc.validate and the index).
+	storesSettled func(context.Context) error
 }
 
 // modules are the daemon's core Modules, the one list of them: runServe serves them, and
@@ -585,6 +588,9 @@ func modules(d *moduleDeps) []module.Module {
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
 	if d.onStores != nil {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
+	}
+	if d.storesSettled != nil {
+		opts = append(opts, todo.WithStoresSettled(d.storesSettled))
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (docs/decisions/todos.md#where-a-variables-value-comes-from)

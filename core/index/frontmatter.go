@@ -62,14 +62,14 @@ func (x *Indexer) schema() (*schema.Schema, string) {
 // workspace's own text extensions.
 func (x *Indexer) Kind(p string) kind.Kind { return x.kinds.Of(p) }
 
-// versionOf is what document.indexer records for path, of kind k, indexed now
+// versionOf is what document.indexer records for path, of kind k, indexed now in mode m
 // (docs/decisions/search.md#indexer-identity-strings): a registered chunker's extension and
 // version; a derived format's frozen identity, then the built-in identity its Markdown is chunked
 // under; or the built-in chunkers' version, with the schema's fingerprint for Markdown. A derived
 // document has no frontmatter to check, so a schema change never derives it again.
-func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, abstract bool) string {
+func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, abstract bool, m Mode) string {
 	builtIn := docVersion(indexerVersion(tokens), k.Traits().Frontmatter, schemaFP, abstract)
-	return identities.Of(k)(x, p, tokens, builtIn) + x.mode(p).version()
+	return identities.Of(k)(x, p, tokens, builtIn) + m.version()
 }
 
 // identity is a kind's document.indexer for path: its own, or the built-in chunkers' when the build
@@ -127,7 +127,8 @@ func (x *Indexer) outdated(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("index: listing outdated documents: reading the retrieval settings: %w", err)
 	}
 	out, err := x.store.outdated(ctx, func(p string, tokens int, recorded string) string {
-		return x.versionOf(p, x.kinds.Of(p), tokens, fp, ret.AbstractChunk) + varsVersion(varsNamed(recorded), x.mode(p).Vars)
+		m := x.mode(p)
+		return x.versionOf(p, x.kinds.Of(p), tokens, fp, ret.AbstractChunk, m) + varsVersion(varsNamed(recorded), m.Vars)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("index: listing outdated documents: %w", err)

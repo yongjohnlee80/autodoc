@@ -2,12 +2,15 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -355,5 +358,54 @@ func TestAViewWithoutModesReportsTheDefaults(t *testing.T) {
 	list, search, excluded := v.TodoModes()
 	if !slices.Equal(list, workspace.DefaultGraphOnly()) || !search || excluded != nil {
 		t.Errorf("TodoModes %v %v %v", list, search, excluded)
+	}
+}
+
+// TestTodoStoresSettledWaitsForTheReadOfAChange: a todo verb that made a store waits on
+// TodoStoresSettled, and it returns only once the reader has read every change told before it
+// (and revalidated): not while the read is under way. With nothing pending it returns at once, and
+// with no reader running (no registry given) it never waits.
+func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
+	ctx := context.Background()
+	idle, _ := open(t)
+	idle.TodoStoresChanged()
+	if err := idle.TodoStoresSettled(ctx); err != nil {
+		t.Fatalf("no reader: %v, want an answer at once", err)
+	}
+
+	m, _ := open(t)
+	var calls atomic.Int32
+	gate := make(chan struct{})
+	m.SetTodoStores(func(context.Context) (TodoRegistry, error) {
+		if calls.Add(1) > 1 { // SetTodoStores's own first read runs; the reader's waits for the gate
+			<-gate
+		}
+		return TodoRegistry{}, nil
+	})
+	if err := m.TodoStoresSettled(ctx); err != nil {
+		t.Fatalf("nothing pending: %v", err)
+	}
+	m.TodoStoresChanged()
+	done := make(chan error, 1)
+	go func() { done <- m.TodoStoresSettled(ctx) }()
+	select {
+	case err := <-done:
+		t.Fatalf("settled (%v) while the reader was still reading the change", err)
+	case <-time.After(100 * time.Millisecond): // NOTE: a bound on a failing run only
+	}
+	close(gate)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("never settled once the read ended")
+	}
+	bounded, cancel := context.WithCancel(ctx)
+	cancel()
+	m.TodoStoresChanged() // read at once now: the gate is open
+	if err := m.TodoStoresSettled(bounded); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled wait: %v", err)
 	}
 }
