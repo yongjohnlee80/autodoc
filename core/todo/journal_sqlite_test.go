@@ -141,6 +141,7 @@ var sqliteSuites = []struct {
 	{"ADailyRefreshFailureIsReported", TestADailyRefreshFailureIsReported},
 	{"TheDailyRefreshOfAProjectRoot", TestTheDailyRefreshOfAProjectRoot},
 	{"RefreshDailyRunsUntilItsContextEnds", TestRefreshDailyRunsUntilItsContextEnds},
+	{"AListsSummaryLeavesOutTheText", TestAListsSummaryLeavesOutTheText},
 }
 
 // TestEveryEnvSuiteRunsOnSQLite: a test that builds an env (newEnv, claimed) is in sqliteSuites, so
