@@ -349,7 +349,7 @@ otherwise gone. The access has two halves, and each has one owner:
 - **The endpoint is the agent's.** Only its own process sees how it is woken (Claude's inbox
   socket, its Codex thread, agy's language server), so only it can register that again.
 
-`crew.access` (protocol 46) answers what the calling session's access holds now: live or ended
+`crew.access` (protocol 47) answers what the calling session's access holds now: live or ended
 (with how it ended, or `stale_epoch`), whether its host holds its scope, and a live session's
 endpoint, `registered`, `none` or `failing`. A credential of an ended session answers that
 session's state alone; one matching no session is `bad_credential`. It never answers a credential,

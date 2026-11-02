@@ -197,7 +197,7 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(module.Contract{Verb: "crew.access", Since: AccessSince, Audience: module.AudienceAgent,
 			Effect: module.EffectRead, Result: "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
 			Errors: []int64{CodeBadCredential, CodeContextMismatch},
-			Doc:    "What the calling session's crew access holds now (since 46): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue."},
+			Doc:    "What the calling session's crew access holds now (since 47): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue."},
 			func(ctx context.Context, p whoamiParams) (Access, error) {
 				return m.AccessOf(ctx, p.Credential, p.Store)
 			}),
