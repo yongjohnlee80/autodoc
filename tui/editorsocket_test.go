@@ -42,6 +42,32 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
 		t.Fatalf("the agent's environment: %s", env)
 	}
+	if strings.Contains(env, EnvEditorCredentialFile) {
+		t.Fatalf("a Claude agent's environment names a token file: %s", env)
+	}
+	// a Codex agent's tool shells drop *TOKEN*: its token is a 0600 file of its own folder too, named
+	// by a variable Codex keeps
+	codexDir := t.TempDir()
+	cenv := onLoop(r, func() []string {
+		return r.h.agents.agentEnv(wsInfo{name: "kb"}, codexDir, agentProfile{Codename: "cx", Command: "codex"})
+	})
+	file := ""
+	for _, kv := range cenv {
+		if v, ok := strings.CutPrefix(kv, EnvEditorCredentialFile+"="); ok {
+			file = v
+		}
+	}
+	fi, ferr := os.Stat(file)
+	body, _ := os.ReadFile(file)
+	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || fi.Mode().Perm() != 0o600 ||
+		string(body) != onLoop(r, func() string { return r.h.agents.editorToken("cx") }) {
+		t.Fatalf("a Codex agent's token file %q (%v, %v, %q) in its environment %v", file, fi, ferr, body, cenv)
+	}
+	for _, w := range []string{"KEY", "SECRET", "TOKEN"} {
+		if strings.Contains(EnvEditorCredentialFile, w) {
+			t.Fatalf("%s holds %s, which Codex's shells filter", EnvEditorCredentialFile, w)
+		}
+	}
 
 	ctx := context.Background()
 	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))

@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // runEditor is --editor <verb> [params]: one call to the page of the TUI that started this agent
@@ -22,6 +23,13 @@ import (
 // token goes first, and the answer is written to out as JSON.
 func runEditor(ctx context.Context, verb, params string, env func(string) string, out io.Writer) error {
 	sock, token := env("AUTODOC_EDITOR"), env("AUTODOC_EDITOR_TOKEN")
+	if token == "" && env(tui.EnvEditorCredentialFile) != "" {
+		t, err := readEditorCredential(env(tui.EnvEditorCredentialFile))
+		if err != nil {
+			return fmt.Errorf("--editor: the token file $%s: %w", tui.EnvEditorCredentialFile, err)
+		}
+		token = t
+	}
 	if sock == "" || token == "" {
 		return errors.New("--editor reaches the page of the AutoDoc that started this agent: $AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set")
 	}
