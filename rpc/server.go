@@ -192,7 +192,12 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-const Protocol int64 = 45
+// Protocol 46 is a root holding AutoDoc's own folders
+// (docs/decisions/contract.md#a-root-holding-autodocs-own-folders): workspace.list's and
+// workspace.add's autodoc_dirs, each of AutoDoc's config, state or data folders the root holds or
+// lies inside, and workspace.add's warning. The add is never refused; a session below 46 ignores
+// the keys.
+const Protocol int64 = 46
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -349,6 +354,7 @@ type Server struct {
 	files        *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
 	guard        *fsbounds.Guard      // a gated script's bounds, for file.* (WithGuard); nil: every bounded file.* refused
 	profiler     *profiling.Profiler  // the daemon's own monitor, for sys.profile (WithProfiler); nil: none
+	ownDirs      []workspace.OwnDir   // AutoDoc's own folders, canonical (WithOwnDirs); nil: none named
 	rpc          *golibrpc.Server
 	workspaces   Workspaces
 	preferences  Preferences
@@ -387,6 +393,7 @@ type options struct {
 	profiler    *profiling.Profiler
 	storeID     string
 	modules     []module.Module
+	ownDirs     []workspace.OwnDir
 }
 
 // Option configures a Server.
@@ -403,6 +410,11 @@ type StoreChecker interface {
 // WithStoreCheck lets sys.check run the store's whole check (AM-4); without it, sys.check is
 // unsupported (a store that is not SQLite's).
 func WithStoreCheck(c StoreChecker) Option { return func(o *options) { o.checker = c } }
+
+// WithOwnDirs names AutoDoc's own folders (config, state, data): a workspace whose root holds one or
+// lies inside one is named so in workspace.list and workspace.add
+// (docs/decisions/contract.md#a-root-holding-autodocs-own-folders).
+func WithOwnDirs(dirs []workspace.OwnDir) Option { return func(o *options) { o.ownDirs = dirs } }
 
 // WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
 // that found this daemon through the store's lease-info can check it serves that store.
@@ -436,7 +448,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, checker: o.checker, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces), ownDirs: workspace.CanonicalDirs(o.ownDirs),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}

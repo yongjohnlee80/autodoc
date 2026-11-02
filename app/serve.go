@@ -36,6 +36,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
@@ -429,7 +430,7 @@ func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
-		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
+		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -679,4 +680,26 @@ func todoStores(m *todo.Manager) serving.TodoStores {
 		}
 		return reg, nil
 	}
+}
+
+// ownDirs is AutoDoc's own folders, for the daemon to name a workspace root holding one or inside
+// one (docs/decisions/contract.md#a-root-holding-autodocs-own-folders): the config file's folder
+// (its Lua, plugins, themes, keymap), the state folder and the data folder (the store's). One that
+// can't be resolved is left out.
+func (d *process) ownDirs() []workspace.OwnDir {
+	var out []workspace.OwnDir
+	if d.e.ConfigPath != "" {
+		if p, err := filepath.Abs(filepath.Dir(d.e.ConfigPath)); err == nil {
+			out = append(out, workspace.OwnDir{Name: "config", Path: p})
+		}
+	}
+	if p, err := d.e.StateDir(); err == nil {
+		if p, err := filepath.Abs(p); err == nil {
+			out = append(out, workspace.OwnDir{Name: "state", Path: p})
+		}
+	}
+	if p, err := d.e.DataDir(); err == nil {
+		out = append(out, workspace.OwnDir{Name: "data", Path: p})
+	}
+	return out
 }

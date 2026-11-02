@@ -7180,6 +7180,10 @@ A última conexão falhou:
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>raiz: %1 (um espaço de trabalho mantém sua raiz: adicione o outro diretório como um espaço de trabalho próprio)</translation>
     </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ Esta raiz contém ou está dentro das pastas próprias do AutoDoc: %1. Um script com acesso aos seus arquivos poderia alcançá-las, não fosse a lista de caminhos protegidos: mova a raiz ou restrinja-a.</translation>
+    </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>
         <translation>raiz: o diretório que ele indexa (Procurar… escolhe um)</translation>

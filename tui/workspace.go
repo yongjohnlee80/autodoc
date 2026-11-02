@@ -106,7 +106,11 @@ func workspaceLabel(w wsInfo) string {
 // workspaceRowOf is a workspace as the picker shows it; managedRowOf, as the manager does.
 func workspaceRowOf(_ int, w wsInfo) rowOf { return rowOf{"key": w.name, "label": workspaceLabel(w)} }
 func managedRowOf(_ int, w wsInfo) rowOf {
-	return rowOf{"key": w.name, "name": workspaceLabel(w), "root": w.root}
+	name := workspaceLabel(w)
+	if len(w.autodocDirs) > 0 { // its root holds or lies inside AutoDoc's own folders: its pane says which
+		name += " ⚠"
+	}
+	return rowOf{"key": w.name, "name": name, "root": w.root}
 }
 
 func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
@@ -232,7 +236,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
 			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
 			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
-			graphOnly: workspacePatterns(m["graph_only"]), todoExcluded: workspacePatterns(m["todo_excluded"])})
+			graphOnly: workspacePatterns(m["graph_only"]), todoExcluded: workspacePatterns(m["todo_excluded"]), autodocDirs: autodocDirsOf(m["autodoc_dirs"])})
 		w := &out[len(out)-1]
 		w.todoSearch, _ = m["todo_search"].(bool)
 		if _, ok := m["graph_only"]; !ok {
@@ -373,4 +377,14 @@ func (h *Host) noteTodoExcluded(list []wsInfo) {
 func (h *Host) leaveWorkspace() {
 	close(h.wsLeft)
 	h.wsLeft = make(chan struct{})
+}
+
+// autodocDirsOf reads workspace.list's autodoc_dirs; none from a daemon below protocol 46.
+func autodocDirsOf(v any) []autodocDir {
+	var out []autodocDir
+	for _, e := range asList(v) {
+		m := asMap(e)
+		out = append(out, autodocDir{dir: str(m, "dir"), relation: str(m, "relation"), path: str(m, "path")})
+	}
+	return out
 }

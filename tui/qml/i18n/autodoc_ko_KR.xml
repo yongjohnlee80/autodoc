@@ -7173,6 +7173,10 @@ The last connect failed:
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>루트: %1 (워크스페이스는 루트를 바꿀 수 없습니다: 다른 디렉터리는 별도의 워크스페이스로 추가하세요)</translation>
     </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ 이 루트는 AutoDoc 자체 폴더를 포함하거나 그 안에 있습니다: %1. 이 파일에 대한 권한을 받은 스크립트는 보호 경로 목록이 없다면 그 폴더에 닿을 수 있습니다: 루트를 옮기거나 좁히세요.</translation>
+    </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>
         <translation>루트: 색인할 디렉터리 (찾아보기…로 선택)</translation>

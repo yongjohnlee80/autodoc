@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -97,6 +99,42 @@ type workspaceJSON struct {
 	Provider         string         `json:"provider"`
 	ProviderError    string         `json:"provider_error,omitempty"`
 	Databases        *databasesJSON `json:"databases,omitempty"`
+	// AutodocDirs are AutoDoc's own folders the root holds or lies inside; Warning, on
+	// workspace.add's answer alone, says what that exposes
+	AutodocDirs []autodocDirJSON `json:"autodoc_dirs,omitempty"`
+	Warning     string           `json:"warning,omitempty"`
+}
+
+// autodocDirJSON is one of AutoDoc's own folders a root overlaps: dir is config, state or data,
+// relation holds or inside, path where the folder leads.
+type autodocDirJSON struct {
+	Dir      string `json:"dir"`
+	Relation string `json:"relation"`
+	Path     string `json:"path"`
+}
+
+// named is w's answer with AutoDoc's own folders its root holds or lies inside
+// (docs/decisions/contract.md#a-root-holding-autodocs-own-folders).
+func (s *Server) named(w Workspace) workspaceJSON {
+	out := listed(w)
+	for _, o := range workspace.Overlaps(w.Root(), s.ownDirs) {
+		out.AutodocDirs = append(out.AutodocDirs, autodocDirJSON{Dir: o.Dir, Relation: o.Relation, Path: o.Path})
+	}
+	return out
+}
+
+// ownDirsWarning is workspace.add's warning for a root overlapping AutoDoc's own folders: which
+// ones, and what a gated script could reach there but for the protected-path list. "" for none.
+func ownDirsWarning(dirs []autodocDirJSON) string {
+	if len(dirs) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		parts = append(parts, fmt.Sprintf("%s AutoDoc's %s folder %s", d.Relation, d.Dir, d.Path))
+	}
+	return "This root " + strings.Join(parts, ", and ") + ". A script granted this workspace's files could read and write " +
+		"AutoDoc's own files there (its Lua, config, state and store) but for the protected-path list. Move the root, or narrow it."
 }
 
 // schemaJSON is a workspace's schema status as workspace.list and workspace.set_schema answer it.
@@ -235,24 +273,25 @@ func (s *Server) workspaceVerbs() []module.Verb {
 	fixed := []int64{CodeNoSuchWorkspace, CodeUnsupported}
 	return []module.Verb{
 		module.Handle(module.Contract{Verb: "workspace.list", Effect: module.EffectRead, Since: 1, Audience: module.AudienceAgent,
-			Result: "[{id, name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
-			Doc:    "Every workspace. Search only one whose state is ready. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password, sealed?}, never its DSN; sealed is a connection whose DSN does not open with the store's key (a store restored without its key): enter it again."},
+			Result: "[{id, name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?, autodoc_dirs?}]",
+			Doc:    "Every workspace. Search only one whose state is ready. autodoc_dirs are AutoDoc's own folders the root holds or lies inside ({dir: config|state|data, relation: holds|inside, path}): flagged, still served. id is the workspace's own id in the store, which a rename keeps: what to key a record of the workspace on. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password, sealed?}, never its DSN; sealed is a connection whose DSN does not open with the store's key (a store restored without its key): enter it again."},
 			func(context.Context, struct{}) ([]workspaceJSON, error) {
 				out := []workspaceJSON{}
 				for _, w := range s.workspaces.List() {
-					out = append(out, listed(w))
+					out = append(out, s.named(w))
 				}
 				return out, nil
 			}),
 		module.Rooted(module.Handle(module.Contract{Verb: "workspace.add", Effect: module.EffectSettings, Since: 2, Audience: user,
-			Result: "{name, root, state, …}", Errors: []int64{CodeConflict, CodeUnsupported},
-			Event: ev("workspace.added", "name", ""), Doc: "Adds a workspace and starts serving it; answers it as workspace.list does."},
+			Result: "{name, root, state, …, autodoc_dirs?, warning?}", Errors: []int64{CodeConflict, CodeUnsupported},
+			Event: ev("workspace.added", "name", ""), Doc: "Adds a workspace and starts serving it; answers it as workspace.list does. A root holding or inside AutoDoc's own folders is added all the same, with a warning saying what a script granted its files could reach there."},
 			func(ctx context.Context, p workspaceAdd) (*workspaceJSON, error) {
 				w, err := s.workspaces.Add(ctx, workspace.Spec{Name: p.Name, Root: p.Root, Include: p.Include, Exclude: p.Exclude})
 				if err != nil {
 					return nil, err
 				}
-				out := listed(w)
+				out := s.named(w)
+				out.Warning = ownDirsWarning(out.AutodocDirs)
 				return &out, nil
 			})),
 		module.Handle(module.Contract{Verb: "workspace.rename", Effect: module.EffectSettings, Since: 2, Audience: user,
