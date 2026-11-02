@@ -560,6 +560,15 @@ delivery between agents never waits on you.
   `inbox.watch` answers the changes after a cursor, or a snapshot when the cursor can't be resumed.
 - Every window shows the same toasts: one for each open request and each raised attention, ended in
   every window when it is answered, dismissed, expired or cleared, and a passing one for each report.
+- **The inbox** (`SPC a i`, or `:inbox`) lists your mail in a dialog, newest first, fifty at a time
+  (`inbox.list`, paged by seq; More reads the next page). Its tabs are All, Unread (reports not
+  read yet), Open requests, and Undeliverable (`inbox.list`'s filter). The message under the cursor
+  shows below the list, as Markdown. Opening a report marks it read (`inbox.ack`); opening a request
+  never answers it or marks it read: it stays open until Reply (the reply dialog) or Dismiss (asked
+  first) answers it. Mark read marks any report read; Sender shows the agent that sent it. The
+  dialog holds no long-poll of its own: the window's one `inbox.watch` gives its title the count of
+  what is open, and a change reads the first page again, merged by seq, so the pages read before
+  stay where they are.
 - A request's toast opens a reply dialog in any window. Send is `inbox.reply`, keyed by the request
   and the text, so a resend after a lost answer is the same reply; the first answer wins. Dismiss
   tells the sender. An attention's toast raises its agent, or asks the host that shows it to

@@ -262,6 +262,9 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 	}
 	if again {
 		x.cursor = 0
+		if x.view != nil {
+			x.view.changed() // the inbox dialog, open, reads its first page again
+		}
 	}
 	x.watch(gen, "")
 }
@@ -287,6 +290,9 @@ func (x *crewInbox) show(p snapshotParts) {
 		}
 	}
 	x.reports = reports // one read, so out of the set, is never back: forgotten
+	if x.view != nil {
+		x.view.openSet(len(reports), len(requests))
+	}
 	waiting := map[string]bool{}
 	for _, a := range p.attention {
 		session, codename := a.session, a.codename

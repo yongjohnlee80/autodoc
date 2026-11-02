@@ -50,6 +50,7 @@ configuration. `editor.commands` lists them with the rest.
 | `buffer.show_8` |  |  | show the 8th buffer |
 | `buffer.show_9` |  |  | show the 9th buffer |
 | `crew.bridges` |  |  | crew bridges |
+| `crew.inbox` | `:inbox` |  | the inbox: your mail (SPC a i) |
 | `editor.context_menu` |  |  | the right-click menu |
 | `editor.mode` |  |  | the editor mode (Vim, Text) |
 | `editor.vim_keys` |  |  | the Vim keys' card |
