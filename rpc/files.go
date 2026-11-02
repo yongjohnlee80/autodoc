@@ -164,7 +164,7 @@ func (s *Server) fileVerbs() []module.Verb {
 			}
 			if bounded {
 				if bw.Docs().Admits(brel) { // a document: the workspace's doc.write, indexed at once
-					v, err := writeDoc(ctx, bw, brel, p.Content, vfs.Version(p.Version), raw)
+					v, err := s.writeDoc(ctx, bw, brel, p.Content, vfs.Version(p.Version), raw)
 					if err != nil {
 						return nil, err
 					}
@@ -172,11 +172,14 @@ func (s *Server) fileVerbs() []module.Verb {
 				}
 				files, name = bw.Files(), brel
 			} else if w, rel := s.located(p.Path); w != nil {
-				v, err := writeDoc(ctx, w, rel, p.Content, vfs.Version(p.Version), raw)
+				v, err := s.writeDoc(ctx, w, rel, p.Content, vfs.Version(p.Version), raw)
 				if err != nil {
 					return nil, err
 				}
 				return &versionJSON{Version: string(v)}, nil
+			}
+			if err := s.oneTaskFile(ctx, p.Path, p.Content, vfs.Version(p.Version)); err != nil {
+				return nil, err // a store outside every workspace, or one its workspace does not index
 			}
 			write := files.Write
 			if raw {

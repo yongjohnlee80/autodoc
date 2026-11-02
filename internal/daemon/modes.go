@@ -219,6 +219,16 @@ func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
 	return nil, g.varsOf(abs, nil)
 }
 
+// TodoStoreAt is the directory of the todo store holding abs, the innermost one, as the registry
+// last read gives it (canonical); false for none.
+func (m *Workspaces) TodoStoreAt(abs string) (string, bool) {
+	st, _ := m.storeAt(abs)
+	if st == nil {
+		return "", false
+	}
+	return st.Dir, true
+}
+
 // modes are one workspace's graph_only settings
 // (docs/decisions/todos.md#which-paths-are-graph-only), read by its indexer for each path. They
 // outlive its restarts, like its schema.
