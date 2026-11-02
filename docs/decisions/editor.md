@@ -36,6 +36,24 @@ editor's icon hides every shown panel, and its next click shows the same set aga
 
 In the code: `tui/dock.go`, `tui/panels.go`, `tui/globemap_gui.go`, `tui/mindmap_gui.go`, `tui/relations.go`
 
+## A toggle raises a covered panel
+
+Panels and windows can lie over one another, so an open panel isn't always seen. A panel's toggle
+(its key, such as SPC x for the todos, its `:` command, Lua action, menu item and dock icon)
+decides by whether the panel is seen whole, never by where the keyboard is:
+
+- closed or hidden: shown, in front, with the keyboard;
+- open but covered, even by one cell, by a window or panel stacked over it: brought to the front
+  with the keyboard, and not hidden;
+- open and uncovered: hidden, whether it has the keyboard or not. A panel tiled beside the editor
+  hides at the first press.
+
+Covered is golib's `OverlayHost.Covered`: a shown panel or window above it in the stack overlaps it.
+An open dialog or a notification over it doesn't count. Every toggle goes through one helper,
+`togglePanel`, so they all behave the same.
+
+In the code: `tui/panels.go`, `tui/dock.go`
+
 ## Multiple buffers
 
 Several files are open at once as buffers; the editor shows one, the active buffer. The host's
