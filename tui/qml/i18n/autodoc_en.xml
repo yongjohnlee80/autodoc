@@ -887,6 +887,14 @@
         <source>search models</source>
         <translation>search models</translation>
     </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search">
+        <source>set up semantic search</source>
+        <translation>set up semantic search</translation>
+    </message>
+    <message id="autodoc.cmd.prefs.set_up_semantic_search.help">
+        <source>set up semantic search</source>
+        <translation>set up semantic search</translation>
+    </message>
     <message id="autodoc.cmd.prefs.terminal_panel_keys">
         <source>Ctrl+h/j/k/l move between panels while typing</source>
         <translation>Ctrl+h/j/k/l move between panels while typing</translation>
@@ -1231,14 +1239,6 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1's request was already answered, dismissed or expired.</translation>
     </message>
-    <message id="autodoc.crew.fallback_waits">
-        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
-        <translation>Mail from %1 for %2 waits for its host (%3), which is away</translation>
-    </message>
-    <message id="autodoc.crew.fallback_went">
-        <source>%1's mail that waited for its host was delivered</source>
-        <translation>%1's mail that waited for its host was delivered</translation>
-    </message>
     <message id="autodoc.crew.fallback_typed">
         <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
         <translation>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</translation>
@@ -1247,13 +1247,21 @@
         <source>%1's mail that waited for its host may not have arrived: its text is in a notice</source>
         <translation>%1's mail that waited for its host may not have arrived: its text is in a notice</translation>
     </message>
-    <message id="autodoc.crew.no_longer_waits">
-        <source>%1 no longer waits on you</source>
-        <translation>%1 no longer waits on you</translation>
+    <message id="autodoc.crew.fallback_waits">
+        <source>Mail from %1 for %2 waits for its host (%3), which is away</source>
+        <translation>Mail from %1 for %2 waits for its host (%3), which is away</translation>
+    </message>
+    <message id="autodoc.crew.fallback_went">
+        <source>%1's mail that waited for its host was delivered</source>
+        <translation>%1's mail that waited for its host was delivered</translation>
     </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</translation>
+    </message>
+    <message id="autodoc.crew.no_longer_waits">
+        <source>%1 no longer waits on you</source>
+        <translation>%1 no longer waits on you</translation>
     </message>
     <message id="autodoc.crew.no_scope">
         <source>This window's agents have no crew scope: %1</source>
@@ -1386,6 +1394,10 @@
     <message id="autodoc.dialog.aIModels.search_models">
         <source>Search models</source>
         <translation>Search models</translation>
+    </message>
+    <message id="autodoc.dialog.aIModels.set_up">
+        <source>&amp;Set up…</source>
+        <translation>&amp;Set up…</translation>
     </message>
     <message id="autodoc.dialog.aIModels.usage_and_calls">
         <source>usage and calls</source>
@@ -1566,6 +1578,46 @@
     <message id="autodoc.dialog.diagram.zoom_out">
         <source>Zoom &amp;out</source>
         <translation>Zoom &amp;out</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.check">
+        <source>&amp;Check</source>
+        <translation>&amp;Check</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Close (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.download">
+        <source>&amp;Download</source>
+        <translation>&amp;Download</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.enter_ticks_a_workspace_or_unticks_it">
+        <source>Enter ticks a workspace or unticks it. Ticked ones use this model.</source>
+        <translation>Enter ticks a workspace or unticks it. Ticked ones use this model.</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.model">
+        <source>Model</source>
+        <translation>Model</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.ollama">
+        <source>Ollama at</source>
+        <translation>Ollama at</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.retry">
+        <source>&amp;Retry</source>
+        <translation>&amp;Retry</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.set_up_semantic_search">
+        <source>Set up semantic search</source>
+        <translation>Set up semantic search</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.stop_download">
+        <source>&amp;Stop download</source>
+        <translation>&amp;Stop download</translation>
+    </message>
+    <message id="autodoc.dialog.embeddingSetup.use">
+        <source>&amp;Use</source>
+        <translation>&amp;Use</translation>
     </message>
     <message id="autodoc.dialog.exportResults.cancel">
         <source>&amp;Cancel</source>
@@ -2134,6 +2186,10 @@
     <message id="autodoc.dialog.searchPicker.semantic">
         <source>Semantic</source>
         <translation>Semantic</translation>
+    </message>
+    <message id="autodoc.dialog.searchPicker.semantic_search_is_off_set_up">
+        <source>Semantic search is off — set up…</source>
+        <translation>Semantic search is off — set up…</translation>
     </message>
     <message id="autodoc.dialog.terminalLook.font_at_the_cell_size">
         <source>font: at the cell size</source>
@@ -3991,6 +4047,18 @@ WHAT A KEY NEEDS
         <source>the agent %1's command was not found (%2): check it in System › Agent profiles…</source>
         <translation>the agent %1's command was not found (%2): check it in System › Agent profiles…</translation>
     </message>
+    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
+        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
+        <translation>%1's doorbell didn't ring (%2): the message goes to its input instead</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
+        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
+        <translation>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</translation>
+    </message>
+    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
+        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
+        <translation>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</translation>
+    </message>
     <message id="autodoc.notice.agenttabs.the_agent_could_not_restart">
         <source>the agent could not restart: %1</source>
         <translation>the agent could not restart: %1</translation>
@@ -4019,10 +4087,6 @@ WHAT A KEY NEEDS
         <source>%1 is tiled: Layout › Float lets it be arranged</source>
         <translation>%1 is tiled: Layout › Float lets it be arranged</translation>
     </message>
-    <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
-        <source>its program takes no bracketed paste</source>
-        <translation>its program takes no bracketed paste</translation>
-    </message>
     <message id="autodoc.notice.candidate.audit_of_not_delivered">
         <source>audit of %1 not delivered: %2</source>
         <translation>audit of %1 not delivered: %2</translation>
@@ -4031,6 +4095,14 @@ WHAT A KEY NEEDS
         <source>audit of %1 not handed over: %2</source>
         <translation>audit of %1 not handed over: %2</translation>
     </message>
+    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
+        <source>audit of %1 sent to %2; click to install or cancel</source>
+        <translation>audit of %1 sent to %2; click to install or cancel</translation>
+    </message>
+    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
+        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
+        <translation>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</translation>
+    </message>
     <message id="autodoc.notice.candidate.copying_for_its_audit">
         <source>copying %1 for its audit…</source>
         <translation>copying %1 for its audit…</translation>
@@ -4038,6 +4110,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.candidate.ended">
         <source>%1: ended</source>
         <translation>%1: ended</translation>
+    </message>
+    <message id="autodoc.notice.candidate.its_program_takes_no_bracketed_paste">
+        <source>its program takes no bracketed paste</source>
+        <translation>its program takes no bracketed paste</translation>
     </message>
     <message id="autodoc.notice.candidate.no_autodoc_agent_to_audit_with_add_one_in_system">
         <source>no AutoDoc agent to audit with: add one in System › Agent profiles…</source>
@@ -4094,6 +4170,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.crash.failed_the_crash_log_could_not_be_written">
         <source>%1 failed: %2 (the crash log could not be written: %3)</source>
         <translation>%1 failed: %2 (the crash log could not be written: %3)</translation>
+    </message>
+    <message id="autodoc.notice.crewfallback.delivered">
+        <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
+        <translation>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</translation>
+    </message>
+    <message id="autodoc.notice.crewfallback.unknown">
+        <source>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</source>
+        <translation>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</translation>
     </message>
     <message id="autodoc.notice.diagram.no_mermaid_diagram_in_this_file_a_mermaid_fence">
         <source>no Mermaid diagram in this file: a mermaid fence, or an embed of a .mmd file</source>
@@ -4971,6 +5055,10 @@ WHAT A KEY NEEDS
         <source>model switch ended; search in %1 remains words-only</source>
         <translation>model switch ended; search in %1 remains words-only</translation>
     </message>
+    <message id="autodoc.notice.progress.model_updated_refilling">
+        <source>%1 was updated; semantic search is temporarily words-only while it refills %2</source>
+        <translation>%1 was updated; semantic search is temporarily words-only while it refills %2</translation>
+    </message>
     <message id="autodoc.notice.progress.ready_search_and_the_files_are_up_to_date">
         <source>ready: search and the files are up to date</source>
         <translation>ready: search and the files are up to date</translation>
@@ -5407,10 +5495,6 @@ WHAT A KEY NEEDS
         <source>todos: the store is now in %1</source>
         <translation>todos: the store is now in %1</translation>
     </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
-        <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
-        <translation>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</translation>
-    </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in">
         <source>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</source>
         <translation>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</translation>
@@ -5422,6 +5506,30 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_the_workspac">
         <source>todos: assigned to %1, but not delivered (the workspace changed before the assign landed): A on the task in its own workspace delivers it</source>
         <translation>todos: assigned to %1, but not delivered (the workspace changed before the assign landed): A on the task in its own workspace delivers it</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste">
+        <source>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</source>
+        <translation>todos: assigned to %1, but not handed over: its program takes no bracketed paste; open its panel and paste the task</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent">
+        <source>todos: assigned to %1, but not sent: %2</source>
+        <translation>todos: assigned to %1, but not sent: %2</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_queued">
+        <source>todos: assigned to %1, queued: it can't be woken now (%2)</source>
+        <translation>todos: assigned to %1, queued: it can't be woken now (%2)</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>todos: assigned to %1, and sent to it</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
+        <source>todos: assigned to %1, and sent to it</source>
+        <translation>todos: assigned to %1, and sent to it</translation>
+    </message>
+    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
+        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
+        <translation>todos: assigned to %1, and typed into its input: press Enter there to send it</translation>
     </message>
     <message id="autodoc.notice.todos_assign.todos_no_autodoc_agent_to_assign_to_add_one_in_t">
         <source>todos: no AutoDoc agent to assign to: add one in the agent profiles</source>
@@ -5912,6 +6020,162 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
         <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.about">
+        <source>about %1</source>
+        <translation>about %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.can_t_tell_here">
+        <source>can't tell here</source>
+        <translation>can't tell here</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_check">
+        <source>Could not check: %1</source>
+        <translation>Could not check: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.could_not_estimate">
+        <source>Could not estimate: %1</source>
+        <translation>Could not estimate: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.done">
+        <source>Done: semantic search uses %1.</source>
+        <translation>Done: semantic search uses %1.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.download_failed">
+        <source>The download failed: %1</source>
+        <translation>The download failed: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloaded_timing_it">
+        <source>Downloaded. Timing it on a sample…</source>
+        <translation>Downloaded. Timing it on a sample…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading">
+        <source>Downloading: %1 of %2</source>
+        <translation>Downloading: %1 of %2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.downloading_eta">
+        <source>Downloading: %1 of %2, about %3 left</source>
+        <translation>Downloading: %1 of %2, about %3 left</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.embeds">
+        <source>embeds</source>
+        <translation>embeds</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_in_memory">
+        <source>fits in memory</source>
+        <translation>fits in memory</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.fits_on_the_gpu">
+        <source>fits on the GPU</source>
+        <translation>fits on the GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_memory_unknown">
+        <source>%1 (memory unknown)</source>
+        <translation>%1 (memory unknown)</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.gpu_with_memory">
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.installed">
+        <source>, installed</source>
+        <translation>, installed</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.its_own">
+        <source>its own: %1</source>
+        <translation>its own: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.keeps_its_own">
+        <source>keeps its own: %1</source>
+        <translation>keeps its own: %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.model_row">
+        <source>%1 — %2, %3 download</source>
+        <translation>%1 — %2, %3 download</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_gpu">
+        <source>no GPU</source>
+        <translation>no GPU</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.no_ollama">
+        <source>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</source>
+        <translation>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.off">
+        <source>off</source>
+        <translation>off</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.on">
+        <source>on</source>
+        <translation>on</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.ready_to_use">
+        <source>%1 is installed. Tick the workspaces, then Use.</source>
+        <translation>%1 is installed. Tick the workspaces, then Use.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.setting_up">
+        <source>Setting up…</source>
+        <translation>Setting up…</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stays_off">
+        <source>stays off</source>
+        <translation>stays off</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_reading_the_workspaces">
+        <source>reading the workspaces</source>
+        <translation>reading the workspaces</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_the_provider">
+        <source>adding the provider</source>
+        <translation>adding the provider</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_off">
+        <source>turning off %1</source>
+        <translation>turning off %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_turning_on">
+        <source>turning on %1</source>
+        <translation>turning on %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.step_using_it">
+        <source>using the provider</source>
+        <translation>using the provider</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped">
+        <source>Stopped. If something else is downloading this model too, Ollama finishes it for that.</source>
+        <translation>Stopped. If something else is downloading this model too, Ollama finishes it for that.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.stopped_at">
+        <source>Stopped at %1: %2. What is done stays done; Retry runs it again.</source>
+        <translation>Stopped at %1: %2. What is done stays done; Retry runs it again.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.switches_from">
+        <source>switches from %1</source>
+        <translation>switches from %1</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.this_machine">
+        <source>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</source>
+        <translation>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.to_download">
+        <source>The model is a %1 download. The times show once it is installed.</source>
+        <translation>The model is a %1 download. The times show once it is installed.</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.too_large_here">
+        <source>too large here</source>
+        <translation>too large here</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_off">
+        <source>turned off</source>
+        <translation>turned off</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.turned_on">
+        <source>turned on</source>
+        <translation>turned on</translation>
+    </message>
+    <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
+        <source>A setup that was still running changed the workspaces: Check again before Use.</source>
+        <translation>A setup that was still running changed the workspaces: Check again before Use.</translation>
     </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
@@ -7349,6 +7613,18 @@ The last connect failed:
         <source>Not running: you'll be asked to start it, and the task is handed over once it has.</source>
         <translation>Not running: you'll be asked to start it, and the task is handed over once it has.</translation>
     </message>
+    <message id="autodoc.text.todos_assign.peer_can_be_woken">
+        <source>a wake reaches it</source>
+        <translation>a wake reaches it</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_cant_be_woken_now">
+        <source>can't be woken now (%1)</source>
+        <translation>can't be woken now (%1)</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.peer_pane">
+        <source>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</source>
+        <translation>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</translation>
+    </message>
     <message id="autodoc.text.todos_assign.running">
         <source>running</source>
         <translation>running</translation>
@@ -7606,282 +7882,6 @@ H J K L, Shift+arrows   resize it</translation>
     <message id="autodoc.view.tutorial.previous">
         <source>P&amp;revious</source>
         <translation>P&amp;revious</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.about">
-        <source>about %1</source>
-        <translation>about %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.can_t_tell_here">
-        <source>can't tell here</source>
-        <translation>can't tell here</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.could_not_check">
-        <source>Could not check: %1</source>
-        <translation>Could not check: %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.could_not_estimate">
-        <source>Could not estimate: %1</source>
-        <translation>Could not estimate: %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.done">
-        <source>Done: semantic search uses %1.</source>
-        <translation>Done: semantic search uses %1.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.downloaded_timing_it">
-        <source>Downloaded. Timing it on a sample…</source>
-        <translation>Downloaded. Timing it on a sample…</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.download_failed">
-        <source>The download failed: %1</source>
-        <translation>The download failed: %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.downloading">
-        <source>Downloading: %1 of %2</source>
-        <translation>Downloading: %1 of %2</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.downloading_eta">
-        <source>Downloading: %1 of %2, about %3 left</source>
-        <translation>Downloading: %1 of %2, about %3 left</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.embeds">
-        <source>embeds</source>
-        <translation>embeds</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.fits_in_memory">
-        <source>fits in memory</source>
-        <translation>fits in memory</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.fits_on_the_gpu">
-        <source>fits on the GPU</source>
-        <translation>fits on the GPU</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.gpu_memory_unknown">
-        <source>%1 (memory unknown)</source>
-        <translation>%1 (memory unknown)</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.gpu_with_memory">
-        <source>%1, %2</source>
-        <translation>%1, %2</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.installed">
-        <source>, installed</source>
-        <translation>, installed</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.its_own">
-        <source>its own: %1</source>
-        <translation>its own: %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.keeps_its_own">
-        <source>keeps its own: %1</source>
-        <translation>keeps its own: %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.model_row">
-        <source>%1 — %2, %3 download</source>
-        <translation>%1 — %2, %3 download</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.no_gpu">
-        <source>no GPU</source>
-        <translation>no GPU</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.no_ollama">
-        <source>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</source>
-        <translation>No Ollama answers at %1. Install it from ollama.com, start it, then Check.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.off">
-        <source>off</source>
-        <translation>off</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.on">
-        <source>on</source>
-        <translation>on</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.ready_to_use">
-        <source>%1 is installed. Tick the workspaces, then Use.</source>
-        <translation>%1 is installed. Tick the workspaces, then Use.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.setting_up">
-        <source>Setting up…</source>
-        <translation>Setting up…</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.stays_off">
-        <source>stays off</source>
-        <translation>stays off</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.step_the_provider">
-        <source>adding the provider</source>
-        <translation>adding the provider</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.step_turning_off">
-        <source>turning off %1</source>
-        <translation>turning off %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.step_turning_on">
-        <source>turning on %1</source>
-        <translation>turning on %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.step_using_it">
-        <source>using the provider</source>
-        <translation>using the provider</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.stopped">
-        <source>Stopped. If something else is downloading this model too, Ollama finishes it for that.</source>
-        <translation>Stopped. If something else is downloading this model too, Ollama finishes it for that.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.stopped_at">
-        <source>Stopped at %1: %2. What is done stays done; Retry runs it again.</source>
-        <translation>Stopped at %1: %2. What is done stays done; Retry runs it again.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.switches_from">
-        <source>switches from %1</source>
-        <translation>switches from %1</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.this_machine">
-        <source>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</source>
-        <translation>This machine: %1; %2 of memory; %3 free on disk; Ollama %4.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.to_download">
-        <source>The model is a %1 download. The times show once it is installed.</source>
-        <translation>The model is a %1 download. The times show once it is installed.</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.too_large_here">
-        <source>too large here</source>
-        <translation>too large here</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.turned_off">
-        <source>turned off</source>
-        <translation>turned off</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.turned_on">
-        <source>turned on</source>
-        <translation>turned on</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.check">
-        <source>&amp;Check</source>
-        <translation>&amp;Check</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>Close (&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.download">
-        <source>&amp;Download</source>
-        <translation>&amp;Download</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.enter_ticks_a_workspace_or_unticks_it">
-        <source>Enter ticks a workspace or unticks it. Ticked ones use this model.</source>
-        <translation>Enter ticks a workspace or unticks it. Ticked ones use this model.</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.model">
-        <source>Model</source>
-        <translation>Model</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.ollama">
-        <source>Ollama at</source>
-        <translation>Ollama at</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.retry">
-        <source>&amp;Retry</source>
-        <translation>&amp;Retry</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.set_up_semantic_search">
-        <source>Set up semantic search</source>
-        <translation>Set up semantic search</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.stop_download">
-        <source>&amp;Stop download</source>
-        <translation>&amp;Stop download</translation>
-    </message>
-    <message id="autodoc.dialog.embeddingSetup.use">
-        <source>&amp;Use</source>
-        <translation>&amp;Use</translation>
-    </message>
-    <message id="autodoc.dialog.aIModels.set_up">
-        <source>&amp;Set up…</source>
-        <translation>&amp;Set up…</translation>
-    </message>
-    <message id="autodoc.dialog.searchPicker.semantic_search_is_off_set_up">
-        <source>Semantic search is off — set up…</source>
-        <translation>Semantic search is off — set up…</translation>
-    </message>
-    <message id="autodoc.notice.progress.model_updated_refilling">
-        <source>%1 was updated; semantic search is temporarily words-only while it refills %2</source>
-        <translation>%1 was updated; semantic search is temporarily words-only while it refills %2</translation>
-    </message>
-    <message id="autodoc.cmd.prefs.set_up_semantic_search">
-        <source>set up semantic search</source>
-        <translation>set up semantic search</translation>
-    </message>
-    <message id="autodoc.cmd.prefs.set_up_semantic_search.help">
-        <source>set up semantic search</source>
-        <translation>set up semantic search</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.step_reading_the_workspaces">
-        <source>reading the workspaces</source>
-        <translation>reading the workspaces</translation>
-    </message>
-    <message id="autodoc.text.embedsetup.workspaces_changed_check_again">
-        <source>A setup that was still running changed the workspaces: Check again before Use.</source>
-        <translation>A setup that was still running changed the workspaces: Check again before Use.</translation>
-    </message>
-    <message id="autodoc.notice.agentmessaging.doorbell_not_fired_typed">
-        <source>%1's doorbell didn't ring (%2): the message goes to its input instead</source>
-        <translation>%1's doorbell didn't ring (%2): the message goes to its input instead</translation>
-    </message>
-    <message id="autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt">
-        <source>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</source>
-        <translation>%1 is waiting on a prompt: the message is typed but not sent; answer the prompt, then press Enter there</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_sent">
-        <source>todos: assigned to %1, and sent to it</source>
-        <translation>todos: assigned to %1, and sent to it</translation>
-    </message>
-    <message id="autodoc.text.todos_assign.peer_can_be_woken">
-        <source>a wake reaches it</source>
-        <translation>a wake reaches it</translation>
-    </message>
-    <message id="autodoc.text.todos_assign.peer_cant_be_woken_now">
-        <source>can't be woken now (%1)</source>
-        <translation>can't be woken now (%1)</translation>
-    </message>
-    <message id="autodoc.text.todos_assign.peer_pane">
-        <source>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</source>
-        <translation>Another host's agent, in %1: %2. A sends it the task as your request, queued until a wake reaches it.</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_sent">
-        <source>todos: assigned to %1, and sent to it</source>
-        <translation>todos: assigned to %1, and sent to it</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_queued">
-        <source>todos: assigned to %1, queued: it can't be woken now (%2)</source>
-        <translation>todos: assigned to %1, queued: it can't be woken now (%2)</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent">
-        <source>todos: assigned to %1, but not sent: %2</source>
-        <translation>todos: assigned to %1, but not sent: %2</translation>
-    </message>
-    <message id="autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel">
-        <source>audit of %1 sent to %2; click to install or cancel</source>
-        <translation>audit of %1 sent to %2; click to install or cancel</translation>
-    </message>
-    <message id="autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input">
-        <source>todos: assigned to %1, and typed into its input: press Enter there to send it</source>
-        <translation>todos: assigned to %1, and typed into its input: press Enter there to send it</translation>
-    </message>
-    <message id="autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel">
-        <source>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</source>
-        <translation>audit of %1 typed into %2's input: press Enter there to send it; click to install or cancel</translation>
-    </message>
-    <message id="autodoc.notice.crewfallback.delivered">
-        <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
-        <translation>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</translation>
-    </message>
-    <message id="autodoc.notice.crewfallback.unknown">
-        <source>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</source>
-        <translation>AutoDoc can't tell whether %1 got this message from the crew, so send it there yourself: %2</translation>
-    </message>
-    <message id="autodoc.notice.agentmessaging.typed_not_sent_no_prompt_reporting">
-        <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
-        <translation>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</translation>
     </message>
 </context>
 </TS>
