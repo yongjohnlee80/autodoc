@@ -91,16 +91,38 @@ func cleanBody(body string) string {
 func stripManaged(s string) string {
 	for {
 		rest := strings.TrimLeft(s, " \t\r\n")
-		loc := headerRe.FindStringIndex(rest)
-		if loc == nil || loc[0] != 0 {
+		end, ok := managedHeaderAt(rest)
+		if !ok {
 			return s
 		}
-		rest = rest[loc[1]:]
+		rest = rest[end:]
 		if l := h1Re.FindStringIndex(rest); l != nil {
 			rest = rest[l[1]:]
 		}
 		s = strings.TrimLeft(rest, "\n")
 	}
+}
+
+// managedOpenRe is how the managed header opens, as either writer worded it.
+var managedOpenRe = regexp.MustCompile(`^<!-- ─── (?:autodoc|auto-core)\.todo schema v1`)
+
+// managedHeaderAt reports whether s opens with the managed header, one HTML comment from its
+// opening to its own closing "─── -->", and where it ends (its trailing blank space included). A
+// comment that opens alike but closes on another "-->" is the user's text, never consumed up to a
+// later comment's close.
+func managedHeaderAt(s string) (int, bool) {
+	if !managedOpenRe.MatchString(s) {
+		return 0, false
+	}
+	c := strings.Index(s, "-->")
+	if c < 0 || !strings.HasSuffix(strings.TrimRight(s[:c], " "), "───") {
+		return 0, false
+	}
+	end := c + len("-->")
+	for end < len(s) && strings.ContainsRune(" \t\r\n\v\f", rune(s[end])) {
+		end++
+	}
+	return end, true
 }
 
 // formatError is why a file is not a valid task.
