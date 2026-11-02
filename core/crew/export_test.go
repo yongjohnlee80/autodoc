@@ -47,3 +47,15 @@ func SetCodexProbeTimeout(t interface{ Cleanup(func()) }, d time.Duration) {
 	codexProbeTimeout = d
 	t.Cleanup(func() { codexProbeTimeout = was })
 }
+
+// SetClaudeFindTimeouts bounds ClaudeOf's run of mise by first, and its run again after a timeout
+// by retry, for the test's length.
+func SetClaudeFindTimeouts(t interface{ Cleanup(func()) }, first, retry time.Duration) {
+	f, r := claudeFindTimeout, claudeFindRetry
+	claudeFindTimeout, claudeFindRetry = first, retry
+	t.Cleanup(func() { claudeFindTimeout, claudeFindRetry = f, r })
+}
+
+// ForgetClaudeLast drops the binaries ClaudeOf's lookups resolved to in this process, as a new
+// process starts with none.
+func ForgetClaudeLast() { claudeLast.Range(func(k, _ any) bool { claudeLast.Delete(k); return true }) }
