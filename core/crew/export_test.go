@@ -55,7 +55,3 @@ func SetClaudeFindTimeouts(t interface{ Cleanup(func()) }, first, retry time.Dur
 	claudeFindTimeout, claudeFindRetry = first, retry
 	t.Cleanup(func() { claudeFindTimeout, claudeFindRetry = f, r })
 }
-
-// ForgetClaudeLast drops the binaries ClaudeOf's lookups resolved to in this process, as a new
-// process starts with none.
-func ForgetClaudeLast() { claudeLast.Range(func(k, _ any) bool { claudeLast.Delete(k); return true }) }

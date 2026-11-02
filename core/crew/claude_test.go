@@ -236,7 +236,6 @@ func wrapperFirst(t *testing.T) string {
 // other agents start, each running a wrapper's `mise use`) is asked once more, with a longer bound,
 // and its answer is taken: the agent starts with its prompt hooks, not the floor.
 func TestClaudeOfRetriesAMiseThatTimesOut(t *testing.T) {
-	crew.ForgetClaudeLast()
 	crew.SetClaudeFindTimeouts(t, 300*time.Millisecond, 5*time.Second)
 	tools, work := t.TempDir(), t.TempDir()
 	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
@@ -250,7 +249,6 @@ func TestClaudeOfRetriesAMiseThatTimesOut(t *testing.T) {
 		t.Fatalf("a mise past the first bound: %q, %v, %v; want it asked again and its tool %q, with prompts", got, k, err, tool)
 	}
 	// past both bounds, with nothing resolved before: the error says first that mise timed out
-	crew.ForgetClaudeLast()
 	crew.SetClaudeFindTimeouts(t, 200*time.Millisecond, 400*time.Millisecond)
 	if err := os.WriteFile(filepath.Join(tools, "stall"), []byte("3"), 0o644); err != nil {
 		t.Fatal(err)
@@ -265,49 +263,39 @@ func TestClaudeOfRetriesAMiseThatTimesOut(t *testing.T) {
 	}
 }
 
-// TestClaudeOfTakesTheLastBinaryWhenMiseCantAnswer: when mise can't answer (it failed or timed
-// out), the binary the same lookup last resolved to is taken, if it is still there and still reads
-// as a Claude Code: from this process, or from the cache file for a later one. With none, or with
-// that binary gone, the lookup fails, its error saying first why mise didn't answer.
-func TestClaudeOfTakesTheLastBinaryWhenMiseCantAnswer(t *testing.T) {
-	crew.ForgetClaudeLast()
+// TestClaudeOfTakesNothingInPlaceOfAMiseThatCantAnswer: when mise can't answer, the lookup fails,
+// its error saying first why, and the agent starts with the floor: never the binary an earlier
+// lookup resolved to, though it's still installed and reads as a Claude Code with every hook, since
+// the launcher may run another one now (the user's mise selection changed), and naming hooks that
+// one doesn't know can stall its start.
+func TestClaudeOfTakesNothingInPlaceOfAMiseThatCantAnswer(t *testing.T) {
 	tools, work := t.TempDir(), t.TempDir()
 	cache := filepath.Join(t.TempDir(), "claude-hooks.json")
-	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
-	stalledMise(t, tools, tool)
+	older := fakeClaude(t, tools, "claude-older", "SessionStart") // what mise selects now
+	newer := fakeClaude(t, tools, "claude-newer", everyClaudeEvent...)
+	stalledMise(t, tools, newer)
 	path := wrapperFirst(t) + string(os.PathListSeparator) + tools
-	if got, _, err := crew.ClaudeOf("claude", path, work, cache); err != nil || got != tool {
-		t.Fatalf("the premise, mise answering: %q, %v; want %q", got, err, tool)
+	if got, k, err := crew.ClaudeOf("claude", path, work, cache); err != nil || got != newer || !k.Reports() {
+		t.Fatalf("the premise, mise selecting the newer: %q, %v, %v", got, k, err)
 	}
+	// the selection changes to the older one, and mise fails at the next lookup: the newer one,
+	// still installed, must not be taken for what the launcher runs
+	stalledMise(t, tools, older)
 	if err := os.WriteFile(filepath.Join(tools, "fail"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, k, err := crew.ClaudeOf("claude", path, work, cache)
-	if err != nil || got != tool || !k.Reports() {
-		t.Fatalf("mise failing, this process's last answer: %q, %v, %v; want %q, with prompts", got, k, err, tool)
+	if err == nil || got != "" || k != nil {
+		t.Fatalf("mise failing after an earlier answer: %q, %v, %v; want an error, no binary and no hooks (the floor)", got, k, err)
 	}
-	crew.ForgetClaudeLast() // a later process: only the cache file remembers
-	got, k, err = crew.ClaudeOf("claude", path, work, cache)
-	if err != nil || got != tool || !k.Reports() {
-		t.Fatalf("mise failing, the cache file's last answer: %q, %v, %v; want %q, with prompts", got, k, err, tool)
-	}
-	if _, _, err := crew.ClaudeOf("claude", path, t.TempDir(), cache); err == nil ||
-		!strings.HasPrefix(err.Error(), "crew: mise which claude exit status 1, and none of ") {
-		t.Fatalf("mise failing for a lookup that never resolved (another folder): %v; want the error, mise's failure first", err)
-	}
-	if err := os.Remove(tool); err != nil {
-		t.Fatal(err)
-	}
-	crew.ForgetClaudeLast()
-	if got, _, err := crew.ClaudeOf("claude", path, work, cache); err == nil || !strings.HasPrefix(err.Error(), "crew: mise which claude ") {
-		t.Fatalf("mise failing, its last answer since removed: %q, %v; want the error, not the removed binary", got, err)
+	if !strings.HasPrefix(err.Error(), "crew: mise which claude exit status 1, and none of ") {
+		t.Fatalf("the error: %v; want it to say first that mise failed", err)
 	}
 }
 
 // TestClaudeOfTakesAMiseAnswerWhoseChildKeepsTheOutput: a mise that answered and ended, a child of
 // its still holding the output, is taken at its answer a second later, not held to the bound.
 func TestClaudeOfTakesAMiseAnswerWhoseChildKeepsTheOutput(t *testing.T) {
-	crew.ForgetClaudeLast()
 	crew.SetClaudeFindTimeouts(t, 10*time.Second, 10*time.Second)
 	sleep, err := exec.LookPath("sleep")
 	if err != nil {
