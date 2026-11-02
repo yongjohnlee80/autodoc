@@ -197,6 +197,10 @@ import (
 // each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
 // verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
 // as crew.bridge_reclaimed. A session below 46 has neither verb.
+// Protocol 47 is crew.access (docs/decisions/crew.md#re-issuing-a-bridge): what the calling
+// session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
+// reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
+// session below 47 has no such verb.
 // Protocol 50 is the summary and the pages an agent reads within its turn: todos.list's
 // opts.summary (docs/decisions/todos.md#a-lists-summary), each task without its text, and
 // graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with

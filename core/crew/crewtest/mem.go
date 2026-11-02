@@ -197,6 +197,17 @@ func (t *memTx) LiveSessionsOfScope(scope string) ([]crew.Session, error) {
 	return out, nil
 }
 
+func (t *memTx) SessionsByServer(server string) ([]crew.Session, error) {
+	var out []crew.Session
+	for _, s := range t.st.sessions {
+		if s.Server == server {
+			out = append(out, copySession(s))
+		}
+	}
+	slices.SortFunc(out, func(a, b crew.Session) int { return strings.Compare(a.ID, b.ID) })
+	return out, nil
+}
+
 func (t *memTx) PutSession(s crew.Session) error { t.st.sessions[s.ID] = copySession(s); return nil }
 
 func (t *memTx) Wake(session string) (crew.Wake, bool, error) {

@@ -12,6 +12,9 @@ import (
 const (
 	ReclaimEvery = time.Minute      // the daemon looks this often, with no window open
 	reclaimAfter = 10 * time.Minute // orphaned, for the same reason, in every look this long
+	// reclaimRetries is how often an incomplete reclaim is tried again, each at the next look 10
+	// minutes on; then the orphan is flagged for the user (BridgeRow.ReclaimStopped) and left alone
+	reclaimRetries = 3
 )
 
 // Reclaimed is one helper the daemon's look ended (Reclaim), or tried to.
@@ -38,12 +41,19 @@ func (m *Manager) Reclaim(ctx context.Context, now time.Time) ([]Reclaimed, erro
 	}
 	m.bridgeMu.Lock()
 	seen := make(map[string]time.Time, len(rows))
+	tries, left := map[string]int{}, map[string]int{}
 	var due []BridgeRow
 	for _, r := range rows {
 		if r.State != BridgeOrphan {
 			continue // forgotten: a live row restarts the clock, a foreign one never has one
 		}
 		k := reclaimKey(r)
+		if n, ok := m.bridgeTries[k]; ok {
+			tries[k], left[k] = n, m.bridgeLeft[k]
+		}
+		if tries[k] > reclaimRetries {
+			continue // flagged for the user: no clock, no further kill or journal row
+		}
 		first, ok := m.bridgeSeen[k]
 		if !ok {
 			first = now
@@ -53,7 +63,7 @@ func (m *Manager) Reclaim(ctx context.Context, now time.Time) ([]Reclaimed, erro
 			due = append(due, r)
 		}
 	}
-	m.bridgeSeen = seen
+	m.bridgeSeen, m.bridgeTries, m.bridgeLeft = seen, tries, left
 	m.bridgeMu.Unlock()
 
 	var out []Reclaimed
@@ -68,13 +78,20 @@ func (m *Manager) Reclaim(ctx context.Context, now time.Time) ([]Reclaimed, erro
 			continue // it came back, or its reason changed, between the look and the kill
 		}
 		out = append(out, Reclaimed{Row: r, Outcome: res.Outcome, Survivors: res.Survivors, Err: err})
-		// an incomplete one keeps its clock: the next look finds what still runs, still orphaned, and
-		// ends it at once; it is journaled each time, with what survived
-		if err == nil && res.Outcome != KilledIncomplete {
-			m.bridgeMu.Lock()
-			delete(m.bridgeSeen, reclaimKey(r))
-			m.bridgeMu.Unlock()
+		k := reclaimKey(r)
+		m.bridgeMu.Lock()
+		switch {
+		case err == nil && res.Outcome == KilledIncomplete:
+			// tried again at the next look 10 minutes on, at most reclaimRetries times, then flagged
+			m.bridgeTries[k]++
+			m.bridgeLeft[k] = res.Survivors
+			m.bridgeSeen[k] = now
+		case err == nil:
+			delete(m.bridgeSeen, k)
+			delete(m.bridgeTries, k)
+			delete(m.bridgeLeft, k)
 		}
+		m.bridgeMu.Unlock()
 	}
 	return out, nil
 }

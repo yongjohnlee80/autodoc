@@ -7906,6 +7906,10 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
         <translation>%1 个辅助进程，其中 %2 个孤儿。孤儿状态持续 10 分钟的进程由守护进程终止。</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>孤儿，仍有 %1 个在运行：守护进程已停止尝试，请自行终止</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
         <translation>孤儿，%1 分钟后终止</translation>
@@ -7951,12 +7955,12 @@ H J K L, Shift+方向键   调整大小</translation>
         <translation>已复制 %1 %2 的详细信息</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.ended">
-        <source>%1 %2 ended</source>
-        <translation>%1 %2 已结束</translation>
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 已结束，连同它持有的所有进程（其首进程结束后派生的进程不受追踪）</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.killed">
-        <source>%1 %2 ignored the stop and was killed</source>
-        <translation>%1 %2 忽略了停止请求，已被强制终止</translation>
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 忽略了停止请求，已被强制终止，连同它持有的所有进程（其首进程结束后派生的进程不受追踪）</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.gone">
         <source>%1 %2 had already ended</source>

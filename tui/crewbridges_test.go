@@ -16,17 +16,18 @@ import (
 // bridgesWindow is Crew Bridges' program: crew.bridges answers rows, crew.bridge_kill is recorded
 // and answers outcome, timers wait until fired, questions are kept for the cell to answer.
 type bridgesWindow struct {
-	rows    []any
-	listErr error // what crew.bridges answers instead of rows, when set
-	outcome string
-	kills   [][]any
-	listed  int // crew.bridges calls
-	timers  []func()
-	state   map[string]any
-	opened  []string
-	asked   []Question
-	notices []string
-	copied  string
+	rows      []any
+	listErr   error // what crew.bridges answers instead of rows, when set
+	outcome   string
+	survivors int64 // with outcome incomplete
+	kills     [][]any
+	listed    int // crew.bridges calls
+	timers    []func()
+	state     map[string]any
+	opened    []string
+	asked     []Question
+	notices   []string
+	copied    string
 }
 
 func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, error) {
@@ -39,7 +40,7 @@ func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, err
 		return w.rows, nil
 	case "crew.bridge_kill":
 		w.kills = append(w.kills, p)
-		return map[string]any{"outcome": w.outcome}, nil
+		return map[string]any{"outcome": w.outcome, "survivors": w.survivors}, nil
 	}
 	return nil, errors.New("unknown method: " + verb)
 }
@@ -116,7 +117,7 @@ func TestCrewBridgesKillAnOrphanAtOnceAndAskForALiveOne(t *testing.T) {
 	if k := w.kills[0]; k[0] != scope || k[1] != host.run || k[2] != epoch || k[3] != int64(101) || k[4] != "boot:ns:101:77" || k[5] != false {
 		t.Fatalf("the orphan's crew.bridge_kill %v, want scope %s, the run token, epoch %d, pid 101, its start, unconfirmed", k, scope, epoch)
 	}
-	if last := w.notices[len(w.notices)-1]; last != "agy-bridge 101 ended" {
+	if last := w.notices[len(w.notices)-1]; last != "agy-bridge 101 ended, with every process it held (one forked after its leader went isn't tracked)" {
 		t.Fatalf("the notice %q", last)
 	}
 
@@ -200,5 +201,26 @@ func TestCrewBridgesSayWhyNothingIsListed(t *testing.T) {
 		if got := w.state["App.crewBridgesStatus"].(string); !strings.Contains(got, c.want) || strings.Contains(got, "-32") {
 			t.Errorf("crew.bridges answering %v: the status %q, want it to say %q", c.err, got, c.want)
 		}
+	}
+}
+
+// The daemon's reclaim gave up on an orphan its kills left running: its row says so, with how many
+// still run, and that it's the user's to end. A kill that left processes running says so too,
+// never "ended".
+func TestCrewBridgesSayWhatTheKillsLeftRunning(t *testing.T) {
+	now := time.Unix(1793600000, 0)
+	stopped := bridgeWire("agy-bridge", 101, "orphan", "", "session ended", 0)
+	stopped["reclaim_stopped"], stopped["survivors"] = true, int64(2)
+	w := &bridgesWindow{outcome: "incomplete", rows: []any{stopped}}
+	w.survivors = 2
+	b, _ := newBridgesCell(t, w)
+	b.now = func() time.Time { return now }
+	b.open()
+	if row := b.rowOf(0, b.rows.items[0]); row["state"] != "orphan, 2 still running: the daemon stopped trying, it's yours to end" {
+		t.Fatalf("the orphan the daemon gave up on: %v", row)
+	}
+	b.kill(0)
+	if last := w.notices[len(w.notices)-1]; last != "agy-bridge 101: 2 of its processes still ran after it was killed" {
+		t.Fatalf("an incomplete kill's notice %q", last)
 	}
 }

@@ -2,9 +2,18 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 50,
+  protocol = 47,
   min_protocol = 12,
   verbs = {
+    ["crew.access"] = {
+      since = 47, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "store", type = "string", optional = true }
+      },
+      result = "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
+      doc = "What the calling session's crew access holds now (since 47): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue.",
+    },
     ["crew.adopt"] = {
       since = 37, scope = "local-peer", audience = "user",
       params = {
@@ -43,7 +52,7 @@ return {
     ["crew.bridges"] = {
       since = 46, scope = "local-peer", audience = "user",
       params = {},
-      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at, reclaim_stopped, survivors}]",
       doc = "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned.",
     },
     ["crew.claim"] = {
@@ -473,8 +482,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{unresolved: [{src, raw, reason}], count, next?} (protocol 50; below it [{src, raw, reason}], the whole list)",
-      doc = "Links that name no file, a page at a time: opts.limit (1 to 2000, default 500) rows after opts.offset, the whole list's count, and next, the next page's offset, absent on the last. A session below 50 gets the whole list in one reply.",
+      result = "[{src, raw, reason}]",
+      doc = "Links that name no file.",
     },
     ["host.probe"] = {
       since = 31, scope = "global", audience = "user",
@@ -947,7 +956,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-      doc = "The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 50), each task is {id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: what an agent reads to pick a task, then todos.get for the one it needs.",
+      doc = "The active buckets' tasks; archives only by month, on request.",
     },
     ["todos.migrate_refs"] = {
       since = 22, scope = "global", audience = "user",

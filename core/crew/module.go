@@ -16,6 +16,9 @@ const Protocol = 37
 // bridgesSince is the protocol crew.bridges and crew.bridge_kill arrive in (rpc's Protocol 46).
 const bridgesSince = 46
 
+// AccessSince is the protocol crew.access arrives in (rpc's Protocol 47).
+const AccessSince = 47
+
 // Name is the module's name: its verbs are crew.*.
 func (m *Manager) Name() string { return "crew" }
 
@@ -191,13 +194,20 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p whoamiParams) (Identity, error) {
 				return m.Whoami(ctx, p.Credential, p.Store)
 			}),
+		module.Handle(module.Contract{Verb: "crew.access", Since: AccessSince, Audience: module.AudienceAgent,
+			Effect: module.EffectRead, Result: "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
+			Errors: []int64{CodeBadCredential, CodeContextMismatch},
+			Doc:    "What the calling session's crew access holds now (since 47): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue."},
+			func(ctx context.Context, p whoamiParams) (Access, error) {
+				return m.AccessOf(ctx, p.Credential, p.Store)
+			}),
 		module.Handle(module.Contract{Verb: "crew.orphans", Since: Protocol, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead, Result: "[{scope, profiles, unread}]",
 			Doc: "AutoDoc scopes with a free holder and unhandled mail."},
 			func(ctx context.Context, _ struct{}) ([]Orphan, error) { return m.Orphans(ctx) }),
 		module.Handle(module.Contract{Verb: "crew.bridges", Since: bridgesSince, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead,
-			Result: "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+			Result: "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at, reclaim_stopped, survivors}]",
 			Errors: []int64{CodeNoBridges},
 			Doc:    "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned."},
 			func(ctx context.Context, _ struct{}) ([]BridgeRow, error) { return m.Bridges(ctx) }),

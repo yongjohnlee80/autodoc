@@ -7917,6 +7917,10 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
         <translation>補助プロセス %1 件、うち孤児 %2 件。10 分間孤児のままのものはデーモンが終了します。</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>孤児、%1 個がまだ実行中: デーモンは試行をやめました。終了はあなたに任されます</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
         <translation>孤児、%1 分後に終了</translation>
@@ -7962,12 +7966,12 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <translation>%1 %2 の詳細をコピーしました</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.ended">
-        <source>%1 %2 ended</source>
-        <translation>%1 %2 は終了しました</translation>
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 は保持していたすべてのプロセスとともに終了しました（リーダー終了後に生まれたプロセスは追跡されません）</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.killed">
-        <source>%1 %2 ignored the stop and was killed</source>
-        <translation>%1 %2 は停止要求を無視したため強制終了しました</translation>
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 は停止を無視したため、保持していたすべてのプロセスとともに強制終了されました（リーダー終了後に生まれたプロセスは追跡されません）</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.gone">
         <source>%1 %2 had already ended</source>

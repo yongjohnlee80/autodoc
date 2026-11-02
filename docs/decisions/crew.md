@@ -268,9 +268,14 @@ all, for the daemon's user on its machine:
 - The scan sees every helper of the user's, and several daemons, each with its own store, can run
   at once. A helper missing from this store's rows is no proof of an orphan: it may be another
   daemon's live helper. So an orphan is only a helper this store is proven to own: a bridge whose
-  `--session` is one of this store's sessions, or a Codex server whose own session context (the
-  `AUTODOC_CREW_CONTEXT` the host gives it) names this store and one of its sessions. Any other
-  helper is `foreign` too, "not one of this store's sessions".
+  `--session` is one of this store's sessions, or a Codex server this store recorded. When a
+  Codex session's endpoint registers, its session row keeps the server's socket and the process
+  listening there (its process reference), and keeps them after the session ends. A running
+  server is this store's when a session of the store recorded both that socket and that very
+  process; the socket alone could be a later server's. While the server's own session context
+  file lasts (the `AUTODOC_CREW_CONTEXT` the host gives it, naming this store and one of its
+  sessions), that proves it too. Any other helper is `foreign` too, "not one of this store's
+  sessions".
 - The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
   in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
   between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
@@ -288,9 +293,11 @@ all, for the daemon's user on its machine:
   how many survived, and the window says so. Nothing is claimed ended that wasn't seen to end.
   `term` and `kill` say that every process the kill held ended, no more: a process forked into the
   group after its leader was gone is never taken in, so it can outlive a kill that answers `term`.
-  Taking it in by its group number would risk another group's processes. The daemon's reclaim
-  journals an incomplete kill with its survivors and keeps the orphan's clock, so the next look
-  ends what still runs.
+  Taking it in by its group number would risk another group's processes. The window's notice says
+  so. The daemon's reclaim journals an incomplete kill with its survivors and tries again at the
+  look 10 minutes on, at most 3 times. Then the orphan is flagged for the user ("the daemon
+  stopped trying, it's yours to end", with how many still run), and the daemon neither kills it
+  nor journals it again.
   A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
   helper that leads its own process group is ended with its group. Any other, such as a server
   Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is
@@ -335,6 +342,46 @@ removed once the session ends.
   the secret's hash.
 
 In the code: `core/crew/context.go`, `core/crew/auth.go`, `app/crewcli.go`, `tui/agent.go`
+
+## Re-issuing a bridge
+
+An agent can ask the running daemon to re-establish its crew access, with no restart of its slot:
+when its slot started before its host joined it, when the daemon restarted, or when its access is
+otherwise gone. The access has two halves, and each has one owner:
+
+- **The session and its context are the host's.** The daemon never makes a credential: it keeps
+  only a secret's hash, and only a host, with its run token and epoch, registers a session. A host
+  joins every running slot that has no live session at each claim and renewal, writing the context
+  at the slot's own path.
+- **The endpoint is the agent's.** Only its own process sees how it is woken (Claude's inbox
+  socket, its Codex thread, agy's language server), so only it can register that again.
+
+`crew.access` (protocol 47) answers what the calling session's access holds now: live or ended
+(with how it ended, or `stale_epoch`), whether its host holds its scope, and a live session's
+endpoint, `registered`, `none` or `failing`. A credential of an ended session answers that
+session's state alone; one matching no session is `bad_credential`. It never answers a credential,
+so no caller can obtain another agent's identity through it. It writes nothing.
+
+`autodoc crew reissue [--wait D]`, and the crew MCP server's `crew_reissue`, read it and do what the
+agent can:
+
+- No context at its path yet, a credential the daemon no longer knows, or an ended session: it
+  waits, up to 40 s by default (past one renewal), for its host's re-join, reading the context again
+  each time. Several contexts, another agent's, or no daemon end it at once.
+- A live session's endpoint, none or failing, it registers again from its own process, as that
+  kind's own command does: Claude's `crew endpoint --claude`, Codex's `crew endpoint --codex-here`,
+  agy's `crew bridge --agy` (from agy's shell only: its MCP server has no token). OpenCode's plugin
+  registers its own on the session's next message. A waker that returned is not an endpoint registered (agy's bridge
+  detaches first): it is re-issued only once `crew.access` says `registered`, looked at for up to
+  10 s, else it says the daemon holds none.
+- A registered endpoint it keeps: a registration raises its generation and resets its wake state,
+  so a re-issue of a healthy session changes nothing.
+- It answers `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access
+  it ended with.
+
+The guide's first step says to call it when `crew whoami` fails, then ask again.
+
+In the code: `core/crew/access.go`, `app/crewreissue.go`, `app/crewmcp.go`
 
 ## Durable mail
 
@@ -700,7 +747,7 @@ tool policy, and a prompt it hits raises attention for you to answer in its tab.
 The one allowance is the guide's own commands, so following the guide never stops at a prompt.
 Each kind gets it only once a live probe shows that a compound command (`;`, `&&`, `|`, `$(…)`, a
 newline) can't ride its rules:
-`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge`
+`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge|reissue`
 and the read-only `autodoc --contracts` (the verb tables the written guide indexes), each named
 (`crew.GuideCommands`), never `autodoc *`. It is written only where the session's own CLI
 reads it, never in your own CLI configuration:
