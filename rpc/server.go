@@ -218,7 +218,13 @@ import (
 // graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with
 // opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 50
 // is refused both options and keeps the one-reply list.
-const Protocol int64 = 50
+// Protocol 51 says what became of a delivery (docs/decisions/crew.md#durable-mail), and which rows
+// are hosts (docs/decisions/crew.md#wakers-and-the-wake-scheduler): mail.show of the caller's own delivery
+// answers mail.done (-32115) when acked or replied to, mail.ended (-32116) when it failed, expired,
+// was merged or withdrawn, or its message passed its expiry; and crew.list's why host for a host's
+// own session (kind host), which an agent's crew list leaves out unless all. A session below 51 reads
+// both new codes as errors it doesn't know, and host as a why it doesn't know.
+const Protocol int64 = 51
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
