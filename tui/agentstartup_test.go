@@ -55,11 +55,12 @@ func (d *crewDaemon) started(t *testing.T, codename string) {
 	}
 }
 
-// notStartedNotices counts the notices that say codename hasn't finished starting in folder.
+// notStartedNotices counts the notices that say codename hasn't finished starting in folder (not
+// the exit-before-start notice, which names its folder and the trust question too).
 func notStartedNotices(notes []string, name, folder string) int {
 	n := 0
 	for _, note := range notes {
-		if strings.Contains(note, name) && strings.Contains(note, folder) && strings.Contains(note, "trust") {
+		if strings.Contains(note, name) && strings.Contains(note, folder) && strings.Contains(note, "hasn't finished starting") {
 			n++
 		}
 	}
