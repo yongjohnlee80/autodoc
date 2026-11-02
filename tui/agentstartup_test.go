@@ -131,7 +131,15 @@ func TestTheUsersSendToAClaudeThatHasntStartedWaitsAsMail(t *testing.T) {
 // mutant: any why but ended and no_endpoint taken for started).
 func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
-	w.d.clock.Advance(91 * time.Second) // past the lease, and the daemon that old
+	// the rig's daemon was started by the wall clock, which its store's clock is days behind, so it
+	// never takes a lease for lapsed (a young daemon's hosts are reconnecting): one started by the
+	// store's clock, 91 s later, is past the lease and that old
+	w.d.m = crew.New(w.d.mem, crew.WithStarted(w.d.clock.Now()))
+	w.d.clock.Advance(91 * time.Second)
+	es, err := w.d.m.List(context.Background())
+	if err != nil || !slices.ContainsFunc(es, func(e crew.Entry) bool { return e.Codename == "cl" && e.Why == crew.WhyHostGone }) {
+		t.Fatalf("crew.list: %+v %v, want cl's host gone", es, err)
+	}
 	var heard []error
 	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 	settleMessaging(c, w)
