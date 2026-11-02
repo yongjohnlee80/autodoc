@@ -389,7 +389,9 @@ func TestAnAttemptForAReplacedEndpointIsAbandoned(t *testing.T) {
 	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
 		t.Fatalf("the premise, the reserved row in flight under its token: %+v", w)
 	}
-	r.write(func(tx crew.Tx) error { return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"}) })
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"})
+	})
 	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
 		t.Fatalf("the attempt answered %v, want failed", o)
 	}
