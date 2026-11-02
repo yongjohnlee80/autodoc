@@ -587,6 +587,10 @@ func waitUntil(wait time.Duration, done func() bool) bool {
 		if time.Now().After(deadline) {
 			return false
 		}
-		time.Sleep(50 * time.Millisecond)
+		// NOTE: a poll, not a wait on an event: the processes a kill waits on are another
+		// session's helpers, not this process's children, so their exit reaches no wait of this
+		// one. Each pause is 50 ms, and the whole wait ends at its deadline (seconds).
+		t := time.NewTimer(50 * time.Millisecond)
+		<-t.C
 	}
 }

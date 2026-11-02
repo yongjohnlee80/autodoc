@@ -185,6 +185,9 @@ func cliReissuer(configPath string) reissuer {
 			return registerEndpoint(ctx, configPath, c, kind)
 		},
 		sleep: func(ctx context.Context, d time.Duration) error {
+			// NOTE: the pause between reissue's checks of crew.access while it waits for the host
+			// to re-join the slot: the CLI holds no subscription to the daemon's registrations, so
+			// it asks again after d, until its deadline; ctx cancels the wait.
 			t := time.NewTimer(d)
 			defer t.Stop()
 			select {

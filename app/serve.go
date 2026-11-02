@@ -297,6 +297,9 @@ func (d *process) reclaimBridges() {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		// NOTE: timed by design: a reclaim is a look every crew.ReclaimEvery for helpers that
+		// became orphans meanwhile, which no event announces (a helper's host or session can end
+		// anywhere); ctx ends the loop.
 		t := time.NewTicker(crew.ReclaimEvery)
 		defer t.Stop()
 		for {
