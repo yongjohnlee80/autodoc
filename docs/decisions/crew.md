@@ -80,7 +80,11 @@ was killed never removes its own, so each TUI at its start removes the `<pid>.so
 folder that refuse a connection. A socket that answers is another TUI's, and stays.
 
 - An agent calls it as `autodoc --editor <verb> [params]`. Its environment names the socket
-  (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`).
+  (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
+  named `*TOKEN*`, so a Codex agent's token is also a 0600 file in its own folder, which
+  `AUTODOC_EDITOR_CREDENTIAL_FILE` names. `autodoc --editor` reads that file when the token variable
+  is missing, and refuses it if it is a link or others can open it. The token itself never appears
+  in a variable Codex's tools can see.
 - The verbs read, find, insert, replace and delete text, list buffers and commands, open a file, and
   run a command line. Each runs on the UI loop, each edit is one undo step, and an edit given the
   revision it read is refused when the text has changed since.

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+
+	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // TestEditorCallsThePageAsTheAgent: --editor dials $AUTODOC_EDITOR and passes $AUTODOC_EDITOR_TOKEN first,
@@ -46,6 +49,64 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 	if err := runEditor(ctx, "editor.echo", "", func(string) string { return "" }, &out); err == nil ||
 		!strings.Contains(err.Error(), "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set") {
 		t.Fatalf("no environment: %v", err)
+	}
+}
+
+// A Codex agent's tool shells drop $AUTODOC_EDITOR_TOKEN (Codex filters *TOKEN*), so --editor reads
+// the token from the file $AUTODOC_EDITOR_CREDENTIAL_FILE names: the same call as with the variable.
+// A file others can open, a link, or an empty one is refused, saying why, and nothing is sent; the
+// variable, when set, still wins.
+func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "e.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
+	srv.Handle("editor.echo", func(_ context.Context, req *golibrpc.Request) (any, error) { return req.Params, nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.Run(ctx) }()
+	dir := t.TempDir()
+	write := func(name, body string, mode os.FileMode) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	good := write("good", "tok-from-file\n", 0o600)
+	envOf := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
+	var out bytes.Buffer
+	if err := runEditor(ctx, "editor.echo", `[1]`, envOf(map[string]string{"AUTODOC_EDITOR": sock, tui.EnvEditorCredentialFile: good}), &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(strings.Fields(out.String()), ""); got != `["tok-from-file",1]` {
+		t.Fatalf("the call with the token's file: %s", out.String())
+	}
+	out.Reset()
+	if err := runEditor(ctx, "editor.echo", "", envOf(map[string]string{"AUTODOC_EDITOR": sock, "AUTODOC_EDITOR_TOKEN": "tok-var",
+		tui.EnvEditorCredentialFile: good}), &out); err != nil || !strings.Contains(out.String(), "tok-var") {
+		t.Fatalf("the variable set: %v %s, want it first", err, out.String())
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(good, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ path, why string }{
+		{write("open", "tok", 0o644), "must be 0600"},
+		{link, "not a regular file"},
+		{write("empty", "", 0o600), "not a token"},
+		{filepath.Join(dir, "missing"), "no such file"},
+	} {
+		out.Reset()
+		err := runEditor(ctx, "editor.echo", "", envOf(map[string]string{"AUTODOC_EDITOR": sock, tui.EnvEditorCredentialFile: c.path}), &out)
+		if err == nil || !strings.Contains(err.Error(), c.why) || out.Len() != 0 {
+			t.Errorf("the token file %s: %v (sent %q), want refused: %s", filepath.Base(c.path), err, out.String(), c.why)
+		}
 	}
 }
 
