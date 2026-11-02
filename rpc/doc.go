@@ -185,16 +185,18 @@ func (s *Server) docVerbs() []module.Verb {
 
 // writeDoc is doc.write (raw: doc.write_raw) on workspace w's file at path: written at version
 // through the workspace's documents, then indexed at once. file.write on a path a workspace indexes
-// is this too. A create that would be a second file of a task is refused first (oneTaskFile).
+// is this too. A create that would be a second file of a task is refused, and any other create in a
+// todo store written under that store's lock (oneTaskFile).
 func (s *Server) writeDoc(ctx context.Context, w Workspace, path string, content []byte, version vfs.Version, raw bool) (vfs.Version, error) {
-	if err := s.oneTaskFile(ctx, filepath.Join(w.Root(), filepath.FromSlash(path)), content, version); err != nil {
-		return "", err
-	}
 	write := w.Docs().Write
 	if raw {
 		write = w.Docs().WriteRaw
 	}
-	v, err := write(ctx, path, content, version)
+	var v vfs.Version
+	err := s.oneTaskFile(ctx, filepath.Join(w.Root(), filepath.FromSlash(path)), content, version, func() (err error) {
+		v, err = write(ctx, path, content, version)
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
@@ -202,24 +204,25 @@ func (s *Server) writeDoc(ctx context.Context, w Workspace, path string, content
 	return v, nil
 }
 
-// TaskFiles is the daemon's check of a client's create in a todo store
-// (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): for content created at the
-// absolute path abs, the id of the task it would be a second file of and that task's path in its
-// store; "" for none. The daemon's own todo writes never come here: they go through the store's
-// documents, not doc.write or file.write.
-type TaskFiles func(ctx context.Context, abs string, content []byte) (id, at string, err error)
+// TaskFiles is the daemon's guard of a client's create in a todo store
+// (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): write, the create of content at
+// the absolute path abs, is run under the lock the store's own moves take, unless the content would
+// be a second file of a task, whose id and path in its store it answers instead ("" when written).
+// write's error is its own. The daemon's own todo writes never come here: they go through the
+// store's documents, not doc.write or file.write.
+type TaskFiles func(ctx context.Context, abs string, content []byte, write func() error) (id, at string, err error)
 
 // WithTaskFiles refuses a client's create of a second file of a task with f's check.
 func WithTaskFiles(f TaskFiles) Option { return func(o *options) { o.taskFiles = f } }
 
-// oneTaskFile refuses a create (version "") at abs that would be a second file of a task: a
-// conflict naming the task and where it is. A write at a version is of a file that is there, and
-// passes unchecked, as does every write on a server with no check.
-func (s *Server) oneTaskFile(ctx context.Context, abs string, content []byte, version vfs.Version) error {
+// oneTaskFile runs write, the write of content at abs at version: a create (version "") through the
+// todo stores' guard, which refuses one that would be a second file of a task (CodeConflict) and
+// writes any other under its store's lock; anything else as it is.
+func (s *Server) oneTaskFile(ctx context.Context, abs string, content []byte, version vfs.Version, write func() error) error {
 	if version != "" || s.taskFiles == nil || !filepath.IsAbs(abs) {
-		return nil
+		return write()
 	}
-	id, at, err := s.taskFiles(ctx, abs, content)
+	id, at, err := s.taskFiles(ctx, abs, content, write)
 	if err != nil || at == "" {
 		return err
 	}

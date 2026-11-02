@@ -135,7 +135,9 @@ byte for byte, a task that is at another path, the daemon refuses it with a conf
 task and where it is.
 
 The check never blocks the daemon's own moves and restores, nor a save of a task's file at its own
-path.
+path. It and the create run under the lock the store's own writes take: a move of the task, or
+another create of the same id, waits until the create is written or refused, so nothing comes
+between the check and the write (`todo.Manager.CreateOnce`).
 
 Why: an editor holding a task's file open after the daemon moved it would otherwise write the task
 back into its old bucket, which leaves one task in two files. The editor follows the move itself

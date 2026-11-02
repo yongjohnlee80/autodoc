@@ -178,16 +178,19 @@ func (s *Server) fileVerbs() []module.Verb {
 				}
 				return &versionJSON{Version: string(v)}, nil
 			}
-			if err := s.oneTaskFile(ctx, p.Path, p.Content, vfs.Version(p.Version)); err != nil {
-				return nil, err // a store outside every workspace, or one its workspace does not index
-			}
 			write := files.Write
 			if raw {
 				write = files.WriteRaw
 			}
-			v, err := write(ctx, name, p.Content, vfs.Version(p.Version))
-			if err != nil {
-				return nil, fileErr(err)
+			var v vfs.Version
+			var werr error // the write's own, answered as a file's: a store outside every workspace, or one its workspace does not index
+			if err := s.oneTaskFile(ctx, p.Path, p.Content, vfs.Version(p.Version), func() error {
+				v, werr = write(ctx, name, p.Content, vfs.Version(p.Version))
+				return werr
+			}); werr != nil {
+				return nil, fileErr(werr)
+			} else if err != nil {
+				return nil, err
 			}
 			return &versionJSON{Version: string(v)}, nil
 		})

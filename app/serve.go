@@ -22,7 +22,6 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/rank"
-	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -431,7 +430,7 @@ func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
-		rpc.WithTaskFiles(taskFiles(d.ws, serving.TodoDisk{Log: d.log})), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
+		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -657,35 +656,17 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
 }
 
-// taskFiles is the daemon's check of a client's create in a todo store
+// taskFiles is the daemon's guard of a client's create in a todo store
 // (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): a path shaped as a task file's
-// place, in a store the registry knows, created with the id of a task at another path there. Any
+// place goes to the todo manager, which writes it under the lock of the store holding it, the one
+// its own moves take, unless it is a second file of a task there (todo.Manager.CreateOnce). Any
 // other path costs the shape's test alone.
-func taskFiles(ws *serving.Workspaces, disk serving.TodoDisk) rpc.TaskFiles {
-	return func(ctx context.Context, abs string, content []byte) (string, string, error) {
+func taskFiles(m *todo.Manager) rpc.TaskFiles {
+	return func(ctx context.Context, abs string, content []byte, write func() error) (string, string, error) {
 		if !todo.MayBeTaskFile(abs) {
-			return "", "", nil
+			return "", "", write()
 		}
-		abs = localfs.Resolve(abs) // the registry's directories are canonical
-		dir, ok := ws.TodoStoreAt(abs)
-		if !ok {
-			return "", "", nil
-		}
-		rel, err := filepath.Rel(dir, abs)
-		if err != nil {
-			return "", "", nil
-		}
-		fsys, _, err := disk.Open(ctx, dir)
-		if errors.Is(err, vfs.ErrNotExist) {
-			return "", "", nil
-		}
-		if err != nil {
-			return "", "", err
-		}
-		if c, ok := fsys.(io.Closer); ok {
-			defer c.Close()
-		}
-		return todo.Elsewhere(ctx, fsys, filepath.ToSlash(rel), content)
+		return m.CreateOnce(ctx, localfs.Resolve(abs), content, write) // the registry's directories are canonical
 	}
 }
 

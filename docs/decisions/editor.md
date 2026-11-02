@@ -152,6 +152,11 @@ So before a buffer whose file is gone is badged deleted, the editor asks where t
 2. by its id: `todos.get` of the file's name in the store that holds it. This also finds a move
    the log reports only as a hand edit, and works in a window with no todo feed.
 
+A move is its own store's: the feed reads several stores, and the same relative path can be a task's
+in two of them, so a move is taken only for the file at its store's path joined with its old path.
+And the file a move names is taken only when its own `id` is the task's (the file's name): a stale
+move to another file, of another task or of none, is passed over for the lookup by id.
+
 What happens next:
 
 - **moved:** the buffer takes the new path, with its text, cursor and undo kept. With no unsaved

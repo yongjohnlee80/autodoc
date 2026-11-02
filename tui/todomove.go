@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -66,21 +67,54 @@ func (h *Host) todoFilesChanged(cs []todoFileChange) {
 			}
 		}
 		for _, b := range h.buffers {
-			if b.file.open && endsWithPath(h.pathOnDisk(b.file.ws, b.file.path), c.from) {
+			if b.file.open && c.of(h.pathOnDisk(b.file.ws, b.file.path)) {
 				h.diskSoon(b)
 			}
 		}
 	}
 }
 
-// todoMoveOf is the latest move the feed read of the file at abs, nil for none.
+// of reports whether the change is of the file at abs: its store's path joined with its from, the
+// two canonical, is abs's canonical path. A path that only ends as from does is another store's.
+func (c todoFileChange) of(abs string) bool {
+	if c.store == "" || !endsWithPath(abs, c.from) { // the cheap test first
+		return false
+	}
+	return canonicalFile(abs) == canonicalFile(filepath.Join(filepath.FromSlash(c.store), filepath.FromSlash(c.from)))
+}
+
+// canonicalFile is abs with its folder's symlinks resolved, as a store's path is: the folder of a
+// gone file still exists.
+func canonicalFile(abs string) string {
+	if dir, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
+		return filepath.Join(dir, filepath.Base(abs))
+	}
+	return abs
+}
+
+// todoMoveOf is the latest move the feed read of the file at abs, in its own store, nil for none.
 func (h *Host) todoMoveOf(abs string) *todoFileChange {
 	for i := len(h.todoMoves) - 1; i >= 0; i-- {
-		if c := h.todoMoves[i]; endsWithPath(abs, c.from) {
+		if c := h.todoMoves[i]; c.of(abs) {
 			return &c
 		}
 	}
 	return nil
+}
+
+// taskIDOf is the id a task file's frontmatter gives, "" for none.
+func taskIDOf(content string) string {
+	fm, err := frontmatterOf(content)
+	if err != nil {
+		return ""
+	}
+	switch id := asMap(fm)["id"].(type) {
+	case string:
+		return id
+	case int64, int, uint64, float64:
+		return fmt.Sprint(id)
+	}
+	return ""
 }
 
 // endsWithPath reports whether the path abs ends with the slash-separated relative path rel.
@@ -113,16 +147,15 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 		return taskFate{}
 	}
 	slashP := filepath.ToSlash(p)
+	// the task a file of a store holds is named by its file: the file it moved to is that task's
+	// only when its own id says so
+	id := strings.TrimSuffix(path.Base(slashP), ".md")
 	if hint != nil && (slashP == hint.from || strings.HasSuffix(slashP, "/"+hint.from)) {
-		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, hint.from)+hint.to, raw); ok {
+		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, hint.from)+hint.to, raw); ok && taskIDOf(m.content) == id {
 			return taskFate{moved: &m}
 		}
 	}
-	// the store's path is canonical; the file's folder still exists, the file gone from it
-	canon := abs
-	if dir, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
-		canon = filepath.Join(dir, filepath.Base(abs))
-	}
+	canon := canonicalFile(abs) // the store's path is canonical
 	res, err := h.call(ctx, "todos.stores")
 	if err != nil {
 		return taskFate{}
@@ -135,7 +168,6 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 			continue
 		}
 		root, _ := roots[0].(string)
-		id := strings.TrimSuffix(path.Base(rel), ".md")
 		got, err := h.call(ctx, "todos.get", map[string]any{"root": root}, id)
 		if code(err) == codeNoTask {
 			return taskFate{removed: true}
@@ -147,7 +179,7 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 		if now == "" || now == rel || !(slashP == rel || strings.HasSuffix(slashP, "/"+rel)) {
 			return taskFate{}
 		}
-		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, rel)+now, raw); ok {
+		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, rel)+now, raw); ok && taskIDOf(m.content) == id {
 			return taskFate{moved: &m}
 		}
 		return taskFate{}
