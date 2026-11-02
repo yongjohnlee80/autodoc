@@ -185,3 +185,42 @@ func TestAGatedScriptHearsItsGrantAnswered(t *testing.T) {
 		t.Fatalf("heard %q after three cards: another script heard the package's answer, or one card answered twice", h)
 	}
 }
+
+// TestAGrantHandlerThatAsksAgainGetsItsOwnCard: a grant handler that asks for another capability
+// (requires inside the event, while its card is still the one shown) gets a card of its own once
+// this one closes, and hears that card's answer too: the re-entry neither replaces the open card
+// nor is lost.
+func TestAGrantHandlerThatAsksAgainGetsItsOwnCard(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	var heard []string
+	onLoop(r, func() bool {
+		r.h.scripts.SetFunction("heard", func(L *lua.LState) int { heard = append(heard, L.CheckString(1)); return 0 })
+		return true
+	})
+	if err := onLoop(r, func() error {
+		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.requires{"workspace.read"}
+autodoc.on("grant", function(ed, info)
+  autodoc.heard(tostring(info.allowed) .. " " .. table.concat(info.capabilities, ","))
+  if info.capabilities[1] == "workspace.read" then autodoc.requires{"clipboard"} end
+end)`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := func() []string { return onLoop(r, func() []string { return slices.Clone(heard) }) }
+	r.s.WaitForText(t, "let the Lua script pkg use workspace.read?")
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	r.s.WaitForText(t, "let the Lua script pkg use clipboard?")
+	if h := got(); len(h) != 1 || h[0] != "true workspace.read" {
+		t.Fatalf("after the first card: heard %q, want its one answer", h)
+	}
+	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	r.s.WaitFor(t, "the second card's answer", func(string) bool { return len(got()) > 1 })
+	if h := got(); len(h) != 2 || h[1] != "false clipboard" {
+		t.Fatalf("after the second card: heard %q, want its answer, false clipboard", h)
+	}
+	if !onLoop(r, func() bool { return r.h.prefs.luaGrants["pkg"]["workspace.read"] && !r.h.prefs.luaGrants["pkg"]["clipboard"] }) {
+		t.Fatalf("grants %v, want workspace.read only", onLoop(r, func() map[string]bool { return r.h.prefs.luaGrants["pkg"] }))
+	}
+}
