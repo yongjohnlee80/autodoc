@@ -197,7 +197,11 @@ import (
 // each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
 // verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
 // as crew.bridge_reclaimed. A session below 46 has neither verb.
-const Protocol int64 = 46
+// Protocol 47 is crew.access (docs/decisions/crew.md#re-issuing-a-bridge): what the calling
+// session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
+// reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
+// session below 47 has no such verb.
+const Protocol int64 = 47
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

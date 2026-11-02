@@ -137,6 +137,11 @@ var crewCommands = map[string]crewCommand{
 		call: func(c sessionContext, _ *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "crew.whoami", []any{c.Credential, c.Store}, nil, nil
 		}},
+	"crew reissue": {usage: "[--wait D]: re-establish this session's crew access on the running daemon, when it was never given or the daemon restarted: waits up to D (40s) for its host to re-join the slot, then registers again how it is woken when that is missing or failing; answers {reissued, kept, not: [{item, why}]}",
+		example: "autodoc crew reissue",
+		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
+			return "", nil, nil, errors.New("crew reissue runs on its own (crewReissueMain)")
+		}},
 	"crew list": {usage: "[--all]: the addressbook: every codename, its scope, presence and reachability; a profile whose session ended only with --all",
 		example: "autodoc crew list",
 		flags:   func(fs *flag.FlagSet) { fs.Bool("all", false, "also the profiles whose session ended") },
@@ -583,6 +588,9 @@ func crewMainIn(ctx context.Context, configPath string, args []string, stdin io.
 	}
 	if name == "crew setup" {
 		return crewSetupMain(configPath, args[2:], os.Environ(), stdout, stderr)
+	}
+	if name == "crew reissue" {
+		return crewReissueMain(ctx, configPath, args[2:], stdout, stderr)
 	}
 	res, err := runCrewCommand(ctx, name, args[2:], stdin, stderr, sessionHere)
 	var usageErr *crewUsageError
