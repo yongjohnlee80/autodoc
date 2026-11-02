@@ -318,3 +318,42 @@ func hasRule(ds []schema.Diagnostic, field, rule string) bool {
 	}
 	return false
 }
+
+// TestAModeChangedWhileATaskIsPreparedReachesItsRow: a task prepared under one mode (no todo store
+// yet: the KB schema judges it) whose store is registered, and the index revalidated, before its row
+// is written must not keep the old judgement: that revalidation could not see a row not yet
+// written, so the commit looks again (modeMoved) and the task is indexed again, checked by the
+// store's format (the daemon's registration race: a todos.add's store is published while the
+// task's first index is in flight).
+func TestAModeChangedWhileATaskIsPreparedReachesItsRow(t *testing.T) {
+	var sv schemaVar
+	sv.set(t, facetSchema, "s1")
+	format := func([]byte) schema.Result {
+		return schema.Result{Diagnostics: []schema.Diagnostic{{Field: "adr[0]", Line: 1, Rule: "todo-not-found", Message: "adr[0]: no such file"}}}
+	}
+	m := &modes{stores: map[string]*TodoStore{}} // no store yet
+	const task = ".todo-list/open/t.md"
+	var once sync.Once
+	var e *env
+	e = newEnv(t, options{Schema: sv.get, Modes: m.mode, afterRead: func(p string) {
+		if p != task {
+			return
+		}
+		once.Do(func() { // its mode is read: the store is registered and revalidated before its row is
+			m.set(func(m *modes) { m.stores[".todo-list/"] = &TodoStore{ID: "S", Check: format} })
+			if err := e.ix.Revalidate(context.Background()); err != nil {
+				t.Error(err)
+			}
+		})
+	}})
+	e.write(task, "---\nid: t\nstatus: open\n---\nt\n")
+	e.ix.Touch(task)
+	ctx := context.Background()
+	e.indexing("the task checked by its store's format", func() bool {
+		d, _ := e.store.Diagnostics(ctx, task)
+		return len(d) == 1 && d[0].Rule == "todo-not-found" && e.pendingJobs() == 0
+	})
+	if id := e.indexerOf(task); !strings.Contains(id, ";todo=S;fm=todo") {
+		t.Errorf("the task's indexer identity %q: want the store's mode", id)
+	}
+}
