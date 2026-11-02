@@ -125,12 +125,16 @@ func (t *todos) assign() {
 		return
 	}
 	own := assignable(t.c.AgentEntries())
+	tk := t.c.Ticket(nil, TicketWorkspace) // taken before the crew is asked: its answer may come late
 	open := func(agents []AgentEntry) {
+		if !tk.Current() {
+			return // the workspace changed while the crew answered: this task's picker is stale
+		}
 		if len(agents) == 0 {
 			t.c.Notify(t.c.Tr("autodoc.notice.todos_assign.todos_no_autodoc_agent_to_assign_to_add_one_in_t"))
 			return
 		}
-		t.assigning = &todoAssign{store: s, task: x, ws: t.c.Ticket(nil, TicketWorkspace)}
+		t.assigning = &todoAssign{store: s, task: x, ws: tk}
 		t.assignPick.setAll(agents)
 		t.assignPick.open()
 	}
