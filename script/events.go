@@ -46,10 +46,11 @@ func (e *Engine) HandlesFor(script, event string) bool {
 	return false
 }
 
-// EmitFor is Emit for the handlers gated script added (LoadGated, LoadPackage, under script's
+// EmitFor is Emit for the handlers gated script defined (LoadGated, LoadPackage, under script's
 // name) and no one else's: an event about that script alone, which another script has no business
-// hearing (grant: the user's answer to its own requires{…}). An ungated script's handlers never hear
-// it.
+// hearing (grant: the user's answer to its own requires{…}). A handler is its definer's wherever it
+// was registered from, as its grants are (gate.go): one script's function another registers hears
+// the definer's events. An ungated script's handlers never hear it.
 func (e *Engine) EmitFor(script, event string, info map[string]any) []error {
 	return e.emit(event, info, func(fn *lua.LFunction) bool { return e.ownedBy(fn, script) })
 }
