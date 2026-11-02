@@ -114,7 +114,7 @@ The running session doesn't see a new group until the user logs out and in again
 echo 'docker info' | newgrp docker
 ```
 
-**6. A reranker: the TEI image tag must match the GPU.** Each TEI GPU image is built for one compute capability and refuses every other at start. `shell/tei/tei-rerank.sh up` reads the capability and picks the tag; prefer it to a `docker run` of your own. The bare version tag (`:1.9`, or the `:1.5` older instructions show) is not generic: it is the Ampere 8.0 (A100) build. A few newer GPUs can run an older build (TEI 1.9 lets 8.6 and 8.9 run the 8.0 build, and 8.9 the 8.6 one), but most GPUs stop with `Runtime compute cap N is not compatible with compile time compute cap M`, where N is the GPU and M the image. That message means this image doesn't fit this GPU, not that the GPU is unsupported: take the tag built for N. Take the tag from the [table below](#starting-local-ollama-and-tei-servers).
+**6. A reranker: the TEI image tag must match the GPU.** Each TEI GPU image is built for a compute capability, and a GPU it wasn't built for may refuse it at start. `shell/tei/tei-rerank.sh up` reads the capability and picks the tag; prefer it to a `docker run` of your own. The bare version tag (`:1.9`, or the `:1.5` older instructions show) is the Ampere 8.0 (A100) build, not a generic one. A refusal reads `Runtime compute cap N is not compatible with compile time compute cap M`, where N is the GPU and M the image: take the tag the [table below](#starting-local-ollama-and-tei-servers) gives for N. When N has no row there, the GPU may not be supported by this TEI release: use the `cpu-` image, and tell the user the reranker runs on the CPU.
 
 **7. Verify end to end,** not by a container having started:
 
@@ -201,7 +201,7 @@ shell/tei/tei-rerank.sh down
 The GPU needs the NVIDIA Container Toolkit; the script's [README](../../shell/tei/README.md) lists what else it needs, and how to measure a model's accuracy on your own documents.
 
 > [!WARNING]
-> **TEI's GPU images are built for one compute capability each.** The bare version tag (`:1.9`) is the Ampere 8.0 (A100) build only. On any other GPU, the container stops at start with `Runtime compute cap N is not compatible with compile time compute cap 80`. `tei-rerank.sh` reads your GPU's capability (`nvidia-smi --query-gpu=compute_cap`) and picks the tag. If you run TEI yourself, pick it the same way:
+> **TEI's GPU images are built for a compute capability each.** The bare version tag (`:1.9`) is the Ampere 8.0 (A100) build. A GPU an image wasn't built for may stop it at start with `Runtime compute cap N is not compatible with compile time compute cap M` (a few newer GPUs can run an older build, but don't rely on it): use the tag for your GPU's capability. `tei-rerank.sh` reads your GPU's capability (`nvidia-smi --query-gpu=compute_cap`) and picks the tag. If you run TEI yourself, pick it the same way:
 >
 > | compute capability | GPUs | tag |
 > |---|---|---|
@@ -213,7 +213,7 @@ The GPU needs the NVIDIA Container Toolkit; the script's [README](../../shell/te
 > | 8.6 | RTX 30 series, A40 (Ampere) | `86-1.9` |
 > | 8.0 | A100 (Ampere) | `1.9` |
 > | 7.5 | RTX 20 series, T4 (Turing) | `turing-1.9` |
-> | no NVIDIA GPU | | `cpu-1.9` |
+> | no NVIDIA GPU, or a capability not in this table | | `cpu-1.9` |
 >
 > To check that a tag exists, ask the registry for that tag's manifest (`docker manifest inspect ghcr.io/huggingface/text-embeddings-inference:120-1.9`). Don't search the list of tags: the registry returns it in pages, alphabetically, so a page without the tag doesn't prove it's missing.
 
