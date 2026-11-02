@@ -15,6 +15,9 @@ import (
 //	save    a save that wrote the editor's text: { path, workspace }
 //	mode    the editor's mode changed (App.syncMode): { mode, previous }, as ed:mode() says them
 //	change  the text changed, once a pause follows the edits: { revision }, as ed:revision() says it
+//	grant   the user answered the grant card a gated script's requires{…} asked for (grantAnswered):
+//	        { capabilities, allowed }; allowed false for Not now and for a card closed unanswered.
+//	        That script's own handlers only (emitLuaFor)
 //
 // A handler's own edits do not emit change again: the revision after the handlers is the one the
 // next emit compares with.
@@ -29,6 +32,18 @@ func (h *Host) emitLua(event string, info map[string]any) {
 		return
 	}
 	for _, err := range h.scripts.Emit(event, info) {
+		if !errors.Is(err, script.ErrStale) {
+			h.notify(h.trf("autodoc.notice.luaevents.a_lua_handler_failed", err.Error()))
+		}
+	}
+}
+
+// emitLuaFor is emitLua for the gated script owner's own handlers only (script.Engine.EmitFor).
+func (h *Host) emitLuaFor(owner, event string, info map[string]any) {
+	if h.scripts == nil || !h.scripts.HandlesFor(owner, event) {
+		return
+	}
+	for _, err := range h.scripts.EmitFor(owner, event, info) {
 		if !errors.Is(err, script.ErrStale) {
 			h.notify(h.trf("autodoc.notice.luaevents.a_lua_handler_failed", err.Error()))
 		}
