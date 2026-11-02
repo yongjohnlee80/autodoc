@@ -811,3 +811,63 @@ func TestAnIncompleteReclaimIsRetriedThreeTimesThenFlagged(t *testing.T) {
 		t.Fatal("the spared orphan ended")
 	}
 }
+
+// A Codex server whose session context is gone (its host removed it at the session's end, or a
+// crashed host's folder was swept) is still proven this store's by what its endpoint recorded:
+// the socket AND the very process (ProcRef). Such a server is an orphan once its session ends,
+// and reclaimed at 10 minutes. Another process at the same socket path is not proven (a later
+// server), and neither is a server another store recorded: both foreign.
+func TestACodexServerIsProvenThisStoresByItsRecordedProcess(t *testing.T) {
+	r, other := newBridgeRig(t), newBridgeRig(t)
+	agent, sockets := t.TempDir(), t.TempDir()
+	bound := filepath.Join(sockets, "abc.sock")
+	if err := os.WriteFile(bound, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
+		t.Fatal(err)
+	}
+	server := startCell(t, codexServerArgv(agent), false, false) // no session context in its environment
+	loc, _ := json.Marshal(map[string]string{"server": filepath.Join(agent, crew.CodexServerSocket), "thread": "th-1"})
+	socket, ref := r.m.CodexServerOf("codex", string(loc))
+	if want, _ := crew.ProcRef(server.pid); socket == "" || ref != want {
+		t.Fatalf("what a registration records: %q %q, want the socket and %q, the server's", socket, ref, want)
+	}
+	record := func(rig *bridgeRig, codename, server, serverRef string) {
+		t.Helper()
+		id := rig.session(codename, "codex", true)
+		if err := rig.mem.Write(rig.ctx, func(tx crew.Tx) error {
+			s, _, err := tx.Session(id)
+			if err != nil {
+				return err
+			}
+			s.Server, s.ServerRef = server, serverRef
+			return tx.PutSession(s)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record(r, "tifa", socket, ref)
+	if row, _ := r.row(server.pid); row.State != crew.BridgeOrphan || row.Why != crew.OrphanNoEndpoint || row.Owner != "tifa@autodoc:w" {
+		t.Fatalf("this store's recorded server, its session ended, no context: %+v, want an orphan, tifa's", row)
+	}
+	if row, _ := other.row(server.pid); row.State != crew.BridgeForeign {
+		t.Fatalf("the same server, seen by a store that never recorded it: %+v, want foreign", row)
+	}
+	later := startCell(t, codexServerArgv(agent), false, false) // another process at the same socket path
+	if row, _ := r.row(later.pid); row.State != crew.BridgeForeign || row.Why != crew.ForeignUnowned {
+		t.Fatalf("another process at the recorded socket: %+v, want foreign (the socket alone proves nothing)", row)
+	}
+	t0 := time.Now()
+	for _, at := range []time.Duration{0, 10 * time.Minute} {
+		if _, err := r.m.Reclaim(r.ctx, t0.Add(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !waitEnded(server.pid) {
+		t.Fatal("this store's orphaned server wasn't reclaimed at 10 minutes")
+	}
+	if !running(later.pid) {
+		t.Fatal("the unproven process at the same socket was reclaimed")
+	}
+}

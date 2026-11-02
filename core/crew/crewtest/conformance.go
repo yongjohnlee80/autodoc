@@ -223,6 +223,45 @@ func Run(t *testing.T, h Harness) {
 		}
 	})
 
+	t.Run("a session keeps its Codex server, ended too, and is found by it", func(t *testing.T) {
+		_, store, clock, _ := setup(t)
+		ended := clock.Now().UnixNano()
+		if err := store.Write(ctx, func(tx crew.Tx) error {
+			for _, s := range []crew.Session{
+				{ID: "c1", Profile: "p1", Host: scope, Instance: "c1", Server: "/a/codex.sock", ServerRef: "boot:1:10:1", Ended: &ended, EndedWhy: crew.EndedExit},
+				{ID: "c2", Profile: "p2", Host: scope, Instance: "c2", Server: "/a/codex.sock", ServerRef: "boot:1:11:1"},
+				{ID: "c3", Profile: "p3", Host: scope, Instance: "c3", Server: "/b/codex.sock", ServerRef: "boot:1:12:1"},
+				{ID: "c4", Profile: "p4", Host: scope, Instance: "c4"},
+			} {
+				if err := tx.PutSession(s); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			got, err := tx.SessionsByServer("/a/codex.sock")
+			if err != nil {
+				return err
+			}
+			if len(got) != 2 || got[0].ID != "c1" || got[0].ServerRef != "boot:1:10:1" || got[0].Ended == nil || got[1].ID != "c2" {
+				t.Errorf("the sessions of /a/codex.sock: %+v, want c1 (ended, its ref kept) and c2", got)
+			}
+			if none, err := tx.SessionsByServer("/c/codex.sock"); err != nil || len(none) != 0 {
+				t.Errorf("a socket no session recorded: %+v, %v", none, err)
+			}
+			s, _, err := tx.Session("c4")
+			if err == nil && (s.Server != "" || s.ServerRef != "") {
+				t.Errorf("a session with no server: %+v", s)
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("claim, reattach, busy, and a lapsed lease", func(t *testing.T) {
 		m, _, clock, _ := setup(t)
 		e1, err := m.Claim(ctx, scope, "run-a", proc)

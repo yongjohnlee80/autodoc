@@ -268,9 +268,14 @@ all, for the daemon's user on its machine:
 - The scan sees every helper of the user's, and several daemons, each with its own store, can run
   at once. A helper missing from this store's rows is no proof of an orphan: it may be another
   daemon's live helper. So an orphan is only a helper this store is proven to own: a bridge whose
-  `--session` is one of this store's sessions, or a Codex server whose own session context (the
-  `AUTODOC_CREW_CONTEXT` the host gives it) names this store and one of its sessions. Any other
-  helper is `foreign` too, "not one of this store's sessions".
+  `--session` is one of this store's sessions, or a Codex server this store recorded. When a
+  Codex session's endpoint registers, its session row keeps the server's socket and the process
+  listening there (its process reference), and keeps them after the session ends. A running
+  server is this store's when a session of the store recorded both that socket and that very
+  process; the socket alone could be a later server's. While the server's own session context
+  file lasts (the `AUTODOC_CREW_CONTEXT` the host gives it, naming this store and one of its
+  sessions), that proves it too. Any other helper is `foreign` too, "not one of this store's
+  sessions".
 - The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
   in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
   between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
