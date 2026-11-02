@@ -298,6 +298,8 @@ func (d *process) reclaimBridges() {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		// NOTE: an orphaned helper announces nothing (its owner is gone): it is found only by
+		// looking, every crew.ReclaimEvery; ctx ends the loop.
 		t := time.NewTicker(crew.ReclaimEvery)
 		defer t.Stop()
 		for {

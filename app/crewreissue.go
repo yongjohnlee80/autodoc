@@ -185,6 +185,9 @@ func cliReissuer(configPath string) reissuer {
 			return registerEndpoint(ctx, configPath, c, kind)
 		},
 		sleep: func(ctx context.Context, d time.Duration) error {
+			// NOTE: the pause between reissue's reads of crew.access: the host's re-join and the
+			// endpoint's registration announce nothing to this CLI process, so it reads again after d;
+			// ctx ends the wait.
 			t := time.NewTimer(d)
 			defer t.Stop()
 			select {
