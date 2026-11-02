@@ -853,6 +853,52 @@ func Run(t *testing.T, h Harness) {
 		}
 	})
 
+	t.Run("endpoint: its first registration is kept by every later generation", func(t *testing.T) {
+		// a Claude's startup ends at its endpoint's first registration (its SessionStart hook), and
+		// its mail's fallback window opens then: a resume or a compaction registers again, moving
+		// Registered, never First
+		clock := NewClock()
+		store := h.New(t, clock.Now)
+		m := crew.New(store, crew.WithUID(1000), crew.WithStarted(clock.Now()))
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rj := reg(e, "jarvis", "agent-1")
+		got, err := m.Register(ctx, rj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loc := `{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`
+		endpoint := func() crew.Endpoint {
+			t.Helper()
+			var ep crew.Endpoint
+			if err := store.Read(ctx, func(tx crew.Tx) error {
+				var err error
+				ep, _, err = tx.Endpoint(got.Session)
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			return ep
+		}
+		clock.Advance(time.Minute)
+		first := clock.Now().UnixNano()
+		if _, err := m.SetEndpoint(ctx, crew.Credential(got.Session, rj.Secret), "claude", loc); err != nil {
+			t.Fatal(err)
+		}
+		if ep := endpoint(); ep.Generation != 1 || ep.First != first || ep.Registered != first {
+			t.Fatalf("the first generation: %+v, want first and registered %d", ep, first)
+		}
+		clock.Advance(5 * time.Minute)
+		if _, err := m.SetEndpoint(ctx, crew.Credential(got.Session, rj.Secret), "claude", loc); err != nil {
+			t.Fatal(err)
+		}
+		if ep := endpoint(); ep.Generation != 2 || ep.First != first || ep.Registered != clock.Now().UnixNano() {
+			t.Fatalf("the second generation: %+v, want first %d kept, registered now", ep, first)
+		}
+	})
+
 	t.Run("list: presence, reachability and why", func(t *testing.T) {
 		clock, enders := NewClock(), &Enders{}
 		store := h.New(t, clock.Now)

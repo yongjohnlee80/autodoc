@@ -39,7 +39,7 @@ func TestTheFallbackVerbAnswersAJobsWireForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := cm.Register(ctx, crew.Registration{Scope: "autodoc:w", Run: "host-run", Epoch: epoch, Codename: "gold",
-		Kind: "claude", Workspace: "w", Instance: "i1", Secret: strings.Repeat("s", 40)}); err != nil {
+		Kind: "codex", Workspace: "w", Instance: "i1", Secret: strings.Repeat("s", 40)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mm.Fallbacks(ctx, "autodoc:w", "host-run", epoch, 0); err != nil { // the host takes fallbacks
@@ -49,7 +49,7 @@ func TestTheFallbackVerbAnswersAJobsWireForm(t *testing.T) {
 		Body: "the build is red", Key: "k1"}); err != nil {
 		t.Fatal(err)
 	}
-	clock.Advance(30 * time.Second) // gold's session has no endpoint: its mail falls back at 30 s
+	clock.Advance(30 * time.Second) // gold's Codex session has no endpoint: its mail falls back at 30 s (a Claude's waits for its start)
 	if err := st.Crew().Write(ctx, func(tx crew.Tx) error { return mm.Expire(tx) }); err != nil {
 		t.Fatal(err)
 	}
