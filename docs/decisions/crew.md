@@ -83,8 +83,11 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
   named `*TOKEN*`, so a Codex agent's token is also a 0600 file in its own folder, which
   `AUTODOC_EDITOR_CREDENTIAL_FILE` names. `autodoc --editor` reads that file when the token variable
-  is missing, and refuses it if it is a link or others can open it. The token itself never appears
-  in a variable Codex's tools can see.
+  is missing, and refuses it if it is a link, isn't a regular file, another user owns it, others can
+  open it, or it holds more than 256 bytes. It opens the file once, without following a link or
+  waiting on a FIFO, checks the file it opened, and reads the token from that same file, so a file
+  put in its place meanwhile is never read. The token itself never appears in a variable Codex's
+  tools can see.
 - The verbs read, find, insert, replace and delete text, list buffers and commands, open a file, and
   run a command line. Each runs on the UI loop, each edit is one undo step, and an edit given the
   revision it read is refused when the text has changed since.

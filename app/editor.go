@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -55,30 +54,6 @@ func runEditor(ctx context.Context, verb, params string, env func(string) string
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	return enc.Encode(jsonOf(res))
-}
-
-// readEditorCredential is the editor token in the file at path ($AUTODOC_EDITOR_CREDENTIAL_FILE: a
-// Codex agent's, whose tool shells drop $AUTODOC_EDITOR_TOKEN): a regular file, never a link, that
-// only its owner can read or write, holding one token.
-func readEditorCredential(path string) (string, error) {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		return "", err
-	}
-	if !fi.Mode().IsRegular() {
-		return "", errors.New("it is not a regular file")
-	}
-	if fi.Mode().Perm()&0o077 != 0 {
-		return "", fmt.Errorf("others can open it (mode %o): it must be 0600", fi.Mode().Perm())
-	}
-	if fi.Size() == 0 || fi.Size() > 256 {
-		return "", fmt.Errorf("it holds %d bytes, not a token", fi.Size())
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(b)), nil
 }
 
 // editorMain is --editor's exit code, as --call's: 0 with the answer on stdout; 1 with a refusal as
