@@ -189,17 +189,26 @@ import (
 // with whether its host holds its scope, so a window says a job waits for an absent host, and gives
 // the text of one whose outcome is unknown; mail.fallback_done of a delivered job journals
 // fallback_done.
-// Protocol 46 is who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
+// Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
+// read again under its lease, which stays as it was, so an agent whose reader cut a body short
+// reads it whole without asking its sender to resend. A session below 45 has no such verb.
+// Protocol 46 is Crew Bridges (docs/decisions/crew.md#crew-bridges): crew.bridges, the crew's
+// helper processes on the machine (agy and Codex bridges, Codex servers, Codex's shared daemon),
+// each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
+// verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
+// as crew.bridge_reclaimed. A session below 46 has neither verb.
+// Protocol 47 is crew.access (docs/decisions/crew.md#re-issuing-a-bridge): what the calling
+// session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
+// reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
+// session below 47 has no such verb.
+// Protocol 48 is who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
 // sys.hello's crew key ({credential, store}, from the session context `autodoc --call` runs with),
 // verified once, at the hello, by crew, and kept on the session as the caller (codename@scope, or
 // the unverified marker), never the credential; todos.changes' and a resync's by, who made each
 // assign; and inbox.forward, a window's send of an assignment its feed read, which the daemon
-// sends from the assignment's maker. A hello without the key, as every client before 46 says it, is
-// the user's surface, as before; a session below 46 has no inbox.forward.
-// Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
-// read again under its lease, which stays as it was, so an agent whose reader cut a body short
-// reads it whole without asking its sender to resend. A session below 45 has no such verb.
-const Protocol int64 = 46
+// sends from the assignment's maker. A hello without the key, as every client before 48 says it, is
+// the user's surface, as before; a session below 48 has no inbox.forward.
+const Protocol int64 = 48
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

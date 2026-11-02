@@ -124,7 +124,7 @@ read as the user's.
   once, with the crew's own check, and keeps the caller on the connection as `codename@scope`. It
   never keeps, logs or answers the credential. A crew key that doesn't verify (a context the CLI
   couldn't read, a session gone) makes the caller an unverified agent, never the user. A hello with
-  no crew key (a window, Neovim, a shell with no crew context, any client before protocol 46) is the
+  no crew key (a window, Neovim, a shell with no crew context, any client before protocol 48) is the
   user's surface, as before.
 - **The change records it.** An assign change (`todos.assign`, and `todos.add` with an assignee)
   carries `by`: the caller's `codename@scope`, the unverified marker, or `""` for the user's

@@ -21,8 +21,8 @@ const sendSince = 41
 // fallbackSince is the protocol inbox.fallback arrives in (rpc's Protocol 44).
 const fallbackSince = 44
 
-// forwardSince is the protocol inbox.forward arrives in (rpc's Protocol 46).
-const forwardSince = 46
+// forwardSince is the protocol inbox.forward arrives in (rpc's Protocol 48).
+const forwardSince = 48
 
 // The verbs' params, in their positional order.
 type (

@@ -35,6 +35,10 @@ type Manager struct {
 	aliveMu sync.Mutex
 	alive   map[string]time.Time
 	causes  map[string]string
+	// bridgeSeen is when the daemon's look (Reclaim) first found each orphaned helper, by
+	// reclaimKey, in memory alone: a daemon restart starts every clock over
+	bridgeMu   sync.Mutex
+	bridgeSeen map[string]time.Time
 }
 
 // endpointSecret is a session's endpoint secret and the generation it belongs to.

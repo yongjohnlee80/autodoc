@@ -251,6 +251,54 @@ Discard or Keep.
 
 In the code: `core/crew/adopt.go`, `core/mail/ender.go`, `tui/creworphans.go`
 
+## Crew bridges
+
+The crew starts helper processes that can outlive their agents: agy and Codex prompt bridges
+(`autodoc crew bridge … --foreground`), and each Codex agent's own app-server. Codex's shared
+managed daemon is Codex's own, started by whichever Codex came first. `crew.bridges` lists them
+all, for the daemon's user on its machine:
+
+- The daemon scans the processes itself (`/proc`; only Linux for now), matching each kind's command
+  line, so there is no pid file to go stale. A helper's start is its process reference, so a kill
+  never reaches a later process holding its pid.
+- Each helper is joined to the session it serves: a bridge by its `--session`, a Codex server by
+  the live endpoint naming its socket. It is `live`, or an `orphan` with why (its session ended, its
+  host is gone, no endpoint names its socket, its language server is gone). Codex's shared daemon
+  is `foreign`: the crew never started it and can't know what else uses it.
+- The scan sees every helper of the user's, and several daemons, each with its own store, can run
+  at once. A helper missing from this store's rows is no proof of an orphan: it may be another
+  daemon's live helper. So an orphan is only a helper this store is proven to own: a bridge whose
+  `--session` is one of this store's sessions, or a Codex server whose own session context (the
+  `AUTODOC_CREW_CONTEXT` the host gives it) names this store and one of its sessions. Any other
+  helper is `foreign` too, "not one of this store's sessions".
+- The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
+  in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
+  between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
+- `crew.bridge_kill` is the user's kill, from a window's System > Crew Bridges: a host verb, so no
+  agent can call it. The helper is opened by a pidfd and checked again before it is signalled.
+  Every process it signals besides is one seen in a single read of `/proc` (its start, parent,
+  group and user), opened by its own pidfd and checked to be that same process after the open, so
+  a process that took a pid in between is never signalled. A group is never signalled by its
+  number. Its leader goes through its own pidfd, and each other member of the daemon's user is
+  read from the group while the leader is alive. On each poll after that, while the leader still
+  lives, a process forked since is taken in only if its parent is one already held, never for
+  its group number alone. Once the leader is gone nothing more is taken in. Another user's process
+  in the group is never signalled.
+- What still runs after SIGKILL and its wait is reported: the kill's outcome is `incomplete`, with
+  how many survived, and the window says so. Nothing is claimed ended that wasn't seen to end.
+  `term` and `kill` say that every process the kill held ended, no more: a process forked into the
+  group after its leader was gone is never taken in, so it can outlive a kill that answers `term`.
+  Taking it in by its group number would risk another group's processes. The daemon's reclaim
+  journals an incomplete kill with its survivors and keeps the orphan's clock, so the next look
+  ends what still runs.
+  A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
+  helper that leads its own process group is ended with its group. Any other, such as a server
+  Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is
+  never signalled.
+
+In the code: `core/crew/bridges.go`, `core/crew/bridges_linux.go`, `core/crew/reclaim.go`,
+`app/serve.go`, `tui/crewbridges.go`
+
 ## Sessions and the guard
 
 Before starting an agent, the host generates a secret (32 random bytes) and calls `crew.register`
@@ -287,6 +335,46 @@ removed once the session ends.
   the secret's hash.
 
 In the code: `core/crew/context.go`, `core/crew/auth.go`, `app/crewcli.go`, `tui/agent.go`
+
+## Re-issuing a bridge
+
+An agent can ask the running daemon to re-establish its crew access, with no restart of its slot:
+when its slot started before its host joined it, when the daemon restarted, or when its access is
+otherwise gone. The access has two halves, and each has one owner:
+
+- **The session and its context are the host's.** The daemon never makes a credential: it keeps
+  only a secret's hash, and only a host, with its run token and epoch, registers a session. A host
+  joins every running slot that has no live session at each claim and renewal, writing the context
+  at the slot's own path.
+- **The endpoint is the agent's.** Only its own process sees how it is woken (Claude's inbox
+  socket, its Codex thread, agy's language server), so only it can register that again.
+
+`crew.access` (protocol 47) answers what the calling session's access holds now: live or ended
+(with how it ended, or `stale_epoch`), whether its host holds its scope, and a live session's
+endpoint, `registered`, `none` or `failing`. A credential of an ended session answers that
+session's state alone; one matching no session is `bad_credential`. It never answers a credential,
+so no caller can obtain another agent's identity through it. It writes nothing.
+
+`autodoc crew reissue [--wait D]`, and the crew MCP server's `crew_reissue`, read it and do what the
+agent can:
+
+- No context at its path yet, a credential the daemon no longer knows, or an ended session: it
+  waits, up to 40 s by default (past one renewal), for its host's re-join, reading the context again
+  each time. Several contexts, another agent's, or no daemon end it at once.
+- A live session's endpoint, none or failing, it registers again from its own process, as that
+  kind's own command does: Claude's `crew endpoint --claude`, Codex's `crew endpoint --codex-here`,
+  agy's `crew bridge --agy` (from agy's shell only: its MCP server has no token). OpenCode's plugin
+  registers its own on the session's next message. A waker that returned is not an endpoint registered (agy's bridge
+  detaches first): it is re-issued only once `crew.access` says `registered`, looked at for up to
+  10 s, else it says the daemon holds none.
+- A registered endpoint it keeps: a registration raises its generation and resets its wake state,
+  so a re-issue of a healthy session changes nothing.
+- It answers `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access
+  it ended with.
+
+The guide's first step says to call it when `crew whoami` fails, then ask again.
+
+In the code: `core/crew/access.go`, `app/crewreissue.go`, `app/crewmcp.go`
 
 ## Durable mail
 
@@ -410,7 +498,11 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   - Claude Code's hooks report them through `autodoc crew attention --claude-hook`. Each prompt
     shown (`PermissionRequest`) is an open prompt, named by its tool and input and counted (two
     identical calls that both prompt are two); its own `PostToolUse`, or `PostToolUseFailure` when
-    the approved tool fails, closes one, while another tool's, a parallel one, doesn't; `UserPromptSubmit` (after
+    the approved tool fails, closes one, while another tool's, a parallel one, doesn't. A prompt
+    that collects an answer widens the input its tool runs with (`AskUserQuestion` adds `answers`),
+    so for such a tool alone a `PostToolUse` also closes the oldest open prompt of its tool whose
+    input it holds with every value unchanged. Any other tool's wider input is another call (a
+    parallel `Bash` with the same command and a timeout), and closes nothing; `UserPromptSubmit` (after
     a denial) and `Stop` close them all; an idle `Notification` changes nothing. The attention is
     raised while any is open. What the daemon was last told is kept, written only once told, so a
     raise or clear that failed is retried by the next hook; until then that prompt is unreported.
@@ -651,7 +743,7 @@ tool policy, and a prompt it hits raises attention for you to answer in its tab.
 The one allowance is the guide's own commands, so following the guide never stops at a prompt.
 Each kind gets it only once a live probe shows that a compound command (`;`, `&&`, `|`, `$(…)`, a
 newline) can't ride its rules:
-`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge`
+`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge|reissue`
 and the read-only `autodoc --contracts` (the verb tables the written guide indexes), each named
 (`crew.GuideCommands`), never `autodoc *`. It is written only where the session's own CLI
 reads it, never in your own CLI configuration:
@@ -817,15 +909,21 @@ In the code: `lua/autodoc/kb/scaffold.lua`, `lua/autodoc/kb/templates/`
 ## Managed KB files
 
 `KB_OPERATIONS.md` and `_schema/frontmatter.yaml` belong to AutoDoc, not to the KB. Each is stamped
-with the AutoDoc version that wrote it, and a KB's copy is replaced only when it is from an older
-version; a KB's own rules go in `AGENTS.md`. A release that changes either file bumps the version,
-and one that changes the operations surface also bumps `KB_OPERATIONS.md`'s `revision:`, which tells
-agents to read it again. The Neovim plugin hands each build's copies to auto-core, the one writer
+with the version of AutoDoc whose release last changed them, and a KB's copy is replaced only when it
+is from an older version; a KB's own rules go in `AGENTS.md`. A release that changes either file
+bumps the version, and one that changes the operations surface also bumps `KB_OPERATIONS.md`'s
+`revision:`, which tells agents to read it again.
+
+`lua/autodoc/kb/version.lua` is the one source of that stamp: the Neovim side reads it, and the
+daemon embeds it, so a KB either side scaffolds carries the same version (not the build's, which
+would replace an unchanged copy at every release and leave an older one when the two disagree). A
+test reads the last release through git and fails when either file differs from that release's
+while the version isn't newer than that release's, so the bump can't be forgotten. The Neovim plugin hands each build's copies to auto-core, the one writer
 that brings a KB up to them, so an agent always starts on the installed AutoDoc's operations
 document.
 
 In the code: `lua/autodoc/kb/managed.lua`, `lua/autodoc/kb/version.lua`,
-`lua/autodoc/kb/templates/KB_OPERATIONS.md`
+`lua/autodoc/kb/templates/KB_OPERATIONS.md`, `kbversion.go`
 
 ## One frontmatter schema
 

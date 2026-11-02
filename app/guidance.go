@@ -21,7 +21,7 @@ import (
 // plugin can read it, or write it into a KB. A failed write is its error: a redirect into a KB
 // that fails must not look like a written manual.
 func kbOperations(out io.Writer, version string) error {
-	v := kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: version}
+	v := kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: version, ManagedVersion: autodoc.KBManagedVersion()}
 	_, err := out.Write(v.Operations(autodoc.KBOperations))
 	return err
 }

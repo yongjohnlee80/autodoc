@@ -12,7 +12,12 @@ import (
 // namespaced so a template's Obsidian variables ({{date}}, {{title}}) pass through untouched.
 type Vars struct {
 	Date           string // YYYY-MM-DD
-	AutoDocVersion string
+	AutoDocVersion string // the build's, for {{autodoc.version}}
+	// ManagedVersion is the autodoc_version KB_OPERATIONS.md is stamped with
+	// (autodoc.KBManagedVersion, the Neovim side's lua/autodoc/kb/version.lua): it changes only with
+	// the managed files, so a KB takes a new copy exactly when they change. "" stamps
+	// AutoDocVersion.
+	ManagedVersion string
 	URL            string // where the type was cloned from
 	Commit         string // the commit cloned, in full
 }
@@ -66,7 +71,11 @@ func (v Vars) Operations(b []byte) []byte { return v.renderOperations(b) }
 // renderOperations renders KB_OPERATIONS.md as scaffold.lua's render does: {{autodoc_version}}
 // anywhere, {{date}} only on the frontmatter's created line (elsewhere it is an editor's variable).
 func (v Vars) renderOperations(b []byte) []byte {
-	b = bytes.ReplaceAll(b, []byte("{{autodoc_version}}"), []byte(v.AutoDocVersion))
+	stamp := v.ManagedVersion
+	if stamp == "" {
+		stamp = v.AutoDocVersion
+	}
+	b = bytes.ReplaceAll(b, []byte("{{autodoc_version}}"), []byte(stamp))
 	return bytes.Replace(b, []byte("\ncreated: {{date}}\n"), []byte("\ncreated: "+v.Date+"\n"), 1)
 }
 

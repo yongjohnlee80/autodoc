@@ -167,7 +167,7 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 	for _, tool := range list["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "mail_show", "crew_whoami", "crew_list", "mail_send"}) {
+	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "mail_show", "crew_whoami", "crew_reissue", "crew_list", "mail_send"}) {
 		t.Fatalf("tools/list: %v, want the table %v", names, MCPTools())
 	}
 	if text, failed := g.tool("crew_whoami", nil); failed || !strings.Contains(text, `"codename":"gold"`) {

@@ -8,7 +8,7 @@ import "slices"
 // reads it (its folder's settings, or its setup's argv or env), never in the user's own config.
 var GuideCommands = []string{
 	"mail receive", "mail ack", "mail reply", "mail send", "mail inbox", "mail show",
-	"crew whoami", "crew list", "crew endpoint", "crew attention", "crew bridge",
+	"crew whoami", "crew list", "crew endpoint", "crew attention", "crew bridge", "crew reissue",
 	ContractsCommand,
 }
 

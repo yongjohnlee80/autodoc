@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -264,6 +265,7 @@ func (d *process) startWorkspaces() error {
 		return err
 	}
 	d.startWakes()
+	d.reclaimBridges()
 	if err := d.ws.OpenAll(); err != nil {
 		return err
 	}
@@ -283,6 +285,62 @@ func (d *process) startWakes() {
 	s, stop := startScheduler(d.ctx, d.deps.crew, crewWakers(d.deps.crew), d.log)
 	d.stops.push(stop)
 	d.stops.push(addLateWakers(d.ctx, s, d.log))
+}
+
+// reclaimBridges is the daemon's own look for the crew's orphaned helpers
+// (docs/decisions/crew.md#crew-bridges), every crew.ReclaimEvery for as long as the daemon serves:
+// each helper it ends is journaled (bridgeReclaimed). On a system whose processes it can't read it
+// stops at its first look. It stops before the store closes.
+func (d *process) reclaimBridges() {
+	ctx, cancel := context.WithCancel(d.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(crew.ReclaimEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-t.C:
+				reclaimed, err := d.deps.crew.Reclaim(ctx, now)
+				if errors.Is(err, crew.ErrNoBridges) {
+					logger.Info(d.log, "orphaned crew helpers aren't reclaimed here: the daemon reads the machine's processes on Linux only")
+					return
+				}
+				if err != nil {
+					logger.Warning(d.log, err, "the look for orphaned crew helpers")
+					continue
+				}
+				for _, r := range reclaimed {
+					bridgeReclaimed(d.deps, r)
+				}
+			}
+		}
+	}()
+	d.stops.push(func() { cancel(); <-done })
+}
+
+// bridgeReclaimed journals one helper the daemon's look ended, in sys.events (crew.bridge_reclaimed):
+// what it was, whose, why it was an orphan, and how it ended.
+func bridgeReclaimed(d *moduleDeps, r crew.Reclaimed) {
+	owner := r.Row.Owner
+	if owner == "" {
+		owner = r.Row.Session
+	}
+	outcome := r.Outcome
+	if r.Outcome == crew.KilledIncomplete {
+		outcome = fmt.Sprintf("%s, %d still running", r.Outcome, r.Survivors)
+	}
+	if r.Err != nil {
+		outcome = "failed: " + r.Err.Error()
+		logger.Warning(d.log, r.Err, fmt.Sprintf("reclaiming the orphaned %s %d", r.Row.Kind, r.Row.PID))
+	}
+	detail := strings.Join(slices.DeleteFunc([]string{r.Row.Kind + " " + strconv.Itoa(r.Row.PID), owner, r.Row.Why, outcome},
+		func(s string) bool { return s == "" }), " · ")
+	if _, err := d.store.AppendEvent(context.Background(), store.Event{Kind: "crew.bridge_reclaimed", Detail: detail}); err != nil {
+		logger.Warning(d.log, err, "logging event crew.bridge_reclaimed")
+	}
 }
 
 // crewWakers are the wakers serve has at once, by endpoint kind, for the daemon's user: Claude's;
