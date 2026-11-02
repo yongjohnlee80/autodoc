@@ -688,7 +688,7 @@ tool policy, and a prompt it hits raises attention for you to answer in its tab.
 The one allowance is the guide's own commands, so following the guide never stops at a prompt.
 Each kind gets it only once a live probe shows that a compound command (`;`, `&&`, `|`, `$(…)`, a
 newline) can't ride its rules:
-`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge`
+`autodoc mail receive|ack|reply|send|inbox|show`, `autodoc crew whoami|list|endpoint|attention|bridge|reissue`
 and the read-only `autodoc --contracts` (the verb tables the written guide indexes), each named
 (`crew.GuideCommands`), never `autodoc *`. It is written only where the session's own CLI
 reads it, never in your own CLI configuration:
