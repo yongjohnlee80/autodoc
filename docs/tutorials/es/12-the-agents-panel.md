@@ -24,6 +24,8 @@ flowchart LR
 
 **Envíale tu página.** **SPC a** abre la tarjeta de agentes: **b** envía la página a un agente, **f** la selección.
 
+**Tu bandeja de entrada.** Los agentes te envían correo: un informe cuando terminan un paso y una solicitud cuando necesitan que decidas. **SPC a i** (o `:inbox`) abre la bandeja de entrada, lo más reciente primero; su título cuenta lo que está sin leer y las solicitudes aún abiertas. Sus pestañas **Todo**, **Sin leer**, **Solicitudes abiertas** y **No entregables** la filtran, y **Más** lee el correo anterior. El mensaje bajo el cursor se muestra debajo de la lista. Abrir un informe lo marca como leído (**Marcar como leído** también). Una solicitud sigue abierta hasta que la respondes: **Responder…** envía tu respuesta al agente, y **Descartar…** (te lo pregunta antes) le dice que no lo harás. **Remitente** muestra el agente que la envió. Una solicitud también aparece como aviso en cada ventana, y su aviso abre la misma respuesta.
+
 En la GUI, **Opciones › Fuentes y zoom…** fija el tamaño del texto de los agentes, como proporción del de la ventana, del 50 % al 150 %; el menú del panel (≡) lo cambia de 10 % en 10 % (**Tamaño del texto › Más pequeño**, **Más grande**). El panel de terminal lo comparte.
 
 Más: [Referencia, capítulo 11: Pestañas de terminal integradas y traspaso de tareas a agentes con una tecla](../../reference/11-terminal-tabs-and-agent-handoff.md), y [Referencia, capítulo 12: Integración de agentes de IA, recuperación adaptativa y RPC por CLI](../../reference/12-ai-agent-integration-and-cli-rpc.md).
