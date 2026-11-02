@@ -49,8 +49,9 @@ decides by whether the panel is seen whole, never by where the keyboard is:
   hides at the first press.
 
 Covered is golib's `OverlayHost.Covered`: a shown panel or window above it in the stack overlaps it.
-An open dialog or a notification over it doesn't count. Every toggle goes through one helper,
-`togglePanel`, so they all behave the same.
+An open dialog or a notification over it doesn't count. Every toggle decides by the same coverage
+rule (`panelCovered`): the keys, commands, Lua actions and menu items through `togglePanel`, the
+dock icon in its own handler (`goDock`).
 
 In the code: `tui/panels.go`, `tui/dock.go`
 
