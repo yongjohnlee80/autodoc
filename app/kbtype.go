@@ -20,7 +20,7 @@ func checkKBType(dir string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	plan := t.Plan(kbtype.Vars{Date: time.Now().Format(time.DateOnly)}, autodoc.KBOperations)
+	plan := t.Plan(kbtype.Vars{Date: time.Now().Format(time.DateOnly), ManagedVersion: autodoc.KBManagedVersion()}, autodoc.KBOperations)
 	fmt.Fprintf(out, "%s (%s): %d folders, %d files\n", t.Name, t.Title, len(t.Folders), len(plan))
 	for _, f := range t.Folders {
 		mark := ""

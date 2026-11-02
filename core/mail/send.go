@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
 // Send is what a sender asks of mail.send.
@@ -141,6 +142,62 @@ func (m *Manager) SendAsUser(ctx context.Context, scope, run string, epoch int64
 		return out, err
 	}
 	return out, m.fire(ctx, out)
+}
+
+// UnverifiedAssigner opens an assignment's mail that autodoc sends because who made the assignment
+// couldn't be verified (SendAsAssigner): an agent's call, never the user's.
+const UnverifiedAssigner = "Who made this assignment couldn't be verified: an agent made it, not the user."
+
+// SendAsAssigner is inbox.forward: an assignment's mail from the window that holds scope (run's
+// process at epoch, guarded as a host verb is), sent from the one by names, the assignment's maker
+// as the daemon recorded it (docs/decisions/todos.md#an-assignment-says-who-made-it), never from
+// someone the window names. by is "" for the user's surface: from the user, as SendAsUser. An
+// agent's codename@scope: from that agent's profile, so its recipient reads it as a peer's and a
+// reply reaches the agent. The unverified marker, or an agent no longer in the crew: from autodoc,
+// the body opened by UnverifiedAssigner. Never fired: it is queued as any mail. The key is the
+// sender's, so a retry answers the first send.
+func (m *Manager) SendAsAssigner(ctx context.Context, scope, run string, epoch int64, by string, p Send) (Sent, error) {
+	p.Fire = false
+	if err := checkSend(p); err != nil {
+		return Sent{}, err
+	}
+	var out Sent
+	err := m.store.Write(ctx, func(tx Tx) error {
+		if err := m.crew.GuardHost(tx, scope, run, epoch); err != nil {
+			return err
+		}
+		sender, err := assigner(tx, by)
+		if err != nil {
+			return err
+		}
+		if sender == DaemonProfile {
+			p.Body = UnverifiedAssigner + "\n\n" + p.Body
+			if err := checkSend(p); err != nil {
+				return err
+			}
+		}
+		out, err = m.send(tx, sender, "", scope, p)
+		return err
+	})
+	return out, err
+}
+
+// assigner is the profile an assignment by by is sent from (SendAsAssigner): the user's for "",
+// the agent's active profile for its codename@scope, and the daemon's for anything else.
+func assigner(tx Tx, by string) (string, error) {
+	if by == "" {
+		return userProfile(tx)
+	}
+	if codename, scope, ok := strings.Cut(by, "@"); ok && by != module.CallerUnverified && codename != "" && codename != UserCodename && scope != "" {
+		p, found, err := tx.ActiveProfile(scope, codename)
+		if err != nil {
+			return "", err
+		}
+		if found && p.ID != DaemonProfile && p.ID != UserProfile {
+			return p.ID, nil
+		}
+	}
+	return DaemonProfile, nil
 }
 
 // fireBound is how long a send to fire waits for its doorbell: the call and an attempt the loop

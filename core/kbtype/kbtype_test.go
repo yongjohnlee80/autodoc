@@ -191,6 +191,13 @@ func TestPlan(t *testing.T) {
 	if !strings.Contains(ops2, "created: 2026-10-19\n") || !strings.Contains(ops2, "autodoc_version: v0.2.0") || !strings.Contains(ops2, "use {{date}} in a template") {
 		t.Fatalf("KB_OPERATIONS.md rendered as %q", ops2)
 	}
+	// a managed version stamps KB_OPERATIONS.md alone: {{autodoc.version}} elsewhere stays the build's
+	v.ManagedVersion = "0.1.20"
+	managed := ty.Plan(v, ops)
+	if got := string(managed[len(managed)-1].Text); !strings.Contains(got, "autodoc_version: 0.1.20\n") || strings.Contains(got, "v0.2.0") {
+		t.Fatalf("KB_OPERATIONS.md with ManagedVersion 0.1.20 rendered as %q", got)
+	}
+	v.ManagedVersion = ""
 	about := string(byRel["ABOUT.md"].Text)
 	for _, want := range []string{`kb_type: "zettelkasten.kb"`, `kb_type_url: "https://example.com/kb"`, `kb_type_commit: "0123456789abcdef0123456789abcdef01234567"`} {
 		if !strings.Contains(about, want) {

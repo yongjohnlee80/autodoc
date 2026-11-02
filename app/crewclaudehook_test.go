@@ -15,7 +15,9 @@ import (
 // with their input (as live-probed on Claude Code 2.1.280), keeps the session's permission
 // attention raised while any prompt shows, saying what the newest asks: a prompt's own PostToolUse
 // closes it, another tool's (a parallel one) doesn't, and so does its PostToolUseFailure when the
-// approved tool fails; two identical prompting calls are two to close; the next UserPromptSubmit
+// approved tool fails; two identical prompting calls are two to close; a prompt whose answer widened
+// its tool's input (AskUserQuestion) is closed by that tool's PostToolUse, while any other tool's
+// wider input (a parallel call) closes nothing; the next UserPromptSubmit
 // (after a denial) or Stop closes them all; an idle Notification changes nothing. It prints nothing
 // and exits 0.
 func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
@@ -97,6 +99,37 @@ func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
 	hook(`{"hook_event_name":"PermissionRequest",` + bash + `}`)
 	hook(`{"hook_event_name":"PostToolUseFailure",` + bash + `,"error":"mkdir: cannot create directory","is_interrupt":false}`)
 	expect("an approved tool that failed")
+
+	// a prompt that collects an answer widens its tool's input: AskUserQuestion's PostToolUse carries
+	// its questions with the answers and annotations added, and still closes it at once, not at Stop
+	ask := `"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which?","header":"Pick","multiSelect":false,"options":[{"label":"A","description":"a"},{"label":"B","description":"b"}]}]}`
+	asked := `{"hook_event_name":"PermissionRequest",` + ask + `}`
+	answered := `{"hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":{"answers":{"Which?":"A"},"annotations":{},` +
+		`"questions":[{"question":"Which?","header":"Pick","multiSelect":false,"options":[{"label":"A","description":"a"},{"label":"B","description":"b"}]}]},"tool_response":{}}`
+	hook(asked)
+	expect("a question asked", perm+"AskUserQuestion")
+	hook(answered)
+	expect("the question answered")
+
+	// widened, but only ever added to: a value the prompt changed, or another call of the same tool
+	// in parallel, closes nothing; the oldest of two widened prompts of one tool closes first
+	hook(`{"hook_event_name":"PermissionRequest",` + bash + `}`)
+	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"touch other-file","description":"Create a probe file"},"tool_response":{}}`)
+	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls","description":"List"},"tool_response":{}}`)
+	expect("a changed command, and a parallel Bash", perm+"Bash: touch probe-file")
+	// only a tool that collects an answer widens its input: a parallel Bash with the same command and
+	// description plus a timeout is another call, and closes nothing (the prompt still shows, and a
+	// window must not press Enter into it)
+	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"touch probe-file","description":"Create a probe file","timeout":5000},"tool_response":{}}`)
+	expect("a parallel Bash holding the asked input and more", perm+"Bash: touch probe-file")
+	hook(bashDone)
+	expect("its own done")
+	hook(asked)
+	hook(`{"hook_event_name":"PermissionRequest","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Second?"}]}}`)
+	hook(answered)
+	expect("the first question answered", perm+"AskUserQuestion")
+	hook(`{"hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Second?"}],"answers":{"Second?":"yes"}},"tool_response":{}}`)
+	expect("both answered")
 }
 
 // TestAClaudeHookRetriesWhatTheDaemonWasntTold: a raise or a clear that failed is never taken for

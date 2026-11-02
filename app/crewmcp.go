@@ -129,6 +129,9 @@ var crewMCPTools = []mcpTool{
 	{Name: "crew_whoami", Description: "Who you are in the crew: your codename, scope, session and store.",
 		Schema: toolSchema("crew_whoami", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "crew whoami", nil, nil }},
+	{Name: "crew_reissue", Description: "Re-establish your crew access on the running daemon, when crew_whoami fails, mail stops, or crew_list shows you unreachable: waits up to 40 s for your host to re-join you, then registers again how you're woken when that is missing or failing. Answers {reissued, kept, not: [{item, why}]}; a healthy session changes nothing.",
+		Schema: toolSchema("crew_reissue", map[string]any{}),
+		args:   func(map[string]any) (string, []string, error) { return "crew reissue", nil, nil }},
 	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it; a profile whose session ended only with all.",
 		Schema: toolSchema("crew_list", map[string]any{"all": map[string]any{"type": "boolean", "description": "also the profiles whose session ended"}}),
 		args: func(in map[string]any) (string, []string, error) {
@@ -450,6 +453,9 @@ func callMCPTool(ctx context.Context, name string, args map[string]any, session 
 	if err != nil {
 		return failed(err.Error())
 	}
+	if command == "crew reissue" {
+		return mcpReissue(ctx, session)
+	}
 	var said strings.Builder
 	res, err := runCrewCommand(ctx, command, cliArgs, strings.NewReader(""), &said, session)
 	var re *golibrpc.Error
@@ -477,4 +483,32 @@ func callMCPTool(ctx context.Context, name string, args map[string]any, session 
 		return failed(err.Error())
 	}
 	return map[string]any{"content": []map[string]any{{"type": "text", "text": strings.TrimSuffix(b.String(), "\n")}}}
+}
+
+// mcpReissue is crew_reissue: reissue as the server's session, through the CLI's paths, but for an
+// agy session's endpoint, which only agy's own shell can register (its MCP server never has the
+// language server's token): that one says to run the bridge there.
+func mcpReissue(ctx context.Context, session func() (sessionContext, error)) map[string]any {
+	r := cliReissuer("")
+	register := r.register
+	r.register = func(ctx context.Context, c sessionContext, kind string) error {
+		if kind == "agy" {
+			return errors.New("run `autodoc crew bridge --agy` from your shell: this MCP server has no agy token")
+		}
+		return register(ctx, c, kind)
+	}
+	res, err := reissue(ctx, session, reissueWait, r)
+	if err != nil {
+		var re *golibrpc.Error
+		if errors.As(err, &re) {
+			b, _ := json.Marshal(map[string]any{"error": &CallError{Code: re.Code, Message: re.Message}})
+			return map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": string(b)}}}
+		}
+		return map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": err.Error()}}}
+	}
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(res)
+	return map[string]any{"content": []map[string]any{{"type": "text", "text": strings.TrimSpace(b.String())}}}
 }

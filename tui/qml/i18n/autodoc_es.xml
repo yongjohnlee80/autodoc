@@ -7885,5 +7885,129 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc no puede ver ahora los avisos de permiso de %1, así que el mensaje está escrito pero no enviado: pulsa Enter allí</translation>
     </message>
+    <message id="autodoc.main.crew_bridges">
+        <source>Cr&amp;ew bridges…</source>
+        <translation>Pu&amp;entes del equipo…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.title">
+        <source>Crew Bridges</source>
+        <translation>Puentes del equipo</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill">
+        <source>Ki&amp;ll</source>
+        <translation>Fina&amp;lizar</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill_orphans">
+        <source>Kill &amp;orphans…</source>
+        <translation>Finalizar huérfan&amp;os…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.copy">
+        <source>&amp;Copy</source>
+        <translation>&amp;Copiar</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Cerrar (&amp;q)</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.listing">
+        <source>listing the crew's helper processes…</source>
+        <translation>listando los procesos auxiliares del equipo…</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.not_listed">
+        <source>not listed: %1</source>
+        <translation>no se listaron: %1</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.none">
+        <source>no crew helper is running</source>
+        <translation>no hay ningún proceso auxiliar del equipo en marcha</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.count">
+        <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
+        <translation>%1 auxiliar(es), %2 huérfano(s). El daemon termina un huérfano que sigue siéndolo 10 minutos.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>huérfano, %1 aún en ejecución: el daemon dejó de intentarlo, terminarlo te corresponde</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
+        <source>orphan, ends in %1 min</source>
+        <translation>huérfano, termina en %1 min</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.detail">
+        <source>command: %1 · socket: %2 · session: %3 · why: %4</source>
+        <translation>orden: %1 · socket: %2 · sesión: %3 · motivo: %4</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_orphans">
+        <source>no orphan to kill</source>
+        <translation>no hay huérfanos que terminar</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_scope">
+        <source>the window holds no crew scope yet: try again in a moment</source>
+        <translation>la ventana aún no tiene un ámbito del equipo: inténtalo de nuevo en un momento</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_title">
+        <source>Kill the helper?</source>
+        <translation>¿Terminar el proceso auxiliar?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 no es de ninguna sesión de este AutoDoc: puede servir al agente de otro AutoDoc, que lo perdería. ¿Terminarlo?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_live">
+        <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
+        <translation>%1 %2 sirve a %3, que está en marcha: terminarlo deja a ese agente sin su correo hasta que vuelva a iniciarse. ¿Terminarlo?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_foreign">
+        <source>Codex's shared daemon (%1) wasn't started by the crew: any Codex running outside the crew uses it, and loses it. Kill it?</source>
+        <translation>El daemon compartido de Codex (%1) no lo inició el equipo: cualquier Codex que se ejecute fuera del equipo lo usa y lo pierde. ¿Terminarlo?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans_title">
+        <source>Kill the orphans?</source>
+        <translation>¿Terminar los huérfanos?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans">
+        <source>End %1 orphaned helper(s)? Each is checked again as it ends.</source>
+        <translation>¿Terminar %1 proceso(s) auxiliar(es) huérfano(s)? Cada uno se comprueba de nuevo al terminarlo.</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.copied">
+        <source>copied %1 %2's details</source>
+        <translation>se copiaron los detalles de %1 %2</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.ended">
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 terminó, con todos los procesos que retenía (uno bifurcado después de que su líder terminara no se rastrea)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.killed">
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ignoró la parada y fue forzado a terminar, con todos los procesos que retenía (uno bifurcado después de que su líder terminara no se rastrea)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.gone">
+        <source>%1 %2 had already ended</source>
+        <translation>%1 %2 ya había terminado</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: %3 de sus procesos seguían en ejecución después de terminarlo</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.not_killed">
+        <source>%1 %2 not killed: %3</source>
+        <translation>%1 %2 no se terminó: %3</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges">
+        <source>crew bridges</source>
+        <translation>puentes del equipo</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges.help">
+        <source>crew bridges</source>
+        <translation>puentes del equipo</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>Puentes del equipo lee los procesos del equipo solo en Linux por ahora: en este sistema, búscalos y termínalos a mano (ps, kill). El daemon no recupera ninguno aquí.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>el daemon es anterior a Puentes del equipo: reinicia el backend (Sistema › Reiniciar el backend…)</translation>
+    </message>
 </context>
 </TS>

@@ -27,6 +27,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -112,6 +113,8 @@ type daemonOpts struct {
 	// storeAt, when set, is where the daemon's store is: the path a config names, so a client bound
 	// to that config's store finds its daemon serving it (a real daemon's store_id). "" is a temp one.
 	storeAt string
+	// crew, when set, is served too: the crew.* verbs, on its own store (crewbridges_test.go)
+	crew *crew.Manager
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -304,6 +307,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
 	opts = append(opts, rpc.WithModules(d.todos))
+	if o.crew != nil {
+		opts = append(opts, rpc.WithModules(o.crew))
+	}
 	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done

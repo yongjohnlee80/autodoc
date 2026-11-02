@@ -379,7 +379,7 @@ func (h *Host) leaveWorkspace() {
 	h.wsLeft = make(chan struct{})
 }
 
-// autodocDirsOf reads workspace.list's autodoc_dirs; none from a daemon below protocol 46.
+// autodocDirsOf reads workspace.list's autodoc_dirs; none from a daemon below protocol 49.
 func autodocDirsOf(v any) []autodocDir {
 	var out []autodocDir
 	for _, e := range asList(v) {

@@ -50,7 +50,7 @@ func GuideOfVia(kind string, via MailVia) Guide {
 	var b strings.Builder
 	b.WriteString("You are one agent of a crew: AutoDoc carries mail between you, the other agents and the user (`user`). ")
 	b.WriteString("The `autodoc` CLI knows who you are, so use these commands as they are. Never read your context file, never pass a credential, and never call `mail.*` or `crew.*` through `autodoc --call`.\n\n")
-	fmt.Fprintf(&b, "- **At the start of your session:** `autodoc crew whoami`. If it fails, or says the context doesn't match, tell the user and send no mail. %s\n", step)
+	fmt.Fprintf(&b, "- **At the start of your session:** `autodoc crew whoami`. If it fails, run `autodoc crew reissue` (it waits for your host to re-join you and registers how you're woken again), then whoami again; if that fails too, or it says the context doesn't match, tell the user and send no mail. %s\n", step)
 	b.WriteString("- **When AutoDoc's notice wakes you, or a turn starts with mail waiting:** run `autodoc mail receive` until `more` is false, then answer each delivery by its `id`, exactly as `receive` printed it: `autodoc mail receive`, then `autodoc mail ack <id>` once it's handled. Each delivery's `answer` is the command that answers it: run it with that delivery's `id` in place of `<id>`, your reply in place of `<your reply>`; never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
 	b.WriteString("  - a request: do it, then `autodoc mail reply <id> --body \"…\"`. That acks it too, and is safe to repeat;\n")
 	b.WriteString("  - a message or an event: act on it, then `autodoc mail ack <id>`;\n")
@@ -106,6 +106,7 @@ var MCPToolArgs = []MCPToolArg{
 	{Name: "mail_renew", Required: []string{"id"}},
 	{Name: "mail_show", Required: []string{"id"}},
 	{Name: "crew_whoami"},
+	{Name: "crew_reissue"},
 	{Name: "crew_list", Optional: []string{"all"}},
 	{Name: "mail_send", Required: []string{"to", "body"}, Optional: []string{"kind", "subject"}},
 }
@@ -179,7 +180,7 @@ func mcpGuide(step string) Guide {
 	var b strings.Builder
 	b.WriteString("You are one agent of a crew: AutoDoc carries mail between you, the other agents and the user (`user`). ")
 	b.WriteString("Your crew and mail are the `autodoc` MCP server's tools, which know who you are: use them, never the `autodoc mail` or `autodoc crew` shell commands (only the one step below says otherwise). Never read your context file and never pass a credential.\n\n")
-	fmt.Fprintf(&b, "- **At the start of your session:** call `crew_whoami`. If it fails, or says the context doesn't match, tell the user and send no mail. %s\n", step)
+	fmt.Fprintf(&b, "- **At the start of your session:** call `crew_whoami`. If it fails, call `crew_reissue` (it waits for your host to re-join you and registers how you're woken again), then `crew_whoami` again; if that fails too, or it says the context doesn't match, tell the user and send no mail. %s\n", step)
 	b.WriteString("- **When AutoDoc's notice wakes you, when a tool result shows mail waiting, and at the end of each task:** call `mail_receive` until `more` is false, then answer each delivery by its `id`, exactly as `mail_receive` gave it: `mail_receive`, then `mail_ack` with its `id` once it's handled. Each delivery's `answer` names the tool that answers it: call it with that delivery's `id` (and your `body`, for `mail_reply`); never make an `id` from a message's. A delivery you don't ack (or reply to) comes to you again after 10 minutes. For each (an answer to a request you sent carries `reply_to`, that request's id; a new request has none):\n")
 	b.WriteString("  - a request: do it, then `mail_reply` with its `id` and your `body`. That acks it too, and is safe to repeat;\n")
 	b.WriteString("  - a message or an event: act on it, then `mail_ack` with its `id`;\n")

@@ -222,6 +222,7 @@ type Change struct {
 	Fields   []string  `json:"fields,omitempty"` // update and refresh: the fields that changed
 	Reason   string    `json:"reason,omitempty"`
 	Scope    string    `json:"scope,omitempty"` // assign: the assigner's scope as given, never read here (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope)
+	By       string    `json:"by,omitempty"`    // assign: who made it, as the caller's hello proved it (docs/decisions/todos.md#an-assignment-says-who-made-it); "" for the user's surface
 	Hand     bool      `json:"hand,omitempty"`  // found by the snapshot diff: an edit made outside the daemon
 	FromPath string    `json:"from_path,omitempty"`
 	ToPath   string    `json:"to_path,omitempty"`
@@ -240,6 +241,7 @@ type SnapshotRow struct {
 	Status   string            `json:"status"`
 	Assignee string            `json:"assignee,omitempty"`
 	Scope    string            `json:"scope,omitempty"` // the scope of the assign that set Assignee; "" once anything else changed it
+	By       string            `json:"by,omitempty"`    // who made the assign that set Assignee (Change.By); "" once anything else changed it
 	Fields   map[string]string `json:"fields,omitempty"`
 }
 

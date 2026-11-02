@@ -192,12 +192,28 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-// Protocol 46 is a root holding AutoDoc's own folders
+// Protocol 46 is Crew Bridges (docs/decisions/crew.md#crew-bridges): crew.bridges, the crew's
+// helper processes on the machine (agy and Codex bridges, Codex servers, Codex's shared daemon),
+// each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
+// verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
+// as crew.bridge_reclaimed. A session below 46 has neither verb.
+// Protocol 47 is crew.access (docs/decisions/crew.md#re-issuing-a-bridge): what the calling
+// session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
+// reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
+// session below 47 has no such verb.
+// Protocol 48 is who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
+// sys.hello's crew key ({credential, store}, from the session context `autodoc --call` runs with),
+// verified once, at the hello, by crew, and kept on the session as the caller (codename@scope, or
+// the unverified marker), never the credential; todos.changes' and a resync's by, who made each
+// assign; and inbox.forward, a window's send of an assignment its feed read, which the daemon
+// sends from the assignment's maker. A hello without the key, as every client before 48 says it, is
+// the user's surface, as before; a session below 48 has no inbox.forward.
+// Protocol 49 is a root holding AutoDoc's own folders
 // (docs/decisions/contract.md#a-root-holding-autodocs-own-folders): workspace.list's and
 // workspace.add's autodoc_dirs, each of AutoDoc's config, state or data folders the root holds or
-// lies inside, and workspace.add's warning. The add is never refused; a session below 46 ignores
+// lies inside, and workspace.add's warning. The add is never refused; a session below 49 ignores
 // the keys.
-const Protocol int64 = 46
+const Protocol int64 = 49
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -226,6 +242,7 @@ const (
 	sessHello    = "hello"    // true once a compatible sys.hello was said
 	sessRefused  = "refused"  // true after a hello with another protocol: the session is spent
 	sessProtocol = "protocol" // the protocol the session's hello declared
+	sessCaller   = "caller"   // who the session's hello proved its caller is (module.CallerFrom); never the credential
 )
 
 // Databases is a workspace's database settings as workspace.list reports them: never a DSN, only
@@ -372,6 +389,7 @@ type Server struct {
 	verbs        map[string]verb
 	legacy       map[string]verb // rpc's own contracts, until register gives each its handler
 	moduleErrs   []module.PublicError
+	callers      module.Callers // the module that verifies a hello's crew credential (crew's); nil: none
 	stop         chan struct{}
 	// damaged is set once a check found the store damaged (RefuseWrites): every verb that writes is
 	// refused from then on, before the daemon stops
