@@ -603,8 +603,15 @@ func TestTheWakeNoticeNamesItsSenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.start(r.withWaker())
-	r.woken(gold)
-	r.woken(tifa)
+	// both, in either order: woken drops the wakes of other sessions while it waits for one
+	for left, deadline := map[string]bool{gold: true, tifa: true}, time.After(10*time.Second); len(left) > 0; {
+		select {
+		case s := <-r.waker.woke:
+			delete(left, s)
+		case <-deadline: // NOTE: a bound on a failing run only
+			t.Fatalf("no wake reached %v", left)
+		}
+	}
 	want := map[string]string{
 		gold: "AutoDoc mail is waiting for you: 2 from jarvis (claude), 1 from user. Run: autodoc mail receive",
 		tifa: "AutoDoc mail is waiting for you: 1 from lector (claude), 1 from zen (claude), 1 from juliet (claude), and 2 more. Run: autodoc mail receive",
