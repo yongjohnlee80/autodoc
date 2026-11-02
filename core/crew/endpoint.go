@@ -203,7 +203,7 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 	if err != nil {
 		return 0, err
 	}
-	server, serverRef := m.codexServerOf(kind, canon)
+	server, serverRef := m.codexServerOf(ctx, kind, canon)
 	var gen int64
 	err = m.write(ctx, func(tx Tx, after *afterCommit) error {
 		s, err := m.Authenticate(tx, credential)

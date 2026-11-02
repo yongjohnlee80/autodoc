@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // Crew Bridges (crew.bridges, crew.bridge_kill): the helper processes the crew runs on this machine,
@@ -305,10 +307,14 @@ func (m *Manager) joinBridge(tx Tx, r *BridgeRow, p helperProc, servers map[stri
 	return nil
 }
 
-// codexServerOf is a Codex endpoint's own app-server: its socket (socketKey) and the process now
-// listening there (ProcRef), found by the helper scan; "" for another kind, a locator naming no
-// server, and the process when none is found (then nothing proves the server this store's).
-func (m *Manager) codexServerOf(kind, locator string) (string, string) {
+// codexServerOf is a Codex endpoint's own app-server: its socket (socketKey) and the process
+// listening there now (ProcRef), "" for another kind or a locator naming no server. The process is
+// the one the kernel says holds the socket (its peer credentials on a connection to it), and only
+// when the helper scan knows that very process (its pid and reference) as a Codex app-server naming
+// this socket, and a second connection finds the same listener. Any doubt (no listener, an
+// unreadable peer, a process the scan doesn't know, a listener that changed) records no process,
+// and so proves nothing: never the first process whose command line merely names the path.
+func (m *Manager) codexServerOf(ctx context.Context, kind, locator string) (string, string) {
 	if kind != "codex" {
 		return "", ""
 	}
@@ -317,17 +323,46 @@ func (m *Manager) codexServerOf(kind, locator string) (string, string) {
 		return "", ""
 	}
 	server := socketKey(l.Server)
+	pid, ok := listenerPID(ctx, l.Server)
+	if !ok {
+		return server, ""
+	}
+	ref, err := ProcRef(pid)
+	if err != nil || ref == "" {
+		return server, ""
+	}
 	procs, err := scanHelpers(m.uid)
 	if err != nil {
 		return server, ""
 	}
+	known := false
 	for _, p := range procs {
-		if p.kind == BridgeCodexServer && socketKey(p.socket) == server {
-			return server, p.ref
+		if p.pid == pid && p.ref == ref && p.kind == BridgeCodexServer && socketKey(p.socket) == server {
+			known = true
 		}
 	}
-	return server, ""
+	if again, ok := listenerPID(ctx, l.Server); !known || !ok || again != pid {
+		return server, ""
+	}
+	return server, ref
 }
+
+// listenerPID is the process holding the unix socket at path, from the kernel's record of the peer
+// of a connection to it (peercred.PeerPID), bounded by listenerWait; false when nothing answers.
+func listenerPID(ctx context.Context, path string) (int, bool) {
+	ctx, cancel := context.WithTimeout(ctx, listenerWait)
+	defer cancel()
+	c, err := peercred.Dial(ctx, "unix", path)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = c.Close() }()
+	pid, err := peercred.PeerPID(c)
+	return pid, err == nil && pid > 0
+}
+
+// listenerWait bounds each connection codexServerOf makes to a Codex server's socket.
+const listenerWait = 2 * time.Second
 
 // serverOwner is the session of this store that a Codex server is proven to serve, "" when none
 // is: first a session, live or ended, whose endpoint recorded this socket AND this very process
