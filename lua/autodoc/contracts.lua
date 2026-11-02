@@ -2,17 +2,17 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 46,
+  protocol = 47,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
-      since = 46, scope = "global", audience = "agent",
+      since = 47, scope = "global", audience = "agent",
       params = {
         { name = "credential", type = "string" },
         { name = "store", type = "string", optional = true }
       },
       result = "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
-      doc = "What the calling session's crew access holds now (since 46): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue.",
+      doc = "What the calling session's crew access holds now (since 47): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue.",
     },
     ["crew.adopt"] = {
       since = 37, scope = "local-peer", audience = "user",
