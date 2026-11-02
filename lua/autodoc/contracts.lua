@@ -2,9 +2,18 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 45,
+  protocol = 48,
   min_protocol = 12,
   verbs = {
+    ["crew.access"] = {
+      since = 47, scope = "global", audience = "agent",
+      params = {
+        { name = "credential", type = "string" },
+        { name = "store", type = "string", optional = true }
+      },
+      result = "{session, why?, codename, kind, scope, host, endpoint?, generation?, store}",
+      doc = "What the calling session's crew access holds now (since 47): session live or ended (why: how it ended, or stale_epoch), host holds or gone, and a live session's endpoint registered, none or failing. A credential of an ended session answers that session's state. Never a credential: what `autodoc crew reissue` reads to know what to re-issue.",
+    },
     ["crew.adopt"] = {
       since = 37, scope = "local-peer", audience = "user",
       params = {
@@ -26,6 +35,25 @@ return {
       },
       result = "{}",
       doc = "Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41).",
+    },
+    ["crew.bridge_kill"] = {
+      since = 46, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "pid", type = "int" },
+        { name = "start", type = "string" },
+        { name = "confirmed", type = "bool", optional = true }
+      },
+      result = "{outcome, survivors}",
+      doc = "End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill.",
+    },
+    ["crew.bridges"] = {
+      since = 46, scope = "local-peer", audience = "user",
+      params = {},
+      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at, reclaim_stopped, survivors}]",
+      doc = "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned.",
     },
     ["crew.claim"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -496,6 +524,24 @@ return {
       },
       result = "{session, owner}",
       doc = "Ask the session's current owner to raise its agent: the owner's host hears a focus change.",
+    },
+    ["inbox.forward"] = {
+      since = 48, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "store", type = "string" },
+        { name = "seq", type = "int" },
+        { name = "task", type = "string" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Send an assignment the window's todo feed read (store and seq, or a resync's task) from whoever the todo system recorded made it: an agent's own profile, so its recipient reads it as that agent's, with the peer marker; autodoc, saying so, when its maker couldn't be verified; the user only when the user's surface made it. The window never names the sender. Queued, never fired. The key is the change's: the same key answers the first send.",
     },
     ["inbox.list"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -1242,6 +1288,8 @@ return {
     { code = -32094, name = "crew.bad_credential", next = "the session ended: its host registers a new one" },
     { code = -32095, name = "crew.context_mismatch", next = "fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew" },
     { code = -32096, name = "crew.bad_endpoint", next = "register an endpoint of a known kind, with its locator" },
+    { code = -32097, name = "crew.bridge_confirm", next = "ask the user, naming the agent it cuts off, then send confirmed" },
+    { code = -32098, name = "crew.bridges_unsupported", next = "list and end the crew's helpers by hand" },
     { code = -32110, name = "mail.no_recipient", next = "crew.list the addressbook, and send to a name it shows" },
     { code = -32111, name = "mail.key_reused", next = "a retry sends the same content; new content takes a new key" },
     { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },

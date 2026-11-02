@@ -109,7 +109,7 @@ var noticeKinds = []string{KindClaude, KindCodex, KindAgy, KindOpenCode}
 
 // NoticeFor is the one wake text for a session that reads its mail via: every waker sends it. With
 // senders (WaitingSenders), it names at most NoticeMaxSenders of them by their daemon-set address
-// and kind, and how many messages are each one's: "1 from gold-man (claude), 1 from user", then
+// and kind, and how many messages are each one's: "1 from gold (claude), 1 from user", then
 // "and N more" (or "and more" when the read stopped short). An address that isn't a plain name
 // (noticeName) is counted in the more, never printed; a kind not known is left out. With none, it
 // is WakeNotice or WakeNoticeMCP, byte for byte.
@@ -153,7 +153,7 @@ func NoticeFor(via MailVia, senders []Sender, more bool) string {
 const (
 	wakePermits    = 4                // calls out at once, whatever the sessions
 	wakeCallLimit  = 10 * time.Second // one waker call's deadline
-	WakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out; mail's fallback is due after it too
+	WakeUnanswered = 2 * time.Minute  // an accepted notice with no receive after it times out, as a failed wake (mail's fallback has its own window, mail.FallbackAfter)
 	wakeLookBatch  = 64               // rows one look reserves from, before it looks again
 )
 

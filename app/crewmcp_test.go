@@ -167,7 +167,7 @@ func TestTheCrewMCPServerIsTheMailCommands(t *testing.T) {
 	for _, tool := range list["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "mail_show", "crew_whoami", "crew_list", "mail_send"}) {
+	if !slices.Equal(names, MCPTools()) || !slices.Equal(names, []string{"mail_receive", "mail_ack", "mail_reply", "mail_renew", "mail_show", "crew_whoami", "crew_reissue", "crew_list", "mail_send"}) {
 		t.Fatalf("tools/list: %v, want the table %v", names, MCPTools())
 	}
 	if text, failed := g.tool("crew_whoami", nil); failed || !strings.Contains(text, `"codename":"gold"`) {
@@ -368,10 +368,10 @@ func TestThePerEventTextsKeepTheirSize(t *testing.T) {
 	}{
 		{"the CLI wake notice (crew.WakeNotice), per wake", crew.WakeNotice, 58},
 		{"the MCP wake notice (crew.WakeNoticeMCP), per wake", crew.WakeNoticeMCP, 125},
-		{"the CLI wake notice naming one sender, per wake", crew.NoticeFor(crew.MailViaCLI, []crew.Sender{{From: "gold-man", Kind: "claude", Count: 1}}, false), 84},
-		{"the MCP wake notice naming one sender, per wake", crew.NoticeFor(crew.MailViaMCP, []crew.Sender{{From: "gold-man", Kind: "claude", Count: 1}}, false), 151},
-		{"the CLI wake notice at its cap of senders, per wake", crew.NoticeFor(crew.MailViaCLI, []crew.Sender{{From: "gold-man", Kind: "claude", Count: 2},
-			{From: "user", Count: 1}, {From: "kimmy-vision", Kind: "claude", Count: 1}, {From: "lector", Kind: "codex", Count: 12}}, false), 140},
+		{"the CLI wake notice naming one sender, per wake", crew.NoticeFor(crew.MailViaCLI, []crew.Sender{{From: "gold", Kind: "claude", Count: 1}}, false), 80},
+		{"the MCP wake notice naming one sender, per wake", crew.NoticeFor(crew.MailViaMCP, []crew.Sender{{From: "gold", Kind: "claude", Count: 1}}, false), 147},
+		{"the CLI wake notice at its cap of senders, per wake", crew.NoticeFor(crew.MailViaCLI, []crew.Sender{{From: "gold", Kind: "claude", Count: 2},
+			{From: "user", Count: 1}, {From: "vision", Kind: "claude", Count: 1}, {From: "lector", Kind: "codex", Count: 12}}, false), 130},
 		{"the waiting line with nothing waiting, per MCP tool result", waitingLine(0), 10},
 		{"the waiting line with mail waiting, per MCP tool result", waitingLine(1), 132},
 	} {

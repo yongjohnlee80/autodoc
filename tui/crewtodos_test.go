@@ -13,6 +13,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 )
@@ -338,6 +339,103 @@ func TestAnAssignmentLostThenARestartIsStillDelivered(t *testing.T) {
 	settleMessaging(c, w)
 	if len(*sends) != 2 || (*sends)[1][5] != (*sends)[0][5] {
 		t.Fatalf("after the restart: sends %v, want the lost one asked again by its key", *sends)
+	}
+}
+
+// An assignment an agent made (its change's by, as the agent's hello proved it) is never mailed as
+// the user's: the window asks the daemon to forward it (inbox.forward), naming the change by its
+// store and seq, and the daemon sends it from whoever its change says made it. The window names no
+// sender, and never sends it by inbox.send. It is keyed by its change, as the user's assignments
+// are; a lost answer is asked again by that key, and a read after the answer sends nothing more.
+// One made in the window's own scope is still the panel's own, and skipped.
+func TestAPeersAssignmentIsForwardedByTheDaemon(t *testing.T) {
+	a, c, w, task, sends := todoFeedRig(t)
+	var forwards [][]any
+	lost := 1
+	w.inboxForward = func(p []any) (any, error) {
+		forwards = append(forwards, p)
+		if lost > 0 {
+			lost--
+			return nil, io.ErrUnexpectedEOF
+		}
+		return map[string]any{"message": "m1"}, nil
+	}
+	ctx := module.WithCaller(context.Background(), "gold@autovim:plugins")
+	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "autodoc:one", "Take it.", "autovim:plugins"); err != nil {
+		t.Fatal(err)
+	}
+	store, seq := storeOf(t, w)
+	a.crew.Connected()
+	settleMessaging(c, w)
+	if len(*sends) != 0 {
+		t.Fatalf("inbox.send %v: a peer's assignment went out as the user's", *sends)
+	}
+	if len(forwards) != 2 {
+		t.Fatalf("inbox.forward %d times (%v), want the lost one asked again", len(forwards), forwards)
+	}
+	scope, epoch, _ := a.crew.held()
+	run := a.crew.run
+	p := forwards[1]
+	key := fmt.Sprintf("todo-%s-%d", store, seq)
+	if p[0] != scope || p[1] != run || p[2] != epoch || p[3] != store || p[4] != seq || p[5] != task.ID ||
+		!slices.Equal(p[6].([]any), []any{"one"}) || p[8] != key || forwards[0][8] != key {
+		t.Fatalf("forwarded %v, want the change (store %s, seq %d, task %s) to one, keyed %s, in the window's scope", p, store, seq, task.ID, key)
+	}
+	if body, _ := p[7].(string); !strings.HasPrefix(body, todoAssigned) || !strings.Contains(body, "  > Take it.") {
+		t.Errorf("the body: %q", body)
+	}
+	for _, v := range p {
+		if s, _ := v.(string); strings.Contains(s, "gold") {
+			t.Errorf("the window named the sender: %v", p)
+		}
+	}
+	a.crew.Connected()
+	settleMessaging(c, w)
+	if len(forwards) != 2 || len(*sends) != 0 {
+		t.Fatalf("a read after the answer: %d forwards, %d sends; want nothing more", len(forwards), len(*sends))
+	}
+
+	// one an agent made in the window's own scope is the panel's own: neither sent nor forwarded
+	cur, err := w.d.todos.Get(context.Background(), todo.At{Workspace: "kb"}, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, cur.Rev, "autodoc:one", "", scope); err != nil {
+		t.Fatal(err)
+	}
+	a.crew.Event("todos.changed", "kb", task.ID)
+	settleMessaging(c, w)
+	if len(forwards) != 2 || len(*sends) != 0 {
+		t.Fatalf("the window's own scope: %d forwards, %d sends; want none more", len(forwards), len(*sends))
+	}
+}
+
+// A resync's snapshot carries who made each assignment too: a store read before mails each
+// assigned task once more, and one an agent assigned is forwarded by the daemon from its maker
+// (named by store and task, seq 0), never sent as the user's.
+func TestAResyncForwardsAPeersAssignment(t *testing.T) {
+	var away time.Duration
+	a, c, w, task, sends := todoFeedRigAt(t, func() time.Time { return time.Now().Add(away) })
+	var forwards [][]any
+	w.inboxForward = func(p []any) (any, error) {
+		forwards = append(forwards, p)
+		return map[string]any{"message": "m1"}, nil
+	}
+	a.crew.Connected() // the store read once: a resync of it mails again
+	settleMessaging(c, w)
+	ctx := module.WithCaller(context.Background(), module.CallerUnverified)
+	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "autodoc:one", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	away = todo.ConsumerSilence + time.Hour
+	a.crew.Connected()
+	settleMessaging(c, w)
+	store, _ := storeOf(t, w)
+	if len(*sends) != 0 || len(forwards) != 1 {
+		t.Fatalf("the resync: %d sends (%v), %d forwards; want it forwarded once", len(*sends), *sends, len(forwards))
+	}
+	if p := forwards[0]; p[3] != store || p[4] != int64(0) || p[5] != task.ID || !strings.Contains(p[7].(string), "Sent again") || !strings.Contains(p[8].(string), "-r") {
+		t.Errorf("the resync's forward %v, want the task by store and id, keyed by the resync", p)
 	}
 }
 

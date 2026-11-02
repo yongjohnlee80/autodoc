@@ -24,15 +24,16 @@ func runOut(t *testing.T, v string, args ...string) (int, string, string) {
 }
 
 // --kb-operations prints the manual the build carries, as a scaffold writes it: stamped with the
-// build's version, so the printed copy is one a later scaffold replaces when it is older, with no
-// placeholder left in its frontmatter.
+// managed files' own version (lua/autodoc/kb/version.lua, as the Neovim side stamps it), not the
+// build's, so the printed copy is one a later scaffold replaces exactly when the manual changed,
+// with no placeholder left in its frontmatter.
 func TestKBOperationsIsPrintedAsAScaffoldWritesIt(t *testing.T) {
 	code, out, errOut := runOut(t, "v9.8.7", "--kb-operations")
 	if code != 0 || errOut != "" {
 		t.Fatalf("--kb-operations: exit %d, stderr %q", code, errOut)
 	}
-	if got := kbtype.DeclaredVersion([]byte(out)); got != "v9.8.7" {
-		t.Errorf("the printed manual declares autodoc_version %q; want the build's v9.8.7", got)
+	if got, want := kbtype.DeclaredVersion([]byte(out)), autodoc.KBManagedVersion(); got != want {
+		t.Errorf("the printed manual declares autodoc_version %q; want version.lua's %q, not the build's v9.8.7", got, want)
 	}
 	front, _, _ := strings.Cut(strings.TrimPrefix(out, "---\n"), "\n---\n")
 	if strings.Contains(front, "{{") {

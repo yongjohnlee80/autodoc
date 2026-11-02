@@ -47,6 +47,87 @@ When you register a cloud provider (`ollama-cloud`, `openai`, or `rerank-api`) w
 
 For local workstations and developer servers, AutoDoc's recommended stack pairs **Ollama** for Stage 2 bi-encoder embeddings with **HuggingFace Text Embeddings Inference (TEI)** for Stage 3 cross-encoder reranking.
 
+### Preparing the Machine with Your Agent
+
+Before **Set up…** can help, the machine needs Ollama running and, for a reranker on a GPU, Docker that can reach the GPU. Those steps change the system, and AutoDoc doesn't take them. An AI agent can walk you through them: it checks what the machine has, tells you what each change does and why before it asks you for it, and checks the result. The steps below are written for that agent, in order. The latest version is at https://yongjohnlee80.github.io/autodoc/reference/06-configuring-embeddings-and-rerankers.html#preparing-the-machine-with-your-agent.
+
+Three rules hold throughout:
+
+- **The agent never asks for, holds or looks for a password.** The user types it only into the system's own dialog or their own terminal (step 2).
+- **Install the minimum.** Only what the checks show missing.
+- **Never install, upgrade or replace a GPU driver**, nor anything that touches signed kernel modules while Secure Boot is on: a change there can leave the machine unable to boot. If the driver itself is missing or broken, stop and tell the user; that is for them or their administrator.
+
+**1. Check first.** Read the machine before asking anything:
+
+| what | how |
+|---|---|
+| the GPU and its memory, the RAM, the free disk, Ollama's version (`""` when no Ollama answers: not installed, or installed and not running) | `autodoc --call host.probe` |
+| an NVIDIA GPU's compute capability | `nvidia-smi --query-gpu=name,compute_cap,memory.total --format=csv,noheader` |
+| a container runtime this user can use | `docker info`: a `permission denied` on `/var/run/docker.sock` means Docker is there but this user can't reach it (step 5) |
+| whether the runtime and Ollama start at boot | `systemctl is-enabled docker.service docker.socket ollama.service` |
+| a graphical session, or none (SSH, a bare console) | `loginctl show-session "$XDG_SESSION_ID" -p Type -p Active -p Remote` |
+| Secure Boot, and who signed the GPU driver | `mokutil --sb-state`, and the `signer` line of `modinfo nvidia` |
+| a reranker already running | `shell/tei/tei-rerank.sh status` |
+
+Tell the user what you found and what you propose, in plain words, before step 2.
+
+**2. Run each privileged command the user's way.** Say first what the command does and that the system will ask for their password.
+
+- **A desktop with a polkit authentication agent:** run it with `pkexec --disable-internal-agent`, and the system's own dialog asks; the flag stops `pkexec` falling back to a password prompt in the agent's own shell, where the user can't answer. Put the whole sequence in one call, so the user sees one dialog, and stop at the first failure. Wrap it in `timeout`, which bounds the dialog and the commands together, because an unanswered dialog otherwise waits for ever. On Arch, for example:
+
+  ```sh
+  timeout 300 pkexec --disable-internal-agent /bin/bash -c 'set -euo pipefail
+  pacman -S --needed --noconfirm nvidia-container-toolkit
+  nvidia-ctk runtime configure --runtime=docker
+  systemctl restart docker.service'
+  ```
+
+- **Otherwise:** when `pkexec` fails for any reason (no authentication agent, no graphical session, over SSH, the dialog dismissed or timed out), don't retry it: show the exact command and ask the user to run it in their own terminal, with `sudo`, and to say when it has finished. Never run `sudo` from the agent's own shell: it has no terminal to ask in, and it hangs.
+- Restarting `docker.service` stops the containers running at that moment; say so before, and run it when nothing the user needs is running.
+
+**3. Install the minimum.**
+
+- **Ollama**, when `host.probe` shows no version: with the system's package manager, or as the `ollama/ollama` container with the restart policy `unless-stopped`.
+- **Docker with the Compose plugin**, only for the TEI reranker (or Ollama in a container), when `docker info` finds no Docker.
+- **For an NVIDIA GPU in containers:** only the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (`nvidia-container-toolkit`), then `nvidia-ctk runtime configure --runtime=docker` and a restart of Docker, as in step 2. No CUDA package: the container brings its own CUDA runtime. The driver stays as it is.
+
+**4. Make it survive a reboot.** A container's restart policy (`unless-stopped`, which the reranker's compose file sets) acts only once Docker's daemon runs. Where `docker.socket` is enabled and `docker.service` isn't, the daemon starts only when something calls it, and at boot nothing does: every command reports success, and the containers are gone after the next reboot. Enable the services themselves, through step 2:
+
+```sh
+systemctl enable --now docker.service
+systemctl enable --now ollama.service
+```
+
+The second is for Ollama installed as a system service; Ollama in a container needs only the first. Tell the user which units you enabled. Check with `systemctl is-enabled docker.service ollama.service`, and again after the next reboot (step 7).
+
+**5. The docker group, only if `docker info` was refused.** Before suggesting it, say plainly: **membership of the `docker` group is equivalent to root.** Anything running as this user can then control the whole machine through Docker. Offer the alternative too, rootless Docker or Podman, which run containers without root (they change the steps above; `tei-rerank.sh` runs `docker compose`). If the user chooses the group, add them through step 2, with the user's name expanded before the command is elevated (inside a root shell `$USER` is `root`):
+
+```sh
+pkexec --disable-internal-agent usermod -aG docker "$USER"
+```
+
+(or `sudo usermod -aG docker "$USER"` in the user's own terminal).
+
+The running session doesn't see a new group until the user logs out and in again. Until then, `newgrp docker` starts a shell that has it, and an agent can pipe its commands into one (`sg` is missing on some systems, Arch among them):
+
+```sh
+echo 'docker info' | newgrp docker
+```
+
+**6. A reranker: the TEI image tag must match the GPU.** Each TEI GPU image is built for a compute capability, and a GPU it wasn't built for may refuse it at start. `shell/tei/tei-rerank.sh up` reads the capability and picks the tag; prefer it to a `docker run` of your own. The bare version tag (`:1.9`, or the `:1.5` older instructions show) is the Ampere 8.0 (A100) build, not a generic one. A refusal reads `Runtime compute cap N is not compatible with compile time compute cap M`, where N is the GPU and M the image: take the tag the [table below](#starting-local-ollama-and-tei-servers) gives for N. When N has no row there, the GPU may not be supported by this TEI release: use the `cpu-` image, and tell the user the reranker runs on the CPU.
+
+**7. Verify end to end,** not by a container having started:
+
+1. **A real vector of the expected dimensions.** Set the model up with **Set up…** (below), or `embedding.add` and `embedding.use`, which embed a probe text first and refuse a model that can't embed. Then `autodoc --call index.models '["<workspace>"]'` lists the model with its `dims`, the same as `embedding.catalog` gives for it, and its `vectors`.
+2. **A semantic search that found nothing now finds.** Before the setup, search a plain-language question the user would ask, the way they would ask a colleague: the answer says `semantic` `off`, and finds little or nothing. Once the workspace has embedded its sections, the same search says `semantic` `ready`, lists `semantic` in `stages.performed`, and returns hits:
+
+   ```sh
+   autodoc --call search.query '["<workspace>", "<the question>", {"stages": ["lexical", "semantic"]}]'
+   ```
+
+3. **A reranker answers through AutoDoc**, as [Checking the ranker through AutoDoc](#checking-the-ranker-through-autodoc) says.
+4. **After the next reboot**, without starting anything by hand: `host.probe` shows Ollama's version, `tei-rerank.sh status` shows TEI, and the search in 2 still has `semantic` `ready`.
+
 ### Setting Up the Embedding Model from AutoDoc (`Set up…`)
 
 Once Ollama is installed and running, AutoDoc sets up the embedding side itself. Open **Search models › Embedding Models › Set up…**. The command palette also has it as *set up semantic search*, and the search picker offers it while semantic search is off. The dialog works in five steps:
@@ -120,7 +201,7 @@ shell/tei/tei-rerank.sh down
 The GPU needs the NVIDIA Container Toolkit; the script's [README](../../shell/tei/README.md) lists what else it needs, and how to measure a model's accuracy on your own documents.
 
 > [!WARNING]
-> **TEI's GPU images are built for one compute capability each.** The bare version tag (`:1.9`) is the Ampere 8.0 (A100) build only. On any other GPU, the container stops at start with `Runtime compute cap N is not compatible with compile time compute cap 80`. `tei-rerank.sh` reads your GPU's capability (`nvidia-smi --query-gpu=compute_cap`) and picks the tag. If you run TEI yourself, pick it the same way:
+> **TEI's GPU images are built for a compute capability each.** The bare version tag (`:1.9`) is the Ampere 8.0 (A100) build. A GPU an image wasn't built for may stop it at start with `Runtime compute cap N is not compatible with compile time compute cap M` (a few newer GPUs can run an older build, but don't rely on it): use the tag for your GPU's capability. `tei-rerank.sh` reads your GPU's capability (`nvidia-smi --query-gpu=compute_cap`) and picks the tag. If you run TEI yourself, pick it the same way:
 >
 > | compute capability | GPUs | tag |
 > |---|---|---|
@@ -132,7 +213,7 @@ The GPU needs the NVIDIA Container Toolkit; the script's [README](../../shell/te
 > | 8.6 | RTX 30 series, A40 (Ampere) | `86-1.9` |
 > | 8.0 | A100 (Ampere) | `1.9` |
 > | 7.5 | RTX 20 series, T4 (Turing) | `turing-1.9` |
-> | no NVIDIA GPU | | `cpu-1.9` |
+> | no NVIDIA GPU, or a capability not in this table | | `cpu-1.9` |
 >
 > To check that a tag exists, ask the registry for that tag's manifest (`docker manifest inspect ghcr.io/huggingface/text-embeddings-inference:120-1.9`). Don't search the list of tags: the registry returns it in pages, alphabetically, so a page without the tag doesn't prove it's missing.
 

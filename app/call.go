@@ -146,6 +146,10 @@ func jsonOf(v any) any {
 
 // cliWho is who a --call is, for its hello: the agent running it ($AUTO_AGENTS_MAILBOX_ID), its pid and
 // its working directory. The daemon puts them in the client's token, so a todo event names its caller.
+// Run with a crew session context ($AUTODOC_CREW_CONTEXT), it also carries the context's credential
+// and store (crew), which the daemon verifies once, at the hello, so what the call does is known to
+// be that agent's (docs/decisions/todos.md#an-assignment-says-who-made-it); a context it can't read
+// still says crew, with no credential, so the call is never taken for the user's.
 func cliWho() map[string]any {
 	info := map[string]any{"pid": int64(os.Getpid())}
 	if a := os.Getenv("AUTO_AGENTS_MAILBOX_ID"); a != "" {
@@ -153,6 +157,13 @@ func cliWho() map[string]any {
 	}
 	if wd, err := os.Getwd(); err == nil {
 		info["cwd"] = wd
+	}
+	if path := os.Getenv("AUTODOC_CREW_CONTEXT"); path != "" {
+		crew := map[string]any{}
+		if c, err := readSessionContext(path); err == nil {
+			crew["credential"], crew["store"] = c.Credential, c.Store
+		}
+		info["crew"] = crew
 	}
 	return info
 }

@@ -64,6 +64,7 @@ var sqliteSuites = []struct {
 	{"AClientsCreateIsSerializedWithTheStore", TestAClientsCreateIsSerializedWithTheStore},
 	{"HandEditsAreUpdatesNeverAssigns", TestHandEditsAreUpdatesNeverAssigns},
 	{"AnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand", TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand},
+	{"AnAssignmentSaysWhoMadeIt", TestAnAssignmentSaysWhoMadeIt},
 	{"FirstSightIsABaseline", TestFirstSightIsABaseline},
 	{"Consumers", TestConsumers},
 	{"PruningAndResync", TestPruningAndResync},

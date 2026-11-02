@@ -1,6 +1,8 @@
 package docs_test
 
 import (
+	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
@@ -42,5 +44,63 @@ func TestNoFileNamesTheTeam(t *testing.T) {
 	})
 	if n == 0 {
 		t.Error("the walk read no file")
+	}
+}
+
+// TestNoCommitMessageNamesTheTeam: the commit messages a run brings name no one either, by the same
+// patterns: AUTODOC_NAMES_COMMITS is their range (CI: the release pull request's base..head, a
+// canary push's origin/main..after, a main push's before..after). Unset, nothing is checked; a range whose start the clone doesn't hold (a
+// branch's first push, a reset) brings no commit of its own and is skipped, saying so.
+func TestNoCommitMessageNamesTheTeam(t *testing.T) {
+	commits := os.Getenv("AUTODOC_NAMES_COMMITS")
+	if commits == "" {
+		t.Skip("AUTODOC_NAMES_COMMITS is unset: no range of commits to read")
+	}
+	from, _, ok := strings.Cut(commits, "..")
+	if !ok {
+		t.Fatalf("AUTODOC_NAMES_COMMITS = %q, want from..to", commits)
+	}
+	if err := exec.Command("git", "-C", "..", "cat-file", "-e", from+"^{commit}").Run(); err != nil {
+		t.Skipf("the clone holds no commit %q (a branch's first push, or a reset): nothing of its own to read", from)
+	}
+	out, err := exec.Command("git", "-C", "..", "log", "--format=%h%x00%B%x1e", commits).Output()
+	if err != nil {
+		t.Fatalf("git log %s: %v", commits, err)
+	}
+	for _, entry := range strings.Split(string(out), "\x1e") {
+		sha, msg, ok := strings.Cut(strings.TrimSpace(entry), "\x00")
+		if !ok {
+			continue
+		}
+		for i, line := range strings.Split(msg, "\n") {
+			for _, m := range teamNames.FindAllString(line, -1) {
+				t.Errorf("commit %s, line %d: %q names the team: say what was decided, not who", sha, i+1, m)
+			}
+			for _, m := range teamPaths.FindAllString(line, -1) {
+				t.Errorf("commit %s, line %d: %q points into the team's reviews", sha, i+1, m)
+			}
+		}
+	}
+}
+
+// TestACanaryPushReadsEveryCommitMainLacks: CI's range for a push to canary is cumulative from main,
+// never a push's before..after: a newer merge replaces a waiting run, and before..after would then
+// skip the replaced run's commits.
+func TestACanaryPushReadsEveryCommitMainLacks(t *testing.T) {
+	b, err := os.ReadFile("../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var line string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, "AUTODOC_NAMES_COMMITS:") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatal("ci.yml sets no AUTODOC_NAMES_COMMITS")
+	}
+	if !strings.Contains(line, "github.ref == 'refs/heads/canary' && format('origin/main..{0}', github.sha)") {
+		t.Errorf("a canary push's range isn't origin/main..after: %s", strings.TrimSpace(line))
 	}
 }
