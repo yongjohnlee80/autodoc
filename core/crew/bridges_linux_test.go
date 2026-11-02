@@ -749,3 +749,24 @@ func TestALaterGroupMemberIsAdoptedOnlyThroughAHeldParent(t *testing.T) {
 		t.Fatalf("adopted %v, want 11 and 21 alone (parents held), never 31 or 41 (only the group's number)", got)
 	}
 }
+
+// N1 (Lector #244 r3), the guarantee's limit, pinned: term says every process the kill held
+// ended, no more. A process that appears in the group only once its leader is gone is never taken
+// in (its group number could be another group's), so it outlives a kill that answers term.
+func TestAGroupKillsTermCoversWhatItHeldOnly(t *testing.T) {
+	r := newBridgeRig(t)
+	bridge := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false, []string{"bridge-child"}, []string{"late-child"})
+	member, late := bridge.children[0], bridge.children[1]
+	leaderListed := func() bool { _, err := os.Stat("/proc/" + strconv.Itoa(bridge.pid)); return err == nil }
+	crew.HideFromGroupWhile(t, bridge.pid, late, leaderListed)
+	got, err := r.kill(bridge.pid, false)
+	if err != nil || got.Outcome != crew.KilledTerm || got.Survivors != 0 {
+		t.Fatalf("the kill: %+v, %v; want term: every process it held ended", got, err)
+	}
+	if !waitEnded(bridge.pid, member) {
+		t.Fatal("a held process still runs")
+	}
+	if !running(late) {
+		t.Fatal("a process that appeared in the group after its leader was gone was signalled")
+	}
+}

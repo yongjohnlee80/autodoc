@@ -16,9 +16,10 @@ const (
 
 // Reclaimed is one helper the daemon's look ended (Reclaim), or tried to.
 type Reclaimed struct {
-	Row     BridgeRow
-	Outcome string // term | kill | gone
-	Err     error  // the kill's error, if it failed
+	Row       BridgeRow
+	Outcome   string // term | kill | gone | incomplete
+	Survivors int    // incomplete: how many of its processes still ran
+	Err       error  // the kill's error, if it failed
 }
 
 // reclaimKey names an orphan across looks: its process (ProcRef) and why it is one. A row whose
@@ -66,8 +67,10 @@ func (m *Manager) Reclaim(ctx context.Context, now time.Time) ([]Reclaimed, erro
 		if errors.Is(err, errReclaimChanged) {
 			continue // it came back, or its reason changed, between the look and the kill
 		}
-		out = append(out, Reclaimed{Row: r, Outcome: res.Outcome, Err: err})
-		if err == nil {
+		out = append(out, Reclaimed{Row: r, Outcome: res.Outcome, Survivors: res.Survivors, Err: err})
+		// an incomplete one keeps its clock: the next look finds what still runs, still orphaned, and
+		// ends it at once; it is journaled each time, with what survived
+		if err == nil && res.Outcome != KilledIncomplete {
 			m.bridgeMu.Lock()
 			delete(m.bridgeSeen, reclaimKey(r))
 			m.bridgeMu.Unlock()

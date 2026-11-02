@@ -329,6 +329,9 @@ func bridgeReclaimed(d *moduleDeps, r crew.Reclaimed) {
 		owner = r.Row.Session
 	}
 	outcome := r.Outcome
+	if r.Outcome == crew.KilledIncomplete {
+		outcome = fmt.Sprintf("%s, %d still running", r.Outcome, r.Survivors)
+	}
 	if r.Err != nil {
 		outcome = "failed: " + r.Err.Error()
 		logger.Warning(d.log, r.Err, fmt.Sprintf("reclaiming the orphaned %s %d", r.Row.Kind, r.Row.PID))
