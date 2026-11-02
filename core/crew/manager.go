@@ -39,6 +39,10 @@ type Manager struct {
 	// reclaimKey, in memory alone: a daemon restart starts every clock over
 	bridgeMu   sync.Mutex
 	bridgeSeen map[string]time.Time
+	// bridgeTries is how many of each orphan's reclaims left processes running (incomplete), and
+	// bridgeLeft how many its last one left; past reclaimRetries it is flagged and left alone
+	bridgeTries map[string]int
+	bridgeLeft  map[string]int
 }
 
 // endpointSecret is a session's endpoint secret and the generation it belongs to.

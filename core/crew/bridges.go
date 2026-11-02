@@ -92,6 +92,10 @@ type BridgeRow struct {
 	// ReclaimAt is when the daemon reclaims this orphan if it stays one for the same reason, Unix
 	// seconds; 0 until the daemon's own look has seen it orphaned, and for every other row.
 	ReclaimAt int64 `json:"reclaim_at,omitempty"`
+	// ReclaimStopped is an orphan whose reclaims left processes running reclaimRetries+1 times: the
+	// daemon tries no more, and the user ends it (or not). Survivors is how many its last left.
+	ReclaimStopped bool `json:"reclaim_stopped,omitempty"`
+	Survivors      int  `json:"survivors,omitempty"`
 }
 
 // BridgeKilled is what crew.bridge_kill did.
@@ -192,7 +196,16 @@ func (m *Manager) Bridges(ctx context.Context) ([]BridgeRow, error) {
 	}
 	m.bridgeMu.Lock()
 	for i := range rows {
-		if first, ok := m.bridgeSeen[reclaimKey(rows[i])]; ok && rows[i].State == BridgeOrphan {
+		if rows[i].State != BridgeOrphan {
+			continue
+		}
+		k := reclaimKey(rows[i])
+		rows[i].Survivors = m.bridgeLeft[k]
+		if m.bridgeTries[k] > reclaimRetries {
+			rows[i].ReclaimStopped = true // the daemon gave up on it: the user's to end
+			continue
+		}
+		if first, ok := m.bridgeSeen[k]; ok {
 			rows[i].ReclaimAt = first.Add(reclaimAfter).Unix()
 		}
 	}
