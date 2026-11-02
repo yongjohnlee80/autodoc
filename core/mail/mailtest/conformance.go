@@ -435,8 +435,8 @@ func testARenewKeepsTheLease(t *testing.T, h Harness) {
 
 // A show reads a delivery the caller holds again, read-only: the same message and sender as its
 // receive gave, by its delivery's id or its message's (with the lease), and its lease, lease_until
-// and attempts are as they were. Another session's show, another lease, a lapsed lease and an acked
-// delivery are each a lost lease.
+// and attempts are as they were. Another session's show, another lease and a lapsed lease are each a
+// lost lease; an acked delivery is done (mail.done).
 func testAShowReadsAHeldDeliveryAgain(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Subject: "plan", Body: "the whole plan", Key: "k"})
