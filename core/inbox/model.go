@@ -60,6 +60,8 @@ type Store interface {
 type Mail interface {
 	Answer(ctx context.Context, message, body, key string) (mail.Message, error)
 	SendAsUser(ctx context.Context, scope, run string, epoch int64, p mail.Send) (mail.Sent, error)
+	// SendAsAssigner is an assignment's mail, from its recorded maker (mail.Manager's).
+	SendAsAssigner(ctx context.Context, scope, run string, epoch int64, by string, p mail.Send) (mail.Sent, error)
 	Dismiss(ctx context.Context, message string) error
 	Read(ctx context.Context, message string) error
 	// Fallback is one fallback job as the feed shows it (mail.Manager's Fallback).

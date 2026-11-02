@@ -632,11 +632,14 @@ Neovim's notifier never delivers `autodoc:` assignees, so the window does.
   over itself ([the user's own sends](#the-users-own-sends)). So the feed skips an assignment made
   in its own scope, and only that: one made in another window's scope, or any scope a caller
   passed, is delivered to the agent's own window, so no assignment falls between two windows.
-- **A notice, not the user's task:** the window mails it from `user`, kind message, subject
-  `[todos] task assigned to you: <title>`. The body states the assignment, not who made it ("You've
-  been assigned a new task."), then the task's id, title and file, and the reason quoted as the
-  note, word for word as Neovim's notifier writes its own. It carries no `peer` field (it is a
-  host's notice). A request from `user` headed `Task:` is the user's own instruction.
+- **A notice, not the user's task:** kind message, subject `[todos] task assigned to you:
+  <title>`. The body states the assignment ("You've been assigned a new task."), then the task's
+  id, title and file, and the reason quoted as the note, word for word as Neovim's notifier writes
+  its own. A request from `user` headed `Task:` is the user's own instruction.
+- **From whoever made it** ([todos: An assignment says who made it](todos.md#an-assignment-says-who-made-it)):
+  one the user's surface made comes from `user` (`inbox.send`). One an agent made goes through
+  `inbox.forward`, and the daemon sends it from that agent, with the `peer` field, so a peer's
+  reason is never read as the user's. An unverified maker's comes from `autodoc`, saying so.
 - **Queued, not fired:** the daemon wakes the agent as for any mail, and a stopped agent finds it
   when it starts. The mail's key is the change's, `todo-<store>-<seq>`, so an ask after a lost
   answer never mails it twice. A change whose send has no outcome stays unacked and is read again.

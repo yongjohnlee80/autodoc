@@ -65,21 +65,28 @@ type Edit struct {
 	// changed: a scope belongs only to the assign that set the assignee
 	// (docs/decisions/todos.md#an-assignment-carries-its-assigners-scope).
 	Scope *string
+	// By is who made that assign (Change.By), given to its Put rows as Scope is, by the same rule
+	// (docs/decisions/todos.md#an-assignment-says-who-made-it).
+	By *string
 }
 
-// Scoped is e's Put rows with their scopes: e.Scope when set, else each row's task's prior scope
-// where prior (the store's row of that id before e, if any) has the same assignee, else none. A
-// journal applies these, so every journal keeps one rule.
+// Scoped is e's Put rows with their scopes and makers: e.Scope and e.By when e.Scope is set (an
+// assign), else each row's task's prior scope and maker where prior (the store's row of that id
+// before e, if any) has the same assignee, else none. A journal applies these, so every journal
+// keeps one rule.
 func (e Edit) Scoped(prior func(id string) (SnapshotRow, bool)) []SnapshotRow {
 	out := make([]SnapshotRow, len(e.Put))
 	for i, r := range e.Put {
 		switch was, ok := prior(r.ID); {
 		case e.Scope != nil:
-			r.Scope = *e.Scope
+			r.Scope, r.By = *e.Scope, ""
+			if e.By != nil {
+				r.By = *e.By
+			}
 		case ok && was.Assignee == r.Assignee:
-			r.Scope = was.Scope
+			r.Scope, r.By = was.Scope, was.By
 		default:
-			r.Scope = ""
+			r.Scope, r.By = "", ""
 		}
 		out[i] = r
 	}

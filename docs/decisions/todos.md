@@ -113,6 +113,39 @@ instead, an opaque string such as its project, and AutoDoc carries it without re
 
 In the code: `core/todo/journal.go`, `core/todo/types.go`, `core/todo/ops.go`, `rpc/server.go`
 
+## An assignment says who made it
+
+A window agent takes mail from `user` as the user's own instruction. An assignment the window
+forwards must therefore come from whoever really made it, or a peer's `todos.assign` reason would
+read as the user's.
+
+- **A verified caller.** `autodoc --call` run inside a crew session (`$AUTODOC_CREW_CONTEXT` set)
+  sends that session's credential and store in its `sys.hello` (`crew`). The daemon verifies it
+  once, with the crew's own check, and keeps the caller on the connection as `codename@scope`. It
+  never keeps, logs or answers the credential. A crew key that doesn't verify (a context the CLI
+  couldn't read, a session gone) makes the caller an unverified agent, never the user. A hello with
+  no crew key (a window, Neovim, a shell with no crew context, any client before protocol 48) is the
+  user's surface, as before.
+- **The change records it.** An assign change (`todos.assign`, and `todos.add` with an assignee)
+  carries `by`: the caller's `codename@scope`, the unverified marker, or `""` for the user's
+  surface. It is kept on the snapshot row as the assigner's scope is, returned by `todos.changes`
+  and a resync, and cleared with it when anything else changes the assignee.
+- **The forward is the maker's.** The window's feed sends an assignment with `by` `""` as the
+  user's mail (`inbox.send`). Any other goes through `inbox.forward`, which names only the change
+  (store and seq, or a resync's task). The daemon looks up `by` itself and sends the mail from that
+  agent's own profile, so it arrives with the peer marker and a reply reaches the agent. An
+  unverified maker, or one no longer in the crew, is sent from `autodoc`, the body opening with a
+  line that its maker couldn't be verified. The key is the change's on both paths, so a resend
+  never mails twice.
+
+What `by` proves: that a call carrying a crew context was that agent's. What it doesn't: an agent
+that unsets `$AUTODOC_CREW_CONTEXT` before `autodoc --call` is taken for the user's shell. Tying a
+call to its process (the socket peer's pid against the crew sessions' processes) would close that,
+and is left for later.
+
+In the code: `app/call.go`, `rpc/sys.go`, `core/crew/auth.go`, `core/todo/ops.go`,
+`core/todo/assignedby.go`, `core/inbox/manager.go`, `core/mail/send.go`, `tui/crewtodos.go`
+
 ## AutoDoc's own todos view
 
 The TUI and GUI show the todo stores in a native view, reached with `SPC x` or the Todos menu. It
@@ -353,5 +386,7 @@ In the code: `core/todo/storevars.go`, `core/todo/daily.go`, `core/todo/types.go
 
 `autodoc --call` sends its pid, its working directory and, when it has one, its agent's mailbox id in
 its hello. They go into the session's client token, so a todo event names who caused it.
+Inside a crew session it also sends the session's credential, which the daemon verifies and never
+keeps (see [An assignment says who made it](#an-assignment-says-who-made-it)).
 
 In the code: `app/call.go`, `rpc/events.go`, `rpc/who_test.go`
