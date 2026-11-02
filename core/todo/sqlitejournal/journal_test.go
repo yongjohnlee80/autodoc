@@ -228,7 +228,7 @@ func TestTheTodoLogLookupsUseTheirIndex(t *testing.T) {
 		"SELECT seq FROM todo_change WHERE store = 'A' AND state IN ('pending', 'staged') ORDER BY seq":           "todo_change_store",
 		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' AND seq > 5 ORDER BY seq LIMIT 10": "todo_change_store",
 		"SELECT seq FROM todo_change WHERE store = 'A' AND state = 'committed' ORDER BY seq DESC LIMIT 1":         "todo_change_store",
-		"SELECT assignee, scope FROM todo_snapshot WHERE store = 'A' AND id = 'x'":                                "todo_snapshot_id",
+		"SELECT assignee, scope, assigned_by FROM todo_snapshot WHERE store = 'A' AND id = 'x'":                   "todo_snapshot_id",
 	} {
 		rows, err := raw.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+q)
 		if err != nil {

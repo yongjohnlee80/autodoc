@@ -153,6 +153,9 @@ type crewWindow struct {
 	// inboxSend, when set, answers inbox.send (the user's doorbell) instead of the daemon: the
 	// messaging cells choose whether it fired (agentmessaging_test.go)
 	inboxSend func(p []any) (any, error)
+	// inboxForward, when set, answers inbox.forward (an assignment a peer made, sent by the daemon
+	// from its maker) instead of the daemon (crewtodos_test.go)
+	inboxForward func(p []any) (any, error)
 	// crewList, when set, answers crew.list instead of the daemon: the messaging cells choose what
 	// it says of a session's prompts
 	crewList func() (any, error)
@@ -177,6 +180,9 @@ func (w *crewWindow) Call(ctx context.Context, verb string, p ...any) (any, erro
 	}
 	if verb == "inbox.send" && w.inboxSend != nil {
 		return w.inboxSend(p)
+	}
+	if verb == "inbox.forward" && w.inboxForward != nil {
+		return w.inboxForward(p)
 	}
 	if verb == "crew.list" && w.crewList != nil {
 		return w.crewList()
