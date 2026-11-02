@@ -1,6 +1,5 @@
----The kb.* verbs AutoDoc registers with auto-core's command registry, so other plugins, and
----agents without a shell, reach the KB through the family's one command surface (`commands_list`
----shows them). Agents with a shell use `autodoc --call` directly, which needs no Neovim.
+---The kb.* verbs AutoDoc registers with auto-core's command registry (autodoc.registry), so other
+---plugins, and agents without a shell, reach the KB through the family's one command surface. Agents with a shell use `autodoc --call` directly, which needs no Neovim.
 ---
 ---  kb.info        the project's primary KB, the daemon's endpoint, version and protocols
 ---  kb.workspaces  the daemon's workspaces
@@ -92,11 +91,16 @@ M.SPECS = {
   },
 }
 
----register adds the verbs to auto-core's registry; a missing auto-core registers nothing.
+---register adds the verbs to auto-core's registry (autodoc.registry: auto-core.commands, else an
+---older auto-core's mailbox one); with neither, it registers nothing, and says so once.
 ---@return integer registered
 function M.register()
-  local ok, commands = pcall(require, "auto-core.mailbox.commands")
-  if not ok then return 0 end
+  local registry = require("autodoc.registry")
+  local commands = registry.get()
+  if not commands then
+    registry.missing("autodoc", vim.tbl_keys(M.SPECS))
+    return 0
+  end
   local n = 0
   for name, spec in pairs(M.SPECS) do
     local rok = commands.register(name, { owner = M.OWNER, handler = spec.handler, schema = spec.schema,
