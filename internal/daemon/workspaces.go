@@ -382,7 +382,7 @@ func (m *Workspaces) event(id int64, kind, detail string) {
 }
 
 // revalidate queues the files of workspace id that its new schema applies to.
-func (m *Workspaces) revalidate(id int64) {
+func (m *Workspaces) revalidate(id int64) error {
 	m.mu.Lock()
 	var ix *index.Indexer
 	for _, s := range m.served {
@@ -392,11 +392,13 @@ func (m *Workspaces) revalidate(id int64) {
 	}
 	m.mu.Unlock()
 	if ix == nil {
-		return // not started yet: its first pass compares the new fingerprint itself
+		return nil // not started yet: its first pass compares the new fingerprint itself
 	}
 	if err := ix.Revalidate(m.ctx); err != nil {
 		logger.Warning(m.opts.Log, err, "revalidating files after a schema change")
+		return err
 	}
+	return nil
 }
 
 // SetSchema names a workspace's frontmatter schema file ("" for none) and reads it at once: a valid
