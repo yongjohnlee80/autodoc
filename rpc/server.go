@@ -213,7 +213,12 @@ import (
 // workspace.add's autodoc_dirs, each of AutoDoc's config, state or data folders the root holds or
 // lies inside, and workspace.add's warning. The add is never refused; a session below 49 ignores
 // the keys.
-const Protocol int64 = 49
+// Protocol 51 is what an answer did (docs/decisions/crew.md#an-answer-says-what-it-did): mail.ack
+// answers {delivery, state}, the delivery its handle resolved to (also when named by its message's
+// id) and acked or already_acked (a replay); mail.reply adds the same, replied; mail.inbox's held,
+// the deliveries the caller holds leased and hasn't answered. Additive: a client below 51 reads the
+// old keys alone.
+const Protocol int64 = 51
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

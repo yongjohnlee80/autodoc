@@ -324,8 +324,8 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 				continue
 			}
 			res := callMCPTool(ctx, p.Name, p.Arguments, session)
-			if n, ok := mailWaiting(ctx, session); ok {
-				res["content"] = append(res["content"].([]map[string]any), map[string]any{"type": "text", "text": waitingLine(n)})
+			if n, held, ok := mailWaiting(ctx, session); ok {
+				res["content"] = append(res["content"].([]map[string]any), map[string]any{"type": "text", "text": waitingLine(n, held)})
 			}
 			say(req.ID, res, nil)
 			select {
@@ -343,28 +343,42 @@ func crewMCPMain(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer)
 	return 0
 }
 
+// mcpHeldNote follows a footer's held count above 0: what a held delivery is, and what to do.
+const mcpHeldNote = "held: deliveries you received and haven't answered yet; answer each (mail_ack, or mail_reply for a request), or it comes to you again."
+
 // waitingLine is a tool result's last line: how much mail is waiting, and when there is some, to
-// receive it once the current step is done.
-func waitingLine(n int) string {
+// receive it once the current step is done; then how many deliveries the session holds unanswered,
+// so a forgotten ack shows on the next tool call.
+func waitingLine(n, held int) string {
+	line := "waiting: 0"
 	if n > 0 {
-		return fmt.Sprintf("waiting: %d. %s", n, mcpWaitingNote)
+		line = fmt.Sprintf("waiting: %d. %s", n, mcpWaitingNote)
 	}
-	return "waiting: 0"
+	if held > 0 {
+		return fmt.Sprintf("%s held: %d (%s)", line, held, mcpHeldNote)
+	}
+	return line + " held: 0"
 }
 
 // mailWaiting is how much mail the session may receive now (mail.inbox's count: it leases
-// nothing), and false when it can't be counted (no session, no daemon).
-func mailWaiting(ctx context.Context, session func() (sessionContext, error)) (int, bool) {
+// nothing) and how many deliveries it holds unanswered (mail.inbox's held), and false when it
+// can't be counted (no session, no daemon). A daemon before protocol 51 answers no held: 0.
+func mailWaiting(ctx context.Context, session func() (sessionContext, error)) (int, int, bool) {
 	c, err := session()
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	res, err := crewCall(ctx, c, "mail.inbox", []any{c.Credential, int64(0)})
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	m, _ := jsonOf(res).(map[string]any)
-	return countOf(m["unread"])
+	n, ok := countOf(m["unread"])
+	if !ok {
+		return 0, 0, false
+	}
+	held, _ := countOf(m["held"])
+	return n, held, true
 }
 
 // countOf is a count the daemon answered: msgpack's integer, of whichever width, or JSON's number.
@@ -402,7 +416,7 @@ func countOf(v any) (int, bool) {
 func mailWatch(ctx context.Context, session func() (sessionContext, error), acted <-chan struct{}, notify func()) {
 	told := 0
 	for ctx.Err() == nil {
-		n, ok := mailWaiting(ctx, session)
+		n, _, ok := mailWaiting(ctx, session)
 		if ctx.Err() != nil {
 			return
 		}
