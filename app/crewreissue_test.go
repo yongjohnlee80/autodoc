@@ -208,3 +208,27 @@ func TestReissueRefusesAnotherAgentsContext(t *testing.T) {
 		t.Errorf("%d calls and %d waits, want none", calls, rr.sleeps)
 	}
 }
+
+// TestReissueReportsAnEndpointOnlyOnceTheDaemonHasIt: a waker that returns without registering
+// (agy's bridge detaches first; a registration refused after the command) is not reported as
+// re-issued: reissue looks at crew.access for reissueConfirm, then says the endpoint wasn't.
+func TestReissueReportsAnEndpointOnlyOnceTheDaemonHasIt(t *testing.T) {
+	d := newCrewDaemon(t)
+	path := d.agentOfKind("tifa", "agent-1", "store-1", "agy")
+	rr := newReissueRig(d, nil)
+	rr.r.register = func(context.Context, sessionContext, string) error { rr.registers++; return nil } // ran, registered nothing
+	res, err := reissue(d.ctx, func() (sessionContext, error) { return readSessionContext(path) }, reissueWait, rr.r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(res.Reissued, reissueEndpoint) || len(res.Not) != 1 || res.Not[0].Item != reissueEndpoint ||
+		!strings.Contains(res.Not[0].Why, "no endpoint") {
+		t.Fatalf("a waker that registered nothing: %+v, want the endpoint not re-issued, saying so", res)
+	}
+	if want := int(reissueConfirm / reissueEvery); rr.sleeps != want || rr.registers != 1 {
+		t.Errorf("%d looks and %d registrations, want %d looks and 1", rr.sleeps, rr.registers, want)
+	}
+	if e := listed(t, d, "tifa"); e.Reachable {
+		t.Errorf("crew list: %+v, want tifa still unreachable", e)
+	}
+}
