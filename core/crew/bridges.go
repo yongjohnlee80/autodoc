@@ -305,10 +305,46 @@ func (m *Manager) joinBridge(tx Tx, r *BridgeRow, p helperProc, servers map[stri
 	return nil
 }
 
-// serverOwner is the session of this store that a Codex server's own session context names, ""
-// when none is proven: no context, an unreadable one, another store's, or a session this store
-// doesn't hold.
+// codexServerOf is a Codex endpoint's own app-server: its socket (socketKey) and the process now
+// listening there (ProcRef), found by the helper scan; "" for another kind, a locator naming no
+// server, and the process when none is found (then nothing proves the server this store's).
+func (m *Manager) codexServerOf(kind, locator string) (string, string) {
+	if kind != "codex" {
+		return "", ""
+	}
+	var l codexLocator
+	if json.Unmarshal([]byte(locator), &l) != nil || l.Server == "" {
+		return "", ""
+	}
+	server := socketKey(l.Server)
+	procs, err := scanHelpers(m.uid)
+	if err != nil {
+		return server, ""
+	}
+	for _, p := range procs {
+		if p.kind == BridgeCodexServer && socketKey(p.socket) == server {
+			return server, p.ref
+		}
+	}
+	return server, ""
+}
+
+// serverOwner is the session of this store that a Codex server is proven to serve, "" when none
+// is: first a session, live or ended, whose endpoint recorded this socket AND this very process
+// (its ProcRef: a socket path alone could be a later server's); else the session its own session
+// context names, while that file lasts: this store's, and one this store holds.
 func (m *Manager) serverOwner(tx Tx, p helperProc) (string, error) {
+	if p.ref != "" {
+		recorded, err := tx.SessionsByServer(socketKey(p.socket))
+		if err != nil {
+			return "", err
+		}
+		for _, s := range recorded {
+			if s.ServerRef == p.ref {
+				return s.ID, nil
+			}
+		}
+	}
 	if p.context == "" {
 		return "", nil
 	}
