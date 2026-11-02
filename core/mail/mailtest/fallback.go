@@ -92,12 +92,33 @@ func (r *fbRig) look() {
 	r.sched.Wait()
 }
 
-// reachable gives gold's session an endpoint, registered now: woken, not unreachable.
+// reachable gives gold's session its endpoint's first generation, registered now: woken, not
+// unreachable.
 func (r *fbRig) reachable() {
 	r.t.Helper()
+	now := r.clock.Now().UnixNano()
+	r.putEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: r.kind, Registered: now})
+}
+
+// reregistered is gold's endpoint registered again now (a resume, a compaction): its generation one
+// higher.
+func (r *fbRig) reregistered() {
+	r.t.Helper()
+	var e crew.Endpoint
 	if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error {
-		return tx.PutEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: r.kind, Registered: r.clock.Now().UnixNano()})
+		var err error
+		e, _, err = tx.Endpoint(r.session)
+		return err
 	}); err != nil {
+		r.t.Fatal(err)
+	}
+	e.Generation, e.Registered = e.Generation+1, r.clock.Now().UnixNano()
+	r.putEndpoint(e)
+}
+
+func (r *fbRig) putEndpoint(e crew.Endpoint) {
+	r.t.Helper()
+	if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error { return tx.PutEndpoint(e) }); err != nil {
 		r.t.Fatal(err)
 	}
 }
@@ -310,6 +331,38 @@ func testTheNextFallbackIsTheSessionsStartPlusTheWindow(t *testing.T, h Harness)
 	r.sweep()
 	if at := next(); at != want || len(r.st.Inspect.Jobs()) != 0 {
 		t.Fatalf("past the send + 10 min: next %d (want %d), jobs %+v", at, want, r.st.Inspect.Jobs())
+	}
+}
+
+// An endpoint registered again (a resume, a compaction, a refresh) moves no fallback window: a
+// Codex session's mail still falls back fallbackWindow from its send, its endpoint refreshed at 9
+// min; a Claude's, fallbackWindow from its first endpoint, whatever generation came later. Both
+// stores' due and next deadline say the same.
+func testARegisteredAgainEndpointMovesNoFallbackWindow(t *testing.T, h Harness) {
+	for _, c := range []struct {
+		name   string
+		rig    func(*testing.T, Harness) *fbRig
+		before time.Duration // from the send to the endpoint's first registration
+	}{{"codex", newFallbackRig, 0}, {"claude", newClaudeFallbackRig, 3 * time.Minute}} {
+		r := c.rig(t, h)
+		r.poll()
+		d := r.send()
+		r.clock.Advance(c.before)
+		r.reachable()
+		opened := r.clock.Now()
+		r.clock.Advance(9 * time.Minute)
+		r.reregistered()
+		if at, has := r.nextDeadline(); !has || at != opened.Add(fallbackWindow).UnixNano() {
+			t.Fatalf("%s: the next deadline %v after its window opened (has %v), want %v", c.name, time.Duration(at-opened.UnixNano()), has, fallbackWindow)
+		}
+		r.clock.Advance(opened.Add(fallbackWindow - time.Nanosecond).Sub(r.clock.Now()))
+		if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+			t.Fatalf("%s: 10 min less 1 ns after its window opened: %+v; want nothing yet", c.name, got)
+		}
+		r.clock.Advance(time.Nanosecond)
+		if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+			t.Fatalf("%s: 10 min after its window opened, its endpoint registered again at 9: %+v, want its job", c.name, got)
+		}
 	}
 }
 

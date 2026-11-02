@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
@@ -120,6 +121,24 @@ func TestTheUsersSendToAClaudeThatHasntStartedWaitsAsMail(t *testing.T) {
 	}
 	if len(heard) != 1 || heard[0] != nil || !slices.Equal(fired, []bool{true, false}) {
 		t.Fatalf("heard %v, inbox.send fired %v: want the doorbell, then the message mailed unfired, done once", heard, fired)
+	}
+}
+
+// A Claude that hasn't started, its window's lease lapsed meanwhile (a stalled renewal): crew.list
+// says host_gone before it looks for an endpoint, so it says nothing of one, and nothing is typed:
+// only what proves the endpoint registered counts as started, and nothing is kept as started (the
+// mutant: any why but ended and no_endpoint taken for started).
+func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
+	a, c, w, instance := claudeRig(t)
+	w.d.clock.Advance(91 * time.Second) // past the lease, and the daemon that old
+	var heard []error
+	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+	settleMessaging(c, w)
+	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
+		t.Fatalf("pasted %q, pressed %q into a Claude whose host's lease lapsed, with no endpoint: want nothing", c.panel.pastes, c.panel.keys)
+	}
+	if len(heard) != 1 || heard[0] == nil || instance.started != "" {
+		t.Fatalf("heard %v, kept as started %q: want it ended unsent, nothing kept", heard, instance.started)
 	}
 }
 

@@ -75,6 +75,7 @@ func Run(t *testing.T, h Harness) {
 		{"TheNextFallbackIsTheSessionsStartPlusTheWindow", testTheNextFallbackIsTheSessionsStartPlusTheWindow},
 		{"AClaudeThatNeverStartedKeepsItsMailQueued", testAClaudeThatNeverStartedKeepsItsMailQueued},
 		{"AClaudesFallbackWindowOpensWhenItStarts", testAClaudesFallbackWindowOpensWhenItStarts},
+		{"ARegisteredAgainEndpointMovesNoFallbackWindow", testARegisteredAgainEndpointMovesNoFallbackWindow},
 		{"AThreeMinuteGapEndsInAReceiveNotAFallback", testAThreeMinuteGapEndsInAReceiveNotAFallback},
 		{"AHostTakesFallbacksOnlyOnceItPollsInItsEpoch", testAHostTakesFallbacksOnlyOnceItPollsInItsEpoch},
 		{"AReceiveRacingAFallbackLeavesOneOutcome", testAReceiveRacingAFallbackLeavesOneOutcome},
