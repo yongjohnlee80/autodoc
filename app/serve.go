@@ -307,22 +307,33 @@ func (d *process) reclaimBridges() {
 			case <-ctx.Done():
 				return
 			case now := <-t.C:
-				reclaimed, err := d.deps.crew.Reclaim(ctx, now)
-				if errors.Is(err, crew.ErrNoBridges) {
-					logger.Info(d.log, "orphaned crew helpers aren't reclaimed here: the daemon reads the machine's processes on Linux only")
+				if !d.reclaimOnce(ctx, now, d.deps.crew.Reclaim) {
 					return
-				}
-				if err != nil {
-					logger.Warning(d.log, err, "the look for orphaned crew helpers")
-					continue
-				}
-				for _, r := range reclaimed {
-					bridgeReclaimed(d.deps, r)
 				}
 			}
 		}
 	}()
 	d.stops.push(func() { cancel(); <-done })
+}
+
+// reclaimOnce is one look of reclaimBridges' (reclaim, the crew's Reclaim): each helper it ended
+// journaled. keepLooking is false only on a system whose processes it can't read (ErrNoBridges); a
+// look that failed is warned of, and the next one comes as usual.
+func (d *process) reclaimOnce(ctx context.Context, now time.Time,
+	reclaim func(context.Context, time.Time) ([]crew.Reclaimed, error)) (keepLooking bool) {
+	reclaimed, err := reclaim(ctx, now)
+	if errors.Is(err, crew.ErrNoBridges) {
+		logger.Info(d.log, "orphaned crew helpers aren't reclaimed here: the daemon reads the machine's processes on Linux only")
+		return false
+	}
+	if err != nil {
+		logger.Warning(d.log, err, "the look for orphaned crew helpers")
+		return true
+	}
+	for _, r := range reclaimed {
+		bridgeReclaimed(d.deps, r)
+	}
+	return true
 }
 
 // bridgeReclaimed journals one helper the daemon's look ended, in sys.events (crew.bridge_reclaimed):
