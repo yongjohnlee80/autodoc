@@ -131,7 +131,7 @@ section("[1] subscriptions: none at load, all in setup(), gone after teardown()"
     core.events.count_subscribers("worktree:switched") == before_sw)
   ok("module load subscribes to nothing (core.file:modified)",
     core.events.count_subscribers("core.file:modified") == before_fm)
-  ok("module load registers no verb", core.mailbox.commands.get("preview.attach") == nil)
+  ok("module load registers no verb", require("autodoc.registry").get().get("preview.attach") == nil)
   P.setup({ opener = opener })
   ok("setup subscribes to worktree:switched",
     core.events.count_subscribers("worktree:switched") == before_sw + 1)
@@ -145,7 +145,7 @@ section("[1] subscriptions: none at load, all in setup(), gone after teardown()"
     core.events.count_subscribers("worktree:switched") == before_sw)
   ok("teardown unsubscribes core.file:modified",
     core.events.count_subscribers("core.file:modified") == before_fm)
-  ok("teardown unregisters the verbs", core.mailbox.commands.get("preview.attach") == nil)
+  ok("teardown unregisters the verbs", require("autodoc.registry").get().get("preview.attach") == nil)
 end)
 
 local P = require("autodoc.preview")
@@ -709,9 +709,9 @@ section("[9] find lists any Markdown file under cwd (not only KB files)", functi
   P.close_all()
 end)
 
--- ── [10] mailbox verbs ────────────────────────────────────────────────────
-section("[10] mailbox verbs preview.attach / view / browser (owner autodoc)", function()
-  local cmds = core.mailbox.commands
+-- ── [10] registry verbs ───────────────────────────────────────────────────
+section("[10] registry verbs preview.attach / view / browser (owner autodoc)", function()
+  local cmds = require("autodoc.registry").get()
   for _, name in ipairs({ "preview.attach", "preview.view", "preview.browser" }) do
     local spec = cmds.get(name)
     ok(name .. " registered by autodoc", spec and spec.owner == "autodoc")

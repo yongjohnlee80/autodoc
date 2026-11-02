@@ -111,7 +111,7 @@ t.section("the save hook", function()
 end)
 
 t.section("verbs", function()
-  local commands = require("auto-core.mailbox.commands")
+  local commands = require("autodoc.registry").get()
   local spec = commands.get("kb.workspaces")
   t.ok(spec ~= nil and spec.owner == "autodoc", "kb.workspaces is registered by autodoc")
   local list = spec and spec.handler({}, {}) or {}
