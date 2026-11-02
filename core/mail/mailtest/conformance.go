@@ -51,6 +51,7 @@ func Run(t *testing.T, h Harness) {
 		{"ALapsedLeaseIsRedeliveredThenFails", testALapsedLeaseIsRedeliveredThenFails},
 		{"ARenewKeepsTheLease", testARenewKeepsTheLease},
 		{"AShowReadsAHeldDeliveryAgain", testAShowReadsAHeldDeliveryAgain},
+		{"AShowNeverReadsAnExpiredMessage", testAShowNeverReadsAnExpiredMessage},
 		{"AnExpiredMessageEnds", testAnExpiredMessageEnds},
 		{"AReplyAnswersARequestOnce", testAReplyAnswersARequestOnce},
 		{"AMessagesIDWithItsLeaseNamesTheItem", testAMessagesIDWithItsLeaseNamesTheItem},
@@ -472,6 +473,21 @@ func testAShowReadsAHeldDeliveryAgain(t *testing.T, h Harness) {
 	}
 	if _, err := r.m.Show(r.ctx, "s-gold", held.ID, held.Lease); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Errorf("a show after the ack: %v, want a lost lease", err)
+	}
+}
+
+// A show never reads a message past its expiry, though the lease that holds it is live: the message
+// has ended, as a receive would say, and the show writes nothing (the next write expires it).
+func testAShowNeverReadsAnExpiredMessage(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "b", Key: "k", TTL: time.Minute})
+	d := r.receive("s-gold").Items[0].Delivery
+	r.clock.Advance(2 * time.Minute) // the lease (LeaseFor) is live, the message expired
+	if _, err := r.m.Show(r.ctx, "s-gold", d.ID, d.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+		t.Errorf("a show of an expired message: %v, want a lost lease", err)
+	}
+	if got := r.delivery(d.ID); got.State != mail.Leased || got.Lease != d.Lease {
+		t.Errorf("the show wrote the delivery: %+v", got)
 	}
 }
 
