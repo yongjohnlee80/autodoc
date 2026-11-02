@@ -141,15 +141,20 @@ var _ script.Grants = luaGrants{}
 
 // grantAnswered tells the requester the user's answer: an agent (agent:<codename>), by the crew,
 // as the user's own mail, so it retries the refused call, or stops, instead of retrying blind
-// (crew.grantAnswered). A Lua script or plugin package hears nothing yet. A window with no crew
-// scope says nothing; the refusal it gave says so too (editorVerb).
+// (crew.grantAnswered); a window with no crew scope says nothing, and the refusal it gave says so
+// too (editorVerb). A gated Lua script or package (plugin:<name> for a plugin's) hears the grant
+// event, its own handlers only (luaevents.go), so it can resume what the refusal stopped.
 func (h *Host) grantAnswered(requester string, caps []string, allowed bool) {
 	if h.onGrantAnswered != nil {
 		h.onGrantAnswered(requester, caps, allowed)
 	}
-	if codename, ok := strings.CutPrefix(requester, "agent:"); ok && h.crew != nil {
-		h.crew.grantAnswered(codename, caps, allowed)
+	if codename, ok := strings.CutPrefix(requester, "agent:"); ok {
+		if h.crew != nil {
+			h.crew.grantAnswered(codename, caps, allowed)
+		}
+		return
 	}
+	h.emitLuaFor(requester, "grant", map[string]any{"capabilities": caps, "allowed": allowed})
 }
 
 // crewHeld is the window's crew scope, when it holds one.
