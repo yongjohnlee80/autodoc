@@ -237,7 +237,7 @@ func TestAProtocol22SessionSeesNoTodoRelations(t *testing.T) {
 	if back := call(t, old, "graph.backlinks", "kb", "b.md").([]any); len(back) != 0 {
 		t.Errorf("protocol 22's backlinks of b: %v, want none", back)
 	}
-	if un := call(t, cur, "graph.unresolved", "kb").([]any); len(un) != 0 {
+	if un := call(t, cur, "graph.unresolved", "kb").(map[string]any)["unresolved"].([]any); len(un) != 0 {
 		t.Errorf("an external link is listed unresolved: %v", un)
 	}
 	// asked for by name, a kind protocol 23 added is refused below it, in every graph verb
