@@ -218,7 +218,12 @@ import (
 // graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with
 // opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 50
 // is refused both options and keeps the one-reply list.
-const Protocol int64 = 50
+// Protocol 51 is what an answer did (docs/decisions/crew.md#an-answer-says-what-it-did): mail.ack
+// answers {delivery, state}, the delivery its handle resolved to (also when named by its message's
+// id) and acked or already_acked (a replay); mail.reply adds the same, replied; mail.inbox's held,
+// the deliveries the caller holds leased and hasn't answered. Additive: a client below 51 reads the
+// old keys alone.
+const Protocol int64 = 51
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

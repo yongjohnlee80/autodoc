@@ -45,6 +45,7 @@ func Run(t *testing.T, h Harness) {
 		fn   func(*testing.T, Harness)
 	}{
 		{"ASendIsReceivedLeasedAndAcked", testASendIsReceivedLeasedAndAcked},
+		{"AnInboxCountsTheDeliveriesHeldUnanswered", testAnInboxCountsTheDeliveriesHeldUnanswered},
 		{"ASendsKeyMakesOneMessage", testASendsKeyMakesOneMessage},
 		{"ASendsAddresses", testASendsAddresses},
 		{"ABareNameReachesTheOneOtherScope", testABareNameReachesTheOneOtherScope},
@@ -258,15 +259,17 @@ func testASendIsReceivedLeasedAndAcked(t *testing.T, h Harness) {
 		t.Fatalf("the receive: %+v", got)
 	}
 	d := got.Items[0].Delivery
-	if err := r.m.Ack(r.ctx, "s-gold", d.ID, "another"); !errors.Is(err, mail.ErrLeaseLost) {
+	if _, err := r.m.Ack(r.ctx, "s-gold", d.ID, "another"); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Fatalf("an ack under another lease: %v", err)
 	}
-	if err := r.m.Ack(r.ctx, "s-jarvis", d.ID, d.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+	if _, err := r.m.Ack(r.ctx, "s-jarvis", d.ID, d.Lease); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Fatalf("an ack by a session that is not the recipient's: %v", err)
 	}
-	for range 2 {
-		if err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease); err != nil {
-			t.Fatalf("an ack, then its replay: %v", err)
+	// the ack answers what it did: the delivery, acked; its replay, already_acked
+	for i, want := range []mail.AnswerState{mail.AnsweredAcked, mail.AnsweredAlreadyAcked} {
+		a, err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease)
+		if err != nil || a.Delivery != d.ID || a.State != want {
+			t.Fatalf("ack %d: %+v %v; want {%s %s}", i+1, a, err, d.ID, want)
 		}
 	}
 	if st := r.delivery(d.ID).State; st != mail.Acked {
@@ -425,7 +428,7 @@ func testARenewKeepsTheLease(t *testing.T, h Harness) {
 		t.Fatal(err)
 	}
 	r.clock.Advance(2 * time.Second)
-	if err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease); err != nil {
+	if _, err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease); err != nil {
 		t.Fatalf("an ack after the renew: %v", err)
 	}
 	if got := r.delivery(d.ID); got.Attempts != 0 {
@@ -476,7 +479,7 @@ func testAShowReadsAHeldDeliveryAgain(t *testing.T, h Harness) {
 			held = it.Delivery
 		}
 	}
-	if err := r.m.Ack(r.ctx, "s-gold", held.ID, held.Lease); err != nil {
+	if _, err := r.m.Ack(r.ctx, "s-gold", held.ID, held.Lease); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.m.Show(r.ctx, "s-gold", held.ID, held.Lease); !errors.Is(err, mail.ErrLeaseLost) {
@@ -534,18 +537,22 @@ func testAReplyAnswersARequestOnce(t *testing.T, h Harness) {
 	req := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "q?", Key: "k"})
 	d := r.receive("s-gold").Items[0].Delivery
 	p := mail.Reply{Body: "a", Key: "r"}
-	resp, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, p)
+	resp, a, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, p)
 	if err != nil || resp.ReplyTo != req.Message.ID || resp.Kind != mail.KindResponse {
 		t.Fatalf("the reply: %+v %v", resp, err)
+	}
+	if a.Delivery != d.ID || a.State != mail.AnsweredReplied {
+		t.Fatalf("the reply answered %+v; want {%s replied}", a, d.ID)
 	}
 	if r.delivery(d.ID).State != mail.Acked {
 		t.Fatal("the request's delivery is not acked")
 	}
-	if again, err := r.m.Reply(r.ctx, "s-gold", d.ID, "stale", p); err != nil || again.ID != resp.ID {
-		t.Fatalf("the retry: %+v %v", again, err)
+	if again, a, err := r.m.Reply(r.ctx, "s-gold", d.ID, "stale", p); err != nil || again.ID != resp.ID ||
+		a.Delivery != d.ID || a.State != mail.AnsweredReplied {
+		t.Fatalf("the retry: %+v %+v %v; want the same response, {%s replied}", again, a, err, d.ID)
 	}
 	p.Body = "changed"
-	if _, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, p); !errors.Is(err, mail.ErrKeyReused) {
+	if _, _, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, p); !errors.Is(err, mail.ErrKeyReused) {
 		t.Fatalf("a second, different reply: %v", err)
 	}
 	got := r.receive("s-jarvis")
@@ -553,7 +560,7 @@ func testAReplyAnswersARequestOnce(t *testing.T, h Harness) {
 		t.Fatalf("the requester's receive: %+v", got)
 	}
 	m := got.Items[0].Delivery
-	if _, err := r.m.Reply(r.ctx, "s-jarvis", m.ID, m.Lease, mail.Reply{Body: "x", Key: "r2"}); !errors.Is(err, mail.ErrInvalid) {
+	if _, _, err := r.m.Reply(r.ctx, "s-jarvis", m.ID, m.Lease, mail.Reply{Body: "x", Key: "r2"}); !errors.Is(err, mail.ErrInvalid) {
 		t.Fatalf("a reply to a response: %v", err)
 	}
 }
@@ -568,28 +575,28 @@ func testAMessagesIDWithItsLeaseNamesTheItem(t *testing.T, h Harness) {
 	req := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "q?", Key: "k"})
 	d := r.receive("s-gold").Items[0].Delivery
 	msg := req.Message.ID
-	if _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
+	if _, _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Fatalf("the message's id with another lease: %v, want lease lost", err)
 	}
 	if err := r.m.Renew(r.ctx, "s-gold", msg, d.Lease); err != nil {
 		t.Fatalf("a renew by the message's id and the lease: %v", err)
 	}
-	resp, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)})
+	resp, _, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)})
 	if err != nil || resp.ReplyTo != msg || resp.Kind != mail.KindResponse || resp.IdemKey != mail.ReplyKey(d.ID) {
 		t.Fatalf("the reply by the message's id: %+v %v; want the response, keyed as the delivery's", resp, err)
 	}
 	if r.delivery(d.ID).State != mail.Acked {
 		t.Fatal("the request's delivery is not acked")
 	}
-	if again, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(d.ID)}); err != nil || again.ID != resp.ID {
+	if again, _, err := r.m.Reply(r.ctx, "s-gold", d.ID, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(d.ID)}); err != nil || again.ID != resp.ID {
 		t.Fatalf("the same reply by the delivery's id: %+v %v; want the one response", again, err)
 	}
-	if again, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); err != nil || again.ID != resp.ID {
+	if again, _, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); err != nil || again.ID != resp.ID {
 		t.Fatalf("the reply by the message's id again: %+v %v; want the one response", again, err)
 	}
 	// the message's id names the item only with its lease: a retry by it with another lease isn't
 	// handed the response, as a retry by the delivery's own id is
-	if _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
+	if _, _, err := r.m.Reply(r.ctx, "s-gold", msg, "another", mail.Reply{Body: "a", Key: mail.ReplyKey(msg)}); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Fatalf("a retry by the message's id with another lease: %v, want lease lost", err)
 	}
 	if got := r.receive("s-jarvis"); len(got.Items) != 1 || got.Items[0].Message.ID != resp.ID {
@@ -600,11 +607,13 @@ func testAMessagesIDWithItsLeaseNamesTheItem(t *testing.T, h Harness) {
 	theirs := r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "not gold's", Key: "k3"})
 	pd := r.receive("s-gold").Items[0].Delivery
 	zd := r.receive("s-zen").Items[0].Delivery
-	if err := r.m.Ack(r.ctx, "s-gold", theirs.Message.ID, zd.Lease); !errors.Is(err, mail.ErrLeaseLost) {
+	if _, err := r.m.Ack(r.ctx, "s-gold", theirs.Message.ID, zd.Lease); !errors.Is(err, mail.ErrLeaseLost) {
 		t.Fatalf("an ack of another's message by its id and their lease: %v, want lease lost", err)
 	}
-	if err := r.m.Ack(r.ctx, "s-gold", plain.Message.ID, pd.Lease); err != nil || r.delivery(pd.ID).State != mail.Acked {
-		t.Fatalf("an ack by the message's id and the lease: %v, %s", err, r.delivery(pd.ID).State)
+	// named by its message's id, the ack answers the delivery that handle resolved to (D7)
+	if a, err := r.m.Ack(r.ctx, "s-gold", plain.Message.ID, pd.Lease); err != nil || r.delivery(pd.ID).State != mail.Acked ||
+		a.Delivery != pd.ID || a.State != mail.AnsweredAcked {
+		t.Fatalf("an ack by the message's id and the lease: %+v %v, %s; want {%s acked}", a, err, r.delivery(pd.ID).State, pd.ID)
 	}
 	if r.delivery(zd.ID).State != mail.Leased {
 		t.Fatal("another's delivery changed")
@@ -623,7 +632,7 @@ func testMergedProfilesForwardToTheirSurvivor(t *testing.T, h Harness) {
 	merge("p-old", "p-gold")
 	req := r.send("s-jarvis", mail.Send{To: []string{"session:s-gold"}, Body: "b", Key: "k0"})
 	d := r.receive("s-gold").Items[0].Delivery
-	if err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease); err != nil {
+	if _, err := r.m.Ack(r.ctx, "s-gold", d.ID, d.Lease); err != nil {
 		t.Fatal(err)
 	}
 	_ = req
@@ -637,7 +646,7 @@ func testMergedProfilesForwardToTheirSurvivor(t *testing.T, h Harness) {
 	})
 	q := r.send("s-c0", mail.Send{To: []string{"gold@p"}, Kind: mail.KindRequest, Body: "q", Key: "k1"})
 	gd := r.receive("s-gold").Items[0].Delivery
-	resp, err := r.m.Reply(r.ctx, "s-gold", gd.ID, gd.Lease, mail.Reply{Body: "a", Key: "r"})
+	resp, _, err := r.m.Reply(r.ctx, "s-gold", gd.ID, gd.Lease, mail.Reply{Body: "a", Key: "r"})
 	if err != nil {
 		t.Fatalf("a reply to a sender past the chain's limit still commits: %v", err)
 	}
@@ -666,7 +675,7 @@ func testMergedProfilesForwardToTheirSurvivor(t *testing.T, h Harness) {
 			gd2 = it.Delivery
 		}
 	}
-	resp2, err := r.m.Reply(r.ctx, "s-gold", gd2.ID, gd2.Lease, mail.Reply{Body: "a", Key: "r2"})
+	resp2, _, err := r.m.Reply(r.ctx, "s-gold", gd2.ID, gd2.Lease, mail.Reply{Body: "a", Key: "r2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1176,7 +1185,7 @@ func testNextDeadlineIsTheEarliestLive(t *testing.T, h Harness) {
 	// a finished delivery: its message's expiry (the earliest of all) must not count
 	done := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "done", Key: "k-done", TTL: time.Minute})
 	got := r.receive("s-gold")
-	if err := r.m.Ack(r.ctx, "s-gold", got.Items[0].Delivery.ID, got.Items[0].Delivery.Lease); err != nil {
+	if _, err := r.m.Ack(r.ctx, "s-gold", got.Items[0].Delivery.ID, got.Items[0].Delivery.Lease); err != nil {
 		t.Fatal(err)
 	}
 	_ = done
@@ -1234,7 +1243,7 @@ func testAnItemNamesItsSenderAsAnAddress(t *testing.T, h Harness) {
 		t.Fatalf("a reply to the advertised address: %v", err)
 	}
 	// handled: acked, so the clock below redelivers nothing of it alongside the notices
-	if err := r.m.Ack(r.ctx, "s-jarvis", merged.Items[0].Delivery.ID, merged.Items[0].Delivery.Lease); err != nil {
+	if _, err := r.m.Ack(r.ctx, "s-jarvis", merged.Items[0].Delivery.ID, merged.Items[0].Delivery.Lease); err != nil {
 		t.Fatal(err)
 	}
 	// a delivery that ends unhandled makes a notice from the daemon
@@ -1432,5 +1441,60 @@ func testTheUsersSendIsTheWindowsHostsAndFiredOrNothing(t *testing.T, h Harness)
 			t.Fatal(err) // the window's lease, as it renews it
 		}
 		_, _ = send(fmt.Sprintf("kf%d", i), true)
+	}
+}
+
+// testAnInboxCountsTheDeliveriesHeldUnanswered: mail.inbox's held is how many deliveries the session
+// holds leased and hasn't answered: none before a receive, each received one until it's acked or
+// replied to, never another session's, and not one whose lease has lapsed (it comes back as mail
+// waiting instead).
+func testAnInboxCountsTheDeliveriesHeldUnanswered(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.profile("p-zen", "autovim:p", "zen", "s-zen")
+	held := func(session string) int {
+		t.Helper()
+		in, err := r.m.Preview(r.ctx, session, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return in.Held
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "one", Key: "k1"})
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Kind: mail.KindRequest, Body: "two?", Key: "k2"})
+	r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "zen's", Key: "k3"})
+	if n := held("s-gold"); n != 0 {
+		t.Fatalf("before a receive: held %d, want 0", n)
+	}
+	got := r.receive("s-gold")
+	if len(got.Items) != 2 {
+		t.Fatalf("gold's receive: %d items", len(got.Items))
+	}
+	r.receive("s-zen")
+	if n := held("s-gold"); n != 2 {
+		t.Fatalf("after receiving two: held %d, want 2 (zen's not counted)", n)
+	}
+	for _, it := range got.Items {
+		var err error
+		if it.Message.Kind == mail.KindRequest {
+			_, _, err = r.m.Reply(r.ctx, "s-gold", it.Delivery.ID, it.Delivery.Lease, mail.Reply{Body: "a", Key: "r"})
+		} else {
+			_, err = r.m.Ack(r.ctx, "s-gold", it.Delivery.ID, it.Delivery.Lease)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, want := held("s-gold"), 1; it.Delivery.ID == got.Items[0].Delivery.ID && n != want {
+			t.Fatalf("after answering one: held %d, want %d", n, want)
+		}
+	}
+	if n := held("s-gold"); n != 0 {
+		t.Fatalf("after answering both (an ack and a reply): held %d, want 0", n)
+	}
+	if n := held("s-zen"); n != 1 {
+		t.Fatalf("zen, who received one and answered none: held %d, want 1", n)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	if n := held("s-zen"); n != 0 {
+		t.Fatalf("zen's lease lapsed: held %d, want 0 (it waits to be received again)", n)
 	}
 }
