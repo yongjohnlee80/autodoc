@@ -32,6 +32,9 @@ func (g luaGrants) Granted(script, capability string) bool {
 
 // Request queues the question, asked once the file has loaded and the answers given are known.
 func (g luaGrants) Request(script string, caps []string) {
+	if a := g.h.luaShown; a != nil && a.script == script && slices.Equal(a.caps, caps) {
+		return // its card is open: the one answer it gets answers this retry too
+	}
 	for _, a := range g.h.luaAsks {
 		if a.script == script && slices.Equal(a.caps, caps) {
 			return // asked already, not answered yet: an agent retrying asks once
@@ -67,8 +70,8 @@ func (h *Host) askLuaGrants() {
 		if len(open) == 0 {
 			continue
 		}
-		h.luaAsking = true
-		next := func() { h.luaAsking = false; h.p.Post(h.askLuaGrants) }
+		h.luaAsking, h.luaShown = true, &a
+		next := func() { h.luaAsking, h.luaShown = false, nil; h.p.Post(h.askLuaGrants) }
 		who := h.trf("autodoc.question.luagate.the_lua_script", a.script)
 		if name, ok := strings.CutPrefix(a.script, "plugin:"); ok {
 			who = h.trf("autodoc.question.luagate.the_plugin_s_lua_package", name)
@@ -141,6 +144,9 @@ var _ script.Grants = luaGrants{}
 // (crew.grantAnswered). A Lua script or plugin package hears nothing yet. A window with no crew
 // scope says nothing; the refusal it gave says so too (editorVerb).
 func (h *Host) grantAnswered(requester string, caps []string, allowed bool) {
+	if h.onGrantAnswered != nil {
+		h.onGrantAnswered(requester, caps, allowed)
+	}
 	if codename, ok := strings.CutPrefix(requester, "agent:"); ok && h.crew != nil {
 		h.crew.grantAnswered(codename, caps, allowed)
 	}

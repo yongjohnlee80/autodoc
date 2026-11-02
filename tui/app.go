@@ -292,6 +292,11 @@ type Host struct {
 	// answers have been read
 	luaAsks                 []luaAsk
 	luaAsking, luaPrefsRead bool
+	// luaShown is the grant ask whose card is open, until it is answered: a retry of it asks
+	// nothing more, so one card has one answer (luaGrants.Request). onGrantAnswered, when set (a
+	// test), hears each answer grantAnswered gives.
+	luaShown        *luaAsk
+	onGrantAnswered func(requester string, caps []string, allowed bool)
 	// Lua events (luaevents.go): the change debounce's generation, the revision the last change emit
 	// (or open) saw, and the mode last emitted
 	luaChangeGen uint64
