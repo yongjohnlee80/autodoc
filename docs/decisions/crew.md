@@ -605,7 +605,15 @@ messaging, which tries the agent's doorbell first and falls back to typing
 - **The base** types the message into the agent's terminal as one bracketed paste and presses
   Enter after it, only where the agent's prompts are reported (`crew.list`'s `prompts_reported` for
   its session in the window's scope) and none shows (no permission attention raised). Elsewhere the
-  message stays typed for the user's Enter, and a notice says why. Only a doorbell that answers for
+  message stays typed for the user's Enter, and a notice says why. A Claude agent's prompts are
+  reported only once it has started (its endpoint registered), and the base types nothing at all
+  into a Claude agent the crew doesn't say has started: a paste into its folder-trust question may
+  act on its keys. An agent just started is asked again while it comes up. To one that hasn't started,
+  your own send is mailed instead, never fired, so its first receive gets it; anything else (a
+  fallback job from an older daemon) ends `ErrAgentNotStarted`. A notice, once a session, names its
+  folder. A Claude
+  agent that exits before it started may have declined that question: a notice says so, with its
+  exit code. Only a doorbell that answers for
   certain it didn't ring falls back; one whose answer is lost is asked again with the same key.
 - **An agent in another workspace** (started in one workspace, the window now in another) is rung
   all the same: its crew session is the window's scope's, not the workspace's, so its mail reaches
@@ -656,9 +664,21 @@ Mail an agent doesn't receive in time goes to it some other way, once: its host 
 it in its file mailbox.
 
 - **When.** A delivery falls back when it was never leased (an agent that leased it may have read
-  it), its recipient has a live session (an ended one's mail waits for the next), and, counted from
-  the later of the message's creation and that session's start, either the session has been
+  it), its recipient has a live session (an ended one's mail waits for the next) that is past its
+  CLI's startup, and, counted from the later of the message's creation and that session's start (for
+  a Claude session, its endpoint's first registration, when later), either the session has been
   unreachable (no endpoint, or 5 failed wakes) for 30 s, or 10 min have passed (`FallbackAfter`).
+  A later registration of the endpoint (a resume, a compaction) moves nothing, nor does another
+  kind's endpoint.
+- **Not before the agent has started.** A Claude session registers its endpoint from Claude Code's
+  SessionStart hook, which runs only once Claude Code is past its startup: in a folder it hasn't
+  trusted yet, its folder-trust question, whose default is "No, exit". Its host registers the session
+  at spawn, so until then it is live and unreachable, and a host typing a job into it would answer
+  the question. A Claude session with no endpoint therefore gets no job: its mail stays queued, and
+  its first receive once it has started gets it (`crew.StartsWithItsEndpoint`). Its endpoint goes
+  only when the session ends, so having one means it registered once. Every other kind falls back
+  as before: Codex asks nothing in a folder outside git (an agent's own folder), and agy's folders
+  are trusted by its setup.
 - **Why 10 min, and from the session's start.** A ring's own wait (2 min) is not the fallback's: an
   agent busy in a long step accepts its notice and receives only when the step ends. Each
   unanswered wait counts as a failed wake, so it is rung again, backing off: at 0:00, 2:05, 4:35 and

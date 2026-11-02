@@ -236,7 +236,7 @@ implementations, tried in order:
 An Enter can't tell the agent's input from a permission or select prompt the agent is showing, and
 an Enter into a permission prompt approves it. So the base presses Enter only into an agent whose
 prompts are reported now: `crew.list` says so of its crew session (`prompts_reported`: Claude Code
-while its session is live; OpenCode and agy while their plugin or bridge says it is alive). And it
+while its session is live and has started, its endpoint registered; OpenCode and agy while their plugin or bridge says it is alive). And it
 shows none: an agent the crew says waits on a prompt gets no Enter. Otherwise the message stays typed, and a notice says why and asks the user to
 press Enter there. Codex reports no prompts yet, so a message typed to it is never sent by AutoDoc.
 

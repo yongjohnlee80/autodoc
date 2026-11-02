@@ -219,6 +219,12 @@ Handlers run in the order they were added, as a callback runs, and a failing one
 while the rest still run. `change` waits for a pause after the last edit (300 ms), and a handler's
 own edits do not emit it again. A reload drops every handler with its engine.
 
+`grant` is a gated script's own: the user's answer to the card its requires asked for, `{capabilities,
+allowed}`, once per card, `allowed` false for Not now and for a card closed unanswered. Only the
+handlers that script defined hear it (`Engine.EmitFor`, by the handler's environment), so no script
+learns what another was granted; an ungated script, which asks for nothing, never hears it. An agent
+that asked through the editor socket hears its answer as crew mail instead (`tui/crewgrant.go`).
+
 In the code: `script/events.go`, `tui/luaevents.go`
 
 ## Script keys and menu rows
