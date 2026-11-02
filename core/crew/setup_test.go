@@ -7,6 +7,7 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -627,7 +628,9 @@ func codexOnPath(t *testing.T, help string) string {
 	return codexScript(t, "case \"$1\" in --version) echo 'codex-cli 0.0.0-test';; --help) printf '%s\\n' \""+help+"\";; esac\nexit 0\n")
 }
 
-// codexScript is a folder holding an executable named codex that runs body as a shell script.
+// codexScript is a folder holding an executable named codex that runs body as a shell script. It
+// runs with that folder as its whole PATH, so body uses builtins alone, or a command's full path
+// (sleepCmd).
 func codexScript(t *testing.T, body string) string {
 	t.Helper()
 	bin := t.TempDir()
@@ -635,6 +638,16 @@ func codexScript(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return bin
+}
+
+// sleepCmd is sleep's full path, for a script whose PATH holds no sleep.
+func sleepCmd(t *testing.T) string {
+	t.Helper()
+	p, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 // TestSetupForCodexWithNoFolderRefusesACodexItCantRead: with no folder of its own, the setup must
@@ -647,7 +660,7 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 	for name, path := range map[string]string{
 		"not found":    t.TempDir(),
 		"help fails":   codexScript(t, "exit 1\n"),
-		"help hangs":   codexScript(t, "[ \"$1\" = --help ] && exec sleep 5\necho codex-cli 0.163.0\n"),
+		"help hangs":   codexScript(t, "[ \"$1\" = --help ] && exec "+sleepCmd(t)+" 5\necho codex-cli 0.163.0\n"),
 		"version only": codexScript(t, "[ \"$1\" = --version ] && echo codex-cli 0.163.0 && exit 0\nexit 2\n"),
 	} {
 		start := time.Now()
@@ -655,8 +668,12 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "--no-daemon") || !strings.Contains(err.Error(), "folder of its own") {
 			t.Errorf("%s: %+v %v; want the start refused, naming --no-daemon and the agent's own folder", name, s, err)
 		}
-		if took := time.Since(start); took > 3*time.Second {
+		took := time.Since(start)
+		if took > 3*time.Second {
 			t.Errorf("%s: the setup took %v, want it bounded by the probe's time", name, took)
+		}
+		if name == "help hangs" && took < 300*time.Millisecond {
+			t.Errorf("%s: the setup took %v, under the probe's time: the stand-in failed, it didn't hang", name, took)
 		}
 	}
 }
@@ -666,9 +683,9 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 // --no-daemon.
 func TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe(t *testing.T) {
 	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
-	for name, failing := range map[string]string{"fails": "exit 1", "hangs": "exec sleep 5"} {
+	for name, failing := range map[string]string{"fails": "exit 1", "hangs": "exec " + sleepCmd(t) + " 5"} {
 		// its --version answers throughout: the failed --help is of a Codex the probe can name
-		bin := codexScript(t, "[ \"$1\" = --help ] && [ -f \"$(dirname \"$0\")/broken\" ] && "+failing+"\n"+
+		bin := codexScript(t, "[ \"$1\" = --help ] && [ -f \"${0%/*}/broken\" ] && "+failing+"\n"+
 			"case \"$1\" in --version) echo codex-cli 0.163.0;; --help) printf '%s\\n' \""+codexNewerHelp+"\";; esac\n")
 		broken := filepath.Join(bin, "broken")
 		if err := os.WriteFile(broken, nil, 0o600); err != nil {
