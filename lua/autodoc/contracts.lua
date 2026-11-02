@@ -746,7 +746,7 @@ return {
         { name = "lease", type = "string" }
       },
       result = "{from, delivery, message}",
-      doc = "A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged.",
+      doc = "A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 52): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
     },
     ["mail.wait"] = {
       since = 37, scope = "global", audience = "agent",

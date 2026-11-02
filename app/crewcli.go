@@ -144,7 +144,9 @@ var crewCommands = map[string]crewCommand{
 		}},
 	"crew list": {usage: "[--all]: the addressbook: every codename, its scope, presence and reachability; a profile whose session ended, or a host's own session (kind host), only with --all",
 		example: "autodoc crew list",
-		flags:   func(fs *flag.FlagSet) { fs.Bool("all", false, "also the profiles whose session ended") },
+		flags: func(fs *flag.FlagSet) {
+			fs.Bool("all", false, "also the profiles whose session ended, and the hosts' own sessions")
+		},
 		call: func(_ sessionContext, fs *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			if fs.Lookup("all").Value.(flag.Getter).Get().(bool) {
 				return "crew.list", nil, nil, nil

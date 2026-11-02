@@ -45,8 +45,9 @@ var (
 	// delivery after its ack can tell the ack landed (a lapsed lease is still lease_lost).
 	ErrDone = errs.Sentinel(errs.ErrPrecondition, "mail: the delivery is done")
 
-	// ErrEnded is mail.show of the caller's own delivery that will never be its to answer: its message
-	// expired, or it fell back to the host or was merged into another delivery.
+	// ErrEnded is mail.show of the caller's own delivery that will never be its to answer: it failed,
+	// it expired or its message passed its expiry, it was withdrawn (handed to its host as a fallback),
+	// or it was merged into another delivery.
 	ErrEnded = errs.Sentinel(errs.ErrPrecondition, "mail: the delivery has ended")
 
 	// ErrInvalid is a param the mail verbs refuse; the message names it. It answers as invalid

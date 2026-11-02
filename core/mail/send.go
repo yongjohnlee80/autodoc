@@ -590,8 +590,11 @@ func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string)
 
 // Show is a delivery the caller holds, read again: its message, under the lease it holds, with the
 // lease and its attempts unchanged (mail.show).
-// Another session's, another lease, one that lapsed, or a delivery done is ErrLeaseLost. It writes
-// nothing: a lapsed lease is read as lapsed, and left for the next write to expire.
+// The caller's own delivery that is done says so: acked (or replied to) is ErrDone; failed, expired,
+// merged, withdrawn (handed to its host as a fallback), or its message past its expiry with no write
+// yet to expire it, is ErrEnded. Another session's, another lease, or one that lapsed on a live
+// message is ErrLeaseLost. It writes nothing: what it reads as lapsed or ended is left for the next
+// write to settle.
 func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) (Item, error) {
 	var out Item
 	err := m.store.Read(ctx, func(tx Tx) error {
@@ -603,14 +606,11 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 		if err != nil {
 			return err
 		}
-		switch d.State { // the caller's own delivery, no longer leased: say what became of it
+		switch d.State { // the caller's own delivery, done: say what became of it
 		case Acked:
 			return ErrDone
-		case Failed, Expired, Merged:
+		case Failed, Expired, Merged, Withdrawn:
 			return ErrEnded
-		}
-		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
-			return ErrLeaseLost
 		}
 		msg, ok, err := tx.Message(d.Message)
 		if err != nil {
@@ -620,7 +620,10 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 			return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
 		}
 		if msg.Expires != nil && *msg.Expires <= tx.Now().UnixNano() {
-			return ErrLeaseLost // the message ended though its lease is live; the next write expires it
+			return ErrEnded // the message ended, though no write has expired its delivery yet
+		}
+		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
+			return ErrLeaseLost
 		}
 		scope, err := receiverScope(tx, s)
 		if err != nil {
