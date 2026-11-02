@@ -242,8 +242,12 @@ func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs)
 			who := "agent:" + agent
 			if g := (luaGrants{h}); capability != "" && !g.Granted(who, capability) {
 				g.Request(who, []string{capability})
+				told := ""
+				if _, _, held := h.crewHeld(); held {
+					told = "; their answer comes to you as mail" // grantAnswered
+				}
 				return nil, &golibrpc.Error{Code: codeEditorNotGranted,
-					Message: fmt.Sprintf("needs %s: not granted (the user is asked)", capability)}
+					Message: fmt.Sprintf("needs %s: not granted (the user is asked%s)", capability, told)}
 			}
 			return fn(agent, a)
 		})

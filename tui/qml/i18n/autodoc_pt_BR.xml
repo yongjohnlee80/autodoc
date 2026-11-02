@@ -1251,6 +1251,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 não está mais esperando por você</translation>
     </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>Não foi possível enviar ao agente %1 a sua resposta ao pedido dele: %2. Avise o agente você mesmo.</translation>
+    </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>O daemon recusou a caixa de entrada da equipe desta janela (%1): solicitações e avisos aparecem de novo na próxima conexão.</translation>
