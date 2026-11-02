@@ -712,6 +712,17 @@ end)
 -- ── [10] registry verbs ───────────────────────────────────────────────────
 section("[10] registry verbs preview.attach / view / browser (owner autodoc)", function()
   local cmds = require("autodoc.registry").get()
+  -- a verb called as the registry's callers call it (the editor socket, admin run): its schema
+  -- checked, then its handler; v0.6.0's registry has no file-envelope dispatch (handle_message)
+  local function call(name, args)
+    local spec = cmds.get(name)
+    if not spec then return { ok = false, code = "unknown_command" } end
+    if spec.schema and cmds.validate_args then
+      local vok, verr = cmds.validate_args(args, spec.schema)
+      if not vok then return { ok = false, code = "bad_args", error = verr } end
+    end
+    return spec.handler(args, {})
+  end
   for _, name in ipairs({ "preview.attach", "preview.view", "preview.browser" }) do
     local spec = cmds.get(name)
     ok(name .. " registered by autodoc", spec and spec.owner == "autodoc")
@@ -719,18 +730,18 @@ section("[10] registry verbs preview.attach / view / browser (owner autodoc)", f
   for _, old in ipairs({ "harpoon_attach", "harpoon_view", "harpoon_render_browser" }) do
     ok("no alias " .. old, cmds.get(old) == nil or cmds.get(old).owner ~= "autodoc")
   end
-  local r = cmds.handle_message({ kind = "command", command = "preview.attach", args = { slot = "3", path = DOC } })
+  local r = call("preview.attach", { slot = "3", path = DOC })
   ok("preview.attach renders the path into the slot", r.ok and P._slot("3").path == DOC, vim.inspect(r))
   P.close_all()
-  r = cmds.handle_message({ kind = "command", command = "preview.view", args = { slot = "3" } })
+  r = call("preview.view", { slot = "3" })
   ok("preview.view reopens the slot", r.ok and P._slot("3").win ~= nil, vim.inspect(r))
-  r = cmds.handle_message({ kind = "command", command = "preview.attach", args = { slot = "z", path = DOC } })
+  r = call("preview.attach", { slot = "z", path = DOC })
   ok("a bad slot is refused", r.ok == false and r.code == "invalid_slot", vim.inspect(r))
-  r = cmds.handle_message({ kind = "command", command = "preview.attach", args = { slot = "1" } })
+  r = call("preview.attach", { slot = "1" })
   ok("a missing path is refused by the schema", r.ok == false and r.code == "bad_args", vim.inspect(r))
   vim.fn.delete(ARGS)
   opened = {}
-  r = cmds.handle_message({ kind = "command", command = "preview.browser", args = { slot = "3" } })
+  r = call("preview.browser", { slot = "3" })
   vim.wait(5000, function() return #opened > 0 end, 10)
   local vargv = vim.fn.filereadable(ARGS) == 1 and vim.fn.readfile(ARGS) or {}
   ok("preview.browser exports the slot", r.ok and arg_after(vargv, "--base") == DOCDIR,
