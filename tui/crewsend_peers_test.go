@@ -53,6 +53,19 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 	if !asked {
 		t.Error("a window holding no scope didn't answer no peers")
 	}
+
+	// Connected, but holding no scope (its claim lost): the crew would answer, and is never asked.
+	a.crew.scope = ""
+	listed := 0
+	w.crewList = func() (any, error) {
+		listed++
+		return []any{map[string]any{"codename": "jarvis", "scope": "autovim:plugins", "presence": crew.PresenceLive}}, nil
+	}
+	asked = false
+	a.crew.peerAgents(func(peers []AgentEntry) { asked = len(peers) == 0 })
+	if !asked || listed != 0 {
+		t.Errorf("a connected window holding no scope: answered none %v, crew.list asked %d times; want none, never asked", asked, listed)
+	}
 }
 
 // TestTheCrewHostSendsAnotherHostsAgentATaskUnrung (item 17): the task goes to codename@scope from
