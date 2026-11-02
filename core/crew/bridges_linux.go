@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
 )
 
 // procRoot is where the scan reads processes.
@@ -150,9 +148,11 @@ func readHelper(pid, uid int, boot int64) (helperProc, bool) {
 // dead with it, never a number a later process could hold. Its pid is read from the pidfd, and its
 // reference (ProcRef) while the pidfd shows it alive, before and after: so the reference is that
 // process's own. false when nothing answers, the kernel has no pidfd for the peer, or the peer has
-// ended (a listener that handed its socket to a child and exited proves nothing).
+// ended (a listener that handed its socket to a child and exited proves nothing). Its user is not
+// checked here: codexServerOf takes only a process the scan lists, the store's user's.
 func listenerProof(ctx context.Context, path string) (int, string, bool) {
-	c, err := peercred.Dial(ctx, "unix", path)
+	var d net.Dialer
+	c, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
 		return 0, "", false
 	}
@@ -172,17 +172,26 @@ func listenerProof(ctx context.Context, path string) (int, string, bool) {
 		return 0, "", false
 	}
 	defer func() { _ = unix.Close(pidfd) }()
-	alive := func() bool { return unix.PidfdSendSignal(pidfd, 0, nil, 0) == nil }
 	pid := pidfdPID(pidfd)
+	// alive: the pidfd's process runs, and is no zombie (one that ended, not yet reaped, still
+	// takes a signal and keeps its pid); the pid still names it after the state is read, so the
+	// state read was that process's
+	alive := func() bool {
+		if unix.PidfdSendSignal(pidfd, 0, nil, 0) != nil {
+			return false
+		}
+		st, err := readStat(pid)
+		return err == nil && st.state != 'Z' && pidfdPID(pidfd) == pid
+	}
 	if pid <= 0 || !alive() {
 		return 0, "", false
 	}
-	pid = reusedLookup(pid)
-	ref, err := ProcRef(pid)
+	looked := reusedLookup(pid)
+	ref, err := ProcRef(looked)
 	if err != nil || ref == "" || !alive() {
 		return 0, "", false
 	}
-	return pid, ref, true
+	return looked, ref, true
 }
 
 // reusedLookup, a test's, stands for what a pid number names when the process is looked up: the
