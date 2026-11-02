@@ -362,6 +362,18 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	if cur, err := r.m.StillCurrent(r.ctx, s.Session, tok, ep.Generation); err != nil || cur {
 		t.Fatalf("still current after the exit: %v %v", cur, err)
 	}
+	// the attempt itself, its call reached now: nothing is sent, it answers failed, and its row is
+	// out of flight, abandoned rather than left for the lease to lapse
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for an ended session", n)
+	}
+	if w := r.wake(s.Session); w.State == crew.WakeInFlight {
+		t.Fatalf("the ended session's wake is still in flight: %+v", w)
+	}
 }
 
 // faultStore is a crew.Store whose nth write (counting from 1) fails once, as a store's transient
