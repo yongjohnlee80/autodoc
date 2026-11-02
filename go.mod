@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.26-0.20261102063504-5ef366437b3b
+	github.com/yongjohnlee80/golib v0.8.26
 	github.com/yongjohnlee80/golib/gui v0.3.10
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
