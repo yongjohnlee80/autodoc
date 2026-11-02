@@ -104,6 +104,9 @@ type crewInbox struct {
 	// user of itself
 	fallbacks map[string]string
 	took      func(job string) bool
+	// view is the inbox dialog, told how much is open and when that may have changed
+	// (crewinboxview.go); nil: none
+	view *inboxView
 }
 
 func newCrewInbox(c crewInboxCore, raise func(string) bool) *crewInbox {
