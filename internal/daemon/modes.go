@@ -204,13 +204,34 @@ func (m *Workspaces) TodoStoresSettled(ctx context.Context) error {
 	}
 }
 
-// rereadTodoStores reads the registry again. When what the workspaces see changed, every served
-// workspace re-indexes the documents whose mode or store changed: their indexer version tells
-// them, no file changed (docs/decisions/todos.md#which-paths-are-graph-only).
+// rereadTodoStores reads the registry again. When what the workspaces see changed, or the last
+// revalidation failed, every served workspace re-indexes the documents whose mode or store changed:
+// their indexer version tells them, no file changed
+// (docs/decisions/todos.md#which-paths-are-graph-only). It answers why the read or the
+// revalidation failed.
 func (m *Workspaces) rereadTodoStores() error {
 	changed, err := m.readTodoStores()
-	if err != nil || !changed {
+	if err != nil {
 		return err
+	}
+	if !changed && !m.storesRevalidate {
+		return nil
+	}
+	// a revalidation that failed is done again, the registry unchanged or not: the rows it left
+	// were indexed under the old stores, and nothing else touches an idle row again
+	m.storesRevalidate = true
+	if err := m.revalidateServed(); err != nil {
+		return err
+	}
+	m.storesRevalidate = false
+	return nil
+}
+
+// revalidateServed revalidates every served workspace (revalidateAll, a test's seam), answering
+// the first error.
+func (m *Workspaces) revalidateServed() error {
+	if m.revalidateAll != nil {
+		return m.revalidateAll()
 	}
 	m.mu.Lock()
 	var ids []int64
