@@ -678,6 +678,23 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 	}
 }
 
+// TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce: a Codex (or its shim) that hangs, and left a
+// child holding its output, is cut off soon after the probe's time runs out, not a second probe's
+// time later: the start waits about the probe's time for a Codex that never answers, no more.
+func TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce(t *testing.T) {
+	crew.SetCodexProbeTimeout(t, 4*time.Second)
+	bin := codexScript(t, "[ \"$1\" = --version ] && echo codex-cli 0.163.0 && exit 0\n"+
+		sleepCmd(t)+" 30 &\nexec "+sleepCmd(t)+" 30\n")
+	start := time.Now()
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: t.TempDir()}, "")
+	if err == nil || !strings.Contains(err.Error(), "--no-daemon") {
+		t.Errorf("%+v %v; want the start refused, naming --no-daemon", s, err)
+	}
+	if took := time.Since(start); took < 4*time.Second || took > 7*time.Second {
+		t.Errorf("the setup took %v; want the probe's time (4s) and a short cut-off of the child holding its output, under 7s", took)
+	}
+}
+
 // TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe: a probe that failed, or ran out of time, is
 // not what that Codex is: once the same Codex answers, the next setup reads it and gives it
 // --no-daemon.
