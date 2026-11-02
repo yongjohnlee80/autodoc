@@ -821,9 +821,9 @@ bumps the version, and one that changes the operations surface also bumps `KB_OP
 
 `lua/autodoc/kb/version.lua` is the one source of that stamp: the Neovim side reads it, and the
 daemon embeds it, so a KB either side scaffolds carries the same version (not the build's, which
-would replace an unchanged copy at every release and leave an older one when the two disagree). It
-also holds the two files' digest, and a test fails when either changes without a new version, so the
-bump can't be forgotten. The Neovim plugin hands each build's copies to auto-core, the one writer
+would replace an unchanged copy at every release and leave an older one when the two disagree). A
+test reads the last release through git and fails when either file differs from that release's
+while the version isn't newer than that release's, so the bump can't be forgotten. The Neovim plugin hands each build's copies to auto-core, the one writer
 that brings a KB up to them, so an agent always starts on the installed AutoDoc's operations
 document.
 
