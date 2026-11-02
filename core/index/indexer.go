@@ -245,6 +245,9 @@ type prepared struct {
 	frontmatter schema.Result // a Markdown file's facets and diagnostics under the schema
 	adr         string        // the decision record number a document of type adr carries; "" otherwise
 	todoName    string        // the name a todo store's task answers to; "" otherwise
+	// mode is the path's mode as it was prepared under, read once: its identity and its check both
+	// follow it, and commit looks again when the mode has changed since (a todo store registered).
+	mode Mode
 }
 
 // New returns the indexer for store over the workspace root fsys.
@@ -658,7 +661,7 @@ func (x *Indexer) worker(ctx context.Context) {
 
 // prepare reads, parses and chunks one path. It writes nothing.
 func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
-	p := &prepared{path: w.path, claimedSeq: w.seq}
+	p := &prepared{path: w.path, claimedSeq: w.seq, mode: x.mode(w.path)}
 	tokens, err := x.store.sectionTokens(ctx)
 	if err != nil {
 		p.err = err
@@ -671,7 +674,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	}
 	sch, schemaFP := x.schema()
 	k := x.kinds.Of(w.path)
-	p.indexer = x.versionOf(w.path, k, tokens, schemaFP, ret.AbstractChunk)
+	p.indexer = x.versionOf(w.path, k, tokens, schemaFP, ret.AbstractChunk, p.mode)
 	fi, err := x.fsys.Stat(ctx, w.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -712,7 +715,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 			p.err = err
 			return p
 		} else if rec := x.store.indexer(ctx, w.path); ok && v == fi.Version &&
-			rec == p.indexer+varsVersion(varsNamed(rec), x.mode(w.path).Vars) {
+			rec == p.indexer+varsVersion(varsNamed(rec), p.mode.Vars) {
 			p.skip = true
 			return p
 		}
@@ -725,7 +728,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err, p.tooLarge = tooLarge(w.path, limit), true
 		return p
 	}
-	m := x.mode(w.path)
+	m := p.mode
 	if derives {
 		return graphOnly(x.prepareDerived(ctx, p, fi, tokens), m)
 	}
@@ -1042,6 +1045,17 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			x.holds.set(o.p.path, o.p.holdState)
 		case o.p.delete:
 			x.holds.drop(o.p.path)
+		}
+	}
+	// a mode that changed while a document was prepared (its todo store registered, a variable it
+	// names changed) may have been revalidated before this row was written, which that pass could
+	// not see: look again now it is, so an index never keeps a task the old mode judged
+	for _, o := range outcomes {
+		if !o.done || o.p.delete || o.p.hold || o.p.skip {
+			continue
+		}
+		if x.modeMoved(o.p) {
+			x.touch(o.p.path, false)
 		}
 	}
 	for _, o := range outcomes {
@@ -1465,3 +1479,11 @@ func (x *Indexer) vectorsIn() chan vecBatch {
 
 // Store is the store the indexer writes: its readers serve listings, the change log and the graph.
 func (x *Indexer) Store() *Store { return x.store }
+
+// modeMoved reports whether p's path has another mode now than p was prepared under, as far as its
+// row records it: the mode's own version, or the value of a variable the document names.
+func (x *Indexer) modeMoved(p *prepared) bool {
+	now := x.mode(p.path)
+	names := varsNamed(p.indexer)
+	return now.version() != p.mode.version() || varsVersion(names, now.Vars) != varsVersion(names, p.mode.Vars)
+}
