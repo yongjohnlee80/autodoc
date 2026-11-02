@@ -427,3 +427,91 @@ func TestARefreshNeverRewritesAFileForItsHeader(t *testing.T) {
 		t.Errorf("an update kept the earlier header:\n%s", after)
 	}
 }
+
+// TestADescriptionSentBackWholeIsNotStacked: a client that sends a task's whole body back as its
+// description (the managed header and the title H1 included) stores the description alone: the
+// file keeps one header however often it is sent, through todos.update and todos.add alike. A file
+// whose header and title are stacked already reads clean and heals at its next write. A
+// description of the user's own that starts with an H1, with no header above it, keeps it.
+func TestADescriptionSentBackWholeIsNotStacked(t *testing.T) {
+	e := claimed(t)
+	task := e.add(todo.Spec{Title: "t", Description: "the text"})
+	p := kbStore + "/" + task.Path
+	headers := func() int { return strings.Count(e.read(p), "todo schema v1 — managed file") }
+	body := func() string { s := e.read(p); return s[strings.Index(s, "<!--"):] } // the header, the H1, the text
+	if headers() != 1 {
+		t.Fatalf("a new task's file holds %d headers:\n%s", headers(), e.read(p))
+	}
+	got := task
+	for i := range 3 {
+		var err error
+		if got, err = e.m.Update(ctx, kb, got.ID, got.Rev, todo.Patch{"review": "/kb/r" + string(rune('0'+i)) + ".md",
+			"description": body()}); err != nil {
+			t.Fatal(err)
+		}
+		if got.Description != "the text" || headers() != 1 {
+			t.Fatalf("update %d with the body sent back: description %q, %d headers:\n%s", i+1, got.Description, headers(), e.read(p))
+		}
+	}
+
+	stacked := strings.Replace(e.read(p), "<!--", body()[:strings.Index(body(), "the text")]+"<!--", 1)
+	e.disk.WriteFile(p, []byte(stacked))
+	if n := strings.Count(stacked, "todo schema v1 — managed file"); n != 2 {
+		t.Fatalf("the stacked file holds %d headers, want 2", n)
+	}
+	e.m.List(ctx, kb, todo.ListOpts{}) // the hand edit read
+	got = e.get(task.ID)
+	if got.Description != "the text" {
+		t.Fatalf("a stacked file's description: %q, want the text alone", got.Description)
+	}
+	if _, err := e.m.Update(ctx, kb, got.ID, got.Rev, todo.Patch{"priority": "low"}); err != nil {
+		t.Fatal(err)
+	}
+	if headers() != 1 {
+		t.Fatalf("after its next write the stacked file holds %d headers, want 1:\n%s", headers(), e.read(p))
+	}
+
+	older := strings.Replace(body()[:strings.Index(body(), "the text")], "autodoc.todo", "auto-core.todo", 1)
+	e.disk.WriteFile(p, []byte(strings.Replace(e.read(p), "<!--", older+"<!--", 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	got = e.get(task.ID)
+	if _, err := e.m.Update(ctx, kb, got.ID, got.Rev, todo.Patch{"priority": "high"}); err != nil {
+		t.Fatal(err)
+	}
+	if headers() != 1 || e.get(task.ID).Description != "the text" {
+		t.Fatalf("a file stacked with the older writer's header: %d headers after a write, description %q:\n%s",
+			headers(), e.get(task.ID).Description, e.read(p))
+	}
+
+	sent := e.add(todo.Spec{Title: "u", Description: body()})
+	if sent.Description != "the text" {
+		t.Errorf("todos.add with a body for a description: %q, want the text alone", sent.Description)
+	}
+	if n := strings.Count(e.read(kbStore+"/"+sent.Path), "todo schema v1 — managed file"); n != 1 {
+		t.Errorf("todos.add with a body for a description: its file holds %d headers, want 1", n)
+	}
+
+	// A comment of the user's own that opens like the header but closes on its own "-->" is text:
+	// nothing up to a later comment's close is taken for a header, through a read or a later write.
+	mine := "<!-- ─── autodoc.todo schema v1 notes -->\nKeep this explanation.\n<!-- ─── -->\n# User heading\n\nKeep tail."
+	kept := e.add(todo.Spec{Title: "w", Description: mine})
+	if kept.Description != mine {
+		t.Fatalf("a description opening with a comment of the user's own: %q, want it whole", kept.Description)
+	}
+	if _, err := e.m.Update(ctx, kb, kept.ID, kept.Rev, todo.Patch{"priority": "low"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.get(kept.ID).Description; got != mine {
+		t.Fatalf("after an unrelated write, the user's comment: %q, want it whole", got)
+	}
+	byHand := kbStore + "/open/byhand-comment.md"
+	e.disk.WriteFile(byHand, []byte(strings.Replace(taskFile("byhand-comment", "open"), "# Task byhand-comment\n\nBody of byhand-comment.\n", mine+"\n", 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	if got := e.get("byhand-comment").Description; !strings.Contains(got, "Keep this explanation.") || !strings.Contains(got, "Keep tail.") {
+		t.Fatalf("a hand-written file with no managed header, opening with the user's comment: %q, want the comment's text kept", got)
+	}
+	own := e.add(todo.Spec{Title: "v", Description: "# My heading\n\nmine"})
+	if own.Description != "# My heading\n\nmine" {
+		t.Errorf("a description of the user's own that starts with an H1: %q, want it kept", own.Description)
+	}
+}

@@ -324,7 +324,7 @@ func (t *Task) set(name string, v any) {
 	case "title":
 		t.Title = s
 	case "description":
-		t.Description = s
+		t.Description = stripManaged(s) // a body sent back whole (todos.get's) is its description
 	case "due":
 		t.Due = s
 	case "priority":
