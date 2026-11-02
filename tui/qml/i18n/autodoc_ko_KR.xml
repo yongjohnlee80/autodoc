@@ -7895,19 +7895,19 @@ H J K L, Shift+화살표   크기 조절</translation>
     </message>
     <message id="autodoc.dialog.inbox.all">
         <source>&amp;All</source>
-        <translation>전체(&amp;A)</translation>
+        <translation>전체(&amp;a)</translation>
     </message>
     <message id="autodoc.dialog.inbox.unread">
         <source>&amp;Unread</source>
-        <translation>읽지 않음(&amp;U)</translation>
+        <translation>읽지 않음(&amp;u)</translation>
     </message>
     <message id="autodoc.dialog.inbox.requests">
         <source>Open reques&amp;ts</source>
-        <translation>열린 요청(&amp;T)</translation>
+        <translation>열린 요청(&amp;t)</translation>
     </message>
     <message id="autodoc.dialog.inbox.undeliverable">
         <source>Undeli&amp;verable</source>
-        <translation>전달 불가(&amp;V)</translation>
+        <translation>전달 불가(&amp;v)</translation>
     </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
@@ -7919,27 +7919,27 @@ H J K L, Shift+화살표   크기 조절</translation>
     </message>
     <message id="autodoc.dialog.inbox.open">
         <source>&amp;Open</source>
-        <translation>열기(&amp;O)</translation>
+        <translation>열기(&amp;o)</translation>
     </message>
     <message id="autodoc.dialog.inbox.mark_read">
         <source>&amp;Mark read</source>
-        <translation>읽음으로 표시(&amp;M)</translation>
+        <translation>읽음으로 표시(&amp;m)</translation>
     </message>
     <message id="autodoc.dialog.inbox.reply">
         <source>&amp;Reply…</source>
-        <translation>답장(&amp;R)…</translation>
+        <translation>답장(&amp;r)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.dismiss">
         <source>&amp;Dismiss…</source>
-        <translation>거절(&amp;D)…</translation>
+        <translation>거절(&amp;d)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.sender">
         <source>&amp;Sender</source>
-        <translation>보낸 사람(&amp;S)</translation>
+        <translation>보낸 사람(&amp;s)</translation>
     </message>
     <message id="autodoc.dialog.inbox.more">
         <source>Mor&amp;e</source>
-        <translation>더 보기(&amp;E)</translation>
+        <translation>더 보기(&amp;e)</translation>
     </message>
     <message id="autodoc.dialog.inbox.close_q">
         <source>Close (&amp;q)</source>
@@ -8020,6 +8020,18 @@ H J K L, Shift+화살표   크기 조절</translation>
     <message id="autodoc.question.inbox.dismiss_yes">
         <source>&amp;Yes, dismiss it</source>
         <translation>예, 거절합니다(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>받은 편지함: 내 메일 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>받은 편지함: 내 메일 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>받은 편지함: 내 메일</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>

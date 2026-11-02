@@ -7899,19 +7899,19 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
     </message>
     <message id="autodoc.dialog.inbox.all">
         <source>&amp;All</source>
-        <translation>すべて(&amp;A)</translation>
+        <translation>すべて(&amp;a)</translation>
     </message>
     <message id="autodoc.dialog.inbox.unread">
         <source>&amp;Unread</source>
-        <translation>未読(&amp;U)</translation>
+        <translation>未読(&amp;u)</translation>
     </message>
     <message id="autodoc.dialog.inbox.requests">
         <source>Open reques&amp;ts</source>
-        <translation>未回答の依頼(&amp;T)</translation>
+        <translation>未回答の依頼(&amp;t)</translation>
     </message>
     <message id="autodoc.dialog.inbox.undeliverable">
         <source>Undeli&amp;verable</source>
-        <translation>配信不能(&amp;V)</translation>
+        <translation>配信不能(&amp;v)</translation>
     </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
@@ -7923,27 +7923,27 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
     </message>
     <message id="autodoc.dialog.inbox.open">
         <source>&amp;Open</source>
-        <translation>開く(&amp;O)</translation>
+        <translation>開く(&amp;o)</translation>
     </message>
     <message id="autodoc.dialog.inbox.mark_read">
         <source>&amp;Mark read</source>
-        <translation>既読にする(&amp;M)</translation>
+        <translation>既読にする(&amp;m)</translation>
     </message>
     <message id="autodoc.dialog.inbox.reply">
         <source>&amp;Reply…</source>
-        <translation>返信(&amp;R)…</translation>
+        <translation>返信(&amp;r)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.dismiss">
         <source>&amp;Dismiss…</source>
-        <translation>断る(&amp;D)…</translation>
+        <translation>断る(&amp;d)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.sender">
         <source>&amp;Sender</source>
-        <translation>送信者(&amp;S)</translation>
+        <translation>送信者(&amp;s)</translation>
     </message>
     <message id="autodoc.dialog.inbox.more">
         <source>Mor&amp;e</source>
-        <translation>さらに(&amp;E)</translation>
+        <translation>さらに(&amp;e)</translation>
     </message>
     <message id="autodoc.dialog.inbox.close_q">
         <source>Close (&amp;q)</source>
@@ -8024,6 +8024,18 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
     <message id="autodoc.question.inbox.dismiss_yes">
         <source>&amp;Yes, dismiss it</source>
         <translation>はい、断る(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>受信箱: あなたのメール (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>受信箱: あなたのメール (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>受信箱: あなたのメール</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>

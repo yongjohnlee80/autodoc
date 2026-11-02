@@ -7903,19 +7903,19 @@ H J K L, Shift+flechas   redimensionarlo</translation>
     </message>
     <message id="autodoc.dialog.inbox.all">
         <source>&amp;All</source>
-        <translation>&amp;Todo</translation>
+        <translation>Todo(&amp;a)</translation>
     </message>
     <message id="autodoc.dialog.inbox.unread">
         <source>&amp;Unread</source>
-        <translation>Sin &amp;leer</translation>
+        <translation>Sin leer(&amp;u)</translation>
     </message>
     <message id="autodoc.dialog.inbox.requests">
         <source>Open reques&amp;ts</source>
-        <translation>Solicitudes a&amp;biertas</translation>
+        <translation>Solici&amp;tudes abiertas</translation>
     </message>
     <message id="autodoc.dialog.inbox.undeliverable">
         <source>Undeli&amp;verable</source>
-        <translation>&amp;No entregables</translation>
+        <translation>No entregables(&amp;v)</translation>
     </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
@@ -7927,7 +7927,7 @@ H J K L, Shift+flechas   redimensionarlo</translation>
     </message>
     <message id="autodoc.dialog.inbox.open">
         <source>&amp;Open</source>
-        <translation>&amp;Abrir</translation>
+        <translation>Abrir(&amp;o)</translation>
     </message>
     <message id="autodoc.dialog.inbox.mark_read">
         <source>&amp;Mark read</source>
@@ -7943,11 +7943,11 @@ H J K L, Shift+flechas   redimensionarlo</translation>
     </message>
     <message id="autodoc.dialog.inbox.sender">
         <source>&amp;Sender</source>
-        <translation>R&amp;emitente</translation>
+        <translation>Remitente(&amp;s)</translation>
     </message>
     <message id="autodoc.dialog.inbox.more">
         <source>Mor&amp;e</source>
-        <translation>Má&amp;s</translation>
+        <translation>Más(&amp;e)</translation>
     </message>
     <message id="autodoc.dialog.inbox.close_q">
         <source>Close (&amp;q)</source>
@@ -8027,7 +8027,19 @@ H J K L, Shift+flechas   redimensionarlo</translation>
     </message>
     <message id="autodoc.question.inbox.dismiss_yes">
         <source>&amp;Yes, dismiss it</source>
-        <translation>&amp;Sí, descartarla</translation>
+        <translation>Sí, descartarla(&amp;y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>la bandeja de entrada: tu correo (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>la bandeja de entrada: tu correo (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>la bandeja de entrada: tu correo</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>

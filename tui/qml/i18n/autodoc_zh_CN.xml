@@ -7888,19 +7888,19 @@ H J K L, Shift+方向键   调整大小</translation>
     </message>
     <message id="autodoc.dialog.inbox.all">
         <source>&amp;All</source>
-        <translation>全部(&amp;A)</translation>
+        <translation>全部(&amp;a)</translation>
     </message>
     <message id="autodoc.dialog.inbox.unread">
         <source>&amp;Unread</source>
-        <translation>未读(&amp;U)</translation>
+        <translation>未读(&amp;u)</translation>
     </message>
     <message id="autodoc.dialog.inbox.requests">
         <source>Open reques&amp;ts</source>
-        <translation>待答复的请求(&amp;T)</translation>
+        <translation>待答复的请求(&amp;t)</translation>
     </message>
     <message id="autodoc.dialog.inbox.undeliverable">
         <source>Undeli&amp;verable</source>
-        <translation>无法投递(&amp;V)</translation>
+        <translation>无法投递(&amp;v)</translation>
     </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
@@ -7912,27 +7912,27 @@ H J K L, Shift+方向键   调整大小</translation>
     </message>
     <message id="autodoc.dialog.inbox.open">
         <source>&amp;Open</source>
-        <translation>打开(&amp;O)</translation>
+        <translation>打开(&amp;o)</translation>
     </message>
     <message id="autodoc.dialog.inbox.mark_read">
         <source>&amp;Mark read</source>
-        <translation>标为已读(&amp;M)</translation>
+        <translation>标为已读(&amp;m)</translation>
     </message>
     <message id="autodoc.dialog.inbox.reply">
         <source>&amp;Reply…</source>
-        <translation>回复(&amp;R)…</translation>
+        <translation>回复(&amp;r)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.dismiss">
         <source>&amp;Dismiss…</source>
-        <translation>拒绝(&amp;D)…</translation>
+        <translation>拒绝(&amp;d)…</translation>
     </message>
     <message id="autodoc.dialog.inbox.sender">
         <source>&amp;Sender</source>
-        <translation>发件人(&amp;S)</translation>
+        <translation>发件人(&amp;s)</translation>
     </message>
     <message id="autodoc.dialog.inbox.more">
         <source>Mor&amp;e</source>
-        <translation>更多(&amp;E)</translation>
+        <translation>更多(&amp;e)</translation>
     </message>
     <message id="autodoc.dialog.inbox.close_q">
         <source>Close (&amp;q)</source>
@@ -8013,6 +8013,18 @@ H J K L, Shift+方向键   调整大小</translation>
     <message id="autodoc.question.inbox.dismiss_yes">
         <source>&amp;Yes, dismiss it</source>
         <translation>是，拒绝(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>收件箱：你的邮件 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>收件箱：你的邮件 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>收件箱：你的邮件</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
