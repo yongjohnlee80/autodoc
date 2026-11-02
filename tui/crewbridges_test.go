@@ -7,12 +7,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // bridgesWindow is Crew Bridges' program: crew.bridges answers rows, crew.bridge_kill is recorded
 // and answers outcome, timers wait until fired, questions are kept for the cell to answer.
 type bridgesWindow struct {
 	rows    []any
+	listErr error // what crew.bridges answers instead of rows, when set
 	outcome string
 	kills   [][]any
 	listed  int // crew.bridges calls
@@ -28,6 +33,9 @@ func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, err
 	switch verb {
 	case "crew.bridges":
 		w.listed++
+		if w.listErr != nil {
+			return nil, w.listErr
+		}
 		return w.rows, nil
 	case "crew.bridge_kill":
 		w.kills = append(w.kills, p)
@@ -171,5 +179,26 @@ const bridgeCellEnv = "AUTODOC_TUI_BRIDGE_CELL"
 func bridgeCell() {
 	for {
 		time.Sleep(time.Hour)
+	}
+}
+
+// A daemon that can't read the machine's processes (only Linux can yet), or one older than Crew
+// Bridges, is said so in words, never as an empty list or a bare code; any other failure as the
+// daemon put it.
+func TestCrewBridgesSayWhyNothingIsListed(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{&golibrpc.Error{Code: crew.CodeNoBridges, Message: "crew: listing the crew's helper processes needs Linux"}, "on Linux only for now"},
+		{&golibrpc.Error{Code: golibrpc.CodeMethodNotFound, Message: "unknown method: crew.bridges"}, "older than Crew Bridges"},
+		{errors.New("the store is unavailable"), "not listed: the store is unavailable"},
+	} {
+		w := &bridgesWindow{listErr: c.err}
+		b, _ := newBridgesCell(t, w)
+		b.open()
+		if got := w.state["App.crewBridgesStatus"].(string); !strings.Contains(got, c.want) || strings.Contains(got, "-32") {
+			t.Errorf("crew.bridges answering %v: the status %q, want it to say %q", c.err, got, c.want)
+		}
 	}
 }

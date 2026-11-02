@@ -7970,5 +7970,13 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>crew bridges</source>
         <translation>团队桥接</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>团队桥接目前仅在 Linux 上读取团队的进程：在此系统上请手动查找并终止它们（ps、kill）。守护进程在这里不会回收任何进程。</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>守护进程早于团队桥接：请重启后端（系统 › 重启后端…）</translation>
+    </message>
 </context>
 </TS>

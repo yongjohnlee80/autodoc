@@ -6117,9 +6117,17 @@ WHAT A KEY NEEDS
         <source>not listed: %1</source>
         <translation>not listed: %1</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
         <translation>orphan, ends in %1 min</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</translation>
     </message>
     <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>

@@ -7985,5 +7985,13 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>crew bridges</source>
         <translation>puentes del equipo</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>Puentes del equipo lee los procesos del equipo solo en Linux por ahora: en este sistema, búscalos y termínalos a mano (ps, kill). El daemon no recupera ninguno aquí.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>el daemon es anterior a Puentes del equipo: reinicia el backend (Sistema › Reiniciar el backend…)</translation>
+    </message>
 </context>
 </TS>

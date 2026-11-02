@@ -6,7 +6,10 @@ import (
 	"strings"
 	"time"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
 // CREW BRIDGES — System › Crew Bridges…, a feature of its own: the crew's helper processes on this
@@ -140,7 +143,9 @@ func (b *crewBridges) load() {
 			return
 		}
 		if err, ok := v.(error); ok {
-			b.c.Set("App.crewBridgesStatus", b.c.Trf("autodoc.text.crew_bridges.not_listed", wireMessage(err)))
+			b.rows.Reset(nil)
+			b.c.Set("App.crewBridgesDetail", "")
+			b.c.Set("App.crewBridgesStatus", b.listFailed(err))
 			return
 		}
 		rows, _ := v.([]crewBridgeRow)
@@ -148,6 +153,18 @@ func (b *crewBridges) load() {
 		b.c.Set("App.crewBridgesStatus", b.statusOf(rows))
 		b.showDetail(b.cursor)
 	})
+}
+
+// listFailed says why crew.bridges listed nothing: a daemon that can't read the machine's processes
+// (only Linux can yet) or one older than the verb, in words; any other failure as the daemon put it.
+func (b *crewBridges) listFailed(err error) string {
+	switch code(err) {
+	case crew.CodeNoBridges:
+		return b.c.Tr("autodoc.text.crew_bridges.unsupported")
+	case golibrpc.CodeMethodNotFound:
+		return b.c.Tr("autodoc.text.crew_bridges.older_daemon")
+	}
+	return b.c.Trf("autodoc.text.crew_bridges.not_listed", wireMessage(err))
 }
 
 // statusOf is the line under the list: how many helpers, and how many orphans.

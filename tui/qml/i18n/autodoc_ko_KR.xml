@@ -7977,5 +7977,13 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>crew bridges</source>
         <translation>크루 브리지</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>크루 브리지는 현재 Linux에서만 크루의 프로세스를 읽습니다. 이 시스템에서는 직접 찾아 종료하세요 (ps, kill). 여기서는 데몬이 회수하지 않습니다.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>데몬이 크루 브리지보다 오래된 버전입니다. 백엔드를 다시 시작하세요 (시스템 › 백엔드 다시 시작…)</translation>
+    </message>
 </context>
 </TS>

@@ -7981,5 +7981,13 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>crew bridges</source>
         <translation>クルーのブリッジ</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>クルーのブリッジは現在 Linux でのみクルーのプロセスを読み取ります。このシステムでは手動で探して終了してください (ps, kill)。ここではデーモンは回収しません。</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>デーモンがクルーのブリッジより古いバージョンです。バックエンドを再起動してください (システム › バックエンドを再起動…)</translation>
+    </message>
 </context>
 </TS>

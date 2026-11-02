@@ -305,6 +305,7 @@ func (d *process) reclaimBridges() {
 			case now := <-t.C:
 				reclaimed, err := d.deps.crew.Reclaim(ctx, now)
 				if errors.Is(err, crew.ErrNoBridges) {
+					logger.Info(d.log, "orphaned crew helpers aren't reclaimed here: the daemon reads the machine's processes on Linux only")
 					return
 				}
 				if err != nil {

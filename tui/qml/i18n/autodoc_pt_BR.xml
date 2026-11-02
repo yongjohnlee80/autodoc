@@ -7984,5 +7984,13 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>crew bridges</source>
         <translation>pontes da equipe</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>Pontes da equipe lê os processos da equipe só no Linux por enquanto: neste sistema, encontre-os e encerre-os à mão (ps, kill). O daemon não recupera nenhum aqui.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>o daemon é anterior a Pontes da equipe: reinicie o backend (Sistema › Reiniciar backend…)</translation>
+    </message>
 </context>
 </TS>
