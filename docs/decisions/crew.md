@@ -336,6 +336,44 @@ removed once the session ends.
 
 In the code: `core/crew/context.go`, `core/crew/auth.go`, `app/crewcli.go`, `tui/agent.go`
 
+## Re-issuing a bridge
+
+An agent can ask the running daemon to re-establish its crew access, with no restart of its slot:
+when its slot started before its host joined it, when the daemon restarted, or when its access is
+otherwise gone. The access has two halves, and each has one owner:
+
+- **The session and its context are the host's.** The daemon never makes a credential: it keeps
+  only a secret's hash, and only a host, with its run token and epoch, registers a session. A host
+  joins every running slot that has no live session at each claim and renewal, writing the context
+  at the slot's own path.
+- **The endpoint is the agent's.** Only its own process sees how it is woken (Claude's inbox
+  socket, its Codex thread, agy's language server), so only it can register that again.
+
+`crew.access` (protocol 46) answers what the calling session's access holds now: live or ended
+(with how it ended, or `stale_epoch`), whether its host holds its scope, and a live session's
+endpoint, `registered`, `none` or `failing`. A credential of an ended session answers that
+session's state alone; one matching no session is `bad_credential`. It never answers a credential,
+so no caller can obtain another agent's identity through it. It writes nothing.
+
+`autodoc crew reissue [--wait D]`, and the crew MCP server's `crew_reissue`, read it and do what the
+agent can:
+
+- No context at its path yet, a credential the daemon no longer knows, or an ended session: it
+  waits, up to 40 s by default (past one renewal), for its host's re-join, reading the context again
+  each time. Several contexts, another agent's, or no daemon end it at once.
+- A live session's endpoint, none or failing, it registers again from its own process, as that
+  kind's own command does: Claude's `crew endpoint --claude`, Codex's `crew endpoint --codex-here`,
+  agy's `crew bridge --agy` (from agy's shell only: its MCP server has no token). OpenCode's plugin
+  registers its own on the session's next message.
+- A registered endpoint it keeps: a registration raises its generation and resets its wake state,
+  so a re-issue of a healthy session changes nothing.
+- It answers `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access
+  it ended with.
+
+The guide's first step says to call it when `crew whoami` fails, then ask again.
+
+In the code: `core/crew/access.go`, `app/crewreissue.go`, `app/crewmcp.go`
+
 ## Durable mail
 
 The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail.reply`, `mail.inbox`
