@@ -179,6 +179,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
+	fs.Bool("check-workspaces", false, "report every workspace whose root holds AutoDoc's own config, state or data folder, or lies inside one, as the daemon serving the store lists them; JSON out, exit 1 when one does, 2 when no daemon serves the store")
 	fs.Bool("check-store", false, "check the store: SQLite's integrity_check and foreign_key_check, and every sealed secret opened with its key; JSON out, exit 1 on a problem. The daemon serving it checks it when one runs")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
@@ -254,6 +255,16 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 				return failed(err, 1)
 			}
 			return 0
+		}},
+		{flag: "check-workspaces", run: func(string) int {
+			switch err := runCheckWorkspaces(ctx, *configPath, stdout); {
+			case err == nil:
+				return 0
+			case errors.Is(err, errWorkspacesFlagged):
+				return failed(err, 1)
+			default:
+				return failed(err, 2)
+			}
 		}},
 		{flag: "compact", run: func(string) int {
 			if err := runCompact(ctx, *configPath, stdout); err != nil {

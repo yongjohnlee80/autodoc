@@ -177,6 +177,33 @@ own (from protocol 34), replacing anything the script passed. The daemon enforce
 
 In the code: `core/fsbounds`, `rpc/bounds.go`, `rpc/files.go`, `rpc/module.go`, `internal/daemon/workspaces.go`, `internal/localfs/localfs.go`
 
+## A root holding AutoDoc's own folders
+
+AutoDoc's own folders are its config folder (its Lua, plugins, themes, keymap and config), its state
+folder and its data folder (the store). A workspace whose root holds one of them, or lies inside
+one (a root of `$HOME`, say, or one under the data folder), is still added and served. It is named:
+
+- `workspace.list` and `workspace.add` answer `autodoc_dirs`, one entry per folder:
+  `{dir: config|state|data, relation: holds|inside, path}`. `workspace.add` also answers a short
+  `warning`: a script granted the workspace's files could read and write AutoDoc's own files there,
+  but for the protected-path list.
+- The daemon is told its folders when it starts, each resolved through its symlinks. A root is
+  resolved again at every check, since its symlink can change after the add. A folder not made yet
+  (the state folder before the first write there) is matched by its cleaned path. Containment is by
+  whole path elements: a sibling root, or one that only shares a prefix with a folder, is not
+  named.
+- `:checkhealth autodoc` warns about each such workspace, naming the folders and the fix (move the
+  root, or narrow it). `autodoc --check-workspaces` prints the same report as JSON, exit 1 when a
+  workspace is named, 0 when none is, 2 when no daemon serves the store. The window's workspace
+  manager badges the row and says why in its pane.
+
+Why warn and not refuse: an existing `$HOME`-rooted workspace must keep working, and the
+protected-path list already refuses those files to a gated script. The warning says the root
+depends on that list. A gated script can't add a root at all ("No new roots" above).
+
+In the code: `core/workspace/own.go`, `rpc/workspace.go`, `app/serve.go`, `app/checkworkspaces.go`,
+`lua/autodoc/health.lua`, `tui/workspace.go`, `tui/settings.go`
+
 ## User-only commands
 
 Granting `commands` lets a script run AutoDoc's commands, but never as the user. A catalog entry
