@@ -170,10 +170,10 @@ func (h *Host) goDock(key string) {
 		h.focusEditor()
 	case t.panel == "":
 		h.hideOrShowPanels()
-	case h.panelOpen[t.panel] && !h.panelHidden(t.panel):
+	case h.panelOpen[t.panel] && !h.panelHidden(t.panel) && !h.panelCovered(t.panel):
 		h.hidePanel(t.panel)
 		h.focusEditor()
-	default:
+	default: // closed, hidden, or covered by a window over it: there, in front
 		h.goTo(t)
 	}
 }
@@ -221,6 +221,14 @@ func (h *Host) panelHidden(id string) bool {
 	c, ok := h.p.Find(id)
 	w, isWindow := c.(interface{ WindowBehavior() *widget.WindowCore })
 	return ok && isWindow && w.WindowBehavior() != nil && w.WindowBehavior().State().Minimized
+}
+
+// panelCovered reports whether panel id is open and a window or panel stacked above it overlaps
+// it, even by a cell (golib's OverlayHost.Covered): shown, but not seen whole.
+func (h *Host) panelCovered(id string) bool {
+	c, ok := h.p.Find(id)
+	w, isCoverable := c.(interface{ Covered() bool })
+	return ok && isCoverable && w.Covered()
 }
 
 // panelsHiddenChanged follows the window collector: a panel hidden or shown again, by the dock or
