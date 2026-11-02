@@ -19,10 +19,9 @@ const (
 // TestAManagedFileChangedSinceTheLastReleaseCarriesANewVersion: when KB_OPERATIONS.md or
 // _schema/frontmatter.yaml differs from the last release's (the newest v* tag this commit holds),
 // version.lua's autodoc is newer than that release's and than the release itself, or a KB stamped
-// with the old version would
-// never take the new copy (revision 6 shipped in v0.3.7 while version.lua still said 0.3.6). It
-// reads the release through git, so a clone without the tag (a shallow one) skips, saying so; CI's
-// fetches every tag.
+// with the old version would never take the new copy (revision 6 shipped in v0.3.7 while
+// version.lua still said 0.3.6). It reads the release through git, so a clone without the tag (a
+// shallow one) skips, saying so; CI's fetches every tag.
 func TestAManagedFileChangedSinceTheLastReleaseCarriesANewVersion(t *testing.T) {
 	tag, err := exec.Command("git", "describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD").Output()
 	if err != nil {
