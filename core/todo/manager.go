@@ -64,6 +64,7 @@ type options struct {
 	env          func(string) string
 	events       func(Event)
 	stores       func()
+	settled      func(context.Context) error
 	refreshCheck time.Duration
 }
 
@@ -91,6 +92,29 @@ func WithEvents(fn func(Event)) Option { return func(o *options) { o.events = fn
 // daemon's workspaces read the stores again on it. It is called from the verbs, so it must not
 // wait.
 func WithStoresChanged(fn func()) Option { return func(o *options) { o.stores = fn } }
+
+// WithStoresSettled is waited on after each verb, once its locks are released: it returns when every
+// change WithStoresChanged was told of has been read by the daemon's workspaces, so a verb that made
+// or moved a store answers only once the index and doc.validate see that store (read-your-writes).
+// It is bounded by storesSettle; a wait that runs out is logged, never the verb's failure.
+func WithStoresSettled(fn func(context.Context) error) Option {
+	return func(o *options) { o.settled = fn }
+}
+
+// storesSettle bounds a verb's wait for the workspaces to read the stores it changed.
+const storesSettle = 5 * time.Second
+
+// awaitStores waits, bounded, for the workspaces to have read every stores change made so far.
+func (m *Manager) awaitStores(ctx context.Context) {
+	if m.o.settled == nil {
+		return
+	}
+	wait, cancel := context.WithTimeout(ctx, storesSettle)
+	defer cancel()
+	if err := m.o.settled(wait); err != nil && ctx.Err() == nil {
+		logger.Warning(m.o.log, err, "waiting for the workspaces to read the todo stores: the verb answers anyway")
+	}
+}
 
 // WithRefreshCheck sets how often RefreshDaily looks for a claimed store due its daily refresh;
 // an hour by default. Whether a store is due is the clock's (WithClock), not this interval's.
