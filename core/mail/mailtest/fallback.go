@@ -23,6 +23,7 @@ type fbRig struct {
 	mm         *mail.Manager
 	cm         *crew.Manager
 	bell       *fireWaker
+	sched      *crew.Scheduler
 	run        string
 	epoch      int64
 	session    string
@@ -40,7 +41,7 @@ func newFallbackRig(t *testing.T, h Harness) *fbRig {
 	if err := r.mm.EnsureReserved(r.ctx); err != nil {
 		t.Fatal(err)
 	}
-	r.cm.NewScheduler("daemon-run", map[string]crew.Waker{"claude": r.bell})
+	r.sched = r.cm.NewScheduler("daemon-run", map[string]crew.Waker{"claude": r.bell})
 	var err error
 	if r.epoch, err = r.cm.Claim(r.ctx, "autodoc:w", r.run, ""); err != nil {
 		t.Fatal(err)
@@ -53,6 +54,31 @@ func newFallbackRig(t *testing.T, h Harness) *fbRig {
 	}
 	r.session, r.credential = reg.Session, reg.Session+"."+secret
 	return r
+}
+
+// fallbackWindow is how long a delivery to a reachable live session waits to be received before it
+// falls back (mail.FallbackAfter), counted from the later of its message's creation and that
+// session's start.
+const fallbackWindow = 10 * time.Minute
+
+// restart registers gold again in the same epoch, as its host does when the agent's process was
+// lost: its old session is superseded and the new one is gold's live session from now.
+func (r *fbRig) restart(instance string) {
+	r.t.Helper()
+	secret := strings.Repeat("r", 40)
+	reg, err := r.cm.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: r.run, Epoch: r.epoch, Codename: "gold",
+		Kind: "claude", Workspace: "w", Instance: instance, Secret: secret})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.session, r.credential = reg.Session, reg.Session+"."+secret
+}
+
+// look is one pass of the wake scheduler, its calls answered.
+func (r *fbRig) look() {
+	r.t.Helper()
+	r.sched.Look(r.ctx)
+	r.sched.Wait()
 }
 
 // reachable gives gold's session an endpoint: woken, not unreachable.
@@ -117,8 +143,9 @@ func (r *fbRig) told(kind string) int {
 }
 
 // A delivery falls back at 30 s after its send when its recipient's session is unreachable (no
-// endpoint), not a nanosecond before; one whose session is reachable, at 2 min (the first ring
-// unanswered). Falling back withdraws it (WhyFallback), opens one job, and tells the user once.
+// endpoint), not a nanosecond before; one whose session is reachable, at fallbackWindow (10 min),
+// not when its first ring goes unanswered (2 min). Falling back withdraws it (WhyFallback), opens one
+// job, and tells the user once.
 func testAFallbackIsDueAtItsBoundaries(t *testing.T, h Harness) {
 	r := newFallbackRig(t, h)
 	r.poll() // the host takes fallbacks
@@ -144,13 +171,152 @@ func testAFallbackIsDueAtItsBoundaries(t *testing.T, h Harness) {
 
 	r.reachable()
 	d2 := r.send()
-	r.clock.Advance(crew.WakeUnanswered - time.Nanosecond)
+	r.clock.Advance(crew.WakeUnanswered)
 	if got := r.poll(); len(got) != 0 || r.delivery(d2.ID).State != mail.Queued {
-		t.Fatalf("reachable, at 2 min less 1 ns: %+v; want nothing yet", got)
+		t.Fatalf("reachable, at 2 min (its first ring unanswered): %+v; want nothing yet", got)
+	}
+	r.clock.Advance(fallbackWindow - crew.WakeUnanswered - time.Nanosecond)
+	if got := r.poll(); len(got) != 0 || r.delivery(d2.ID).State != mail.Queued {
+		t.Fatalf("reachable, at 10 min less 1 ns: %+v; want nothing yet", got)
 	}
 	r.clock.Advance(time.Nanosecond)
 	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d2.ID {
-		t.Fatalf("reachable, at 2 min: %+v, want its job", got)
+		t.Fatalf("reachable, at 10 min: %+v, want its job", got)
+	}
+}
+
+// A reachable agent that accepts its notices but doesn't receive (busy mid-turn) is rung again after
+// each unanswered 2-min wait, backing off as a failed wake does (5 s, 30 s, 2 min): at 0:00, 2:05,
+// 4:35 and 8:35, four rings before its mail falls back at 10:00. Fewer than crew.UnreachableAfter
+// failures by then, so the 30 s path never takes it first.
+func testABusyAgentIsRungFourTimesBeforeItsMailFallsBack(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.reachable()
+	r.poll()
+	d := r.send()
+	steps := []struct {
+		after time.Duration
+		rings int
+	}{{0, 1}, {2 * time.Minute, 1}, {5 * time.Second, 2}, {2 * time.Minute, 2}, {30 * time.Second, 3},
+		{2 * time.Minute, 3}, {2 * time.Minute, 4}}
+	at := time.Duration(0)
+	for _, st := range steps {
+		r.clock.Advance(st.after)
+		at += st.after
+		r.look()
+		if got := r.bell.answer(nil); got != st.rings {
+			t.Fatalf("at %v: rung %d times, want %d", at, got, st.rings)
+		}
+		if jobs := r.st.Inspect.Jobs(); len(jobs) != 0 || r.delivery(d.ID).State != mail.Queued {
+			t.Fatalf("at %v: jobs %+v, the delivery %+v; want it queued, no job", at, jobs, r.delivery(d.ID))
+		}
+	}
+	r.clock.Advance(fallbackWindow - at - time.Nanosecond)
+	if got := r.poll(); len(got) != 0 {
+		t.Fatalf("at 10 min less 1 ns, after four rings: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(time.Nanosecond)
+	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+		t.Fatalf("at 10 min: %+v, want its job", got)
+	}
+}
+
+// A message that waited across its recipient's restart gets the whole window in the new session:
+// the deadline counts from the later of the message's creation and the recipient's live session's
+// start (the profile has one live session: registering again supersedes the old). Unreachable, 30 s
+// from the new session's start; reachable, fallbackWindow from it.
+func testAFallbackCountsFromTheRecipientsSessionStart(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.poll()
+	d := r.send()
+	r.clock.Advance(20 * time.Second)
+	r.restart("i2") // no endpoint yet: unreachable
+	restarted := r.clock.Now()
+	r.clock.Advance(10 * time.Second) // 30 s after the send
+	if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+		t.Fatalf("unreachable, 30 s after the send but 10 s into the new session: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(restarted.Add(30*time.Second - time.Nanosecond).Sub(r.clock.Now()))
+	if got := r.poll(); len(got) != 0 {
+		t.Fatalf("unreachable, 30 s less 1 ns into the new session: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(time.Nanosecond)
+	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+		t.Fatalf("unreachable, 30 s into the new session: %+v, want its job", got)
+	}
+
+	r2 := newFallbackRig(t, h)
+	r2.reachable()
+	r2.poll()
+	d2 := r2.send()
+	r2.clock.Advance(9 * time.Minute)
+	r2.restart("i2")
+	r2.reachable()
+	restarted = r2.clock.Now()
+	r2.clock.Advance(time.Minute) // 10 min after the send
+	if got := r2.poll(); len(got) != 0 || r2.delivery(d2.ID).State != mail.Queued {
+		t.Fatalf("reachable, 10 min after the send but 1 min into the new session: %+v; want nothing yet", got)
+	}
+	r2.clock.Advance(restarted.Add(fallbackWindow - time.Nanosecond).Sub(r2.clock.Now()))
+	if got := r2.poll(); len(got) != 0 {
+		t.Fatalf("reachable, 10 min less 1 ns into the new session: %+v; want nothing yet", got)
+	}
+	r2.clock.Advance(time.Nanosecond)
+	if got := r2.poll(); len(got) != 1 || got[0].Job.Delivery != d2.ID {
+		t.Fatalf("reachable, 10 min into the new session: %+v, want its job", got)
+	}
+}
+
+// The scheduler's next deadline for a message that waited across a restart is the new session's
+// start plus the window, never the message's creation plus it: an earlier answer has the timer wake,
+// find nothing due, and ask again for the same instant (a spin).
+func testTheNextFallbackIsTheSessionsStartPlusTheWindow(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.reachable()
+	r.poll()
+	r.send()
+	r.clock.Advance(9 * time.Minute)
+	r.restart("i2")
+	r.reachable()
+	want := r.clock.Now().Add(fallbackWindow).UnixNano()
+	next := func() int64 {
+		t.Helper()
+		var at int64
+		var has bool
+		if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error {
+			var err error
+			at, has, err = r.mm.NextDeadline(tx)
+			return err
+		}); err != nil || !has {
+			t.Fatalf("the next deadline: %d %v %v", at, has, err)
+		}
+		return at
+	}
+	if at := next(); at != want {
+		t.Fatalf("the next deadline: %d, want the new session's start + 10 min (%d), %v early", at, want, time.Duration(want-at))
+	}
+	r.clock.Advance(time.Minute) // the old answer (the send + 10 min) has passed: nothing is due, and the answer stays
+	r.sweep()
+	if at := next(); at != want || len(r.st.Inspect.Jobs()) != 0 {
+		t.Fatalf("past the send + 10 min: next %d (want %d), jobs %+v", at, want, r.st.Inspect.Jobs())
+	}
+}
+
+// An agent busy for 3 min (a fake clock, no sleep) still gets its mail by mail.receive: no job.
+func testAThreeMinuteGapEndsInAReceiveNotAFallback(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.reachable()
+	r.poll()
+	d := r.send()
+	r.clock.Advance(3 * time.Minute)
+	if got := r.poll(); len(got) != 0 {
+		t.Fatalf("3 min busy: %+v, want no job", got)
+	}
+	if got, err := r.mm.Receive(r.ctx, r.credential); err != nil || len(got.Items) != 1 || got.Items[0].Delivery.ID != d.ID {
+		t.Fatalf("the receive after 3 min: %+v %v, want the delivery", got, err)
+	}
+	if jobs := r.st.Inspect.Jobs(); len(jobs) != 0 {
+		t.Fatalf("jobs %+v, want none", jobs)
 	}
 }
 
