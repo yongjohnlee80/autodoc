@@ -46,32 +46,53 @@ func sentBy(at int64) dao.Predicate {
 	return store.Correlated(false, "mail_message", "id", "mail_delivery", "message", dao.Lte(`"mail_message"."created"`, at))
 }
 
+// windowOpenBy is a delivery whose fallback window opened at or before at: its message was created
+// then, and its recipient's live session had started (a profile has one live session: registering
+// again supersedes the old), so a message that waited across a restart counts from the new session.
+func windowOpenBy(at int64) dao.Predicate {
+	return dao.And(sentBy(at), liveRecipient(dao.Lte(`"crew_session"."started"`, at)))
+}
+
 func (t *Tx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) ([]mail.Delivery, error) {
 	if limit <= 0 {
 		return nil, errLimit
 	}
 	return deliveries(t.m.deliveries.On(t.tx).WithPredicate(fallbackCandidate).
-		WithPredicate(dao.Or(sentBy(unansweredBefore), dao.And(sentBy(unreachableBefore), unreachableRecipient))).
+		WithPredicate(dao.Or(windowOpenBy(unansweredBefore), dao.And(windowOpenBy(unreachableBefore), unreachableRecipient))).
 		OrderBy(dao.Asc(bySeq)).Limit(uint64(limit)).Select())
 }
 
-// NextFallbackAt reads the earliest-created message of a candidate, and of an unreachable one:
-// one ordered, one-row read each, from mail_message by its own column.
+// NextFallbackAt is the earliest max(created, started)+after over the candidates, per live session:
+// a delivery's window opens at the later of its message's creation and its recipient's session's
+// start, so for each live session the earliest-created message of its candidates (and of its
+// unreachable ones) decides, read by mail_message's own column. One ordered one-row read per live
+// session and kind, the crew's size. Never earlier than FallbackDue answers, so the timer never
+// wakes to find nothing due and asks again for the same instant.
 func (t *Tx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) {
+	sessions, err := t.t.sessions.On(t.tx).WithPredicate(live).Select()
+	if err != nil {
+		return 0, false, err
+	}
 	var at int64
 	has := false
-	for _, c := range []struct {
-		cond  []dao.Predicate
-		after int64
-	}{{[]dao.Predicate{fallbackCandidate}, unanswered}, {[]dao.Predicate{fallbackCandidate, unreachableRecipient}, unreachable}} {
-		msg, ok, err := one(t.m.messages.On(t.tx).
-			WithPredicate(store.Correlated(false, "mail_delivery", "message", "mail_message", "id", c.cond...)).
-			OrderBy(dao.Asc(byCreated)).Limit(1).Select())
-		if err != nil {
-			return 0, false, err
-		}
-		if ok && (!has || msg.Created+c.after < at) {
-			at, has = msg.Created+c.after, true
+	for _, s := range sessions {
+		for _, c := range []struct {
+			cond  []dao.Predicate
+			after int64
+		}{{[]dao.Predicate{fallbackCandidate}, unanswered}, {[]dao.Predicate{fallbackCandidate, unreachableRecipient}, unreachable}} {
+			cond := append([]dao.Predicate{dao.Eq(`"mail_delivery"."recipient"`, s.Profile)}, c.cond...)
+			msg, ok, err := one(t.m.messages.On(t.tx).
+				WithPredicate(store.Correlated(false, "mail_delivery", "message", "mail_message", "id", cond...)).
+				OrderBy(dao.Asc(byCreated)).Limit(1).Select())
+			if err != nil {
+				return 0, false, err
+			}
+			if !ok {
+				continue
+			}
+			if due := max(msg.Created, s.Started) + c.after; !has || due < at {
+				at, has = due, true
+			}
 		}
 	}
 	return at, has, nil
