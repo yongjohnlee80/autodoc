@@ -154,3 +154,14 @@ func TestAHelloProvesItsCrewCaller(t *testing.T) {
 		}
 	}
 }
+
+// TestACallWithNoSessionIsTheUsers: a verb dispatched with no session at all (an in-process call,
+// never a hello) carries no caller: it is the user's surface, as a hello without the crew key is
+// (the mutant: the session's caller read without checking there is one).
+func TestACallWithNoSessionIsTheUsers(t *testing.T) {
+	s := New(Fixed(), "v", WithModules(newCallerModule()))
+	out, err := s.verbs["todos.who"].h(context.Background(), &golibrpc.Request{Method: "todos.who"})
+	if err != nil || out != "" {
+		t.Fatalf("todos.who with no session: %v, %v; want the user's surface (no caller)", out, err)
+	}
+}
