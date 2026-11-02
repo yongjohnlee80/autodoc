@@ -209,3 +209,44 @@ editor.on("ping", function(ed) local a, b = ed:run("boom"); editor.notify("handl
 		t.Fatalf("an ungated ed:run: %v, boom ran %d", err, ran)
 	}
 }
+
+// TestAnEventForAScriptReachesItsHandlersOnly: EmitFor reaches the handlers the gated script it
+// names added, and neither another gated script's nor an ungated one's; HandlesFor says so first.
+func TestAnEventForAScriptReachesItsHandlersOnly(t *testing.T) {
+	e, g, said := gatedEngine(t)
+	hear := func(who string) string {
+		return `editor.on("grant", function(ed, info)
+  editor.notify("` + who + ` " .. tostring(info.allowed) .. " " .. table.concat(info.capabilities, ","))
+end)`
+	}
+	for _, s := range []string{"pkg", "other"} {
+		if err := e.LoadGated(s, s+"/init.lua", []byte(hear(s)), g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := e.Load("mine.lua", []byte(hear("mine"))); err != nil {
+		t.Fatal(err)
+	}
+	for who, want := range map[string]bool{"pkg": true, "other": true, "mine.lua": false, "nobody": false} {
+		if got := e.HandlesFor(who, "grant"); got != want {
+			t.Errorf("HandlesFor(%q): %v, want %v", who, got, want)
+		}
+	}
+	for _, ev := range []struct {
+		script  string
+		allowed bool
+		want    string
+	}{{"pkg", true, "pkg true secrets,box"}, {"other", false, "other false secrets,box"}} {
+		*said = nil
+		if errs := e.EmitFor(ev.script, "grant", map[string]any{"capabilities": []string{"secrets", "box"}, "allowed": ev.allowed}); errs != nil {
+			t.Fatal(errs)
+		}
+		if strings.Join(*said, ";") != ev.want {
+			t.Fatalf("grant for %s: heard %q, want only %q", ev.script, *said, ev.want)
+		}
+	}
+	*said = nil
+	if errs := e.EmitFor("mine.lua", "grant", map[string]any{"capabilities": []string{"x"}, "allowed": true}); errs != nil || len(*said) != 0 {
+		t.Fatalf("grant for an ungated script's name: %v, heard %q, want nothing", errs, *said)
+	}
+}
