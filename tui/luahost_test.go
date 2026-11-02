@@ -565,9 +565,8 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.s.WaitForText(t, "SPC a — agents")
 	r.keys(t, key('g'))
 	r.s.WaitFor(t, "the panel raised by g", func(string) bool { return shown() && !r.covered("agent") })
-	r.leader(t, 'a')
-	r.s.WaitForText(t, "SPC a — agents")
-	r.keys(t, key('g'))
+	// its terminal has the keyboard now, so SPC is the agent's: the same toggle again, as a command
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the panel hidden by g", func(string) bool { return !shown() })
 	if !r.agentRunningNow() {
 		t.Error("g stopped the agent")
