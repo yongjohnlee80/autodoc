@@ -57,11 +57,21 @@ jobs:
     env:
       PGURL: postgres://autodoc:autodoc@localhost:5432/autodoc?sslmode=disable
     steps:
+      # the whole history: the commit-message step below reads the run's range of commits
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
+
+      # The commits a run brings name no one, by the files' own patterns (docs/names_test.go): a
+      # push's before..after, the release pull request's base..head.
+      - name: commit messages name no one
+        env:
+          AUTODOC_NAMES_COMMITS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: go test -count=1 -v -run '^TestNoCommitMessageNamesTheTeam$' ./docs/
 
       - name: gofmt
         run: |
