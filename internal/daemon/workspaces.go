@@ -75,8 +75,13 @@ type Workspaces struct {
 	storesWant, storesDone atomic.Int64
 	storesRead             chan struct{}
 	storesReader           bool
-	varsStamps             map[string]string // each variable file's size and modification time, the reader's alone
-	modes                  map[int64]*modes
+	// storesRevalidate says the stores' last revalidation failed, so the reader does it again even
+	// when the registry reads the same (the reader's own). revalidateAll, when set (a test), is
+	// what revalidating every served workspace does.
+	storesRevalidate bool
+	revalidateAll    func() error
+	varsStamps       map[string]string // each variable file's size and modification time, the reader's alone
+	modes            map[int64]*modes
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
