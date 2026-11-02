@@ -288,9 +288,11 @@ all, for the daemon's user on its machine:
   how many survived, and the window says so. Nothing is claimed ended that wasn't seen to end.
   `term` and `kill` say that every process the kill held ended, no more: a process forked into the
   group after its leader was gone is never taken in, so it can outlive a kill that answers `term`.
-  Taking it in by its group number would risk another group's processes. The daemon's reclaim
-  journals an incomplete kill with its survivors and keeps the orphan's clock, so the next look
-  ends what still runs.
+  Taking it in by its group number would risk another group's processes. The window's notice says
+  so. The daemon's reclaim journals an incomplete kill with its survivors and tries again at the
+  look 10 minutes on, at most 3 times. Then the orphan is flagged for the user ("the daemon
+  stopped trying, it's yours to end", with how many still run), and the daemon neither kills it
+  nor journals it again.
   A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
   helper that leads its own process group is ended with its group. Any other, such as a server
   Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is

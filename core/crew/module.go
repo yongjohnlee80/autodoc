@@ -207,7 +207,7 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, _ struct{}) ([]Orphan, error) { return m.Orphans(ctx) }),
 		module.Handle(module.Contract{Verb: "crew.bridges", Since: bridgesSince, Scope: module.ScopeLocalPeer,
 			Audience: module.AudienceUser, Effect: module.EffectRead,
-			Result: "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+			Result: "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at, reclaim_stopped, survivors}]",
 			Errors: []int64{CodeNoBridges},
 			Doc:    "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned."},
 			func(ctx context.Context, _ struct{}) ([]BridgeRow, error) { return m.Bridges(ctx) }),
