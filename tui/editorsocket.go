@@ -31,7 +31,7 @@ import (
 // editor.add_command writes a Lua command into lua/ only after the user's yes.
 //
 //	editor.document                         {path, workspace, kind, modified, revision, cursor, selection?,
-//	                                         spawn_workspace, foreign_workspace?}                            editor.read
+//	                                         disk?, spawn_workspace, foreign_workspace?}                     editor.read
 //	editor.workspace                        {spawn_workspace, workspace_in_use, switch?}                     none
 //	editor.read [from_line, to_line]        {text, revision}                                                 editor.read
 //	editor.find term [opts]                 [[l1, c1, l2, c2], …]                                            editor.read
@@ -242,8 +242,12 @@ func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs)
 			who := "agent:" + agent
 			if g := (luaGrants{h}); capability != "" && !g.Granted(who, capability) {
 				g.Request(who, []string{capability})
+				told := ""
+				if _, _, held := h.crewHeld(); held {
+					told = "; their answer comes to you as mail" // grantAnswered
+				}
 				return nil, &golibrpc.Error{Code: codeEditorNotGranted,
-					Message: fmt.Sprintf("needs %s: not granted (the user is asked)", capability)}
+					Message: fmt.Sprintf("needs %s: not granted (the user is asked%s)", capability, told)}
 			}
 			return fn(agent, a)
 		})
@@ -300,6 +304,12 @@ func (h *Host) editorDocument(agent string, a editorArgs) (any, error) {
 		doc["path"], doc["kind"] = b.file.path, h.resolver().Of(b.file.path).String()
 		if b.file.ws != "" {
 			doc["workspace"] = b.file.ws
+		}
+		switch b.file.disk { // how the file stands on disk, when not as the buffer read it
+		case diskChanged:
+			doc["disk"] = "changed"
+		case diskDeleted:
+			doc["disk"] = "deleted"
 		}
 		h.markForeign(agent, b.file.ws, doc)
 	}

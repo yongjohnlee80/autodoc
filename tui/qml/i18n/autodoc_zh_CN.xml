@@ -1251,6 +1251,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 不再等你了</translation>
     </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>无法将你对 %1 请求的答复通过邮件发送给它：%2。请直接告诉该代理。</translation>
+    </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>此窗口的团队收件箱被守护进程拒绝（%1）：请求和提醒会在下次连接时重新显示。</translation>
@@ -5353,6 +5357,30 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>主题：%1</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 已随其任务移动到 %2：缓冲区随之跟进</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 已随其任务移动到 %2：缓冲区随之跟进，并保留未保存的编辑；那里的文本不同，下次打开或保存时会询问您</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 已随其任务移动到 %2，而该文件已在另一个缓冲区中打开：此缓冲区保留未保存的编辑，并拒绝保存</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1 的任务已被移除：其缓冲区已关闭</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1 的任务已被移除：未保存的编辑会保留，但拒绝保存，以免再次写入该任务</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 未保存：其任务已移动或被移除，在此写入会产生该任务的第二个文件</translation>
     </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>

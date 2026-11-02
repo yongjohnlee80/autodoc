@@ -828,4 +828,5 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"is relative to that workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not " +
 	"at all. Keep your task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
 	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>`. " +
-	"Say so to the user, and try again once they have answered.\n\n"
+	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
+	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"

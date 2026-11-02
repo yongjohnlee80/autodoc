@@ -453,6 +453,11 @@ func (t *todos) toggle() {
 // only the latest call of that sequence is answered, its error as well as its result; without
 // one (a write), every call is.
 func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
+	t.callOr(verb, params, seq, then, nil)
+}
+
+// callOr is call whose failure, once told, runs failed (nil for nothing more).
+func (t *todos) callOr(verb string, params []any, seq *uint64, then func(any), failed func()) {
 	tk := Ticket{}
 	if seq != nil {
 		tk = t.c.Ticket(seq, TicketSession)
@@ -469,6 +474,9 @@ func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
 		}
 		if err, ok := v.(error); ok {
 			t.c.Failed(verb, err)
+			if failed != nil {
+				failed()
+			}
 			return
 		}
 		then(v.(answer).v)
@@ -989,19 +997,23 @@ func (t *todos) monthsBack() {
 // there does nothing rather than answer with an error.
 func (t *todos) readOnly(s *todoStore) bool { return s == nil || s.released }
 
-// write runs a todos verb that changes store s, once s takes writes here, and reads its tabs again.
+// write runs a todos verb that changes store s, once s takes writes here, and reads its tabs again:
+// after a refused write too, whose row may be of the task as it was (its rev stale).
 func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
 	if t.readOnly(s) {
 		return
 	}
-	t.call(verb, params, nil, func(v any) {
-		if done != nil {
-			done(v)
-		}
+	reload := func() {
 		if s == t.cur {
 			t.reload()
 		}
-	})
+	}
+	t.callOr(verb, params, nil, func(v any) {
+		if done != nil {
+			done(v)
+		}
+		reload()
+	}, reload)
 }
 
 // add is a: the title of a new task in the store shown asked for (todoNew).

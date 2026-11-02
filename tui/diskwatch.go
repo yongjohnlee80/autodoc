@@ -21,8 +21,8 @@ import (
 // polling where it cannot, and checks each change against the daemon's version: a buffer with no
 // unsaved edits reloads silently, one undo step, its cursor kept; a modified one is badged, and
 // asked keep / reload / overwrite when it is next entered or saved, never while it is typed in; a
-// file deleted on disk keeps its buffer, badged, and a save creates it again. The TUI's own saves
-// are never outside changes.
+// file deleted on disk keeps its buffer, badged, and a save creates it again, unless it was a todo
+// task's: that buffer follows its task (todomove.go). The TUI's own saves are never outside changes.
 
 // diskState is how a buffer's file stands on disk, as its last check found it.
 type diskState uint8
@@ -30,7 +30,7 @@ type diskState uint8
 const (
 	diskSame    diskState = iota // the version the buffer holds, or the TUI's own save
 	diskChanged                  // a newer version than the buffer's, which has unsaved edits
-	diskDeleted                  // gone from disk; a save creates it again
+	diskDeleted                  // gone from disk; a save creates it again (not a gone task's: taskGone)
 )
 
 // diskWatch is one watched folder: the open buffers whose files are in it.
@@ -276,18 +276,22 @@ func (h *Host) diskSoon(b *openBuffer) {
 	})
 }
 
-// diskSnap is what a check reads of b, taken on the loop: the worker never reads b.
+// diskSnap is what a check reads of b, taken on the loop: the worker never reads b. abs is the
+// file's path on disk, hint the latest move of it the todo feed read (nil for none).
 type diskSnap struct {
-	ws, path string
-	raw      bool
-	version  string
-	saves    uint64
+	ws, path, abs string
+	raw           bool
+	version       string
+	saves         uint64
+	hint          *todoFileChange
 }
 
-// diskRead is a check's read of the file through the daemon.
+// diskRead is a check's read of the file through the daemon; missing, fate is what became of its
+// task, if it was a task's (todomove.go).
 type diskRead struct {
 	content, version string
 	missing          bool
+	fate             taskFate
 	err              error
 }
 
@@ -295,7 +299,7 @@ type diskRead struct {
 func readDisk(ctx context.Context, h *Host, snap diskSnap) diskRead {
 	res, err := h.readFile(ctx, snap.ws, snap.path, snap.raw)
 	if code(err) == rpc.CodeNotFound {
-		return diskRead{missing: true}
+		return diskRead{missing: true, fate: h.taskFateOf(ctx, snap.ws, snap.path, snap.abs, snap.raw, snap.hint)}
 	}
 	if err != nil {
 		return diskRead{err: err}
@@ -316,7 +320,8 @@ func (h *Host) diskCheck(b *openBuffer) {
 		return
 	}
 	tk := h.bufferTicket(b, false) // a switch of buffer or workspace does not drop it
-	snap := diskSnap{ws: b.file.ws, path: b.file.path, raw: b.file.raw, version: b.file.version, saves: b.saves}
+	abs := h.pathOnDisk(b.file.ws, b.file.path)
+	snap := diskSnap{ws: b.file.ws, path: b.file.path, abs: abs, raw: b.file.raw, version: b.file.version, saves: b.saves, hint: h.todoMoveOf(abs)}
 	do(h, func(ctx context.Context) diskRead { return readDisk(ctx, h, snap) }, func(r diskRead) {
 		switch {
 		case !tk.Current(), !b.file.open, b.file.path != snap.path, b.file.ws != snap.ws:
@@ -325,8 +330,12 @@ func (h *Host) diskCheck(b *openBuffer) {
 			h.diskSoon(b) // a save started or landed while this read was out: stale; one fresh check
 		case r.err != nil:
 			h.keep(fmt.Errorf("checking %s on disk: %w", snap.path, r.err))
+		case r.missing && b.file.taskGone:
+			// settled already: its task is gone from this path for good
 		case r.missing:
-			h.markDisk(b, diskDeleted, "")
+			if !h.followTask(b, r.fate) {
+				h.markDisk(b, diskDeleted, "")
+			}
 		case r.version == snap.version:
 			h.markDisk(b, diskSame, "") // the TUI's own save, or a touch
 		case !b.file.dirty && h.prefs.diskReload == diskReloadClean:
@@ -340,6 +349,9 @@ func (h *Host) diskCheck(b *openBuffer) {
 // markDisk badges b with how its file stands on disk (its tab and the status line); the question
 // a changed file asks waits for b's next enter or save.
 func (h *Host) markDisk(b *openBuffer, st diskState, version string) {
+	if st != diskDeleted {
+		b.file.taskGone = false // the file is there again: its save writes it as any file's
+	}
 	if b.file.disk == st && b.file.diskVersion == version {
 		return
 	}
@@ -396,6 +408,7 @@ func (h *Host) reloadFromDisk(b *openBuffer, content, version string) {
 	}
 	ed.MarkSaved()
 	b.file.version, b.file.disk, b.file.diskVersion, b.file.diskAsked = version, diskSame, "", ""
+	b.file.taskGone = false
 	if b == h.active {
 		h.setDirty(false)
 	} else {

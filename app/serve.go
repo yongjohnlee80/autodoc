@@ -40,6 +40,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -488,7 +489,7 @@ func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
-		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
+		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -713,6 +714,20 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 		fmt.Fprintln(out, "  "+f)
 	}
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
+}
+
+// taskFiles is the daemon's guard of a client's create in a todo store
+// (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): a path shaped as a task file's
+// place goes to the todo manager, which writes it under the lock of the store holding it, the one
+// its own moves take, unless it is a second file of a task there (todo.Manager.CreateOnce). Any
+// other path costs the shape's test alone.
+func taskFiles(m *todo.Manager) rpc.TaskFiles {
+	return func(ctx context.Context, abs string, content []byte, write func() error) (string, string, error) {
+		if !todo.MayBeTaskFile(abs) {
+			return "", "", write()
+		}
+		return m.CreateOnce(ctx, localfs.Resolve(abs), content, write) // the registry's directories are canonical
+	}
 }
 
 // todoStores is the todo registry as the workspaces read it
