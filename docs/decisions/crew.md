@@ -316,7 +316,9 @@ agent can:
 - A live session's endpoint, none or failing, it registers again from its own process, as that
   kind's own command does: Claude's `crew endpoint --claude`, Codex's `crew endpoint --codex-here`,
   agy's `crew bridge --agy` (from agy's shell only: its MCP server has no token). OpenCode's plugin
-  registers its own on the session's next message.
+  registers its own on the session's next message. A waker that returned is not an endpoint registered (agy's bridge
+  detaches first): it is re-issued only once `crew.access` says `registered`, looked at for up to
+  10 s, else it says the daemon holds none.
 - A registered endpoint it keeps: a registration raises its generation and resets its wake state,
   so a re-issue of a healthy session changes nothing.
 - It answers `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access
