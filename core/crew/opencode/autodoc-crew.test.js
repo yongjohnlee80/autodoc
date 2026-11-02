@@ -9,8 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AutodocCrew } from "./autodoc-crew.js";
 
-const NOTICE = "AutoDoc mail is waiting for you. Run: autodoc mail receive";
-const NOTICE_MCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false.";
+const NOTICE = "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail receive (not SendMessage)";
+const NOTICE_MCP = "[AutoDoc mail] Mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage).";
 let fake, path, plugin, client, savedPath;
 
 const until = async (ok, ms = 3000) => {

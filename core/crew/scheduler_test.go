@@ -153,7 +153,7 @@ func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
 			t.Errorf("%s reads its mail via %v, want %v", kind, got, want)
 		}
 	}
-	if n := crew.NoticeFor(crew.MailViaCLI, nil, false); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive") {
+	if n := crew.NoticeFor(crew.MailViaCLI, nil, false); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive (not SendMessage)") {
 		t.Errorf("the CLI notice: %q", n)
 	}
 	if n := crew.NoticeFor(crew.MailViaMCP, nil, false); n != crew.WakeNoticeMCP || !strings.Contains(n, "mail_receive, a tool of the autodoc MCP server") || strings.Contains(n, "Run:") {
@@ -167,8 +167,8 @@ func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
 // a command, words, a bracket, a line break, an over-long name); an unknown kind is left out; a
 // sender with no messages is skipped. With nothing to print, the notice is the constant one.
 func TestTheNoticeNamesItsSendersSafely(t *testing.T) {
-	const head, cli = "AutoDoc mail is waiting for you: ", ". Run: autodoc mail receive"
-	const mcp = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+	const head, cli = "[AutoDoc mail] Mail is waiting for you: ", ". Run: autodoc mail receive (not SendMessage)"
+	const mcp = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
 	type S = crew.Sender
 	long := strings.Repeat("a", 65)
 	for _, c := range []struct {
@@ -790,5 +790,30 @@ func TestAWakeFollowsTheSessionsOwnMailMode(t *testing.T) {
 	if crew.SessionMailVia("", crew.KindAgy) != crew.MailViaMCP || crew.SessionMailVia("cli", crew.KindAgy) != crew.MailViaCLI ||
 		crew.SessionMailVia("", crew.KindClaude) != crew.MailViaCLI || crew.SessionMailVia("smtp", crew.KindClaude) != crew.MailViaCLI {
 		t.Error("SessionMailVia: a session's own mode wins, and with none (or one not known) its kind's")
+	}
+}
+
+// TestEveryWakeNoticeSaysItIsAutoDocMail: Claude Code frames whatever reaches a session as "Another
+// Claude session sent a message … reply via SendMessage". Every form of AutoDoc's notice says, inside
+// that frame, what it is and how to read it: it opens with [AutoDoc mail] and ends saying not
+// SendMessage, on CLI mail and MCP mail, naming no sender, one, or the most it names and more.
+func TestEveryWakeNoticeSaysItIsAutoDocMail(t *testing.T) {
+	one := []crew.Sender{{From: "gold", Kind: crew.KindClaude, Count: 1}}
+	many := []crew.Sender{{From: "gold", Kind: crew.KindClaude, Count: 2}, {From: "user", Count: 1},
+		{From: "vision", Kind: crew.KindClaude, Count: 1}, {From: "lector", Kind: crew.KindCodex, Count: 3}}
+	for _, via := range []crew.MailVia{crew.MailViaCLI, crew.MailViaMCP} {
+		for _, senders := range [][]crew.Sender{nil, one, many} {
+			n := crew.NoticeFor(via, senders, false)
+			if !strings.HasPrefix(n, "[AutoDoc mail] ") || !strings.Contains(n, "(not SendMessage)") {
+				t.Errorf("via %d, %d senders: %q; want it to open [AutoDoc mail] and say not SendMessage", via, len(senders), n)
+			}
+			read := "autodoc mail receive"
+			if via == crew.MailViaMCP {
+				read = "mail_receive"
+			}
+			if !strings.Contains(n, read) {
+				t.Errorf("via %d, %d senders: %q; want it to say how to read the mail (%s)", via, len(senders), n, read)
+			}
+		}
 	}
 }
