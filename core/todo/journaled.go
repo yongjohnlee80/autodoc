@@ -31,7 +31,7 @@ func (m *Manager) begin(ctx context.Context, st *store, c Change) (Change, error
 func (m *Manager) commit(ctx context.Context, st *store, c Change, e Edit) error {
 	e.Store = st.id
 	if c.Kind == KindAssign {
-		e.Scope = &c.Scope
+		e.Scope, e.By = &c.Scope, &c.By
 	}
 	return m.j.Commit(ctx, c.Seq, e)
 }

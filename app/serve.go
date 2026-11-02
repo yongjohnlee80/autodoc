@@ -555,7 +555,8 @@ func crewModules(d *moduleDeps) {
 			logger.Warning(d.log, err, fmt.Sprintf("crew.register refused: %s@%s (%s, epoch %d, instance %s)", r.Codename, r.Scope, r.Kind, r.Epoch, r.Instance))
 		}))
 	port.Manager = d.crew
-	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls))
+	// inbox.forward asks the todo system who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it)
+	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls), inbox.WithAssigners(d.todos.AssignedBy))
 }
 
 // crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each

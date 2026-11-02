@@ -21,6 +21,9 @@ const sendSince = 41
 // fallbackSince is the protocol inbox.fallback arrives in (rpc's Protocol 44).
 const fallbackSince = 44
 
+// forwardSince is the protocol inbox.forward arrives in (rpc's Protocol 46).
+const forwardSince = 46
+
 // The verbs' params, in their positional order.
 type (
 	watchParams struct {
@@ -51,6 +54,19 @@ type (
 		// doorbell rang for it; otherwise it is the host's fallback job when the host takes them
 		// (inbox.handed_over), and else nothing is left and the window types the text instead.
 		Fire bool `param:"fire,optional" doc:"one recipient: answer once its doorbell rang for this message; else handed_over (its host's fallback job) or unreachable (nothing left)"`
+	}
+	forwardParams struct {
+		Scope   string   `param:"scope" doc:"the window's scope, which its host holds"`
+		Run     string   `param:"run" doc:"the host's run token"`
+		Epoch   int64    `param:"epoch" doc:"the host's epoch"`
+		Store   string   `param:"store" doc:"the todo store's id, as todos.stores names it"`
+		Seq     int64    `param:"seq" doc:"the assign change's seq; 0 for a resync's snapshot row"`
+		Task    string   `param:"task" doc:"the task's id"`
+		To      []string `param:"to" doc:"names in the scope, name@scope, or session:<id>"`
+		Body    string   `param:"body" doc:"at most 64 KiB"`
+		Key     string   `param:"key" doc:"the idempotency key, the change's (todo-<store>-<seq>): a retry with the same content answers the first send"`
+		Kind    string   `param:"kind,optional" doc:"message (the default) or request"`
+		Subject string   `param:"subject,optional"`
 	}
 	messageParams struct {
 		Message string `param:"message"`
@@ -245,6 +261,18 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p sendParams) (sentResult, error) {
 				s, err := m.Send(ctx, p.Scope, p.Run, p.Epoch, mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body,
 					Key: p.Key, Fire: p.Fire})
+				return sentResult{Message: s.Message.ID}, err
+			}),
+		module.Handle(func() module.Contract {
+			c := host("inbox.forward", "{message}",
+				"Send an assignment the window's todo feed read (store and seq, or a resync's task) from whoever the todo system recorded made it: an agent's own profile, so its recipient reads it as that agent's, with the peer marker; autodoc, saying so, when its maker couldn't be verified; the user only when the user's surface made it. The window never names the sender. Queued, never fired. The key is the change's: the same key answers the first send.",
+				crew.CodeStaleEpoch, mail.CodeNoRecipient, mail.CodeAmbiguous, CodeKeyReused, CodeTooLarge)
+			c.Since = forwardSince
+			return c
+		}(),
+			func(ctx context.Context, p forwardParams) (sentResult, error) {
+				s, err := m.Forward(ctx, p.Scope, p.Run, p.Epoch, p.Store, p.Seq, p.Task,
+					mail.Send{To: p.To, Kind: p.Kind, Subject: p.Subject, Body: p.Body, Key: p.Key})
 				return sentResult{Message: s.Message.ID}, err
 			}),
 		module.Handle(user("inbox.dismiss", module.EffectWrite, "{}",

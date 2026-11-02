@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 45,
+  protocol = 46,
   min_protocol = 12,
   verbs = {
     ["crew.adopt"] = {
@@ -496,6 +496,24 @@ return {
       },
       result = "{session, owner}",
       doc = "Ask the session's current owner to raise its agent: the owner's host hears a focus change.",
+    },
+    ["inbox.forward"] = {
+      since = 46, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "store", type = "string" },
+        { name = "seq", type = "int" },
+        { name = "task", type = "string" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Send an assignment the window's todo feed read (store and seq, or a resync's task) from whoever the todo system recorded made it: an agent's own profile, so its recipient reads it as that agent's, with the peer marker; autodoc, saying so, when its maker couldn't be verified; the user only when the user's surface made it. The window never names the sender. Queued, never fired. The key is the change's: the same key answers the first send.",
     },
     ["inbox.list"] = {
       since = 37, scope = "local-peer", audience = "user",

@@ -869,3 +869,34 @@ func TestTheMailFallbackScript(t *testing.T) {
 		t.Fatalf("hosts after the revert: %s, %v; want the one kept", got, err)
 	}
 }
+
+// 000031 records who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
+// empty for a change or a snapshot row written without it, and the snapshot's id index covers it.
+// The revert drops both columns, keeps the rows, and leaves the index as 000025 made it.
+func TestTheTodoAssignByScript(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO todo_change(store, id, kind, op, state) VALUES ('s', 'x', 'assign', 'in-place', 'committed')")
+	exec(t, db, "INSERT INTO todo_snapshot(store, path, id, rev, status) VALUES ('s', 'open/x.md', 'x', '1', 'open')")
+	for _, q := range []string{"SELECT assigned_by FROM todo_change", "SELECT assigned_by FROM todo_snapshot"} {
+		if got, err := first(db, q); err != nil || got != "" {
+			t.Fatalf("%s: %q, %v; want '' for a row written without it", q, got, err)
+		}
+	}
+	if got, err := first(db, "SELECT count(*) FROM pragma_index_info('todo_snapshot_id') WHERE name = 'assigned_by'"); err != nil || got != "1" {
+		t.Fatalf("the snapshot's id index on assigned_by: %s, %v", got, err)
+	}
+	revertDownTo(t, db, 31)
+	for _, q := range []string{"SELECT assigned_by FROM todo_change", "SELECT assigned_by FROM todo_snapshot"} {
+		if _, err := first(db, q); err == nil {
+			t.Fatalf("the revert left %s", q)
+		}
+	}
+	if got, err := first(db, "SELECT count(*) FROM pragma_index_info('todo_snapshot_id')"); err != nil || got != "4" {
+		t.Fatalf("the snapshot's id index after the revert: %s columns, %v; want 000025's four", got, err)
+	}
+	for _, q := range []string{"SELECT count(*) FROM todo_change", "SELECT count(*) FROM todo_snapshot"} {
+		if got, err := first(db, q); err != nil || got != "1" {
+			t.Fatalf("%s after the revert: %s, %v; want the row kept", q, got, err)
+		}
+	}
+}
