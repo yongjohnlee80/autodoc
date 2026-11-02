@@ -7921,6 +7921,10 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
         <translation>%1 auxiliar(es), %2 huérfano(s). El daemon termina un huérfano que sigue siéndolo 10 minutos.</translation>
     </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>huérfano, %1 aún en ejecución: el daemon dejó de intentarlo, terminarlo te corresponde</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
         <source>orphan, ends in %1 min</source>
         <translation>huérfano, termina en %1 min</translation>
@@ -7966,12 +7970,12 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <translation>se copiaron los detalles de %1 %2</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.ended">
-        <source>%1 %2 ended</source>
-        <translation>%1 %2 terminó</translation>
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 terminó, con todos los procesos que retenía (uno bifurcado después de que su líder terminara no se rastrea)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.killed">
-        <source>%1 %2 ignored the stop and was killed</source>
-        <translation>%1 %2 ignoró la parada y se forzó su fin</translation>
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ignoró la parada y fue forzado a terminar, con todos los procesos que retenía (uno bifurcado después de que su líder terminara no se rastrea)</translation>
     </message>
     <message id="autodoc.notice.crew_bridges.gone">
         <source>%1 %2 had already ended</source>

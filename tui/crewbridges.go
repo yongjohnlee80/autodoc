@@ -40,7 +40,8 @@ type bridgesCore interface {
 // crewBridgeRow is one helper, as crew.bridges lists it.
 type crewBridgeRow struct {
 	kind, start, socket, session, owner, host, state, why string
-	pid, started, reclaimAt                               int64
+	pid, started, reclaimAt, survivors                    int64
+	reclaimStopped                                        bool
 	argv                                                  []string
 }
 
@@ -129,7 +130,9 @@ func (b *crewBridges) load() {
 			m := asMap(x)
 			r := crewBridgeRow{kind: str(m, "kind"), start: str(m, "start"), socket: str(m, "socket"), session: str(m, "session"),
 				owner: str(m, "owner"), host: str(m, "host"), state: str(m, "state"), why: str(m, "why"),
-				pid: num(m, "pid"), started: num(m, "started"), reclaimAt: num(m, "reclaim_at")}
+				pid: num(m, "pid"), started: num(m, "started"), reclaimAt: num(m, "reclaim_at"),
+				survivors: num(m, "survivors")}
+			r.reclaimStopped, _ = m["reclaim_stopped"].(bool)
 			for _, a := range asList(m["argv"]) {
 				if s, ok := a.(string); ok {
 					r.argv = append(r.argv, s)
@@ -184,7 +187,10 @@ func (b *crewBridges) statusOf(rows []crewBridgeRow) string {
 // rowOf is a helper as the list shows it: an orphan's state says when the daemon reclaims it.
 func (b *crewBridges) rowOf(_ int, r crewBridgeRow) rowOf {
 	state := r.state
-	if r.state == "orphan" && r.reclaimAt > 0 {
+	switch {
+	case r.state == "orphan" && r.reclaimStopped: // the daemon's kills left processes running: the user's now
+		state = b.c.Trf("autodoc.text.crew_bridges.orphan_reclaim_stopped", int(r.survivors))
+	case r.state == "orphan" && r.reclaimAt > 0:
 		left := max(time.Unix(r.reclaimAt, 0).Sub(b.now()).Round(time.Minute), 0)
 		state = b.c.Trf("autodoc.text.crew_bridges.orphan_reclaimed_in", int(left/time.Minute))
 	}

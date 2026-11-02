@@ -770,3 +770,44 @@ func TestAGroupKillsTermCoversWhatItHeldOnly(t *testing.T) {
 		t.Fatal("a process that appeared in the group after its leader was gone was signalled")
 	}
 }
+
+// N2 (Lector #244 r3, Jarvis's ruling): an orphan whose reclaim leaves processes running is tried
+// again at the look 10 minutes on, at most 3 times, each journaled with its survivors; then it is
+// flagged for the user (reclaim_stopped, with the survivors) and the daemon neither kills nor
+// journals it again.
+func TestAnIncompleteReclaimIsRetriedThreeTimesThenFlagged(t *testing.T) {
+	r := newBridgeRig(t)
+	orphan := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false)
+	crew.SpareFromSignals(t, orphan.pid) // nothing ends it
+	t0 := time.Now()
+	look := func(at time.Duration) []crew.Reclaimed {
+		t.Helper()
+		got, err := r.m.Reclaim(r.ctx, t0.Add(at))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	look(0)
+	for i, at := range []time.Duration{10, 20, 30, 40} {
+		got := look(at * time.Minute)
+		if len(got) != 1 || got[0].Outcome != crew.KilledIncomplete || got[0].Survivors != 1 {
+			t.Fatalf("try %d, at %d min: %+v, want one incomplete reclaim, 1 survivor", i+1, at, got)
+		}
+		if look(at*time.Minute+9*time.Minute) != nil {
+			t.Fatalf("try %d retried before the look 10 minutes on", i+1)
+		}
+	}
+	for _, at := range []time.Duration{50, 60, 120} {
+		if got := look(at * time.Minute); len(got) != 0 {
+			t.Fatalf("at %d min, after 3 retries: %+v, want nothing", at, got)
+		}
+	}
+	row, _ := r.row(orphan.pid)
+	if !row.ReclaimStopped || row.Survivors != 1 || row.ReclaimAt != 0 || row.State != crew.BridgeOrphan {
+		t.Fatalf("the orphan the daemon gave up on: %+v, want flagged, 1 survivor, no reclaim_at", row)
+	}
+	if !running(orphan.pid) {
+		t.Fatal("the spared orphan ended")
+	}
+}
