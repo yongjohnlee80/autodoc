@@ -436,7 +436,7 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
 
 In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `core/crew/waits.go`
 
-### An answer says what it did
+## An answer says what it did
 
 An ack that answered `{}` couldn't tell an agent which delivery it had acked, whether the ack had
 written anything, or that one it still held was unanswered. Agents took a forgotten ack, whose
