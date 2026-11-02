@@ -61,12 +61,16 @@ M.VERBS = {
 
 local registered = {}
 
----Register the verbs. No-op without auto-core's mailbox.
+---Register the verbs on auto-core's command registry (autodoc.registry). With none, nothing is
+---registered, and the user is told once, naming the verbs.
 ---@return string[] registered names
 function M.register_verbs()
-  local ok, core = pcall(require, "auto-core")
-  local reg = ok and core.mailbox and core.mailbox.commands
-  if not reg or type(reg.register) ~= "function" then return {} end
+  local registry = require("autodoc.registry")
+  local reg = registry.get()
+  if not reg then
+    registry.missing("autodoc.preview", vim.tbl_keys(M.VERBS))
+    return {}
+  end
   local names = {}
   for name, spec in pairs(M.VERBS) do
     local rok, rerr = reg.register(name, {
@@ -84,8 +88,7 @@ function M.register_verbs()
 end
 
 function M.unregister_verbs()
-  local ok, core = pcall(require, "auto-core")
-  local reg = ok and core.mailbox and core.mailbox.commands
+  local reg = require("autodoc.registry").get()
   for name in pairs(registered) do
     if reg then pcall(reg.unregister, name) end
   end
