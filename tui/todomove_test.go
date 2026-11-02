@@ -249,3 +249,56 @@ func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
 		t.Fatalf("after the feed's move: dirty %v, text %q; want the completed task, clean", f.dirty, r.editorText())
 	}
 }
+
+// TestAnotherStoresMoveIsNotFollowed: the feed reads several stores, and a move is its own store's.
+// A move of the same relative path in another store, read later, names a file this store holds too
+// (an unrelated document at deferred/<id>.md): the buffer follows its own store's move, never the
+// other's (the mutant: the hint matched by its relative path alone).
+func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
+	r, root, m, task := onTodoDisk(t)
+	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
+	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // the feed alone says it moved
+	moved, err := m.Status(context.Background(), alphaTodos, task.ID, task.Rev, "completed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoy := filepath.Join(root, ".todo-list", "deferred", task.ID+".md")
+	if err := os.MkdirAll(filepath.Dir(decoy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decoy, []byte("---\nid: \"notes\"\n---\n\n# Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, other := filepath.Join(root, ".todo-list"), filepath.Join(t.TempDir(), ".todo-list")
+	r.h.p.Post(func() {
+		r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: moved.Path},
+			{store: other, from: task.Path, to: "deferred/" + task.ID + ".md"}})
+	})
+	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
+	if got := r.file().path; got != to {
+		t.Fatalf("the buffer followed to %s, want its own store's move, %s", got, to)
+	}
+}
+
+// TestAMoveToAnotherTasksFileIsNotFollowed: a move hint is taken only when the file it names is the
+// same task's, by its own id: one naming another task's file (a stale hint) is passed over, and the
+// task is found by its id (the mutant: any readable file the hint names followed).
+func TestAMoveToAnotherTasksFileIsNotFollowed(t *testing.T) {
+	r, root, m, task := onTodoDisk(t)
+	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
+	ctx := context.Background()
+	y, err := m.Add(ctx, alphaTodos, todo.Spec{Title: "Another"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true })
+	if _, err := m.Status(ctx, alphaTodos, task.ID, task.Rev, "completed"); err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(root, ".todo-list")
+	r.h.p.Post(func() { r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: y.Path}}) })
+	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
+	if got := r.file().path; got != to {
+		t.Fatalf("the buffer followed to %s, want the task's own file, %s", got, to)
+	}
+}
