@@ -366,6 +366,29 @@ func testARegisteredAgainEndpointMovesNoFallbackWindow(t *testing.T, h Harness) 
 	}
 }
 
+// Only a kind that starts with its endpoint (Claude) has its window open at its endpoint's first
+// registration: a Codex session whose endpoint first registers 3 min after the send falls back
+// fallbackWindow from the send, as before, in both stores' due and next deadline.
+func testAnotherKindsFirstEndpointOpensNoWindow(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.poll()
+	sent := r.clock.Now()
+	d := r.send()
+	r.clock.Advance(3 * time.Minute)
+	r.reachable()
+	if at, has := r.nextDeadline(); !has || at != sent.Add(fallbackWindow).UnixNano() {
+		t.Fatalf("the next deadline %v after the send (has %v), want %v", time.Duration(at-sent.UnixNano()), has, fallbackWindow)
+	}
+	r.clock.Advance(sent.Add(fallbackWindow - time.Nanosecond).Sub(r.clock.Now()))
+	if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+		t.Fatalf("10 min less 1 ns after the send: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(time.Nanosecond)
+	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+		t.Fatalf("10 min after the send, its endpoint first registered at 3: %+v, want its job", got)
+	}
+}
+
 // nextDeadline is mail's next deadline, and whether it has one.
 func (r *fbRig) nextDeadline() (int64, bool) {
 	r.t.Helper()
