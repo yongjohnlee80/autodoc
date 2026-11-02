@@ -192,7 +192,12 @@ import (
 // Protocol 45 is mail.show (docs/decisions/crew.md#durable-mail): a delivery the caller holds,
 // read again under its lease, which stays as it was, so an agent whose reader cut a body short
 // reads it whole without asking its sender to resend. A session below 45 has no such verb.
-const Protocol int64 = 45
+// Protocol 46 is Crew Bridges (docs/decisions/crew.md#crew-bridges): crew.bridges, the crew's
+// helper processes on the machine (agy and Codex bridges, Codex servers, Codex's shared daemon),
+// each joined to the session it serves and flagged when orphaned, and crew.bridge_kill, the host's
+// verb that ends one by hand. The daemon reclaims an orphan of the crew's own on its own, journaled
+// as crew.bridge_reclaimed. A session below 46 has neither verb.
+const Protocol int64 = 46
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

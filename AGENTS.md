@@ -222,7 +222,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 45; the daemon serves sessions from protocol 12.
+Verbs at protocol 46; the daemon serves sessions from protocol 12.
 
 ### `crew`
 
@@ -230,6 +230,8 @@ Verbs at protocol 45; the daemon serves sessions from protocol 12.
 | --- | --- | --- | --- | --- | --- |
 | `crew.adopt` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and move its mail here. Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
 | `crew.attention` | `credential` string, `op` string (raise or clear), `kind`? string (for raise: permission or blocked), `text`? string (for raise: what the session waits on) | `{}` — Raise or clear: the session waits on the user. alive: the session's permission-prompt reporter is running (since 41). Codes: -32094, -32091. | 37 | agent | write |
+| `crew.bridge_kill` | `scope` string, `run` string, `epoch` int, `pid` int (the helper's pid, as crew.bridges listed it), `start` string (its process reference, as crew.bridges listed it: a pid another process holds now is never signalled), `confirmed`? bool (the user agreed: required for a live or foreign row) | `{outcome, survivors}` — End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill. Codes: -32091, -32097, -32098. | 46 | for people's tools; unix socket only | write |
+| `crew.bridges` | — | `[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]` — The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned. Codes: -32098. | 46 | for people's tools; unix socket only | read |
 | `crew.claim` | `scope` string (autovim:<project>, nvim:<key> or autodoc:<id>), `run` string (the host process's run token, held in memory only), `proc`? string (<boot id>:<pid ns>:<pid>:<start time>; "" when unknown) | `{epoch}` — Claim or reattach a scope with the process's run token. Idempotent. Codes: -32090. | 37 | for people's tools; unix socket only | write |
 | `crew.discard` | `from` string (the orphan scope (crew.orphans)), `to` string (the caller's own scope), `run` string, `epoch` int (the caller's epoch for to) | `{}` — Fence an orphan scope and fail its mail, telling senders. Codes: -32090, -32091. | 37 | for people's tools; unix socket only | write |
 | `crew.endpoint` | `credential` string, `kind` string (claude, codex, agy or opencode: the session's own), `locator` string (JSON, kind-specific; never a secret. opencode's is the AutoDoc plugin's socket, its process and the session (protocol 40)), `secret`? string (agy only: its language server's token, held in memory for this endpoint, never stored (protocol 38)) | `{generation}` — How to wake the calling session. Codes: -32094, -32096, -32091. | 37 | agent | write |
@@ -467,6 +469,8 @@ Verbs at protocol 45; the daemon serves sessions from protocol 12.
 | -32094 | `crew.bad_credential` | the session ended: its host registers a new one | "no such live session" |
 | -32095 | `crew.context_mismatch` | fix AUTODOC_CREW_CONTEXT or the working directory's .autodoc-crew | "two session contexts disagree, or one is for another store" |
 | -32096 | `crew.bad_endpoint` | register an endpoint of a known kind, with its locator | "the daemon refuses that endpoint" |
+| -32097 | `crew.bridge_confirm` | ask the user, naming the agent it cuts off, then send confirmed | "killing a live helper, or Codex's shared daemon, needs the user's confirmation" |
+| -32098 | `crew.bridges_unsupported` | list and end the crew's helpers by hand | "this daemon can't read the machine's processes" |
 | -32110 | `mail.no_recipient` | crew.list the addressbook, and send to a name it shows | "an address names no active profile or live session" |
 | -32111 | `mail.key_reused` | a retry sends the same content; new content takes a new key | "the key already names another message" |
 | -32112 | `mail.too_large` | send a shorter body, and put the rest in a file the recipient can read | "the body is past 64 KiB" |

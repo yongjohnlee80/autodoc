@@ -45,6 +45,9 @@ func TestMain(m *testing.M) {
 	if len(os.Args) >= 3 && os.Args[1] == testPluginArg {
 		os.Exit(runTestPlugin(os.Args[2]))
 	}
+	if os.Getenv(bridgeCellEnv) != "" {
+		bridgeCell() // a stand-in crew helper (crewbridges_test.go): it waits to be signalled
+	}
 	// No test reaches the registry, nor reads the user's cache of it, unless it serves its own
 	// (servedRegistry): opening the add dialog fetches it.
 	cache, err := os.MkdirTemp("", "autodoc-registry-")
