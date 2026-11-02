@@ -7202,6 +7202,10 @@ The last connect failed:
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>根目录：%1(工作区的根目录不可更改：请将另一个目录添加为独立的工作区)</translation>
     </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ 此根目录包含或位于 AutoDoc 自身的文件夹中：%1。获准访问其文件的脚本若无受保护路径列表即可触及它们：请移动根目录，或缩小它。</translation>
+    </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>
         <translation>根目录：它索引的目录(“浏览…”可选择)</translation>

@@ -74,13 +74,55 @@ func splitFrontmatter(src string) (fm, body string, err error) {
 // cleanBody is md.lua's clean_body: the description is the body without the managed header, a
 // leading H1, and the blank lines around it.
 func cleanBody(body string) string {
-	if loc := headerRe.FindStringIndex(body); loc != nil {
-		body = body[:loc[0]] + body[loc[1]:]
+	if loc := headerRe.FindStringIndex(body); loc != nil && strings.Count(body[loc[0]:loc[1]], "-->") == 1 {
+		body = body[:loc[0]] + body[loc[1]:] // one comment, closing on its own ─── -->: never past another's close
 	}
 	if loc := h1Re.FindStringIndex(body); loc != nil {
 		body = body[loc[1]:]
 	}
-	return strings.TrimRight(strings.TrimLeft(body, "\n"), "\n")
+	return strings.TrimRight(strings.TrimLeft(stripManaged(body), "\n"), "\n")
+}
+
+// stripManaged drops what a write puts above the description from the start of s: the managed
+// header and the H1 under it, as often as they repeat. A client that sends a file's whole body back
+// as the description (todos.get's body) would otherwise stack one more copy with every write, and a
+// file that has them already heals at its next write. Text of the user's own that starts with an H1,
+// with no header above it, keeps it.
+func stripManaged(s string) string {
+	for {
+		rest := strings.TrimLeft(s, " \t\r\n")
+		end, ok := managedHeaderAt(rest)
+		if !ok {
+			return s
+		}
+		rest = rest[end:]
+		if l := h1Re.FindStringIndex(rest); l != nil {
+			rest = rest[l[1]:]
+		}
+		s = strings.TrimLeft(rest, "\n")
+	}
+}
+
+// managedOpenRe is how the managed header opens, as either writer worded it.
+var managedOpenRe = regexp.MustCompile(`^<!-- ─── (?:autodoc|auto-core)\.todo schema v1`)
+
+// managedHeaderAt reports whether s opens with the managed header, one HTML comment from its
+// opening to its own closing "─── -->", and where it ends (its trailing blank space included). A
+// comment that opens alike but closes on another "-->" is the user's text, never consumed up to a
+// later comment's close.
+func managedHeaderAt(s string) (int, bool) {
+	if !managedOpenRe.MatchString(s) {
+		return 0, false
+	}
+	c := strings.Index(s, "-->")
+	if c < 0 || !strings.HasSuffix(strings.TrimRight(s[:c], " "), "───") {
+		return 0, false
+	}
+	end := c + len("-->")
+	for end < len(s) && strings.ContainsRune(" \t\r\n\v\f", rune(s[end])) {
+		end++
+	}
+	return end, true
 }
 
 // formatError is why a file is not a valid task.
