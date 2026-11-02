@@ -1219,6 +1219,14 @@
         <source>%1 did not start: %2</source>
         <translation>%1 no se inició: %2</translation>
     </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 aún no ha terminado de iniciarse en %2: puede que Claude Code esté preguntando en su pestaña si confiar en esa carpeta. No se escribe nada en él hasta que se inicie, y su correo del equipo lo espera.</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 salió (código %2) antes de que Claude Code se iniciara en %3: puede que haya rechazado la pregunta de confiar en la carpeta. Vuelve a iniciarlo y elige confiar en la carpeta.</translation>
+    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>Se descartaron %1 mensaje(s) para %2; se avisa a cada remitente.</translation>
