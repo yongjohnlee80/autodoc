@@ -83,6 +83,13 @@ func promptKey(tool string, input json.RawMessage) string {
 	return "p-" + hex.EncodeToString(h[:12])
 }
 
+// widensInput is the tools whose prompt collects an answer that its PostToolUse carries in the
+// input, added to what was asked (AskUserQuestion adds answers and annotations): only for these does
+// ranPrompt close a prompt whose input the ran one holds and adds to. Any other tool's wider input is
+// another call (a parallel Bash with the same command and a timeout), which must close nothing: the
+// prompt still shows, and the attention it keeps is what stops a window pressing Enter into it.
+var widensInput = map[string]bool{"AskUserQuestion": true}
+
 // canonInput is a tool's input compacted with its keys in order; as it came when it isn't JSON.
 func canonInput(input json.RawMessage) json.RawMessage {
 	var v any
@@ -231,15 +238,19 @@ type openPrompt struct {
 }
 
 // ranPrompt is the open prompt in dir a PostToolUse or PostToolUseFailure closes, by file name: the
-// one its tool and input name, else the oldest of its tool whose input it holds unchanged, every
-// key with the same value (inputWithin); "" when none is open. A tool that prompted runs only after
-// its prompt is answered, so the oldest is the first answered.
+// one its tool and input name, else, for a tool whose prompt widens its input (widensInput), the
+// oldest of its tool whose input it holds unchanged, every key with the same value (inputWithin);
+// "" when none is open. A tool that prompted runs only after its prompt is answered, so the oldest
+// is the first answered.
 func ranPrompt(dir string, in claudeHookInput) (string, error) {
 	key := promptKey(in.ToolName, in.ToolInput)
 	if _, err := os.Stat(filepath.Join(dir, key)); err == nil {
 		return key, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
+	}
+	if !widensInput[in.ToolName] {
+		return "", nil
 	}
 	open, err := openPrompts(dir)
 	if err != nil {
