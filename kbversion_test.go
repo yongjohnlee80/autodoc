@@ -18,7 +18,8 @@ const (
 
 // TestAManagedFileChangedSinceTheLastReleaseCarriesANewVersion: when KB_OPERATIONS.md or
 // _schema/frontmatter.yaml differs from the last release's (the newest v* tag this commit holds),
-// version.lua's autodoc is newer than that release's, or a KB stamped with the old version would
+// version.lua's autodoc is newer than that release's and than the release itself, or a KB stamped
+// with the old version would
 // never take the new copy (revision 6 shipped in v0.3.7 while version.lua still said 0.3.6). It
 // reads the release through git, so a clone without the tag (a shallow one) skips, saying so; CI's
 // fetches every tag.
@@ -49,9 +50,13 @@ func TestAManagedFileChangedSinceTheLastReleaseCarriesANewVersion(t *testing.T) 
 	if len(changed) == 0 {
 		return
 	}
-	if newer, ok := kbtype.Older(string(oldVersion[1]), KBManagedVersion()); !ok || !newer {
-		t.Fatalf("%v changed since %s, but version.lua's autodoc %q is not newer than its %q: set it to the release that ships them",
-			changed, release, KBManagedVersion(), oldVersion[1])
+	// newer than the release's version.lua and than the release itself: up to v0.3.7 the daemon
+	// stamped its copies with its build's version, so a KB it scaffolded carries the tag's
+	for _, then := range []string{string(oldVersion[1]), release} {
+		if newer, ok := kbtype.Older(then, KBManagedVersion()); !ok || !newer {
+			t.Fatalf("%v changed since %s, but version.lua's autodoc %q is not newer than %q: set it to the release that ships them",
+				changed, release, KBManagedVersion(), then)
+		}
 	}
 }
 
