@@ -501,7 +501,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   process, since it wouldn't start an agent it still runs, so the old session ends (`takeover`) and
   the new one is registered. A ghost (a session left live by a host that never sent `crew.exit`)
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
-- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `no_endpoint`, `wakes_failing` (with
+- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
+  `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
+  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.

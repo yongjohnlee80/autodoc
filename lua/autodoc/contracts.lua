@@ -112,7 +112,7 @@ return {
       since = 37, scope = "global", audience = "agent",
       params = {},
       result = "[{codename, scope, kind, presence, reachable, prompts_reported, why}]",
-      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
+      doc = "The addressbook. prompts_reported (since 41): the session's permission prompts are reported now, so a window may press Enter into it when it shows no permission attention. why (since 41, absent when it can be woken now): ended, host_gone (its host's lease lapsed or its process is dead: not woken), host (since 52: a host's own session, kind host, a forwarder never woken), no_endpoint, wakes_failing[: <the last failure's cause>], or backoff_until <RFC 3339 time>.",
     },
     ["crew.orphans"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -1295,6 +1295,8 @@ return {
     { code = -32112, name = "mail.too_large", next = "send a shorter body, and put the rest in a file the recipient can read" },
     { code = -32113, name = "mail.lease_lost", next = "mail.receive again: the delivery comes back if it is still unhandled" },
     { code = -32114, name = "mail.ambiguous", next = "send to the one meant by name@scope, as the error names them" },
+    { code = -32115, name = "mail.done", next = "go on: its ack (or reply) landed" },
+    { code = -32116, name = "mail.ended", next = "nothing to answer: mail.receive for what is still yours" },
     { code = -32130, name = "inbox.already_answered", next = "inbox.list shows who answered, and when" },
     { code = -32131, name = "inbox.not_a_request", next = "inbox.ack a report" },
     { code = -32132, name = "inbox.expired", next = "its sender was told; nothing waits on it" },

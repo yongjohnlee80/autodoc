@@ -603,6 +603,12 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 		if err != nil {
 			return err
 		}
+		switch d.State { // the caller's own delivery, no longer leased: say what became of it
+		case Acked:
+			return ErrDone
+		case Failed, Expired, Merged:
+			return ErrEnded
+		}
 		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
 			return ErrLeaseLost
 		}
