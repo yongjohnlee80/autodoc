@@ -229,7 +229,8 @@ func (b *crewBridges) copy(i int) {
 	}
 }
 
-// kill ends row i: an orphan at once, a live helper or Codex's shared daemon once the user agrees.
+// kill ends row i: an orphan at once; a live helper, Codex's shared daemon, or a helper not of this
+// store's sessions once the user agrees.
 func (b *crewBridges) kill(i int) {
 	r, ok := b.rows.At(i)
 	if !ok {
@@ -241,8 +242,11 @@ func (b *crewBridges) kill(i int) {
 			Text:  b.c.Trf("autodoc.question.crew_bridges.kill_live", r.kind, r.pid, r.owner),
 			OnYes: func() { b.killRow(r, true) }})
 	case "foreign":
-		b.c.Ask(Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"),
-			Text:  b.c.Trf("autodoc.question.crew_bridges.kill_foreign", r.pid),
+		text := b.c.Trf("autodoc.question.crew_bridges.kill_foreign", r.pid)
+		if r.why == crew.ForeignUnowned { // not this store's: perhaps another AutoDoc's agent's
+			text = b.c.Trf("autodoc.question.crew_bridges.kill_unowned", r.kind, r.pid)
+		}
+		b.c.Ask(Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"), Text: text,
 			OnYes: func() { b.killRow(r, true) }})
 	default:
 		b.killRow(r, false)

@@ -4,7 +4,9 @@ package crew
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -129,11 +131,45 @@ func readHelper(pid, uid int, boot int64) (helperProc, bool) {
 	}
 	ticks, _ := strconv.ParseInt(st.start, 10, 64)
 	p := helperProc{pid: pid, ppid: st.ppid, pgid: st.pgid, ref: ref, started: boot + ticks/clockTicks,
-		argv: argv, kind: kind, session: session, socket: socket}
-	if kind == BridgeAgy {
+		argv: argv, kind: kind, session: session, socket: socket, statStart: st.start}
+	switch kind {
+	case BridgeAgy:
 		p.agyProc = environValue(dir+"/environ", "AUTODOC_AGY_PROC")
+	case BridgeCodexServer:
+		p.context = environValue(dir+"/environ", EnvContext) // the host gives its server the session's context
 	}
 	return p, true
+}
+
+// maxHelperContext is the most of a session context file the scan reads: one is far smaller.
+const maxHelperContext = 64 << 10
+
+// readHelperContext is the session context file at path, as a helper's environment names it: read
+// without following a link or waiting on a FIFO, a regular file of the daemon's user, at most
+// maxHelperContext bytes. false for anything else: what it can't read proves nothing.
+func readHelperContext(path string) (Context, bool) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return Context{}, false
+	}
+	f := os.NewFile(uintptr(fd), path)
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() {
+		return Context{}, false
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+		return Context{}, false
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxHelperContext+1))
+	if err != nil || len(b) > maxHelperContext {
+		return Context{}, false
+	}
+	var c Context
+	if json.Unmarshal(b, &c) != nil {
+		return Context{}, false
+	}
+	return c, true
 }
 
 // environValue is name's value in a process's environment file, "" when unset or unreadable.
@@ -189,21 +225,77 @@ func (h *linuxHelper) end(wait time.Duration) (string, error) {
 	return h.endSubtree(wait)
 }
 
+// endGroup ends the group the helper leads. Its members, as observed now, are opened by their own
+// pidfds and signalled through them, so a process signalled is one observed in the group. The
+// group as a whole (kill(-pgid), which reaches a member forked since) is signalled only while the
+// leader, or a member still in the group, holds the group's id: an id the kernel never gives a
+// new group while a process of the old one lives.
 func (h *linuxHelper) endGroup(wait time.Duration) (string, error) {
 	pgid := h.p.pgid
+	members := groupMembers(pgid, h.p.pid)
+	defer func() {
+		for _, m := range members {
+			_ = unix.Close(m.fd)
+		}
+	}()
 	// the leader first, through its pidfd: it is the process checked, so the group is the one it leads
 	if err := unix.PidfdSendSignal(h.fd, unix.SIGTERM, nil, 0); errors.Is(err, unix.ESRCH) {
 		return KilledGone, nil
 	} else if err != nil {
 		return "", err
 	}
-	_ = unix.Kill(-pgid, unix.SIGTERM)
-	if waitUntil(wait, func() bool { return !groupAlive(pgid) }) {
+	held := func() bool {
+		if unix.PidfdSendSignal(h.fd, 0, nil, 0) == nil {
+			return true
+		}
+		for _, m := range members {
+			if st, err := readStat(m.pid); err == nil && st.start == m.start && st.pgid == pgid && st.state != 'Z' &&
+				unix.PidfdSendSignal(m.fd, 0, nil, 0) == nil {
+				return true
+			}
+		}
+		return false
+	}
+	signal := func(sig unix.Signal) {
+		_ = unix.PidfdSendSignal(h.fd, sig, nil, 0)
+		for _, m := range members {
+			_ = unix.PidfdSendSignal(m.fd, sig, nil, 0)
+		}
+		if held() {
+			_ = unix.Kill(-pgid, sig)
+		}
+	}
+	signal(unix.SIGTERM)
+	if waitUntil(wait, func() bool { return !held() }) {
 		return KilledTerm, nil
 	}
-	_ = unix.Kill(-pgid, unix.SIGKILL)
-	waitUntil(time.Second, func() bool { return !groupAlive(pgid) })
+	signal(unix.SIGKILL)
+	waitUntil(time.Second, func() bool { return !held() })
 	return KilledKill, nil
+}
+
+// groupMembers are the processes of group pgid other than its leader, of the daemon's user, each
+// opened by its pidfd and checked after the open to be the process observed (start, group, user).
+func groupMembers(pgid, leader int) []member {
+	all, err := pids()
+	if err != nil {
+		return nil
+	}
+	uid := os.Getuid()
+	var out []member
+	for _, p := range all {
+		if p == leader {
+			continue
+		}
+		o, ok := observe(p)
+		if !ok || o.pgid != pgid || o.uid != uid {
+			continue
+		}
+		if m, ok := openObserved(o, func(st procStat) bool { return st.pgid == pgid }); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // member is one process of a subtree, opened by its own pidfd.
@@ -214,7 +306,7 @@ type member struct {
 }
 
 func (h *linuxHelper) endSubtree(wait time.Duration) (string, error) {
-	members := append(descendants(h.p.pid), member{fd: h.fd, pid: h.p.pid, start: startOf(h.p.pid)})
+	members := append(descendants(h.p.pid), member{fd: h.fd, pid: h.p.pid, start: h.p.statStart})
 	defer func() {
 		for _, m := range members[:len(members)-1] {
 			_ = unix.Close(m.fd) // the helper's own fd is closed by close
@@ -245,48 +337,94 @@ func (h *linuxHelper) endSubtree(wait time.Duration) (string, error) {
 	return KilledKill, nil
 }
 
-// descendants are pid's descendants, each opened by its pidfd, deepest first.
+// observed is a process as one read of /proc saw it: what its pidfd, opened later, must still be.
+type observed struct {
+	pid, ppid, pgid int
+	start           string
+	uid             int
+}
+
+// observe reads process pid once: false when it ended, is a zombie, or can't be read.
+func observe(pid int) (observed, bool) {
+	st, err := readStat(pid)
+	if err != nil || st.state == 'Z' || st.start == "" {
+		return observed{}, false
+	}
+	uid, ok := procUID(pid)
+	if !ok {
+		return observed{}, false
+	}
+	return observed{pid: pid, ppid: st.ppid, pgid: st.pgid, start: st.start, uid: uid}, true
+}
+
+// procUID is the user process pid runs as (its /proc entry's owner).
+func procUID(pid int) (int, bool) {
+	fi, err := os.Stat(procRoot + "/" + strconv.Itoa(pid))
+	if err != nil {
+		return 0, false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return int(st.Uid), ok
+}
+
+// openObserved opens o's pid by a pidfd and checks, after the open, that the process it names is
+// still the one observed: the same start, the same user, and still in place (still). A pid
+// reused between the observation and the open fails the start check, whatever its new holder is.
+func openObserved(o observed, still func(procStat) bool) (member, bool) {
+	fd, err := unix.PidfdOpen(o.pid, 0)
+	if err != nil {
+		return member{}, false
+	}
+	st, err := readStat(o.pid)
+	uid, ok := procUID(o.pid)
+	if err != nil || st.state == 'Z' || st.start != o.start || !ok || uid != o.uid || !still(st) {
+		_ = unix.Close(fd)
+		return member{}, false
+	}
+	return member{fd: fd, pid: o.pid, start: o.start}, true
+}
+
+// descendantsObserved, a test's, runs between the observation and the opens: a pid can change hands
+// there.
+var descendantsObserved = func(map[int][]observed) {}
+
+// descendants are pid's descendants, each opened by its pidfd, deepest first. Each is observed
+// (start, parent, user) in one read of /proc, and opened only if it is still that process, still
+// the child of the parent it was seen under, and the daemon's user's; the walk goes on only below
+// a member so checked. A process whose pid was taken since, or that moved, is left alone.
 func descendants(pid int) []member {
 	all, err := pids()
 	if err != nil {
 		return nil
 	}
-	children := map[int][]int{}
+	uid := os.Getuid()
+	children := map[int][]observed{}
 	for _, p := range all {
-		if st, err := readStat(p); err == nil && st.state != 'Z' {
-			children[st.ppid] = append(children[st.ppid], p)
+		if o, ok := observe(p); ok {
+			children[o.ppid] = append(children[o.ppid], o)
 		}
 	}
+	descendantsObserved(children)
 	var out []member
 	var walk func(int, int)
-	walk = func(p, depth int) {
+	walk = func(parent, depth int) {
 		if depth > 64 {
 			return
 		}
-		for _, c := range children[p] {
-			walk(c, depth+1)
-			start := startOf(c)
-			fd, err := unix.PidfdOpen(c, 0)
-			if err != nil {
+		for _, c := range children[parent] {
+			if c.uid != uid {
+				continue // another user's process is never a member
+			}
+			m, ok := openObserved(c, func(st procStat) bool { return st.ppid == parent })
+			if !ok {
 				continue
 			}
-			if startOf(c) != start || start == "" {
-				_ = unix.Close(fd) // it ended, and the pid was taken, between the read and the open
-				continue
-			}
-			out = append(out, member{fd: fd, pid: c, start: start})
+			walk(c.pid, depth+1)
+			out = append(out, m)
 		}
 	}
 	walk(pid, 0)
 	return out
-}
-
-func startOf(pid int) string {
-	st, err := readStat(pid)
-	if err != nil {
-		return ""
-	}
-	return st.start
 }
 
 // alive reports whether process pid, started at start, is still running: not ended, not a zombie,
@@ -294,20 +432,6 @@ func startOf(pid int) string {
 func alive(pid int, start string) bool {
 	st, err := readStat(pid)
 	return err == nil && st.state != 'Z' && st.start == start
-}
-
-// groupAlive reports whether any running process is in group pgid.
-func groupAlive(pgid int) bool {
-	all, err := pids()
-	if err != nil {
-		return true
-	}
-	for _, p := range all {
-		if st, err := readStat(p); err == nil && st.pgid == pgid && st.state != 'Z' {
-			return true
-		}
-	}
-	return false
 }
 
 // waitUntil polls done until it holds or wait passes.

@@ -7933,6 +7933,10 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>Kill the helper?</source>
         <translation>보조 프로세스를 종료할까요?</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2은(는) 이 AutoDoc의 세션이 아닙니다. 다른 AutoDoc의 에이전트를 위해 동작 중일 수 있으며, 종료하면 그 에이전트가 잃게 됩니다. 종료할까요?</translation>
+    </message>
     <message id="autodoc.question.crew_bridges.kill_live">
         <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
         <translation>%1 %2은(는) 실행 중인 %3을(를) 지원합니다. 종료하면 그 에이전트는 다시 시작할 때까지 메일을 받지 못합니다. 종료할까요?</translation>

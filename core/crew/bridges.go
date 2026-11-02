@@ -29,7 +29,15 @@ const (
 const (
 	BridgeLive    = "live"    // it serves a live session
 	BridgeOrphan  = "orphan"  // it serves no one: BridgeRow.Why says why
-	BridgeForeign = "foreign" // Codex's shared daemon: never joined to an agent, never reclaimed
+	BridgeForeign = "foreign" // not proven this store's: never joined to an agent, never reclaimed
+)
+
+// Why a row is foreign (BridgeRow.Why).
+const (
+	ForeignShared = "Codex's shared daemon"
+	// ForeignUnowned is a helper no session of this store is proven to own: another daemon's (another
+	// store's), or one whose session this store doesn't know. A missing row is no proof of an orphan.
+	ForeignUnowned = "not one of this store's sessions"
 )
 
 // Why a row is an orphan (BridgeRow.Why).
@@ -98,6 +106,8 @@ type helperProc struct {
 	session         string // a bridge's --session
 	socket          string // a Codex server's --listen socket
 	agyProc         string // an agy bridge's language server (AUTODOC_AGY_PROC), "" when unread
+	context         string // a Codex server's session context file (AUTODOC_CREW_CONTEXT), "" when unread
+	statStart       string // its start time as /proc/<pid>/stat gives it, as ref holds it
 }
 
 // helperOf is the helper argv is, by its shape alone: ok is false for any other process. A bridge
@@ -226,22 +236,37 @@ func (m *Manager) joinBridges(tx Tx, procs []helperProc) ([]BridgeRow, error) {
 func (m *Manager) joinBridge(tx Tx, r *BridgeRow, p helperProc, servers map[string]string, now time.Time) error {
 	switch p.kind {
 	case BridgeCodexShared:
-		r.State = BridgeForeign
+		r.State, r.Why = BridgeForeign, ForeignShared
 		return nil
 	case BridgeCodexServer:
 		r.Session = servers[socketKey(p.socket)]
 		if r.Session == "" {
-			r.State, r.Why = BridgeOrphan, OrphanNoEndpoint // never registered, or its session moved on
-			return nil
+			// no live endpoint names it: an orphan only when its own session context proves it this
+			// store's (a session of this store that moved on); else another daemon's, or unknown
+			owner, err := m.serverOwner(tx, p)
+			if err != nil {
+				return err
+			}
+			if owner == "" {
+				r.State, r.Why = BridgeForeign, ForeignUnowned
+				return nil
+			}
+			r.Session = owner
+			r.State, r.Why = BridgeOrphan, OrphanNoEndpoint
+			return m.ownerOf(tx, r)
 		}
 	}
 	s, ok, err := tx.Session(r.Session)
 	if err != nil {
 		return err
 	}
-	if !ok || s.Ended != nil {
-		r.State, r.Why = BridgeOrphan, OrphanSessionEnded
+	if !ok {
+		r.State, r.Why = BridgeForeign, ForeignUnowned // another store's session, or one this store doesn't know
 		return nil
+	}
+	if s.Ended != nil {
+		r.State, r.Why = BridgeOrphan, OrphanSessionEnded
+		return m.ownerOf(tx, r)
 	}
 	if prof, ok, err := tx.Profile(s.Profile); err != nil {
 		return err
@@ -260,6 +285,40 @@ func (m *Manager) joinBridge(tx Tx, r *BridgeRow, p helperProc, servers map[stri
 	default:
 		r.State = BridgeLive
 	}
+	return nil
+}
+
+// serverOwner is the session of this store that a Codex server's own session context names, ""
+// when none is proven: no context, an unreadable one, another store's, or a session this store
+// doesn't hold.
+func (m *Manager) serverOwner(tx Tx, p helperProc) (string, error) {
+	if p.context == "" {
+		return "", nil
+	}
+	c, ok := readHelperContext(p.context)
+	if !ok || c.Session == "" || (m.storeID != "" && c.Store != m.storeID) {
+		return "", nil
+	}
+	if _, ok, err := tx.Session(c.Session); err != nil || !ok {
+		return "", err
+	}
+	return c.Session, nil
+}
+
+// ownerOf names r's owner, codename@scope, from its session's profile.
+func (m *Manager) ownerOf(tx Tx, r *BridgeRow) error {
+	s, ok, err := tx.Session(r.Session)
+	if err != nil || !ok {
+		return err
+	}
+	prof, ok, err := tx.Profile(s.Profile)
+	if err != nil {
+		return err
+	}
+	if ok {
+		r.Owner = prof.Codename + "@" + prof.Scope
+	}
+	r.Host = s.Host
 	return nil
 }
 

@@ -81,6 +81,12 @@ type cellProc struct {
 // the chain to be up.
 func startCell(t *testing.T, argv []string, setsid, ignoreTerm bool, chain ...[]string) *cellProc {
 	t.Helper()
+	return startCellEnv(t, nil, argv, setsid, ignoreTerm, chain...)
+}
+
+// startCellEnv is startCell with env added to the stand-in's environment.
+func startCellEnv(t *testing.T, env []string, argv []string, setsid, ignoreTerm bool, chain ...[]string) *cellProc {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +95,7 @@ func startCell(t *testing.T, argv []string, setsid, ignoreTerm bool, chain ...[]
 	spawn, _ := json.Marshal(chain)
 	c := exec.Command(exe)
 	c.Args = argv
-	c.Env = append(os.Environ(), cellEnv+"=1", cellSpawn+"="+string(spawn), cellPids+"="+pidFile)
+	c.Env = append(append(os.Environ(), env...), cellEnv+"=1", cellSpawn+"="+string(spawn), cellPids+"="+pidFile)
 	if ignoreTerm {
 		c.Env = append(c.Env, cellTerm+"=ignore")
 	}
@@ -245,6 +251,18 @@ func (r *bridgeRig) kill(pid int, confirmed bool) (crew.BridgeKilled, error) {
 	return r.m.BridgeKill(r.ctx, "autodoc:w", "host", r.epoch, pid, ref, confirmed)
 }
 
+// writeContext writes a session context naming session, as the host gives a Codex server through
+// AUTODOC_CREW_CONTEXT, and is the env entry that names it.
+func writeContext(t *testing.T, session string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "context")
+	b, _ := json.Marshal(crew.Context{Socket: "/run/d.sock", Scope: "autodoc:w", Session: session, Credential: session + ".x", Kind: "codex"})
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func agyArgv(session string) []string {
 	return []string{"/opt/autodoc/autodoc", "crew", "bridge", "--agy", "--foreground", "--session", session}
 }
@@ -258,7 +276,8 @@ func codexServerArgv(dir string) []string {
 // WITHOUT its parent: its subtree goes, leaves first; its group, Neovim's, is never signalled.
 func TestAHelperSharingItsParentsGroupIsKilledWithoutItsParent(t *testing.T) {
 	r := newBridgeRig(t)
-	nvim := startCell(t, []string{"nvim-stand-in", "--embed"}, false, false,
+	ctx := crew.EnvContext + "=" + writeContext(t, r.session("tifa", "codex", true)) // this store's, ended
+	nvim := startCellEnv(t, []string{ctx}, []string{"nvim-stand-in", "--embed"}, false, false,
 		codexServerArgv(t.TempDir()), []string{"codex-tool-stand-in"})
 	server, tool := nvim.children[0], nvim.children[1]
 	row, ok := r.row(server)
@@ -389,31 +408,47 @@ func TestABridgesStateFollowsItsSession(t *testing.T) {
 }
 
 // 8. A Codex server is live while a live session's endpoint names its socket (through the agent
-// folder's link), and an orphan once none does: never foreign.
-func TestACodexServerIsLiveOnlyWhileAnEndpointNamesItsSocket(t *testing.T) {
+// folder's link). With none naming it, it is an orphan only when its own session context (the
+// host gives its server the session's AUTODOC_CREW_CONTEXT) names a session of this store; with no
+// context, or one naming a session this store doesn't hold, its owner is unproven: foreign, never
+// an orphan.
+func TestACodexServerIsAnOrphanOnlyWhenItsContextProvesItThisStores(t *testing.T) {
 	r := newBridgeRig(t)
-	agent, sockets := t.TempDir(), t.TempDir()
-	bound := filepath.Join(sockets, "abc.sock")
-	if err := os.WriteFile(bound, nil, 0o600); err != nil {
-		t.Fatal(err)
+	server := func() (string, string) {
+		agent, sockets := t.TempDir(), t.TempDir()
+		bound := filepath.Join(sockets, "abc.sock")
+		if err := os.WriteFile(bound, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
+			t.Fatal(err)
+		}
+		return agent, bound
 	}
-	if err := os.Symlink(bound, filepath.Join(agent, crew.CodexServerSocket)); err != nil {
-		t.Fatal(err)
+
+	bare, _ := server()
+	p := startCell(t, codexServerArgv(bare), false, false)
+	if row, _ := r.row(p.pid); row.State != crew.BridgeForeign || row.Why != crew.ForeignUnowned {
+		t.Fatalf("a server with no session context and no endpoint: %+v, want foreign, %q", row, crew.ForeignUnowned)
 	}
-	p := startCell(t, codexServerArgv(agent), false, false)
-	if row, _ := r.row(p.pid); row.State != crew.BridgeOrphan || row.Why != crew.OrphanNoEndpoint {
-		t.Fatalf("a server no session registered: %+v, want an orphan, %q", row, crew.OrphanNoEndpoint)
+	strangerDir, _ := server()
+	stranger := startCellEnv(t, []string{crew.EnvContext + "=" + writeContext(t, "s-another-stores")}, codexServerArgv(strangerDir), false, false)
+	if row, _ := r.row(stranger.pid); row.State != crew.BridgeForeign || row.Why != crew.ForeignUnowned {
+		t.Fatalf("a server whose context names a session this store doesn't hold: %+v, want foreign, %q", row, crew.ForeignUnowned)
 	}
+
 	s := r.session("tifa", "codex", false)
+	agent, bound := server()
+	own := startCellEnv(t, []string{crew.EnvContext + "=" + writeContext(t, s)}, codexServerArgv(agent), false, false)
 	r.endpoint(s, bound)
-	if row, _ := r.row(p.pid); row.State != crew.BridgeLive || row.Session != s || row.Owner != "tifa@autodoc:w" {
+	if row, _ := r.row(own.pid); row.State != crew.BridgeLive || row.Session != s || row.Owner != "tifa@autodoc:w" {
 		t.Fatalf("a server a live endpoint names: %+v, want live, tifa's", row)
 	}
 	if err := r.m.Exit(r.ctx, "autodoc:w", "host", r.epoch, s, crew.EndedExit); err != nil {
 		t.Fatal(err)
 	}
-	if row, _ := r.row(p.pid); row.State != crew.BridgeOrphan || row.Why != crew.OrphanNoEndpoint {
-		t.Fatalf("a server whose session ended: %+v, want an orphan, %q", row, crew.OrphanNoEndpoint)
+	if row, _ := r.row(own.pid); row.State != crew.BridgeOrphan || row.Why != crew.OrphanNoEndpoint || row.Session != s || row.Owner != "tifa@autodoc:w" {
+		t.Fatalf("this store's server whose session ended: %+v, want an orphan, %q, tifa's", row, crew.OrphanNoEndpoint)
 	}
 }
 
@@ -498,5 +533,78 @@ func TestBridgesListOnlyTheDaemonsUser(t *testing.T) {
 		if row.PID == p.pid {
 			t.Fatalf("a daemon of another user listed this user's bridge: %+v", row)
 		}
+	}
+}
+
+// F1 (Lector #244 r0). Two daemons, each with its own store, see the same user's helpers. Neither
+// store's look reclaims the other's: a live bridge of store B, whose session store A has never
+// held, is foreign in A (never an orphan, never reclaimed, and a kill of it needs confirming),
+// and stays running through A's reclaim threshold and beyond, while A's own confirmed orphan is
+// still reclaimed at 10 minutes.
+func TestADaemonNeverReclaimsAnotherStoresHelper(t *testing.T) {
+	a, b := newBridgeRig(t), newBridgeRig(t)
+	ours := startCell(t, agyArgv(a.session("aerith", "agy", true)), true, false)
+	theirs := startCell(t, agyArgv(b.session("barret", "agy", false)), true, false)
+	if row, _ := a.row(theirs.pid); row.State != crew.BridgeForeign || row.Why != crew.ForeignUnowned || row.ReclaimAt != 0 {
+		t.Fatalf("store B's live bridge, in store A: %+v, want foreign, %q, no reclaim", row, crew.ForeignUnowned)
+	}
+	if row, _ := b.row(theirs.pid); row.State != crew.BridgeLive {
+		t.Fatalf("store B's live bridge, in store B: %+v, want live", row)
+	}
+	if row, _ := b.row(ours.pid); row.State != crew.BridgeForeign {
+		t.Fatalf("store A's orphan, in store B: %+v, want foreign", row)
+	}
+	t0 := time.Now()
+	for _, at := range []time.Duration{0, 5 * time.Minute, 10 * time.Minute, 60 * time.Minute} {
+		got, err := a.m.Reclaim(a.ctx, t0.Add(at))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range got {
+			if g.Row.PID == theirs.pid {
+				t.Fatalf("store A reclaimed store B's live bridge at %v: %+v", at, g)
+			}
+		}
+		if _, err := b.m.Reclaim(b.ctx, t0.Add(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !waitEnded(ours.pid) {
+		t.Fatal("store A's own orphan wasn't reclaimed")
+	}
+	if !running(theirs.pid) {
+		t.Fatal("store B's live bridge was killed")
+	}
+	if _, err := a.kill(theirs.pid, false); !errors.Is(err, crew.ErrBridgeConfirm) {
+		t.Fatalf("store A's unconfirmed kill of store B's bridge: %v, want ErrBridgeConfirm", err)
+	}
+	if !running(theirs.pid) {
+		t.Fatal("an unconfirmed kill ended store B's bridge")
+	}
+}
+
+// F2 (Lector #244 r0). A helper's subtree is observed in one read of /proc, and each descendant is
+// signalled only if, opened by its pidfd, it is still the process observed. Here the helper's
+// child's pid goes to an unrelated process between the observation and the open (as a pid reused
+// after the child ended would): that process, observed under the child's start, is never
+// signalled, and the helper is still ended.
+func TestAKillNeverSignalsAProcessThatTookADescendantsPid(t *testing.T) {
+	r := newBridgeRig(t)
+	dir := t.TempDir()
+	neovim := startCell(t, []string{"nvim", "--embed"}, false, false, codexServerArgv(dir), []string{"codex", "mcp-tool"})
+	helper, child := neovim.children[0], neovim.children[1]
+	unrelated := startCell(t, []string{"/usr/bin/unrelated", "--sleep"}, true, false)
+	crew.ReuseObservedChild(t, helper, child, unrelated.pid)
+	if _, err := r.kill(helper, true); err != nil {
+		t.Fatal(err)
+	}
+	if !waitEnded(helper) {
+		t.Fatal("the helper wasn't ended")
+	}
+	if !running(unrelated.pid) {
+		t.Fatal("a process that took a descendant's pid after the observation was signalled")
+	}
+	if !running(neovim.pid) {
+		t.Fatal("the helper's parent was signalled")
 	}
 }

@@ -7937,6 +7937,10 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>Kill the helper?</source>
         <translation>補助プロセスを終了しますか？</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 はこの AutoDoc のセッションのものではありません。別の AutoDoc のエージェントに使われている可能性があり、そのエージェントが失います。終了しますか？</translation>
+    </message>
     <message id="autodoc.question.crew_bridges.kill_live">
         <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
         <translation>%1 %2 は実行中の %3 に使われています。終了すると、そのエージェントは再起動するまでメールを受け取れません。終了しますか？</translation>

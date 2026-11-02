@@ -7926,6 +7926,10 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>Kill the helper?</source>
         <translation>终止此辅助进程？</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 不属于这个 AutoDoc 的任何会话：它可能在为另一个 AutoDoc 的代理服务，终止后该代理会失去它。要终止吗？</translation>
+    </message>
     <message id="autodoc.question.crew_bridges.kill_live">
         <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
         <translation>%1 %2 正在为运行中的 %3 服务：终止后，该智能体在重新启动前收不到邮件。要终止吗？</translation>

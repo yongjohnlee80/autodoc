@@ -5739,6 +5739,10 @@ WHAT A KEY NEEDS
         <source>Kill the helper?</source>
         <translation>Kill the helper?</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</translation>
+    </message>
     <message id="autodoc.question.editorsocket.add_it">
         <source>&amp;Add it</source>
         <translation>&amp;Add it</translation>

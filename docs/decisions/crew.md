@@ -265,11 +265,21 @@ all, for the daemon's user on its machine:
   the live endpoint naming its socket. It is `live`, or an `orphan` with why (its session ended, its
   host is gone, no endpoint names its socket, its language server is gone). Codex's shared daemon
   is `foreign`: the crew never started it and can't know what else uses it.
+- The scan sees every helper of the user's, and several daemons, each with its own store, can run
+  at once. A helper missing from this store's rows is no proof of an orphan: it may be another
+  daemon's live helper. So an orphan is only a helper this store is proven to own: a bridge whose
+  `--session` is one of this store's sessions, or a Codex server whose own session context (the
+  `AUTODOC_CREW_CONTEXT` the host gives it) names this store and one of its sessions. Any other
+  helper is `foreign` too, "not one of this store's sessions".
 - The daemon looks every minute. A helper of the crew's own kinds found orphaned for the same reason
   in every look for 10 minutes is ended, and journaled as `crew.bridge_reclaimed`. One seen live in
   between, or whose reason changed, starts over. A live or foreign helper is never reclaimed.
 - `crew.bridge_kill` is the user's kill, from a window's System > Crew Bridges: a host verb, so no
   agent can call it. The helper is opened by a pidfd and checked again before it is signalled.
+  Every process it signals besides is one seen in a single read of `/proc` (its start, parent,
+  group and user), opened by its own pidfd and checked to be that same process after the open, so
+  a process that took a pid in between is never signalled. A group is signalled as a whole only
+  while its leader, or a member still in it, holds the group's id.
   A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
   helper that leads its own process group is ended with its group. Any other, such as a server
   Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is

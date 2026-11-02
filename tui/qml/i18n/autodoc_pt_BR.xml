@@ -7940,6 +7940,10 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>Kill the helper?</source>
         <translation>Encerrar o processo auxiliar?</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 não é de nenhuma sessão deste AutoDoc: pode servir ao agente de outro AutoDoc, que o perderia. Encerrar?</translation>
+    </message>
     <message id="autodoc.question.crew_bridges.kill_live">
         <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
         <translation>%1 %2 atende %3, que está em execução: encerrá-lo deixa esse agente sem o seu correio até que ele inicie de novo. Encerrar?</translation>
