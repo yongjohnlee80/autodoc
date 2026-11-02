@@ -61,8 +61,10 @@ var sqliteSuites = []struct {
 	run  func(*testing.T)
 }{
 	{"EveryVerbWritesItsRow", TestEveryVerbWritesItsRow},
+	{"AClientsCreateIsSerializedWithTheStore", TestAClientsCreateIsSerializedWithTheStore},
 	{"HandEditsAreUpdatesNeverAssigns", TestHandEditsAreUpdatesNeverAssigns},
 	{"AnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand", TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand},
+	{"AnAssignmentSaysWhoMadeIt", TestAnAssignmentSaysWhoMadeIt},
 	{"FirstSightIsABaseline", TestFirstSightIsABaseline},
 	{"Consumers", TestConsumers},
 	{"PruningAndResync", TestPruningAndResync},

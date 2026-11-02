@@ -1251,6 +1251,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 não está mais esperando por você</translation>
     </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>Não foi possível enviar ao agente %1 a sua resposta ao pedido dele: %2. Avise o agente você mesmo.</translation>
+    </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>O daemon recusou a caixa de entrada da equipe desta janela (%1): solicitações e avisos aparecem de novo na próxima conexão.</translation>
@@ -5367,6 +5371,30 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>tema: %1</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 foi movido para %2 com sua tarefa: o buffer o acompanha</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 foi movido para %2 com sua tarefa: o buffer o acompanha e mantém suas edições não salvas; o texto lá é diferente, e você será perguntado na próxima vez que abri-lo ou salvá-lo</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 foi movido para %2 com sua tarefa, que está aberta em outro buffer: este mantém suas edições não salvas, e salvá-lo é recusado</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>A tarefa de %1 foi removida: seu buffer foi fechado</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>A tarefa de %1 foi removida: suas edições não salvas são mantidas, e salvá-lo é recusado, para que a tarefa não seja gravada de novo</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 não foi salvo: sua tarefa foi movida ou removida, e gravá-lo aqui criaria um segundo arquivo da tarefa</translation>
     </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>

@@ -104,6 +104,7 @@ func (g *registry) varsOf(abs string, st *TodoStore) *index.Vars {
 func (m *Workspaces) SetTodoStores(list TodoStores) {
 	m.mu.Lock()
 	m.todoStores = list
+	m.storesReader = true
 	m.mu.Unlock()
 	m.readTodoStores()
 	m.varsFilesChanged()
@@ -117,7 +118,14 @@ func (m *Workspaces) SetTodoStores(list TodoStores) {
 			case <-m.ctx.Done():
 				return
 			case <-m.storesDirty:
-				m.rereadTodoStores()
+				seen := m.storesWant.Load() // every change asked before this read is in it
+				if err := m.rereadTodoStores(); err != nil {
+					// not read, or not re-indexed: the waiting verbs are not told it was, and it is
+					// read again shortly (their wait is bounded, and logs)
+					time.AfterFunc(storesRetry, m.signalStores)
+					continue
+				}
+				m.storesReadThrough(seen)
 			case <-poll.C:
 				if m.varsFilesChanged() {
 					m.rereadTodoStores()
@@ -150,18 +158,80 @@ func (m *Workspaces) varsFilesChanged() bool {
 // waits: the todo system calls it from its verbs, and reading the registry can write it. The reader
 // reads it once for every call made while it was reading.
 func (m *Workspaces) TodoStoresChanged() {
+	m.storesWant.Add(1)
+	m.signalStores()
+}
+
+// storesRetry is how soon a read of the registry that failed is tried again.
+const storesRetry = time.Second
+
+// signalStores wakes the reader, never waiting.
+func (m *Workspaces) signalStores() {
 	select {
 	case m.storesDirty <- struct{}{}:
 	default: // a read is pending already: it sees this change too
 	}
 }
 
-// rereadTodoStores reads the registry again. When what the workspaces see changed, every served
-// workspace re-indexes the documents whose mode or store changed: their indexer version tells
-// them, no file changed (docs/decisions/todos.md#which-paths-are-graph-only).
-func (m *Workspaces) rereadTodoStores() {
-	if !m.readTodoStores() {
-		return
+// storesReadThrough records that every change up to seen has been read, and wakes TodoStoresSettled.
+func (m *Workspaces) storesReadThrough(seen int64) {
+	m.storesDone.Store(seen)
+	m.mu.Lock()
+	close(m.storesRead)
+	m.storesRead = make(chan struct{})
+	m.mu.Unlock()
+}
+
+// TodoStoresSettled returns once the reader has read every change TodoStoresChanged was told of
+// before the call, and re-indexed what it moved, or when ctx ends: what a todo verb that made or
+// moved a store waits on, its own locks released, so it answers only when the index and
+// doc.validate see the store (read-your-writes). With no reader (no registry given) it returns at
+// once.
+func (m *Workspaces) TodoStoresSettled(ctx context.Context) error {
+	want := m.storesWant.Load()
+	for {
+		m.mu.Lock()
+		reading, read := m.storesReader, m.storesRead
+		m.mu.Unlock()
+		if !reading || m.storesDone.Load() >= want {
+			return nil
+		}
+		select {
+		case <-read:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// rereadTodoStores reads the registry again. When what the workspaces see changed, or the last
+// revalidation failed, every served workspace re-indexes the documents whose mode or store changed:
+// their indexer version tells them, no file changed
+// (docs/decisions/todos.md#which-paths-are-graph-only). It answers why the read or the
+// revalidation failed.
+func (m *Workspaces) rereadTodoStores() error {
+	changed, err := m.readTodoStores()
+	if err != nil {
+		return err
+	}
+	if !changed && !m.storesRevalidate {
+		return nil
+	}
+	// a revalidation that failed is done again, the registry unchanged or not: the rows it left
+	// were indexed under the old stores, and nothing else touches an idle row again
+	m.storesRevalidate = true
+	if err := m.revalidateServed(); err != nil {
+		return err
+	}
+	m.storesRevalidate = false
+	return nil
+}
+
+// revalidateServed revalidates every served workspace (revalidateAll, a test's seam), answering
+// the first error.
+func (m *Workspaces) revalidateServed() error {
+	if m.revalidateAll != nil {
+		return m.revalidateAll()
 	}
 	m.mu.Lock()
 	var ids []int64
@@ -169,31 +239,35 @@ func (m *Workspaces) rereadTodoStores() {
 		ids = append(ids, s.id)
 	}
 	m.mu.Unlock()
+	var first error
 	for _, id := range ids {
-		m.revalidate(id)
+		if err := m.revalidate(id); err != nil && first == nil {
+			first = err
+		}
 	}
+	return first
 }
 
 // readTodoStores reads the registry into the snapshot every workspace's modes read, and reports
-// whether it changed.
-func (m *Workspaces) readTodoStores() bool {
+// whether it changed, or why it could not be read (the workspaces keep the stores they had).
+func (m *Workspaces) readTodoStores() (bool, error) {
 	m.mu.Lock()
 	list := m.todoStores
 	m.mu.Unlock()
 	if list == nil {
-		return false
+		return false, nil
 	}
 	got, err := list(m.ctx)
 	if err != nil {
 		logger.Warning(m.opts.Log, err, "reading the todo stores: the workspaces keep the stores they had")
-		return false
+		return false, err
 	}
 	g := newRegistry(got)
 	if old := m.stores.Load(); old != nil && old.same(g) {
-		return false
+		return false, nil
 	}
 	m.stores.Store(g)
-	return true
+	return true, nil
 }
 
 // taskCheck is the registry's check of a task file's frontmatter; nil before it is read.

@@ -68,9 +68,20 @@ type Workspaces struct {
 	// docs/decisions/todos.md#graph-only-indexing
 	todoStores  TodoStores
 	stores      atomic.Pointer[registry]
-	storesDirty chan struct{}     // TodoStoresChanged's signal to the reader, one pending at most
-	varsStamps  map[string]string // each variable file's size and modification time, the reader's alone
-	modes       map[int64]*modes
+	storesDirty chan struct{} // TodoStoresChanged's signal to the reader, one pending at most
+	// storesWant counts TodoStoresChanged's calls, storesDone the count the reader had seen when
+	// its last read (and the revalidation after it) finished; storesRead closes when it does, and
+	// is made anew (TodoStoresSettled). storesReader says the reader runs (SetTodoStores).
+	storesWant, storesDone atomic.Int64
+	storesRead             chan struct{}
+	storesReader           bool
+	// storesRevalidate says the stores' last revalidation failed, so the reader does it again even
+	// when the registry reads the same (the reader's own). revalidateAll, when set (a test), is
+	// what revalidating every served workspace does.
+	storesRevalidate bool
+	revalidateAll    func() error
+	varsStamps       map[string]string // each variable file's size and modification time, the reader's alone
+	modes            map[int64]*modes
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -170,7 +181,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
 		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
-		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1)}
+		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1), storesRead: make(chan struct{})}
 	m.queue = newEmbeddingQueue(m)
 	if o.Guard != nil {
 		o.Guard.SetServed(m.boundsRoots)
@@ -376,7 +387,7 @@ func (m *Workspaces) event(id int64, kind, detail string) {
 }
 
 // revalidate queues the files of workspace id that its new schema applies to.
-func (m *Workspaces) revalidate(id int64) {
+func (m *Workspaces) revalidate(id int64) error {
 	m.mu.Lock()
 	var ix *index.Indexer
 	for _, s := range m.served {
@@ -386,11 +397,13 @@ func (m *Workspaces) revalidate(id int64) {
 	}
 	m.mu.Unlock()
 	if ix == nil {
-		return // not started yet: its first pass compares the new fingerprint itself
+		return nil // not started yet: its first pass compares the new fingerprint itself
 	}
 	if err := ix.Revalidate(m.ctx); err != nil {
 		logger.Warning(m.opts.Log, err, "revalidating files after a schema change")
+		return err
 	}
+	return nil
 }
 
 // SetSchema names a workspace's frontmatter schema file ("" for none) and reads it at once: a valid

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
 )
 
 // reissueAgyLoc is an agy endpoint's locator: one whose check needs no live process, so a cell
@@ -230,5 +232,101 @@ func TestReissueReportsAnEndpointOnlyOnceTheDaemonHasIt(t *testing.T) {
 	}
 	if e := listed(t, d, "tifa"); e.Reachable {
 		t.Errorf("crew list: %+v, want tifa still unreachable", e)
+	}
+}
+
+// TestReissueConfirmsAnEndpointThatRegistersLate: a waker that registers a look or two after it
+// returned (agy's bridge, detached) is re-issued as soon as crew.access says registered, not after
+// the whole confirmation window.
+func TestReissueConfirmsAnEndpointThatRegistersLate(t *testing.T) {
+	d := newCrewDaemon(t)
+	path := d.agentOfKind("tifa", "agent-1", "store-1", "agy")
+	c, err := readSessionContext(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := newReissueRig(d, nil)
+	rr.r.register = func(context.Context, sessionContext, string) error { rr.registers++; return nil }
+	sleep := rr.r.sleep
+	rr.r.sleep = func(ctx context.Context, dur time.Duration) error {
+		if err := sleep(ctx, dur); err != nil {
+			return err
+		}
+		if rr.sleeps == 2 { // the bridge registers, two looks after it returned
+			_, err := d.deps.crew.SetEndpoint(d.ctx, c.Credential, "agy", reissueAgyLoc)
+			return err
+		}
+		return nil
+	}
+	res, err := reissue(d.ctx, func() (sessionContext, error) { return readSessionContext(path) }, reissueWait, rr.r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(res.Kept, []string{reissueSession}) || !slices.Equal(res.Reissued, []string{reissueEndpoint}) || len(res.Not) != 0 {
+		t.Fatalf("a waker that registers late: %+v, want its endpoint re-issued", res)
+	}
+	if rr.sleeps != 2 {
+		t.Errorf("%d looks, want 2: confirmed at the look after it registered", rr.sleeps)
+	}
+}
+
+// TestReissueSaysWhatEndedItsConfirmation: a crew.access read that fails while an endpoint is being
+// confirmed is reported, never taken for "no endpoint yet": a daemon gone ends reissue with that
+// error; the session ending says so; an endpoint there but failing says its wakes fail, at once.
+func TestReissueSaysWhatEndedItsConfirmation(t *testing.T) {
+	d := newCrewDaemon(t)
+	path := d.agentOfKind("tifa", "agent-1", "store-1", "agy")
+	c, err := readSessionContext(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := func() (sessionContext, error) { return readSessionContext(path) }
+
+	gone := errors.New("dial unix: connection refused")
+	rr := newReissueRig(d, nil)
+	calls := 0
+	rr.r.call = func(ctx context.Context, c sessionContext, method string, params []any) (any, error) {
+		if calls++; calls > 1 { // the first look finds the session; the daemon goes before the confirmation
+			return nil, gone
+		}
+		return crewCall(ctx, c, method, params)
+	}
+	rr.r.register = func(context.Context, sessionContext, string) error { return nil }
+	if _, err := reissue(d.ctx, session, reissueWait, rr.r); !errors.Is(err, gone) {
+		t.Errorf("the daemon gone mid-confirmation: %v, want its error", err)
+	}
+
+	rr = newReissueRig(d, nil)
+	rr.r.register = func(context.Context, sessionContext, string) error {
+		if _, err := d.deps.crew.SetEndpoint(d.ctx, c.Credential, "agy", reissueAgyLoc); err != nil {
+			return err
+		}
+		return sqlitecrewmail.New(d.deps.store).Write(d.ctx, func(tx crew.Tx) error {
+			w, _, err := tx.Wake(c.Session)
+			if err != nil {
+				return err
+			}
+			w.Session, w.Failures = c.Session, crew.UnreachableAfter
+			return tx.PutWake(w)
+		})
+	}
+	res, err := reissue(d.ctx, session, reissueWait, rr.r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Not) != 1 || !strings.Contains(res.Not[0].Why, "wakes fail") || rr.sleeps != 0 {
+		t.Errorf("an endpoint there but failing: %+v after %d looks, want \"wakes fail\" at once", res, rr.sleeps)
+	}
+
+	rr = newReissueRig(d, nil)
+	rr.r.register = func(context.Context, sessionContext, string) error {
+		return d.deps.crew.Exit(d.ctx, "autodoc:aaaa", d.run, d.ep, c.Session, crew.EndedExit)
+	}
+	res, err = reissue(d.ctx, session, reissueWait, rr.r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Not) != 1 || !strings.Contains(res.Not[0].Why, "session ended") || slices.Contains(res.Reissued, reissueEndpoint) {
+		t.Errorf("the session ended mid-confirmation: %+v, want it said", res)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
 // The feed's limits (docs/decisions/crew.md#the-human-inbox).
@@ -41,7 +42,18 @@ type Manager struct {
 	mail  Mail
 	feed  *Feed
 	polls *crew.LongPolls // the connections' long-polls (inbox.watch's cap); nil caps nothing
+	// assigners finds who made an assignment a feed read (inbox.forward); nil finds no one
+	assigners Assigners
 }
+
+// Assigners is who made an assignment, as the todo system recorded it
+// (docs/decisions/todos.md#an-assignment-says-who-made-it): the assign change seq of store, or, for
+// seq 0, the snapshot row of task in store. found is false when there is no such assignment (a
+// change pruned, a task gone); by is "" for the user's surface.
+type Assigners func(ctx context.Context, store string, seq int64, task string) (by string, found bool, err error)
+
+// WithAssigners sets who inbox.forward asks for an assignment's maker: the todo system's.
+func WithAssigners(a Assigners) Option { return func(m *Manager) { m.assigners = a } }
 
 // Option configures a Manager.
 type Option func(*Manager)
@@ -361,6 +373,25 @@ func (m *Manager) Reply(ctx context.Context, message, body, key string) (mail.Me
 // process at epoch), mail's SendAsUser.
 func (m *Manager) Send(ctx context.Context, scope, run string, epoch int64, p mail.Send) (mail.Sent, error) {
 	return m.mail.SendAsUser(ctx, scope, run, epoch, p)
+}
+
+// Forward is inbox.forward: an assignment's mail, which a window's todo feed read (the assign change
+// seq of store, or for seq 0 task's snapshot row in a resync), sent from whoever the todo system
+// recorded made it, never from a sender the window names. An assignment it can't find is sent as an
+// unverified one's, from autodoc: never as the user's.
+func (m *Manager) Forward(ctx context.Context, scope, run string, epoch int64, store string, seq int64, task string, p mail.Send) (mail.Sent, error) {
+	by, found := module.CallerUnverified, false
+	if m.assigners != nil {
+		b, ok, err := m.assigners(ctx, store, seq, task)
+		if err != nil {
+			return mail.Sent{}, err
+		}
+		by, found = b, ok
+	}
+	if !found {
+		by = module.CallerUnverified
+	}
+	return m.mail.SendAsAssigner(ctx, scope, run, epoch, by, p)
 }
 
 // Dismiss is inbox.dismiss: mail's Dismiss.

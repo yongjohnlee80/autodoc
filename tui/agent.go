@@ -555,10 +555,50 @@ func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
 	// (docs/decisions/crew.md#the-editor-socket)
 	if h.editorPath != nil {
 		if path := h.editorPath(); path != "" {
-			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+h.editorToken(codename))
+			token := h.editorToken(codename)
+			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+token)
+			// Codex's tool shells drop every variable named *TOKEN* (its shell environment policy), so a
+			// Codex agent's token is a file of its own folder too, which a name Codex keeps points to
+			if p.kind() == crew.KindCodex && dir != "" {
+				if file, err := writeEditorCredential(dir, token); err == nil {
+					env = append(env, EnvEditorCredentialFile+"="+file)
+				}
+			}
 		}
 	}
 	return env
+}
+
+// EnvEditorCredentialFile names the file holding an agent's editor token (its AUTODOC_EDITOR_TOKEN),
+// for `autodoc --editor` where that variable doesn't reach: a Codex agent's tool shells, which drop
+// every variable named *TOKEN*. Its name holds none of the words Codex filters (KEY, SECRET, TOKEN).
+const EnvEditorCredentialFile = "AUTODOC_EDITOR_CREDENTIAL_FILE"
+
+// editorCredentialFile is that file, in the agent's own folder.
+const editorCredentialFile = ".autodoc-editor-credential"
+
+// writeEditorCredential writes token as the agent folder dir's editor credential file, mode 0600,
+// through a temporary file renamed over it, and answers its path. The secret is never in the
+// environment Codex's tools see: only the file's path is.
+func writeEditorCredential(dir, token string) (string, error) {
+	path := filepath.Join(dir, editorCredentialFile)
+	f, err := os.CreateTemp(dir, editorCredentialFile+".*") // 0600
+	if err != nil {
+		return "", err
+	}
+	tmp := f.Name()
+	_, werr := f.WriteString(token)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+		return "", werr
+	}
+	return path, nil
 }
 
 // agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv):
@@ -788,4 +828,5 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"is relative to that workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not " +
 	"at all. Keep your task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
 	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>`. " +
-	"Say so to the user, and try again once they have answered.\n\n"
+	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
+	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"

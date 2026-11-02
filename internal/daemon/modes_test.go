@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -356,4 +358,132 @@ func TestAViewWithoutModesReportsTheDefaults(t *testing.T) {
 	if !slices.Equal(list, workspace.DefaultGraphOnly()) || !search || excluded != nil {
 		t.Errorf("TodoModes %v %v %v", list, search, excluded)
 	}
+}
+
+// TestTodoStoresSettledWaitsForTheReadOfAChange: a todo verb that made a store waits on
+// TodoStoresSettled, and it returns only once the reader has read every change told before it
+// (and revalidated): not while that read is under way, and not after a read that failed, which is
+// tried again (storesRetry) and settles only when it succeeds. With nothing pending it returns at
+// once, with no reader running (no registry given) it never waits, and a wait whose ctx ends while
+// the reader is held answers that.
+func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
+	ctx := context.Background()
+	idle, _ := open(t)
+	idle.TodoStoresChanged()
+	if err := idle.TodoStoresSettled(ctx); err != nil {
+		t.Fatalf("no reader: %v, want an answer at once", err)
+	}
+
+	m, _ := open(t)
+	type read struct {
+		entered chan struct{} // closed as the reader starts this read
+		release chan struct{} // this read answers once it is closed
+		fail    bool
+		reg     TodoRegistry // what it answers
+	}
+	var mu sync.Mutex
+	var plan []*read // the reads after SetTodoStores's own, in order
+	var reads atomic.Int32
+	var failRevalidation atomic.Bool
+	m.revalidateAll = func() error { // set before the reader starts
+		if failRevalidation.Swap(false) {
+			return errors.New("revalidation failed")
+		}
+		return nil
+	}
+	m.SetTodoStores(func(context.Context) (TodoRegistry, error) {
+		n := int(reads.Add(1)) - 2 // SetTodoStores's own first read is -1: it answers at once
+		if n < 0 {
+			return TodoRegistry{}, nil
+		}
+		mu.Lock()
+		r := plan[n]
+		mu.Unlock()
+		close(r.entered)
+		<-r.release
+		if r.fail {
+			return TodoRegistry{}, errors.New("the registry could not be read")
+		}
+		return r.reg, nil
+	})
+	next := func(fail bool) *read {
+		r := &read{entered: make(chan struct{}), release: make(chan struct{}), fail: fail}
+		mu.Lock()
+		plan = append(plan, r)
+		mu.Unlock()
+		return r
+	}
+	if err := m.TodoStoresSettled(ctx); err != nil {
+		t.Fatalf("nothing pending: %v", err)
+	}
+	settled := func() chan error {
+		done := make(chan error, 1)
+		go func() { done <- m.TodoStoresSettled(ctx) }()
+		return done
+	}
+	notYet := func(what string, done chan error) {
+		if want := m.storesWant.Load(); m.storesDone.Load() >= want {
+			t.Fatalf("%s: the change is marked read (%d of %d) before its read succeeded", what, m.storesDone.Load(), want)
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("%s: settled (%v) before its read succeeded", what, err)
+		default:
+		}
+	}
+
+	held := next(false)
+	m.TodoStoresChanged()
+	done := settled()
+	<-held.entered // the reader is in its read of the change
+	notYet("the read under way", done)
+	close(held.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	failing, retried := next(true), next(false)
+	m.TodoStoresChanged()
+	done = settled()
+	<-failing.entered
+	close(failing.release) // the read fails
+	<-retried.entered      // and is tried again: until it answers, nothing settled
+	notYet("a failed read", done)
+	close(retried.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	// a new registry read whose revalidation fails: the retry reads the same registry, and still
+	// revalidates before it settles
+	moved := TodoRegistry{Vars: map[string]map[string]string{"/kb": {"PROJECT_ROOT": "/src"}}}
+	changedRead := next(false)
+	changedRead.reg = moved
+	sameRead := next(false)
+	sameRead.reg = moved
+	failRevalidation.Store(true)
+	m.TodoStoresChanged()
+	done = settled()
+	<-changedRead.entered
+	close(changedRead.release) // read, published, and its revalidation fails
+	<-sameRead.entered         // tried again: the same registry
+	notYet("a failed revalidation", done)
+	close(sameRead.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if m.storesRevalidate {
+		t.Error("the revalidation is still marked to do again after it succeeded")
+	}
+
+	stuck := next(false)
+	stuck.reg = moved
+	m.TodoStoresChanged()
+	<-stuck.entered
+	bounded, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := m.TodoStoresSettled(bounded); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled wait while the reader is held: %v, want context.Canceled", err)
+	}
+	close(stuck.release)
 }

@@ -39,6 +39,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -250,7 +251,7 @@ func (d *process) startWorkspaces() error {
 	// index reads the todo stores, so its first pass indexes their tasks graph-only
 	// (docs/decisions/todos.md#graph-only-indexing)
 	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
-		onStores: d.ws.TodoStoresChanged}
+		onStores: d.ws.TodoStoresChanged, storesSettled: d.ws.TodoStoresSettled}
 	d.mods = modules(d.deps)
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
@@ -487,7 +488,7 @@ func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
-		rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
+		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -573,6 +574,9 @@ type moduleDeps struct {
 	// workspaces read the stores again (docs/decisions/todos.md#which-paths-are-graph-only). nil: no
 	// one is.
 	onStores func()
+	// storesSettled is waited on after each todo verb: it returns once the workspaces have read every
+	// stores change (read-your-writes for doc.validate and the index).
+	storesSettled func(context.Context) error
 }
 
 // modules are the daemon's core Modules, the one list of them: runServe serves them, and
@@ -584,6 +588,9 @@ func modules(d *moduleDeps) []module.Module {
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
 	if d.onStores != nil {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
+	}
+	if d.storesSettled != nil {
+		opts = append(opts, todo.WithStoresSettled(d.storesSettled))
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (docs/decisions/todos.md#where-a-variables-value-comes-from)
@@ -613,7 +620,8 @@ func crewModules(d *moduleDeps) {
 			logger.Warning(d.log, err, fmt.Sprintf("crew.register refused: %s@%s (%s, epoch %d, instance %s)", r.Codename, r.Scope, r.Kind, r.Epoch, r.Instance))
 		}))
 	port.Manager = d.crew
-	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls))
+	// inbox.forward asks the todo system who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it)
+	d.inbox = inbox.New(st.Inbox(), d.mail, feed, inbox.WithLongPolls(polls), inbox.WithAssigners(d.todos.AssignedBy))
 }
 
 // crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each
@@ -711,6 +719,20 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 		fmt.Fprintln(out, "  "+f)
 	}
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
+}
+
+// taskFiles is the daemon's guard of a client's create in a todo store
+// (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): a path shaped as a task file's
+// place goes to the todo manager, which writes it under the lock of the store holding it, the one
+// its own moves take, unless it is a second file of a task there (todo.Manager.CreateOnce). Any
+// other path costs the shape's test alone.
+func taskFiles(m *todo.Manager) rpc.TaskFiles {
+	return func(ctx context.Context, abs string, content []byte, write func() error) (string, string, error) {
+		if !todo.MayBeTaskFile(abs) {
+			return "", "", write()
+		}
+		return m.CreateOnce(ctx, localfs.Resolve(abs), content, write) // the registry's directories are canonical
+	}
 }
 
 // todoStores is the todo registry as the workspaces read it

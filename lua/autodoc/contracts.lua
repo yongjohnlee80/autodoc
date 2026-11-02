@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 50,
+  protocol = 48,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -482,8 +482,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{unresolved: [{src, raw, reason}], count, next?} (protocol 50; below it [{src, raw, reason}], the whole list)",
-      doc = "Links that name no file, a page at a time: opts.limit (1 to 2000, default 500) rows after opts.offset, the whole list's count, and next, the next page's offset, absent on the last. A session below 50 gets the whole list in one reply.",
+      result = "[{src, raw, reason}]",
+      doc = "Links that name no file.",
     },
     ["host.probe"] = {
       since = 31, scope = "global", audience = "user",
@@ -524,6 +524,24 @@ return {
       },
       result = "{session, owner}",
       doc = "Ask the session's current owner to raise its agent: the owner's host hears a focus change.",
+    },
+    ["inbox.forward"] = {
+      since = 48, scope = "local-peer", audience = "user",
+      params = {
+        { name = "scope", type = "string" },
+        { name = "run", type = "string" },
+        { name = "epoch", type = "int" },
+        { name = "store", type = "string" },
+        { name = "seq", type = "int" },
+        { name = "task", type = "string" },
+        { name = "to", type = "[]string" },
+        { name = "body", type = "string" },
+        { name = "key", type = "string" },
+        { name = "kind", type = "string", optional = true },
+        { name = "subject", type = "string", optional = true }
+      },
+      result = "{message}",
+      doc = "Send an assignment the window's todo feed read (store and seq, or a resync's task) from whoever the todo system recorded made it: an agent's own profile, so its recipient reads it as that agent's, with the peer marker; autodoc, saying so, when its maker couldn't be verified; the user only when the user's surface made it. The window never names the sender. Queued, never fired. The key is the change's: the same key answers the first send.",
     },
     ["inbox.list"] = {
       since = 37, scope = "local-peer", audience = "user",
@@ -956,7 +974,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-      doc = "The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 50), each task is {id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: what an agent reads to pick a task, then todos.get for the one it needs.",
+      doc = "The active buckets' tasks; archives only by month, on request.",
     },
     ["todos.migrate_refs"] = {
       since = 22, scope = "global", audience = "user",

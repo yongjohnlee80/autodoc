@@ -39,6 +39,7 @@ func RunJournalConformance(t *testing.T, h Harness) {
 	t.Run("repath", func(t *testing.T) { conformRepath(t, h) })
 	t.Run("a failed transaction leaves nothing", func(t *testing.T) { conformAtomic(t, h) })
 	t.Run("the scope", func(t *testing.T) { conformScope(t, h) })
+	t.Run("who assigned", func(t *testing.T) { conformBy(t, h) })
 	t.Run("reopen", func(t *testing.T) { conformReopen(t, h) })
 }
 
@@ -52,7 +53,7 @@ var (
 // full is a change with every field set; Seq and State are the journal's to give.
 func full(store, id string) todo.Change {
 	return todo.Change{Seq: 77, Store: store, ID: id, Kind: todo.KindStatus, Op: todo.OpMove, From: "open", To: "completed",
-		Fields: []string{"status", "title"}, Reason: "done", Scope: "auto-agents:p1", Hand: true, FromPath: "open/" + id + ".md",
+		Fields: []string{"status", "title"}, Reason: "done", Scope: "auto-agents:p1", By: "gold@autodoc:aaaa", Hand: true, FromPath: "open/" + id + ".md",
 		ToPath: "completed/" + id + ".md", FromRev: "r1", ToRev: "r2", State: todo.StateCommitted, At: t0.In(pdt)}
 }
 
@@ -542,4 +543,40 @@ func instant(t time.Time) time.Time {
 		return time.Time{}
 	}
 	return t.UTC().Round(0)
+}
+
+// conformBy: who made an assign (Change.By) follows its rows as its scope does: an assign's edit
+// gives them its By, any other edit keeps it while the assignee is unchanged and drops it when the
+// assignee changed, and it is read back with the snapshot.
+func conformBy(t *testing.T, h Harness) {
+	j := h.New(t)
+	str := func(s string) *string { return &s }
+	x := todo.SnapshotRow{Path: "open/x.md", ID: "x", Rev: "1", Status: "open"}
+	must(t, j.Baseline(cctx, "A", []todo.SnapshotRow{x}))
+	commit := func(e todo.Edit) {
+		t.Helper()
+		e.Store = "A"
+		must(t, j.Commit(cctx, begin(t, j, full("A", "x")), e))
+	}
+	assigned := x
+	assigned.Rev, assigned.Status, assigned.Assignee = "2", "in-progress", "autodoc:jarvis"
+	commit(todo.Edit{Put: []todo.SnapshotRow{assigned}, Scope: str("autodoc:aaaa"), By: str("gold@autodoc:aaaa")})
+	want := assigned
+	want.Scope, want.By = "autodoc:aaaa", "gold@autodoc:aaaa"
+	same(t, "an assign's maker", snapshot(t, j, "A"), []todo.SnapshotRow{want})
+
+	moved := assigned
+	moved.Path, moved.Rev, moved.Status = "completed/x.md", "3", "completed"
+	commit(todo.Edit{Put: []todo.SnapshotRow{moved}, Delete: []string{"open/x.md"}})
+	want = moved
+	want.Scope, want.By = "autodoc:aaaa", "gold@autodoc:aaaa"
+	same(t, "kept across a move, the assignee unchanged", snapshot(t, j, "A"), []todo.SnapshotRow{want})
+
+	edited := moved
+	edited.Rev, edited.Assignee = "4", "autodoc:other"
+	commit(todo.Edit{Put: []todo.SnapshotRow{edited}})
+	same(t, "dropped when the assignee changed by anything but an assign", snapshot(t, j, "A"), []todo.SnapshotRow{edited})
+
+	commit(todo.Edit{Put: []todo.SnapshotRow{edited}, Scope: str(""), By: str("")})
+	same(t, "an assign by the user's surface names no one", snapshot(t, j, "A"), []todo.SnapshotRow{edited})
 }

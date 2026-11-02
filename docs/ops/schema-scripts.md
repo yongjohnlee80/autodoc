@@ -105,8 +105,8 @@ A new workspace-owned table follows the same rule.
 | `todo_var` | a user's global todo ref variable (000017) | `name` |
 | `todo_store_var` | a todo store's variable on this machine: a machine-only name's value, or an override (000020, [where a value comes from](../decisions/todos.md#where-a-variables-value-comes-from)); read once more by the migration into `todo_workspace_var` | `(store, name)` |
 | `todo_workspace_var` | a workspace's variable on this machine, keyed by the workspace's root: an absolute path that never travels (000023, [where a value comes from](../decisions/todos.md#where-a-variables-value-comes-from)) | `(kb, name)` |
-| `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
-| `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
+| `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017); an assign's scope (000025) and its maker (`assigned_by`, 000032) | `seq` |
+| `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017), and the scope and maker of the assign that set its assignee (000025, 000032) | `(store, path)` |
 | `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017); the cursor of the resync it was last answered (000018) | `(store, name)` |
 | `crew_host` | a host (an AutoDoc window or a Neovim project) holding its scope at an ownership epoch, with its run token's hash (000026, [the crew and mail tables](../decisions/crew.md#the-crew-and-mail-tables)), and the epoch in which it last polled for fallback jobs (`fallbacks`, 000029) | `id` |
 | `crew_scope` | a scope agents live in: an AutoVim project, an AutoDoc window, or global; live, adopting or gone (000026) | `id` |

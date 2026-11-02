@@ -36,6 +36,25 @@ editor's icon hides every shown panel, and its next click shows the same set aga
 
 In the code: `tui/dock.go`, `tui/panels.go`, `tui/globemap_gui.go`, `tui/mindmap_gui.go`, `tui/relations.go`
 
+## A toggle raises a covered panel
+
+Panels and windows can lie over one another, so an open panel isn't always seen. A panel's toggle
+(its key, such as SPC x for the todos, its `:` command, Lua action, menu item and dock icon)
+decides by whether the panel is seen whole, never by where the keyboard is:
+
+- closed or hidden: shown, in front, with the keyboard;
+- open but covered, even by one cell, by a window or panel stacked over it: brought to the front
+  with the keyboard, and not hidden;
+- open and uncovered: hidden, whether it has the keyboard or not. A panel tiled beside the editor
+  hides at the first press.
+
+Covered is golib's `OverlayHost.Covered`: a shown panel or window above it in the stack overlaps it.
+An open dialog or a notification over it doesn't count. Every toggle decides by the same coverage
+rule (`panelCovered`): the keys, commands, Lua actions and menu items through `togglePanel`, the
+dock icon in its own handler (`goDock`).
+
+In the code: `tui/panels.go`, `tui/dock.go`
+
 ## Multiple buffers
 
 Several files are open at once as buffers; the editor shows one, the active buffer. The host's
@@ -127,11 +146,56 @@ and ends with the last of them. Each change is checked against the daemon's vers
   kept;
 - a newer version and unsaved edits: the buffer is badged, and asked keep / reload / overwrite
   when it is next entered or saved, never while it is typed in;
-- the file deleted: the buffer stays, badged, and a save creates the file again.
+- the file deleted: the buffer stays, badged, and a save creates the file again. A todo task's
+  file is the exception: see [A task's file follows its task](#a-tasks-file-follows-its-task).
 
 This keeps the editor honest when an agent or another editor writes the files it has open.
+`editor.document` reports a buffer whose file changed or was deleted on disk as `disk: "changed"`
+or `disk: "deleted"`.
 
 In the code: `tui/diskwatch.go`, `tui/buffers.go`
+
+## A task's file follows its task
+
+A todo store keeps each task in the folder of its status (`open/`, `in-progress/`, `deferred/`,
+`completed/`, `archived/<year>/<month>/`). A status change, the assignment of an open task, the
+refresh's archiving, or a move by hand moves the task's file. To the disk watch, that is the file
+deleted, and the rule above would let a save write it again: a second file of the task, beside the
+one that was moved.
+
+So before a buffer whose file is gone is badged deleted, the editor asks where the task is now:
+
+1. by the change log: the window's todo feed reads `todos.changes`, and each move it reads names
+   the old path and the new one. The feed also asks for an immediate check of every buffer on a
+   path a change moved, rewrote or removed, without waiting for the disk watch;
+2. by its id: `todos.get` of the file's name in the store that holds it. This also finds a move
+   the log reports only as a hand edit, and works in a window with no todo feed.
+
+A move is its own store's: the feed reads several stores, and the same relative path can be a task's
+in two of them, so a move is taken only for the file at its store's path joined with its old path.
+And the file a move names is taken only when its own `id` is the task's (the file's name): a stale
+move to another file, of another task or of none, is passed over for the lookup by id.
+
+What happens next:
+
+- **moved:** the buffer takes the new path, with its text, cursor and undo kept. With no unsaved
+  edits it takes the moved file's text as one undo step, as for a file changed on disk. With
+  unsaved edits it keeps them, badged changed on disk, and asks keep / reload / overwrite when it
+  is next shown or saved. If the new path is already open in another buffer, a clean buffer closes;
+  one with unsaved edits keeps them, and its save is refused.
+- **removed** (`todos.get` finds no such task): a clean buffer closes. One with unsaved edits keeps
+  them, badged deleted on disk, and its save is refused: a removed task is never written back from
+  a buffer.
+- **not a task's file**, or the daemon cannot say: the file is deleted, as before.
+
+The daemon backs this up on its side: a client's create of a second file of a task is refused (see
+[todos: A task's file is written at one path](todos.md#a-tasks-file-is-written-at-one-path)).
+
+Why: a task must have one file. A second one, in an old bucket, is a task with two statuses, and the
+store reports it as a conflict that a person must settle by hand.
+
+In the code: `tui/todomove.go`, `tui/diskwatch.go`, `tui/files.go` (`recheckBuffer`, `writeAs`),
+`tui/crewtodos.go`
 
 ## HTML files open raw or simplified
 

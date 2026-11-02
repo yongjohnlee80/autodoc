@@ -341,6 +341,14 @@ func (m *Manager) Verbs() []module.Verb {
 		if verbs[i].Event != nil {
 			verbs[i].Events = changedEvent
 		}
+		// each answers once the workspaces have read any store it made or moved, its own locks
+		// released by then (a read of the registry may write it): a no-op when nothing changed
+		call := verbs[i].Call
+		verbs[i].Call = func(ctx context.Context, params []any) (any, error) {
+			res, err := call(ctx, params)
+			m.awaitStores(ctx)
+			return res, err
+		}
 		switch verbs[i].Verb {
 		case "todos.migrate_refs":
 			verbs[i].Since = protocolMigrateRefs

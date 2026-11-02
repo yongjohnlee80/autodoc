@@ -157,8 +157,10 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	r.keys(t, esc())
 }
 
+// The terminal is tiled here, so the page beside it never covers it: a toggle hides a panel it
+// sees whole wherever the keyboard is (docs/decisions/editor.md#a-toggle-raises-a-covered-panel).
 func TestTheTerminalGivesTheKeyboardBackToThePaneThatHadIt(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runShellTUI(t, map[string]string{layoutKey("terminal"): layoutTiled})
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the explorer's keyboard", func(string) bool { return r.focused("explorerTree") })
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })

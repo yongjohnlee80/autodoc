@@ -104,13 +104,16 @@ func (h *Host) panelView(id string) string {
 
 // togglePanel opens or closes a panel its own way, or the one way: the drawer, and its view
 // takes the keyboard. Open, it has the keyboard. Hidden by the dock, it is shown again as it was,
-// as the dock's own click does (docs/decisions/editor.md#dock-clicks-hide-and-show).
+// as the dock's own click does (docs/decisions/editor.md#dock-clicks-hide-and-show). Open but
+// covered, even in part, by a window or panel over it, it comes to the front with the keyboard
+// instead of closing: what decides is whether it is seen whole, never where the keyboard is
+// (docs/decisions/editor.md#a-toggle-raises-a-covered-panel).
 func (h *Host) togglePanel(name string) {
 	s := h.panelSpec(name)
 	if s == nil {
 		return
 	}
-	if h.panelOpen[name] && h.panelHidden(name) {
+	if h.panelOpen[name] && (h.panelHidden(name) || h.panelCovered(name)) {
 		h.goTo(widgetTarget{panel: name})
 		return
 	}
@@ -130,7 +133,8 @@ func (h *Host) togglePanel(name string) {
 }
 
 // togglePanelTab is a tabbed panel's toggle for one of its tabs (SPC e, SPC l): closed or hidden,
-// the panel shown on that tab; shown on another tab, that tab; shown on it, closed.
+// the panel shown on that tab; shown on another tab, that tab, to the front when covered; shown on
+// it, closed, or to the front when covered (togglePanel).
 func (h *Host) togglePanelTab(name string, tab int) {
 	s := h.panelSpec(name)
 	if s == nil || s.Tab == nil || s.ShowTab == nil {
@@ -142,8 +146,8 @@ func (h *Host) togglePanelTab(name string, tab int) {
 		return
 	}
 	s.ShowTab(tab)
-	if !shown {
-		h.togglePanel(name)
+	if !shown || h.panelCovered(name) {
+		h.togglePanel(name) // shown on it, and to the front when covered
 	}
 }
 
