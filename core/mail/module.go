@@ -32,6 +32,10 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "a retry sends the same content; new content takes a new key"},
 		{Err: ErrTooLarge, Code: CodeTooLarge, Name: "mail.too_large", Message: "the body is past 64 KiB",
 			Next: "send a shorter body, and put the rest in a file the recipient can read"},
+		{Err: ErrDone, Code: CodeDone, Name: "mail.done", Message: "the delivery is acked: it is handled, nothing to answer again",
+			Next: "go on: its ack (or reply) landed"},
+		{Err: ErrEnded, Code: CodeEnded, Name: "mail.ended", Message: "the delivery has ended: its message expired, or it fell back to the host",
+			Next: "nothing to answer: mail.receive for what is still yours"},
 		{Err: ErrLeaseLost, Code: CodeLeaseLost, Name: "mail.lease_lost", Message: "the caller no longer holds the delivery's lease",
 			Next: "mail.receive again: the delivery comes back if it is still unhandled"},
 		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "mail.long_polls_busy",
@@ -215,8 +219,8 @@ func (m *Manager) Verbs() []module.Verb {
 			Effect: module.EffectWrite, Result: result, Errors: append([]int64{crew.CodeStaleEpoch}, codes...), Doc: doc}
 	}
 	show := agent("mail.show", module.EffectRead, "{from, delivery, message}",
-		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged.",
-		CodeLeaseLost)
+		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 51): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
+		CodeLeaseLost, CodeDone, CodeEnded)
 	show.Since = showSince
 	return []module.Verb{
 		module.Handle(agent("mail.send", module.EffectWrite, "{message, deliveries[]}",

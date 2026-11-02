@@ -413,8 +413,11 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   lost lease, which says nothing of anyone else's mail.
 - `mail.show` (protocol 45) reads a delivery the caller holds again, under its lease, which stays as
   it was (lease, deadline, attempts): an agent whose reader cut a body short reads it whole, never
-  asking its sender to resend. Another session's, another lease, a lapsed one or a done delivery is a
-  lost lease. It writes nothing.
+  asking its sender to resend. The caller's own delivery that is done says so (protocol 51):
+  `mail.done` when it was acked or replied to, so an agent can tell its ack landed; `mail.ended` when
+  it failed, expired, was merged, or was withdrawn (handed to its host as a fallback), or its message
+  passed its expiry though no write has expired it yet. Another session's, another lease, or a lapsed
+  lease on a live message is a lost lease. It writes nothing.
 - What an agent reads of its mail costs only what it needs, since each byte is paid for in every
   session. The CLI and the MCP tools print one line of JSON, no indent and nothing HTML-escaped. A
   received item names its delivery once, as its `id`: the delivery's own id and lease aren't printed
@@ -441,7 +444,7 @@ In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `
 An ack that answered `{}` couldn't tell an agent which delivery it had acked, whether the ack had
 written anything, or that one it still held was unanswered. Agents took a forgotten ack, whose
 delivery came back at its lease expiry, for a daemon redelivering acked mail. So each answer says
-what it did (protocol 51):
+what it did (protocol 52):
 
 - `mail.ack` answers `{delivery, state}`: the delivery its handle resolved to, also when the handle
   named the message's id with the lease, and `acked` when this ack wrote it done, `already_acked`
@@ -452,7 +455,7 @@ what it did (protocol 51):
   crew MCP server puts it on every tool result's last line, beside `waiting`, so a forgotten ack
   shows on the next tool call. A lapsed lease isn't held: its delivery waits to be received again.
 
-Each is additive: a client below 51 reads the keys it knew.
+Each is additive: a client below 52 reads the keys it knew.
 
 In the code: `core/mail/send.go` (`Ack`, `Reply`, `Preview`), `core/mail/module.go`, `app/crewmcp.go`
 (`waitingLine`), `core/crew/guide.go`
@@ -522,7 +525,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   process, since it wouldn't start an agent it still runs, so the old session ends (`takeover`) and
   the new one is registered. A ghost (a session left live by a host that never sent `crew.exit`)
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
-- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `no_endpoint`, `wakes_failing` (with
+- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
+  `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
+  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.

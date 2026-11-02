@@ -132,8 +132,8 @@ var crewMCPTools = []mcpTool{
 	{Name: "crew_reissue", Description: "Re-establish your crew access on the running daemon, when crew_whoami fails, mail stops, or crew_list shows you unreachable: waits up to 40 s for your host to re-join you, then registers again how you're woken when that is missing or failing. Answers {reissued, kept, not: [{item, why}]}; a healthy session changes nothing.",
 		Schema: toolSchema("crew_reissue", map[string]any{}),
 		args:   func(map[string]any) (string, []string, error) { return "crew reissue", nil, nil }},
-	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it; a profile whose session ended only with all.",
-		Schema: toolSchema("crew_list", map[string]any{"all": map[string]any{"type": "boolean", "description": "also the profiles whose session ended"}}),
+	{Name: "crew_list", Description: "Every crew member's codename, whether it's live, and whether a wake reaches it; a profile whose session ended, or a host's own session (kind host), only with all.",
+		Schema: toolSchema("crew_list", map[string]any{"all": map[string]any{"type": "boolean", "description": "also the profiles whose session ended, and the hosts' own sessions"}}),
 		args: func(in map[string]any) (string, []string, error) {
 			switch all := in["all"].(type) {
 			case nil:
@@ -362,7 +362,7 @@ func waitingLine(n, held int) string {
 
 // mailWaiting is how much mail the session may receive now (mail.inbox's count: it leases
 // nothing) and how many deliveries it holds unanswered (mail.inbox's held), and false when it
-// can't be counted (no session, no daemon). A daemon before protocol 51 answers no held: 0.
+// can't be counted (no session, no daemon). A daemon before protocol 52 answers no held: 0.
 func mailWaiting(ctx context.Context, session func() (sessionContext, error)) (int, int, bool) {
 	c, err := session()
 	if err != nil {
