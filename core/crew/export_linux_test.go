@@ -2,6 +2,8 @@
 
 package crew
 
+import "golang.org/x/sys/unix"
+
 // ReuseObservedChild makes the next descendant walk see parent's child from as process to: as if
 // from ended, and its pid went to to, between the walk's observation and its opens. to keeps
 // from's observed start, parent and user, as a reused pid would.
@@ -14,4 +16,29 @@ func ReuseObservedChild(t interface{ Cleanup(func()) }, parent, from, to int) {
 		}
 	}
 	t.Cleanup(func() { descendantsObserved = func(map[int][]observed) {} })
+}
+
+// ReuseObservedMember makes the group walks of group pgid see member from as process to, as
+// ReuseObservedChild does for a subtree.
+func ReuseObservedMember(t interface{ Cleanup(func()) }, pgid, from, to int) {
+	groupObserved = func(g int, seen []observed) {
+		for i, o := range seen {
+			if g == pgid && o.pid == from {
+				seen[i].pid = to
+			}
+		}
+	}
+	t.Cleanup(func() { groupObserved = func(int, []observed) {} })
+}
+
+// OpenObserved is whether process pid opens as observed with start, parent ppid, group pgid and
+// user uid: the check a kill makes before it signals a process it didn't open itself.
+func OpenObserved(pid, ppid, pgid int, start string, uid int) bool {
+	m, ok := openObserved(observed{pid: pid, ppid: ppid, pgid: pgid, start: start, uid: uid}, func(st procStat) bool {
+		return st.ppid == ppid && st.pgid == pgid
+	})
+	if ok {
+		_ = unix.Close(m.fd)
+	}
+	return ok
 }

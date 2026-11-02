@@ -225,52 +225,38 @@ func (h *linuxHelper) end(wait time.Duration) (string, error) {
 	return h.endSubtree(wait)
 }
 
-// endGroup ends the group the helper leads. Its members, as observed now, are opened by their own
-// pidfds and signalled through them, so a process signalled is one observed in the group. The
-// group as a whole (kill(-pgid), which reaches a member forked since) is signalled only while the
-// leader, or a member still in the group, holds the group's id: an id the kernel never gives a
-// new group while a process of the old one lives.
+// endGroup ends the group the helper leads, one checked process at a time: never by the group's
+// number (kill(-pgid)), whose holder can change between any check and the signal, and which
+// would reach a member of another user too. The leader is signalled through its own pidfd; the
+// other members are found in the group, the daemon's user's only, each opened by its pidfd and
+// checked to be the process observed (groupMembers), and signalled through it. The group is
+// looked at again on every poll, so a member forked since is found and signalled too.
 func (h *linuxHelper) endGroup(wait time.Duration) (string, error) {
 	pgid := h.p.pgid
-	members := groupMembers(pgid, h.p.pid)
-	defer func() {
-		for _, m := range members {
-			_ = unix.Close(m.fd)
-		}
-	}()
-	// the leader first, through its pidfd: it is the process checked, so the group is the one it leads
 	if err := unix.PidfdSendSignal(h.fd, unix.SIGTERM, nil, 0); errors.Is(err, unix.ESRCH) {
 		return KilledGone, nil
 	} else if err != nil {
 		return "", err
 	}
-	held := func() bool {
-		if unix.PidfdSendSignal(h.fd, 0, nil, 0) == nil {
-			return true
+	// round signals every member now in the group, and reports whether the group has any process
+	// left, the leader included
+	round := func(sig unix.Signal) bool {
+		left := alive(h.p.pid, h.p.statStart)
+		if left {
+			_ = unix.PidfdSendSignal(h.fd, sig, nil, 0)
 		}
-		for _, m := range members {
-			if st, err := readStat(m.pid); err == nil && st.start == m.start && st.pgid == pgid && st.state != 'Z' &&
-				unix.PidfdSendSignal(m.fd, 0, nil, 0) == nil {
-				return true
-			}
-		}
-		return false
-	}
-	signal := func(sig unix.Signal) {
-		_ = unix.PidfdSendSignal(h.fd, sig, nil, 0)
-		for _, m := range members {
+		for _, m := range groupMembers(pgid, h.p.pid) {
 			_ = unix.PidfdSendSignal(m.fd, sig, nil, 0)
+			_ = unix.Close(m.fd)
+			left = true
 		}
-		if held() {
-			_ = unix.Kill(-pgid, sig)
-		}
+		return left
 	}
-	signal(unix.SIGTERM)
-	if waitUntil(wait, func() bool { return !held() }) {
+	round(unix.SIGTERM)
+	if waitUntil(wait, func() bool { return !round(unix.SIGTERM) }) {
 		return KilledTerm, nil
 	}
-	signal(unix.SIGKILL)
-	waitUntil(time.Second, func() bool { return !held() })
+	waitUntil(time.Second, func() bool { return !round(unix.SIGKILL) })
 	return KilledKill, nil
 }
 
@@ -282,14 +268,20 @@ func groupMembers(pgid, leader int) []member {
 		return nil
 	}
 	uid := os.Getuid()
-	var out []member
+	var seen []observed
 	for _, p := range all {
 		if p == leader {
 			continue
 		}
-		o, ok := observe(p)
-		if !ok || o.pgid != pgid || o.uid != uid {
-			continue
+		if o, ok := observe(p); ok && o.pgid == pgid {
+			seen = append(seen, o)
+		}
+	}
+	groupObserved(pgid, seen)
+	var out []member
+	for _, o := range seen {
+		if o.uid != uid {
+			continue // another user's process is never signalled, in the group or not
 		}
 		if m, ok := openObserved(o, func(st procStat) bool { return st.pgid == pgid }); ok {
 			out = append(out, m)
@@ -383,6 +375,9 @@ func openObserved(o observed, still func(procStat) bool) (member, bool) {
 	}
 	return member{fd: fd, pid: o.pid, start: o.start}, true
 }
+
+// groupObserved, a test's, runs between a group's observation and its opens.
+var groupObserved = func(int, []observed) {}
 
 // descendantsObserved, a test's, runs between the observation and the opens: a pid can change hands
 // there.

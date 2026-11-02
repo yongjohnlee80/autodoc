@@ -278,8 +278,10 @@ all, for the daemon's user on its machine:
   agent can call it. The helper is opened by a pidfd and checked again before it is signalled.
   Every process it signals besides is one seen in a single read of `/proc` (its start, parent,
   group and user), opened by its own pidfd and checked to be that same process after the open, so
-  a process that took a pid in between is never signalled. A group is signalled as a whole only
-  while its leader, or a member still in it, holds the group's id.
+  a process that took a pid in between is never signalled. A group is never signalled by its
+  number: its leader through its own pidfd, and each other member of the daemon's user found in it
+  likewise, looked for again on every poll so a process forked since is found too. Another user's
+  process in the group is never signalled.
   A live or foreign row needs the user's confirmation. It gets SIGTERM, then SIGKILL after 5 s. A
   helper that leads its own process group is ended with its group. Any other, such as a server
   Neovim started inside its own group, is ended with its subtree, leaves first, and its parent is

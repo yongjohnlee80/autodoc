@@ -53,6 +53,10 @@ func cellProcess() {
 		c := exec.Command(exe)
 		c.Args = chain[0]
 		c.Env = append(os.Environ(), cellSpawn+"="+string(rest))
+		if chain[0][0] == "/bin/sleep" { // another user's process in the chain's group: nobody's
+			c = exec.Command("/bin/sleep", chain[0][1:]...)
+			c.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65534, Gid: 65534}}
+		}
 		if err := c.Start(); err != nil {
 			os.Exit(3)
 		}
@@ -607,4 +611,84 @@ func TestAKillNeverSignalsAProcessThatTookADescendantsPid(t *testing.T) {
 	if !running(neovim.pid) {
 		t.Fatal("the helper's parent was signalled")
 	}
+}
+
+// F3 (Lector #244 r1). A group is ended one checked process at a time, never by its number: a
+// member of the group that runs as another user is never signalled, though the daemon, as root,
+// could. Runs as root only (it starts a process as nobody).
+func TestAGroupKillNeverSignalsAnotherUsersMember(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("starts a process as another user: root only")
+	}
+	r := newBridgeRig(t)
+	bridge := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false, []string{"bridge-child"}, []string{"/bin/sleep", "3600"})
+	child, nobody := bridge.children[0], bridge.children[1]
+	if uid, _ := procOwner(nobody); uid != 65534 {
+		t.Fatalf("the group's other-user member runs as %d, want nobody", uid)
+	}
+	if got, err := r.kill(bridge.pid, false); err != nil || got.Outcome != crew.KilledTerm {
+		t.Fatalf("the orphan bridge: %+v, %v; want ended on SIGTERM", got, err)
+	}
+	if !waitEnded(bridge.pid, child) {
+		t.Fatal("the bridge or its own child still runs")
+	}
+	time.Sleep(200 * time.Millisecond)
+	if !running(nobody) {
+		t.Fatal("another user's process in the group was signalled")
+	}
+}
+
+// F3. A process that took a group member's pid between the group's observation and its open is
+// never signalled: it isn't the process observed.
+func TestAGroupKillNeverSignalsAProcessThatTookAMembersPid(t *testing.T) {
+	r := newBridgeRig(t)
+	bridge := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false, []string{"bridge-child"})
+	unrelated := startCell(t, []string{"/usr/bin/unrelated", "--sleep"}, true, false)
+	crew.ReuseObservedMember(t, bridge.pid, bridge.children[0], unrelated.pid)
+	if got, err := r.kill(bridge.pid, false); err != nil || got.Outcome == crew.KilledGone {
+		t.Fatalf("the orphan bridge: %+v, %v", got, err)
+	}
+	if !waitEnded(bridge.pid) {
+		t.Fatal("the bridge still runs")
+	}
+	time.Sleep(200 * time.Millisecond)
+	if !running(unrelated.pid) {
+		t.Fatal("a process that took a member's pid after the observation was signalled")
+	}
+}
+
+// The check before a process a kill didn't open itself is signalled: opened by its pidfd, it must
+// still be the process observed, with the same start, parent, group and user. Each alone is
+// refused when it differs (a reused pid has another start whatever its parent).
+func TestAnObservedProcessOpensOnlyAsItWasObserved(t *testing.T) {
+	p := startCell(t, []string{"/usr/bin/observed", "--sleep"}, false, false)
+	ref, err := crew.ProcRef(p.pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := ref[strings.LastIndexByte(ref, ':')+1:]
+	ppid, pgid, uid := os.Getpid(), p.pid, os.Getuid()
+	if !crew.OpenObserved(p.pid, ppid, pgid, start, uid) {
+		t.Fatal("the process as observed doesn't open")
+	}
+	for name, ok := range map[string]bool{
+		"another start":  crew.OpenObserved(p.pid, ppid, pgid, start+"0", uid),
+		"another parent": crew.OpenObserved(p.pid, ppid+1, pgid, start, uid),
+		"another group":  crew.OpenObserved(p.pid, ppid, pgid+1, start, uid),
+		"another user":   crew.OpenObserved(p.pid, ppid, pgid, start, uid+1),
+	} {
+		if ok {
+			t.Errorf("observed with %s, it still opens", name)
+		}
+	}
+}
+
+// procOwner is the user process pid runs as.
+func procOwner(pid int) (int, bool) {
+	fi, err := os.Stat("/proc/" + strconv.Itoa(pid))
+	if err != nil {
+		return 0, false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return int(st.Uid), ok
 }
