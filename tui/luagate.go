@@ -77,8 +77,8 @@ func (h *Host) askLuaGrants() {
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
 			Text:  luaGrantText(h.trf, open),
 			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),
-			OnYes:    func() { h.grantLua(a.script, open); next() },
-			OnCancel: next,
+			OnYes:    func() { h.grantLua(a.script, open); h.grantAnswered(a.script, open, true); next() },
+			OnCancel: func() { h.grantAnswered(a.script, open, false); next() },
 		})
 		return
 	}
@@ -135,3 +135,21 @@ var luaCapabilityText = map[string]string{
 }
 
 var _ script.Grants = luaGrants{}
+
+// grantAnswered tells the requester the user's answer: an agent (agent:<codename>), by the crew,
+// as the user's own mail, so it retries the refused call, or stops, instead of retrying blind
+// (crew.grantAnswered). A Lua script or plugin package hears nothing yet. A window with no crew
+// scope says nothing; the refusal it gave says so too (editorVerb).
+func (h *Host) grantAnswered(requester string, caps []string, allowed bool) {
+	if codename, ok := strings.CutPrefix(requester, "agent:"); ok && h.crew != nil {
+		h.crew.grantAnswered(codename, caps, allowed)
+	}
+}
+
+// crewHeld is the window's crew scope, when it holds one.
+func (h *Host) crewHeld() (scope string, epoch int64, ok bool) {
+	if h.crew == nil {
+		return "", 0, false
+	}
+	return h.crew.held()
+}

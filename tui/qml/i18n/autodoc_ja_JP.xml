@@ -1251,6 +1251,10 @@
         <source>%1 no longer waits on you</source>
         <translation>%1 はもうあなたを待っていません</translation>
     </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>%1 の要求への回答をメールで送れませんでした: %2。エージェントに直接伝えてください。</translation>
+    </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>このウィンドウのクルーの受信箱はデーモンに拒否されました (%1)。依頼と注意は次の接続で再び表示されます。</translation>
