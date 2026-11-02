@@ -31,7 +31,7 @@ type (
 	}
 	graphUnresolved struct {
 		Workspace string    `param:"workspace"`
-		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14)"`
+		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14), {limit, offset} (protocol 50)"`
 	}
 	graphResolve struct {
 		Workspace string `param:"workspace"`
@@ -81,6 +81,14 @@ type unresolvedJSON struct {
 	Src    string `json:"src"`
 	Raw    string `json:"raw"`
 	Reason string `json:"reason"`
+}
+
+// unresolvedPageJSON is graph.unresolved from protocol 50: limit rows after offset, the whole
+// list's count, and next, the next page's offset, absent on the last.
+type unresolvedPageJSON struct {
+	Unresolved []unresolvedJSON `json:"unresolved"`
+	Count      int64            `json:"count"`
+	Next       *int64           `json:"next,omitempty"`
 }
 
 type resolvedJSON struct {
@@ -189,9 +197,17 @@ func (s *Server) graphVerbs() []module.Verb {
 				return out, nil
 			}),
 		module.Handle(module.Contract{Verb: "graph.unresolved", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
-			Result: "[{src, raw, reason}]", Errors: []int64{CodeNoSuchWorkspace}, Doc: "Links that name no file."},
-			func(ctx context.Context, p graphUnresolved) ([]unresolvedJSON, error) {
+			Result: "{unresolved: [{src, raw, reason}], count, next?} (protocol 50; below it [{src, raw, reason}], the whole list)",
+			Errors: []int64{CodeNoSuchWorkspace},
+			Doc: fmt.Sprintf("Links that name no file, a page at a time: opts.limit (1 to %d, default %d) rows after opts.offset, the whole list's count, "+
+				"and next, the next page's offset, absent on the last. A session below %d gets the whole list in one reply.",
+				maxUnresolvedPage, defaultUnresolvedPage, unresolvedPagesSince)},
+			func(ctx context.Context, p graphUnresolved) (any, error) {
 				kinds, err := graphKinds(ctx, p.Options.raw)
+				if err != nil {
+					return nil, err
+				}
+				limit, offset, err := unresolvedPage(ctx, p.Options.raw)
 				if err != nil {
 					return nil, err
 				}
@@ -203,7 +219,18 @@ func (s *Server) graphVerbs() []module.Verb {
 				for i, u := range us {
 					out[i] = unresolvedJSON{Src: u.Src, Raw: u.Raw, Reason: u.Reason}
 				}
-				return out, nil
+				if protocolOf(ctx) < unresolvedPagesSince {
+					return out, nil
+				}
+				page := &unresolvedPageJSON{Unresolved: []unresolvedJSON{}, Count: int64(len(out))}
+				if offset < int64(len(out)) {
+					end := min(offset+limit, int64(len(out)))
+					page.Unresolved = out[offset:end]
+					if end < int64(len(out)) {
+						page.Next = &end
+					}
+				}
+				return page, nil
 			}),
 		// graph.resolve: where one link, as written in the file at from, reaches now, saved or not, as
 		// the index will resolve it (Protocol 18)
@@ -299,6 +326,44 @@ func mapOpts(ctx context.Context, raw any) (mapRequest, error) {
 		o.Limit = int(n)
 	}
 	return o, nil
+}
+
+// unresolvedPagesSince is the protocol graph.unresolved came a page at a time in
+// (docs/decisions/search.md#the-unresolved-links-in-pages): a session below it keeps the one reply,
+// and is refused limit and offset. A page holds defaultUnresolvedPage rows unless opts.limit says
+// otherwise, at most maxUnresolvedPage.
+const (
+	unresolvedPagesSince  = 50
+	defaultUnresolvedPage = 500
+	maxUnresolvedPage     = 2000
+)
+
+// unresolvedPage is graph.unresolved's page, from its options: opts.limit and opts.offset, each
+// refused below unresolvedPagesSince, not ignored, and out of its bounds.
+func unresolvedPage(ctx context.Context, raw any) (limit, offset int64, err error) {
+	limit = defaultUnresolvedPage
+	opts, _ := raw.(map[string]any) // graphKinds refused any other shape
+	for _, k := range []string{"limit", "offset"} {
+		v, ok := opts[k]
+		if !ok {
+			continue
+		}
+		if protocolOf(ctx) < unresolvedPagesSince {
+			return 0, 0, invalid(fmt.Sprintf("graph.unresolved: opts.%s needs protocol %d", k, unresolvedPagesSince))
+		}
+		n, ok := v.(int64)
+		switch {
+		case k == "limit" && (!ok || n < 1 || n > maxUnresolvedPage):
+			return 0, 0, invalid(fmt.Sprintf("graph.unresolved: opts.limit must be 1 to %d", maxUnresolvedPage))
+		case k == "offset" && (!ok || n < 0):
+			return 0, 0, invalid("graph.unresolved: opts.offset must be 0 or more")
+		case k == "limit":
+			limit = n
+		default:
+			offset = n
+		}
+	}
+	return limit, offset, nil
 }
 
 // todoKinds are the relation kinds protocol 23 added.

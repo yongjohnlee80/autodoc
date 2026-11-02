@@ -61,8 +61,10 @@ var sqliteSuites = []struct {
 	run  func(*testing.T)
 }{
 	{"EveryVerbWritesItsRow", TestEveryVerbWritesItsRow},
+	{"AClientsCreateIsSerializedWithTheStore", TestAClientsCreateIsSerializedWithTheStore},
 	{"HandEditsAreUpdatesNeverAssigns", TestHandEditsAreUpdatesNeverAssigns},
 	{"AnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand", TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand},
+	{"AnAssignmentSaysWhoMadeIt", TestAnAssignmentSaysWhoMadeIt},
 	{"FirstSightIsABaseline", TestFirstSightIsABaseline},
 	{"Consumers", TestConsumers},
 	{"PruningAndResync", TestPruningAndResync},
@@ -96,6 +98,7 @@ var sqliteSuites = []struct {
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},
 	{"UpdatePatchesHandEditableFieldsOnly", TestUpdatePatchesHandEditableFieldsOnly},
+	{"ADescriptionSentBackWholeIsNotStacked", TestADescriptionSentBackWholeIsNotStacked},
 	{"StaleRevIsRefused", TestStaleRevIsRefused},
 	{"HandEditBetweenReadAndWriteIsCaught", TestHandEditBetweenReadAndWriteIsCaught},
 	{"RacingWritesAreSerialized", TestRacingWritesAreSerialized},
@@ -141,6 +144,7 @@ var sqliteSuites = []struct {
 	{"ADailyRefreshFailureIsReported", TestADailyRefreshFailureIsReported},
 	{"TheDailyRefreshOfAProjectRoot", TestTheDailyRefreshOfAProjectRoot},
 	{"RefreshDailyRunsUntilItsContextEnds", TestRefreshDailyRunsUntilItsContextEnds},
+	{"AListsSummaryLeavesOutTheText", TestAListsSummaryLeavesOutTheText},
 }
 
 // TestEveryEnvSuiteRunsOnSQLite: a test that builds an env (newEnv, claimed) is in sqliteSuites, so

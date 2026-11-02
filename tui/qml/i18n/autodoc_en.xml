@@ -1255,6 +1255,10 @@
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1's request was already answered, dismissed or expired.</translation>
     </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</translation>
+    </message>
     <message id="autodoc.crew.fallback_typed">
         <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
         <translation>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</translation>
@@ -1270,6 +1274,10 @@
     <message id="autodoc.crew.fallback_went">
         <source>%1's mail that waited for its host was delivered</source>
         <translation>%1's mail that waited for its host was delivered</translation>
+    </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</translation>
     </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
@@ -1290,6 +1298,10 @@
     <message id="autodoc.crew.not_shown">
         <source>%1 could not be shown: %2.</source>
         <translation>%1 could not be shown: %2.</translation>
+    </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</translation>
     </message>
     <message id="autodoc.crew.orphan_adopt">
         <source>&amp;Adopt</source>
@@ -5595,6 +5607,30 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>theme: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 moved to %2 with its task: the buffer follows it</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1's task was removed: its buffer is closed</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>todos: a new store in %1</translation>
@@ -7726,6 +7762,10 @@ The last connect failed:
     <message id="autodoc.text.settings.root_a_workspace_keeps_its_root_add_the_other_di">
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</translation>
+    </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</translation>
     </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>

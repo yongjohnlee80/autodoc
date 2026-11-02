@@ -1219,6 +1219,14 @@
         <source>%1 did not start: %2</source>
         <translation>%1이(가) 시작되지 않았습니다: %2</translation>
     </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1이(가) %2에서 아직 시작을 마치지 않았습니다. Claude Code가 탭에서 이 폴더를 신뢰할지 묻고 있을 수 있습니다. 시작될 때까지 아무것도 입력되지 않으며, 크루 메일은 기다립니다.</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1이(가) %3에서 Claude Code가 시작되기 전에 종료되었습니다(코드 %2). 폴더 신뢰 질문을 거절했을 수 있습니다. 다시 시작한 뒤 폴더를 신뢰하도록 선택하세요.</translation>
+    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>%2에게 온 메시지 %1개를 폐기했습니다. 각 발신자에게 알립니다.</translation>
@@ -1250,6 +1258,10 @@
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1이(가) 더 이상 기다리지 않습니다</translation>
+    </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>%1의 요청에 대한 답변을 메일로 보내지 못했습니다: %2. 에이전트에게 직접 알려 주세요.</translation>
     </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
@@ -5361,6 +5373,30 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>테마: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동됨: 버퍼가 따라갑니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동됨: 버퍼가 따라가며 저장하지 않은 편집은 유지됩니다. 그곳의 텍스트가 달라 다음에 열거나 저장할 때 묻습니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1이(가) 작업과 함께 %2(으)로 이동했으며 그 파일은 다른 버퍼에 열려 있습니다: 이 버퍼는 저장하지 않은 편집을 유지하고, 저장은 거부됩니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>%1의 작업이 제거됨: 버퍼를 닫았습니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>%1의 작업이 제거됨: 저장하지 않은 편집은 유지되지만, 작업이 다시 기록되지 않도록 저장은 거부됩니다</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1은(는) 저장되지 않음: 작업이 이동되었거나 제거되었으며, 여기에 쓰면 작업의 두 번째 파일이 생깁니다</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>할 일: %1에 새 저장소</translation>
@@ -7172,6 +7208,10 @@ The last connect failed:
     <message id="autodoc.text.settings.root_a_workspace_keeps_its_root_add_the_other_di">
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>루트: %1 (워크스페이스는 루트를 바꿀 수 없습니다: 다른 디렉터리는 별도의 워크스페이스로 추가하세요)</translation>
+    </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ 이 루트는 AutoDoc 자체 폴더를 포함하거나 그 안에 있습니다: %1. 이 파일에 대한 권한을 받은 스크립트는 보호 경로 목록이 없다면 그 폴더에 닿을 수 있습니다: 루트를 옮기거나 좁히세요.</translation>
     </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>

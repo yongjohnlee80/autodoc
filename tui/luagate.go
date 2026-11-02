@@ -32,6 +32,9 @@ func (g luaGrants) Granted(script, capability string) bool {
 
 // Request queues the question, asked once the file has loaded and the answers given are known.
 func (g luaGrants) Request(script string, caps []string) {
+	if a := g.h.luaShown; a != nil && a.script == script && slices.Equal(a.caps, caps) {
+		return // its card is open: the one answer it gets answers this retry too
+	}
 	for _, a := range g.h.luaAsks {
 		if a.script == script && slices.Equal(a.caps, caps) {
 			return // asked already, not answered yet: an agent retrying asks once
@@ -67,8 +70,8 @@ func (h *Host) askLuaGrants() {
 		if len(open) == 0 {
 			continue
 		}
-		h.luaAsking = true
-		next := func() { h.luaAsking = false; h.p.Post(h.askLuaGrants) }
+		h.luaAsking, h.luaShown = true, &a
+		next := func() { h.luaAsking, h.luaShown = false, nil; h.p.Post(h.askLuaGrants) }
 		who := h.trf("autodoc.question.luagate.the_lua_script", a.script)
 		if name, ok := strings.CutPrefix(a.script, "plugin:"); ok {
 			who = h.trf("autodoc.question.luagate.the_plugin_s_lua_package", name)
@@ -77,8 +80,8 @@ func (h *Host) askLuaGrants() {
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
 			Text:  luaGrantText(h.trf, open),
 			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),
-			OnYes:    func() { h.grantLua(a.script, open); next() },
-			OnCancel: next,
+			OnYes:    func() { h.grantLua(a.script, open); h.grantAnswered(a.script, open, true); next() },
+			OnCancel: func() { h.grantAnswered(a.script, open, false); next() },
 		})
 		return
 	}
@@ -135,3 +138,29 @@ var luaCapabilityText = map[string]string{
 }
 
 var _ script.Grants = luaGrants{}
+
+// grantAnswered tells the requester the user's answer: an agent (agent:<codename>), by the crew,
+// as the user's own mail, so it retries the refused call, or stops, instead of retrying blind
+// (crew.grantAnswered); a window with no crew scope says nothing, and the refusal it gave says so
+// too (editorVerb). A gated Lua script or package (plugin:<name> for a plugin's) hears the grant
+// event, its own handlers only (luaevents.go), so it can resume what the refusal stopped.
+func (h *Host) grantAnswered(requester string, caps []string, allowed bool) {
+	if h.onGrantAnswered != nil {
+		h.onGrantAnswered(requester, caps, allowed)
+	}
+	if codename, ok := strings.CutPrefix(requester, "agent:"); ok {
+		if h.crew != nil {
+			h.crew.grantAnswered(codename, caps, allowed)
+		}
+		return
+	}
+	h.emitLuaFor(requester, "grant", map[string]any{"capabilities": caps, "allowed": allowed})
+}
+
+// crewHeld is the window's crew scope, when it holds one.
+func (h *Host) crewHeld() (scope string, epoch int64, ok bool) {
+	if h.crew == nil {
+		return "", 0, false
+	}
+	return h.crew.held()
+}

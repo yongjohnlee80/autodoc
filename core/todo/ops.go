@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
@@ -245,7 +246,7 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec, scope string) (Task
 	if err := checkBlocked(spec.Blocked); err != nil {
 		return Task{}, err
 	}
-	t := Task{Version: newest.version, ID: id, Status: status, Title: spec.Title, Description: spec.Description,
+	t := Task{Version: newest.version, ID: id, Status: status, Title: spec.Title, Description: stripManaged(spec.Description),
 		Due: spec.Due, Priority: spec.Priority, Assignee: spec.Assignee, Tags: spec.Tags, ADR: slices.Clone(spec.ADR),
 		Review: slices.Clone(spec.Review), Blocked: spec.Blocked, Created: ts, Updated: ts, StatusChanged: ts}
 	switch status {
@@ -273,7 +274,7 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec, scope string) (Task
 	}
 	c := Change{ID: id, Kind: KindAdd, To: status}
 	if spec.Assignee != "" {
-		c = Change{ID: id, Kind: KindAssign, To: spec.Assignee, Scope: scope} // delivered like todos.assign, with its scope
+		c = Change{ID: id, Kind: KindAssign, To: spec.Assignee, Scope: scope, By: module.CallerFrom(ctx)} // delivered like todos.assign, with its scope and its maker
 	}
 	return m.create(ctx, st, c, back, content)
 }
@@ -444,7 +445,7 @@ func (m *Manager) Assign(ctx context.Context, at At, id, seen, assignee, reason,
 	if err != nil {
 		return Task{}, err
 	}
-	c := Change{ID: id, Kind: KindAssign, From: old, To: assignee, Reason: reason, Scope: scope, FromRev: seen}
+	c := Change{ID: id, Kind: KindAssign, From: old, To: assignee, Reason: reason, Scope: scope, By: module.CallerFrom(ctx), FromRev: seen}
 	if back.Path != from {
 		return m.move(ctx, st, c, from, ver, back, content)
 	}

@@ -93,7 +93,10 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   revision it read is refused when the text has changed since.
 - Each agent is held to grants as a Lua package is (`editor.read`, `editor.write`, `commands`). An
   ungranted call is refused at once, never held open, and the user is asked; an Allow works for the
-  next call. `editor.workspace` and `editor.commands` need no grant. `editor.add_command` asks every
+  next call. When the window holds a crew scope, the user's answer reaches the agent as the user's own
+  mail (allowed: call again; not allowed, or the card closed: don't), and the refusal says it will, so
+  the agent waits for it rather than retrying blind. `editor.workspace` and `editor.commands` need
+  no grant. `editor.add_command` asks every
   time, shows the whole source, and creates the Lua file only at the user's yes.
 
 The TUI serves the page rather than the daemon, because the unsaved text, cursor and undo history
@@ -611,7 +614,15 @@ messaging, which tries the agent's doorbell first and falls back to typing
 - **The base** types the message into the agent's terminal as one bracketed paste and presses
   Enter after it, only where the agent's prompts are reported (`crew.list`'s `prompts_reported` for
   its session in the window's scope) and none shows (no permission attention raised). Elsewhere the
-  message stays typed for the user's Enter, and a notice says why. Only a doorbell that answers for
+  message stays typed for the user's Enter, and a notice says why. A Claude agent's prompts are
+  reported only once it has started (its endpoint registered), and the base types nothing at all
+  into a Claude agent the crew doesn't say has started: a paste into its folder-trust question may
+  act on its keys. An agent just started is asked again while it comes up. To one that hasn't started,
+  your own send is mailed instead, never fired, so its first receive gets it; anything else (a
+  fallback job from an older daemon) ends `ErrAgentNotStarted`. A notice, once a session, names its
+  folder. A Claude
+  agent that exits before it started may have declined that question: a notice says so, with its
+  exit code. Only a doorbell that answers for
   certain it didn't ring falls back; one whose answer is lost is asked again with the same key.
 - **An agent in another workspace** (started in one workspace, the window now in another) is rung
   all the same: its crew session is the window's scope's, not the workspace's, so its mail reaches
@@ -641,11 +652,14 @@ Neovim's notifier never delivers `autodoc:` assignees, so the window does.
   over itself ([the user's own sends](#the-users-own-sends)). So the feed skips an assignment made
   in its own scope, and only that: one made in another window's scope, or any scope a caller
   passed, is delivered to the agent's own window, so no assignment falls between two windows.
-- **A notice, not the user's task:** the window mails it from `user`, kind message, subject
-  `[todos] task assigned to you: <title>`. The body states the assignment, not who made it ("You've
-  been assigned a new task."), then the task's id, title and file, and the reason quoted as the
-  note, word for word as Neovim's notifier writes its own. It carries no `peer` field (it is a
-  host's notice). A request from `user` headed `Task:` is the user's own instruction.
+- **A notice, not the user's task:** kind message, subject `[todos] task assigned to you:
+  <title>`. The body states the assignment ("You've been assigned a new task."), then the task's
+  id, title and file, and the reason quoted as the note, word for word as Neovim's notifier writes
+  its own. A request from `user` headed `Task:` is the user's own instruction.
+- **From whoever made it** ([todos: An assignment says who made it](todos.md#an-assignment-says-who-made-it)):
+  one the user's surface made comes from `user` (`inbox.send`). One an agent made goes through
+  `inbox.forward`, and the daemon sends it from that agent, with the `peer` field, so a peer's
+  reason is never read as the user's. An unverified maker's comes from `autodoc`, saying so.
 - **Queued, not fired:** the daemon wakes the agent as for any mail, and a stopped agent finds it
   when it starts. The mail's key is the change's, `todo-<store>-<seq>`, so an ask after a lost
   answer never mails it twice. A change whose send has no outcome stays unacked and is read again.
@@ -659,9 +673,21 @@ Mail an agent doesn't receive in time goes to it some other way, once: its host 
 it in its file mailbox.
 
 - **When.** A delivery falls back when it was never leased (an agent that leased it may have read
-  it), its recipient has a live session (an ended one's mail waits for the next), and, counted from
-  the later of the message's creation and that session's start, either the session has been
+  it), its recipient has a live session (an ended one's mail waits for the next) that is past its
+  CLI's startup, and, counted from the later of the message's creation and that session's start (for
+  a Claude session, its endpoint's first registration, when later), either the session has been
   unreachable (no endpoint, or 5 failed wakes) for 30 s, or 10 min have passed (`FallbackAfter`).
+  A later registration of the endpoint (a resume, a compaction) moves nothing, nor does another
+  kind's endpoint.
+- **Not before the agent has started.** A Claude session registers its endpoint from Claude Code's
+  SessionStart hook, which runs only once Claude Code is past its startup: in a folder it hasn't
+  trusted yet, its folder-trust question, whose default is "No, exit". Its host registers the session
+  at spawn, so until then it is live and unreachable, and a host typing a job into it would answer
+  the question. A Claude session with no endpoint therefore gets no job: its mail stays queued, and
+  its first receive once it has started gets it (`crew.StartsWithItsEndpoint`). Its endpoint goes
+  only when the session ends, so having one means it registered once. Every other kind falls back
+  as before: Codex asks nothing in a folder outside git (an agent's own folder), and agy's folders
+  are trusted by its setup.
 - **Why 10 min, and from the session's start.** A ring's own wait (2 min) is not the fallback's: an
   agent busy in a long step accepts its notice and receives only when the step ends. Each
   unanswered wait counts as a failed wake, so it is rung again, backing off: at 0:00, 2:05, 4:35 and
@@ -843,12 +869,19 @@ the session doesn't start until someone answers it.
   run the same CLI as mise's tool for the name, or a later file on PATH, which are tried next. The
   TUI does this off the loop when the window starts and after each spawn; a spawn asks the binary it
   found again, which costs a stat when nothing changed.
+- mise can be held up while other agents start: a wrapper that runs `mise use` on each launch takes
+  mise's lock, or checks its remote. So `mise which` is bounded at 5 s, and asked once more, bounded
+  at 15 s, when that runs out. When mise still can't answer, nothing is taken in its place, not even
+  the binary an earlier lookup found: the launcher may run another one now (the user's mise selection
+  changed), and settings naming hooks that one doesn't know can stall its start. The floor is safe;
+  a guessed binary isn't.
 - The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
   what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
   `SessionStart` alone, and registers without `prompts`.
 - When no file reads as a Claude Code, it is taken to know `SessionStart` and
-  `crossSessionInbound` alone, and the window says once that its prompts aren't reported, naming
-  the files tried.
+  `crossSessionInbound` alone, and the window says once that its prompts aren't reported. The
+  notice says first why mise didn't answer (`mise which claude timed out (5s, then 15s)`, or its
+  failure), then names the files tried, so a notice cut short still shows its cause.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 

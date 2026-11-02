@@ -1219,6 +1219,14 @@
         <source>%1 did not start: %2</source>
         <translation>%1 no se inició: %2</translation>
     </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 aún no ha terminado de iniciarse en %2: puede que Claude Code esté preguntando en su pestaña si confiar en esa carpeta. No se escribe nada en él hasta que se inicie, y su correo del equipo lo espera.</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 salió (código %2) antes de que Claude Code se iniciara en %3: puede que haya rechazado la pregunta de confiar en la carpeta. Vuelve a iniciarlo y elige confiar en la carpeta.</translation>
+    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>Se descartaron %1 mensaje(s) para %2; se avisa a cada remitente.</translation>
@@ -1250,6 +1258,10 @@
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 ya no te espera</translation>
+    </message>
+    <message id="autodoc.crew.grant_answer_unsent">
+        <source>Your answer to %1's request could not be mailed to it: %2. Tell the agent yourself.</source>
+        <translation>Tu respuesta a la solicitud de %1 no se le pudo enviar por correo: %2. Díselo tú al agente.</translation>
     </message>
     <message id="autodoc.crew.inbox_refused">
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
@@ -5369,6 +5381,30 @@ LO QUE NECESITA UNA TECLA
         <source>theme: %1</source>
         <translation>tema: %1</translation>
     </message>
+    <message id="autodoc.notice.todomove.moved_to">
+        <source>%1 moved to %2 with its task: the buffer follows it</source>
+        <translation>%1 se movió a %2 con su tarea: el búfer lo sigue</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_asked">
+        <source>%1 moved to %2 with its task: the buffer follows it, your unsaved edits kept; its text there differs, and you are asked when you next open or save it</source>
+        <translation>%1 se movió a %2 con su tarea: el búfer lo sigue y conserva sus cambios sin guardar; su texto allí es distinto, y se le preguntará la próxima vez que lo abra o lo guarde</translation>
+    </message>
+    <message id="autodoc.notice.todomove.moved_to_open">
+        <source>%1 moved to %2 with its task, which is open in another buffer: this one keeps your unsaved edits, and its save is refused</source>
+        <translation>%1 se movió a %2 con su tarea, que está abierta en otro búfer: este conserva sus cambios sin guardar, y se rechaza guardarlo</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_closed">
+        <source>%1's task was removed: its buffer is closed</source>
+        <translation>Se eliminó la tarea de %1: su búfer se cerró</translation>
+    </message>
+    <message id="autodoc.notice.todomove.removed_kept">
+        <source>%1's task was removed: your unsaved edits are kept, and its save is refused, so the task is not written again</source>
+        <translation>Se eliminó la tarea de %1: se conservan sus cambios sin guardar, y se rechaza guardarlo, para que la tarea no se escriba de nuevo</translation>
+    </message>
+    <message id="autodoc.notice.todomove.save_refused">
+        <source>%1 is not saved: its task moved or was removed, and writing it here would make a second file of the task</source>
+        <translation>%1 no se guardó: su tarea se movió o se eliminó, y escribirlo aquí crearía un segundo archivo de la tarea</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_a_new_store_in">
         <source>todos: a new store in %1</source>
         <translation>tareas: un almacén nuevo en %1</translation>
@@ -7180,6 +7216,10 @@ La última conexión falló:
     <message id="autodoc.text.settings.root_a_workspace_keeps_its_root_add_the_other_di">
         <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
         <translation>raíz: %1 (un espacio de trabajo conserva su raíz: añade el otro directorio como un espacio de trabajo propio)</translation>
+    </message>
+    <message id="autodoc.text.settings.root_overlaps_autodoc_dirs">
+        <source>⚠ This root holds or lies inside AutoDoc's own folders: %1. A script granted its files could reach them but for the protected-path list: move the root, or narrow it.</source>
+        <translation>⚠ Esta raíz contiene o está dentro de las carpetas propias de AutoDoc: %1. Un script con acceso a sus archivos podría alcanzarlas si no fuera por la lista de rutas protegidas: mueva la raíz o acótela.</translation>
     </message>
     <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
         <source>root: the directory it indexes (Browse… picks one)</source>

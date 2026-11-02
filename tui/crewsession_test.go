@@ -260,9 +260,12 @@ func unreportedNotices(notes []string) int {
 	return n
 }
 
-// promptsReported is crew.list's prompts_reported for codename, on the window's daemon.
+// promptsReported is crew.list's prompts_reported for codename, on the window's daemon, once its
+// session has started (its endpoint registered, as Claude Code's SessionStart hook does past its
+// startup: a Claude's prompts are reported only then).
 func promptsReported(t *testing.T, w *crewWindow, codename string) bool {
 	t.Helper()
+	w.d.started(t, codename)
 	es, err := w.d.m.List(context.Background())
 	if err != nil {
 		t.Fatal(err)

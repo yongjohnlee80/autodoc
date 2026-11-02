@@ -30,10 +30,11 @@ import (
 //     over itself (todos_assign.go), so an assignment made in the window's own scope is skipped
 //     here. One made in another window's scope is not: that window's panel may have no crew
 //     profile of this agent's to deliver to, and the feed only ever skips what its own panel made.
-//   - A notice, never a task the user typed: mail from the user, kind message, subject "[todos] task
-//     assigned to you: <title>". A peer may have made it, and the crew's mail from the user is the
-//     user's own instruction, so its body says first that it is forwarded and not the user's, names
-//     the assigner (the scope the change was made from, or unknown), and quotes its reason.
+//   - A notice, never a task the user typed: kind message, subject "[todos] task assigned to you:
+//     <title>", its body stating the assignment and quoting its reason. From whoever made it, as the
+//     daemon recorded it (docs/decisions/todos.md#an-assignment-says-who-made-it): the user's surface's
+//     is the user's mail (inbox.send); an agent's is sent by the daemon from that agent
+//     (inbox.forward), with the peer marker, so a peer's reason is never read as the user's.
 //   - Queued, not fired: the daemon wakes the agent as for any mail, and a stopped agent finds it
 //     when it starts. Keyed by the change (todo-<store>-<seq>, as Neovim keys its own), so asking
 //     again after a lost answer never mails it twice.
@@ -43,6 +44,9 @@ import (
 // would replay its whole retained log: there, assignments from before this process started are
 // skipped (a resync's snapshot too), and the stores read are kept in <agentDir>/.crew-todos/<scope>
 // once their history is behind the cursor.
+//
+// The same read tells the open buffers each task file a change moved, rewrote or removed, so a buffer
+// on a moved task's file follows it (docs/decisions/editor.md#a-tasks-file-follows-its-task).
 //
 // It reads at each claim (a start, a reconnect) and at each todos.changed event. An assignment whose
 // send has no outcome yet (a lost answer, a dropped connection) leaves its change unacked, and the
@@ -69,8 +73,12 @@ type todoFeed struct {
 	retrying bool      // a read again is set for todoFeedRetry
 }
 
-// todoFeedRead is what a read left for the loop: whether a send had no outcome.
-type todoFeedRead struct{ retry bool }
+// todoFeedRead is what a read left for the loop: whether a send had no outcome, and the task files
+// its changes moved, rewrote or removed, for the open buffers (todomove.go).
+type todoFeedRead struct {
+	retry bool
+	files []todoFileChange
+}
 
 // poll reads every store's changes, one read at a time: asked during a read, it reads once more
 // after it. A window holding no scope reads nothing.
@@ -87,7 +95,11 @@ func (f *todoFeed) poll() {
 	run, start := f.h.run, f.start
 	f.h.c.Go(func(ctx context.Context) any { return f.read(ctx, scope, run, epoch, start) }, func(v any) {
 		f.polling = false
-		if r, _ := v.(todoFeedRead); r.retry && !f.retrying {
+		r, _ := v.(todoFeedRead)
+		if len(r.files) > 0 && f.h.onTodoFiles != nil {
+			f.h.onTodoFiles(r.files)
+		}
+		if r.retry && !f.retrying {
 			f.retrying = true
 			f.h.c.After(todoFeedRetry, func() { f.retrying = false; f.poll() })
 		}
@@ -139,6 +151,8 @@ func (f *todoFeed) read(ctx context.Context, scope, run string, epoch int64, sta
 		}
 		s.news = !seen[s.id]
 		outcome, past := d.store(ctx, s, start)
+		out.files = append(out.files, d.files...)
+		d.files = nil
 		if outcome == todoRetry {
 			out.retry = true
 		}
@@ -159,7 +173,8 @@ type todoDelivery struct {
 	scope string
 	run   string
 	epoch int64
-	own   map[string]bool // the codenames of the crew profiles in the scope; nil until asked
+	own   map[string]bool  // the codenames of the crew profiles in the scope; nil until asked
+	files []todoFileChange // the store's task files its changes moved, rewrote or removed
 }
 
 // store reads one store's changes after the consumer's cursor and acks what it handled. past is
@@ -188,7 +203,7 @@ func (d *todoDelivery) store(ctx context.Context, s todoFeedStore, start time.Ti
 			for _, r := range asList(page["snapshot"]) {
 				row := asMap(r)
 				key := fmt.Sprintf("todo-%s-r%d-%s", s.id, cursor, str(row, "id"))
-				if d.deliver(ctx, s, str(row, "assignee"), str(row, "scope"), str(row, "id"), "", key,
+				if d.deliver(ctx, s, str(row, "assignee"), str(row, "scope"), str(row, "by"), 0, str(row, "id"), "", key,
 					"Sent again: the window was away too long to know what changed.") == todoRetry {
 					return todoRetry, true
 				}
@@ -204,10 +219,13 @@ func (d *todoDelivery) store(ctx context.Context, s todoFeedStore, start time.Ti
 			old := s.news && beforeStart(str(c, "at"), start)
 			if !old {
 				past = true
+				if from := str(c, "from_path"); from != "" { // a creation names no file a buffer could be on
+					d.files = append(d.files, todoFileChange{store: s.path, from: from, to: str(c, "to_path"), removed: str(c, "op") == "delete"})
+				}
 			}
 			if str(c, "kind") == "assign" && !old {
 				key := fmt.Sprintf("todo-%s-%d", s.id, seq)
-				if d.deliver(ctx, s, str(c, "to"), str(c, "scope"), str(c, "id"), str(c, "reason"), key, "") == todoRetry {
+				if d.deliver(ctx, s, str(c, "to"), str(c, "scope"), str(c, "by"), seq, str(c, "id"), str(c, "reason"), key, "") == todoRetry {
 					if acked >= 0 {
 						ack(acked)
 					}
@@ -233,8 +251,11 @@ func beforeStart(at string, start time.Time) bool {
 }
 
 // deliver mails one assignment to its assignee when it is one of the window's own agents and no
-// window's own panel made it; otherwise it is done with, unsent.
-func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, scope, id, reason, key, note string) todoFeedOutcome {
+// window's own panel made it; otherwise it is done with, unsent. by is who made it, as its change (or
+// a resync's row) says: "" for the user's surface, sent as the user's (inbox.send); an agent's, which
+// the daemon sends from its maker (inbox.forward, by store and seq, or seq 0 and the task for a
+// resync's row): docs/decisions/todos.md#an-assignment-says-who-made-it.
+func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, scope, by string, seq int64, id, reason, key, note string) todoFeedOutcome {
 	codename, ok := strings.CutPrefix(assignee, assigneePrefix)
 	if !ok || codename == "" || scope == d.scope { // not a window's agent, or this window's panel handed it over
 		return todoDone
@@ -258,8 +279,13 @@ func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, s
 		}
 	}
 	subject := "[todos] task assigned to you: " + cmp.Or(title, id)
-	_, err := d.f.h.c.Call(ctx, "inbox.send", d.scope, d.run, d.epoch, []any{codename}, todoAssignedBody(id, title, file, reason, note),
-		key, MessagePlain, subject, false)
+	body := todoAssignedBody(id, title, file, reason, note)
+	var err error
+	if by == "" { // the user's surface made it: the user's mail
+		_, err = d.f.h.c.Call(ctx, "inbox.send", d.scope, d.run, d.epoch, []any{codename}, body, key, MessagePlain, subject, false)
+	} else { // an agent made it: the daemon sends it from its maker, named by the change, never by the window
+		_, err = d.f.h.c.Call(ctx, "inbox.forward", d.scope, d.run, d.epoch, s.id, seq, id, []any{codename}, body, key, MessagePlain, subject)
+	}
 	switch {
 	case err == nil:
 		return todoDone

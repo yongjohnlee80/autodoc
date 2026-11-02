@@ -2,8 +2,11 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 // gatedLua is a package-like script: it asks for reading the workspace, and its :pkg tries a read
@@ -116,5 +119,138 @@ func TestALuaGrantNamesEachCapability(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "Not now refuses until the next start.") {
 		t.Errorf("the grant does not end with how Not now answers:\n%s", got)
+	}
+}
+
+// grantHeard is a script that hears the grant event, as who, and retries the read it was refused:
+// each answer it hears is a line to autodoc.heard (the test's own function), "<who> <allowed>
+// <capabilities> <the retried read's refusal, nil once granted>".
+func grantHeard(who string) string {
+	return `autodoc.on("grant", function(ed, info)
+  local _, err = autodoc.doc.read(autodoc.current_workspace(), "a.md", function() end)
+  autodoc.heard("` + who + ` " .. tostring(info.allowed) .. " " .. table.concat(info.capabilities, ",") .. " " .. tostring(err))
+end)`
+}
+
+// TestAGatedScriptHearsItsGrantAnswered: a package that asked for capabilities hears the user's
+// answer as the grant event, so it can resume rather than poll: Not now and a card closed
+// unanswered as allowed false, its retried read still refused; Allow as true, the grant already in
+// force for the read its handler retries. One event per card; neither another gated script nor an
+// ungated one hears it.
+func TestAGatedScriptHearsItsGrantAnswered(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	var heard []string
+	onLoop(r, func() bool {
+		r.h.scripts.SetFunction("heard", func(L *lua.LState) int { heard = append(heard, L.CheckString(1)); return 0 })
+		return true
+	})
+	if err := onLoop(r, func() error {
+		if err := r.h.loadGated("other", "other.lua", []byte(grantHeard("other"))); err != nil {
+			return err
+		}
+		if err := r.h.scripts.Load("mine.lua", []byte(grantHeard("mine"))); err != nil {
+			return err
+		}
+		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.requires{"workspace.read", "clipboard"}
+`+grantHeard("pkg")))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := func() []string { return onLoop(r, func() []string { return slices.Clone(heard) }) }
+	for i, end := range []struct {
+		name   string
+		answer func()
+		want   string
+	}{
+		{"closed", func() { r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"not now", func() { r.h.asker.rejected(); r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"allow", func() { r.h.asker.accepted(); r.h.asker.closed() }, "pkg true workspace.read,clipboard nil"},
+	} {
+		if i > 0 { // Not now is not remembered: the package's requires asks again, as at its next start
+			onLoop(r, func() bool { luaGrants{r.h}.Request("pkg", []string{"workspace.read", "clipboard"}); return true })
+		}
+		r.s.WaitForText(t, "let the Lua script pkg use workspace.read, clipboard?")
+		onLoop(r, func() bool { end.answer(); return true })
+		r.s.WaitFor(t, end.name, func(string) bool { return len(got()) > i })
+		if h := got(); len(h) != i+1 || h[i] != end.want {
+			t.Fatalf("%s: heard %q, want one more, %q", end.name, h, end.want)
+		}
+	}
+	r.s.WaitFor(t, "the grant kept", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.luaGrants["pkg"]["clipboard"] })
+	})
+	if h := got(); len(h) != 3 {
+		t.Fatalf("heard %q after three cards: another script heard the package's answer, or one card answered twice", h)
+	}
+}
+
+// TestAGrantHandlerThatAsksAgainGetsItsOwnCard: a grant handler that asks for another capability
+// (requires inside the event, while its card is still the one shown) gets a card of its own once
+// this one closes, and hears that card's answer too: the re-entry neither replaces the open card
+// nor is lost.
+func TestAGrantHandlerThatAsksAgainGetsItsOwnCard(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	var heard []string
+	onLoop(r, func() bool {
+		r.h.scripts.SetFunction("heard", func(L *lua.LState) int { heard = append(heard, L.CheckString(1)); return 0 })
+		return true
+	})
+	if err := onLoop(r, func() error {
+		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.requires{"workspace.read"}
+autodoc.on("grant", function(ed, info)
+  autodoc.heard(tostring(info.allowed) .. " " .. table.concat(info.capabilities, ","))
+  if info.capabilities[1] == "workspace.read" then autodoc.requires{"clipboard"} end
+end)`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := func() []string { return onLoop(r, func() []string { return slices.Clone(heard) }) }
+	r.s.WaitForText(t, "let the Lua script pkg use workspace.read?")
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	r.s.WaitForText(t, "let the Lua script pkg use clipboard?")
+	if h := got(); len(h) != 1 || h[0] != "true workspace.read" {
+		t.Fatalf("after the first card: heard %q, want its one answer", h)
+	}
+	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	r.s.WaitFor(t, "the second card's answer", func(string) bool { return len(got()) > 1 })
+	if h := got(); len(h) != 2 || h[1] != "false clipboard" {
+		t.Fatalf("after the second card: heard %q, want its answer, false clipboard", h)
+	}
+	if !onLoop(r, func() bool {
+		return r.h.prefs.luaGrants["pkg"]["workspace.read"] && !r.h.prefs.luaGrants["pkg"]["clipboard"]
+	}) {
+		t.Fatalf("grants %v, want workspace.read only", onLoop(r, func() map[string]bool { return r.h.prefs.luaGrants["pkg"] }))
+	}
+}
+
+// TestAGrantHandlerThatFailsIsSaidAndAScriptWithoutOneHearsNothing: a gated package's grant
+// handler that raises is said as a notice ("a Lua handler failed"), and the card still answers (the
+// grant is kept); a package that asked but set no grant handler is answered with nothing emitted.
+func TestAGrantHandlerThatFailsIsSaidAndAScriptWithoutOneHearsNothing(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	if err := onLoop(r, func() error {
+		if err := r.h.loadGated("quiet", "quiet.lua", []byte(`autodoc.requires{"clipboard"}`)); err != nil {
+			return err
+		}
+		return r.h.loadGated("loud", "loud.lua", []byte(`autodoc.requires{"workspace.read"}
+autodoc.on("grant", function(ed, info) error("the grant handler broke") end)`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "let the Lua script quiet use clipboard?")
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	r.s.WaitForText(t, "let the Lua script loud use workspace.read?")
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	r.s.WaitForText(t, "the grant handler broke")
+	if !onLoop(r, func() bool {
+		return r.h.prefs.luaGrants["quiet"]["clipboard"] && r.h.prefs.luaGrants["loud"]["workspace.read"]
+	}) {
+		t.Fatalf("grants %v, want both kept: a failing handler or none never undoes the answer", onLoop(r, func() map[string]map[string]bool { return r.h.prefs.luaGrants }))
 	}
 }

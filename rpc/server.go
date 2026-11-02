@@ -201,7 +201,24 @@ import (
 // session's crew access holds now (live or ended, its host, its endpoint), which `autodoc crew
 // reissue` reads to re-register an endpoint gone missing and to wait for its host's re-join. A
 // session below 47 has no such verb.
-const Protocol int64 = 47
+// Protocol 48 is who made an assignment (docs/decisions/todos.md#an-assignment-says-who-made-it):
+// sys.hello's crew key ({credential, store}, from the session context `autodoc --call` runs with),
+// verified once, at the hello, by crew, and kept on the session as the caller (codename@scope, or
+// the unverified marker), never the credential; todos.changes' and a resync's by, who made each
+// assign; and inbox.forward, a window's send of an assignment its feed read, which the daemon
+// sends from the assignment's maker. A hello without the key, as every client before 48 says it, is
+// the user's surface, as before; a session below 48 has no inbox.forward.
+// Protocol 49 is a root holding AutoDoc's own folders
+// (docs/decisions/contract.md#a-root-holding-autodocs-own-folders): workspace.list's and
+// workspace.add's autodoc_dirs, each of AutoDoc's config, state or data folders the root holds or
+// lies inside, and workspace.add's warning. The add is never refused; a session below 49 ignores
+// the keys.
+// Protocol 50 is the summary and the pages an agent reads within its turn: todos.list's
+// opts.summary (docs/decisions/todos.md#a-lists-summary), each task without its text, and
+// graph.unresolved a page at a time (docs/decisions/search.md#the-unresolved-links-in-pages), with
+// opts.limit and opts.offset, the whole list's count and the next page's offset. A session below 50
+// is refused both options and keeps the one-reply list.
+const Protocol int64 = 50
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -230,6 +247,7 @@ const (
 	sessHello    = "hello"    // true once a compatible sys.hello was said
 	sessRefused  = "refused"  // true after a hello with another protocol: the session is spent
 	sessProtocol = "protocol" // the protocol the session's hello declared
+	sessCaller   = "caller"   // who the session's hello proved its caller is (module.CallerFrom); never the credential
 )
 
 // Databases is a workspace's database settings as workspace.list reports them: never a DSN, only
@@ -357,7 +375,9 @@ type Server struct {
 	reg          registrations.Tables // the build's registrations, sys.capabilities reports them
 	files        *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
 	guard        *fsbounds.Guard      // a gated script's bounds, for file.* (WithGuard); nil: every bounded file.* refused
+	taskFiles    TaskFiles            // the todo stores' check of a create (WithTaskFiles); nil: none
 	profiler     *profiling.Profiler  // the daemon's own monitor, for sys.profile (WithProfiler); nil: none
+	ownDirs      []workspace.OwnDir   // AutoDoc's own folders, canonical (WithOwnDirs); nil: none named
 	rpc          *golibrpc.Server
 	workspaces   Workspaces
 	preferences  Preferences
@@ -375,6 +395,7 @@ type Server struct {
 	verbs        map[string]verb
 	legacy       map[string]verb // rpc's own contracts, until register gives each its handler
 	moduleErrs   []module.PublicError
+	callers      module.Callers // the module that verifies a hello's crew credential (crew's); nil: none
 	stop         chan struct{}
 	// damaged is set once a check found the store damaged (RefuseWrites): every verb that writes is
 	// refused from then on, before the daemon stops
@@ -393,9 +414,11 @@ type options struct {
 	reg         registrations.Tables
 	files       *docs.Docs
 	guard       *fsbounds.Guard
+	taskFiles   TaskFiles
 	profiler    *profiling.Profiler
 	storeID     string
 	modules     []module.Module
+	ownDirs     []workspace.OwnDir
 }
 
 // Option configures a Server.
@@ -412,6 +435,11 @@ type StoreChecker interface {
 // WithStoreCheck lets sys.check run the store's whole check (AM-4); without it, sys.check is
 // unsupported (a store that is not SQLite's).
 func WithStoreCheck(c StoreChecker) Option { return func(o *options) { o.checker = c } }
+
+// WithOwnDirs names AutoDoc's own folders (config, state, data): a workspace whose root holds one or
+// lies inside one is named so in workspace.list and workspace.add
+// (docs/decisions/contract.md#a-root-holding-autodocs-own-folders).
+func WithOwnDirs(dirs []workspace.OwnDir) Option { return func(o *options) { o.ownDirs = dirs } }
 
 // WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
 // that found this daemon through the store's lease-info can check it serves that store.
@@ -445,7 +473,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, checker: o.checker, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, guard: o.guard, taskFiles: o.taskFiles, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces), ownDirs: workspace.CanonicalDirs(o.ownDirs),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}

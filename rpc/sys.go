@@ -199,6 +199,7 @@ func (s *Server) hello(ctx context.Context, p sysHello) (*helloJSON, error) {
 	reply.Protocol = proto
 	reply.Client = newClientToken(name + who(name, info))
 	sess.SetValue(sessClient, reply.Client)
+	sess.SetValue(sessCaller, s.caller(ctx, info["crew"]))
 	if s.events != nil {
 		// where this client's sys.events begins: what happened before it connected is in its snapshot
 		if _, head, _, err := s.events.Events(ctx, -1, 1); err == nil {
@@ -206,6 +207,28 @@ func (s *Server) hello(ctx context.Context, p sysHello) (*helloJSON, error) {
 		}
 	}
 	return reply, nil
+}
+
+// caller is who a hello's crew key ({credential, store}: the session context its client runs with)
+// proves the caller is (docs/decisions/todos.md#an-assignment-says-who-made-it): the crew module's
+// codename@scope for a credential it verifies; module.CallerUnverified for any crew key it doesn't,
+// one with no credential (a context its client couldn't read) or of another shape, so an agent's
+// call is never taken for the user's; "" for no crew key, the user's surface. The credential is
+// read here alone: never kept, logged or answered.
+func (s *Server) caller(ctx context.Context, crew any) string {
+	if crew == nil {
+		return ""
+	}
+	m, _ := crew.(map[string]any)
+	credential, _ := m["credential"].(string)
+	store, _ := m["store"].(string)
+	if credential == "" || s.callers == nil {
+		return module.CallerUnverified
+	}
+	if c, ok := s.callers.Caller(ctx, credential, store); ok {
+		return c
+	}
+	return module.CallerUnverified
 }
 
 // StatsJSON is sys.stats's answer, and autodoc.app.stats's (the TUI's own process, in the same keys).

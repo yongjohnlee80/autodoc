@@ -14,9 +14,10 @@ import (
 )
 
 // The fallback's cells (docs/decisions/crew.md#the-fallback-exactly-once). fbRig is a window's
-// scope autodoc:w held by host-run, with gold, a claude session, and its credential.
+// scope autodoc:w held by host-run, with gold, a session of kind, and its credential.
 type fbRig struct {
 	t          *testing.T
+	kind       string
 	ctx        context.Context
 	clock      *crewtest.Clock
 	st         Stores
@@ -31,8 +32,18 @@ type fbRig struct {
 	keys       int
 }
 
-func newFallbackRig(t *testing.T, h Harness) *fbRig {
-	r := &fbRig{t: t, ctx: context.Background(), clock: crewtest.NewClock(), run: "host-run", bell: &fireWaker{}}
+// newFallbackRig is the rig with gold a codex session: a kind whose mail falls back whether or not
+// it ever registered its endpoint (newClaudeFallbackRig's doesn't before it has one).
+func newFallbackRig(t *testing.T, h Harness) *fbRig { return newKindFallbackRig(t, h, crew.KindCodex) }
+
+// newClaudeFallbackRig is the rig with gold a claude session: its endpoint registers from Claude
+// Code's SessionStart hook, only once it is past its own startup (its folder-trust question).
+func newClaudeFallbackRig(t *testing.T, h Harness) *fbRig {
+	return newKindFallbackRig(t, h, crew.KindClaude)
+}
+
+func newKindFallbackRig(t *testing.T, h Harness, kind string) *fbRig {
+	r := &fbRig{t: t, kind: kind, ctx: context.Background(), clock: crewtest.NewClock(), run: "host-run", bell: &fireWaker{}}
 	r.st = h.New(t, r.clock.Now)
 	port := &lazyCrew{}
 	r.mm = mail.New(r.st.Mail, port)
@@ -41,14 +52,14 @@ func newFallbackRig(t *testing.T, h Harness) *fbRig {
 	if err := r.mm.EnsureReserved(r.ctx); err != nil {
 		t.Fatal(err)
 	}
-	r.sched = r.cm.NewScheduler("daemon-run", map[string]crew.Waker{"claude": r.bell})
+	r.sched = r.cm.NewScheduler("daemon-run", map[string]crew.Waker{kind: r.bell})
 	var err error
 	if r.epoch, err = r.cm.Claim(r.ctx, "autodoc:w", r.run, ""); err != nil {
 		t.Fatal(err)
 	}
 	secret := strings.Repeat("s", 40)
 	reg, err := r.cm.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: r.run, Epoch: r.epoch, Codename: "gold",
-		Kind: "claude", Workspace: "w", Instance: "i1", Secret: secret})
+		Kind: kind, Workspace: "w", Instance: "i1", Secret: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +78,7 @@ func (r *fbRig) restart(instance string) {
 	r.t.Helper()
 	secret := strings.Repeat("r", 40)
 	reg, err := r.cm.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: r.run, Epoch: r.epoch, Codename: "gold",
-		Kind: "claude", Workspace: "w", Instance: instance, Secret: secret})
+		Kind: r.kind, Workspace: "w", Instance: instance, Secret: secret})
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -81,12 +92,33 @@ func (r *fbRig) look() {
 	r.sched.Wait()
 }
 
-// reachable gives gold's session an endpoint: woken, not unreachable.
+// reachable gives gold's session its endpoint's first generation, registered now: woken, not
+// unreachable.
 func (r *fbRig) reachable() {
 	r.t.Helper()
+	now := r.clock.Now().UnixNano()
+	r.putEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: r.kind, Registered: now, First: now})
+}
+
+// reregistered is gold's endpoint registered again now (a resume, a compaction): its generation one
+// higher, its first registration kept, as crew.endpoint keeps it.
+func (r *fbRig) reregistered() {
+	r.t.Helper()
+	var e crew.Endpoint
 	if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error {
-		return tx.PutEndpoint(crew.Endpoint{Session: r.session, Generation: 1, Kind: "claude"})
+		var err error
+		e, _, err = tx.Endpoint(r.session)
+		return err
 	}); err != nil {
+		r.t.Fatal(err)
+	}
+	e.Generation, e.Registered = e.Generation+1, r.clock.Now().UnixNano()
+	r.putEndpoint(e)
+}
+
+func (r *fbRig) putEndpoint(e crew.Endpoint) {
+	r.t.Helper()
+	if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error { return tx.PutEndpoint(e) }); err != nil {
 		r.t.Fatal(err)
 	}
 }
@@ -302,6 +334,151 @@ func testTheNextFallbackIsTheSessionsStartPlusTheWindow(t *testing.T, h Harness)
 	}
 }
 
+// An endpoint registered again (a resume, a compaction, a refresh) moves no fallback window: a
+// Codex session's mail still falls back fallbackWindow from its send, its endpoint refreshed at 9
+// min; a Claude's, fallbackWindow from its first endpoint, whatever generation came later. Both
+// stores' due and next deadline say the same.
+func testARegisteredAgainEndpointMovesNoFallbackWindow(t *testing.T, h Harness) {
+	for _, c := range []struct {
+		name   string
+		rig    func(*testing.T, Harness) *fbRig
+		before time.Duration // from the send to the endpoint's first registration
+	}{{"codex", newFallbackRig, 0}, {"claude", newClaudeFallbackRig, 3 * time.Minute}} {
+		r := c.rig(t, h)
+		r.poll()
+		d := r.send()
+		r.clock.Advance(c.before)
+		r.reachable()
+		opened := r.clock.Now()
+		r.clock.Advance(9 * time.Minute)
+		r.reregistered()
+		if at, has := r.nextDeadline(); !has || at != opened.Add(fallbackWindow).UnixNano() {
+			t.Fatalf("%s: the next deadline %v after its window opened (has %v), want %v", c.name, time.Duration(at-opened.UnixNano()), has, fallbackWindow)
+		}
+		r.clock.Advance(opened.Add(fallbackWindow - time.Nanosecond).Sub(r.clock.Now()))
+		if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+			t.Fatalf("%s: 10 min less 1 ns after its window opened: %+v; want nothing yet", c.name, got)
+		}
+		r.clock.Advance(time.Nanosecond)
+		if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+			t.Fatalf("%s: 10 min after its window opened, its endpoint registered again at 9: %+v, want its job", c.name, got)
+		}
+	}
+}
+
+// Only a kind that starts with its endpoint (Claude) has its window open at its endpoint's first
+// registration: a Codex session whose endpoint first registers 3 min after the send falls back
+// fallbackWindow from the send, as before, in both stores' due and next deadline.
+func testAnotherKindsFirstEndpointOpensNoWindow(t *testing.T, h Harness) {
+	r := newFallbackRig(t, h)
+	r.poll()
+	sent := r.clock.Now()
+	d := r.send()
+	r.clock.Advance(3 * time.Minute)
+	r.reachable()
+	if at, has := r.nextDeadline(); !has || at != sent.Add(fallbackWindow).UnixNano() {
+		t.Fatalf("the next deadline %v after the send (has %v), want %v", time.Duration(at-sent.UnixNano()), has, fallbackWindow)
+	}
+	r.clock.Advance(sent.Add(fallbackWindow - time.Nanosecond).Sub(r.clock.Now()))
+	if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+		t.Fatalf("10 min less 1 ns after the send: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(time.Nanosecond)
+	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+		t.Fatalf("10 min after the send, its endpoint first registered at 3: %+v, want its job", got)
+	}
+}
+
+// nextDeadline is mail's next deadline, and whether it has one.
+func (r *fbRig) nextDeadline() (int64, bool) {
+	r.t.Helper()
+	var at int64
+	var has bool
+	if err := r.st.Crew.Write(r.ctx, func(tx crew.Tx) error {
+		var err error
+		at, has, err = r.mm.NextDeadline(tx)
+		return err
+	}); err != nil {
+		r.t.Fatal(err)
+	}
+	return at, has
+}
+
+// A Claude session that never registered its endpoint never got past its own startup: Claude Code
+// runs the SessionStart hook that registers it only once its folder-trust question is answered Yes,
+// and the question's default is "No, exit". Its mail never falls back (a host typing into it would
+// answer the question), unreachable as it is, however long it waits: it stays queued, the user is
+// told of no job, and no deadline is set for it. Once the session starts, its first receive gets
+// the mail: nothing is lost.
+func testAClaudeThatNeverStartedKeepsItsMailQueued(t *testing.T, h Harness) {
+	r := newClaudeFallbackRig(t, h)
+	r.poll()
+	d := r.send()
+	for _, wait := range []time.Duration{30 * time.Second, fallbackWindow, time.Hour} {
+		r.clock.Advance(wait)
+		r.sweep()
+		if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued || r.told(mail.ChangeFallback) != 0 {
+			t.Fatalf("a Claude never started, %v on: offered %+v, the delivery %+v, told %d; want it queued, no job",
+				wait, got, r.delivery(d.ID), r.told(mail.ChangeFallback))
+		}
+	}
+	if at, has := r.nextDeadline(); has && at <= r.clock.Now().Add(fallbackWindow).UnixNano() {
+		t.Fatalf("the next deadline %v from now, want none for a Claude never started", time.Duration(at-r.clock.Now().UnixNano()))
+	}
+	r.reachable() // its SessionStart hook ran: past its startup
+	if got, err := r.mm.Receive(r.ctx, r.credential); err != nil || len(got.Items) != 1 || got.Items[0].Delivery.ID != d.ID {
+		t.Fatalf("its first receive once started: %+v %v, want the queued delivery", got, err)
+	}
+	if jobs := r.st.Inspect.Jobs(); len(jobs) != 0 {
+		t.Fatalf("jobs %+v, want none", jobs)
+	}
+}
+
+// A Claude session's fallback window opens when it starts (its endpoint registers), when that is
+// after the message's creation and the session's registration: a message that waited out its
+// startup gets the whole window to be received, not a fallback at once. Reachable, fallbackWindow
+// from then; unreachable once started (crew.UnreachableAfter failed wakes), 30 s from then. The
+// next deadline says the same.
+func testAClaudesFallbackWindowOpensWhenItStarts(t *testing.T, h Harness) {
+	r := newClaudeFallbackRig(t, h)
+	r.poll()
+	d := r.send()
+	r.clock.Advance(15 * time.Minute) // its folder-trust question waits for the user
+	r.reachable()
+	started := r.clock.Now()
+	if at, has := r.nextDeadline(); !has || at != started.Add(fallbackWindow).UnixNano() {
+		t.Fatalf("the next deadline: %v from its start (has %v), want the window, %v", time.Duration(at-started.UnixNano()), has, fallbackWindow)
+	}
+	r.clock.Advance(fallbackWindow - time.Nanosecond)
+	if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued {
+		t.Fatalf("started, 10 min less 1 ns on: %+v; want nothing yet", got)
+	}
+	r.clock.Advance(time.Nanosecond)
+	if got := r.poll(); len(got) != 1 || got[0].Job.Delivery != d.ID {
+		t.Fatalf("started, 10 min on: %+v, want its job", got)
+	}
+
+	r2 := newClaudeFallbackRig(t, h)
+	r2.poll()
+	d2 := r2.send()
+	r2.clock.Advance(15 * time.Minute)
+	r2.reachable()
+	if err := r2.st.Crew.Write(r2.ctx, func(tx crew.Tx) error {
+		return tx.PutWake(crew.Wake{Session: r2.session, State: crew.WakeIdle, Failures: crew.UnreachableAfter})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started = r2.clock.Now()
+	r2.clock.Advance(30*time.Second - time.Nanosecond)
+	if got := r2.poll(); len(got) != 0 || r2.delivery(d2.ID).State != mail.Queued {
+		t.Fatalf("started but unreachable, 30 s less 1 ns on: %+v; want nothing yet", got)
+	}
+	r2.clock.Advance(time.Nanosecond)
+	if got := r2.poll(); len(got) != 1 || got[0].Job.Delivery != d2.ID {
+		t.Fatalf("started but unreachable, 30 s on (%v after its start): %+v, want its job", r2.clock.Now().Sub(started), got)
+	}
+}
+
 // An agent busy for 3 min (a fake clock, no sleep) still gets its mail by mail.receive: no job.
 func testAThreeMinuteGapEndsInAReceiveNotAFallback(t *testing.T, h Harness) {
 	r := newFallbackRig(t, h)
@@ -350,7 +527,7 @@ func testAHostTakesFallbacksOnlyOnceItPollsInItsEpoch(t *testing.T, h Harness) {
 		t.Fatalf("the takeover: %d %v", epoch, err)
 	}
 	if _, err := r.cm.Register(r.ctx, crew.Registration{Scope: "autodoc:w", Run: "host-run-2", Epoch: epoch, Codename: "gold",
-		Kind: "claude", Workspace: "w", Instance: "i2", Secret: strings.Repeat("t", 40)}); err != nil {
+		Kind: r.kind, Workspace: "w", Instance: "i2", Secret: strings.Repeat("t", 40)}); err != nil {
 		t.Fatal(err)
 	}
 	d3 := r.send2(epoch)

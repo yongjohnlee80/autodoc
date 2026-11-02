@@ -72,6 +72,15 @@ func newClientToken(name string) string {
 	return name + "#" + hex.EncodeToString(b[:])
 }
 
+// callerOf is who the session's hello proved its caller is (sessCaller); "" for the user's surface.
+func callerOf(sess *golibrpc.Session) string {
+	if sess == nil {
+		return ""
+	}
+	c, _ := sess.Value(sessCaller).(string)
+	return c
+}
+
 func clientOf(sess *golibrpc.Session) string {
 	if sess == nil {
 		return ""

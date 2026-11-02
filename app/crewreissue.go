@@ -113,11 +113,26 @@ func reissue(ctx context.Context, session func() (sessionContext, error), wait t
 	// registers, and any registration can be refused after the command is done. Only the daemon's
 	// crew.access saying registered counts, looked at again for up to reissueConfirm.
 	for tries := int(reissueConfirm / reissueEvery); ; tries-- {
-		if after, err := accessOf(ctx, r, c); err == nil {
-			a = after
+		after, err := accessOf(ctx, r, c)
+		if err != nil {
+			why, waitable := reissueWaitable(err, crew.Access{})
+			if !waitable { // no daemon, or a context it refuses: nothing to confirm against
+				return res, err
+			}
+			res.Not = append(res.Not, reissueNot{reissueEndpoint, why + " while its endpoint was confirmed"})
+			break
+		}
+		a = after
+		if a.Session != crew.AccessLive {
+			res.Not = append(res.Not, reissueNot{reissueEndpoint, "its session ended (" + a.Why + ") while its endpoint was confirmed"})
+			break
 		}
 		if a.Endpoint == crew.EndpointRegistered {
 			res.Reissued = append(res.Reissued, reissueEndpoint)
+			break
+		}
+		if a.Endpoint == crew.EndpointFailing { // there, but its wakes don't reach it: no wait mends that
+			res.Not = append(res.Not, reissueNot{reissueEndpoint, "registered, but its wakes fail (" + a.Why + ")"})
 			break
 		}
 		if tries <= 0 {
@@ -170,6 +185,9 @@ func cliReissuer(configPath string) reissuer {
 			return registerEndpoint(ctx, configPath, c, kind)
 		},
 		sleep: func(ctx context.Context, d time.Duration) error {
+			// NOTE: the pause between reissue's reads of crew.access: the host's re-join and the
+			// endpoint's registration announce nothing to this CLI process, so it reads again after d;
+			// ctx ends the wait.
 			t := time.NewTimer(d)
 			defer t.Stop()
 			select {

@@ -308,14 +308,22 @@ func TestBackgroundAdvancesBeforeFocusedBacklogIsDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(p.release)
-	queueReady(t, m, p, "bravo")
-	w, _ := m.Get("alpha")
-	st, err := w.Index().Status(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	// the order of the provider's calls, not alpha's pending count when bravo is seen filled: the
+	// poll looks every 10 ms, and a slowed store (coverage, 'database is locked' retries) let
+	// alpha's last batches land before it looked (hosted CI, #60's coverage run)
+	queueReady(t, m, p, "alpha", "bravo")
+	calls, _ := p.snapshot()
+	firstBravo, lastAlpha := -1, -1
+	for i, text := range calls {
+		switch {
+		case strings.Contains(text, "bravo-") && firstBravo < 0:
+			firstBravo = i
+		case strings.Contains(text, "alpha-"):
+			lastAlpha = i
+		}
 	}
-	if st.Embeddings == nil || st.Embeddings.Pending == 0 {
-		t.Fatal("background did not advance until focused workspace finished")
+	if firstBravo < 0 || lastAlpha < 0 || firstBravo > lastAlpha {
+		t.Fatalf("background did not advance until focused workspace finished: bravo's first call %d, alpha's last %d, of %d", firstBravo, lastAlpha, len(calls))
 	}
 }
 

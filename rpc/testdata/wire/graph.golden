@@ -19,7 +19,7 @@ graph.map ["kb", {depth: int(3)}]
 graph.map ["kb", {root: "none.md"}]
   error -32061 "not found"
 graph.unresolved ["kb"]
-  [{raw: "[[nowhere]]", reason: "missing", src: "plan.md"}]
+  {count: int(1), unresolved: [{raw: "[[nowhere]]", reason: "missing", src: "plan.md"}]}
 graph.unresolved ["kb", {kinds: "body"}]
   error -32602 "kinds must be a list of strings"
 graph.resolve ["kb", "plan.md", "target"]

@@ -328,7 +328,7 @@ func TestAnUnregisteredDerivedFormatTakesTheBuiltInIdentity(t *testing.T) {
 	x := &Indexer{}
 	builtIn := docVersion(indexerVersion(512), false, "fp", false)
 	for p, k := range map[string]kind.Kind{"a.pdf": kind.Derived, "a.rs": kind.Registered} {
-		if got := x.versionOf(p, k, 512, "fp", false); got != builtIn {
+		if got := x.versionOf(p, k, 512, "fp", false, x.mode(p)); got != builtIn {
 			t.Errorf("%s (%v): %q; want the built-in %q", p, k, got, builtIn)
 		}
 	}

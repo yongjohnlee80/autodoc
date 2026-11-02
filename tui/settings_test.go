@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -706,5 +707,27 @@ func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 	onLoop(r, func() bool { r.h.todoGraphOnly("[unclosed; .todo-list/**"); return true }) // refused: left as typed
 	if got := storedOnly(t, d); !slices.Equal(got.Exclude, before) {
 		t.Errorf("the button saved: %v, was %v", got.Exclude, before)
+	}
+}
+
+// A workspace whose root holds AutoDoc's own folders, or lies inside one, is badged in the
+// manager's list, and its pane names the folders and the fix.
+func TestTheManagerBadgesARootHoldingAutoDocsFolders(t *testing.T) {
+	w := kbInfo()
+	if row := managedRowOf(0, w); strings.Contains(fmt.Sprint(row["name"]), "⚠") {
+		t.Fatalf("a root touching none of them is badged: %v", row)
+	}
+	if d := managerDetail(inEnglish{}, w, false, nil); strings.Contains(d, "AutoDoc's own folders") {
+		t.Fatalf("a root touching none of them is warned of:\n%s", d)
+	}
+	w.autodocDirs = []autodocDir{{"state", "holds", "/home/me/.local/state/autodoc"}, {"data", "inside", "/home/me/.local/share/autodoc"}}
+	if row := managedRowOf(0, w); !strings.HasSuffix(fmt.Sprint(row["name"]), " ⚠") {
+		t.Errorf("the flagged row is %v, want its name badged", row)
+	}
+	d := managerDetail(inEnglish{}, w, false, nil)
+	for _, s := range []string{"AutoDoc's own folders", "state /home/me/.local/state/autodoc", "data /home/me/.local/share/autodoc", "move the root, or narrow it"} {
+		if !strings.Contains(d, s) {
+			t.Errorf("the pane lacks %q:\n%s", s, d)
+		}
 	}
 }

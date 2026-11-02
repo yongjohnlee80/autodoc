@@ -342,6 +342,7 @@ autodoc.command{
 | `save` | a save wrote a buffer's text | `{buffer, path, workspace}` |
 | `mode` | the editor's mode changed | `{mode, previous}`, as `ed:mode()` names them |
 | `change` | a buffer's text changed, once typing pauses (300 ms): a burst of keys is one change, per buffer | `{buffer, revision}`, as `ed:revision()` |
+| `grant` | you answered the card a package's `requires` asked: Allow, Not now, or closed it without an answer. Only that package's handlers hear it ([packages](#packages-and-capabilities)) | `{capabilities, allowed}`: the capabilities the card asked for, and `allowed` `false` for Not now and a closed card |
 
 - **`open` is a load; `enter` is a switch.** Opening a file shows its buffer (`enter`) and loads it
   (`open`); switching back to it later is `enter` only. A script that sets something up for each
@@ -658,6 +659,16 @@ to your workspaces (the daemon checks each file the call reaches):
   package whatever it was granted.
 - **A package declares what it needs** in `package.toml`'s `requires`, or as it loads,
   `autodoc.requires{"workspace.read"}`. AutoDoc asks after the scripts load.
+- **A package hears your answer** as its `grant` event, `{capabilities, allowed}`, so a call it
+  was refused can be made again once you allow it, with no polling. Not now and a card closed
+  without an answer are `allowed = false`; no other script hears another's answer.
+
+  ```lua
+  autodoc.requires{"workspace.read"}
+  autodoc.on("grant", function(ed, info)
+    if info.allowed then refresh() end -- refresh: the package's own call that was refused
+  end)
+  ```
 - **Its own calls are its own:** a function a package defines runs with the package's grants
   wherever it runs from (a callback, an event, a key).
 - **`require(name)`** loads the package's `name.lua` or `name/init.lua` once; `a.b` is `a/b.lua`.

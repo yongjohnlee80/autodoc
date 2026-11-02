@@ -145,6 +145,8 @@ When you run `autodoc --call workspace.add` followed by `autodoc --ui engineerin
 3. **Watch-Before-Scan Indexing**: The daemon attaches filesystem watches, scans all matching `.md` files and `.todo-list/` tasks, extracts YAML frontmatter, splits prose into heading-aligned chunks, and populates the SQLite FTS5 index.
 4. **Interactive Workspace Open**: The terminal TUI opens on the page: the **120-column page editor**, centred. The **Files**, **Outline** and **Relations** panels come when they are asked for (Chapter 3).
 
+A root that holds AutoDoc's own config, state or data folder, or lies inside one, is added all the same. The answer names those folders (`autodoc_dirs`) and carries a `warning`. `:checkhealth autodoc` and `autodoc --check-workspaces` report such workspaces later (see [contract: A root holding AutoDoc's own folders](../decisions/contract.md#a-root-holding-autodocs-own-folders)).
+
 To launch the native desktop window instead of the terminal TUI, pass `--gui`:
 
 ```bash

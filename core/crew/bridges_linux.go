@@ -587,6 +587,11 @@ func waitUntil(wait time.Duration, done func() bool) bool {
 		if time.Now().After(deadline) {
 			return false
 		}
-		time.Sleep(50 * time.Millisecond)
+		// NOTE: a look every 50 ms, not a wait on the exits: the processes are not this daemon's
+		// children, and endGroup's set grows between looks (each round adopts the members forked
+		// since by a process it already holds), so there is no one event to wait on. wait bounds the
+		// whole loop.
+		t := time.NewTimer(50 * time.Millisecond)
+		<-t.C
 	}
 }
