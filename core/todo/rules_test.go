@@ -504,6 +504,12 @@ func TestADescriptionSentBackWholeIsNotStacked(t *testing.T) {
 	if got := e.get(kept.ID).Description; got != mine {
 		t.Fatalf("after an unrelated write, the user's comment: %q, want it whole", got)
 	}
+	byHand := kbStore + "/open/byhand-comment.md"
+	e.disk.WriteFile(byHand, []byte(strings.Replace(taskFile("byhand-comment", "open"), "# Task byhand-comment\n\nBody of byhand-comment.\n", mine+"\n", 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	if got := e.get("byhand-comment").Description; !strings.Contains(got, "Keep this explanation.") || !strings.Contains(got, "Keep tail.") {
+		t.Fatalf("a hand-written file with no managed header, opening with the user's comment: %q, want the comment's text kept", got)
+	}
 	own := e.add(todo.Spec{Title: "v", Description: "# My heading\n\nmine"})
 	if own.Description != "# My heading\n\nmine" {
 		t.Errorf("a description of the user's own that starts with an H1: %q, want it kept", own.Description)
