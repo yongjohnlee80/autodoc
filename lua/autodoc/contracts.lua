@@ -37,13 +37,13 @@ return {
         { name = "start", type = "string" },
         { name = "confirmed", type = "bool", optional = true }
       },
-      result = "{outcome}",
+      result = "{outcome, survivors}",
       doc = "End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill.",
     },
     ["crew.bridges"] = {
       since = 46, scope = "local-peer", audience = "user",
       params = {},
-      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at}]",
+      result = "[{kind, pid, start, started, argv, socket, session, owner, host, state, why, reclaim_at, reclaim_stopped, survivors}]",
       doc = "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned.",
     },
     ["crew.claim"] = {
