@@ -4,21 +4,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 )
 
-// WakeNotice is the wake's text for a session that reads its mail with the CLI (MailViaCLI):
-// constant, with no subject, no sender, nothing a peer wrote
+// WakeNotice is the wake's text for a session that reads its mail with the CLI (MailViaCLI), when
+// NoticeFor has no senders to name: no subject, no sender, nothing a peer wrote
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler). OpenCode's plugin wakes with its own copy.
 const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
 
 // WakeNoticeMCP is the wake's text for a session that reads its mail with `autodoc crew mcp`'s
-// tools (MailViaMCP): constant too. Its rules allow the tools, not the shell command; it names the
-// server, since a CLI that describes MCP tools by their server (agy) finds no tool by its name alone,
-// and that it takes no arguments, so the agent has no schema to look up (MCPToolArgs).
+// tools (MailViaMCP), with no senders to name. Its rules allow the tools, not the shell command; it
+// names the server, since a CLI that describes MCP tools by their server (agy) finds no tool by its
+// name alone, and that it takes no arguments, so the agent has no schema to look up (MCPToolArgs).
 const WakeNoticeMCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+
+// The texts a notice naming its senders is made of (NoticeFor): its head, then the senders, then
+// the way to read the mail.
+const (
+	noticeHead       = "AutoDoc mail is waiting for you: "
+	noticeTailCLI    = ". Run: autodoc mail receive"
+	noticeTailMCP    = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+	NoticeMaxSenders = 3 // senders a notice names; the rest are "N more"
+)
 
 // MailVia is how a session reads its mail, which decides what its wake says (NoticeFor).
 type MailVia int
@@ -71,13 +82,71 @@ func SessionMailVia(via, kind string) MailVia {
 	return MailViaOf(kind)
 }
 
-// NoticeFor is the one wake text for a session that reads its mail via: every waker sends it, and
-// it names nothing of the mail.
-func NoticeFor(via MailVia) string {
-	if via == MailViaMCP {
-		return WakeNoticeMCP
+// Sender is one sender of a session's waiting mail as its wake notice names it: its address as
+// mail receive answers it (a codename, user, codename@project) and its profile's kind ("" for the
+// user), both set by the daemon, never by the sender, and how many of the waiting messages are its.
+type Sender struct {
+	From  string
+	Kind  string
+	Count int
+}
+
+// WaitingSenders is the mail module's summary of who a session's waiting mail is from, for its wake
+// notice: the senders of its eligible deliveries, in seq order of each one's first, and More, the
+// messages past those it read. A SessionEnder that implements it is asked in the scheduler's read
+// of the attempt (stillCurrent); with none, the notice names no one.
+type WaitingSenders interface {
+	WaitingSenders(tx Tx, s Session) (senders []Sender, more bool, err error)
+}
+
+// noticeName is a sender address a notice may print: a codename, user or autodoc, with an
+// @project or @<scope id>; nothing that could read as an instruction, a command, a path or a
+// variable.
+var noticeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(@[A-Za-z0-9][A-Za-z0-9._:-]{0,127})?$`)
+
+// noticeKinds are the kinds a notice names after a sender.
+var noticeKinds = []string{KindClaude, KindCodex, KindAgy, KindOpenCode}
+
+// NoticeFor is the one wake text for a session that reads its mail via: every waker sends it. With
+// senders (WaitingSenders), it names at most NoticeMaxSenders of them by their daemon-set address
+// and kind, and how many messages are each one's: "1 from gold-man (claude), 1 from user", then
+// "and N more" (or "and more" when the read stopped short). An address that isn't a plain name
+// (noticeName) is counted in the more, never printed; a kind not known is left out. With none, it
+// is WakeNotice or WakeNoticeMCP, byte for byte.
+func NoticeFor(via MailVia, senders []Sender, more bool) string {
+	var named []string
+	rest := 0
+	for _, s := range senders {
+		if s.Count < 1 {
+			continue
+		}
+		if len(named) == NoticeMaxSenders || !noticeName.MatchString(s.From) {
+			rest += s.Count
+			continue
+		}
+		n := fmt.Sprintf("%d from %s", s.Count, s.From)
+		if slices.Contains(noticeKinds, s.Kind) {
+			n += " (" + s.Kind + ")"
+		}
+		named = append(named, n)
 	}
-	return WakeNotice
+	if len(named) == 0 {
+		if via == MailViaMCP {
+			return WakeNoticeMCP
+		}
+		return WakeNotice
+	}
+	switch {
+	case rest > 0:
+		named = append(named, fmt.Sprintf("and %d more", rest))
+	case more:
+		named = append(named, "and more")
+	}
+	tail := noticeTailCLI
+	if via == MailViaMCP {
+		tail = noticeTailMCP
+	}
+	return noticeHead + strings.Join(named, ", ") + tail
 }
 
 // The scheduler's bounds (docs/decisions/crew.md#wakers-and-the-wake-scheduler).
@@ -330,11 +399,12 @@ func (m *Manager) StillCurrent(ctx context.Context, session, token string, gener
 	return ok, err
 }
 
-// stillCurrent is StillCurrent, and the session's own mail mode as its registration gave it ("" for
-// its kind's), read with it: what the wake about to be sent says follows it (SessionMailVia).
-func (m *Manager) stillCurrent(ctx context.Context, session, token string, generation int64) (bool, string, error) {
+// stillCurrent is StillCurrent, and what the wake about to be sent says, read with it: the session's
+// own mail mode as its registration gave it ("" for its kind's, SessionMailVia), and who its waiting
+// mail is from (WaitingSenders).
+func (m *Manager) stillCurrent(ctx context.Context, session, token string, generation int64) (bool, waiting, error) {
 	var ok bool
-	var via string
+	var why waiting
 	err := m.store.Read(ctx, func(tx Tx) error {
 		w, found, err := tx.Wake(session)
 		if err != nil || !found || w.State != WakeInFlight || w.Token != token {
@@ -347,12 +417,35 @@ func (m *Manager) stillCurrent(ctx context.Context, session, token string, gener
 			}
 			return err
 		}
-		via = s.MailVia
+		why.via = s.MailVia
 		e, has, err := tx.Endpoint(session)
 		ok = err == nil && has && e.Generation == generation
-		return err
+		if !ok {
+			return err
+		}
+		if ws, is := m.ender.(WaitingSenders); is {
+			// the notice's senders, in the same read: one it can't read names no one, and the wake
+			// goes on with the plain notice
+			if senders, more, err := ws.WaitingSenders(tx, s); err == nil {
+				why.senders, why.more = senders, more
+			}
+		}
+		return nil
 	})
-	return ok, via, err
+	return ok, why, err
+}
+
+// waiting is what an attempt's notice says (stillCurrent): how its session reads its mail, as its
+// registration said, and who the mail is from.
+type waiting struct {
+	via     string
+	senders []Sender
+	more    bool
+}
+
+// notice is the attempt's wake text for an endpoint of kind (NoticeFor).
+func (w waiting) notice(kind string) string {
+	return NoticeFor(SessionMailVia(w.via, kind), w.senders, w.more)
 }
 
 // Abandon gives up an attempt that never made its call: its row goes idle, its deadline kept.

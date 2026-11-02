@@ -48,29 +48,36 @@ type Item struct {
 // to the address reaches it; the message keeps the original sender for its history. A sender that
 // resolves to nothing (gone, missing, a chain too long) is still named, for display, as it was.
 func fromAddress(tx Tx, scope, sender string) (string, error) {
+	from, _, err := senderOf(tx, scope, sender)
+	return from, err
+}
+
+// senderOf is fromAddress, and the profile it names (the zero Profile for the daemon, or a sender
+// that resolves to nothing).
+func senderOf(tx Tx, scope, sender string) (string, crew.Profile, error) {
 	if sender == DaemonProfile {
-		return "autodoc", nil
+		return "autodoc", crew.Profile{}, nil
 	}
 	who := sender
 	if to, err := resolveRecipient(tx, sender); err == nil {
 		who = to
 	} else if !errors.Is(err, errRecipientGone) {
-		return "", err
+		return "", crew.Profile{}, err
 	}
 	p, ok, err := tx.Profile(who)
 	if err != nil || !ok {
-		return sender, err
+		return sender, crew.Profile{}, err
 	}
 	switch {
 	case p.Scope == GlobalScope && p.Codename == UserCodename:
-		return UserCodename, nil
+		return UserCodename, p, nil
 	case p.Scope == scope:
-		return p.Codename, nil
+		return p.Codename, p, nil
 	}
 	if project, ok := strings.CutPrefix(p.Scope, "autovim:"); ok {
-		return p.Codename + "@" + project, nil
+		return p.Codename + "@" + project, p, nil
 	}
-	return p.Codename + "@" + p.Scope, nil
+	return p.Codename + "@" + p.Scope, p, nil
 }
 
 // receiverScope is the scope of s's profile, against which fromAddress shortens a sender.
