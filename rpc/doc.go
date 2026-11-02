@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
@@ -90,7 +92,7 @@ func (s *Server) docVerbs() []module.Verb {
 	}
 	write := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p docWrite) (*versionJSON, error) {
-			v, err := writeDoc(ctx, workspaceOf(ctx), p.Path, p.Content, vfs.Version(p.Version), raw)
+			v, err := s.writeDoc(ctx, workspaceOf(ctx), p.Path, p.Content, vfs.Version(p.Version), raw)
 			if err != nil {
 				return nil, err
 			}
@@ -183,8 +185,11 @@ func (s *Server) docVerbs() []module.Verb {
 
 // writeDoc is doc.write (raw: doc.write_raw) on workspace w's file at path: written at version
 // through the workspace's documents, then indexed at once. file.write on a path a workspace indexes
-// is this too.
-func writeDoc(ctx context.Context, w Workspace, path string, content []byte, version vfs.Version, raw bool) (vfs.Version, error) {
+// is this too. A create that would be a second file of a task is refused first (oneTaskFile).
+func (s *Server) writeDoc(ctx context.Context, w Workspace, path string, content []byte, version vfs.Version, raw bool) (vfs.Version, error) {
+	if err := s.oneTaskFile(ctx, filepath.Join(w.Root(), filepath.FromSlash(path)), content, version); err != nil {
+		return "", err
+	}
 	write := w.Docs().Write
 	if raw {
 		write = w.Docs().WriteRaw
@@ -195,6 +200,30 @@ func writeDoc(ctx context.Context, w Workspace, path string, content []byte, ver
 	}
 	touch(w, path) // indexed now, not when a watch or a poll gets to it
 	return v, nil
+}
+
+// TaskFiles is the daemon's check of a client's create in a todo store
+// (docs/decisions/todos.md#a-tasks-file-is-written-at-one-path): for content created at the
+// absolute path abs, the id of the task it would be a second file of and that task's path in its
+// store; "" for none. The daemon's own todo writes never come here: they go through the store's
+// documents, not doc.write or file.write.
+type TaskFiles func(ctx context.Context, abs string, content []byte) (id, at string, err error)
+
+// WithTaskFiles refuses a client's create of a second file of a task with f's check.
+func WithTaskFiles(f TaskFiles) Option { return func(o *options) { o.taskFiles = f } }
+
+// oneTaskFile refuses a create (version "") at abs that would be a second file of a task: a
+// conflict naming the task and where it is. A write at a version is of a file that is there, and
+// passes unchecked, as does every write on a server with no check.
+func (s *Server) oneTaskFile(ctx context.Context, abs string, content []byte, version vfs.Version) error {
+	if version != "" || s.taskFiles == nil || !filepath.IsAbs(abs) {
+		return nil
+	}
+	id, at, err := s.taskFiles(ctx, abs, content)
+	if err != nil || at == "" {
+		return err
+	}
+	return &golibrpc.Error{Code: CodeConflict, Message: fmt.Sprintf("task %s is at %s: a task's file is written at one path", id, at)}
 }
 
 // touch tells the workspace's indexer that paths changed through the API, so a file saved in a client
