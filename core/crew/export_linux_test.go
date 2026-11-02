@@ -88,3 +88,9 @@ func OpenObserved(pid, ppid, pgid int, start string, uid int) bool {
 	}
 	return ok
 }
+
+// CodexServerOf is what a Codex endpoint's registration records of its server: its socket and the
+// process listening there.
+func (m *Manager) CodexServerOf(kind, locator string) (string, string) {
+	return m.codexServerOf(kind, locator)
+}
