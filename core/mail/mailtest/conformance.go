@@ -73,6 +73,8 @@ func Run(t *testing.T, h Harness) {
 		{"ABusyAgentIsRungFourTimesBeforeItsMailFallsBack", testABusyAgentIsRungFourTimesBeforeItsMailFallsBack},
 		{"AFallbackCountsFromTheRecipientsSessionStart", testAFallbackCountsFromTheRecipientsSessionStart},
 		{"TheNextFallbackIsTheSessionsStartPlusTheWindow", testTheNextFallbackIsTheSessionsStartPlusTheWindow},
+		{"AClaudeThatNeverStartedKeepsItsMailQueued", testAClaudeThatNeverStartedKeepsItsMailQueued},
+		{"AClaudesFallbackWindowOpensWhenItStarts", testAClaudesFallbackWindowOpensWhenItStarts},
 		{"AThreeMinuteGapEndsInAReceiveNotAFallback", testAThreeMinuteGapEndsInAReceiveNotAFallback},
 		{"AHostTakesFallbacksOnlyOnceItPollsInItsEpoch", testAHostTakesFallbacksOnlyOnceItPollsInItsEpoch},
 		{"AReceiveRacingAFallbackLeavesOneOutcome", testAReceiveRacingAFallbackLeavesOneOutcome},
