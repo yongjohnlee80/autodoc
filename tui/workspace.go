@@ -27,7 +27,14 @@ type wsInfo struct {
 	// (docs/decisions/todos.md#graph-only-indexing)
 	graphOnly, todoExcluded []string
 	todoSearch              bool
+	// autodocDirs are AutoDoc's own folders its root holds or lies inside (workspace.list's
+	// autodoc_dirs)
+	autodocDirs []autodocDir
 }
+
+// autodocDir is one of AutoDoc's own folders a workspace's root holds or lies inside: dir is
+// config, state or data, relation holds or inside.
+type autodocDir struct{ dir, relation, path string }
 
 func workspacePatterns(value any) []string {
 	var patterns []string
