@@ -66,11 +66,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # The commits a run brings name no one, by the files' own patterns (docs/names_test.go): a
-      # push's before..after, the release pull request's base..head.
+      # The commits a run brings name no one, by the files' own patterns (docs/names_test.go): the
+      # release pull request's base..head; a push to canary, every commit canary holds that main
+      # doesn't (a newer merge replaces a waiting run, so before..after would skip the replaced
+      # one's commits; canary is reset to main at each release, so the range stays short); a push
+      # to main, before..after (its release pull request's run read them already).
       - name: commit messages name no one
         env:
-          AUTODOC_NAMES_COMMITS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+          AUTODOC_NAMES_COMMITS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.ref == 'refs/heads/canary' && format('origin/main..{0}', github.sha) || format('{0}..{1}', github.event.before, github.sha) }}
         run: go test -count=1 -v -run '^TestNoCommitMessageNamesTheTeam$' ./docs/
 
       - name: gofmt
