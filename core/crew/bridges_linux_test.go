@@ -540,7 +540,7 @@ func TestBridgesListOnlyTheDaemonsUser(t *testing.T) {
 	}
 }
 
-// F1 (Lector #244 r0). Two daemons, each with its own store, see the same user's helpers. Neither
+// Two daemons, each with its own store, see the same user's helpers. Neither
 // store's look reclaims the other's: a live bridge of store B, whose session store A has never
 // held, is foreign in A (never an orphan, never reclaimed, and a kill of it needs confirming),
 // and stays running through A's reclaim threshold and beyond, while A's own confirmed orphan is
@@ -587,7 +587,7 @@ func TestADaemonNeverReclaimsAnotherStoresHelper(t *testing.T) {
 	}
 }
 
-// F2 (Lector #244 r0). A helper's subtree is observed in one read of /proc, and each descendant is
+// A helper's subtree is observed in one read of /proc, and each descendant is
 // signalled only if, opened by its pidfd, it is still the process observed. Here the helper's
 // child's pid goes to an unrelated process between the observation and the open (as a pid reused
 // after the child ended would): that process, observed under the child's start, is never
@@ -613,7 +613,7 @@ func TestAKillNeverSignalsAProcessThatTookADescendantsPid(t *testing.T) {
 	}
 }
 
-// F3 (Lector #244 r1). A group is ended one checked process at a time, never by its number: a
+// A group is ended one checked process at a time, never by its number: a
 // member of the group that runs as another user is never signalled, though the daemon, as root,
 // could. Runs as root only (it starts a process as nobody).
 func TestAGroupKillNeverSignalsAnotherUsersMember(t *testing.T) {
@@ -693,7 +693,7 @@ func procOwner(pid int) (int, bool) {
 	return int(st.Uid), ok
 }
 
-// F3 + F4 (Lector #244 r2). Once the group's leader is gone, nothing more is adopted into its kill:
+// Once the group's leader is gone, nothing more is adopted into its kill:
 // a process that appears in the group only then (here: a member's child, kept out of every read of
 // the group until the leader is reaped, as one forked after it would be) is never signalled,
 // though its parent is a held member; its group number could be another group's by then. The held
@@ -750,7 +750,7 @@ func TestALaterGroupMemberIsAdoptedOnlyThroughAHeldParent(t *testing.T) {
 	}
 }
 
-// N1 (Lector #244 r3), the guarantee's limit, pinned: term says every process the kill held
+// The guarantee's limit, pinned: term says every process the kill held
 // ended, no more. A process that appears in the group only once its leader is gone is never taken
 // in (its group number could be another group's), so it outlives a kill that answers term.
 func TestAGroupKillsTermCoversWhatItHeldOnly(t *testing.T) {
