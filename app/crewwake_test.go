@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,14 +33,15 @@ import (
 // (startScheduler) with a fake waker, and agents that register, set an endpoint, receive and ack as
 // the guide says.
 
-// fakeWaker records each wake by session, fails or blocks on demand, and counts the calls out at
-// once.
+// fakeWaker records each wake by session and its notice, fails or blocks on demand, and counts the
+// calls out at once.
 type fakeWaker struct {
 	mu       sync.Mutex
 	fail     int           // the next calls to fail
 	block    chan struct{} // when set, each call waits for it (or its ctx)
 	out, max int
 	woke     chan string
+	notices  map[string][]string // each call's notice, by session, in order
 }
 
 func newFakeWaker() *fakeWaker { return &fakeWaker{woke: make(chan string, 1024)} }
@@ -61,9 +63,15 @@ func (w *fakeWaker) Wake(ctx context.Context, ep crew.Endpoint, notice string) e
 			return ctx.Err()
 		}
 	}
-	if notice != crew.WakeNotice {
-		return fmt.Errorf("a notice that isn't the constant one: %q", notice)
+	if !strings.HasPrefix(notice, "AutoDoc mail is waiting for you") || !strings.HasSuffix(notice, "Run: autodoc mail receive") {
+		return fmt.Errorf("a notice that isn't a CLI wake notice: %q", notice)
 	}
+	w.mu.Lock()
+	if w.notices == nil {
+		w.notices = map[string][]string{}
+	}
+	w.notices[ep.Session] = append(w.notices[ep.Session], notice)
+	w.mu.Unlock()
 	w.woke <- ep.Session
 	if fail {
 		return errors.New("the CLI refused the notice")
@@ -553,7 +561,7 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	r.start(crewWakers(r.deps.crew))
 	r.send(jarvis, "gold", "for gold")
 	r.send(jarvis, "tifa", "for tifa")
-	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"` + crew.WakeNotice + `"}}` + "\n"
+	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"AutoDoc mail is waiting for you: 1 from jarvis (claude). Run: autodoc mail receive"}}` + "\n"
 	select {
 	case line := <-lines:
 		if line != want {
@@ -568,5 +576,48 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	time.Sleep(200 * time.Millisecond) // a cell's own window: any look that would take tifa has run
 	if w := r.wake(tifa); w.AttemptGen != 0 || w.DaemonRun != "" || w.Failures != 0 || w.State != crew.WakeIdle {
 		t.Fatalf("tifa, of a kind serve has no waker for, was attempted: %+v; want never reserved, never failed", w)
+	}
+}
+
+// TestTheWakeNoticeNamesItsSenders: the notice that wakes a session names who its waiting mail is
+// from, by the daemon-set address mail receive gives each sender and its kind, with how many
+// messages are each one's, in the order each first sent: 2 from jarvis, then 1 from the user, who
+// has no kind. At most three are named, then the rest are counted; a codename the registry takes
+// but the notice may not print ($PWD, which a shell or an agent could read as a variable) is
+// counted, never printed.
+func TestTheWakeNoticeNamesItsSenders(t *testing.T) {
+	r := newWakeRig(t)
+	gold, goldCred := r.agent("gold")
+	tifa, tifaCred := r.agent("tifa")
+	_, jarvis := r.agent("jarvis")
+	r.send(jarvis, "gold", "first")
+	if _, err := r.deps.mail.SendAsUser(r.ctx, "autodoc:aaaa", "run-a", r.epoch, mail.Send{To: []string{"gold"}, Body: "from the user", Key: "k-user"}); err != nil {
+		t.Fatal(err)
+	}
+	r.send(jarvis, "gold", "second")
+	for _, name := range []string{"lector", "zen", "$PWD", "juliet"} {
+		_, cred := r.agent(name)
+		r.send(cred, "tifa", "from "+name)
+	}
+	if _, err := r.deps.mail.SendAsUser(r.ctx, "autodoc:aaaa", "run-a", r.epoch, mail.Send{To: []string{"tifa"}, Body: "the user's to tifa", Key: "k-user-tifa"}); err != nil {
+		t.Fatal(err)
+	}
+	r.start(r.withWaker())
+	r.woken(gold)
+	r.woken(tifa)
+	want := map[string]string{
+		gold: "AutoDoc mail is waiting for you: 2 from jarvis (claude), 1 from user. Run: autodoc mail receive",
+		tifa: "AutoDoc mail is waiting for you: 1 from lector (claude), 1 from zen (claude), 1 from juliet (claude), and 2 more. Run: autodoc mail receive",
+	}
+	r.waker.mu.Lock()
+	notices := maps.Clone(r.waker.notices)
+	r.waker.mu.Unlock()
+	for s, w := range want {
+		if len(notices[s]) != 1 || notices[s][0] != w {
+			t.Errorf("session %s was told %q, want once %q", s, notices[s], w)
+		}
+	}
+	if got := len(r.drain(goldCred)) + len(r.drain(tifaCred)); got != 8 {
+		t.Fatalf("the two sessions received %d messages, want 8", got)
 	}
 }

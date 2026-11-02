@@ -67,8 +67,9 @@ func TestServeWakesAgySessions(t *testing.T) {
 	case body := <-sent:
 		// an agy session reads its mail with the crew MCP server's tools, so its notice names the
 		// tool, never the shell command its rules don't allow
-		if body["content"] != crew.WakeNoticeMCP || !strings.Contains(body["content"], "mail_receive, a tool of the autodoc MCP server") {
-			t.Fatalf("the language server was sent %q, want the MCP notice %q", body["content"], crew.WakeNoticeMCP)
+		want := "AutoDoc mail is waiting for you: 1 from jarvis (claude). Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+		if body["content"] != want || !strings.Contains(body["content"], "mail_receive, a tool of the autodoc MCP server") {
+			t.Fatalf("the language server was sent %q, want the MCP notice naming its sender %q", body["content"], want)
 		}
 	// NOTE: a bound on a failing run only: a wake that never comes fails here rather than hanging.
 	case <-time.After(10 * time.Second):
