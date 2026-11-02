@@ -178,7 +178,7 @@ func TestTheNoticeNamesItsSendersSafely(t *testing.T) {
 		more    bool
 		want    string
 	}{
-		{"one sender", crew.MailViaCLI, []S{{"gold-man", "claude", 1}}, false, head + "1 from gold-man (claude)" + cli},
+		{"one sender", crew.MailViaCLI, []S{{"gold", "claude", 1}}, false, head + "1 from gold (claude)" + cli},
 		{"the user, of no kind, and a peer", crew.MailViaCLI, []S{{"user", "", 2}, {"jarvis", "claude", 1}}, false,
 			head + "2 from user, 1 from jarvis (claude)" + cli},
 		{"on MCP mail", crew.MailViaMCP, []S{{"zen", "opencode", 1}}, false, head + "1 from zen (opencode)" + mcp},
