@@ -512,9 +512,10 @@ Neovim's notifier never delivers `autodoc:` assignees, so the window does.
   in its own scope, and only that: one made in another window's scope, or any scope a caller
   passed, is delivered to the agent's own window, so no assignment falls between two windows.
 - **A notice, not the user's task:** the window mails it from `user`, kind message, subject
-  `[todos] task assigned to you: <title>`, with the task's id, title, file and the assigner's
-  reason in the body, as Neovim's notifier words its own. A peer may have made it, and a request
-  from `user` headed `Task:` is the user's own instruction.
+  `[todos] task assigned to you: <title>`. The body states the assignment, not who made it ("You've
+  been assigned a new task."), then the task's id, title and file, and the reason quoted as the
+  note, word for word as Neovim's notifier writes its own. It carries no `peer` field (it is a
+  host's notice). A request from `user` headed `Task:` is the user's own instruction.
 - **Queued, not fired:** the daemon wakes the agent as for any mail, and a stopped agent finds it
   when it starts. The mail's key is the change's, `todo-<store>-<seq>`, so an ask after a lost
   answer never mails it twice. A change whose send has no outcome stays unacked and is read again.
