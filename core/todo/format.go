@@ -80,7 +80,27 @@ func cleanBody(body string) string {
 	if loc := h1Re.FindStringIndex(body); loc != nil {
 		body = body[loc[1]:]
 	}
-	return strings.TrimRight(strings.TrimLeft(body, "\n"), "\n")
+	return strings.TrimRight(strings.TrimLeft(stripManaged(body), "\n"), "\n")
+}
+
+// stripManaged drops what a write puts above the description from the start of s: the managed
+// header and the H1 under it, as often as they repeat. A client that sends a file's whole body back
+// as the description (todos.get's body) would otherwise stack one more copy with every write, and a
+// file that has them already heals at its next write. Text of the user's own that starts with an H1,
+// with no header above it, keeps it.
+func stripManaged(s string) string {
+	for {
+		rest := strings.TrimLeft(s, " \t\r\n")
+		loc := headerRe.FindStringIndex(rest)
+		if loc == nil || loc[0] != 0 {
+			return s
+		}
+		rest = rest[loc[1]:]
+		if l := h1Re.FindStringIndex(rest); l != nil {
+			rest = rest[l[1]:]
+		}
+		s = strings.TrimLeft(rest, "\n")
+	}
 }
 
 // formatError is why a file is not a valid task.

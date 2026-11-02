@@ -246,7 +246,7 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec, scope string) (Task
 	if err := checkBlocked(spec.Blocked); err != nil {
 		return Task{}, err
 	}
-	t := Task{Version: newest.version, ID: id, Status: status, Title: spec.Title, Description: spec.Description,
+	t := Task{Version: newest.version, ID: id, Status: status, Title: spec.Title, Description: stripManaged(spec.Description),
 		Due: spec.Due, Priority: spec.Priority, Assignee: spec.Assignee, Tags: spec.Tags, ADR: slices.Clone(spec.ADR),
 		Review: slices.Clone(spec.Review), Blocked: spec.Blocked, Created: ts, Updated: ts, StatusChanged: ts}
 	switch status {
