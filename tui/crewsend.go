@@ -112,6 +112,36 @@ func (h *crewHost) sendTask(codename, scope, subject, body, key string, then fun
 	})
 }
 
+// startedOf asks the crew whether codename's session in the window's scope is past its CLI's
+// startup: its session live with its endpoint registered (crew.list's why is neither ended nor
+// no_endpoint), for a kind that starts with it (crew.StartsWithItsEndpoint). then hears it on the
+// loop; a window holding no scope, a
+// failed ask or no such session hears false: nothing is typed into what isn't known to have started.
+func (h *crewHost) startedOf(codename string, then func(started bool)) {
+	scope, _, ok := h.held()
+	if !ok || codename == "" {
+		then(false)
+		return
+	}
+	h.c.Go(func(ctx context.Context) any {
+		v, err := h.c.Call(ctx, "crew.list")
+		if err != nil {
+			return nil
+		}
+		return v
+	}, func(v any) {
+		for _, e := range asList(v) {
+			m := asMap(e)
+			if str(m, "scope") == scope && str(m, "codename") == codename {
+				why := str(m, "why")
+				then(why != crew.WhyEnded && why != crew.WhyNoEndpoint)
+				return
+			}
+		}
+		then(false)
+	})
+}
+
 // promptsReported asks the crew whether codename's session in the window's scope has its permission
 // prompts reported now (crew.list's prompts_reported: a live session whose reporter is there, the
 // daemon's rule). then hears it on the loop; a window holding no scope, a failed ask or no such

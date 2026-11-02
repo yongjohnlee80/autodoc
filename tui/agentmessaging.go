@@ -49,6 +49,12 @@ func (m AgentMessage) text() string {
 // window can't see its permission prompts now, or it shows one. The user's Enter there sends it.
 var ErrAgentTypedNotSent = errors.New("typed into its input, not sent")
 
+// ErrAgentNotStarted is a delivery to a crew agent whose CLI hasn't got past its own startup
+// (crew.StartsWithItsEndpoint: a Claude agent whose SessionStart hook hasn't registered its
+// endpoint): nothing was typed, since its terminal may be showing its folder-trust question, and a
+// paste may act on its keys and an Enter answer it.
+var ErrAgentNotStarted = errors.New("it hasn't finished starting: nothing typed")
+
 // errDoorbellNotSent is a doorbell that answered, for certain, that nothing was sent: the message
 // goes on to the base.
 var errDoorbellNotSent = errors.New("the doorbell didn't ring")

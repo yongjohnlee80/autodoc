@@ -39,7 +39,8 @@ type Entry struct {
 	Presence  string `json:"presence"`
 	Reachable bool   `json:"reachable"` // a live session with an endpoint and fewer than 5 failed wakes
 	// PromptsReported is a live session whose permission prompts are reported now: Claude's hooks,
-	// when its registration said its host wrote them, or a reporter (OpenCode's plugin, agy's bridge) that said it is alive within 15 s. Only into
+	// when its registration said its host wrote them and it has started (its endpoint registered:
+	// StartsWithItsEndpoint), or a reporter (OpenCode's plugin, agy's bridge) that said it is alive within 15 s. Only into
 	// such a session, showing no permission attention, may a window press Enter.
 	PromptsReported bool `json:"prompts_reported"`
 	// Why is why the session can't be woken now (Why*): empty when it can.
@@ -80,7 +81,11 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				if e.Reachable, e.Why, err = m.reachability(tx, s, now); err != nil {
 					return err
 				}
-				e.PromptsReported = m.promptsReported(p.Kind, s, now)
+				_, started, err := tx.Endpoint(s.ID)
+				if err != nil {
+					return err
+				}
+				e.PromptsReported = m.promptsReported(p.Kind, s, started || !StartsWithItsEndpoint(p.Kind), now)
 				via, err := SessionMailVia(s.MailVia, p.Kind).MarshalText()
 				if err != nil {
 					return err

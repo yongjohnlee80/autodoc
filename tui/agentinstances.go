@@ -76,6 +76,9 @@ type agentInstance struct {
 	crewed   bool
 	context  string
 	setup    crew.Setup // its crew start's setup (crew setup's answer): what its process starts with
+	// started is the session past its CLI's startup, as the crew last said (startedOf), and told
+	// the session the user was told hadn't finished starting: each a session id, "" for none
+	started, told string
 	// env is what its process is started with over AutoDoc's own environment: its profile's env,
 	// then AutoDoc's (agentEnv), as its command line sets them (agentArgv); its setup's server is
 	// started with the same (runAgent)
@@ -629,10 +632,41 @@ func (a *agents) endSession(instance *agentInstance) string {
 	return id
 }
 
+// mayBeStarting is whether instance runs a crew session that may not have got past its CLI's
+// startup: of a kind that starts with its endpoint (crew.StartsWithItsEndpoint), not yet known to
+// have started.
+func (a *agents) mayBeStarting(instance *agentInstance) bool {
+	return a.crew != nil && instance.crewed && instance.session.ID != "" &&
+		crew.StartsWithItsEndpoint(instance.profile.kind()) && instance.started != instance.session.ID
+}
+
+// tellNotStarted tells the user, once for instance's session, that it hasn't finished starting, in
+// its folder: nothing is typed into it, and its mail waits for it.
+func (a *agents) tellNotStarted(instance *agentInstance) {
+	if instance.told == instance.session.ID {
+		return
+	}
+	instance.told = instance.session.ID
+	a.c.Notify(a.c.Trf("autodoc.crew.not_started", instance.profile.Name, instance.dir))
+}
+
 func (a *agents) instanceExited(instance *agentInstance, code int) {
 	instance.context = ""                         // its session ends with it: a next start registers a new one
 	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
-		a.crew.exit(instance.session, crew.EndedExit)
+		s := instance.session
+		if a.mayBeStarting(instance) {
+			// a Claude that exits before it started may have declined its folder-trust question: the
+			// crew says whether it started before its exit ends the session (and its endpoint)
+			name, dir := instance.profile.Name, instance.dir
+			a.crew.startedOf(instance.profile.Codename, func(started bool) {
+				if !started {
+					a.c.Notify(a.c.Trf("autodoc.crew.exited_before_start", name, code, dir))
+				}
+				a.crew.exit(s, crew.EndedExit)
+			})
+		} else {
+			a.crew.exit(s, crew.EndedExit)
+		}
 		instance.session = crewSession{}
 	}
 	if a.stopping || a.instances[instance.profile.Codename] != instance {
@@ -921,6 +955,27 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		panel, err := a.runtime()
 		if err == nil && (!instance.running || !instance.owner.SameOwner(panel)) {
 			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
+		}
+		if err == nil && a.mayBeStarting(instance) {
+			// nothing is typed into a CLI that may be showing its startup question: the crew says
+			// first whether it has started, asked again while an agent just started comes up
+			session := instance.session.ID
+			a.crew.startedOf(instance.profile.Codename, func(started bool) {
+				switch {
+				case accepted.finished:
+				case instance.session.ID != session:
+					finish(ErrAgentStale)
+				case started:
+					instance.started = session
+					attempt(tries)
+				case tries > 0:
+					c.After(agentReadyPoll, func() { attempt(tries - 1) })
+				default:
+					a.tellNotStarted(instance)
+					finish(ErrAgentNotStarted)
+				}
+			})
+			return
 		}
 		if err == nil {
 			err = send(panel, instance.tab)
