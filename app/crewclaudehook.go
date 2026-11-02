@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -26,11 +27,14 @@ import (
 //	                    (notification_type permission_prompt); several queue, one per tool use
 //	approved            that tool's PostToolUse (the same tool_name and tool_input), or its
 //	                    PostToolUseFailure when it fails, then Stop once the turn ends; another
-//	                    tool's PostToolUse may come while a prompt shows
+//	                    tool's PostToolUse may come while a prompt shows. A prompt that collects
+//	                    an answer widens the input it runs with: AskUserQuestion's PostToolUse
+//	                    carries its questions with answers and annotations added
 //	denied              nothing until the user's next message (UserPromptSubmit)
 //
 // So each prompt shown is an open prompt, named by its tool and input, counted (two identical calls
-// that both prompt are two); its own PostToolUse or PostToolUseFailure closes one,
+// that both prompt are two); its own PostToolUse or PostToolUseFailure closes one: the one its tool
+// and input name, else the oldest of its tool whose input it holds unchanged (a widened one),
 // and UserPromptSubmit and Stop, past every prompt, close them all. The attention is raised while any
 // is open. Another Notification (idle, elicitation) proves nothing about a prompt, so it changes
 // nothing.
@@ -75,15 +79,19 @@ const claudeNotified = "notified"
 // promptKey names an open prompt by its tool and input, as both its PermissionRequest and its
 // PostToolUse carry them: the input's JSON compacted with its keys in order, so the two match.
 func promptKey(tool string, input json.RawMessage) string {
+	h := sha256.Sum256(append([]byte(tool+"\x00"), canonInput(input)...))
+	return "p-" + hex.EncodeToString(h[:12])
+}
+
+// canonInput is a tool's input compacted with its keys in order; as it came when it isn't JSON.
+func canonInput(input json.RawMessage) json.RawMessage {
 	var v any
-	canon := input
 	if json.Unmarshal(input, &v) == nil {
 		if b, err := json.Marshal(v); err == nil { // maps marshal with their keys sorted
-			canon = b
+			return b
 		}
 	}
-	h := sha256.Sum256(append([]byte(tool+"\x00"), canon...))
-	return "p-" + hex.EncodeToString(h[:12])
+	return input
 }
 
 // crewClaudeHookMain runs `autodoc crew attention --claude-hook`: Claude's hook input on stdin.
@@ -131,7 +139,8 @@ func claudeHook(ctx context.Context, stdin io.Reader, envFile string, call func(
 	switch {
 	case in.Event == "PermissionRequest":
 		asks = claudeAsks(in)
-		if err := countPrompt(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), asks, 1); err != nil {
+		p := openPrompt{Asks: asks, Tool: in.ToolName, Input: canonInput(in.ToolInput)}
+		if err := countPrompt(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), p, 1); err != nil {
 			return err
 		}
 		_ = os.Remove(filepath.Join(dir, claudeNotified)) // its Notification stood for this one
@@ -142,13 +151,19 @@ func claudeHook(ctx context.Context, stdin io.Reader, envFile string, call func(
 		}
 		if len(open) == 0 { // its PermissionRequest names it, when there is one
 			asks = claudeAsks(in)
-			if err := countPrompt(filepath.Join(dir, claudeNotified), asks, 1); err != nil {
+			if err := countPrompt(filepath.Join(dir, claudeNotified), openPrompt{Asks: asks}, 1); err != nil {
 				return err
 			}
 		}
 	case in.Event == "PostToolUse", in.Event == "PostToolUseFailure": // the tool ran: approved, done or failed
-		if err := countPrompt(filepath.Join(dir, promptKey(in.ToolName, in.ToolInput)), "", -1); err != nil {
+		name, err := ranPrompt(dir, in)
+		if err != nil {
 			return err
+		}
+		if name != "" {
+			if err := countPrompt(filepath.Join(dir, name), openPrompt{}, -1); err != nil {
+				return err
+			}
 		}
 	case in.Event == "UserPromptSubmit", in.Event == "Stop":
 		open, err := openPrompts(dir)
@@ -206,10 +221,53 @@ func reportPrompts(ctx context.Context, c sessionContext, dir, asks string, call
 }
 
 // openPrompt is one open prompt's file: how many of its tool use are asking (two identical calls
-// that both prompt are two), and what it asks.
+// that both prompt are two), what it asks, and the tool and input it asked for (canonInput), which a
+// PostToolUse whose input the prompt widened is matched against. A Notification's has no tool.
 type openPrompt struct {
-	N    int    `json:"n"`
-	Asks string `json:"asks"`
+	N     int             `json:"n"`
+	Asks  string          `json:"asks"`
+	Tool  string          `json:"tool,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
+}
+
+// ranPrompt is the open prompt in dir a PostToolUse or PostToolUseFailure closes, by file name: the
+// one its tool and input name, else the oldest of its tool whose input it holds unchanged, every
+// key with the same value (inputWithin); "" when none is open. A tool that prompted runs only after
+// its prompt is answered, so the oldest is the first answered.
+func ranPrompt(dir string, in claudeHookInput) (string, error) {
+	key := promptKey(in.ToolName, in.ToolInput)
+	if _, err := os.Stat(filepath.Join(dir, key)); err == nil {
+		return key, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	open, err := openPrompts(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, name := range open {
+		p, err := readPrompt(filepath.Join(dir, name))
+		if err == nil && p.Tool == in.ToolName && inputWithin(p.Input, in.ToolInput) {
+			return name, nil
+		}
+	}
+	return "", nil
+}
+
+// inputWithin reports whether every key of the input asked for is in the input ran with, with the
+// same value: a prompt may add to its tool's input (an answer) but never takes from it. An asked
+// input that isn't a JSON object (or a prompt file from before inputs were kept) matches nothing.
+func inputWithin(asked, ran json.RawMessage) bool {
+	var a, r map[string]any
+	if len(asked) == 0 || json.Unmarshal(asked, &a) != nil || json.Unmarshal(ran, &r) != nil {
+		return false
+	}
+	for k, v := range a {
+		if w, ok := r[k]; !ok || !reflect.DeepEqual(v, w) {
+			return false
+		}
+	}
+	return true
 }
 
 func readPrompt(path string) (openPrompt, error) {
@@ -221,16 +279,20 @@ func readPrompt(path string) (openPrompt, error) {
 	return p, json.Unmarshal(b, &p)
 }
 
-// countPrompt adds by (1: one more asking, -1: one closed) to the open prompt at path, asking asks
-// when given; at 0 it is closed (its file gone). Closing one that isn't open changes nothing.
-func countPrompt(path, asks string, by int) error {
+// countPrompt adds by (1: one more asking, -1: one closed) to the open prompt at path, taking with's
+// asks, tool and input when given; at 0 it is closed (its file gone). Closing one that isn't open
+// changes nothing.
+func countPrompt(path string, with openPrompt, by int) error {
 	p, err := readPrompt(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		p = openPrompt{} // unreadable: as if new
 	}
 	p.N += by
-	if asks != "" {
-		p.Asks = asks
+	if with.Asks != "" {
+		p.Asks = with.Asks
+	}
+	if with.Tool != "" {
+		p.Tool, p.Input = with.Tool, with.Input
 	}
 	if p.N <= 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
