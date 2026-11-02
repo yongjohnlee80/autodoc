@@ -203,6 +203,7 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 	if err != nil {
 		return 0, err
 	}
+	server, serverRef := m.codexServerOf(ctx, kind, canon)
 	var gen int64
 	err = m.write(ctx, func(tx Tx, after *afterCommit) error {
 		s, err := m.Authenticate(tx, credential)
@@ -221,6 +222,12 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 			return err
 		}
 		gen = e.Generation + 1
+		if server != "" && (s.Server != server || s.ServerRef != serverRef) {
+			s.Server, s.ServerRef = server, serverRef // kept after the session ends: crew.bridges' proof
+			if err := tx.PutSession(s); err != nil {
+				return err
+			}
+		}
 		now := tx.Now().UnixNano()
 		first := e.First // a Claude's startup ended at its first: a resume or a compaction doesn't move it
 		if gen == 1 {

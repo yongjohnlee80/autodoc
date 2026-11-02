@@ -527,6 +527,14 @@
         <source>show the 9th buffer</source>
         <translation>show the 9th buffer</translation>
     </message>
+    <message id="autodoc.cmd.crew.bridges">
+        <source>crew bridges</source>
+        <translation>crew bridges</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges.help">
+        <source>crew bridges</source>
+        <translation>crew bridges</translation>
+    </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
         <translation>the right-click menu</translation>
@@ -1574,6 +1582,26 @@
     <message id="autodoc.dialog.bufferPick.switch_buffer">
         <source>switch buffer</source>
         <translation>switch buffer</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Close (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.copy">
+        <source>&amp;Copy</source>
+        <translation>&amp;Copy</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill">
+        <source>Ki&amp;ll</source>
+        <translation>Ki&amp;ll</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill_orphans">
+        <source>Kill &amp;orphans…</source>
+        <translation>Kill &amp;orphans…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.title">
+        <source>Crew Bridges</source>
+        <translation>Crew Bridges</translation>
     </message>
     <message id="autodoc.dialog.diagram.close_q">
         <source>Close (&amp;q)</source>
@@ -3671,6 +3699,10 @@ WHAT A KEY NEEDS
         <source>Copy</source>
         <translation>Copy</translation>
     </message>
+    <message id="autodoc.main.crew_bridges">
+        <source>Cr&amp;ew bridges…</source>
+        <translation>Cr&amp;ew bridges…</translation>
+    </message>
     <message id="autodoc.main.details">
         <source>details</source>
         <translation>details</translation>
@@ -4178,6 +4210,30 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.crash.failed_the_crash_log_could_not_be_written">
         <source>%1 failed: %2 (the crash log could not be written: %3)</source>
         <translation>%1 failed: %2 (the crash log could not be written: %3)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.copied">
+        <source>copied %1 %2's details</source>
+        <translation>copied %1 %2's details</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.ended">
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.gone">
+        <source>%1 %2 had already ended</source>
+        <translation>%1 %2 had already ended</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: %3 of its processes still ran after it was killed</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.killed">
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.not_killed">
+        <source>%1 %2 not killed: %3</source>
+        <translation>%1 %2 not killed: %3</translation>
     </message>
     <message id="autodoc.notice.crewfallback.delivered">
         <source>%1 couldn't be woken: AutoDoc typed %2's message into its prompt</source>
@@ -5675,6 +5731,30 @@ WHAT A KEY NEEDS
         <source>&amp;Yes, stop them</source>
         <translation>&amp;Yes, stop them</translation>
     </message>
+    <message id="autodoc.question.crew_bridges.kill_foreign">
+        <source>Codex's shared daemon (%1) wasn't started by the crew: any Codex running outside the crew uses it, and loses it. Kill it?</source>
+        <translation>Codex's shared daemon (%1) wasn't started by the crew: any Codex running outside the crew uses it, and loses it. Kill it?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_live">
+        <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
+        <translation>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans">
+        <source>End %1 orphaned helper(s)? Each is checked again as it ends.</source>
+        <translation>End %1 orphaned helper(s)? Each is checked again as it ends.</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans_title">
+        <source>Kill the orphans?</source>
+        <translation>Kill the orphans?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_title">
+        <source>Kill the helper?</source>
+        <translation>Kill the helper?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</translation>
+    </message>
     <message id="autodoc.question.editorsocket.add_it">
         <source>&amp;Add it</source>
         <translation>&amp;Add it</translation>
@@ -6024,6 +6104,50 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc">
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.count">
+        <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
+        <translation>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.detail">
+        <source>command: %1 · socket: %2 · session: %3 · why: %4</source>
+        <translation>command: %1 · socket: %2 · session: %3 · why: %4</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.listing">
+        <source>listing the crew's helper processes…</source>
+        <translation>listing the crew's helper processes…</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_orphans">
+        <source>no orphan to kill</source>
+        <translation>no orphan to kill</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_scope">
+        <source>the window holds no crew scope yet: try again in a moment</source>
+        <translation>the window holds no crew scope yet: try again in a moment</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.none">
+        <source>no crew helper is running</source>
+        <translation>no crew helper is running</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.not_listed">
+        <source>not listed: %1</source>
+        <translation>not listed: %1</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>orphan, %1 still running: the daemon stopped trying, it's yours to end</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
+        <source>orphan, ends in %1 min</source>
+        <translation>orphan, ends in %1 min</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</translation>
     </message>
     <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>

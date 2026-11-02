@@ -7881,5 +7881,129 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>AutoDoc can't see %1's permission prompts now, so the message is typed but not sent: press Enter there</source>
         <translation>AutoDoc이 지금 %1의 권한 프롬프트를 볼 수 없어 메시지는 입력했지만 보내지 않았습니다: 그곳에서 Enter를 누르세요</translation>
     </message>
+    <message id="autodoc.main.crew_bridges">
+        <source>Cr&amp;ew bridges…</source>
+        <translation>크루 브리지(&amp;e)…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.title">
+        <source>Crew Bridges</source>
+        <translation>크루 브리지</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill">
+        <source>Ki&amp;ll</source>
+        <translation>종료(&amp;l)</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.kill_orphans">
+        <source>Kill &amp;orphans…</source>
+        <translation>고아 종료(&amp;o)…</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.copy">
+        <source>&amp;Copy</source>
+        <translation>복사(&amp;c)</translation>
+    </message>
+    <message id="autodoc.dialog.crew_bridges.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>닫기(&amp;q)</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.listing">
+        <source>listing the crew's helper processes…</source>
+        <translation>크루의 보조 프로세스를 나열하는 중…</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.not_listed">
+        <source>not listed: %1</source>
+        <translation>나열하지 못했습니다: %1</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.none">
+        <source>no crew helper is running</source>
+        <translation>실행 중인 크루 보조 프로세스가 없습니다</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.count">
+        <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
+        <translation>보조 프로세스 %1개, 그중 고아 %2개. 10분 동안 고아로 남은 프로세스는 데몬이 종료합니다.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaim_stopped">
+        <source>orphan, %1 still running: the daemon stopped trying, it's yours to end</source>
+        <translation>고아, %1개 아직 실행 중: 데몬이 더 시도하지 않으니 직접 종료하세요</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.orphan_reclaimed_in">
+        <source>orphan, ends in %1 min</source>
+        <translation>고아, %1분 후 종료</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.detail">
+        <source>command: %1 · socket: %2 · session: %3 · why: %4</source>
+        <translation>명령: %1 · 소켓: %2 · 세션: %3 · 이유: %4</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_orphans">
+        <source>no orphan to kill</source>
+        <translation>종료할 고아가 없습니다</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.no_scope">
+        <source>the window holds no crew scope yet: try again in a moment</source>
+        <translation>이 창은 아직 크루 범위를 갖고 있지 않습니다. 잠시 후 다시 시도하세요</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_title">
+        <source>Kill the helper?</source>
+        <translation>보조 프로세스를 종료할까요?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_unowned">
+        <source>%1 %2 isn't one of this AutoDoc's sessions: it may serve another AutoDoc's agent, which loses it. Kill it?</source>
+        <translation>%1 %2은(는) 이 AutoDoc의 세션이 아닙니다. 다른 AutoDoc의 에이전트를 위해 동작 중일 수 있으며, 종료하면 그 에이전트가 잃게 됩니다. 종료할까요?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_live">
+        <source>%1 %2 serves %3, which is running: killing it cuts that agent off from its mail until it starts again. Kill it?</source>
+        <translation>%1 %2은(는) 실행 중인 %3을(를) 지원합니다. 종료하면 그 에이전트는 다시 시작할 때까지 메일을 받지 못합니다. 종료할까요?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_foreign">
+        <source>Codex's shared daemon (%1) wasn't started by the crew: any Codex running outside the crew uses it, and loses it. Kill it?</source>
+        <translation>Codex의 공유 데몬(%1)은 크루가 시작한 것이 아닙니다. 크루 밖에서 실행 중인 Codex가 이를 사용하며, 종료하면 잃게 됩니다. 종료할까요?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans_title">
+        <source>Kill the orphans?</source>
+        <translation>고아를 종료할까요?</translation>
+    </message>
+    <message id="autodoc.question.crew_bridges.kill_orphans">
+        <source>End %1 orphaned helper(s)? Each is checked again as it ends.</source>
+        <translation>고아 보조 프로세스 %1개를 종료할까요? 종료할 때 각각 다시 확인합니다.</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.copied">
+        <source>copied %1 %2's details</source>
+        <translation>%1 %2의 세부 정보를 복사했습니다</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.ended">
+        <source>%1 %2 ended, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2이(가) 종료되었습니다. 보유한 모든 프로세스와 함께 종료되었습니다(리더가 종료된 뒤 생성된 프로세스는 추적되지 않습니다)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.killed">
+        <source>%1 %2 ignored the stop and was killed, with every process it held (one forked after its leader went isn't tracked)</source>
+        <translation>%1 %2이(가) 중지를 무시하여 강제 종료되었습니다. 보유한 모든 프로세스와 함께 종료되었습니다(리더가 종료된 뒤 생성된 프로세스는 추적되지 않습니다)</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.gone">
+        <source>%1 %2 had already ended</source>
+        <translation>%1 %2은(는) 이미 종료되어 있었습니다</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: 종료한 뒤에도 프로세스 %3개가 계속 실행 중이었습니다</translation>
+    </message>
+    <message id="autodoc.notice.crew_bridges.not_killed">
+        <source>%1 %2 not killed: %3</source>
+        <translation>%1 %2을(를) 종료하지 못했습니다: %3</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges">
+        <source>crew bridges</source>
+        <translation>크루 브리지</translation>
+    </message>
+    <message id="autodoc.cmd.crew.bridges.help">
+        <source>crew bridges</source>
+        <translation>크루 브리지</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.unsupported">
+        <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
+        <translation>크루 브리지는 현재 Linux에서만 크루의 프로세스를 읽습니다. 이 시스템에서는 직접 찾아 종료하세요 (ps, kill). 여기서는 데몬이 회수하지 않습니다.</translation>
+    </message>
+    <message id="autodoc.text.crew_bridges.older_daemon">
+        <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
+        <translation>데몬이 크루 브리지보다 오래된 버전입니다. 백엔드를 다시 시작하세요 (시스템 › 백엔드 다시 시작…)</translation>
+    </message>
 </context>
 </TS>

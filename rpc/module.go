@@ -35,6 +35,9 @@ func WithModules(ms ...module.Module) Option {
 func (s *Server) registerModules(ms []module.Module) {
 	owners := map[int64]int{} // code → the module that answers it
 	for i, m := range ms {
+		if c, ok := m.(module.Callers); ok && s.callers == nil {
+			s.callers = c
+		}
 		if err := module.CheckCodes(m); err != nil {
 			panic("rpc: " + err.Error())
 		}
@@ -115,6 +118,7 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		ctx = context.WithValue(ctx, sessionKey{}, req.Session)
 		ctx = module.WithConn(ctx, req.Session) // the connection's own: one Session per connection, whatever its hellos
+		ctx = module.WithCaller(ctx, callerOf(req.Session))
 		return h(module.WithClient(ctx, clientOf(req.Session)), req)
 	}
 }

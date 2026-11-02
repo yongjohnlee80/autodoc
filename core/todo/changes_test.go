@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
@@ -298,5 +299,60 @@ func TestAnAssignmentsScopeIsKeptUntilTheAssigneeChangesByHand(t *testing.T) {
 	a = b
 	if last := e.rows()[len(e.rows())-1]; last.Kind != todo.KindAssign || last.Scope != "auto-agents:p2" || snap().Scope != "auto-agents:p2" {
 		t.Fatalf("an add with an assignee: %+v, its snapshot %+v", last, snap())
+	}
+}
+
+// An assign records who made it, as the caller's hello proved it
+// (docs/decisions/todos.md#an-assignment-says-who-made-it): an agent's codename@scope, or the
+// unverified marker, never a value the caller passes; "" for the user's surface. It is on the
+// change, which todos.changes answers, and on the task's snapshot row, which a resync answers; a
+// status move keeps it, and an assignee changed by hand drops it. An add with an assignee is an
+// assignment too.
+func TestAnAssignmentSaysWhoMadeIt(t *testing.T) {
+	e := claimed(t)
+	a := e.add(todo.Spec{Title: "a"})
+	snap := func(id string) todo.SnapshotRow {
+		t.Helper()
+		rows, err := e.j.Snapshot(ctx, e.storeID())
+		e.must(err)
+		for _, r := range rows {
+			if r.ID == id {
+				return r
+			}
+		}
+		t.Fatalf("no snapshot row for %s: %+v", id, rows)
+		return todo.SnapshotRow{}
+	}
+	gold := module.WithCaller(ctx, "gold@autodoc:aaaa")
+	a, err := e.m.Assign(gold, kb, a.ID, a.Rev, "autodoc:jarvis", "go", "autodoc:aaaa")
+	e.must(err)
+	if last := e.rows()[len(e.rows())-1]; last.Kind != todo.KindAssign || last.By != "gold@autodoc:aaaa" || snap(a.ID).By != "gold@autodoc:aaaa" {
+		t.Fatalf("an agent's assign: %+v, its snapshot %+v", last, snap(a.ID))
+	}
+	page, err := e.m.Changes(ctx, kb, "reader", 10)
+	e.must(err)
+	if c := page.Changes[len(page.Changes)-1]; c.Kind != todo.KindAssign || c.By != "gold@autodoc:aaaa" {
+		t.Fatalf("todos.changes: %+v", c)
+	}
+	a, err = e.m.Status(ctx, kb, a.ID, a.Rev, "deferred")
+	e.must(err)
+	if s := snap(a.ID); s.By != "gold@autodoc:aaaa" {
+		t.Fatalf("after a status move: %+v", s)
+	}
+	a, err = e.m.Assign(ctx, kb, a.ID, a.Rev, "autodoc:other", "", "")
+	e.must(err)
+	if last := e.rows()[len(e.rows())-1]; last.By != "" || snap(a.ID).By != "" {
+		t.Fatalf("the user's own assign: %+v, its snapshot %+v", last, snap(a.ID))
+	}
+	b, err := e.m.Add(module.WithCaller(ctx, module.CallerUnverified), kb, todo.Spec{Title: "b", Assignee: "autodoc:jarvis"}, "")
+	e.must(err)
+	if last := e.rows()[len(e.rows())-1]; last.Kind != todo.KindAssign || last.By != module.CallerUnverified || snap(b.ID).By != module.CallerUnverified {
+		t.Fatalf("an unverified add with an assignee: %+v, its snapshot %+v", last, snap(b.ID))
+	}
+	p := kbStore + "/" + b.Path
+	e.disk.WriteFile(p, []byte(strings.Replace(e.read(p), `assignee: "autodoc:jarvis"`, `assignee: "autodoc:other"`, 1)))
+	e.m.List(ctx, kb, todo.ListOpts{})
+	if s := snap(b.ID); s.Assignee != "autodoc:other" || s.By != "" {
+		t.Fatalf("after a hand edit of the assignee: %+v", s)
 	}
 }

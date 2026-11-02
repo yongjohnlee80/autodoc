@@ -922,8 +922,15 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 		t.Fatalf("the table under the paragraph:\n%.120s\n…\n%s", text, text[max(len(text)-120, 0):])
 	}
 
-	if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
-		t.Fatal(err)
+	// the page that has the keyboard covers the panel: the first toggle brings it to the front, the
+	// second closes it (docs/decisions/editor.md#a-toggle-raises-a-covered-panel)
+	for i := range 2 {
+		if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			r.s.WaitFor(t, "the results in front", func(string) bool { return !r.covered(resultsPanel) })
+		}
 	}
 	waitSaidN(t, logs, "rows", "closed q1", 1)
 	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) })

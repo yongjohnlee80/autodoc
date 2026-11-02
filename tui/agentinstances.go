@@ -578,9 +578,10 @@ func (a *agents) runAfterSteps(after [][]string, ctxFile, dir string, environ []
 
 // runAgentAutodoc runs the agent's own autodoc (bin, on config) with args in folder dir, as its
 // session (ctxFile, $AUTODOC_CREW_CONTEXT) with environ, its profile's (agentProfile.environ: a
-// CODEX_HOME there is the one it reads), bounded at 15 s; its error carries what it said.
+// CODEX_HOME there is the one it reads), bounded by agentAutodocBound; its error carries what it
+// said.
 func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), agentAutodocBound(args))
 	defer cancel()
 	full := []string{}
 	if config != "" {
@@ -594,6 +595,27 @@ func runAgentAutodoc(bin, config, ctxFile, dir string, environ []string, args ..
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// agentAutodocWait bounds an agent's autodoc command that waits for nothing.
+const agentAutodocWait = 15 * time.Second
+
+// agentAutodocBound is how long an agent's autodoc command (args) may run: agentAutodocWait, plus
+// the wait the command asks for itself (--wait <duration>, as `crew endpoint --codex-here` takes).
+// A step that waits ends at its own deadline, and does what it does there (raises the session's
+// attention), before the window would kill it.
+func agentAutodocBound(args []string) time.Duration {
+	bound := agentAutodocWait
+	for i, arg := range args {
+		w, ok := strings.CutPrefix(arg, "--wait=")
+		if !ok && arg == "--wait" && i+1 < len(args) {
+			w, ok = args[i+1], true
+		}
+		if d, err := time.ParseDuration(w); ok && err == nil && d > 0 {
+			bound += d
+		}
+	}
+	return bound
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.

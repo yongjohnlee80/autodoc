@@ -72,3 +72,15 @@ func (m *Manager) Whoami(ctx context.Context, credential, store string) (Identit
 	})
 	return out, err
 }
+
+// Caller is who credential belongs to, as codename@scope, for a client whose hello carried it
+// (module.Callers; docs/decisions/todos.md#an-assignment-says-who-made-it): verified as every agent
+// verb is (Whoami), against the store its context names. ok is false for a credential that doesn't
+// verify, whatever the reason; the reason is never said, so the credential is never echoed.
+func (m *Manager) Caller(ctx context.Context, credential, store string) (string, bool) {
+	id, err := m.Whoami(ctx, credential, store)
+	if err != nil {
+		return "", false
+	}
+	return id.Codename + "@" + id.Scope, true
+}

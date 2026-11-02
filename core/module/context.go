@@ -12,6 +12,7 @@ const (
 	keyProtocol
 	keyClient
 	keyConn
+	keyCaller
 )
 
 // WithWorkspace is ctx carrying the resolved workspace; only a host calls it.
@@ -56,3 +57,28 @@ func WithConn(ctx context.Context, conn any) context.Context {
 
 // ConnFrom is the caller's connection identity (comparable); nil when no host set one.
 func ConnFrom(ctx context.Context) any { return ctx.Value(keyConn) }
+
+// CallerUnverified is the caller of a session whose hello named a crew session the daemon could not
+// verify (docs/decisions/todos.md#an-assignment-says-who-made-it): an agent's, never the user's. It
+// is no codename@scope, so it names no one.
+const CallerUnverified = "!unverified"
+
+// WithCaller is ctx carrying who the caller is, as its hello proved it: "codename@scope" for a crew
+// agent's session, CallerUnverified for one whose credential didn't verify, "" for the user's own
+// surface (a window, Neovim, a shell with no crew context); only a host calls it.
+func WithCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, keyCaller, caller)
+}
+
+// CallerFrom is who the caller is (WithCaller); "" for the user's surface, or when no host set one.
+func CallerFrom(ctx context.Context) string {
+	c, _ := ctx.Value(keyCaller).(string)
+	return c
+}
+
+// Callers is a module that knows who holds a crew credential (crew's): a host asks it once, at a
+// client's hello, and keeps the answer, never the credential, on the session. store is the store
+// the credential's context names. ok is false for a credential that doesn't verify.
+type Callers interface {
+	Caller(ctx context.Context, credential, store string) (caller string, ok bool)
+}
