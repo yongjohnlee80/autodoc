@@ -1823,6 +1823,22 @@
         <source>&amp;Sender</source>
         <translation>&amp;Sender</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>All</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>Open requests</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>Undeliverable</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>Unread</translation>
+    </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
         <translation>Inbox — %1</translation>

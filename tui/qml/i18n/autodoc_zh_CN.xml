@@ -8026,6 +8026,22 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>the inbox: your mail</source>
         <translation>收件箱：你的邮件</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>全部</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>未读</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>待答复的请求</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>无法投递</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>关闭(&amp;Q)</translation>

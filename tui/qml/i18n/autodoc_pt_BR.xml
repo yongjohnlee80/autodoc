@@ -8040,6 +8040,22 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>the inbox: your mail</source>
         <translation>a caixa de entrada: seu correio</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>Todas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>Não lidas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>Pedidos em aberto</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>Não entregáveis</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>Fechar (&amp;q)</translation>

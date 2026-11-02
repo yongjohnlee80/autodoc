@@ -8041,6 +8041,22 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>the inbox: your mail</source>
         <translation>la bandeja de entrada: tu correo</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>Todo</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>Sin leer</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>Solicitudes abiertas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>No entregables</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>Cerrar (&amp;q)</translation>

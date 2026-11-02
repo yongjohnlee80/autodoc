@@ -8033,6 +8033,22 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>the inbox: your mail</source>
         <translation>받은 편지함: 내 메일</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>전체</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>읽지 않음</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>열린 요청</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>전달 불가</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>닫기(&amp;q)</translation>

@@ -8037,6 +8037,22 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>the inbox: your mail</source>
         <translation>受信箱: あなたのメール</translation>
     </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>すべて</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>未読</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>未回答の依頼</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>配信不能</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>閉じる(&amp;q)</translation>

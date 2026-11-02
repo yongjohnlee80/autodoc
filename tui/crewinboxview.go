@@ -39,9 +39,9 @@ const (
 	inboxTabs
 )
 
-// inboxTabNames are the tabs' names, by tab.
-var inboxTabNames = [inboxTabs]string{"autodoc.dialog.inbox.all", "autodoc.dialog.inbox.unread",
-	"autodoc.dialog.inbox.requests", "autodoc.dialog.inbox.undeliverable"}
+// inboxTabNames are the tabs' names in the title, by tab: words, without the buttons' mnemonics.
+var inboxTabNames = [inboxTabs]string{"autodoc.dialog.inbox.tab_all", "autodoc.dialog.inbox.tab_unread",
+	"autodoc.dialog.inbox.tab_requests", "autodoc.dialog.inbox.tab_undeliverable"}
 
 // inboxCore is what the inbox needs of the program.
 type inboxCore interface {
