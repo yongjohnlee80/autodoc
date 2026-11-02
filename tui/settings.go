@@ -1014,6 +1014,15 @@ func managerDetail(t wording, w wsInfo, databases bool, registered []string) str
 	lines := []string{
 		w.name + " · " + w.state,
 		w.root,
+	}
+	if len(w.autodocDirs) > 0 {
+		dirs := make([]string, 0, len(w.autodocDirs))
+		for _, d := range w.autodocDirs {
+			dirs = append(dirs, d.dir+" "+d.path+" ("+d.relation+")")
+		}
+		lines = append(lines, t.Trf("autodoc.text.settings.root_overlaps_autodoc_dirs", strings.Join(dirs, "; ")))
+	}
+	lines = append(lines, []string{
 		"",
 		t.Tr("autodoc.text.settings.edit"),
 		"  " + t.Trf("autodoc.text.settings.file_types", none(strings.Join(types, ", "))),
@@ -1027,7 +1036,7 @@ func managerDetail(t wording, w wsInfo, databases bool, registered []string) str
 		"  " + t.Trf("autodoc.text.settings.provider", provider),
 		"  " + t.Trf("autodoc.text.settings.graph_only", none(strings.Join(w.graphOnly, "; "))),
 		"  " + todoSearch,
-	}
+	}...)
 	if databases {
 		dest := t.Tr("autodoc.text.settings.the_local_store")
 		if w.db.destination == store.DestinationPostgres {
