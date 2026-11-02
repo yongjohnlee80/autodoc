@@ -549,6 +549,9 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 		if !ok {
 			return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
 		}
+		if msg.Expires != nil && *msg.Expires <= tx.Now().UnixNano() {
+			return ErrLeaseLost // the message ended though its lease is live; the next write expires it
+		}
 		scope, err := receiverScope(tx, s)
 		if err != nil {
 			return err
