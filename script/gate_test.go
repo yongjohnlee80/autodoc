@@ -250,3 +250,28 @@ end)`
 		t.Fatalf("grant for an ungated script's name: %v, heard %q, want nothing", errs, *said)
 	}
 }
+
+// TestAHandlerIsItsDefinersWhoeverRegistersIt: a function pkg defines and other registers as its
+// grant handler hears pkg's events, not other's, as it runs with pkg's grants (gate.go).
+func TestAHandlerIsItsDefinersWhoeverRegistersIt(t *testing.T) {
+	e, g, said := gatedEngine(t)
+	var kept lua.LValue = lua.LNil
+	e.SetFunction("keep", func(L *lua.LState) int { kept = L.CheckFunction(1); return 0 })
+	e.SetFunction("kept", func(L *lua.LState) int { L.Push(kept); return 1 })
+	if err := e.LoadGated("pkg", "pkg/init.lua", []byte(`editor.keep(function(ed, info) editor.notify("pkg's function " .. tostring(info.allowed)) end)`), g); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.LoadGated("other", "other/init.lua", []byte(`editor.on("grant", editor.kept())`), g); err != nil {
+		t.Fatal(err)
+	}
+	if !e.HandlesFor("pkg", "grant") || e.HandlesFor("other", "grant") {
+		t.Fatalf("HandlesFor pkg %v, other %v: want the handler pkg's, whoever registered it",
+			e.HandlesFor("pkg", "grant"), e.HandlesFor("other", "grant"))
+	}
+	if errs := e.EmitFor("other", "grant", map[string]any{"capabilities": []string{"x"}, "allowed": false}); errs != nil || len(*said) != 0 {
+		t.Fatalf("grant for other: %v, heard %q, want nothing", errs, *said)
+	}
+	if errs := e.EmitFor("pkg", "grant", map[string]any{"capabilities": []string{"x"}, "allowed": true}); errs != nil || strings.Join(*said, ";") != "pkg's function true" {
+		t.Fatalf("grant for pkg: %v, heard %q, want pkg's function", errs, *said)
+	}
+}
