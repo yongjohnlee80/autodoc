@@ -771,7 +771,7 @@ func TestAGroupKillsTermCoversWhatItHeldOnly(t *testing.T) {
 	}
 }
 
-// N2 (Lector #244 r3, Jarvis's ruling): an orphan whose reclaim leaves processes running is tried
+// An orphan whose reclaim leaves processes running is tried
 // again at the look 10 minutes on, at most 3 times, each journaled with its survivors; then it is
 // flagged for the user (reclaim_stopped, with the survivors) and the daemon neither kills nor
 // journals it again.
