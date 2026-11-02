@@ -21,14 +21,60 @@ func ReuseObservedChild(t interface{ Cleanup(func()) }, parent, from, to int) {
 // ReuseObservedMember makes the group walks of group pgid see member from as process to, as
 // ReuseObservedChild does for a subtree.
 func ReuseObservedMember(t interface{ Cleanup(func()) }, pgid, from, to int) {
-	groupObserved = func(g int, seen []observed) {
+	groupObserved = func(g int, seen []observed) []observed {
 		for i, o := range seen {
 			if g == pgid && o.pid == from {
 				seen[i].pid = to
 			}
 		}
+		return seen
 	}
-	t.Cleanup(func() { groupObserved = func(int, []observed) {} })
+	t.Cleanup(func() { groupObserved = func(_ int, seen []observed) []observed { return seen } })
+}
+
+// HideFromGroupWhile makes the group walks of group pgid not see pid while hidden() holds: as if
+// it were forked only once hidden() stops holding.
+func HideFromGroupWhile(t interface{ Cleanup(func()) }, pgid, pid int, hidden func() bool) {
+	groupObserved = func(g int, seen []observed) []observed {
+		if g != pgid || !hidden() {
+			return seen
+		}
+		var out []observed
+		for _, o := range seen {
+			if o.pid != pid {
+				out = append(out, o)
+			}
+		}
+		return out
+	}
+	t.Cleanup(func() { groupObserved = func(_ int, seen []observed) []observed { return seen } })
+}
+
+// SpareFromSignals makes a kill's signals skip process pid: one it can't end.
+func SpareFromSignals(t interface{ Cleanup(func()) }, pid int) {
+	signalFD = func(p, fd int, sig unix.Signal) {
+		if p != pid {
+			_ = unix.PidfdSendSignal(fd, sig, nil, 0)
+		}
+	}
+	t.Cleanup(func() { signalFD = func(_, fd int, sig unix.Signal) { _ = unix.PidfdSendSignal(fd, sig, nil, 0) } })
+}
+
+// Adoptable are the pids of cands (pid, ppid pairs) a group kill may adopt with parents held.
+func Adoptable(parents []int, cands ...[2]int) []int {
+	ps := map[int]bool{}
+	for _, p := range parents {
+		ps[p] = true
+	}
+	var os []observed
+	for _, c := range cands {
+		os = append(os, observed{pid: c[0], ppid: c[1]})
+	}
+	var out []int
+	for _, o := range adoptable(os, ps) {
+		out = append(out, o.pid)
+	}
+	return out
 }
 
 // OpenObserved is whether process pid opens as observed with start, parent ppid, group pgid and

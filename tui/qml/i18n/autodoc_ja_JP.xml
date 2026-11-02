@@ -7973,6 +7973,10 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>%1 %2 had already ended</source>
         <translation>%1 %2 はすでに終了していました</translation>
     </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: 終了させた後も %3 個のプロセスが動いていました</translation>
+    </message>
     <message id="autodoc.notice.crew_bridges.not_killed">
         <source>%1 %2 not killed: %3</source>
         <translation>%1 %2 を終了できません: %3</translation>

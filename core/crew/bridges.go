@@ -53,6 +53,9 @@ const (
 	KilledTerm = "term" // it ended on SIGTERM
 	KilledKill = "kill" // it ignored SIGTERM for bridgeKillWait and ended on SIGKILL
 	KilledGone = "gone" // it had already ended, or the pid is another process now
+	// KilledIncomplete is a kill some of whose processes still ran after SIGKILL and its wait:
+	// BridgeKilled.Survivors says how many. Nothing is claimed ended that wasn't seen to end.
+	KilledIncomplete = "incomplete"
 )
 
 // The crew's helper verbs' codes.
@@ -93,7 +96,8 @@ type BridgeRow struct {
 
 // BridgeKilled is what crew.bridge_kill did.
 type BridgeKilled struct {
-	Outcome string `json:"outcome"` // term | kill | gone
+	Outcome   string `json:"outcome"`             // term | kill | gone | incomplete
+	Survivors int    `json:"survivors,omitempty"` // incomplete: how many of its processes still ran
 }
 
 // helperProc is one process found by the scan, before it is joined to the crew's rows.
@@ -406,6 +410,5 @@ func (m *Manager) killHelper(ctx context.Context, pid int, start string, allow f
 	if err := allow(rows[0]); err != nil {
 		return BridgeKilled{}, err
 	}
-	outcome, err := h.end(bridgeKillWait)
-	return BridgeKilled{Outcome: outcome}, err
+	return h.end(bridgeKillWait)
 }

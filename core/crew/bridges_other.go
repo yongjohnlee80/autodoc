@@ -17,6 +17,6 @@ func openHelper(int, string) (*otherHelper, helperProc, bool, error) {
 
 func (*otherHelper) close() {}
 
-func (*otherHelper) end(time.Duration) (string, error) { return "", ErrNoBridges }
+func (*otherHelper) end(time.Duration) (BridgeKilled, error) { return BridgeKilled{}, ErrNoBridges }
 
 func readHelperContext(string) (Context, bool) { return Context{}, false }

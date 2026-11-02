@@ -253,6 +253,9 @@ func (b *crewBridges) kill(i int) {
 	}
 }
 
+// crewBridgeSurvivors is a kill's incomplete outcome: how many of its processes still ran.
+type crewBridgeSurvivors int
+
 // killOrphans asks, then ends every orphan listed, each by its own crew.bridge_kill: the daemon
 // checks each again as it ends it.
 func (b *crewBridges) killOrphans() {
@@ -289,8 +292,19 @@ func (b *crewBridges) killRow(r crewBridgeRow, confirmed bool) {
 		if err != nil {
 			return err
 		}
-		return str(asMap(res), "outcome")
+		m := asMap(res)
+		if o := str(m, "outcome"); o != crew.KilledIncomplete {
+			return o
+		}
+		return crewBridgeSurvivors(num(m, "survivors"))
 	}, func(v any) {
+		if n, ok := v.(crewBridgeSurvivors); ok { // some of it still ran after SIGKILL: said, never claimed ended
+			b.c.Notify(b.c.Trf("autodoc.notice.crew_bridges.incomplete", r.kind, r.pid, int(n)))
+			if b.shown {
+				b.load()
+			}
+			return
+		}
 		switch v {
 		case "term":
 			b.c.Notify(b.c.Trf("autodoc.notice.crew_bridges.ended", r.kind, r.pid))

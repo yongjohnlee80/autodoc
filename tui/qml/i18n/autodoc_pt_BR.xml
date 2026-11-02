@@ -7976,6 +7976,10 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>%1 %2 had already ended</source>
         <translation>%1 %2 já havia encerrado</translation>
     </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: %3 de seus processos continuavam em execução depois de encerrado</translation>
+    </message>
     <message id="autodoc.notice.crew_bridges.not_killed">
         <source>%1 %2 not killed: %3</source>
         <translation>%1 %2 não encerrado: %3</translation>

@@ -7962,6 +7962,10 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>%1 %2 had already ended</source>
         <translation>%1 %2 已经结束</translation>
     </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2：终止后仍有 %3 个进程在运行</translation>
+    </message>
     <message id="autodoc.notice.crew_bridges.not_killed">
         <source>%1 %2 not killed: %3</source>
         <translation>未能终止 %1 %2：%3</translation>

@@ -7977,6 +7977,10 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>%1 %2 had already ended</source>
         <translation>%1 %2 ya había terminado</translation>
     </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: %3 de sus procesos seguían en ejecución después de terminarlo</translation>
+    </message>
     <message id="autodoc.notice.crew_bridges.not_killed">
         <source>%1 %2 not killed: %3</source>
         <translation>%1 %2 no se terminó: %3</translation>

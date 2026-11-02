@@ -4215,6 +4215,10 @@ WHAT A KEY NEEDS
         <source>%1 %2 had already ended</source>
         <translation>%1 %2 had already ended</translation>
     </message>
+    <message id="autodoc.notice.crew_bridges.incomplete">
+        <source>%1 %2: %3 of its processes still ran after it was killed</source>
+        <translation>%1 %2: %3 of its processes still ran after it was killed</translation>
+    </message>
     <message id="autodoc.notice.crew_bridges.killed">
         <source>%1 %2 ignored the stop and was killed</source>
         <translation>%1 %2 ignored the stop and was killed</translation>

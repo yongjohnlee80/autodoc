@@ -218,69 +218,137 @@ func (h *linuxHelper) close() { _ = unix.Close(h.fd) }
 // process group (a bridge detachBridge started with Setsid, a server a window started with
 // Setpgid) is ended with its whole group. Any other (a server Neovim started, under Neovim's own
 // group) is ended with its subtree, leaves first: its parent, and its group, are never signalled.
-func (h *linuxHelper) end(wait time.Duration) (string, error) {
+func (h *linuxHelper) end(wait time.Duration) (BridgeKilled, error) {
 	if h.p.pgid == h.p.pid && h.p.pgid != unix.Getpgrp() && h.p.pid != os.Getpid() {
 		return h.endGroup(wait)
 	}
 	return h.endSubtree(wait)
 }
 
-// endGroup ends the group the helper leads, one checked process at a time: never by the group's
-// number (kill(-pgid)), whose holder can change between any check and the signal, and which
-// would reach a member of another user too. The leader is signalled through its own pidfd; the
-// other members are found in the group, the daemon's user's only, each opened by its pidfd and
-// checked to be the process observed (groupMembers), and signalled through it. The group is
-// looked at again on every poll, so a member forked since is found and signalled too.
-func (h *linuxHelper) endGroup(wait time.Duration) (string, error) {
+// signalFD sends sig to process pid through its pidfd fd (a test's spares one process).
+var signalFD = func(pid, fd int, sig unix.Signal) { _ = unix.PidfdSendSignal(fd, sig, nil, 0) }
+
+// incomplete is the outcome of a kill that left n of its processes running.
+func incomplete(n int) BridgeKilled { return BridgeKilled{Outcome: KilledIncomplete, Survivors: n} }
+
+// endGroup ends the group the helper leads, never by the group's number (kill(-pgid)), whose
+// holder can change between any check and the signal, and which would reach another user's
+// process too. Every process it signals is held by its own pidfd:
+//   - the baseline: the group's members of the daemon's user (groupMembers), read while the
+//     leader's pidfd shows it alive, before and after the read, so the group read is the leader's;
+//   - on each poll, while the leader still lives (checked after the opens), the processes forked
+//     since whose parent is one already held (adoptable): continuity through the tree, never the
+//     group's number alone. Once the leader is gone, nothing more is adopted.
+//
+// What still runs after SIGKILL and its wait is reported (incomplete), never claimed ended.
+func (h *linuxHelper) endGroup(wait time.Duration) (BridgeKilled, error) {
 	pgid := h.p.pgid
-	if err := unix.PidfdSendSignal(h.fd, unix.SIGTERM, nil, 0); errors.Is(err, unix.ESRCH) {
-		return KilledGone, nil
-	} else if err != nil {
-		return "", err
+	rootHeld := func() bool { return unix.PidfdSendSignal(h.fd, 0, nil, 0) == nil }
+	if !rootHeld() {
+		return BridgeKilled{Outcome: KilledGone}, nil
 	}
-	// round signals every member now in the group, and reports whether the group has any process
-	// left, the leader included
-	round := func(sig unix.Signal) bool {
-		left := alive(h.p.pid, h.p.statStart)
-		if left {
-			_ = unix.PidfdSendSignal(h.fd, sig, nil, 0)
-		}
-		for _, m := range groupMembers(pgid, h.p.pid) {
-			_ = unix.PidfdSendSignal(m.fd, sig, nil, 0)
+	held := groupMembers(pgid, h.p.pid)
+	defer func() {
+		for _, m := range held {
 			_ = unix.Close(m.fd)
-			left = true
 		}
-		return left
+	}()
+	if !rootHeld() { // the leader went while its group was read: what was read can't be told from a new group's
+		for _, m := range held {
+			_ = unix.Close(m.fd)
+		}
+		held = nil
 	}
-	round(unix.SIGTERM)
+	adopt := func() {
+		parents := map[int]bool{h.p.pid: true}
+		known := map[int]bool{h.p.pid: true}
+		for _, m := range held {
+			parents[m.pid], known[m.pid] = true, true
+		}
+		var cands []observed
+		for _, o := range observeGroup(pgid) {
+			if !known[o.pid] && o.uid == os.Getuid() {
+				cands = append(cands, o)
+			}
+		}
+		var opened []member
+		for _, o := range adoptable(cands, parents) {
+			o := o
+			if m, ok := openObserved(o, func(st procStat) bool { return st.pgid == pgid && st.ppid == o.ppid }); ok {
+				opened = append(opened, m)
+			}
+		}
+		if !rootHeld() { // the leader ended during the opens: none of them is proven its group's
+			for _, m := range opened {
+				_ = unix.Close(m.fd)
+			}
+			return
+		}
+		held = append(held, opened...)
+	}
+	running := func() int {
+		n := 0
+		if alive(h.p.pid, h.p.statStart) {
+			n++
+		}
+		for _, m := range held {
+			if alive(m.pid, m.start) {
+				n++
+			}
+		}
+		return n
+	}
+	round := func(sig unix.Signal) bool {
+		adopt()
+		signalFD(h.p.pid, h.fd, sig)
+		for _, m := range held {
+			signalFD(m.pid, m.fd, sig)
+		}
+		return running() > 0
+	}
 	if waitUntil(wait, func() bool { return !round(unix.SIGTERM) }) {
-		return KilledTerm, nil
+		return BridgeKilled{Outcome: KilledTerm}, nil
 	}
-	waitUntil(time.Second, func() bool { return !round(unix.SIGKILL) })
-	return KilledKill, nil
+	if waitUntil(time.Second, func() bool { return !round(unix.SIGKILL) }) {
+		return BridgeKilled{Outcome: KilledKill}, nil
+	}
+	return incomplete(running()), nil
+}
+
+// adoptable are the candidates whose parent is one of parents: a process forked since by a process
+// already held, the only way a later group member is proven the same group's.
+func adoptable(cands []observed, parents map[int]bool) []observed {
+	var out []observed
+	for _, c := range cands {
+		if parents[c.ppid] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// observeGroup is every process observed in group pgid, as the group walks read it.
+func observeGroup(pgid int) []observed {
+	all, err := pids()
+	if err != nil {
+		return nil
+	}
+	var seen []observed
+	for _, p := range all {
+		if o, ok := observe(p); ok && o.pgid == pgid {
+			seen = append(seen, o)
+		}
+	}
+	return groupObserved(pgid, seen)
 }
 
 // groupMembers are the processes of group pgid other than its leader, of the daemon's user, each
 // opened by its pidfd and checked after the open to be the process observed (start, group, user).
 func groupMembers(pgid, leader int) []member {
-	all, err := pids()
-	if err != nil {
-		return nil
-	}
 	uid := os.Getuid()
-	var seen []observed
-	for _, p := range all {
-		if p == leader {
-			continue
-		}
-		if o, ok := observe(p); ok && o.pgid == pgid {
-			seen = append(seen, o)
-		}
-	}
-	groupObserved(pgid, seen)
 	var out []member
-	for _, o := range seen {
-		if o.uid != uid {
+	for _, o := range observeGroup(pgid) {
+		if o.pid == leader || o.uid != uid {
 			continue // another user's process is never signalled, in the group or not
 		}
 		if m, ok := openObserved(o, func(st procStat) bool { return st.pgid == pgid }); ok {
@@ -297,7 +365,7 @@ type member struct {
 	start string
 }
 
-func (h *linuxHelper) endSubtree(wait time.Duration) (string, error) {
+func (h *linuxHelper) endSubtree(wait time.Duration) (BridgeKilled, error) {
 	members := append(descendants(h.p.pid), member{fd: h.fd, pid: h.p.pid, start: h.p.statStart})
 	defer func() {
 		for _, m := range members[:len(members)-1] {
@@ -305,28 +373,31 @@ func (h *linuxHelper) endSubtree(wait time.Duration) (string, error) {
 		}
 	}()
 	if err := unix.PidfdSendSignal(h.fd, 0, nil, 0); errors.Is(err, unix.ESRCH) {
-		return KilledGone, nil
+		return BridgeKilled{Outcome: KilledGone}, nil
 	}
 	signal := func(sig unix.Signal) {
 		for _, m := range members { // leaves first, the helper last
-			_ = unix.PidfdSendSignal(m.fd, sig, nil, 0)
+			signalFD(m.pid, m.fd, sig)
 		}
 	}
-	allGone := func() bool {
+	running := func() int {
+		n := 0
 		for _, m := range members {
 			if alive(m.pid, m.start) {
-				return false
+				n++
 			}
 		}
-		return true
+		return n
 	}
 	signal(unix.SIGTERM)
-	if waitUntil(wait, allGone) {
-		return KilledTerm, nil
+	if waitUntil(wait, func() bool { return running() == 0 }) {
+		return BridgeKilled{Outcome: KilledTerm}, nil
 	}
 	signal(unix.SIGKILL)
-	waitUntil(time.Second, allGone)
-	return KilledKill, nil
+	if waitUntil(time.Second, func() bool { return running() == 0 }) {
+		return BridgeKilled{Outcome: KilledKill}, nil
+	}
+	return incomplete(running()), nil
 }
 
 // observed is a process as one read of /proc saw it: what its pidfd, opened later, must still be.
@@ -376,8 +447,9 @@ func openObserved(o observed, still func(procStat) bool) (member, bool) {
 	return member{fd: fd, pid: o.pid, start: o.start}, true
 }
 
-// groupObserved, a test's, runs between a group's observation and its opens.
-var groupObserved = func(int, []observed) {}
+// groupObserved, a test's, runs between a group's observation and its opens: what a later read of
+// the group sees.
+var groupObserved = func(_ int, seen []observed) []observed { return seen }
 
 // descendantsObserved, a test's, runs between the observation and the opens: a pid can change hands
 // there.

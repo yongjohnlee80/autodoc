@@ -692,3 +692,60 @@ func procOwner(pid int) (int, bool) {
 	st, ok := fi.Sys().(*syscall.Stat_t)
 	return int(st.Uid), ok
 }
+
+// F3 + F4 (Lector #244 r2). Once the group's leader is gone, nothing more is adopted into its kill:
+// a process that appears in the group only then (here: a member's child, kept out of every read of
+// the group until the leader is reaped, as one forked after it would be) is never signalled,
+// though its parent is a held member; its group number could be another group's by then. The held
+// member that wouldn't end (spared from every signal) is reported: incomplete, one survivor, never
+// claimed ended.
+func TestAGroupKillAdoptsNothingOnceItsLeaderIsGone(t *testing.T) {
+	r := newBridgeRig(t)
+	bridge := startCell(t, agyArgv(r.session("aerith", "agy", true)), true, false, []string{"bridge-child"}, []string{"late-child"})
+	member, late := bridge.children[0], bridge.children[1]
+	leaderListed := func() bool { _, err := os.Stat("/proc/" + strconv.Itoa(bridge.pid)); return err == nil }
+	crew.HideFromGroupWhile(t, bridge.pid, late, leaderListed)
+	crew.SpareFromSignals(t, member)
+	got, err := r.kill(bridge.pid, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Outcome != crew.KilledIncomplete || got.Survivors != 1 {
+		t.Fatalf("a kill one of whose held members still runs: %+v, want incomplete, 1 survivor", got)
+	}
+	if !waitEnded(bridge.pid) {
+		t.Fatal("the leader still runs")
+	}
+	if !running(late) {
+		t.Fatal("a process that appeared in the group after its leader was gone was signalled")
+	}
+	if !running(member) {
+		t.Fatal("the spared member was signalled")
+	}
+}
+
+// F4. A subtree kill whose process won't end says so: incomplete, with how many still run.
+func TestASubtreeKillThatLeavesAProcessRunningIsIncomplete(t *testing.T) {
+	r := newBridgeRig(t)
+	ctx := crew.EnvContext + "=" + writeContext(t, r.session("tifa", "codex", true))
+	nvim := startCellEnv(t, []string{ctx}, []string{"nvim-stand-in", "--embed"}, false, false,
+		codexServerArgv(t.TempDir()), []string{"codex-tool-stand-in"})
+	server, tool := nvim.children[0], nvim.children[1]
+	crew.SpareFromSignals(t, tool)
+	got, err := r.kill(server, false)
+	if err != nil || got.Outcome != crew.KilledIncomplete || got.Survivors != 1 {
+		t.Fatalf("the server, its tool spared: %+v, %v; want incomplete, 1 survivor", got, err)
+	}
+	if !waitEnded(server) || !running(tool) {
+		t.Fatalf("the server running %v, the spared tool running %v", running(server), running(tool))
+	}
+}
+
+// F3. Later group members are adopted only through the tree: a process whose parent is one already
+// held, never one that merely carries the group's number.
+func TestALaterGroupMemberIsAdoptedOnlyThroughAHeldParent(t *testing.T) {
+	got := crew.Adoptable([]int{10, 20}, [2]int{11, 10}, [2]int{21, 20}, [2]int{31, 30}, [2]int{41, 1})
+	if len(got) != 2 || got[0] != 11 || got[1] != 21 {
+		t.Fatalf("adopted %v, want 11 and 21 alone (parents held), never 31 or 41 (only the group's number)", got)
+	}
+}

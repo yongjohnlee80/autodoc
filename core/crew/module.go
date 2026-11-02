@@ -202,7 +202,7 @@ func (m *Manager) Verbs() []module.Verb {
 			Doc:    "The crew's helper processes on this machine (bridges, Codex servers, Codex's shared daemon), each with its owner and whether it is orphaned."},
 			func(ctx context.Context, _ struct{}) ([]BridgeRow, error) { return m.Bridges(ctx) }),
 		module.Handle(module.Contract{Verb: "crew.bridge_kill", Since: bridgesSince, Scope: module.ScopeLocalPeer,
-			Audience: module.AudienceUser, Effect: module.EffectWrite, Result: "{outcome}",
+			Audience: module.AudienceUser, Effect: module.EffectWrite, Result: "{outcome, survivors}",
 			Errors: []int64{CodeStaleEpoch, CodeBridgeConfirm, CodeNoBridges},
 			Doc:    "End one helper by hand: SIGTERM, then SIGKILL after 5 s. A host verb: agents never kill."},
 			func(ctx context.Context, p bridgeKillParams) (BridgeKilled, error) {
