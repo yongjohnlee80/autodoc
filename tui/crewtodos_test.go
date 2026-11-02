@@ -227,7 +227,7 @@ func TestAnAssignmentWithNoOutcomeIsAskedAgainByItsKey(t *testing.T) {
 	}
 }
 
-// The assignment's mail states the assignment, not who made it (Johno's ruling: the user in Neovim or
+// The assignment's mail states the assignment, not who made it (the user in Neovim or
 // AutoDoc, or a peer managing an epic's workload, may assign; the store doesn't know which): "You've
 // been assigned a new task.", the task, and the reason quoted line by line as the task's note, so a
 // reason that reads as an instruction never stands in the mail as its own words. No assigner, nor any

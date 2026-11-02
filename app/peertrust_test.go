@@ -49,7 +49,7 @@ func TestAPeersDeliveryCarriesItsTrustWhereItIsRead(t *testing.T) {
 
 // TestAnAssignmentNoticeCarriesNoPeerField: an assignment notice a host sends through the crew (the
 // window's forwarder, Neovim's notifier: inbox.send, from the user) states the assignment and nothing
-// else (Johno's ruling), so it carries no peer field; a real peer's message does.
+// else, so it carries no peer field; a real peer's message does.
 func TestAnAssignmentNoticeCarriesNoPeerField(t *testing.T) {
 	d := newCrewDaemon(t)
 	t.Chdir(t.TempDir())
