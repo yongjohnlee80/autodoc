@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -195,6 +196,124 @@ func TestClaudeOfLooksPastAWrapper(t *testing.T) {
 	}
 	if _, _, err := crew.ClaudeOf("claude", wrappers, work, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(wrappers, "claude")) {
 		t.Fatalf("a wrapper alone: %v; want an error naming the file tried", err)
+	}
+}
+
+// stalledMise writes a mise at dir/mise whose `which claude` sleeps for the seconds the file
+// dir/stall holds, while it exists, then answers tool; with no such file it answers at once. While
+// dir/fail exists it exits 1 instead.
+func stalledMise(t *testing.T, dir, tool string) string {
+	t.Helper()
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mise := filepath.Join(dir, "mise")
+	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] || exit 2\n" +
+		"[ -f '" + dir + "/fail' ] && exit 1\n" +
+		// the stall's seconds read by the shell itself: mise runs with the lookup's PATH alone, which
+		// holds no cat
+		"[ -f '" + dir + "/stall' ] && { read s < '" + dir + "/stall'; " + sleep + " \"$s\"; }\n" +
+		"echo '" + tool + "'\n"
+	if err := os.WriteFile(mise, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return mise
+}
+
+// wrapperFirst writes a wrapper claude (as `exec mise x claude -- claude` is) into a folder of its
+// own: first on PATH, it never reads as a Claude Code, so the lookup asks mise.
+func wrapperFirst(t *testing.T) string {
+	t.Helper()
+	w := t.TempDir()
+	if err := os.WriteFile(filepath.Join(w, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+// TestClaudeOfRetriesAMiseThatTimesOut: a mise held up past the lookup's first bound (as it is while
+// other agents start, each running a wrapper's `mise use`) is asked once more, with a longer bound,
+// and its answer is taken: the agent starts with its prompt hooks, not the floor.
+func TestClaudeOfRetriesAMiseThatTimesOut(t *testing.T) {
+	crew.SetClaudeFindTimeouts(t, 300*time.Millisecond, 5*time.Second)
+	tools, work := t.TempDir(), t.TempDir()
+	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
+	stalledMise(t, tools, tool)
+	if err := os.WriteFile(filepath.Join(tools, "stall"), []byte("1"), 0o644); err != nil { // 1 s: past the first bound, within the second
+		t.Fatal(err)
+	}
+	path := wrapperFirst(t) + string(os.PathListSeparator) + tools
+	got, k, err := crew.ClaudeOf("claude", path, work, "")
+	if err != nil || got != tool || !k.Reports() {
+		t.Fatalf("a mise past the first bound: %q, %v, %v; want it asked again and its tool %q, with prompts", got, k, err, tool)
+	}
+	// past both bounds, with nothing resolved before: the error says first that mise timed out
+	crew.SetClaudeFindTimeouts(t, 200*time.Millisecond, 400*time.Millisecond)
+	if err := os.WriteFile(filepath.Join(tools, "stall"), []byte("3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, _, err = crew.ClaudeOf("claude", path, t.TempDir(), "")
+	if err == nil || !strings.HasPrefix(err.Error(), "crew: mise which claude timed out (200ms, then 400ms)") {
+		t.Fatalf("a mise past both bounds: %v; want an error starting with the timeout", err)
+	}
+	if took := time.Since(start); took > 4*time.Second {
+		t.Errorf("a mise past both bounds took %v to give up; want both bounds, each with its second's cut-off of a child holding the output, at most", took)
+	}
+}
+
+// TestClaudeOfTakesNothingInPlaceOfAMiseThatCantAnswer: when mise can't answer, the lookup fails,
+// its error saying first why, and the agent starts with the floor: never the binary an earlier
+// lookup resolved to, though it's still installed and reads as a Claude Code with every hook, since
+// the launcher may run another one now (the user's mise selection changed), and naming hooks that
+// one doesn't know can stall its start.
+func TestClaudeOfTakesNothingInPlaceOfAMiseThatCantAnswer(t *testing.T) {
+	tools, work := t.TempDir(), t.TempDir()
+	cache := filepath.Join(t.TempDir(), "claude-hooks.json")
+	older := fakeClaude(t, tools, "claude-older", "SessionStart") // what mise selects now
+	newer := fakeClaude(t, tools, "claude-newer", everyClaudeEvent...)
+	stalledMise(t, tools, newer)
+	path := wrapperFirst(t) + string(os.PathListSeparator) + tools
+	if got, k, err := crew.ClaudeOf("claude", path, work, cache); err != nil || got != newer || !k.Reports() {
+		t.Fatalf("the premise, mise selecting the newer: %q, %v, %v", got, k, err)
+	}
+	// the selection changes to the older one, and mise fails at the next lookup: the newer one,
+	// still installed, must not be taken for what the launcher runs
+	stalledMise(t, tools, older)
+	if err := os.WriteFile(filepath.Join(tools, "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, k, err := crew.ClaudeOf("claude", path, work, cache)
+	if err == nil || got != "" || k != nil {
+		t.Fatalf("mise failing after an earlier answer: %q, %v, %v; want an error, no binary and no hooks (the floor)", got, k, err)
+	}
+	if !strings.HasPrefix(err.Error(), "crew: mise which claude exit status 1, and none of ") {
+		t.Fatalf("the error: %v; want it to say first that mise failed", err)
+	}
+}
+
+// TestClaudeOfTakesAMiseAnswerWhoseChildKeepsTheOutput: a mise that answered and ended, a child of
+// its still holding the output, is taken at its answer a second later, not held to the bound.
+func TestClaudeOfTakesAMiseAnswerWhoseChildKeepsTheOutput(t *testing.T) {
+	crew.SetClaudeFindTimeouts(t, 10*time.Second, 10*time.Second)
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools, work := t.TempDir(), t.TempDir()
+	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
+	script := "#!/bin/sh\n" + sleep + " 8 &\necho '" + tool + "'\n"
+	if err := os.WriteFile(filepath.Join(tools, "mise"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	got, _, err := crew.ClaudeOf("claude", wrapperFirst(t)+string(os.PathListSeparator)+tools, work, "")
+	if err != nil || got != tool {
+		t.Fatalf("a mise whose child keeps its output: %q, %v; want its answer %q", got, err, tool)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("it took %v; want about a second (WaitDelay), not the child's 8 s or the 10 s bound", took)
 	}
 }
 

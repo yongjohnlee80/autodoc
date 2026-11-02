@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -310,15 +311,23 @@ func ClaudeSettings(autodoc string, k ClaudeHooks) (settings map[string]any, pro
 	return settings, prompts
 }
 
-// claudeFindTimeout bounds ClaudeOf's one run of mise.
-const claudeFindTimeout = 5 * time.Second
+// claudeFindTimeout bounds ClaudeOf's run of mise; claudeFindRetry its one run again after a
+// timeout. mise is held up while other agents start (a wrapper that runs `mise use` on each launch
+// takes mise's lock, or checks its remote), so the second try waits longer.
+var (
+	claudeFindTimeout = 5 * time.Second
+	claudeFindRetry   = 15 * time.Second
+)
 
 // ClaudeOf is the Claude Code binary program runs, and what it knows (ClaudeKnowsIn, cache), found
 // as a shell in dir with PATH path finds it: a path (relative to dir) is that file; a name is the
 // first file on path that reads as a Claude Code. A mise shim (a link to mise) is the tool mise runs
 // for it there (`mise which`). A file that doesn't read as one (a wrapper script) is taken to run the
 // same CLI as mise's or a later one on path, which are tried next: mise's tool for the name, then
-// the later files on path. The error names every file tried.
+// the later files on path. When mise can't answer (it timed out or failed, as it can while other
+// agents start), nothing is taken in its place: a binary an earlier lookup resolved to may no longer
+// be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
+// The error says first why mise didn't answer, if it didn't, then names every file tried.
 func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	if strings.Contains(program, "/") {
 		bin := program
@@ -345,12 +354,13 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		k, err := ClaudeKnowsIn(bin, cache)
 		return k, err == nil
 	}
-	triedMise := false
+	triedMise, miseFailed := false, ""
 	which := func(misebin string) string {
 		triedMise = true
 		w, err := miseWhich(misebin, program, path, dir)
 		if err != nil {
-			tried = append(tried, "mise which "+program+" ("+err.Error()+")")
+			miseFailed = "mise which " + program + " " + err.Error()
+			tried = append(tried, "mise which "+program)
 			return ""
 		}
 		return w
@@ -377,6 +387,9 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			}
 		}
 	}
+	if miseFailed != "" {
+		return "", nil, fmt.Errorf("crew: %s, and none of %s reads as a Claude Code", miseFailed, strings.Join(tried, ", "))
+	}
 	return "", nil, fmt.Errorf("crew: none of %s reads as a Claude Code", strings.Join(tried, ", "))
 }
 
@@ -398,14 +411,34 @@ func lookAll(name, path, dir string) []string {
 	return out
 }
 
-// miseWhich is the tool mise (at bin) runs for program in dir: `mise which`, bounded.
+// miseWhich is the tool mise (at bin) runs for program in dir: `mise which`, bounded by
+// claudeFindTimeout, and run once again, bounded by claudeFindRetry, when that runs out.
 func miseWhich(bin, program, path, dir string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), claudeFindTimeout)
+	w, err := miseWhichWithin(bin, program, path, dir, claudeFindTimeout)
+	if errors.Is(err, context.DeadlineExceeded) {
+		if w, err = miseWhichWithin(bin, program, path, dir, claudeFindRetry); errors.Is(err, context.DeadlineExceeded) {
+			return "", fmt.Errorf("timed out (%s, then %s)", claudeFindTimeout, claudeFindRetry)
+		}
+	}
+	return w, err
+}
+
+// miseWhich's one run of `mise which`, bounded by within: context.DeadlineExceeded when it runs out.
+func miseWhichWithin(bin, program, path, dir string, within time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), within)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "which", program)
-	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH="+path)
+	// a child of mise's still holding its output is cut off a second after mise ends, not left to
+	// hold the lookup past its bound
+	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, append(os.Environ(), "PATH="+path), time.Second
 	out, err := cmd.Output()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil // mise answered and ended; only a child of its kept the output open
+	}
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		return "", err
 	}
 	if w := strings.TrimSpace(string(out)); filepath.IsAbs(w) && !strings.Contains(w, "\n") {

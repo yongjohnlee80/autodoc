@@ -7,5 +7,5 @@
 -- the same version (autodoc.KBManagedVersion). A test (kbversion_test.go) fails when either managed
 -- file differs from the last release's while this version isn't newer than that release's.
 return {
-  autodoc = "0.3.7",
+  autodoc = "0.3.8",
 }
