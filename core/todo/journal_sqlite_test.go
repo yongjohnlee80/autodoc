@@ -98,6 +98,7 @@ var sqliteSuites = []struct {
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},
 	{"UpdatePatchesHandEditableFieldsOnly", TestUpdatePatchesHandEditableFieldsOnly},
+	{"ADescriptionSentBackWholeIsNotStacked", TestADescriptionSentBackWholeIsNotStacked},
 	{"StaleRevIsRefused", TestStaleRevIsRefused},
 	{"HandEditBetweenReadAndWriteIsCaught", TestHandEditBetweenReadAndWriteIsCaught},
 	{"RacingWritesAreSerialized", TestRacingWritesAreSerialized},
