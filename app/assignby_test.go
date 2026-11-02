@@ -15,7 +15,8 @@ import (
 )
 
 // assignRig is a crew daemon with a todo store, one task in it, and two agents, gold and jarvis;
-// at is the store's root.
+// at is the store's root, a registered one (the daemon serves no workspace), so its store is
+// writable.
 type assignRig struct {
 	*crewDaemon
 	gold, jarvis string // their context files
@@ -30,6 +31,9 @@ func newAssignRig(t *testing.T) *assignRig {
 	t.Chdir(t.TempDir())
 	r := &assignRig{crewDaemon: d, gold: d.agent("gold", "agent-1", "store-1"), jarvis: d.agent("jarvis", "agent-2", "store-1"),
 		at: todo.At{Root: t.TempDir()}}
+	if _, err := d.deps.todos.Register(d.ctx, r.at.Root); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := d.deps.todos.Scaffold(d.ctx, r.at); err != nil {
 		t.Fatal(err)
 	}
