@@ -147,7 +147,7 @@ t.section("load: the sections, against the daemon", function()
 end)
 
 t.section("load: the loops on every page of graph.unresolved", function()
-  -- from protocol 47 graph.unresolved answers a page ({unresolved, count, next}): the loop of
+  -- from protocol 50 graph.unresolved answers a page ({unresolved, count, next}): the loop of
   -- doc.md on the second page is found, another document's on the first is not, each page asked
   -- by its offset
   local offsets = {}

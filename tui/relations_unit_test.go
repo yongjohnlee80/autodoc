@@ -209,7 +209,7 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 	}
 }
 
-// graph.unresolved comes in pages (protocol 47): the drawer reads every page for the document's
+// graph.unresolved comes in pages (protocol 50): the drawer reads every page for the document's
 // supersession loops, one on a later page as much as the first's, and asks for each by its offset.
 func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
 	c := newScripted("kb")

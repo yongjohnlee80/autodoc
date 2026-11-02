@@ -68,7 +68,7 @@ type ListOpts struct {
 	Assignee  string   `json:"assignee,omitempty"`
 	Priority  string   `json:"priority,omitempty"`
 	HasErrors bool     `json:"has_errors,omitempty"`
-	// Summary answers each task as a TaskSummary, without its text (protocol 47)
+	// Summary answers each task as a TaskSummary, without its text (protocol 50)
 	Summary bool `json:"summary,omitempty"`
 }
 

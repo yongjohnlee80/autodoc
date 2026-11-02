@@ -35,7 +35,7 @@ const protocolWorkspaceVars = 24
 
 // protocolListSummary is the protocol todos.list's opts.summary arrived in
 // (docs/decisions/todos.md#a-lists-summary): a session below it is refused summary.
-const protocolListSummary = 47
+const protocolListSummary = 50
 
 // Name is the module's name: its verbs are todos.*.
 func (m *Manager) Name() string { return "todos" }
@@ -85,7 +85,7 @@ type (
 	}
 	listParams struct {
 		At   At       `param:"at"`
-		Opts ListOpts `param:"opts,optional" doc:"{buckets, tag, assignee, priority, has_errors, summary (protocol 47)}; buckets [\"archived\"] lists the months, [\"archived/YYYY/MM\"] one month; summary answers each task without its text"`
+		Opts ListOpts `param:"opts,optional" doc:"{buckets, tag, assignee, priority, has_errors, summary (protocol 50)}; buckets [\"archived\"] lists the months, [\"archived/YYYY/MM\"] one month; summary answers each task without its text"`
 	}
 	idParams struct {
 		At At     `param:"at"`
@@ -231,7 +231,7 @@ func (m *Manager) Verbs() []module.Verb {
 			user, append(writes, CodeExists)...)),
 			func(ctx context.Context, p moveParams) (Resolved, error) { return m.MoveStore(ctx, p.At, p.To) })),
 		module.Handle(read("todos.list", "{tasks: ["+task+"], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
-			"The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 47), each task is "+
+			"The active buckets' tasks; archives only by month, on request. With opts.summary (protocol 50), each task is "+
 				"{id, status, title, due?, priority?, assignee?, tags?, updated, error_count?, path, rev}, without its text: "+
 				"what an agent reads to pick a task, then todos.get for the one it needs.", CodeNotAStore, CodeInvalid),
 			func(ctx context.Context, p listParams) (any, error) {

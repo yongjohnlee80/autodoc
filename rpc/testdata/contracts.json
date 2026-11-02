@@ -1,5 +1,5 @@
 {
-  "protocol": 46,
+  "protocol": 50,
   "min_protocol": 12,
   "verbs": [
     {
@@ -861,14 +861,14 @@
           "name": "options",
           "type": "map",
           "optional": true,
-          "doc": "{kinds} (protocol 14)"
+          "doc": "{kinds} (protocol 14), {limit, offset} (protocol 50)"
         }
       ],
-      "result": "[{src, raw, reason}]",
+      "result": "{unresolved: [{src, raw, reason}], count, next?} (protocol 50; below it [{src, raw, reason}], the whole list)",
       "errors": [
         -32060
       ],
-      "doc": "Links that name no file."
+      "doc": "Links that name no file, a page at a time: opts.limit (1 to 2000, default 500) rows after opts.offset, the whole list's count, and next, the next page's offset, absent on the last. A session below 50 gets the whole list in one reply."
     },
     {
       "verb": "host.probe",

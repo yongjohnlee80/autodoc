@@ -31,7 +31,7 @@ type (
 	}
 	graphUnresolved struct {
 		Workspace string    `param:"workspace"`
-		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14), {limit, offset} (protocol 47)"`
+		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14), {limit, offset} (protocol 50)"`
 	}
 	graphResolve struct {
 		Workspace string `param:"workspace"`
@@ -83,7 +83,7 @@ type unresolvedJSON struct {
 	Reason string `json:"reason"`
 }
 
-// unresolvedPageJSON is graph.unresolved from protocol 47: limit rows after offset, the whole
+// unresolvedPageJSON is graph.unresolved from protocol 50: limit rows after offset, the whole
 // list's count, and next, the next page's offset, absent on the last.
 type unresolvedPageJSON struct {
 	Unresolved []unresolvedJSON `json:"unresolved"`
@@ -197,7 +197,7 @@ func (s *Server) graphVerbs() []module.Verb {
 				return out, nil
 			}),
 		module.Handle(module.Contract{Verb: "graph.unresolved", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
-			Result: "{unresolved: [{src, raw, reason}], count, next?} (protocol 47; below it [{src, raw, reason}], the whole list)",
+			Result: "{unresolved: [{src, raw, reason}], count, next?} (protocol 50; below it [{src, raw, reason}], the whole list)",
 			Errors: []int64{CodeNoSuchWorkspace},
 			Doc: fmt.Sprintf("Links that name no file, a page at a time: opts.limit (1 to %d, default %d) rows after opts.offset, the whole list's count, "+
 				"and next, the next page's offset, absent on the last. A session below %d gets the whole list in one reply.",
@@ -333,7 +333,7 @@ func mapOpts(ctx context.Context, raw any) (mapRequest, error) {
 // and is refused limit and offset. A page holds defaultUnresolvedPage rows unless opts.limit says
 // otherwise, at most maxUnresolvedPage.
 const (
-	unresolvedPagesSince  = 47
+	unresolvedPagesSince  = 50
 	defaultUnresolvedPage = 500
 	maxUnresolvedPage     = 2000
 )

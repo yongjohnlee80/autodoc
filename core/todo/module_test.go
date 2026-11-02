@@ -325,7 +325,7 @@ func wireOf(t *testing.T, v any) map[string]any {
 // TestAListsSummaryLeavesOutTheText: todos.list with opts.summary answers each task without its
 // text (description, body, the fields a reader needs the task itself for), keeping what picks it
 // out: id, title, status, priority, assignee, tags, due, updated, path, rev. The default answer is
-// the whole task, as before; a session below protocol 47 is refused summary, not answered whole.
+// the whole task, as before; a session below protocol 50 is refused summary, not answered whole.
 func TestAListsSummaryLeavesOutTheText(t *testing.T) {
 	e := claimed(t)
 	call := func(c context.Context, params ...any) (any, error) {
@@ -376,8 +376,8 @@ func TestAListsSummaryLeavesOutTheText(t *testing.T) {
 	}
 
 	if _, err := call(module.WithProtocol(ctx, 45), "kb", map[string]any{"summary": true}); !errors.Is(err, module.ErrInvalidParams) ||
-		!strings.Contains(err.Error(), "47") {
-		t.Errorf("summary at protocol 45: %v, want invalid params naming protocol 47", err)
+		!strings.Contains(err.Error(), "50") {
+		t.Errorf("summary at protocol 45: %v, want invalid params naming protocol 50", err)
 	}
 	if out, err := call(module.WithProtocol(ctx, 45), "kb"); err != nil || wireOf(t, out)["tasks"].([]any)[0].(map[string]any)["description"] != text {
 		t.Errorf("the list at protocol 45: %v %v, want the whole task", out, err)

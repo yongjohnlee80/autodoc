@@ -179,7 +179,7 @@ function M.load(ws, rel, deep, cb, request)
   step("graph.links", { ws, rel }, function(r) data.out = edges_of(r) end, function()
     step("graph.backlinks", { ws, rel }, function(r) data["in"] = edges_of(r) end, function()
       -- the workspace's supersession relations that loop: this document's, on every page
-      -- (protocol 47: {unresolved, count, next}; a daemon before it answers the whole list)
+      -- (protocol 50: {unresolved, count, next}; a daemon before it answers the whole list)
       data.cycles = {}
       local function after()
         if not deep then return done() end

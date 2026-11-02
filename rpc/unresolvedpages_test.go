@@ -44,7 +44,7 @@ func raws(list []any) []string {
 	return out
 }
 
-// TestUnresolvedComesInPages: from protocol 47, graph.unresolved answers a page: opts.limit rows
+// TestUnresolvedComesInPages: from protocol 50, graph.unresolved answers a page: opts.limit rows
 // after opts.offset, the total count, and next, the offset of the next page, absent on the last.
 // Read page by page, it is the whole list a session at 45 gets in one reply, in its order. With
 // no opts, a page of the default size.
@@ -112,8 +112,8 @@ func TestUnresolvedPagesAreBounded(t *testing.T) {
 	if res := call(t, cur, "graph.unresolved", "kb", map[string]any{"limit": int64(2000)}).(map[string]any); len(res["unresolved"].([]any)) != 5 {
 		t.Errorf("limit 2000: %v", res)
 	}
-	refused(old, map[string]any{"limit": int64(2)}, "protocol 47")
-	refused(old, map[string]any{"offset": int64(2)}, "protocol 47")
+	refused(old, map[string]any{"limit": int64(2)}, "protocol 50")
+	refused(old, map[string]any{"offset": int64(2)}, "protocol 50")
 }
 
 // TestUnresolvedPagesHoldFiveHundredByDefault: with no limit, a page holds 500 rows; a list of 501

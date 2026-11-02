@@ -267,7 +267,7 @@ func (r *related) load(ws, p string) {
 			return rl
 		}
 		// the supersession relations of the workspace that resolve or not, and loop: this one's, on
-		// every page (protocol 47; a daemon before it answers the whole list)
+		// every page (protocol 50; a daemon before it answers the whole list)
 		for offset, pages := int64(0), 1; ; pages++ { // pages: the calls made, this one included
 			opts := map[string]any{"kinds": []any{"supersedes", "superseded_by"}}
 			if offset > 0 {
@@ -391,7 +391,7 @@ func (r *related) depth() {
 const maxUnresolvedPages = 1000
 
 // unresolvedPageOf is one graph.unresolved answer: its rows, and the next page's offset when there
-// is one. A daemon before protocol 47 answers the whole list, with no next.
+// is one. A daemon before protocol 50 answers the whole list, with no next.
 func unresolvedPageOf(res any) (rows []any, next int64, more bool) {
 	m, ok := res.(map[string]any)
 	if !ok {
