@@ -22,6 +22,10 @@ const reissueWait = 40 * time.Second
 // reissueEvery is how often it looks again while it waits.
 const reissueEvery = 2 * time.Second
 
+// reissueConfirm is how long it looks for the daemon to hold an endpoint its kind's waker registers
+// (agy's bridge registers after it detaches).
+const reissueConfirm = 10 * time.Second
+
 // The parts of a session's crew access `crew reissue` answers for.
 const (
 	reissueSession  = "session"  // its live session and the context naming it: its host's to write
@@ -102,11 +106,27 @@ func reissue(ctx context.Context, session func() (sessionContext, error), wait t
 	}
 	if err := r.register(ctx, c, a.Kind); err != nil {
 		res.Not = append(res.Not, reissueNot{reissueEndpoint, err.Error()})
-	} else {
-		res.Reissued = append(res.Reissued, reissueEndpoint)
+		res.Access = &a
+		return res, nil
 	}
-	if after, err := accessOf(ctx, r, c); err == nil {
-		a = after
+	// a command that returned is not an endpoint registered: agy's bridge detaches before it
+	// registers, and any registration can be refused after the command is done. Only the daemon's
+	// crew.access saying registered counts, looked at again for up to reissueConfirm.
+	for tries := int(reissueConfirm / reissueEvery); ; tries-- {
+		if after, err := accessOf(ctx, r, c); err == nil {
+			a = after
+		}
+		if a.Endpoint == crew.EndpointRegistered {
+			res.Reissued = append(res.Reissued, reissueEndpoint)
+			break
+		}
+		if tries <= 0 {
+			res.Not = append(res.Not, reissueNot{reissueEndpoint, fmt.Sprintf("its %s waker ran, but the daemon has no endpoint for this session after %s (crew list says why)", a.Kind, reissueConfirm)})
+			break
+		}
+		if err := r.sleep(ctx, reissueEvery); err != nil {
+			return res, err
+		}
 	}
 	res.Access = &a
 	return res, nil
