@@ -189,3 +189,38 @@ func TestPeersOfAreOtherScopesLiveAgents(t *testing.T) {
 		}
 	}
 }
+
+// slowPeerCore answers peerAgents only when answer runs, as a crew.list in flight does.
+type slowPeerCore struct {
+	*peerCore
+	pending func()
+}
+
+func (c *slowPeerCore) peerAgents(then func([]AgentEntry)) {
+	c.pending = func() { c.peerCore.peerAgents(then) }
+}
+
+// TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing (item 17): A asks the crew for the other
+// hosts' agents before it opens its picker; a workspace switched while that is in flight makes the
+// answer stale: no picker opens, nothing is assigned, and no Task: request is sent.
+func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
+	pc, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
+	c := &slowPeerCore{peerCore: pc}
+	v := newTodos(c)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	c.switchWorkspace()
+	if c.pending == nil {
+		t.Fatal("A never asked the crew for the other hosts' agents")
+	}
+	c.pending()
+	if slices.Contains(c.opened, "agentAssignPicker") {
+		t.Errorf("A opened its picker for a workspace no longer in use: %v", c.opened)
+	}
+	v.assignPick.accept(1, "")
+	v.assignSet("Go.")
+	if len(*assigned) != 0 || len(c.sent) != 0 {
+		t.Errorf("after the switch: %d assigns, %d sends; want none", len(*assigned), len(c.sent))
+	}
+}
