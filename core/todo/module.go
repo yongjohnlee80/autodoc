@@ -95,7 +95,7 @@ type (
 		At    At             `param:"at"`
 		ID    string         `param:"id"`
 		Rev   string         `param:"rev" doc:"the rev the client read"`
-		Patch map[string]any `param:"patch" doc:"hand-editable fields only: title, description, priority, due, tags, adr, review, blocked"`
+		Patch map[string]any `param:"patch" doc:"hand-editable fields only: title, description, priority, due, tags, adr, review, blocked. description is the task's own text (todos.get's description), never its body, which is the raw file text with the managed header"`
 	}
 	statusParams struct {
 		At     At     `param:"at"`
@@ -228,7 +228,7 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(read("todos.list", "{tasks: ["+task+"], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
 			"The active buckets' tasks; archives only by month, on request.", CodeNotAStore, CodeInvalid),
 			func(ctx context.Context, p listParams) (Listing, error) { return m.List(ctx, p.At, p.Opts) }),
-		module.Handle(read("todos.get", task, "One task, with its rev and body.", CodeNoTask, CodeNotAStore),
+		module.Handle(read("todos.get", task, "One task, with its rev and body. body is the file's raw text after the frontmatter, its managed header comment and H1 included; description is the task's own text. To change the description, patch description with todos.update, never send body back.", CodeNoTask, CodeNotAStore),
 			func(ctx context.Context, p idParams) (Task, error) { return m.Get(ctx, p.At, p.ID) }),
 		module.Handle(write("todos.add", task,
 			"Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told.",

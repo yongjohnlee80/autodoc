@@ -965,7 +965,7 @@ return {
         { name = "id", type = "string" }
       },
       result = "task: {id, version, status, title, …, rev, path, description}",
-      doc = "One task, with its rev and body.",
+      doc = "One task, with its rev and body. body is the file's raw text after the frontmatter, its managed header comment and H1 included; description is the task's own text. To change the description, patch description with todos.update, never send body back.",
     },
     ["todos.list"] = {
       since = 20, scope = "global", audience = "agent",
