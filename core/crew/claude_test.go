@@ -199,9 +199,9 @@ func TestClaudeOfLooksPastAWrapper(t *testing.T) {
 	}
 }
 
-// stalledMise writes a mise at dir/mise whose `which claude` sleeps for the given seconds while the
-// file dir/stall exists, then answers tool; with no such file it answers at once. failing: it exits 1
-// instead, while dir/fail exists.
+// stalledMise writes a mise at dir/mise whose `which claude` sleeps for the seconds the file
+// dir/stall holds, while it exists, then answers tool; with no such file it answers at once. While
+// dir/fail exists it exits 1 instead.
 func stalledMise(t *testing.T, dir, tool string) string {
 	t.Helper()
 	sleep, err := exec.LookPath("sleep")
@@ -211,7 +211,9 @@ func stalledMise(t *testing.T, dir, tool string) string {
 	mise := filepath.Join(dir, "mise")
 	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] || exit 2\n" +
 		"[ -f '" + dir + "/fail' ] && exit 1\n" +
-		"[ -f '" + dir + "/stall' ] && " + sleep + " \"$(cat '" + dir + "/stall')\"\n" +
+		// the stall's seconds read by the shell itself: mise runs with the lookup's PATH alone, which
+		// holds no cat
+		"[ -f '" + dir + "/stall' ] && { read s < '" + dir + "/stall'; " + sleep + " \"$s\"; }\n" +
 		"echo '" + tool + "'\n"
 	if err := os.WriteFile(mise, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
