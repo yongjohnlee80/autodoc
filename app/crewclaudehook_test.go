@@ -16,7 +16,8 @@ import (
 // attention raised while any prompt shows, saying what the newest asks: a prompt's own PostToolUse
 // closes it, another tool's (a parallel one) doesn't, and so does its PostToolUseFailure when the
 // approved tool fails; two identical prompting calls are two to close; a prompt whose answer widened
-// its tool's input (AskUserQuestion) is closed by that tool's PostToolUse; the next UserPromptSubmit
+// its tool's input (AskUserQuestion) is closed by that tool's PostToolUse, while any other tool's
+// wider input (a parallel call) closes nothing; the next UserPromptSubmit
 // (after a denial) or Stop closes them all; an idle Notification changes nothing. It prints nothing
 // and exits 0.
 func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
@@ -116,6 +117,11 @@ func TestClaudesHooksReportItsPermissionPrompts(t *testing.T) {
 	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"touch other-file","description":"Create a probe file"},"tool_response":{}}`)
 	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls","description":"List"},"tool_response":{}}`)
 	expect("a changed command, and a parallel Bash", perm+"Bash: touch probe-file")
+	// only a tool that collects an answer widens its input: a parallel Bash with the same command and
+	// description plus a timeout is another call, and closes nothing (the prompt still shows, and a
+	// window must not press Enter into it)
+	hook(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"touch probe-file","description":"Create a probe file","timeout":5000},"tool_response":{}}`)
+	expect("a parallel Bash holding the asked input and more", perm+"Bash: touch probe-file")
 	hook(bashDone)
 	expect("its own done")
 	hook(asked)
