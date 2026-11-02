@@ -24,4 +24,6 @@ flowchart LR
 
 The search's checkboxes (Lexical, Semantic, Rerank) choose the stages for each search.
 
+No Ollama yet, or a GPU to set up? An AI agent can walk you through it with [Preparing the Machine with Your Agent](../reference/06-configuring-embeddings-and-rerankers.md#preparing-the-machine-with-your-agent); the latest version is at https://yongjohnlee80.github.io/autodoc/reference/06-configuring-embeddings-and-rerankers.html#preparing-the-machine-with-your-agent.
+
 More: [Reference, Chapter 6: Configuring Embeddings and Rerankers](../reference/06-configuring-embeddings-and-rerankers.md).
