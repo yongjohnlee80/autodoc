@@ -1227,14 +1227,6 @@
         <source>%1 did not start: %2</source>
         <translation>%1 did not start: %2</translation>
     </message>
-    <message id="autodoc.crew.not_started">
-        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
-        <translation>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</translation>
-    </message>
-    <message id="autodoc.crew.exited_before_start">
-        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
-        <translation>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</translation>
-    </message>
     <message id="autodoc.crew.discarded">
         <source>Discarded %1 message(s) for %2; each sender is told.</source>
         <translation>Discarded %1 message(s) for %2; each sender is told.</translation>
@@ -1246,6 +1238,10 @@
     <message id="autodoc.crew.dismiss_too_late">
         <source>%1's request was already answered, dismissed or expired.</source>
         <translation>%1's request was already answered, dismissed or expired.</translation>
+    </message>
+    <message id="autodoc.crew.exited_before_start">
+        <source>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</source>
+        <translation>%1 exited (code %2) before Claude Code started in %3: it may have declined its folder-trust question. Start it again and choose to trust the folder.</translation>
     </message>
     <message id="autodoc.crew.fallback_typed">
         <source>%1's mail that waited for its host is typed into its prompt: press Enter there to send it</source>
@@ -1282,6 +1278,10 @@
     <message id="autodoc.crew.not_shown">
         <source>%1 could not be shown: %2.</source>
         <translation>%1 could not be shown: %2.</translation>
+    </message>
+    <message id="autodoc.crew.not_started">
+        <source>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</source>
+        <translation>%1 hasn't finished starting in %2: Claude Code may be asking in its tab whether to trust that folder. Nothing is typed into it until it starts, and its crew mail waits for it.</translation>
     </message>
     <message id="autodoc.crew.orphan_adopt">
         <source>&amp;Adopt</source>
