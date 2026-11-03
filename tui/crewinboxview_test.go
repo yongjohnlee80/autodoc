@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // mailWindow is the inbox dialog's program: inbox.list answers from its pages, by filter and before
@@ -568,5 +571,23 @@ func TestMarkReadAndDismissShowAtOnceAndAreUndoneWhenRefused(t *testing.T) {
 		if refuse && len(w.notices) != 2 {
 			t.Fatalf("refused: notices %q, want each refusal said", w.notices)
 		}
+	}
+}
+
+// The Inbox's tabs' and buttons' letters are one each: no two take the same key, among the tabs, the
+// buttons and Close's q (the language check holds every translation to English's letter, so English
+// is every language's).
+func TestTheInboxLettersAreOneEach(t *testing.T) {
+	seen := map[rune]string{}
+	for _, id := range []string{"all", "unread", "requests", "undeliverable", "open", "mark_read", "reply", "dismiss", "sender", "more", "close_q"} {
+		_, key, _ := tuicore.ParseMnemonic(englishText("autodoc.dialog.inbox." + id))
+		if key == 0 {
+			t.Fatalf("%s marks no letter", id)
+		}
+		key = unicode.ToLower(key)
+		if other, dup := seen[key]; dup {
+			t.Fatalf("%s and %s both take %q", other, id, key)
+		}
+		seen[key] = id
 	}
 }
