@@ -4121,6 +4121,14 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>에이전트용 편집기 소켓</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>실행되지 않음: 에이전트 %1이(가) 응답하기 전에 기다리기를 멈췄습니다.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>에이전트 %1이(가) 터미널에서 실행한 명령이 %2(으)로 종료되었습니다.</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 제거함</translation>
@@ -5597,6 +5605,26 @@ WHAT A KEY NEEDS
         <source>&amp;No</source>
         <translation>아니요(&amp;n)</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>실행 안 함(&amp;d)</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+It runs in a new terminal tab, in %2. If it asks for a passphrase, type it there: the agent never sees it, nor anything else in that tab. When it ends, the agent is told only its exit code.</source>
+        <translation>%1
+
+새 터미널 탭의 %2에서 실행됩니다. 암호를 물으면 그 탭에 입력하세요. 에이전트는 그 암호도, 그 탭의 다른 어떤 내용도 보지 못합니다. 끝나면 에이전트에게는 종료 코드만 전달됩니다.</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>에이전트 %1이(가) AutoDoc의 터미널에서 이것을 실행하도록 할까요?</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>실행(&amp;r)</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>AutoDoc이 모르는 권한</translation>
@@ -5640,6 +5668,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>AutoDoc의 모든 명령 실행</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>AutoDoc의 터미널에서 명령줄 실행 (각 줄은 내용을 확인하고 실행을 누른 뒤에만)</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>

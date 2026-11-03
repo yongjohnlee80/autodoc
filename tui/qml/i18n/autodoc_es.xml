@@ -4129,6 +4129,14 @@ LO QUE NECESITA UNA TECLA
         <source>the editor socket for agents</source>
         <translation>el socket del editor para los agentes</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>No se ejecutó: el agente %1 dejó de esperar antes de que usted respondiera.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>El comando que el agente %1 ejecutó en el terminal terminó con %2.</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>eliminado: %1 %2</translation>
@@ -5605,6 +5613,26 @@ LO QUE NECESITA UNA TECLA
         <source>&amp;No</source>
         <translation>&amp;No</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>&amp;No ejecutar</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+It runs in a new terminal tab, in %2. If it asks for a passphrase, type it there: the agent never sees it, nor anything else in that tab. When it ends, the agent is told only its exit code.</source>
+        <translation>%1
+
+Se ejecuta en una nueva pestaña del terminal, en %2. Si pide una frase de contraseña, escríbala allí: el agente nunca la ve, ni nada más de esa pestaña. Cuando termina, al agente solo se le dice su código de salida.</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>¿dejar que el agente %1 ejecute esto en el terminal de AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>&amp;Ejecutar</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>una capacidad que AutoDoc no conoce</translation>
@@ -5648,6 +5676,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>ejecutar cualquiera de los comandos de AutoDoc</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>ejecutar líneas de comando en el terminal de AutoDoc, cada una solo después de que la haya visto y haya dicho Ejecutar</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>
