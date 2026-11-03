@@ -14,20 +14,20 @@ import (
 // WakeNotice is the wake's text for a session that reads its mail with the CLI (MailViaCLI), when
 // NoticeFor has no senders to name: no subject, no sender, nothing a peer wrote
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler). OpenCode's plugin wakes with its own copy.
-const WakeNotice = "AutoDoc mail is waiting for you. Run: autodoc mail receive"
+const WakeNotice = "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail receive (not SendMessage)"
 
 // WakeNoticeMCP is the wake's text for a session that reads its mail with `autodoc crew mcp`'s
 // tools (MailViaMCP), with no senders to name. Its rules allow the tools, not the shell command; it
 // names the server, since a CLI that describes MCP tools by their server (agy) finds no tool by its
 // name alone, and that it takes no arguments, so the agent has no schema to look up (MCPToolArgs).
-const WakeNoticeMCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+const WakeNoticeMCP = "[AutoDoc mail] Mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
 
 // The texts a notice naming its senders is made of (NoticeFor): its head, then the senders, then
 // the way to read the mail.
 const (
-	noticeHead       = "AutoDoc mail is waiting for you: "
-	noticeTailCLI    = ". Run: autodoc mail receive"
-	noticeTailMCP    = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+	noticeHead       = "[AutoDoc mail] Mail is waiting for you: "
+	noticeTailCLI    = ". Run: autodoc mail receive (not SendMessage)"
+	noticeTailMCP    = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
 	NoticeMaxSenders = 3 // senders a notice names; the rest are "N more"
 )
 

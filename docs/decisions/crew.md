@@ -464,15 +464,21 @@ In the code: `core/mail/send.go` (`Ack`, `Reply`, `Preview`), `core/mail/module.
 
 The daemon wakes an agent through its CLI's own channel with a notice, and retries until the agent
 receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every waker
-sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the crew
-MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc
-MCP server, with no arguments, until more is false" (naming the server, as agy finds MCP tools by it,
-and its arguments, so there is no schema to look up), since its rules allow the tool, not the shell
-command.
+sends): with the CLI, "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail receive (not
+SendMessage)"; with the crew MCP server's tools (agy), "[AutoDoc mail] Mail is waiting for you: call
+mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not
+SendMessage)." (naming the server, as agy finds MCP tools by it, and its arguments, so there is no
+schema to look up), since its rules allow the tool, not the shell command.
+
+Every notice opens with `[AutoDoc mail]` and ends with "(not SendMessage)". Claude Code frames
+whatever reaches a session this way as "Another Claude session sent a message … reply via
+SendMessage", which isn't AutoDoc's to change; the notice itself says, inside that frame, that this
+is AutoDoc mail and how to read it, so an agent doesn't have to remember a rule that contradicts the
+text in front of it.
 
 The notice names who the mail is from, so an agent can tell a request from the user from a peer's
-note before it receives: "AutoDoc mail is waiting for you: 1 from gold (claude), 1 from user.
-Run: autodoc mail receive", and the MCP form likewise.
+note before it receives: "[AutoDoc mail] Mail is waiting for you: 1 from gold (claude), 1 from user.
+Run: autodoc mail receive (not SendMessage)", and the MCP form likewise.
 - Only daemon-set fields are named: each sender's address as `mail receive` gives it (a codename,
   `user`, `codename@project`) and its profile's kind. Nothing a peer wrote (no subject, no body)
   reaches the agent except through a receive.
