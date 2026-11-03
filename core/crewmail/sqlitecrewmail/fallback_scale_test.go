@@ -19,8 +19,13 @@ import (
 // store keeps until retention takes it.
 const handledAtScale = 20000
 
-// scaleBound is how long NextFallbackAt may take at that scale (see the cell).
-const scaleBound = 5 * time.Second
+// growthAllowed is how much slower NextFallbackAt may be with the handled history than without it,
+// on the same store and runner, before it counts as reading the history: the read from the due
+// mail costs the same at any size, the walk grows with every message.
+const growthAllowed = 5
+
+// growthSlack is a fixed allowance on top, for a runner's noise on a fast read.
+const growthSlack = 50 * time.Millisecond
 
 // TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage (docs/decisions/crew.md#the-fallback-exactly-once):
 // every mail wait asks NextFallbackAt inside its write, once per live session and kind, so it must
@@ -53,22 +58,10 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 		agents = append(agents, r)
 	}
 	if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
-		for i := range handledAtScale {
-			id := fmt.Sprintf("m%05d", i)
-			to := agents[i%len(agents)].Profile
-			if err := tx.PutMessage(mail.Message{ID: id, Sender: agents[(i+1)%len(agents)].Profile, IdemKey: id, Kind: mail.KindMessage,
-				Subject: "s", Body: "b", Created: int64(i + 1)}); err != nil {
-				return err
-			}
-			if err := tx.PutDelivery(mail.Delivery{ID: "d" + id, Message: id, Recipient: to, Seq: int64(i/len(agents) + 1), State: mail.Acked}); err != nil {
-				return err
-			}
-		}
 		return tx.TakeFallbacks("autodoc:aaaa", e) // the scope's host takes fallbacks: deliveries due are candidates
 	}); err != nil {
 		t.Fatal(err)
 	}
-
 	next := func() (int64, bool, time.Duration) {
 		t.Helper()
 		var at int64
@@ -83,17 +76,46 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 		}
 		return at, has, time.Since(began)
 	}
-	// warm once: the first read of a fresh store pages it in
-	next()
-	at, has, took := next()
+	// fastest is the best of a few reads: a runner's noise only ever slows one
+	fastest := func() (int64, bool, time.Duration) {
+		t.Helper()
+		next() // warm: the first read pages the store in
+		at, has, took := next()
+		for range 2 {
+			if _, _, d := next(); d < took {
+				took = d
+			}
+		}
+		return at, has, took
+	}
+	_, _, base := fastest() // the crew alone, no history
+	if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
+		for i := range handledAtScale {
+			id := fmt.Sprintf("m%05d", i)
+			to := agents[i%len(agents)].Profile
+			if err := tx.PutMessage(mail.Message{ID: id, Sender: agents[(i+1)%len(agents)].Profile, IdemKey: id, Kind: mail.KindMessage,
+				Subject: "s", Body: "b", Created: int64(i + 1)}); err != nil {
+				return err
+			}
+			if err := tx.PutDelivery(mail.Delivery{ID: "d" + id, Message: id, Recipient: to, Seq: int64(i/len(agents) + 1), State: mail.Acked}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	at, has, took := fastest()
 	if has {
 		t.Fatalf("with nothing queued NextFallbackAt answered %d", at)
 	}
-	// the bound: under -race the store (modernc's SQLite, instrumented) runs 10-20x slower, and a
-	// loaded CI runner's -race read from the due mail took 0.5-0.66 s here; the old walk took about
-	// 150 s in this cell, so a bound of seconds tells them apart on any runner
-	if took > scaleBound {
-		t.Fatalf("with %d handled messages and %d live sessions, nothing due, NextFallbackAt took %s", handledAtScale, len(agents), took)
+	// the bound is relative, the same store on the same runner without its history: -race runs the
+	// store's SQLite 10-20x slower (0.5-0.66 s on a loaded CI runner, where a fixed 0.5 s failed), and
+	// without -race the walk took under 5 s, so no fixed bound tells them apart in both
+	if limit := growthAllowed*base + growthSlack; took > limit {
+		t.Fatalf("with %d handled messages and %d live sessions, nothing due, NextFallbackAt took %s; without the history %s (limit %s)",
+			handledAtScale, len(agents), took, base, limit)
 	}
 
 	// among them, one agent's two queued messages: the earlier decides, from the later of its
@@ -127,11 +149,11 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	at, has, took = next()
+	at, has, took = fastest()
 	if want := max(sent, started) + int64(time.Minute); !has || at != want {
 		t.Fatalf("with two messages queued to agent07 NextFallbackAt answered %d (%v), want %d", at, has, want)
 	}
-	if took > scaleBound {
-		t.Fatalf("with mail due, NextFallbackAt took %s", took)
+	if limit := growthAllowed*base + growthSlack; took > limit {
+		t.Fatalf("with mail due, NextFallbackAt took %s; without the history %s (limit %s)", took, base, limit)
 	}
 }
