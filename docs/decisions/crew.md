@@ -98,11 +98,26 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   the agent waits for it rather than retrying blind. `editor.workspace` and `editor.commands` need
   no grant. `editor.add_command` asks every
   time, shows the whole source, and creates the Lua file only at the user's yes.
+- `editor.terminal_run` runs a command an agent asks for in AutoDoc's own terminal, so a step that
+  needs the user (sudo, pkexec, an installer) never needs a pasted command or a passphrase given to
+  the agent. It needs the `terminal` grant, and every call shows the user the exact
+  line, the agent and the folder on a card: Run or Don't run. Nothing runs without that Run, and only
+  the line the card showed runs, as `sh -c` in a new tab of its own, in the root of the workspace in
+  use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
+  user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
+  when the command exits, its code reaches the agent as the user's mail, and the user is told when
+  it failed. The tab stays for the user to read. A line is at most 5 lines of 60 cells (a CJK character
+  is two), so the card (64 wide, at most 80% high, wrapping, never scrolling) shows
+  all of it on the smallest window AutoDoc runs in, 80x20, in every shipped language, and holds only
+  characters that draw as themselves: no tab (the card draws it as nothing), control, format or other default-ignorable character (bidi overrides, zero-width, U+034F, U+3164),
+  no separator, private-use code point or space but the plain one. The card waits behind any card
+  already open, and comes back after a question that displaces it; one closed unanswered is a Don't
+  run.
 
 The TUI serves the page rather than the daemon, because the unsaved text, cursor and undo history
 are the TUI's, and several TUIs share one daemon.
 
-In the code: `tui/editorsocket.go`, `app/editor.go`, `tui/agent.go`
+In the code: `tui/editorsocket.go`, `tui/editorterminal.go`, `app/editor.go`, `tui/agent.go`
 
 ## Editor tokens and their limit
 
@@ -439,19 +454,46 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
 
 In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `core/crew/waits.go`
 
+## An answer says what it did
+
+An ack that answered `{}` couldn't tell an agent which delivery it had acked, whether the ack had
+written anything, or that one it still held was unanswered. Agents took a forgotten ack, whose
+delivery came back at its lease expiry, for a daemon redelivering acked mail. So each answer says
+what it did (protocol 52):
+
+- `mail.ack` answers `{delivery, state}`: the delivery its handle resolved to, also when the handle
+  named the message's id with the lease, and `acked` when this ack wrote it done, `already_acked`
+  when an ack of the same lease had (a replay).
+- `mail.reply` adds the same keys to its `{message}`: the delivery, and `replied`, for the first reply
+  and a retry alike.
+- `mail.inbox` answers `held`: the deliveries the caller holds leased, unlapsed and unanswered. The
+  crew MCP server puts it on every tool result's last line, beside `waiting`, so a forgotten ack
+  shows on the next tool call. A lapsed lease isn't held: its delivery waits to be received again.
+
+Each is additive: a client below 52 reads the keys it knew.
+
+In the code: `core/mail/send.go` (`Ack`, `Reply`, `Preview`), `core/mail/module.go`, `app/crewmcp.go`
+(`waitingLine`), `core/crew/guide.go`
+
 ## Wakers and the wake scheduler
 
 The daemon wakes an agent through its CLI's own channel with a notice, and retries until the agent
 receives. The notice follows how the session reads its mail (`crew.NoticeFor`, which every waker
-sends): with the CLI, "AutoDoc mail is waiting for you. Run: autodoc mail receive"; with the crew
-MCP server's tools (agy), "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc
-MCP server, with no arguments, until more is false" (naming the server, as agy finds MCP tools by it,
-and its arguments, so there is no schema to look up), since its rules allow the tool, not the shell
-command.
+sends): with the CLI, "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail receive (not
+SendMessage)"; with the crew MCP server's tools (agy), "[AutoDoc mail] Mail is waiting for you: call
+mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not
+SendMessage)." (naming the server, as agy finds MCP tools by it, and its arguments, so there is no
+schema to look up), since its rules allow the tool, not the shell command.
+
+Every notice opens with `[AutoDoc mail]` and ends with "(not SendMessage)". Claude Code frames
+whatever reaches a session this way as "Another Claude session sent a message … reply via
+SendMessage", which isn't AutoDoc's to change; the notice itself says, inside that frame, that this
+is AutoDoc mail and how to read it, so an agent doesn't have to remember a rule that contradicts the
+text in front of it.
 
 The notice names who the mail is from, so an agent can tell a request from the user from a peer's
-note before it receives: "AutoDoc mail is waiting for you: 1 from gold (claude), 1 from user.
-Run: autodoc mail receive", and the MCP form likewise.
+note before it receives: "[AutoDoc mail] Mail is waiting for you: 1 from gold (claude), 1 from user.
+Run: autodoc mail receive (not SendMessage)", and the MCP form likewise.
 - Only daemon-set fields are named: each sender's address as `mail receive` gives it (a codename,
   `user`, `codename@project`) and its profile's kind. Nothing a peer wrote (no subject, no body)
   reaches the agent except through a receive.
@@ -568,6 +610,20 @@ delivery between agents never waits on you.
   `inbox.watch` answers the changes after a cursor, or a snapshot when the cursor can't be resumed.
 - Every window shows the same toasts: one for each open request and each raised attention, ended in
   every window when it is answered, dismissed, expired or cleared, and a passing one for each report.
+- **The inbox** (`SPC a i`, or `:inbox`) lists your mail in a dialog, newest first, fifty at a time
+  (`inbox.list`, paged by seq; More reads the next page, while the last page held some). Its tabs
+  are All, Unread (reports not read yet), Open requests, and Undeliverable (`inbox.list`'s filter,
+  whose daemon side answers the newest fifty notices only: that tab lists them with no More, and
+  says so). The message under the cursor
+  shows below the list, as Markdown. Opening a report marks it read (`inbox.ack`); opening a request
+  never answers it or marks it read: it stays open until Reply (the reply dialog) or Dismiss (asked
+  first) answers it. Mark read marks any report read; Sender shows the agent that sent it. The
+  dialog holds no long-poll of its own: the window's one `inbox.watch` gives its title the count of
+  what is open, and a change (an undeliverable notice too) reads the first page of the tab shown
+  again, and that page is the list: the pages More read go, so the list is always one consistent
+  read (more than a page arriving leaves no gap, and no older row is listed as it was); the other
+  tab's source is read again at its next showing. A read overtaken by a later one, or by an ack or
+  dismiss that landed, is dropped. The cursor stays on its message.
 - A request's toast opens a reply dialog in any window. Send is `inbox.reply`, keyed by the request
   and the text, so a resend after a lost answer is the same reply; the first answer wins. Dismiss
   tells the sender. An attention's toast raises its agent, or asks the host that shows it to

@@ -12,6 +12,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
 // inboxWindow is a window's crewInboxCore over a scripted daemon: each inbox.watch takes the next
@@ -36,6 +37,7 @@ type inboxWindow struct {
 	prefs  prefs             // the preferences, as SetPref leaves them
 	texts  map[string]string // each text area's text, as SetText leaves it
 	bells  int               // the rings
+	asked  []Question        // the questions asked, in order: a cell answers them
 	opened []string          // the dialogs opened, in order
 	closed []string          // the dialogs closed, in order
 	// verbs is each other verb called, its name then its params; verbAnswers the answers they take,
@@ -112,6 +114,7 @@ func (w *inboxWindow) Set(key string, v any)     { w.set[key] = v }
 func (w *inboxWindow) Prefs() prefs              { return w.prefs }
 func (w *inboxWindow) SetText(id, text string)   { w.texts[id] = text }
 func (w *inboxWindow) Bell()                     { w.bells++ }
+func (w *inboxWindow) Ask(q Question) Asked      { w.asked = append(w.asked, q); return Asked{} }
 func (w *inboxWindow) SetPref(name, value string) {
 	if name == prefAgentBell {
 		w.prefs.agentBell = value == "true"
@@ -510,10 +513,56 @@ func TestAReplyToAClosedRequestIsNotKept(t *testing.T) {
 		t.Fatalf("notes %v, drafts %v", w.notes, x.drafts)
 	}
 	w.clicks["crew:r1"]()
-	x.replyDismiss()
+	x.replyDismiss("")
+	w.asked[len(w.asked)-1].OnYes()
 	w.step(t)
 	if len(w.verbs) != 2 || !slices.Equal(w.verbs[1], []any{"inbox.dismiss", "r1"}) {
 		t.Fatalf("calls %v, want the dismiss", w.verbs)
+	}
+}
+
+// TestTheReplyDialogsDismissAsksFirst: the reply dialog's Dismiss asks first, as the inbox's does: a
+// dismiss is final (the first answer wins) and tells the sender. What was typed is kept as the
+// request's draft, so No loses nothing, the dialog opening on it again; Yes dismisses it, the draft
+// gone (the mutant: dismissed unasked).
+func TestTheReplyDialogsDismissAsksFirst(t *testing.T) {
+	w, x := openOn(t)
+	x.replyDismiss("half an answer")
+	if len(w.asked) != 1 || len(w.verbs) != 0 || x.drafts["r1"] != "half an answer" {
+		t.Fatalf("Dismiss: asked %d, calls %v, draft %q; want it asked first, nothing sent, what was typed kept", len(w.asked), w.verbs, x.drafts["r1"])
+	}
+	if !strings.Contains(w.asked[0].Text, "gold") || !strings.Contains(w.asked[0].Text, "which db?") {
+		t.Fatalf("the question %q: want the sender and the subject", w.asked[0].Text)
+	}
+	w.clicks["crew:r1"]() // No was the answer: the request is still open, its dialog opening on the draft
+	if w.texts[crewReplyText] != "half an answer" {
+		t.Fatalf("the reply dialog again: %q, want the draft", w.texts[crewReplyText])
+	}
+	x.replyDismiss("")
+	w.asked[1].OnYes()
+	w.stepNth(t, len(w.pending)-1)
+	if len(w.verbs) != 1 || !slices.Equal(w.verbs[0], []any{"inbox.dismiss", "r1"}) || len(x.drafts) != 0 {
+		t.Fatalf("Dismiss on Yes: calls %v, drafts %v; want r1 dismissed, its draft gone", w.verbs, x.drafts)
+	}
+}
+
+// TestAnUndeliverableNoticeReachesTheInboxDialog: a notice nobody could receive changes no open set,
+// but it is the inbox dialog's news: open on Undeliverable, it reads that tab again (the mutant: only
+// the open set's kinds reach the dialog).
+func TestAnUndeliverableNoticeReachesTheInboxDialog(t *testing.T) {
+	w, x := openOn(t) // in flight: the next inbox.watch
+	v := newInboxView(w, x)
+	x.view = v
+	v.open()
+	w.stepNth(t, 1) // its first page
+	v.tab(inboxUndeliverable)
+	w.stepNth(t, 1) // Undeliverable's
+	n := len(w.verbs)
+	w.answers = append(w.answers, changes(2, mail.ChangeUndeliverable))
+	w.step(t)       // the watch answers the notice: the dialog's read, then the next watch
+	w.stepNth(t, 0) // the dialog's read
+	if len(w.verbs) != n+1 || w.verbs[n][0] != "inbox.list" || w.verbs[n][1] != "undeliverable" {
+		t.Fatalf("after an undeliverable notice: calls %v, want Undeliverable read again", w.verbs[n:])
 	}
 }
 

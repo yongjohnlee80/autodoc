@@ -4114,6 +4114,22 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>智能体的编辑器套接字</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>未运行：代理 %1 的命令卡片在你能阅读之前就被回答了。代理可以再次请求。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>未运行：在你回答之前，代理 %1 已停止等待。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>代理 %1 在终端中运行的命令已退出，退出码为 %2。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>无法将命令的退出码通过邮件发送给代理 %1：%2</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>已移除 %1 %2</translation>
@@ -5590,6 +5606,26 @@ WHAT A KEY NEEDS
         <source>&amp;No</source>
         <translation>否(&amp;N)</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>不运行(&amp;D)</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
+        <translation>%1
+
+在新终端标签页（%2）中运行。口令请在那里输入：代理看不到标签页，只得知退出码。</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>允许代理 %1 在 AutoDoc 的终端中运行此命令吗？</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>运行(&amp;R)</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>AutoDoc 不认识的权限</translation>
@@ -5633,6 +5669,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>运行 AutoDoc 的任意命令</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>在 AutoDoc 的终端中运行命令行（每一行都只在你看过并选择“运行”之后运行）</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>
@@ -7925,6 +7965,166 @@ H J K L, Shift+方向键   调整大小</translation>
     <message id="autodoc.dialog.crew_bridges.copy">
         <source>&amp;Copy</source>
         <translation>复制(&amp;C)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.all">
+        <source>&amp;All</source>
+        <translation>全部(&amp;a)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.unread">
+        <source>&amp;Unread</source>
+        <translation>未读(&amp;u)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.requests">
+        <source>Open reques&amp;ts</source>
+        <translation>待答复的请求(&amp;t)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.undeliverable">
+        <source>Undeli&amp;verable</source>
+        <translation>无法投递(&amp;v)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title">
+        <source>Inbox — %1</source>
+        <translation>收件箱 — %1</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title_open">
+        <source>Inbox — %1 — %2 unread, %3 open requests</source>
+        <translation>收件箱 — %1 — 未读 %2，待答复请求 %3</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.open">
+        <source>&amp;Open</source>
+        <translation>打开(&amp;o)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.mark_read">
+        <source>&amp;Mark read</source>
+        <translation>标为已读(&amp;m)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.reply">
+        <source>&amp;Reply…</source>
+        <translation>回复(&amp;r)…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.dismiss">
+        <source>&amp;Dismiss…</source>
+        <translation>拒绝(&amp;d)…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.sender">
+        <source>&amp;Sender</source>
+        <translation>发件人(&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.more">
+        <source>Mor&amp;e</source>
+        <translation>更多(&amp;e)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>关闭 (&amp;q)</translation>
+    </message>
+    <message id="autodoc.text.inbox.reading">
+        <source>reading your mail…</source>
+        <translation>正在读取你的邮件…</translation>
+    </message>
+    <message id="autodoc.text.inbox.none">
+        <source>no mail here</source>
+        <translation>这里没有邮件</translation>
+    </message>
+    <message id="autodoc.text.inbox.count">
+        <source>%1 listed</source>
+        <translation>列出 %1 封</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_more">
+        <source>%1 listed: More reads older ones</source>
+        <translation>列出 %1 封：更多 读取更早的</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>列出 %1 封：最新的 %2 条通知</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_listed">
+        <source>your mail could not be read: %1</source>
+        <translation>无法读取你的邮件：%1</translation>
+    </message>
+    <message id="autodoc.text.inbox.just_now">
+        <source>just now</source>
+        <translation>刚刚</translation>
+    </message>
+    <message id="autodoc.text.inbox.minutes_ago">
+        <source>%1 min ago</source>
+        <translation>%1 分钟前</translation>
+    </message>
+    <message id="autodoc.text.inbox.hours_ago">
+        <source>%1 h ago</source>
+        <translation>%1 小时前</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_head">
+        <source>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</source>
+        <translation>**发件人** %1 · **类型** %2 · **状态** %3 · **发送时间** %4</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_reply_to">
+        <source>**In reply to** %1</source>
+        <translation>**回复** %1</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_undelivered">
+        <source>**Delivery** %1 · **Why** %2</source>
+        <translation>**投递** %1 · **原因** %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.request_not_read">
+        <source>a request isn't marked read: reply to it or dismiss it</source>
+        <translation>请求不会被标为已读：请回复或拒绝它</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_marked">
+        <source>“%1” was not marked read: %2</source>
+        <translation>“%1”未能标为已读：%2</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_a_request">
+        <source>only an open request is replied to or dismissed</source>
+        <translation>只有待答复的请求可以回复或拒绝</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_dismissed">
+        <source>“%1” was not dismissed: %2</source>
+        <translation>“%1”未能拒绝：%2</translation>
+    </message>
+    <message id="autodoc.text.inbox.no_sender">
+        <source>%1 sent it from no session to show</source>
+        <translation>%1 发送时没有可显示的会话</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss">
+        <source>Dismiss the request?</source>
+        <translation>拒绝这个请求吗？</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_text">
+        <source>%1 asks: %2. Dismissing it tells them you declined.</source>
+        <translation>%1 请求：%2。拒绝会告诉对方你已拒绝。</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_yes">
+        <source>&amp;Yes, dismiss it</source>
+        <translation>是，拒绝(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>收件箱：你的邮件 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>收件箱：你的邮件 (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>收件箱：你的邮件</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>全部</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>未读</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>待答复的请求</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>无法投递</translation>
     </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>

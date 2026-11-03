@@ -153,7 +153,7 @@ func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
 			t.Errorf("%s reads its mail via %v, want %v", kind, got, want)
 		}
 	}
-	if n := crew.NoticeFor(crew.MailViaCLI, nil, false); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive") {
+	if n := crew.NoticeFor(crew.MailViaCLI, nil, false); n != crew.WakeNotice || !strings.Contains(n, "Run: autodoc mail receive (not SendMessage)") {
 		t.Errorf("the CLI notice: %q", n)
 	}
 	if n := crew.NoticeFor(crew.MailViaMCP, nil, false); n != crew.WakeNoticeMCP || !strings.Contains(n, "mail_receive, a tool of the autodoc MCP server") || strings.Contains(n, "Run:") {
@@ -167,8 +167,8 @@ func TestAWakeSaysHowTheSessionReadsItsMail(t *testing.T) {
 // a command, words, a bracket, a line break, an over-long name); an unknown kind is left out; a
 // sender with no messages is skipped. With nothing to print, the notice is the constant one.
 func TestTheNoticeNamesItsSendersSafely(t *testing.T) {
-	const head, cli = "AutoDoc mail is waiting for you: ", ". Run: autodoc mail receive"
-	const mcp = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false."
+	const head, cli = "[AutoDoc mail] Mail is waiting for you: ", ". Run: autodoc mail receive (not SendMessage)"
+	const mcp = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
 	type S = crew.Sender
 	long := strings.Repeat("a", 65)
 	for _, c := range []struct {
@@ -361,6 +361,106 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	}
 	if cur, err := r.m.StillCurrent(r.ctx, s.Session, tok, ep.Generation); err != nil || cur {
 		t.Fatalf("still current after the exit: %v %v", cur, err)
+	}
+	// the attempt itself, its call reached now: nothing is sent, it answers failed, and its row is
+	// out of flight, abandoned rather than left for the lease to lapse
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for an ended session", n)
+	}
+	if w := r.wake(s.Session); w.State == crew.WakeInFlight {
+		t.Fatalf("the ended session's wake is still in flight: %+v", w)
+	}
+}
+
+// An attempt whose endpoint was replaced before its call (the session re-registered how it's woken:
+// another generation) sends nothing, answers failed, and gives its row back: idle, not left in
+// flight for its lease to lapse, so the next look can wake the session through its new endpoint.
+func TestAnAttemptForAReplacedEndpointIsAbandoned(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
+		t.Fatalf("the premise, the reserved row in flight under its token: %+v", w)
+	}
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"})
+	})
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for a replaced endpoint", n)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Token != "" {
+		t.Fatalf("the replaced endpoint's row: %+v; want it idle with no token (abandoned)", w)
+	}
+}
+
+// An abandon the store refuses is owed, not dropped: the attempt still answers failed, the end
+// stays owed while the store refuses it, and the next payment, once the store is back, gives the
+// row back idle.
+func TestARefusedAbandonIsOwedUntilTheStoreTakesIt(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	var emu sync.Mutex
+	var reported []error
+	r.s = m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now),
+		crew.WithWakeErrors(func(err error) { emu.Lock(); reported = append(reported, err); emu.Unlock() }))
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	s := r.session("gold")
+	tok, ep, ok, err := m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"})
+	})
+	fs.mu.Lock()
+	fs.down = true
+	fs.mu.Unlock()
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for a replaced endpoint", n)
+	}
+	emu.Lock()
+	refused := len(reported) == 1 && errors.Is(reported[0], errInjected)
+	emu.Unlock()
+	if !refused {
+		t.Fatalf("the refused abandon was reported as %v; want the store's one error", reported)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
+		t.Fatalf("the premise, the refused abandon left the row in flight: %+v", w)
+	}
+	if left := r.s.PayOwed(r.ctx); !left {
+		t.Fatal("the abandon was paid while the store still refused it")
+	}
+	fs.mu.Lock()
+	fs.down = false
+	fs.mu.Unlock()
+	if left := r.s.PayOwed(r.ctx); left {
+		t.Fatal("the abandon is still owed with the store back")
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Token != "" {
+		t.Fatalf("the owed abandon's row: %+v; want it idle with no token", w)
 	}
 }
 
@@ -790,5 +890,30 @@ func TestAWakeFollowsTheSessionsOwnMailMode(t *testing.T) {
 	if crew.SessionMailVia("", crew.KindAgy) != crew.MailViaMCP || crew.SessionMailVia("cli", crew.KindAgy) != crew.MailViaCLI ||
 		crew.SessionMailVia("", crew.KindClaude) != crew.MailViaCLI || crew.SessionMailVia("smtp", crew.KindClaude) != crew.MailViaCLI {
 		t.Error("SessionMailVia: a session's own mode wins, and with none (or one not known) its kind's")
+	}
+}
+
+// TestEveryWakeNoticeSaysItIsAutoDocMail: Claude Code frames whatever reaches a session as "Another
+// Claude session sent a message … reply via SendMessage". Every form of AutoDoc's notice says, inside
+// that frame, what it is and how to read it: it opens with [AutoDoc mail] and ends saying not
+// SendMessage, on CLI mail and MCP mail, naming no sender, one, or the most it names and more.
+func TestEveryWakeNoticeSaysItIsAutoDocMail(t *testing.T) {
+	one := []crew.Sender{{From: "gold", Kind: crew.KindClaude, Count: 1}}
+	many := []crew.Sender{{From: "gold", Kind: crew.KindClaude, Count: 2}, {From: "user", Count: 1},
+		{From: "vision", Kind: crew.KindClaude, Count: 1}, {From: "lector", Kind: crew.KindCodex, Count: 3}}
+	for _, via := range []crew.MailVia{crew.MailViaCLI, crew.MailViaMCP} {
+		for _, senders := range [][]crew.Sender{nil, one, many} {
+			n := crew.NoticeFor(via, senders, false)
+			if !strings.HasPrefix(n, "[AutoDoc mail] ") || !strings.Contains(n, "(not SendMessage)") {
+				t.Errorf("via %d, %d senders: %q; want it to open [AutoDoc mail] and say not SendMessage", via, len(senders), n)
+			}
+			read := "autodoc mail receive"
+			if via == crew.MailViaMCP {
+				read = "mail_receive"
+			}
+			if !strings.Contains(n, read) {
+				t.Errorf("via %d, %d senders: %q; want it to say how to read the mail (%s)", via, len(senders), n, read)
+			}
+		}
 	}
 }

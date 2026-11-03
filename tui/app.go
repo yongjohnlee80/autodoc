@@ -153,6 +153,7 @@ type Host struct {
 	agents    *agents
 	crew      *crewHost  // the window's crew scope (crewhost.go)
 	crewInbox *crewInbox // the human's crew inbox in this window (crewinbox.go)
+	inboxView *inboxView // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
@@ -512,6 +513,8 @@ func newHost(session *Session, opt Options) *Host {
 	h.crewInbox.took = h.crew.tookJob
 	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not
 	h.agents.inbox = h.crewInbox
+	h.inboxView = newInboxView(core{h}, h.crewInbox)
+	h.crewInbox.view = h.inboxView
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing

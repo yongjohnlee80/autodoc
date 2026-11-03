@@ -17,4 +17,5 @@ Dialog {
     Shortcut { sequence: keyId("autodoc.agentsCard.run.lua.agent-forward"); onActivated: { agentsCard.close(); App.run("lua.agent-forward") } }
     Shortcut { sequence: keyId("autodoc.agentsCard.toggleAgent"); onActivated: { agentsCard.close(); App.toggleAgent() } }
     Shortcut { sequence: keyId("autodoc.agentsCard.openAgentProfiles"); onActivated: { agentsCard.close(); App.openAgentProfiles() } }
+    Shortcut { sequence: keyId("autodoc.agentsCard.openInbox"); onActivated: { agentsCard.close(); App.openInbox() } }
 }

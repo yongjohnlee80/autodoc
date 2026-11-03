@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 51,
+  protocol = 52,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -657,8 +657,8 @@ return {
         { name = "delivery", type = "string" },
         { name = "lease", type = "string" }
       },
-      result = "{}",
-      doc = "Done with a delivery under its lease. Replaying an ack of the same lease answers ok.",
+      result = "{delivery, state}",
+      doc = "Done with a delivery under its lease. Answers the delivery its handle resolved to, and state acked, or already_acked for a replay of the same lease.",
     },
     ["mail.fallback_done"] = {
       since = 42, scope = "local-peer", audience = "user",
@@ -690,8 +690,8 @@ return {
         { name = "credential", type = "string" },
         { name = "limit", type = "int", optional = true }
       },
-      result = "{unread, items[]}",
-      doc = "A preview of the caller's eligible mail: never leases.",
+      result = "{unread, items[], held}",
+      doc = "A preview of the caller's eligible mail: never leases. held is how many deliveries the caller holds leased and hasn't answered.",
     },
     ["mail.receive"] = {
       since = 37, scope = "global", audience = "agent",
@@ -721,8 +721,8 @@ return {
         { name = "key", type = "string" },
         { name = "subject", type = "string", optional = true }
       },
-      result = "{message}",
-      doc = "Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it.",
+      result = "{message, delivery, state}",
+      doc = "Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it. Answers the response, the delivery its handle resolved to, and state replied.",
     },
     ["mail.send"] = {
       since = 37, scope = "global", audience = "agent",

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"cmp"
+	"time"
 )
 
 // ASK — the one yes-or-no question (Confirm.qml) a feature asks before it does what it cannot
@@ -26,6 +27,11 @@ type Question struct {
 	// lives on (a candidate's Audit…, candidate.go).
 	Other   string
 	OnOther func()
+	// Arm, when set, is how long after the card shows that its Yes counts: a Yes sooner (a key
+	// typed ahead, a double click that answered the card before it) is a No, and OnTooSoon hears
+	// it. For a card whose Yes runs something the user must have read (editorterminal.go).
+	Arm       time.Duration
+	OnTooSoon func()
 }
 
 // Asked is a question while it is asked.
@@ -61,6 +67,9 @@ type asker struct {
 	waiting []Question
 	polite  bool
 	current Question
+	// armedAt is when the open question's Yes starts to count (Question.Arm); tooSoon its OnTooSoon
+	armedAt time.Time
+	tooSoon func()
 }
 
 func newAsker(c Core) *asker { return &asker{c: c} }
@@ -131,6 +140,7 @@ func (a *asker) show(q Question, polite bool) Asked {
 	a.yes, a.other = q.OnYes, q.OnOther
 	a.cancel, a.pending = q.OnCancel, true
 	a.polite, a.current = polite, q
+	a.armedAt, a.tooSoon = time.Now().Add(q.Arm), q.OnTooSoon
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
 	a.c.Set("App.askYes", cmp.Or(q.Yes, a.c.Tr("autodoc.question.yes")))
@@ -145,9 +155,17 @@ func (a *asker) show(q Question, polite bool) Asked {
 	}}
 }
 
-// accepted runs the question's OnYes, once.
+// accepted runs the question's OnYes, once; a Yes before the question is armed (Question.Arm) is
+// its No instead.
 func (a *asker) accepted() {
 	if !a.pending {
+		return
+	}
+	if time.Now().Before(a.armedAt) {
+		if a.tooSoon != nil {
+			a.tooSoon()
+		}
+		a.rejected()
 		return
 	}
 	yes := a.yes
