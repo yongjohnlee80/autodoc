@@ -163,7 +163,8 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 			return r.h.asker.pending && r.h.asker.current.Title == r.h.tr("autodoc.question.inbox.dismiss")
 		})
 	})
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	r.keys(t, decltest.Rune('n')) // No, as the user answers it
+	r.s.WaitFor(t, "the question answered No", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.pending }) })
 	press('r')
 	press('s')
 	r.s.WaitFor(t, "r opening the request's reply and s showing its sender", func(string) bool {
