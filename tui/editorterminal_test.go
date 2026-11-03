@@ -24,13 +24,14 @@ func TestALineTheCardCantShowIsRefused(t *testing.T) {
 		strings.Repeat(strings.Repeat("x", 59)+"\n", 5)[:299] + "xx",
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
-		"echo \ue000", "echo \ufffd", "printf\tfoo"} {
+		"echo \ue000", "echo \ufffd", "printf\tfoo",
+		"printf\u034f foo", "echo \u3164x", "echo a\ufe0fb", "echo \u115fx", "echo \U000e0100"} {
 		if err := terminalLine(bad); err == nil {
 			t.Errorf("terminalLine(%q): accepted, want refused", bad)
 		}
 	}
 	for _, ok := range []string{"sudo apt-get install -y docker.io", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
-		"ls ~/문서 && echo 完了", strings.Repeat("x", 60), strings.Repeat("漢", 30), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
+		"ls ~/문서 && echo 完了", "echo café naïve", "echo 한글", strings.Repeat("x", 60), strings.Repeat("漢", 30), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
 		}

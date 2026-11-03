@@ -37,7 +37,9 @@ const (
 // cells a line or 300 bytes; or holding a character that draws as something else or nothing.
 // That covers every control character but newline (an escape redraws the card; a tab draws as
 // nothing, so "printf<TAB>x" would read as "printfx"), format
-// characters (bidi overrides and isolates, zero-width), line and paragraph separators, private-use
+// characters (bidi overrides and isolates, zero-width), the rest of Unicode's default-ignorable code
+// points (Other_Default_Ignorable_Code_Point, Variation_Selector: U+034F, U+3164 and their kind, which
+// count as printable and draw as nothing), line and paragraph separators, private-use
 // and unpaired surrogate code points, any space but the plain one, and U+FFFD.
 func terminalLine(line string) error {
 	if strings.TrimSpace(line) == "" {
@@ -57,7 +59,8 @@ func terminalLine(line string) error {
 		if r == '\n' || r == ' ' {
 			continue
 		}
-		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs) ||
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs,
+			unicode.Other_Default_Ignorable_Code_Point, unicode.Variation_Selector) ||
 			r == unicode.ReplacementChar || !unicode.IsPrint(r) {
 			return invalid("the command holds %U, which the card can't show as itself: only printable characters, the plain space and newline are allowed", r)
 		}
