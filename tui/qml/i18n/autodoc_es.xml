@@ -5623,7 +5623,7 @@ LO QUE NECESITA UNA TECLA
 In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
-Se ejecuta en una nueva pestaña del terminal, en %2. Si pide una frase de contraseña, escríbala allí: el agente nunca la ve, ni nada más de esa pestaña. Cuando termina, al agente solo se le dice su código de salida.</translation>
+En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agente no ve la pestaña, solo el código de salida.</translation>
     </message>
     <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
         <source>let the agent %1 run this in AutoDoc's terminal?</source>

@@ -5615,7 +5615,7 @@ WHAT A KEY NEEDS
 In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
-새 터미널 탭의 %2에서 실행됩니다. 암호를 물으면 그 탭에 입력하세요. 에이전트는 그 암호도, 그 탭의 다른 어떤 내용도 보지 못합니다. 끝나면 에이전트에게는 종료 코드만 전달됩니다.</translation>
+새 터미널 탭(%2)에서 실행됩니다. 암호는 그 탭에 입력하세요. 에이전트는 탭을 볼 수 없고 종료 코드만 받습니다.</translation>
     </message>
     <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
         <source>let the agent %1 run this in AutoDoc's terminal?</source>

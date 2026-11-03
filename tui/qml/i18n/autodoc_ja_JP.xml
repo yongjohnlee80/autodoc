@@ -5619,7 +5619,7 @@ WHAT A KEY NEEDS
 In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
-新しいターミナルタブで、%2 で実行されます。パスフレーズを求められたら、そこに入力してください。エージェントがそれを見ることはなく、そのタブのほかの内容も見ません。終了すると、エージェントには終了コードだけが伝えられます。</translation>
+新しいターミナルタブ（%2）で実行。パスフレーズはそこへ入力。エージェントにはタブは見えず、終了コードだけが届きます。</translation>
     </message>
     <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
         <source>let the agent %1 run this in AutoDoc's terminal?</source>

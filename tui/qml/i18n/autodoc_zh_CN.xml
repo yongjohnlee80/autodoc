@@ -5608,7 +5608,7 @@ WHAT A KEY NEEDS
 In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
-它在一个新的终端标签页中运行，位于 %2。如果它要求输入口令，请在那里输入：代理永远看不到它，也看不到该标签页中的任何其他内容。结束时，代理只会得知它的退出码。</translation>
+在新终端标签页（%2）中运行。口令请在那里输入：代理看不到标签页，只得知退出码。</translation>
     </message>
     <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
         <source>let the agent %1 run this in AutoDoc's terminal?</source>
