@@ -439,6 +439,27 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
 
 In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `core/crew/waits.go`
 
+## An answer says what it did
+
+An ack that answered `{}` couldn't tell an agent which delivery it had acked, whether the ack had
+written anything, or that one it still held was unanswered. Agents took a forgotten ack, whose
+delivery came back at its lease expiry, for a daemon redelivering acked mail. So each answer says
+what it did (protocol 52):
+
+- `mail.ack` answers `{delivery, state}`: the delivery its handle resolved to, also when the handle
+  named the message's id with the lease, and `acked` when this ack wrote it done, `already_acked`
+  when an ack of the same lease had (a replay).
+- `mail.reply` adds the same keys to its `{message}`: the delivery, and `replied`, for the first reply
+  and a retry alike.
+- `mail.inbox` answers `held`: the deliveries the caller holds leased, unlapsed and unanswered. The
+  crew MCP server puts it on every tool result's last line, beside `waiting`, so a forgotten ack
+  shows on the next tool call. A lapsed lease isn't held: its delivery waits to be received again.
+
+Each is additive: a client below 52 reads the keys it knew.
+
+In the code: `core/mail/send.go` (`Ack`, `Reply`, `Preview`), `core/mail/module.go`, `app/crewmcp.go`
+(`waitingLine`), `core/crew/guide.go`
+
 ## Wakers and the wake scheduler
 
 The daemon wakes an agent through its CLI's own channel with a notice, and retries until the agent
