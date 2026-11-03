@@ -77,17 +77,26 @@ func (t *Tx) PruneInbox(before int64, limit int) (int, error) {
 	if err != nil || newest == 0 {
 		return 0, err
 	}
-	rows, err := t.t.inbox.On(t.tx).WithPredicate(dao.Lt(`"inbox_change"."seq"`, newest)).
-		WithPredicate(dao.Lt(`"inbox_change"."at"`, before)).OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select()
-	if err != nil || len(rows) == 0 {
+	// the oldest page by seq, the primary key: at is not indexed, so it is read here, never asked of
+	// the table. A row is journaled at the time it is written, so the old ones are a prefix: the
+	// first one inside the window, or the newest, ends what goes. A clock stepped back leaves the
+	// rows after a younger one until it is old too: kept, never read past, so a page is the bound.
+	rows, err := t.t.inbox.On(t.tx).OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select()
+	if err != nil {
 		return 0, err
 	}
-	seqs := make([]any, len(rows))
-	for i, r := range rows {
-		seqs[i] = r.Seq
+	var seqs []any
+	for _, r := range rows {
+		if r.Seq >= newest || r.At >= before {
+			break
+		}
+		seqs = append(seqs, r.Seq)
+	}
+	if len(seqs) == 0 {
+		return 0, nil
 	}
 	if err := t.t.inbox.On(t.tx).WithPredicate(dao.In(`"inbox_change"."seq"`, seqs)).Delete(); err != nil {
 		return 0, err
 	}
-	return len(rows), nil
+	return len(seqs), nil
 }

@@ -102,3 +102,76 @@ func TestASweepReadsOnlyTheOldMail(t *testing.T) {
 		t.Fatalf("a sweep over 20,000 young messages took %v, over 200 %v: it read the young mail, not only the old", b, s)
 	}
 }
+
+// A prune reads only the journal's oldest page (docs/decisions/crew.md#handled-mail-is-kept-for-a-window):
+// over a journal of 50,000 recent rows behind three old ones, the old ones go and the rest stay,
+// and a prune then costs what one over 200 recent rows does. inbox_change has no index on its time,
+// so the rows are read by seq, a page at a time, never asked for by their time.
+func TestAPruneReadsOnlyTheOldJournal(t *testing.T) {
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	cutoff := now.Add(-30 * 24 * time.Hour).UnixNano()
+	seeded := func(young int) *Store {
+		s, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"), store.WithClock(func() time.Time { return now }))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = s.Close() })
+		st := New(s)
+		if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
+			in := tx.(*Tx)
+			put := func(i int, at int64) error {
+				_, err := in.t.inbox.On(in.tx).SetMap(map[col]any{cKind: "read", cRef: fmt.Sprintf("m%06d", i), cAt: at}).Insert()
+				return err
+			}
+			for i := range 3 { // the oldest first, as a journal is written
+				if err := put(i, now.Add(-40*24*time.Hour).UnixNano()+int64(i)); err != nil {
+					return err
+				}
+			}
+			for i := range young {
+				if err := put(3+i, now.Add(-time.Hour).UnixNano()+int64(i)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	prune := func(st *Store) (int, time.Duration) {
+		start := time.Now()
+		var n int
+		if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
+			var err error
+			n, err = tx.PruneInbox(cutoff, 200)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n, time.Since(start)
+	}
+	small, big := seeded(200), seeded(50_000)
+	for name, st := range map[string]*Store{"200": small, "50,000": big} {
+		if n, _ := prune(st); n != 3 {
+			t.Fatalf("over %s recent rows the first prune took %d, want the 3 old ones", name, n)
+		}
+	}
+	fastest := func(st *Store) time.Duration {
+		best := time.Duration(1 << 62)
+		for range 5 {
+			n, took := prune(st)
+			if n != 0 {
+				t.Fatalf("a later prune took %d recent rows", n)
+			}
+			best = min(best, took)
+		}
+		return best
+	}
+	s, b := fastest(small), fastest(big)
+	t.Logf("the fastest prune over 200 recent rows: %v; over 50,000: %v", s, b)
+	if b > 5*s+2*time.Millisecond {
+		t.Fatalf("a prune over 50,000 recent rows took %v, over 200 %v: it read the recent journal, not only its oldest page", b, s)
+	}
+}
