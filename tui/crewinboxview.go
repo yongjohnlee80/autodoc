@@ -205,10 +205,11 @@ func (v *inboxView) tab(t int) {
 	v.render()
 }
 
-// more reads the page below the oldest message listed: none on Undeliverable, whose daemon side
-// answers its newest only, nor while a read is in flight (what it pages below isn't known yet).
+// more reads the page below the oldest message listed, while one may be there (never on
+// Undeliverable, whose daemon side answers its newest only), and not while a read is in flight (what
+// it pages below isn't known yet).
 func (v *inboxView) more() {
-	if l := v.list(); v.tabOf != inboxUndeliverable && l.read && l.more && !l.busy {
+	if l := v.list(); l.read && l.more && !l.busy {
 		v.read(false)
 	}
 }
