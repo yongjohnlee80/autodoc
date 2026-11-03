@@ -135,6 +135,7 @@ var luaCapabilityText = map[string]string{
 	"clipboard":       "autodoc.question.luagate.read_and_write_the_clipboard",
 	"agents":          "autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can",
 	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
+	"terminal":        "autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal",
 }
 
 var _ script.Grants = luaGrants{}

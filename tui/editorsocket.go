@@ -42,6 +42,7 @@ import (
 //	editor.open path                        {opening}: absolute, or relative to the workspace in use        commands
 //	editor.commands                         [{id, title, source, name?, aliases?, args?, help?}, …]          none
 //	editor.add_command name source          {installed}, once the user answered                              asked each time
+//	editor.terminal_run line                {started, tab, exit_by_mail}, once the user answered Run         terminal, and asked each time
 //
 // The editor.workspace row: docs/decisions/crew.md#workspace-switches-are-told-not-imposed.
 //
@@ -202,16 +203,17 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 		"editor.document": h.editorVerb("editor.read", h.editorDocument),
 		// no grant: names, roots and a path
 		// (docs/decisions/crew.md#workspace-switches-are-told-not-imposed)
-		"editor.workspace":   h.editorVerb("", h.editorWorkspace),
-		"editor.read":        h.editorVerb("editor.read", h.editorRead),
-		"editor.find":        h.editorVerb("editor.read", h.editorFind),
-		"editor.insert":      h.editorVerb("editor.write", h.editorInsert),
-		"editor.replace":     h.editorVerb("editor.write", h.editorReplace),
-		"editor.delete":      h.editorVerb("editor.write", h.editorDelete),
-		"editor.run":         h.editorVerb("commands", h.editorRun),
-		"editor.open":        h.editorVerb("commands", h.editorOpen), // what editor.run ":open" does, no more
-		"editor.commands":    h.editorVerb("", h.editorCommands),     // no grant: names and help, as F1 shows them
-		"editor.add_command": h.editorAddCommand,
+		"editor.workspace":    h.editorVerb("", h.editorWorkspace),
+		"editor.read":         h.editorVerb("editor.read", h.editorRead),
+		"editor.find":         h.editorVerb("editor.read", h.editorFind),
+		"editor.insert":       h.editorVerb("editor.write", h.editorInsert),
+		"editor.replace":      h.editorVerb("editor.write", h.editorReplace),
+		"editor.delete":       h.editorVerb("editor.write", h.editorDelete),
+		"editor.run":          h.editorVerb("commands", h.editorRun),
+		"editor.open":         h.editorVerb("commands", h.editorOpen), // what editor.run ":open" does, no more
+		"editor.commands":     h.editorVerb("", h.editorCommands),     // no grant: names and help, as F1 shows them
+		"editor.add_command":  h.editorAddCommand,
+		"editor.terminal_run": h.editorTerminalRun, // the grant, then a card for each line (editorterminal.go)
 	}
 }
 
@@ -239,19 +241,29 @@ func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs)
 			if err != nil {
 				return nil, err
 			}
-			who := "agent:" + agent
-			if g := (luaGrants{h}); capability != "" && !g.Granted(who, capability) {
-				g.Request(who, []string{capability})
-				told := ""
-				if _, _, held := h.crewHeld(); held {
-					told = "; their answer comes to you as mail" // grantAnswered
-				}
-				return nil, &golibrpc.Error{Code: codeEditorNotGranted,
-					Message: fmt.Sprintf("needs %s: not granted (the user is asked%s)", capability, told)}
+			if err := h.ungranted(agent, capability); err != nil {
+				return nil, err
 			}
 			return fn(agent, a)
 		})
 	}
+}
+
+// ungranted is the refusal of an agent's call that needs capability ("" for none) it has no grant
+// for, the user asked as the refusal says (luaGrants.Request); nil when granted. On the loop only.
+func (h *Host) ungranted(agent, capability string) error {
+	who := "agent:" + agent
+	g := luaGrants{h}
+	if capability == "" || g.Granted(who, capability) {
+		return nil
+	}
+	g.Request(who, []string{capability})
+	told := ""
+	if _, _, held := h.crewHeld(); held {
+		told = "; their answer comes to you as mail" // grantAnswered
+	}
+	return &golibrpc.Error{Code: codeEditorNotGranted,
+		Message: fmt.Sprintf("needs %s: not granted (the user is asked%s)", capability, told)}
 }
 
 // socketBuffer is the buffer a verb acts on: its optional trailing param i (a buffer number), or
