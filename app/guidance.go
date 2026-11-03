@@ -26,6 +26,13 @@ func kbOperations(out io.Writer, version string) error {
 	return err
 }
 
+// managedOperations is this build's KB_OPERATIONS.md as a scaffold writes it today, stamped with
+// the managed version: what the daemon refreshes a served KB's older copy to.
+func managedOperations() []byte {
+	v := kbtype.Vars{Date: time.Now().Format(time.DateOnly), ManagedVersion: autodoc.KBManagedVersion()}
+	return v.Operations(autodoc.KBOperations)
+}
+
 // errNoPage is --tutorial's argument naming no page of the tutorial: a usage error (exit 2).
 var errNoPage = errors.New("no such tutorial page")
 

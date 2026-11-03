@@ -10,6 +10,7 @@ import (
 	"path"
 
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
@@ -95,7 +96,7 @@ func scaffoldOne(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile) rpc.Scaff
 		}
 	}
 	if f.Managed && f.Path == kbtype.Operations {
-		return scaffoldManaged(ctx, fsys, f, r)
+		return scaffoldManaged(ctx, fsys, f, r, true)
 	}
 	return scaffoldCreate(ctx, fsys, f, r)
 }
@@ -125,11 +126,16 @@ func scaffoldCreate(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc.
 	return r
 }
 
-// scaffoldManaged creates the root KB_OPERATIONS.md, or replaces a copy at the version read, only
-// when the copy's declared version parses and is older than f's. Anything else is kept.
-func scaffoldManaged(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc.ScaffoldResult) rpc.ScaffoldResult {
+// scaffoldManaged creates the root KB_OPERATIONS.md (when create holds; else a missing copy stays
+// missing), or replaces a copy at the version read, only when the copy's declared version parses
+// and is older than f's. Anything else is kept: nothing is ever downgraded.
+func scaffoldManaged(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc.ScaffoldResult, create bool) rpc.ScaffoldResult {
 	fi, err := fsys.Stat(ctx, f.Path)
 	if errors.Is(err, vfs.ErrNotExist) {
+		if !create {
+			r.Outcome = rpc.ScaffoldSkipped
+			return r
+		}
 		return scaffoldCreate(ctx, fsys, f, r)
 	}
 	if err != nil {
@@ -167,6 +173,28 @@ func scaffoldManaged(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile, r rpc
 		r.Outcome, r.Err = rpc.ScaffoldRefused, publicReason(err)
 	}
 	return r
+}
+
+// refreshOperations brings a served workspace's root KB_OPERATIONS.md up to this build's copy
+// (Options.Operations) when the copy there declares an older autodoc_version, as the Neovim side's
+// sync does at its load (docs/decisions/crew.md#managed-kb-files): a daemon of a newer release
+// refreshes the KBs it serves, whatever release the Neovim side is on. A missing copy stays missing
+// (not every workspace is a KB); one of the same or a newer version, or with no readable one, is
+// kept, and one changed while it was read keeps the newer edit.
+func (m *Workspaces) refreshOperations(name string, fsys vfs.FS) {
+	if m.opts.Operations == nil {
+		return
+	}
+	content := m.opts.Operations()
+	r := scaffoldManaged(m.ctx, fsys, rpc.ScaffoldFile{Path: kbtype.Operations, Content: content, Managed: true},
+		rpc.ScaffoldResult{Path: kbtype.Operations}, false)
+	switch r.Outcome {
+	case rpc.ScaffoldUpdated:
+		logger.Info(m.opts.Log, logger.Fields{"event": "kb.operations.refreshed", "workspace": name,
+			"autodoc_version": kbtype.DeclaredVersion(content)})
+	case rpc.ScaffoldRefused:
+		logger.Warning(m.opts.Log, errors.New(r.Err), "refreshing KB_OPERATIONS.md: "+name)
+	}
 }
 
 // publicReason is what a file's refusal says on the wire: the kind of failure, never a driver's
