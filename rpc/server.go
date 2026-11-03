@@ -229,7 +229,11 @@ import (
 // id) and acked or already_acked (a replay); mail.reply adds the same, replied; mail.inbox's held,
 // the deliveries the caller holds leased and hasn't answered. Additive: a client below 52 reads the
 // old keys alone.
-const Protocol int64 = 52
+// Protocol 53 is whether the inbox's history has an older page (docs/decisions/crew.md#the-human-inbox):
+// inbox.list's more, true when a page holds the items it could (by count or by bytes) and an older
+// one is there below the last; the undeliverable notices are the newest only, never paged, so their
+// more is false. A client below 53 reads items alone and pages on until a page comes back empty.
+const Protocol int64 = 53
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
