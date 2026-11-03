@@ -111,7 +111,11 @@ func TestAPruneReadsOnlyTheOldJournal(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_800_000_000, 0)
 	cutoff := now.Add(-30 * 24 * time.Hour).UnixNano()
-	seeded := func(young int) *Store {
+	seeded := func(young int, old ...int) *Store {
+		olds := 3
+		if len(old) > 0 {
+			olds = old[0]
+		}
 		s, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"), store.WithClock(func() time.Time { return now }))
 		if err != nil {
 			t.Fatal(err)
@@ -124,13 +128,13 @@ func TestAPruneReadsOnlyTheOldJournal(t *testing.T) {
 				_, err := in.t.inbox.On(in.tx).SetMap(map[col]any{cKind: "read", cRef: fmt.Sprintf("m%06d", i), cAt: at}).Insert()
 				return err
 			}
-			for i := range 3 { // the oldest first, as a journal is written
+			for i := range olds { // the oldest first, as a journal is written
 				if err := put(i, now.Add(-40*24*time.Hour).UnixNano()+int64(i)); err != nil {
 					return err
 				}
 			}
 			for i := range young {
-				if err := put(3+i, now.Add(-time.Hour).UnixNano()+int64(i)); err != nil {
+				if err := put(olds+i, now.Add(-time.Hour).UnixNano()+int64(i)); err != nil {
 					return err
 				}
 			}
@@ -151,6 +155,24 @@ func TestAPruneReadsOnlyTheOldJournal(t *testing.T) {
 			t.Fatal(err)
 		}
 		return n, time.Since(start)
+	}
+	// a journal with no old row: nothing goes, every row is kept
+	if n, _ := prune(seeded(50, 0)); n != 0 {
+		t.Fatalf("a journal of recent rows only lost %d", n)
+	}
+	// a journal of old rows only keeps its newest, so a journal that had a row is never empty
+	only := seeded(0, 5)
+	if n, _ := prune(only); n != 4 {
+		t.Fatalf("a journal of 5 old rows lost %d, want 4: its newest kept", n)
+	}
+	if err := only.Mail().Read(ctx, func(tx mail.Tx) error {
+		oldest, newest, err := tx.(*Tx).ChangeBounds()
+		if err == nil && (oldest == 0 || oldest != newest) {
+			t.Errorf("the old-only journal after the prune: rows %d to %d, want its newest alone", oldest, newest)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 	small, big := seeded(200), seeded(50_000)
 	for name, st := range map[string]*Store{"200": small, "50,000": big} {
