@@ -201,11 +201,22 @@ func startCellReaped(t *testing.T, reap bool, env []string, argv []string, setsi
 		p.reap()
 		<-waited
 	})
+	// a stand-in that hands its socket off ends once its child holds it, so its own command line
+	// is readable only until it writes the child's pid: it has started when that child has
+	handOff := false
+	for _, kv := range env {
+		handOff = handOff || strings.HasPrefix(kv, cellHandOff+"=")
+	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		b, _ := os.ReadFile(pidFile)
 		lines := strings.Fields(string(b))
-		if len(lines) == len(chain) && cellArgvIs(p.pid, argv) {
+		if handOff && len(lines) == 1 {
+			if n, _ := strconv.Atoi(lines[0]); n > 0 && cellArgvIs(n, argv) {
+				p.children = []int{n}
+				return p
+			}
+		} else if !handOff && len(lines) == len(chain) && cellArgvIs(p.pid, argv) {
 			for _, l := range lines {
 				n, _ := strconv.Atoi(l)
 				p.children = append(p.children, n)
