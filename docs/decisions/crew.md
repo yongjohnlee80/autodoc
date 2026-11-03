@@ -111,7 +111,8 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   80x24 terminal, and holds only
   characters that draw as themselves: no control or format character (bidi overrides, zero-width),
   no separator, private-use code point or space but the plain one. The card waits behind any card
-  already open; one closed or replaced unanswered is a Don't run.
+  already open, and comes back after a question that displaces it; one closed unanswered is a Don't
+  run.
 
 The TUI serves the page rather than the daemon, because the unsaved text, cursor and undo history
 are the TUI's, and several TUIs share one daemon.

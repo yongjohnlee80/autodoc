@@ -78,8 +78,9 @@ func terminalExitBody(line string, code int) (subject, body string) {
 }
 
 // editorTerminalRun is editor.terminal_run: the line is checked, the grant asked for as any verb's
-// (editorVerb), then the user's card is waited for, behind any card already open. A card closed or
-// replaced unanswered is a Don't run; a caller that stops waiting before the answer runs nothing.
+// (editorVerb), then the user's card is waited for, behind any card already open. A card another
+// question displaces comes back after it; one closed unanswered is a Don't run; a caller that stops
+// waiting before the answer runs nothing.
 func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (any, error) {
 	if len(req.Params) == 0 {
 		return nil, invalid("param 1 is the agent's token ($AUTODOC_EDITOR_TOKEN)")

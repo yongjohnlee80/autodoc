@@ -170,18 +170,29 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 		t.Fatalf("the second of two, Run: %v %v, want started", a.res, a.re)
 	}
 
-	// a card another question replaces is a Don't run: nothing runs
-	ch = run("echo replaced-$((40+7))")
-	r.s.WaitForText(t, "echo replaced-$((40+7))")
+	// a card another question displaces comes back after it, unanswered: nothing ran meanwhile, and
+	// only its own Run runs it (here Don't run)
+	before := len(tabs())
+	ch = run("echo displaced-$((40+7))")
+	r.s.WaitForText(t, "echo displaced-$((40+7))")
 	onLoop(r, func() bool { r.h.ask(Question{Title: "another question", Yes: "&Yes", No: "&No"}); return true })
-	if a := wait("a replaced card", ch); a.re == nil || a.re.Code != codeEditorRefused {
-		t.Fatalf("a replaced card: %v %v, want refused, nothing run", a.res, a.re)
+	r.s.WaitForText(t, "another question")
+	select {
+	case a := <-ch:
+		t.Fatalf("a displaced card answered while the other question showed: %v %v", a.res, a.re)
+	default:
 	}
-	onLoop(r, func() bool { r.h.asker.closed(); return true })
-	for _, label := range tabs() {
-		if label == "zen: run 4" {
-			t.Fatalf("a replaced card's line ran: tabs %v", tabs())
-		}
+	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true }) // the other question
+	r.s.WaitForText(t, "echo displaced-$((40+7))")
+	if got := len(tabs()); got != before {
+		t.Fatalf("a displaced card's line ran before its Run: %d tabs, want %d", got, before)
+	}
+	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	if a := wait("a displaced card, then Don't run", ch); a.re == nil || a.re.Code != codeEditorRefused {
+		t.Fatalf("a displaced card answered Don't run: %v %v, want refused", a.res, a.re)
+	}
+	if got := len(tabs()); got != before {
+		t.Fatalf("Don't run on a displaced card ran its line: %d tabs, want %d", got, before)
 	}
 }
 
@@ -192,7 +203,7 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 	if !strings.Contains(s, "Command done") || !strings.Contains(b, "exited 0") || !strings.Contains(b, "sudo apt-get install -y ollama") {
 		t.Errorf("success: %q / %q", s, b)
 	}
-	long := "echo " + strings.Repeat("z", 55)
+	long := "echo " + strings.Repeat("z", 56) // 61 characters: past the subject's 60
 	if s, b := terminalExitBody(long, 0); len([]rune(s)) > 80 || !strings.HasSuffix(s, "…") || !strings.Contains(b, long) {
 		t.Errorf("a long line's subject: %q, want it cut short (the body carries the whole line)", s)
 	}
