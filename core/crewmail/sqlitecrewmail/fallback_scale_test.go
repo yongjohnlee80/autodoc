@@ -93,7 +93,8 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 	}
 
 	// among them, one agent's two queued messages: the earlier decides, from the later of its
-	// creation and the agent's session's start, plus the unanswered window, as fast
+	// creation and the agent's session's start, plus the unreachable window (its session registered
+	// no endpoint, so it can't be woken: the shorter window of the two), as fast
 	sent := clock.Now().UnixNano()
 	if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
 		for i, created := range []int64{sent + 2, sent} {
@@ -123,7 +124,7 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	at, has, took = next()
-	if want := max(sent, started) + int64(10*time.Minute); !has || at != want {
+	if want := max(sent, started) + int64(time.Minute); !has || at != want {
 		t.Fatalf("with two messages queued to agent07 NextFallbackAt answered %d (%v), want %d", at, has, want)
 	}
 	if took > 500*time.Millisecond {
