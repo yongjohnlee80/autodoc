@@ -346,7 +346,6 @@ func (h *Host) features() []Feature {
 	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
 	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)
 	fs = append(fs, h.inboxView)                                                                                               // SPC a i, :inbox (crewinboxview.go)
-	h.grantsView = newGrantsView(core{h})
 	fs = append(fs, h.grantsView) // Go › Agent permissions, :permissions (grants.go)
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;

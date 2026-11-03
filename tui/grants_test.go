@@ -237,6 +237,9 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	})
 	onLoop(r, func() bool {
 		i := slices.IndexFunc(r.h.grantsView.rows.All(), func(g grantRow) bool { return g.holder == "agent:zen" && g.capability == "editor.read" })
+		if i < 0 {
+			t.Error("the dialog lists no editor.read of zen's")
+		}
 		r.h.grantsView.revoke(i)
 		return true
 	})

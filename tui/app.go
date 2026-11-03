@@ -516,6 +516,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents.inbox = h.crewInbox
 	h.inboxView = newInboxView(core{h}, h.crewInbox)
 	h.crewInbox.view = h.inboxView
+	h.grantsView = newGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
