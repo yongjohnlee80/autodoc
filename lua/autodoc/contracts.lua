@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 52,
+  protocol = 53,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -550,8 +550,8 @@ return {
         { name = "before", type = "int", optional = true },
         { name = "limit", type = "int", optional = true }
       },
-      result = "{items[]}",
-      doc = "The human's history, newest first, or the generated notices nobody could receive (filter undeliverable).",
+      result = "{items[], more}",
+      doc = "The human's history, newest first, or the generated notices nobody could receive (filter undeliverable). more (since 53) says an older page is there below the last item: page on with before = its seq. The undeliverable notices are the newest only, so their more is false.",
     },
     ["inbox.reply"] = {
       since = 37, scope = "local-peer", audience = "user",
