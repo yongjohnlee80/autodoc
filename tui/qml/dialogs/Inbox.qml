@@ -16,10 +16,10 @@ Dialog {
         direction: Tui.Vertical
         Flex {
             direction: Tui.Horizontal
-            Button { text: qsTrId("autodoc.dialog.inbox.all"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_all"); onClicked: App.inboxTab(0) }
-            Button { text: qsTrId("autodoc.dialog.inbox.unread"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_unread"); onClicked: App.inboxTab(1) }
-            Button { text: qsTrId("autodoc.dialog.inbox.requests"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_requests"); onClicked: App.inboxTab(2) }
-            Button { text: qsTrId("autodoc.dialog.inbox.undeliverable"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_undeliverable"); onClicked: App.inboxTab(3) }
+            Button { text: qsTrId("autodoc.dialog.inbox.all"); toolTipText: App.inboxTipAll; onClicked: App.inboxTab(0) }
+            Button { text: qsTrId("autodoc.dialog.inbox.unread"); toolTipText: App.inboxTipUnread; onClicked: App.inboxTab(1) }
+            Button { text: qsTrId("autodoc.dialog.inbox.requests"); toolTipText: App.inboxTipRequests; onClicked: App.inboxTab(2) }
+            Button { text: qsTrId("autodoc.dialog.inbox.undeliverable"); toolTipText: App.inboxTipUndeliverable; onClicked: App.inboxTab(3) }
             Text { text: " "; Layout.fillWidth: true }
         }
         TableView {
@@ -48,12 +48,12 @@ Dialog {
         Text { text: App.inboxStatus; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
-        Button { text: qsTrId("autodoc.dialog.inbox.open"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_open"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxOpen(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.mark_read"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_mark_read"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMarkRead(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.reply"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_reply"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxReply(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.dismiss"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_dismiss"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxDismiss(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.sender"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_sender"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxSender(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.more"); toolTipText: qsTrId("autodoc.dialog.inbox.tip_more"); enabled: App.inboxCanMore; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMore() }
+        Button { text: qsTrId("autodoc.dialog.inbox.open"); toolTipText: App.inboxTipOpen; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxOpen(inboxTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.inbox.mark_read"); toolTipText: App.inboxTipMarkRead; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMarkRead(inboxTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.inbox.reply"); toolTipText: App.inboxTipReply; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxReply(inboxTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.inbox.dismiss"); toolTipText: App.inboxTipDismiss; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxDismiss(inboxTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.inbox.sender"); toolTipText: App.inboxTipSender; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxSender(inboxTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.inbox.more"); toolTipText: App.inboxTipMore; enabled: App.inboxCanMore; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMore() }
         Button { text: qsTrId("autodoc.dialog.inbox.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

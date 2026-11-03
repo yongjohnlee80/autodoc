@@ -126,8 +126,12 @@ func newInboxView(c inboxCore, replies inboxReplies) *inboxView {
 func (*inboxView) Name() string { return "inbox" }
 
 func (v *inboxView) State() map[string]any {
-	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxCanMore": false, "App.inboxTitle": "",
+	st := map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxCanMore": false, "App.inboxTitle": "",
 		"App.inboxDetail": "", "App.inboxStatus": "", "App.inboxMessageTitle": "", "App.inboxMessageText": ""}
+	for _, tip := range inboxTips {
+		st[tip.state] = ""
+	}
+	return st
 }
 
 func (v *inboxView) Commands() map[string]Command {
@@ -167,6 +171,9 @@ func (v *inboxView) open() {
 	v.isOpen = true
 	v.cursor, v.key = 0, ""
 	v.history, v.undeliv = inboxList{gen: v.history.gen}, inboxList{gen: v.undeliv.gen}
+	for _, tip := range inboxTips {
+		v.c.Set(tip.state, v.c.Tr(tip.id))
+	}
 	v.c.Set("App.inboxStatus", v.c.Tr("autodoc.text.inbox.reading"))
 	v.c.Set("App.inboxDetail", "")
 	v.title()
@@ -174,6 +181,21 @@ func (v *inboxView) open() {
 	v.read(true)
 	v.c.Open(inboxDialog)
 	v.c.Focus(inboxListID) // the keyboard on the list, never a tab button: the letters reach every button from it
+}
+
+// inboxTips are what each tab and button says it does when it has focus (its toolTipText, which
+// takes a string, not a catalog message): set in the UI's language at each opening.
+var inboxTips = []struct{ state, id string }{
+	{"App.inboxTipAll", "autodoc.dialog.inbox.tip_all"},
+	{"App.inboxTipUnread", "autodoc.dialog.inbox.tip_unread"},
+	{"App.inboxTipRequests", "autodoc.dialog.inbox.tip_requests"},
+	{"App.inboxTipUndeliverable", "autodoc.dialog.inbox.tip_undeliverable"},
+	{"App.inboxTipOpen", "autodoc.dialog.inbox.tip_open"},
+	{"App.inboxTipMarkRead", "autodoc.dialog.inbox.tip_mark_read"},
+	{"App.inboxTipReply", "autodoc.dialog.inbox.tip_reply"},
+	{"App.inboxTipDismiss", "autodoc.dialog.inbox.tip_dismiss"},
+	{"App.inboxTipSender", "autodoc.dialog.inbox.tip_sender"},
+	{"App.inboxTipMore", "autodoc.dialog.inbox.tip_more"},
 }
 
 // inboxListID is the list's id in the layout, scoped to the dialog's instance.

@@ -591,3 +591,16 @@ func TestTheInboxLettersAreOneEach(t *testing.T) {
 		seen[key] = id
 	}
 }
+
+// Each tab and button says what it does when it has focus: its tooltip, set at the opening in the
+// UI's language (a tooltip takes a string, not a catalog message).
+func TestEachInboxButtonSaysWhatItDoes(t *testing.T) {
+	w := &mailWindow{history: mailRun(2, 2)}
+	v, _ := newInboxCell(w)
+	v.open()
+	for _, tip := range inboxTips {
+		if got, _ := w.state[tip.state].(string); got == "" || got != englishText(tip.id) {
+			t.Errorf("%s: %q, want %s's words", tip.state, got, tip.id)
+		}
+	}
+}
