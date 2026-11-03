@@ -53,7 +53,7 @@ Before **Set up…** can help, the machine needs Ollama running and, for a reran
 
 Three rules hold throughout:
 
-- **The agent never asks for, holds or looks for a password.** The user types it only into the system's own dialog or their own terminal (step 2).
+- **The agent never asks for, holds or looks for a password.** The user types it only into AutoDoc's terminal, the system's own dialog, or their own terminal (step 2). The agent never reads what is typed there.
 - **Install the minimum.** Only what the checks show missing.
 - **Never install, upgrade or replace a GPU driver**, nor anything that touches signed kernel modules while Secure Boot is on: a change there can leave the machine unable to boot. If the driver itself is missing or broken, stop and tell the user; that is for them or their administrator.
 
@@ -71,9 +71,19 @@ Three rules hold throughout:
 
 Tell the user what you found and what you propose, in plain words, before step 2.
 
-**2. Run each privileged command the user's way.** Say first what the command does and that the system will ask for their password.
+**2. Run each privileged command the user's way.** Say first what the command does and that it will ask for their password.
 
-- **A desktop with a polkit authentication agent:** run it with `pkexec --disable-internal-agent`, and the system's own dialog asks; the flag stops `pkexec` falling back to a password prompt in the agent's own shell, where the user can't answer. Put the whole sequence in one call, so the user sees one dialog, and stop at the first failure. Wrap it in `timeout`, which bounds the dialog and the commands together, because an unanswered dialog otherwise waits for ever. On Arch, for example:
+- **In AutoDoc's terminal**, when the agent runs inside AutoDoc (`$AUTODOC_EDITOR` is set): `autodoc --editor editor.terminal_run '["<command line>"]'`. AutoDoc shows the user a card with the exact line, the agent's name and the folder, and nothing runs until they click **Run**. On Run, the line runs as `sh -c` in a new tab of AutoDoc's terminal, where the user sees it and types their password at `sudo`'s prompt. The agent never sees that tab.
+  - **The first call** needs the `terminal` permission. It is refused with `needs terminal: not granted (the user is asked; their answer comes to you as mail)`. Wait for that mail; once the user allows it, call again.
+  - **The call waits for the user's click.** Give it a long enough timeout (or run it in the background), because nothing runs if the call ends first. Run answers `{"started": true, "tab": …, "exit_by_mail": true}`. **Don't run**, or a closed card, is refused with `the user did not run it`. Then don't call again: ask the user why.
+  - **The exit code comes as mail from the user:** `Command done: <the first line>` or `Command failed (<code>): <the first line>`. The output stays in the user's tab, so ask them what it said before you try again. With `exit_by_mail: false` (a window with no crew), no mail comes: ask the user to tell you when it has finished.
+  - **A sequence goes in one call**, up to 20 lines and 4 KiB, so the user sees it whole on one card. Use `set -e` to stop at the first failure. `sudo` asks once, then remembers the password for a few minutes in that tab. On Arch, for example:
+
+    ```sh
+    autodoc --editor editor.terminal_run '["set -e\nsudo pacman -S --needed --noconfirm nvidia-container-toolkit\nsudo nvidia-ctk runtime configure --runtime=docker\nsudo systemctl restart docker.service"]'
+    ```
+
+- **Outside AutoDoc, on a desktop with a polkit authentication agent:** run it with `pkexec --disable-internal-agent`, and the system's own dialog asks. The flag stops `pkexec` falling back to a password prompt in the agent's own shell, where the user can't answer. Put the whole sequence in one call, so the user sees one dialog, and stop at the first failure. Wrap it in `timeout`, which bounds the dialog and the commands together, because an unanswered dialog otherwise waits for ever:
 
   ```sh
   timeout 300 pkexec --disable-internal-agent /bin/bash -c 'set -euo pipefail
@@ -82,7 +92,7 @@ Tell the user what you found and what you propose, in plain words, before step 2
   systemctl restart docker.service'
   ```
 
-- **Otherwise:** when `pkexec` fails for any reason (no authentication agent, no graphical session, over SSH, the dialog dismissed or timed out), don't retry it: show the exact command and ask the user to run it in their own terminal, with `sudo`, and to say when it has finished. Never run `sudo` from the agent's own shell: it has no terminal to ask in, and it hangs.
+- **Otherwise:** if neither works (AutoDoc's terminal refused because the window has no terminal; `pkexec` with no authentication agent or graphical session, over SSH, or its dialog dismissed or timed out), don't retry. Show the exact command and ask the user to run it in their own terminal, with `sudo`, and to say when it has finished. Never run `sudo` from the agent's own shell: it has no terminal to ask in, and it hangs.
 - Restarting `docker.service` stops the containers running at that moment; say so before, and run it when nothing the user needs is running.
 
 **3. Install the minimum.**
@@ -100,13 +110,13 @@ systemctl enable --now ollama.service
 
 The second is for Ollama installed as a system service; Ollama in a container needs only the first. Tell the user which units you enabled. Check with `systemctl is-enabled docker.service ollama.service`, and again after the next reboot (step 7).
 
-**5. The docker group, only if `docker info` was refused.** Before suggesting it, say plainly: **membership of the `docker` group is equivalent to root.** Anything running as this user can then control the whole machine through Docker. Offer the alternative too, rootless Docker or Podman, which run containers without root (they change the steps above; `tei-rerank.sh` runs `docker compose`). If the user chooses the group, add them through step 2, with the user's name expanded before the command is elevated (inside a root shell `$USER` is `root`):
+**5. The docker group, only if `docker info` was refused.** Before suggesting it, say plainly: **membership of the `docker` group is equivalent to root.** Anything running as this user can then control the whole machine through Docker. Offer the alternative too, rootless Docker or Podman, which run containers without root (they change the steps above; `tei-rerank.sh` runs `docker compose`). If the user chooses the group, add them through step 2, with the user's name expanded before the command is elevated (inside a root shell `$USER` is `root`). In AutoDoc's terminal, the tab's shell expands it before `sudo` runs:
 
 ```sh
-pkexec --disable-internal-agent usermod -aG docker "$USER"
+autodoc --editor editor.terminal_run '["sudo usermod -aG docker \"$USER\""]'
 ```
 
-(or `sudo usermod -aG docker "$USER"` in the user's own terminal).
+(or `pkexec --disable-internal-agent usermod -aG docker "$USER"` outside AutoDoc, or `sudo usermod -aG docker "$USER"` in the user's own terminal).
 
 The running session doesn't see a new group until the user logs out and in again. Until then, `newgrp docker` starts a shell that has it, and an agent can pipe its commands into one (`sg` is missing on some systems, Arch among them):
 
