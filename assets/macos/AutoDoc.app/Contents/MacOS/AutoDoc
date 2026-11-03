@@ -1,0 +1,12 @@
+#!/bin/zsh
+# AutoDoc.app's launcher. Finder starts apps with a bare PATH: take the one an
+# interactive login shell builds (Homebrew, mise, nvm, ~/.local/bin), so the
+# agents AutoDoc starts find claude, codex, git and nvim.
+p=$(/bin/zsh -lic 'print -r -- $PATH' </dev/null 2>/dev/null | tail -1)
+[[ -n $p ]] && export PATH=$p
+cd "$HOME"
+# autodoc-bin, a symlink to the installed autodoc, runs it from inside the
+# bundle so macOS shows its window as AutoDoc.app; without it, the one on PATH.
+bin=${0:A:h}/autodoc-bin
+[[ -x $bin ]] || bin=autodoc
+exec $bin --gui "$@"

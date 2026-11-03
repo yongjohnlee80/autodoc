@@ -63,7 +63,7 @@ func (w *fakeWaker) Wake(ctx context.Context, ep crew.Endpoint, notice string) e
 			return ctx.Err()
 		}
 	}
-	if !strings.HasPrefix(notice, "AutoDoc mail is waiting for you") || !strings.HasSuffix(notice, "Run: autodoc mail receive") {
+	if !strings.HasPrefix(notice, "[AutoDoc mail] Mail is waiting for you") || !strings.HasSuffix(notice, "Run: autodoc mail receive (not SendMessage)") {
 		return fmt.Errorf("a notice that isn't a CLI wake notice: %q", notice)
 	}
 	w.mu.Lock()
@@ -179,7 +179,7 @@ func (r *wakeRig) drain(cred string) []string {
 		}
 		for _, it := range got.Items {
 			bodies = append(bodies, it.Message.Body)
-			if err := r.deps.mail.Ack(r.ctx, cred, it.Delivery.ID, it.Delivery.Lease); err != nil {
+			if _, err := r.deps.mail.Ack(r.ctx, cred, it.Delivery.ID, it.Delivery.Lease); err != nil {
 				r.t.Fatal(err)
 			}
 		}
@@ -561,7 +561,7 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 	r.start(crewWakers(r.deps.crew))
 	r.send(jarvis, "gold", "for gold")
 	r.send(jarvis, "tifa", "for tifa")
-	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"AutoDoc mail is waiting for you: 1 from jarvis (claude). Run: autodoc mail receive"}}` + "\n"
+	want := `{"type":"user","from":"autodoc","message":{"role":"user","content":"[AutoDoc mail] Mail is waiting for you: 1 from jarvis (claude). Run: autodoc mail receive (not SendMessage)"}}` + "\n"
 	select {
 	case line := <-lines:
 		if line != want {
@@ -613,8 +613,8 @@ func TestTheWakeNoticeNamesItsSenders(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		gold: "AutoDoc mail is waiting for you: 2 from jarvis (claude), 1 from user. Run: autodoc mail receive",
-		tifa: "AutoDoc mail is waiting for you: 1 from lector (claude), 1 from zen (claude), 1 from juliet (claude), and 2 more. Run: autodoc mail receive",
+		gold: "[AutoDoc mail] Mail is waiting for you: 2 from jarvis (claude), 1 from user. Run: autodoc mail receive (not SendMessage)",
+		tifa: "[AutoDoc mail] Mail is waiting for you: 1 from lector (claude), 1 from zen (claude), 1 from juliet (claude), and 2 more. Run: autodoc mail receive (not SendMessage)",
 	}
 	r.waker.mu.Lock()
 	notices := maps.Clone(r.waker.notices)

@@ -25,8 +25,8 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from "node:
 // $AUTODOC_CREW_MAIL_VIA: NOTICE_MCP (crew.WakeNoticeMCP) on MCP mail, where the agent has the
 // autodoc server's tools, else NOTICE (crew.WakeNotice), its CLI. A cell holds each the same as its
 // Go twin.
-const NOTICE = "AutoDoc mail is waiting for you. Run: autodoc mail receive";
-const NOTICE_MCP = "AutoDoc mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false.";
+const NOTICE = "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail receive (not SendMessage)";
+const NOTICE_MCP = "[AutoDoc mail] Mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage).";
 const MAX_REQUEST = 1024;
 
 const alive = (pid) => {

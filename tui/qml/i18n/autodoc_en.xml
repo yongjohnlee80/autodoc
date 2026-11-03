@@ -535,6 +535,14 @@
         <source>crew bridges</source>
         <translation>crew bridges</translation>
     </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>the inbox: your mail (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>the inbox: your mail (SPC a i)</translation>
+    </message>
     <message id="autodoc.cmd.editor.context_menu">
         <source>the right-click menu</source>
         <translation>the right-click menu</translation>
@@ -1790,6 +1798,74 @@
     <message id="autodoc.dialog.htmlPreview.zoom_out">
         <source>Zoom &amp;out</source>
         <translation>Zoom &amp;out</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.all">
+        <source>&amp;All</source>
+        <translation>&amp;All</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Close (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.dismiss">
+        <source>&amp;Dismiss…</source>
+        <translation>&amp;Dismiss…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.mark_read">
+        <source>&amp;Mark read</source>
+        <translation>&amp;Mark read</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.more">
+        <source>Mor&amp;e</source>
+        <translation>Mor&amp;e</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.open">
+        <source>&amp;Open</source>
+        <translation>&amp;Open</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.reply">
+        <source>&amp;Reply…</source>
+        <translation>&amp;Reply…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.requests">
+        <source>Open reques&amp;ts</source>
+        <translation>Open reques&amp;ts</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.sender">
+        <source>&amp;Sender</source>
+        <translation>&amp;Sender</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>All</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>Open requests</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>Undeliverable</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>Unread</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title">
+        <source>Inbox — %1</source>
+        <translation>Inbox — %1</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title_open">
+        <source>Inbox — %1 — %2 unread, %3 open requests</source>
+        <translation>Inbox — %1 — %2 unread, %3 open requests</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.undeliverable">
+        <source>Undeli&amp;verable</source>
+        <translation>Undeli&amp;verable</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.unread">
+        <source>&amp;Unread</source>
+        <translation>&amp;Unread</translation>
     </message>
     <message id="autodoc.dialog.luaPick.choose">
         <source>&amp;Choose</source>
@@ -3574,6 +3650,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.the_file_s_outline">
         <source>the file's outline</source>
         <translation>the file's outline</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>the inbox: your mail</translation>
     </message>
     <message id="autodoc.key.the_links">
         <source>the links</source>
@@ -5831,6 +5911,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>&amp;Run</source>
         <translation>&amp;Run</translation>
     </message>
+    <message id="autodoc.question.inbox.dismiss">
+        <source>Dismiss the request?</source>
+        <translation>Dismiss the request?</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_text">
+        <source>%1 asks: %2. Dismissing it tells them you declined.</source>
+        <translation>%1 asks: %2. Dismissing it tells them you declined.</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_yes">
+        <source>&amp;Yes, dismiss it</source>
+        <translation>&amp;Yes, dismiss it</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>a capability AutoDoc does not know</translation>
@@ -6564,6 +6656,74 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.help.log">
         <source>(log: %1)</source>
         <translation>(log: %1)</translation>
+    </message>
+    <message id="autodoc.text.inbox.count">
+        <source>%1 listed</source>
+        <translation>%1 listed</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_more">
+        <source>%1 listed: More reads older ones</source>
+        <translation>%1 listed: More reads older ones</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>%1 listed: the newest %2 notices</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_head">
+        <source>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</source>
+        <translation>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_reply_to">
+        <source>**In reply to** %1</source>
+        <translation>**In reply to** %1</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_undelivered">
+        <source>**Delivery** %1 · **Why** %2</source>
+        <translation>**Delivery** %1 · **Why** %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.hours_ago">
+        <source>%1 h ago</source>
+        <translation>%1 h ago</translation>
+    </message>
+    <message id="autodoc.text.inbox.just_now">
+        <source>just now</source>
+        <translation>just now</translation>
+    </message>
+    <message id="autodoc.text.inbox.minutes_ago">
+        <source>%1 min ago</source>
+        <translation>%1 min ago</translation>
+    </message>
+    <message id="autodoc.text.inbox.no_sender">
+        <source>%1 sent it from no session to show</source>
+        <translation>%1 sent it from no session to show</translation>
+    </message>
+    <message id="autodoc.text.inbox.none">
+        <source>no mail here</source>
+        <translation>no mail here</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_a_request">
+        <source>only an open request is replied to or dismissed</source>
+        <translation>only an open request is replied to or dismissed</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_dismissed">
+        <source>“%1” was not dismissed: %2</source>
+        <translation>“%1” was not dismissed: %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_listed">
+        <source>your mail could not be read: %1</source>
+        <translation>your mail could not be read: %1</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_marked">
+        <source>“%1” was not marked read: %2</source>
+        <translation>“%1” was not marked read: %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.reading">
+        <source>reading your mail…</source>
+        <translation>reading your mail…</translation>
+    </message>
+    <message id="autodoc.text.inbox.request_not_read">
+        <source>a request isn't marked read: reply to it or dismiss it</source>
+        <translation>a request isn't marked read: reply to it or dismiss it</translation>
     </message>
     <message id="autodoc.text.kbtype.a_kb_type_s_git_url_then_stage">
         <source>a KB type's git URL, then Stage</source>

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"slices"
 	"strings"
@@ -328,5 +329,71 @@ func TestReissueSaysWhatEndedItsConfirmation(t *testing.T) {
 	}
 	if len(res.Not) != 1 || !strings.Contains(res.Not[0].Why, "session ended") || slices.Contains(res.Reissued, reissueEndpoint) {
 		t.Errorf("the session ended mid-confirmation: %+v, want it said", res)
+	}
+}
+
+// TestCrewReissueAnswersAsTheSessionTheCLIFinds: `autodoc crew reissue` runs reissue as the session
+// the CLI finds, its answer one JSON line: a healthy session keeps both its parts; an OpenCode
+// session with no endpoint is told its plugin registers it; with no context for the whole --wait
+// (the CLI's own timer between looks), the session is not re-issued, naming the wait; another
+// store's context is the daemon's refusal on stderr, exit 1; a --wait that isn't a duration is
+// usage, exit 2.
+func TestCrewReissueAnswersAsTheSessionTheCLIFinds(t *testing.T) {
+	d := newCrewDaemon(t)
+	t.Chdir(t.TempDir()) // a working directory with no context of its own
+	strs := func(v any) string {
+		var out []string
+		for _, e := range asSlice(v) {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, fmt.Sprint(m["item"], ": ", m["why"]))
+			} else {
+				out = append(out, fmt.Sprint(e))
+			}
+		}
+		return strings.Join(out, ",")
+	}
+
+	healthy := d.agentOfKind("tifa", "agent-1", "store-1", "agy")
+	c, err := readSessionContext(healthy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.deps.crew.SetEndpoint(d.ctx, c.Credential, "agy", reissueAgyLoc); err != nil {
+		t.Fatal(err)
+	}
+	if code, res, errOut := d.as(healthy, "", "crew", "reissue"); code != 0 || strs(res["kept"]) != "session,endpoint" || strs(res["reissued"]) != "" || strs(res["not"]) != "" {
+		t.Fatalf("crew reissue of a healthy session: exit %d, %v, %s; want both kept", code, res, errOut)
+	}
+
+	oc := d.agentOfKind("oc", "agent-2", "store-1", crew.KindOpenCode)
+	if code, res, errOut := d.as(oc, "", "crew", "reissue"); code != 0 || strs(res["kept"]) != "session" ||
+		!strings.Contains(strs(res["not"]), "endpoint: AutoDoc's OpenCode plugin registers it") {
+		t.Fatalf("crew reissue of an OpenCode session with no endpoint: exit %d, %v, %s; want its plugin named", code, res, errOut)
+	}
+
+	if code, res, errOut := d.as("", "", "crew", "reissue", "--wait=1s"); code != 0 || strs(res["kept"]) != "" ||
+		!strings.Contains(strs(res["not"]), "session: no session context yet; its host did not re-join this slot within 1s") {
+		t.Fatalf("crew reissue with no context: exit %d, %v, %s; want the session not re-issued within the wait", code, res, errOut)
+	}
+
+	foreign := d.agent("vision", "agent-3", "store-other")
+	if code, _, errOut := d.as(foreign, "", "crew", "reissue", "--wait", "0s"); code != 1 || !strings.Contains(errOut, `"code":-32095`) {
+		t.Fatalf("crew reissue with another store's context: exit %d, %s; want crew.context_mismatch", code, errOut)
+	}
+
+	for _, args := range [][]string{{"--wait", "soon"}, {"--wait=-1s"}, {"--wait"}, {"--later"}} {
+		if code, _, errOut := d.as(healthy, "", append([]string{"crew", "reissue"}, args...)...); code != 2 || !strings.Contains(errOut, "usage: autodoc crew reissue [--wait D]") {
+			t.Fatalf("crew reissue %q: exit %d, %s; want its usage", args, code, errOut)
+		}
+	}
+}
+
+// TestAKindWithNoWakerRegistersNone: reissue's registration names a kind AutoDoc has no waker for,
+// and OpenCode's (its plugin's, on the session's next message), never taking either for done.
+func TestAKindWithNoWakerRegistersNone(t *testing.T) {
+	for kind, want := range map[string]string{"pi": "a pi agent has no waker yet", crew.KindOpenCode: "AutoDoc's OpenCode plugin registers it"} {
+		if err := registerEndpoint(context.Background(), "", sessionContext{}, kind); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("registerEndpoint for %s: %v, want %q", kind, err, want)
+		}
 	}
 }
