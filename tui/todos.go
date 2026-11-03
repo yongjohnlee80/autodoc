@@ -587,6 +587,11 @@ func (t *todos) show(stores []*todoStore) {
 	t.showStore()
 }
 
+// shows is whether s is the store shown, by its id: listing the stores again (the panel opened, a
+// label set, a store registered) makes the same store a new value while a write is out, and its
+// answer is still the shown store's.
+func (t *todos) shows(s *todoStore) bool { return s != nil && t.cur != nil && t.cur.id == s.id }
+
 // selectStore puts the dropdown on row i, -1 for none: only when it is not there already, as a
 // dropdown set again under the user could take the keyboard from where it is.
 func (t *todos) selectStore(i int) {
@@ -1004,7 +1009,7 @@ func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
 		return
 	}
 	reload := func() {
-		if s == t.cur {
+		if t.shows(s) {
 			t.reload()
 		}
 	}

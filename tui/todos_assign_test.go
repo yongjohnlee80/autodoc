@@ -402,6 +402,52 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 	}
 }
 
+// A's answer that lands after the stores were listed again (the panel opened again, a label set, a
+// store registered) is still the shown store's: the task is followed to In progress, which is read
+// again, and Open no longer shows it. Listing made the store shown a new value, and the answer,
+// compared by value, was dropped: no follow, no read.
+func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testing.T) {
+	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+	v := newTodos(c)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	v.assignPick.accept(0, "")
+	c.deferred = true
+	v.assignSet("")
+	if len(*assigned) != 1 || len(c.pending) != 1 {
+		t.Fatalf("the premise, the assign's answer held: assigned %v, held %d", *assigned, len(c.pending))
+	}
+	assignAnswer := c.pending[0]
+	c.pending = nil
+	shown := v.cur
+	v.list()                 // the stores listed again while the assign is out
+	for len(c.pending) > 0 { // the listing to its end: the stores, their labels, the workspace's store
+		held := c.pending
+		c.pending = nil
+		for _, answer := range held {
+			answer()
+		}
+	}
+	if v.cur == shown || v.cur == nil || v.cur.id != shown.id {
+		t.Fatalf("the premise, the same store listed again as a new value: %p %p", shown, v.cur)
+	}
+	c.deferred = false
+	before := len(c.calls)
+	assignAnswer() // then the assign's answer
+	inProgress := tabOf("in-progress")
+	if v.tab != inProgress || c.set["App.todoTab"] != inProgress {
+		t.Fatalf("after the assign the panel is on tab %d (App.todoTab %v), want In progress (%d)", v.tab, c.set["App.todoTab"], inProgress)
+	}
+	read := false
+	for _, call := range c.calls[before:] {
+		read = read || strings.HasPrefix(call, "todos.list") && strings.Contains(call, "in-progress")
+	}
+	if !read {
+		t.Fatalf("In progress was not read after the assign's answer: %v", c.calls[before:])
+	}
+}
+
 // scopedAgentCore is agentCore in a window holding the crew scope scope ("" for none).
 type scopedAgentCore struct {
 	*agentCore
