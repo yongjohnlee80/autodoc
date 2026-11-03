@@ -92,6 +92,11 @@ func table[R any](c dao.DataConn, name string, fields map[col]func(R) any, key .
 	return sortedTable(c, name, nil, fields, key...)
 }
 
+// statementHooks are hooks on every crew and mail table's statements, as its tables are built at a
+// store's open: none in a running daemon; a cell's view of the SQL each read renders, whose plans
+// it reads (write_path_scale_test.go).
+var statementHooks []dao.Hook
+
 // sortedTable is table with orders beyond its id's: each sort its own column.
 func sortedTable[R any](c dao.DataConn, name string, sorts map[sort]string, fields map[col]func(R) any, key ...col) *schema[R] {
 	fs := map[col]dao.Field[R]{}
@@ -107,6 +112,7 @@ func sortedTable[R any](c dao.DataConn, name string, sorts map[sort]string, fiel
 		dao.Fields[R, col, sort, string](fs),
 		dao.SortMap[R, col, sort, string](sm),
 		dao.Conflict[R, col, sort, string](key...),
+		dao.Hooks[R, col, sort, string](statementHooks...),
 	)
 }
 
@@ -412,6 +418,10 @@ func (t *Tx) PutEndpoint(e crew.Endpoint) error {
 
 func (t *Tx) DeleteEndpoint(session string) error {
 	return t.t.ends.On(t.tx).With(cSession, session).Delete()
+}
+
+func (t *Tx) DeleteWake(session string) error {
+	return t.t.wakes.On(t.tx).With(cSession, session).Delete()
 }
 
 func (t *Tx) Attention(session string) (crew.Attention, bool, error) {

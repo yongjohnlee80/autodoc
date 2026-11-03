@@ -1,7 +1,9 @@
 package sqlitecrewmail
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
 	"github.com/yongjohnlee80/golib/dao"
 
@@ -91,6 +93,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 				byID: `"mail_delivery"."id"`, bySeq: `"mail_delivery"."recipient", "mail_delivery"."seq"`,
 				byLease: `"mail_delivery"."lease_until"`, byDone: `"mail_delivery"."done_at"`}),
 			dao.Conflict[*mail.Delivery, col, sort, string](cID),
+			dao.Hooks[*mail.Delivery, col, sort, string](statementHooks...),
 		),
 		jobs: sortedTable(c, "mail_fallback", map[sort]string{byCreated: `"mail_fallback"."created", "mail_fallback"."id"`,
 			byLease: `"mail_fallback"."lease_until"`}, map[col]func(*mail.FallbackJob) any{
@@ -215,9 +218,13 @@ func (t *Tx) Eligible(recipient, session string, now int64, limit int) ([]mail.D
 		OrderBy(dao.Asc(bySeq)).Limit(uint64(limit)).Select())
 }
 
+// Unhandled is recipient's queued and leased deliveries, in seq order. The order is taken here, not
+// asked of SQLite: asked, the planner satisfies it by walking the recipient's (recipient, seq)
+// index, every delivery it ever had, rather than search mail_delivery_state for the few unhandled.
 func (t *Tx) Unhandled(recipient string) ([]mail.Delivery, error) {
-	return deliveries(t.m.deliveries.On(t.tx).With(cRecipient, recipient).WithPredicate(unhandled).
-		OrderBy(dao.Asc(bySeq)).Select())
+	ds, err := deliveries(t.m.deliveries.On(t.tx).With(cRecipient, recipient).WithPredicate(unhandled).Select())
+	slices.SortFunc(ds, func(a, b mail.Delivery) int { return cmp.Compare(a.Seq, b.Seq) })
+	return ds, err
 }
 
 func (t *Tx) BoundTo(session string) ([]mail.Delivery, error) {
@@ -253,16 +260,44 @@ func (t *Tx) NextDeadline() (int64, bool, error) {
 	if len(lease) > 0 {
 		take(lease[0].LeaseUntil)
 	}
-	// the earliest expiry of a message that still has an unhandled delivery: read from mail_message
-	// itself, ordered by its own column
-	msg, ok, err := one(t.m.messages.On(t.tx).WithPredicate(dao.IsNotNull(`"mail_message"."expires"`)).
-		WithPredicate(store.Correlated(false, "mail_delivery", "message", "mail_message", "id", unhandled)).
-		OrderBy(dao.Asc(byExpires)).Limit(1).Select())
+	// the earliest expiry of a message that still has an unhandled delivery: read from those
+	// deliveries (mail_delivery_state), then their messages by id, never by walking mail_message,
+	// which keeps every message
+	expires, ok, err := t.earliestExpiry()
 	if err != nil {
 		return 0, false, err
 	}
 	if ok {
-		take(msg.Expires)
+		take(&expires)
+	}
+	return at, has, nil
+}
+
+// earliestExpiry is the earliest expiry of the messages of the unhandled deliveries: those
+// deliveries read by mail_delivery_state (state, recipient, seq), then their messages by id, as
+// earliestCreated does for a recipient's fallback candidates.
+func (t *Tx) earliestExpiry() (int64, bool, error) {
+	ds, err := deliveries(t.m.deliveries.On(t.tx).WithPredicate(unhandled).Select())
+	if err != nil || len(ds) == 0 {
+		return 0, false, err
+	}
+	ids := make([]any, 0, len(ds))
+	for _, d := range ds {
+		ids = append(ids, d.Message)
+	}
+	var at int64
+	has := false
+	for part := range slices.Chunk(ids, earliestMessagesPerRead) {
+		msgs, err := t.m.messages.On(t.tx).WithPredicate(dao.In(`"mail_message"."id"`, part)).
+			WithPredicate(dao.IsNotNull(`"mail_message"."expires"`)).Select()
+		if err != nil {
+			return 0, false, err
+		}
+		for _, m := range msgs {
+			if !has || *m.Expires < at {
+				at, has = *m.Expires, true
+			}
+		}
 	}
 	return at, has, nil
 }

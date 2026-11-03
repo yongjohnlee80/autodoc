@@ -113,11 +113,11 @@ A new workspace-owned table follows the same rule.
 | `crew_profile` | an agent's identity in a scope, (scope, codename); "user" is the human; active or merged into another (000026) | `id`, `(scope, codename)` while active |
 | `crew_session` | one process of a profile, registered by its host under an epoch, with its secret's hash (000026), and whether its host wrote what reports its permission prompts (`prompts`, 000028) | `id`, `(host, epoch, instance)` |
 | `crew_endpoint` | how a session is woken: its CLI's channel and locator, never a secret (000026), and when its first generation registered (`first_registered`, 000033) | `session` |
-| `crew_wake` | a session's wake scheduler state: pending and announced generations, the attempt in flight, failures, the next deadline (000026) | `session` |
+| `crew_wake` | a live session's wake scheduler state: pending and announced generations, the attempt in flight, failures, the next deadline (000026); searched by state, an ended session's row deleted at its end (000035) | `session`, `(state, next_at)` |
 | `crew_attention` | a permission prompt or block an agent's adapter reported, shown to the human (000026) | `session` |
 | `mail_message` | a message, sent by an authenticated profile; idempotent by (sender, idem_key) (000026) | `id`, `(sender, idem_key)` |
 | `mail_recipient` | a recipient's delivery sequence high-water, never reused (000026) | `profile` |
-| `mail_delivery` | one delivery of a message to one recipient: queued, leased, acked, failed, expired, merged or withdrawn (000026) | `id`, `(recipient, seq)`, `(message, recipient)` |
+| `mail_delivery` | one delivery of a message to one recipient: queued, leased, acked, failed, expired, merged or withdrawn (000026); searched by state for what is due (000035) | `id`, `(recipient, seq)`, `(message, recipient)`, `(state, recipient, seq)` |
 | `mail_fallback` | a delivery not received in time, handed once to its recipient's host as a job: open, leased, done or unknown, with the host's outcome (000029, [the fallback](../decisions/crew.md#the-fallback-exactly-once)) | `id`, `delivery` |
 | `inbox_change` | the human feed's journal: requests, reports and their answers, attention, as every window reads them (000026) | `seq` |
 
