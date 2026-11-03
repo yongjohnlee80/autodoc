@@ -174,6 +174,39 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 		t.Fatalf("the second of two, Run: %v %v, want started", a.res, a.re)
 	}
 
+	// with the arm kept, through the verb: Run pressed twice runs the first line, and the second's
+	// card, opened by that answer, is refused as answered too soon, said to the user, no tab started
+	terminalCardArm = 400 * time.Millisecond
+	one := run("echo armed-one")
+	r.s.WaitForText(t, "echo armed-one")
+	two := run("echo armed-two")
+	r.s.WaitFor(t, "the second armed card queued", func(string) bool {
+		return onLoop(r, func() bool { return len(r.h.asker.waiting) == 1 })
+	})
+	time.Sleep(terminalCardArm + 100*time.Millisecond) // the first card read
+	armedBefore := len(tabs())
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
+	if a := wait("the first armed line", one); a.re != nil || a.res["started"] != true {
+		t.Fatalf("the first armed line: %v %v, want started", a.res, a.re)
+	}
+	if a := wait("the second armed line", two); a.re == nil || a.re.Code != codeEditorRefused || !strings.Contains(a.re.Message, "before it had shown") {
+		t.Fatalf("Run typed ahead onto the second card: %v %v, want refused as too soon", a.res, a.re)
+	}
+	if got := len(tabs()); got != armedBefore+1 {
+		t.Fatalf("Run pressed twice started %d tabs, want 1", got-armedBefore)
+	}
+	r.s.WaitFor(t, "the too-soon notice", func(string) bool {
+		return onLoop(r, func() bool {
+			for _, n := range r.h.noticeLog.items {
+				if strings.Contains(n.text, "was answered before you could read it") {
+					return true
+				}
+			}
+			return false
+		})
+	})
+	terminalCardArm = 0
+
 	// a card another question displaces comes back after it, unanswered: nothing ran meanwhile, and
 	// only its own Run runs it (here Don't run)
 	before := len(tabs())

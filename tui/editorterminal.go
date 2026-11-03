@@ -83,7 +83,8 @@ func terminalLine(line string) error {
 
 // overlay is a combining mark drawn over or around its base rather than beside it: the strokes
 // and slashes U+0334-U+0338, and the combining marks for symbols U+20D0-U+20F0 (overlays, rings,
-// enclosing shapes). It changes what its base reads as.
+// enclosing shapes). It changes what its base reads as. These are the common ones, not all of
+// Unicode's overlays (ccc=1 has a few more in rare scripts); the stacked-marks rule bounds the rest.
 func overlay(r rune) bool { return (r >= 0x0334 && r <= 0x0338) || (r >= 0x20D0 && r <= 0x20F0) }
 
 // terminalCardArm is how long a terminal card shows before its Run counts: a card queued behind
@@ -141,6 +142,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 	}
 	answered := make(chan error, 1)
 	var run started
+	early := false // the card's Run came before it was armed
 	if _, err := onLoopFor(ctx, h, func() (bool, error) {
 		agent, _, err := h.agentOf(req)
 		if err != nil {
@@ -162,6 +164,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
 			Arm: terminalCardArm,
 			OnTooSoon: func() {
+				early = true
 				h.notify(h.trf("autodoc.notice.editorterminal.not_run_answered_before_it_showed", agent))
 			},
 			OnYes: func() {
@@ -176,6 +179,10 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 				answered <- err
 			},
 			OnCancel: func() {
+				if early { // a key typed ahead, not the user's choice: they may well want it run
+					answered <- &golibrpc.Error{Code: codeEditorRefused, Message: "not run: the user's Run reached this card before it had shown (a key typed ahead), so it counted as Don't run; you may ask once more"}
+					return
+				}
 				answered <- &golibrpc.Error{Code: codeEditorRefused, Message: "the user did not run it"}
 			},
 		})
