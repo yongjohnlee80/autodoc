@@ -4114,6 +4114,22 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>智能体的编辑器套接字</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>未运行：代理 %1 的命令卡片在你能阅读之前就被回答了。代理可以再次请求。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>未运行：在你回答之前，代理 %1 已停止等待。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>代理 %1 在终端中运行的命令已退出，退出码为 %2。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>无法将命令的退出码通过邮件发送给代理 %1：%2</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>已移除 %1 %2</translation>
@@ -5590,6 +5606,26 @@ WHAT A KEY NEEDS
         <source>&amp;No</source>
         <translation>否(&amp;N)</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>不运行(&amp;D)</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
+        <translation>%1
+
+在新终端标签页（%2）中运行。口令请在那里输入：代理看不到标签页，只得知退出码。</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>允许代理 %1 在 AutoDoc 的终端中运行此命令吗？</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>运行(&amp;R)</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>AutoDoc 不认识的权限</translation>
@@ -5633,6 +5669,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>运行 AutoDoc 的任意命令</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>在 AutoDoc 的终端中运行命令行（每一行都只在你看过并选择“运行”之后运行）</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>

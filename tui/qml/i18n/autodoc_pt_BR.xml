@@ -4128,6 +4128,22 @@ O QUE UMA TECLA PRECISA
         <source>the editor socket for agents</source>
         <translation>o socket do editor para agentes</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>Não executado: o cartão do comando do agente %1 foi respondido antes que você pudesse lê-lo. O agente pode pedir de novo.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>Não executado: o agente %1 parou de esperar antes de você responder.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>O comando que o agente %1 executou no terminal saiu com %2.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>Não foi possível enviar por e-mail ao agente %1 o código de saída do comando: %2</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>removido: %1 %2</translation>
@@ -5604,6 +5620,26 @@ O QUE UMA TECLA PRECISA
         <source>&amp;No</source>
         <translation>&amp;Não</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>Não executar(&amp;d)</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
+        <translation>%1
+
+Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê nada da aba, só o código de saída.</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>deixar o agente %1 executar isto no terminal do AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>Executa&amp;r</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>uma capacidade que o AutoDoc não conhece</translation>
@@ -5647,6 +5683,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>executar qualquer comando do AutoDoc</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>executar linhas de comando no terminal do AutoDoc, cada uma só depois que você a vir e disser Executar</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>

@@ -4125,6 +4125,22 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>エージェント用のエディターソケット</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>実行されませんでした: エージェント %1 のコマンドのカードが、読む前に応答されました。エージェントはもう一度依頼できます。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
+        <source>Not run: the agent %1 stopped waiting before you answered.</source>
+        <translation>実行されませんでした: エージェント %1 があなたの回答より前に待つのをやめました。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
+        <source>The command the agent %1 ran in the terminal exited %2.</source>
+        <translation>エージェント %1 がターミナルで実行したコマンドは %2 で終了しました。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>コマンドの終了コードをエージェント %1 にメールで送れませんでした: %2</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 を削除しました</translation>
@@ -5601,6 +5617,26 @@ WHAT A KEY NEEDS
         <source>&amp;No</source>
         <translation>いいえ(&amp;n)</translation>
     </message>
+    <message id="autodoc.question.editorterminal.dont_run">
+        <source>&amp;Don't run</source>
+        <translation>実行しない(&amp;d)</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
+        <source>%1
+
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
+        <translation>%1
+
+新しいターミナルタブ（%2）で実行。パスフレーズはそこへ入力。エージェントにはタブは見えず、終了コードだけが届きます。</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal">
+        <source>let the agent %1 run this in AutoDoc's terminal?</source>
+        <translation>エージェント %1 に AutoDoc のターミナルでこれを実行させますか?</translation>
+    </message>
+    <message id="autodoc.question.editorterminal.run">
+        <source>&amp;Run</source>
+        <translation>実行(&amp;r)</translation>
+    </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
         <translation>AutoDoc が認識していない権限</translation>
@@ -5644,6 +5680,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>AutoDoc の任意のコマンドを実行</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
+        <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
+        <translation>AutoDoc のターミナルでコマンド行を実行（各行は、内容を確認して「実行」を選んだ後にのみ）</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>
