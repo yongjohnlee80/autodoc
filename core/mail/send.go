@@ -590,8 +590,11 @@ func (m *Manager) Renew(ctx context.Context, credential, delivery, lease string)
 
 // Show is a delivery the caller holds, read again: its message, under the lease it holds, with the
 // lease and its attempts unchanged (mail.show).
-// Another session's, another lease, one that lapsed, or a delivery done is ErrLeaseLost. It writes
-// nothing: a lapsed lease is read as lapsed, and left for the next write to expire.
+// The caller's own delivery that is done says so: acked (or replied to) is ErrDone; failed, expired,
+// merged, withdrawn (handed to its host as a fallback), or its message past its expiry with no write
+// yet to expire it, is ErrEnded. Another session's, another lease, or one that lapsed on a live
+// message is ErrLeaseLost. It writes nothing: what it reads as lapsed or ended is left for the next
+// write to settle.
 func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) (Item, error) {
 	var out Item
 	err := m.store.Read(ctx, func(tx Tx) error {
@@ -603,8 +606,11 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 		if err != nil {
 			return err
 		}
-		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
-			return ErrLeaseLost
+		switch d.State { // the caller's own delivery, done: say what became of it
+		case Acked:
+			return ErrDone
+		case Failed, Expired, Merged, Withdrawn:
+			return ErrEnded
 		}
 		msg, ok, err := tx.Message(d.Message)
 		if err != nil {
@@ -614,7 +620,10 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 			return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
 		}
 		if msg.Expires != nil && *msg.Expires <= tx.Now().UnixNano() {
-			return ErrLeaseLost // the message ended though its lease is live; the next write expires it
+			return ErrEnded // the message ended, though no write has expired its delivery yet
+		}
+		if d.State != Leased || d.Lease != lease || lease == "" || d.LeaseUntil == nil || *d.LeaseUntil <= tx.Now().UnixNano() {
+			return ErrLeaseLost
 		}
 		scope, err := receiverScope(tx, s)
 		if err != nil {
@@ -630,10 +639,28 @@ func (m *Manager) Show(ctx context.Context, credential, delivery, lease string) 
 	return out, err
 }
 
-// Ack is done with a delivery under its lease. Replaying an ack of the same lease answers ok;
-// another lease, or one that lapsed, is ErrLeaseLost.
-func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) error {
-	return m.store.Write(ctx, func(tx Tx) error {
+// Answered is what an ack or a reply did: the delivery its handle resolved to (the delivery's own
+// id, also when it was named by its message's id) and its state then.
+type Answered struct {
+	Delivery string
+	State    AnswerState
+}
+
+// AnswerState is what an ack or a reply found and did.
+type AnswerState string
+
+const (
+	AnsweredAcked        AnswerState = "acked"         // this ack wrote the delivery done
+	AnsweredAlreadyAcked AnswerState = "already_acked" // an ack of the same lease had: a replay
+	AnsweredReplied      AnswerState = "replied"       // the request's response is sent (this time or before)
+)
+
+// Ack is done with a delivery under its lease, and answers the delivery it resolved to and whether
+// this ack wrote it done or found it so (a replay of the same lease answers already_acked). Another
+// lease, or one that lapsed, is ErrLeaseLost.
+func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) (Answered, error) {
+	var out Answered
+	err := m.store.Write(ctx, func(tx Tx) error {
 		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
 			return err
@@ -645,22 +672,32 @@ func (m *Manager) Ack(ctx context.Context, credential, delivery, lease string) e
 		if err != nil {
 			return err
 		}
-		return ack(tx, d, lease)
+		already, err := ack(tx, d, lease)
+		if err != nil {
+			return err
+		}
+		out = Answered{Delivery: d.ID, State: AnsweredAcked}
+		if already {
+			out.State = AnsweredAlreadyAcked
+		}
+		return nil
 	})
+	return out, err
 }
 
-func ack(tx Tx, d Delivery, lease string) error {
+// ack writes d done under lease; already when an ack of the same lease had.
+func ack(tx Tx, d Delivery, lease string) (already bool, err error) {
 	switch {
 	case lease == "" || d.Lease != lease:
-		return ErrLeaseLost
+		return false, ErrLeaseLost
 	case d.State == Acked:
-		return nil
+		return true, nil
 	case d.State != Leased:
-		return ErrLeaseLost
+		return false, ErrLeaseLost
 	}
 	now := tx.Now().UnixNano()
 	d.State, d.DoneAt, d.LeaseUntil = Acked, &now, nil
-	return tx.PutDelivery(d)
+	return false, tx.PutDelivery(d)
 }
 
 // Reply is what a replier gives mail.reply.
@@ -672,17 +709,19 @@ type Reply struct {
 
 // Reply acks a request's delivery under its lease and sends its response, in one write
 // (docs/decisions/crew.md#durable-mail). A replier's response to a request is one: a retry with the
-// same content answers it, even after the lease is gone, and other content is ErrKeyReused.
-func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string, p Reply) (Message, error) {
+// same content answers it, even after the lease is gone, and other content is ErrKeyReused. It
+// answers the response and the delivery the handle resolved to, replied.
+func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string, p Reply) (Message, Answered, error) {
 	switch {
 	case len(p.Body) > MaxBody:
-		return Message{}, fmt.Errorf("%w: %d bytes, at most %d", ErrTooLarge, len(p.Body), MaxBody)
+		return Message{}, Answered{}, fmt.Errorf("%w: %d bytes, at most %d", ErrTooLarge, len(p.Body), MaxBody)
 	case len(p.Subject) > MaxSubject:
-		return Message{}, fmt.Errorf("%w: a subject of %d bytes, at most %d", ErrInvalid, len(p.Subject), MaxSubject)
+		return Message{}, Answered{}, fmt.Errorf("%w: a subject of %d bytes, at most %d", ErrInvalid, len(p.Subject), MaxSubject)
 	case p.Key == "":
-		return Message{}, fmt.Errorf("%w: an empty key", ErrInvalid)
+		return Message{}, Answered{}, fmt.Errorf("%w: an empty key", ErrInvalid)
 	}
 	var out Message
+	var ans Answered
 	err := m.store.Write(ctx, func(tx Tx) error {
 		s, err := m.crew.Authenticate(tx, credential)
 		if err != nil {
@@ -705,6 +744,7 @@ func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string,
 		if !ok || req.Kind != KindRequest {
 			return fmt.Errorf("%w: delivery %s is not a request's", ErrInvalid, delivery)
 		}
+		ans = Answered{Delivery: d.ID, State: AnsweredReplied}
 		sum := replyDigest(d.ID, p)
 		// before the lease: a retry after a lost answer gets its reply back, never ErrLeaseLost
 		if old, ok, err := tx.Response(req.ID, s.Profile); err != nil {
@@ -721,7 +761,7 @@ func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string,
 		} else if ok {
 			return ErrKeyReused
 		}
-		if err := ack(tx, d, lease); err != nil {
+		if _, err := ack(tx, d, lease); err != nil {
 			return err
 		}
 		out = Message{ID: m.newID(), Sender: s.Profile, SenderSession: s.ID, IdemKey: p.Key, Digest: sum,
@@ -733,7 +773,10 @@ func (m *Manager) Reply(ctx context.Context, credential, delivery, lease string,
 		_, err = m.deliver(tx, out, req.Sender, "")
 		return err
 	})
-	return out, err
+	if err != nil {
+		return Message{}, Answered{}, err
+	}
+	return out, ans, nil
 }
 
 func replyDigest(delivery string, p Reply) []byte {
@@ -752,6 +795,9 @@ const previewMax = 1000
 type Inbox struct {
 	Unread int // at most previewMax
 	Items  []Item
+	// Held is how many deliveries the session holds leased and hasn't answered (acked or replied
+	// to): one it forgot comes to it again when its lease lapses.
+	Held int
 }
 
 // Preview is the credential's session's eligible mail, the first limit of it with its messages,
@@ -788,6 +834,30 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 					return err
 				}
 				out.Items = append(out.Items, Item{Delivery: d, Message: msg, From: from})
+			}
+		}
+		// held: the session's mail (its profile's, unbound or bound to it, as owned reads a
+		// delivery) leased under a lease that hasn't lapsed, of a message that hasn't expired (one
+		// that has can't be answered, though no write has expired its delivery yet); a delivery
+		// doesn't record the session that leased it, and a profile has one live session
+		unhandled, err := tx.Unhandled(s.Profile)
+		if err != nil {
+			return err
+		}
+		now := tx.Now().UnixNano()
+		for _, d := range unhandled {
+			if (d.Session != "" && d.Session != s.ID) || d.State != Leased || d.LeaseUntil == nil || *d.LeaseUntil <= now {
+				continue
+			}
+			msg, ok, err := tx.Message(d.Message)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
+			}
+			if msg.Expires == nil || *msg.Expires > now {
+				out.Held++
 			}
 		}
 		return nil

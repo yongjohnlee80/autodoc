@@ -179,7 +179,7 @@ func (r *wakeRig) drain(cred string) []string {
 		}
 		for _, it := range got.Items {
 			bodies = append(bodies, it.Message.Body)
-			if err := r.deps.mail.Ack(r.ctx, cred, it.Delivery.ID, it.Delivery.Lease); err != nil {
+			if _, err := r.deps.mail.Ack(r.ctx, cred, it.Delivery.ID, it.Delivery.Lease); err != nil {
 				r.t.Fatal(err)
 			}
 		}

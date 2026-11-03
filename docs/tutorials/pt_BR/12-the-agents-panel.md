@@ -24,6 +24,8 @@ flowchart LR
 
 **Mande a sua página.** **SPC a** abre o cartão de agentes: **b** envia a página a um agente, **f** a seleção.
 
+**Sua caixa de entrada.** Os agentes mandam e-mail para você: um relatório quando terminam uma etapa e um pedido quando precisam da sua decisão. **SPC a i** (ou `:inbox`) abre a caixa de entrada, as mais recentes primeiro; o título conta o que não foi lido e os pedidos ainda em aberto. As abas **Todas**, **Não lidas**, **Pedidos em aberto** e **Não entregáveis** a filtram, e **Mais** lê as mensagens mais antigas. A mensagem sob o cursor aparece abaixo da lista. **Abrir** (Enter) abre a mensagem sob o cursor; abrir um relatório o marca como lido (**Marcar como lida** também). Um pedido fica em aberto até você responder: **Responder…** manda a sua resposta ao agente, e **Dispensar…** (perguntado antes) avisa que você não vai fazer. **Remetente** mostra o agente que mandou. Um pedido também aparece como aviso em todas as janelas, e o aviso abre a mesma resposta.
+
 Na GUI, **Opções › Fontes e zoom…** define o tamanho do texto dos agentes, como uma fração do da janela, de 50% a 150%; o menu do painel (≡) o muda de 10% em 10% (**Tamanho do texto › Menor**, **Maior**). O painel de terminal o compartilha.
 
 Mais: [Referência, Capítulo 11: Abas de terminal embutidas e entrega de tarefas a agentes com uma tecla](../../reference/11-terminal-tabs-and-agent-handoff.md) e [Referência, Capítulo 12: Integração com agentes de IA, recuperação adaptativa e RPC pela CLI](../../reference/12-ai-agent-integration-and-cli-rpc.md).

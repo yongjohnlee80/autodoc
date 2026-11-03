@@ -413,8 +413,11 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   lost lease, which says nothing of anyone else's mail.
 - `mail.show` (protocol 45) reads a delivery the caller holds again, under its lease, which stays as
   it was (lease, deadline, attempts): an agent whose reader cut a body short reads it whole, never
-  asking its sender to resend. Another session's, another lease, a lapsed one or a done delivery is a
-  lost lease. It writes nothing.
+  asking its sender to resend. The caller's own delivery that is done says so (protocol 51):
+  `mail.done` when it was acked or replied to, so an agent can tell its ack landed; `mail.ended` when
+  it failed, expired, was merged, or was withdrawn (handed to its host as a fallback), or its message
+  passed its expiry though no write has expired it yet. Another session's, another lease, or a lapsed
+  lease on a live message is a lost lease. It writes nothing.
 - What an agent reads of its mail costs only what it needs, since each byte is paid for in every
   session. The CLI and the MCP tools print one line of JSON, no indent and nothing HTML-escaped. A
   received item names its delivery once, as its `id`: the delivery's own id and lease aren't printed
@@ -435,6 +438,27 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   transaction, and a connection may hold at most two, so normal calls keep their slots.
 
 In the code: `core/mail/send.go`, `core/mail/deliver.go`, `core/mail/wait.go`, `core/crew/waits.go`
+
+## An answer says what it did
+
+An ack that answered `{}` couldn't tell an agent which delivery it had acked, whether the ack had
+written anything, or that one it still held was unanswered. Agents took a forgotten ack, whose
+delivery came back at its lease expiry, for a daemon redelivering acked mail. So each answer says
+what it did (protocol 52):
+
+- `mail.ack` answers `{delivery, state}`: the delivery its handle resolved to, also when the handle
+  named the message's id with the lease, and `acked` when this ack wrote it done, `already_acked`
+  when an ack of the same lease had (a replay).
+- `mail.reply` adds the same keys to its `{message}`: the delivery, and `replied`, for the first reply
+  and a retry alike.
+- `mail.inbox` answers `held`: the deliveries the caller holds leased, unlapsed and unanswered. The
+  crew MCP server puts it on every tool result's last line, beside `waiting`, so a forgotten ack
+  shows on the next tool call. A lapsed lease isn't held: its delivery waits to be received again.
+
+Each is additive: a client below 52 reads the keys it knew.
+
+In the code: `core/mail/send.go` (`Ack`, `Reply`, `Preview`), `core/mail/module.go`, `app/crewmcp.go`
+(`waitingLine`), `core/crew/guide.go`
 
 ## Wakers and the wake scheduler
 
@@ -507,7 +531,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   process, since it wouldn't start an agent it still runs, so the old session ends (`takeover`) and
   the new one is registered. A ghost (a session left live by a host that never sent `crew.exit`)
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
-- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `no_endpoint`, `wakes_failing` (with
+- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
+  `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
+  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
@@ -569,6 +595,20 @@ delivery between agents never waits on you.
   `inbox.watch` answers the changes after a cursor, or a snapshot when the cursor can't be resumed.
 - Every window shows the same toasts: one for each open request and each raised attention, ended in
   every window when it is answered, dismissed, expired or cleared, and a passing one for each report.
+- **The inbox** (`SPC a i`, or `:inbox`) lists your mail in a dialog, newest first, fifty at a time
+  (`inbox.list`, paged by seq; More reads the next page, while the last page held some). Its tabs
+  are All, Unread (reports not read yet), Open requests, and Undeliverable (`inbox.list`'s filter,
+  whose daemon side answers the newest fifty notices only: that tab lists them with no More, and
+  says so). The message under the cursor
+  shows below the list, as Markdown. Opening a report marks it read (`inbox.ack`); opening a request
+  never answers it or marks it read: it stays open until Reply (the reply dialog) or Dismiss (asked
+  first) answers it. Mark read marks any report read; Sender shows the agent that sent it. The
+  dialog holds no long-poll of its own: the window's one `inbox.watch` gives its title the count of
+  what is open, and a change (an undeliverable notice too) reads the first page of the tab shown
+  again, and that page is the list: the pages More read go, so the list is always one consistent
+  read (more than a page arriving leaves no gap, and no older row is listed as it was); the other
+  tab's source is read again at its next showing. A read overtaken by a later one, or by an ack or
+  dismiss that landed, is dropped. The cursor stays on its message.
 - A request's toast opens a reply dialog in any window. Send is `inbox.reply`, keyed by the request
   and the text, so a resend after a lost answer is the same reply; the first answer wins. Dismiss
   tells the sender. An attention's toast raises its agent, or asks the host that shows it to
@@ -866,12 +906,19 @@ the session doesn't start until someone answers it.
   run the same CLI as mise's tool for the name, or a later file on PATH, which are tried next. The
   TUI does this off the loop when the window starts and after each spawn; a spawn asks the binary it
   found again, which costs a stat when nothing changed.
+- mise can be held up while other agents start: a wrapper that runs `mise use` on each launch takes
+  mise's lock, or checks its remote. So `mise which` is bounded at 5 s, and asked once more, bounded
+  at 15 s, when that runs out. When mise still can't answer, nothing is taken in its place, not even
+  the binary an earlier lookup found: the launcher may run another one now (the user's mise selection
+  changed), and settings naming hooks that one doesn't know can stall its start. The floor is safe;
+  a guessed binary isn't.
 - The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
   what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
   `SessionStart` alone, and registers without `prompts`.
 - When no file reads as a Claude Code, it is taken to know `SessionStart` and
-  `crossSessionInbound` alone, and the window says once that its prompts aren't reported, naming
-  the files tried.
+  `crossSessionInbound` alone, and the window says once that its prompts aren't reported. The
+  notice says first why mise didn't answer (`mise which claude timed out (5s, then 15s)`, or its
+  failure), then names the files tried, so a notice cut short still shows its cause.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 

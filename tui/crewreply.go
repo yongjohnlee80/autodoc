@@ -13,8 +13,9 @@ import (
 // window, wherever the asking agent runs: the request's subject and body, a text area for the
 // answer, and Send, Dismiss or Cancel. Send is inbox.reply, keyed by the request and the body, so a
 // reply sent again after a lost answer is the same reply; Dismiss is inbox.dismiss, the sender
-// told. A reply that could not be sent is kept as the request's draft: the dialog opens on it
-// again. An attention's toast raises its agent here, or asks the window that shows it to
+// told, once the user says so, as the inbox's Dismiss asks: a dismiss is final. A reply that could
+// not be sent, or one typed before a Dismiss the user took back, is kept as the request's draft:
+// the dialog opens on it again. An attention's toast raises its agent here, or asks the window that shows it to
 // (inbox.focus).
 
 // crewReplyDialog is the dialog's id in the layout (main.qml's Reply { id: crewReply }); crewReplyText
@@ -35,7 +36,7 @@ func (*crewInbox) replyState() map[string]any {
 func (x *crewInbox) Commands() map[string]Command {
 	return map[string]Command{
 		"App.replySend":       oneString("the reply", x.replySend),
-		"App.replyDismiss":    none(x.replyDismiss),
+		"App.replyDismiss":    oneString("the answer typed", x.replyDismiss),
 		"App.replyClosed":     none(func() { x.replying = "" }),
 		"App.toggleAgentBell": none(x.toggleBell),
 	}
@@ -113,14 +114,27 @@ func (x *crewInbox) replySend(body string) {
 	})
 }
 
-// replyDismiss declines the request the dialog is open on: its sender is told.
-func (x *crewInbox) replyDismiss() {
+// replyDismiss declines the request the dialog is open on, once the user says so: its sender is
+// told, and the first answer wins, so it is final. What was typed is kept as the request's draft
+// until the dismiss is done: No leaves the request open, its dialog opening on it again.
+func (x *crewInbox) replyDismiss(typed string) {
 	id := x.replying
 	x.replying = ""
 	if id == "" {
 		return
 	}
+	if typed != "" {
+		x.drafts[id] = typed
+	} else {
+		delete(x.drafts, id) // emptied by the user: no older draft comes back
+	}
 	r := x.requests[id]
+	x.c.Ask(Question{Title: x.c.Tr("autodoc.question.inbox.dismiss"), Text: x.c.Trf("autodoc.question.inbox.dismiss_text", r.from, r.subject),
+		Yes: x.c.Tr("autodoc.question.inbox.dismiss_yes"), OnYes: func() { x.dismissRequest(id, r) }})
+}
+
+// dismissRequest is inbox.dismiss of request id, the user having said so.
+func (x *crewInbox) dismissRequest(id string, r crewRequest) {
 	x.c.Go(func(ctx context.Context) any {
 		_, err := x.c.Call(ctx, "inbox.dismiss", id)
 		return err

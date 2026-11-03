@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 6
+revision: 7
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
@@ -145,7 +145,9 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
   "what replaced this ADR" is `graph.backlinks` with `supersedes` plus `graph.links` with
   `superseded_by`.
 - `graph.unresolved` `[workspace]` lists the links that reach nothing (`missing`, `ambiguous`), and the
-  supersession relations that go round a loop (`cycle`). Fix them in the frontmatter.
+  supersession relations that go round a loop (`cycle`). Fix them in the frontmatter. It answers a
+  page: `{unresolved, count, next}`, 500 rows by default. For the next page, pass
+  `{"offset": <next>}` (and `"limit"`, up to 2000) as the last parameter. The last page has no `next`.
 
 ## 6. Writing
 

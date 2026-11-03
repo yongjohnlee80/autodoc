@@ -32,6 +32,10 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "a retry sends the same content; new content takes a new key"},
 		{Err: ErrTooLarge, Code: CodeTooLarge, Name: "mail.too_large", Message: "the body is past 64 KiB",
 			Next: "send a shorter body, and put the rest in a file the recipient can read"},
+		{Err: ErrDone, Code: CodeDone, Name: "mail.done", Message: "the delivery is acked: it is handled, nothing to answer again",
+			Next: "go on: its ack (or reply) landed"},
+		{Err: ErrEnded, Code: CodeEnded, Name: "mail.ended", Message: "the delivery has ended: its message expired, or it fell back to the host",
+			Next: "nothing to answer: mail.receive for what is still yours"},
 		{Err: ErrLeaseLost, Code: CodeLeaseLost, Name: "mail.lease_lost", Message: "the caller no longer holds the delivery's lease",
 			Next: "mail.receive again: the delivery comes back if it is still unhandled"},
 		{Err: crew.ErrLongPollsBusy, Code: crew.CodeLongPollsBusy, Name: "mail.long_polls_busy",
@@ -129,9 +133,16 @@ type (
 	inboxResult struct {
 		Unread int        `json:"unread"`
 		Items  []wireItem `json:"items"`
+		Held   int        `json:"held"`
+	}
+	answeredResult struct {
+		Delivery string `json:"delivery"`
+		State    string `json:"state"`
 	}
 	replyResult struct {
-		Message wireMessage `json:"message"`
+		Message  wireMessage `json:"message"`
+		Delivery string      `json:"delivery"`
+		State    string      `json:"state"`
 	}
 	wireJob struct {
 		ID         string      `json:"id"`
@@ -208,8 +219,8 @@ func (m *Manager) Verbs() []module.Verb {
 			Effect: module.EffectWrite, Result: result, Errors: append([]int64{crew.CodeStaleEpoch}, codes...), Doc: doc}
 	}
 	show := agent("mail.show", module.EffectRead, "{from, delivery, message}",
-		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged.",
-		CodeLeaseLost)
+		"A delivery the caller holds, read again (a body its reader cut short): its message under the lease mail.receive gave, the lease, lease_until and attempts unchanged. The caller's own delivery that is done says so (since 51): mail.done when acked or replied to, mail.ended when it failed, expired, was merged or withdrawn (handed to its host as a fallback), or its message passed its expiry. Another session's, another lease, or a lapsed lease on a live message is mail.lease_lost.",
+		CodeLeaseLost, CodeDone, CodeEnded)
 	show.Since = showSince
 	return []module.Verb{
 		module.Handle(agent("mail.send", module.EffectWrite, "{message, deliveries[]}",
@@ -245,17 +256,18 @@ func (m *Manager) Verbs() []module.Verb {
 				}
 				return toWireItem(it), nil
 			}),
-		module.Handle(agent("mail.ack", module.EffectWrite, "{}",
-			"Done with a delivery under its lease. Replaying an ack of the same lease answers ok.", CodeLeaseLost),
-			func(ctx context.Context, p leaseParams) (struct{}, error) {
-				return struct{}{}, m.Ack(ctx, p.Credential, p.Delivery, p.Lease)
+		module.Handle(agent("mail.ack", module.EffectWrite, "{delivery, state}",
+			"Done with a delivery under its lease. Answers the delivery its handle resolved to, and state acked, or already_acked for a replay of the same lease.", CodeLeaseLost),
+			func(ctx context.Context, p leaseParams) (answeredResult, error) {
+				a, err := m.Ack(ctx, p.Credential, p.Delivery, p.Lease)
+				return answeredResult{Delivery: a.Delivery, State: string(a.State)}, err
 			}),
-		module.Handle(agent("mail.reply", module.EffectWrite, "{message}",
-			"Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it.",
+		module.Handle(agent("mail.reply", module.EffectWrite, "{message, delivery, state}",
+			"Ack a request's delivery and send its response, in one transaction. One response per request: a retry with the same content answers it. Answers the response, the delivery its handle resolved to, and state replied.",
 			CodeLeaseLost, CodeKeyReused, CodeTooLarge),
 			func(ctx context.Context, p replyParams) (replyResult, error) {
-				msg, err := m.Reply(ctx, p.Credential, p.Delivery, p.Lease, Reply{Subject: p.Subject, Body: p.Body, Key: p.Key})
-				return replyResult{Message: toWireMessage(msg)}, err
+				msg, a, err := m.Reply(ctx, p.Credential, p.Delivery, p.Lease, Reply{Subject: p.Subject, Body: p.Body, Key: p.Key})
+				return replyResult{Message: toWireMessage(msg), Delivery: a.Delivery, State: string(a.State)}, err
 			}),
 		module.Handle(agent("mail.wait", module.EffectRead, "{ready, timed_out}",
 			"Answers when the caller has mail it may receive, or at timeout (at most 25 s). A connection holds at most two long-polls.",
@@ -287,10 +299,10 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p fallbackDoneParams) (struct{}, error) {
 				return struct{}{}, m.FallbackDone(ctx, p.Scope, p.Run, p.Epoch, p.Job, p.Lease, FallbackOutcome(p.Outcome))
 			}),
-		module.Handle(agent("mail.inbox", module.EffectRead, "{unread, items[]}", "A preview of the caller's eligible mail: never leases."),
+		module.Handle(agent("mail.inbox", module.EffectRead, "{unread, items[], held}", "A preview of the caller's eligible mail: never leases. held is how many deliveries the caller holds leased and hasn't answered."),
 			func(ctx context.Context, p inboxParams) (inboxResult, error) {
 				in, err := m.Preview(ctx, p.Credential, int(p.Limit))
-				return inboxResult{Unread: in.Unread, Items: toWireItems(in.Items)}, err
+				return inboxResult{Unread: in.Unread, Items: toWireItems(in.Items), Held: in.Held}, err
 			}),
 	}
 }

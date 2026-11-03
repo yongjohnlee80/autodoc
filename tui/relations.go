@@ -266,16 +266,28 @@ func (r *related) load(ws, p string) {
 		if rl.in, rl.err = edges("graph.backlinks"); rl.err != nil {
 			return rl
 		}
-		// the supersession relations of the workspace that resolve or not, and loop: this one's
-		res, err := r.c.Call(ctx, "graph.unresolved", ws, map[string]any{"kinds": []any{"supersedes", "superseded_by"}})
-		if err != nil {
-			rl.err = err
-			return rl
-		}
-		for _, u := range asList(res) {
-			if m := asMap(u); str(m, "src") == p && str(m, "reason") == "cycle" {
-				rl.cycles = append(rl.cycles, str(m, "raw"))
+		// the supersession relations of the workspace that resolve or not, and loop: this one's, on
+		// every page (protocol 50; a daemon before it answers the whole list)
+		for offset, pages := int64(0), 1; ; pages++ { // pages: the calls made, this one included
+			opts := map[string]any{"kinds": []any{"supersedes", "superseded_by"}}
+			if offset > 0 {
+				opts["offset"] = offset
 			}
+			res, err := r.c.Call(ctx, "graph.unresolved", ws, opts)
+			if err != nil {
+				rl.err = err
+				return rl
+			}
+			rows, next, more := unresolvedPageOf(res)
+			for _, u := range rows {
+				if m := asMap(u); str(m, "src") == p && str(m, "reason") == "cycle" {
+					rl.cycles = append(rl.cycles, str(m, "raw"))
+				}
+			}
+			if !more || next <= offset || pages >= maxUnresolvedPages {
+				break
+			}
+			offset = next
 		}
 		if deep {
 			res, err := r.c.Call(ctx, "graph.neighborhood", ws, p, 2)
@@ -371,4 +383,20 @@ func (r *related) depth() {
 	}
 	r.deep = !r.deep
 	r.ofPage()
+}
+
+// maxUnresolvedPages bounds the calls the drawer makes of graph.unresolved, so a daemon that never
+// ends its pages can't hold the drawer's read forever: 1000, as Neovim's relations.load. A KB past
+// it shows the loops of the pages read.
+const maxUnresolvedPages = 1000
+
+// unresolvedPageOf is one graph.unresolved answer: its rows, and the next page's offset when there
+// is one. A daemon before protocol 50 answers the whole list, with no next.
+func unresolvedPageOf(res any) (rows []any, next int64, more bool) {
+	m, ok := res.(map[string]any)
+	if !ok {
+		return asList(res), 0, false
+	}
+	next, more = m["next"].(int64)
+	return asList(m["unresolved"]), next, more
 }

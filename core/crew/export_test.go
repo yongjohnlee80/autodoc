@@ -10,6 +10,14 @@ func (s *Scheduler) Owe(session, token string, o Outcome) { s.owe(session, token
 
 func (s *Scheduler) PayOwed(ctx context.Context) bool { return s.payOwed(ctx) }
 
+// AttemptWith runs one attempt of a reserved wake as the scheduler's look does: it takes a permit
+// and the wait group's count first, which the attempt gives back.
+func (s *Scheduler) AttemptWith(ctx context.Context, session, token string, ep Endpoint) Outcome {
+	s.permits <- struct{}{}
+	s.wg.Add(1)
+	return s.attemptWith(ctx, ctx, session, token, ep)
+}
+
 // SetRoots points the Claude waker at a test's own socket folders.
 func (w *ClaudeWaker) SetRoots(roots ...string) { w.roots = roots }
 
@@ -46,4 +54,12 @@ func SetCodexProbeTimeout(t interface{ Cleanup(func()) }, d time.Duration) {
 	was := codexProbeTimeout
 	codexProbeTimeout = d
 	t.Cleanup(func() { codexProbeTimeout = was })
+}
+
+// SetClaudeFindTimeouts bounds ClaudeOf's run of mise by first, and its run again after a timeout
+// by retry, for the test's length.
+func SetClaudeFindTimeouts(t interface{ Cleanup(func()) }, first, retry time.Duration) {
+	f, r := claudeFindTimeout, claudeFindRetry
+	claudeFindTimeout, claudeFindRetry = first, retry
+	t.Cleanup(func() { claudeFindTimeout, claudeFindRetry = f, r })
 }

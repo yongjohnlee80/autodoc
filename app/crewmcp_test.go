@@ -249,8 +249,8 @@ func TestTheCrewMCPServerSaysWhenMailWaits(t *testing.T) {
 	if ins, _ := hello["instructions"].(string); !strings.Contains(ins, "waiting above 0") || !strings.Contains(ins, "end of each task") {
 		t.Fatalf("initialize's instructions: %q", ins)
 	}
-	if _, failed := j.tool("mail_ack", map[string]any{"id": "none:none"}); !failed || j.waiting != "waiting: 0" {
-		t.Fatalf("a result with no mail waiting ends %q, want waiting: 0", j.waiting)
+	if _, failed := j.tool("mail_ack", map[string]any{"id": "none:none"}); !failed || j.waiting != "waiting: 0 held: 0" {
+		t.Fatalf("a result with no mail waiting ends %q, want waiting: 0 held: 0", j.waiting)
 	}
 	if _, ok := j.note(500 * time.Millisecond); ok {
 		t.Fatal("a notice with no mail")
@@ -268,17 +268,34 @@ func TestTheCrewMCPServerSaysWhenMailWaits(t *testing.T) {
 	}
 	// the next tool result counts both
 	text, _ := j.tool("mail_send", map[string]any{"to": []string{"gold"}, "body": "working on it"})
-	if j.waiting != "waiting: 2. "+mcpWaitingNote {
+	if j.waiting != "waiting: 2. "+mcpWaitingNote+" held: 0" {
 		t.Fatalf("a result with two waiting ends %q (%s)", j.waiting, text)
 	}
 	items := j.received()
-	if len(items) != 2 || j.waiting != "waiting: 0" {
-		t.Fatalf("mail_receive: %d items, ending %q; want both, waiting 0", len(items), j.waiting)
+	if len(items) != 2 || j.waiting != "waiting: 0 held: 2 ("+mcpHeldNote+")" {
+		t.Fatalf("mail_receive: %d items, ending %q; want both, waiting 0, both held", len(items), j.waiting)
 	}
-	for _, it := range items {
-		if text, failed := j.tool("mail_ack", map[string]any{"id": it["id"]}); failed {
-			t.Fatalf("ack: %s", text)
+	// each ack answers the delivery it resolved to, acked, and the footer counts one fewer held
+	for i, it := range items {
+		text, failed := j.tool("mail_ack", map[string]any{"id": it["id"]})
+		delivery, _, _ := strings.Cut(it["id"].(string), ":")
+		var got struct{ Delivery, State string }
+		if failed || json.Unmarshal([]byte(text), &got) != nil || got.Delivery != delivery || got.State != "acked" {
+			t.Fatalf("ack %d: %s (failed %v); want {delivery %s, state acked}", i+1, text, failed, delivery)
 		}
+		want := "waiting: 0 held: 0"
+		if i == 0 {
+			want = "waiting: 0 held: 1 (" + mcpHeldNote + ")"
+		}
+		if j.waiting != want {
+			t.Fatalf("after ack %d the result ends %q, want %q", i+1, j.waiting, want)
+		}
+	}
+	// a replay says so
+	text, failed := j.tool("mail_ack", map[string]any{"id": items[0]["id"]})
+	var replay struct{ Delivery, State string }
+	if failed || json.Unmarshal([]byte(text), &replay) != nil || replay.State != "already_acked" {
+		t.Fatalf("a replayed ack: %s (failed %v); want state already_acked", text, failed)
 	}
 	// mail after a receive is told of again
 	for len(j.notes) > 0 { // the second arrival's notice, if the watch saw it apart from the first
@@ -372,8 +389,9 @@ func TestThePerEventTextsKeepTheirSize(t *testing.T) {
 		{"the MCP wake notice naming one sender, per wake", crew.NoticeFor(crew.MailViaMCP, []crew.Sender{{From: "gold", Kind: "claude", Count: 1}}, false), 172},
 		{"the CLI wake notice at its cap of senders, per wake", crew.NoticeFor(crew.MailViaCLI, []crew.Sender{{From: "gold", Kind: "claude", Count: 2},
 			{From: "user", Count: 1}, {From: "vision", Kind: "claude", Count: 1}, {From: "lector", Kind: "codex", Count: 12}}, false), 155},
-		{"the waiting line with nothing waiting, per MCP tool result", waitingLine(0), 10},
-		{"the waiting line with mail waiting, per MCP tool result", waitingLine(1), 132},
+		{"the waiting line with nothing waiting or held, per MCP tool result", waitingLine(0, 0), 18},
+		{"the waiting line with mail waiting, per MCP tool result", waitingLine(1, 0), 140},
+		{"the waiting line with a delivery held, per MCP tool result while one is", waitingLine(0, 1), 155},
 	} {
 		if len(c.text) != c.size {
 			t.Errorf("%s is %d bytes, pinned at %d: %q", c.what, len(c.text), c.size, c.text)

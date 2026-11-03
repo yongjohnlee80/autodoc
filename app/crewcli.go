@@ -142,9 +142,11 @@ var crewCommands = map[string]crewCommand{
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "", nil, nil, errors.New("crew reissue runs on its own (crewReissueMain)")
 		}},
-	"crew list": {usage: "[--all]: the addressbook: every codename, its scope, presence and reachability; a profile whose session ended only with --all",
+	"crew list": {usage: "[--all]: the addressbook: every codename, its scope, presence and reachability; a profile whose session ended, or a host's own session (kind host), only with --all",
 		example: "autodoc crew list",
-		flags:   func(fs *flag.FlagSet) { fs.Bool("all", false, "also the profiles whose session ended") },
+		flags: func(fs *flag.FlagSet) {
+			fs.Bool("all", false, "also the profiles whose session ended, and the hosts' own sessions")
+		},
 		call: func(_ sessionContext, fs *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			if fs.Lookup("all").Value.(flag.Getter).Get().(bool) {
 				return "crew.list", nil, nil, nil
@@ -478,7 +480,8 @@ func withoutEcho(v any) any {
 	return res
 }
 
-// withoutEnded is the addressbook without the profiles whose session ended (token item 5): who can
+// withoutEnded is the addressbook without the profiles whose session ended (token item 5), and
+// without the hosts' own sessions (crew.KindHost: a forwarder, never an agent to write to): who can
 // be reached, or may come back. crew list --all shows them.
 func withoutEnded(v any) any {
 	rows, ok := v.([]any)
@@ -487,7 +490,7 @@ func withoutEnded(v any) any {
 	}
 	out := make([]any, 0, len(rows))
 	for _, r := range rows {
-		if e, ok := r.(map[string]any); ok && e["presence"] == crew.PresenceEnded {
+		if e, ok := r.(map[string]any); ok && (e["presence"] == crew.PresenceEnded || e["kind"] == crew.KindHost) {
 			continue
 		}
 		out = append(out, r)

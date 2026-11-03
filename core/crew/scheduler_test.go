@@ -362,6 +362,106 @@ func TestAnEndedSessionsAttemptIsAbandoned(t *testing.T) {
 	if cur, err := r.m.StillCurrent(r.ctx, s.Session, tok, ep.Generation); err != nil || cur {
 		t.Fatalf("still current after the exit: %v %v", cur, err)
 	}
+	// the attempt itself, its call reached now: nothing is sent, it answers failed, and its row is
+	// out of flight, abandoned rather than left for the lease to lapse
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for an ended session", n)
+	}
+	if w := r.wake(s.Session); w.State == crew.WakeInFlight {
+		t.Fatalf("the ended session's wake is still in flight: %+v", w)
+	}
+}
+
+// An attempt whose endpoint was replaced before its call (the session re-registered how it's woken:
+// another generation) sends nothing, answers failed, and gives its row back: idle, not left in
+// flight for its lease to lapse, so the next look can wake the session through its new endpoint.
+func TestAnAttemptForAReplacedEndpointIsAbandoned(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	tok, ep, ok, err := r.m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
+		t.Fatalf("the premise, the reserved row in flight under its token: %+v", w)
+	}
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"})
+	})
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := r.w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for a replaced endpoint", n)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Token != "" {
+		t.Fatalf("the replaced endpoint's row: %+v; want it idle with no token (abandoned)", w)
+	}
+}
+
+// An abandon the store refuses is owed, not dropped: the attempt still answers failed, the end
+// stays owed while the store refuses it, and the next payment, once the store is back, gives the
+// row back idle.
+func TestARefusedAbandonIsOwedUntilTheStoreTakesIt(t *testing.T) {
+	clock := crewtest.NewClock()
+	mem := crewtest.NewMem(clock.Now)
+	fs := &faultStore{Store: mem}
+	m := crew.New(fs, crew.WithSessionEnder(&crewtest.Enders{}))
+	w := &fakeWaker{}
+	r := &wakeRig{t: t, ctx: context.Background(), clock: clock, mem: mem, m: m, w: w}
+	var emu sync.Mutex
+	var reported []error
+	r.s = m.NewScheduler("run1", map[string]crew.Waker{"fake": w}, crew.WithWakeClock(clock.Now),
+		crew.WithWakeErrors(func(err error) { emu.Lock(); reported = append(reported, err); emu.Unlock() }))
+	e, err := m.Claim(r.ctx, "autodoc:w", "host", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.epoch = e
+	s := r.session("gold")
+	tok, ep, ok, err := m.Reserve(r.ctx, s.Session, "run1", []string{"fake"})
+	if err != nil || !ok {
+		t.Fatalf("reserve: %v %v", ok, err)
+	}
+	r.write(func(tx crew.Tx) error {
+		return tx.PutEndpoint(crew.Endpoint{Session: s.Session, Generation: 2, Kind: "fake"})
+	})
+	fs.mu.Lock()
+	fs.down = true
+	fs.mu.Unlock()
+	if o := r.s.AttemptWith(r.ctx, s.Session, tok, ep); o != crew.OutcomeFailed {
+		t.Fatalf("the attempt answered %v, want failed", o)
+	}
+	r.s.Wait()
+	if n := w.count(); n != 0 {
+		t.Fatalf("the waker was called %d times for a replaced endpoint", n)
+	}
+	emu.Lock()
+	refused := len(reported) == 1 && errors.Is(reported[0], errInjected)
+	emu.Unlock()
+	if !refused {
+		t.Fatalf("the refused abandon was reported as %v; want the store's one error", reported)
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeInFlight || w.Token != tok {
+		t.Fatalf("the premise, the refused abandon left the row in flight: %+v", w)
+	}
+	if left := r.s.PayOwed(r.ctx); !left {
+		t.Fatal("the abandon was paid while the store still refused it")
+	}
+	fs.mu.Lock()
+	fs.down = false
+	fs.mu.Unlock()
+	if left := r.s.PayOwed(r.ctx); left {
+		t.Fatal("the abandon is still owed with the store back")
+	}
+	if w := r.wake(s.Session); w.State != crew.WakeIdle || w.Token != "" {
+		t.Fatalf("the owed abandon's row: %+v; want it idle with no token", w)
+	}
 }
 
 // faultStore is a crew.Store whose nth write (counting from 1) fails once, as a store's transient
