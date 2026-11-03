@@ -1529,8 +1529,11 @@ func testAnInboxCountsTheDeliveriesHeldUnanswered(t *testing.T, h Harness) {
 // newest row. A second sweep deletes nothing more.
 func testHandledMailIsDeletedAfterTheWindow(t *testing.T, h Harness) {
 	r := newRig(t, h)
+	r.profile("p-zen", "autovim:p", "zen", "s-zen")
 	const day = 24 * time.Hour
 	acked := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "acked", Key: "k1"})
+	// created as the others were, handled only inside the window: its age is its handling's, not its creation's
+	slow := r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "acked a day before the sweep, sent long before", Key: "k8"})
 	withJob := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "its job is open", Key: "k2"})
 	read := r.send("s-jarvis", mail.Send{To: []string{"user"}, Body: "read", Key: "k3"})
 	unread := r.send("s-jarvis", mail.Send{To: []string{"user"}, Body: "unread", Key: "k4"})
@@ -1554,9 +1557,11 @@ func testHandledMailIsDeletedAfterTheWindow(t *testing.T, h Harness) {
 	})
 	r.clock.Advance(29 * day)
 	fresh := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "acked a day before the sweep", Key: "k7"})
-	for _, it := range r.receive("s-gold").Items {
-		if _, err := r.m.Ack(r.ctx, "s-gold", it.Delivery.ID, it.Delivery.Lease); err != nil {
-			t.Fatal(err)
+	for _, s := range []string{"s-gold", "s-zen"} {
+		for _, it := range r.receive(s).Items {
+			if _, err := r.m.Ack(r.ctx, s, it.Delivery.ID, it.Delivery.Lease); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	r.clock.Advance(day + time.Hour)
@@ -1576,6 +1581,7 @@ func testHandledMailIsDeletedAfterTheWindow(t *testing.T, h Harness) {
 		"acked over the window ago": {acked, false}, "read over the window ago": {read, false},
 		"dismissed over the window ago": {dismissed, false}, "unread": {unread, true}, "open": {open, true},
 		"acked inside the window": {fresh, true}, "with an open fallback job": {withJob, true},
+		"sent long ago, acked inside the window": {slow, true},
 	} {
 		if have[c.sent.Message.ID] != c.kept {
 			t.Errorf("the message %s: kept %v, want %v", what, have[c.sent.Message.ID], c.kept)
