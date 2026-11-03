@@ -11,17 +11,23 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 )
 
-// TestALineTheCardCantShowIsRefused: editor.terminal_run refuses, before any card, a line that is
-// empty, past 20 lines or 4 KiB, or holds a control character (an escape could redraw what the card
-// shows); tab and newline are allowed.
+// TestALineTheCardCantShowIsRefused: editor.terminal_run refuses, before any card, a line the card
+// couldn't show whole and as itself: empty; past 6 lines, 100 characters a line or 600 bytes; a
+// control character (an escape redraws the card), a format character (a bidi override reorders
+// what's shown, a zero-width one hides), a separator, a private-use code point or any space but the
+// plain one. Tab, newline and printable text of any script are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
-	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 21), strings.Repeat("x", 4097),
-		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00"} {
+	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 6) + "echo x", strings.Repeat("x", 101),
+		strings.Repeat(strings.Repeat("x", 99)+"\n", 6)[:601],
+		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
+		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
+		"echo \ue000", "echo \ufffd"} {
 		if err := terminalLine(bad); err == nil {
 			t.Errorf("terminalLine(%q): accepted, want refused", bad)
 		}
 	}
-	for _, ok := range []string{"sudo apt-get install -y docker.io", "echo a\techo b", "set -e\nsudo usermod -aG docker \"$USER\"\nid"} {
+	for _, ok := range []string{"sudo apt-get install -y docker.io", "echo a\techo b", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
+		"ls ~/문서 && echo 完了", strings.Repeat("x", 100), strings.Repeat(strings.Repeat("y", 99)+"\n", 6)[:599]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
 		}
@@ -141,6 +147,40 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	if a := wait("a second line", ch); a.re != nil || a.res["tab"] != "zen: run 2" {
 		t.Fatalf("a second run: %v %v, want tab zen: run 2", a.res, a.re)
 	}
+
+	// two at once: the second's card waits behind the first's, never in its place
+	first := run("echo first-$((40+5))")
+	r.s.WaitForText(t, "echo first-$((40+5))")
+	second := run("echo second-$((40+6))")
+	r.s.WaitFor(t, "the second's card queued", func(string) bool {
+		return onLoop(r, func() bool { return len(r.h.asker.waiting) == 1 })
+	})
+	if sc := r.s.String(); strings.Contains(sc, "echo second-$((40+6))") {
+		t.Fatalf("the second line's card replaced the first's:\n%s", sc)
+	}
+	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	if a := wait("the first of two", first); a.re == nil || a.re.Code != codeEditorRefused {
+		t.Fatalf("the first of two, Don't run: %v %v, want refused", a.res, a.re)
+	}
+	r.s.WaitForText(t, "echo second-$((40+6))")
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	if a := wait("the second of two", second); a.re != nil || a.res["started"] != true {
+		t.Fatalf("the second of two, Run: %v %v, want started", a.res, a.re)
+	}
+
+	// a card another question replaces is a Don't run: nothing runs
+	ch = run("echo replaced-$((40+7))")
+	r.s.WaitForText(t, "echo replaced-$((40+7))")
+	onLoop(r, func() bool { r.h.ask(Question{Title: "another question", Yes: "&Yes", No: "&No"}); return true })
+	if a := wait("a replaced card", ch); a.re == nil || a.re.Code != codeEditorRefused {
+		t.Fatalf("a replaced card: %v %v, want refused, nothing run", a.res, a.re)
+	}
+	onLoop(r, func() bool { r.h.asker.closed(); return true })
+	for _, label := range tabs() {
+		if label == "zen: run 4" {
+			t.Fatalf("a replaced card's line ran: tabs %v", tabs())
+		}
+	}
 }
 
 // TestTheExitMailSaysTheCodeAndNothingOfTheTab: the mail an agent gets when its command ends says
@@ -149,6 +189,10 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 	s, b := terminalExitBody("sudo apt-get install -y ollama", 0)
 	if !strings.Contains(s, "Command done") || !strings.Contains(b, "exited 0") || !strings.Contains(b, "sudo apt-get install -y ollama") {
 		t.Errorf("success: %q / %q", s, b)
+	}
+	long := "echo " + strings.Repeat("z", 95)
+	if s, _ := terminalExitBody(long, 0); len([]rune(s)) > 80 || !strings.HasSuffix(s, "…") {
+		t.Errorf("a long line's subject: %q, want it cut short (the body carries the whole line)", s)
 	}
 	s, b = terminalExitBody("sudo usermod -aG docker me\nid", 1)
 	if !strings.Contains(s, "Command failed (1): sudo usermod -aG docker me") || !strings.Contains(b, "exited 1") ||

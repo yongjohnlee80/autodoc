@@ -16,30 +16,45 @@ import (
 // where the user sees it run and types any passphrase themselves; the agent never holds one. It
 // needs the terminal capability (asked once, as commands is), and every call shows the user the
 // exact line first, Run or Don't run: nothing runs without that Run, and only the line the card
-// showed runs. The call answers once the user has: {started, tab} or refused. The line runs as
+// showed runs, behind any card already open. The call answers once the user has: {started, tab} or refused. The line runs as
 // sh -c in a new tab of its own, in the root of the workspace in use; when it exits, its code
 // reaches the agent as the user's mail (exit_by_mail says whether it will). Nothing of the tab is
 // ever read back for the agent: what the user typed there stays theirs.
 
-// The line an agent may ask to run: at most these, shown whole on the card.
+// The line an agent may ask to run: small enough that the card always shows all of it (it wraps
+// and doesn't scroll), so what the user approves is what they could read.
 const (
-	maxTerminalLines = 20
-	maxTerminalBytes = 4096
+	maxTerminalLines     = 6
+	maxTerminalLineRunes = 100
+	maxTerminalBytes     = 600
 )
 
-// terminalLine refuses a line the card couldn't show as what runs: empty, too long, or holding a
-// control character other than tab and newline (an escape could redraw the card's text).
+// terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 6 lines, 100
+// characters a line or 600 bytes; or holding a character that draws as something else or nothing.
+// That covers control characters other than tab and newline (an escape redraws the card), format
+// characters (bidi overrides and isolates, zero-width), line and paragraph separators, private-use
+// and unpaired surrogate code points, any space but the plain one, and U+FFFD.
 func terminalLine(line string) error {
 	if strings.TrimSpace(line) == "" {
 		return invalid("the command line is empty")
 	}
-	if lines := strings.Count(line, "\n") + 1; lines > maxTerminalLines || len(line) > maxTerminalBytes {
+	lines := strings.Split(line, "\n")
+	if len(lines) > maxTerminalLines || len(line) > maxTerminalBytes {
 		return invalid("the command is %d lines, %d bytes: a command the user is asked to run is at most %d lines and %d bytes, shown whole",
-			lines, len(line), maxTerminalLines, maxTerminalBytes)
+			len(lines), len(line), maxTerminalLines, maxTerminalBytes)
+	}
+	for i, l := range lines {
+		if n := len([]rune(l)); n > maxTerminalLineRunes {
+			return invalid("line %d is %d characters: each line the user is asked to run is at most %d, shown whole", i+1, n, maxTerminalLineRunes)
+		}
 	}
 	for _, r := range line {
-		if r != '\t' && r != '\n' && (unicode.IsControl(r) || r == unicode.ReplacementChar) {
-			return invalid("the command holds a control character (%U): only tab and newline are allowed", r)
+		if r == '\t' || r == '\n' || r == ' ' {
+			continue
+		}
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs) ||
+			r == unicode.ReplacementChar || !unicode.IsPrint(r) {
+			return invalid("the command holds %U, which the card can't show as itself: only printable characters, the plain space, tab and newline are allowed", r)
 		}
 	}
 	return nil
@@ -48,6 +63,9 @@ func terminalLine(line string) error {
 // terminalExitBody is the mail that tells an agent how the command it ran in the terminal ended.
 func terminalExitBody(line string, code int) (subject, body string) {
 	head := firstLine(line)
+	if r := []rune(head); len(r) > 60 { // a subject is short; the body has the whole line
+		head = string(r[:60]) + "…"
+	}
 	if code == 0 {
 		return "Command done: " + head, fmt.Sprintf("Your command in AutoDoc's terminal exited 0 (success):\n\n%s\n\n"+
 			"Its output is in the user's terminal tab, which you don't read: ask the user if you need it.", line)
@@ -58,8 +76,8 @@ func terminalExitBody(line string, code int) (subject, body string) {
 }
 
 // editorTerminalRun is editor.terminal_run: the line is checked, the grant asked for as any verb's
-// (editorVerb), then the user's card is waited for. A caller that stops waiting before the answer
-// runs nothing.
+// (editorVerb), then the user's card is waited for, behind any card already open. A card closed or
+// replaced unanswered is a Don't run; a caller that stops waiting before the answer runs nothing.
 func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (any, error) {
 	if len(req.Params) == 0 {
 		return nil, invalid("param 1 is the agent's token ($AUTODOC_EDITOR_TOKEN)")
@@ -93,7 +111,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 			dir = termDir(ws.root)
 		}
 		_, _, mailed := h.crewHeld()
-		h.ask(Question{
+		h.asker.askWhenFree(Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
 			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, dir),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),

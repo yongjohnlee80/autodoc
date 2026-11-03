@@ -826,7 +826,7 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"exact line first: it answers `{started, tab, exit_by_mail}` once they click Run, or is refused when they don't. " +
 	"It runs in a new terminal tab, where the user types any passphrase themselves: never ask them for one, and " +
 	"you can't read that tab. When it ends, its exit code comes to you as mail; wait for it, and ask the user what " +
-	"it printed if you need to. At most 20 lines and 4 KiB, no control characters.\n\n" +
+	"it printed if you need to. At most 6 lines of 100 characters (600 bytes), printable characters only: chain steps with `&&`, or make several calls.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
 	"`$AUTODOC_ROOT` don't change. Before you act on each message from the user, run `autodoc --editor editor.workspace`, " +
 	"and when it has a `switch`, tell the user what changed (a Claude Code session in this folder is told by a hook " +
