@@ -247,7 +247,8 @@ func (d *process) startWorkspaces() error {
 	d.stops.push(d.ranking.Wait)
 	d.ws = serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: d.log,
 		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
-		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard})
+		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}, Guard: d.guard,
+		Operations: managedOperations})
 	// the modules, the todo system first among them, before any workspace starts: a workspace's
 	// index reads the todo stores, so its first pass indexes their tasks graph-only
 	// (docs/decisions/todos.md#graph-only-indexing)
