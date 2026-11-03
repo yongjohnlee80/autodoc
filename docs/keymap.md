@@ -221,6 +221,7 @@ opens the card (SPC, then the card's key).
 | `autodoc.todoKeys.todoRefresh` | `autodoc.todoKeys` | Shift+R |
 | `autodoc.todoKeys.todoMove` | `autodoc.todoKeys` | Shift+M |
 | `autodoc.leader.luaKeys.open` | `autodoc.leader` | U |
+| `autodoc.agentsCard.openInbox` | `autodoc.agentsCard` | I |
 | `autodoc.arrange.left` | `autodoc.arrange` | H Left |
 | `autodoc.arrange.right` | `autodoc.arrange` | L Right |
 | `autodoc.arrange.up` | `autodoc.arrange` | K Up |

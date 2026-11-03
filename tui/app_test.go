@@ -31,6 +31,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -115,6 +116,8 @@ type daemonOpts struct {
 	storeAt string
 	// crew, when set, is served too: the crew.* verbs, on its own store (crewbridges_test.go)
 	crew *crew.Manager
+	// modules are served too: a cell's own verbs (crewinboxview_tui_test.go)
+	modules []module.Module
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -310,6 +313,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if o.crew != nil {
 		opts = append(opts, rpc.WithModules(o.crew))
 	}
+	opts = append(opts, rpc.WithModules(o.modules...))
 	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done
