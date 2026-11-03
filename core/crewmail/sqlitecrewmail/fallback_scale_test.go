@@ -19,6 +19,9 @@ import (
 // store keeps until retention takes it.
 const handledAtScale = 20000
 
+// scaleBound is how long NextFallbackAt may take at that scale (see the cell).
+const scaleBound = 5 * time.Second
+
 // TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage (docs/decisions/crew.md#the-fallback-exactly-once):
 // every mail wait asks NextFallbackAt inside its write, once per live session and kind, so it must
 // cost what the due mail costs, not what the store keeps: with twenty live sessions, none with mail
@@ -86,9 +89,10 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 	if has {
 		t.Fatalf("with nothing queued NextFallbackAt answered %d", at)
 	}
-	// a bound with room for -race on two CPUs: the walk took seconds here, the read from the due
-	// mail takes milliseconds
-	if took > 500*time.Millisecond {
+	// the bound: under -race the store (modernc's SQLite, instrumented) runs 10-20x slower, and a
+	// loaded CI runner's -race read from the due mail took 0.5-0.66 s here; the old walk took about
+	// 150 s in this cell, so a bound of seconds tells them apart on any runner
+	if took > scaleBound {
 		t.Fatalf("with %d handled messages and %d live sessions, nothing due, NextFallbackAt took %s", handledAtScale, len(agents), took)
 	}
 
@@ -127,7 +131,7 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 	if want := max(sent, started) + int64(time.Minute); !has || at != want {
 		t.Fatalf("with two messages queued to agent07 NextFallbackAt answered %d (%v), want %d", at, has, want)
 	}
-	if took > 500*time.Millisecond {
+	if took > scaleBound {
 		t.Fatalf("with mail due, NextFallbackAt took %s", took)
 	}
 }
