@@ -83,7 +83,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 	if n := r.file(); n.path != "a.md" {
 		t.Fatalf("an ungranted editor.open opened %s", n.path)
 	}
-	r.s.WaitForText(t, "let the Lua script agent:zen use commands?")
+	r.s.WaitForText(t, "let the agent zen use commands?")
 	onLoop(r, func() bool { r.h.asker.accepted(); return true })
 	r.s.WaitFor(t, "commands granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["commands"] })

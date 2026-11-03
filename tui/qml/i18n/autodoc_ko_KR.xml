@@ -8237,5 +8237,97 @@ H J K L, Shift+화살표   크기 조절</translation>
         <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
         <translation>데몬이 크루 브리지보다 오래된 버전입니다. 백엔드를 다시 시작하세요 (시스템 › 백엔드 다시 시작…)</translation>
     </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>닫기(&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>회수(&amp;r)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>모두 회수(&amp;a)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>에이전트 권한</translation>
+    </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>에이전트 권한(&amp;p)…</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1의 %2 권한을 회수했습니다. 다음에 사용할 때 다시 묻습니다</translation>
+    </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>유지(&amp;k)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>회수(&amp;r)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1이(가) %2 권한을 가지고 있습니다.
+
+회수하면 다음에 사용할 때 각각 거부되고, 카드로 다시 묻습니다.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>%1의 권한을 모두 회수할까요?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1이(가) %2 권한을 가지고 있습니다: %3.
+
+회수하면 다음에 %2을(를) 사용할 때 거부되고, 카드로 다시 묻습니다.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>%2의 %1 권한을 회수할까요?</translation>
+    </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>열려 있는 문서의 텍스트 삽입, 바꾸기, 삭제</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>열려 있는 문서와 버퍼 읽기, 그 안에서 검색</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>보유자 %2명에게 권한 %1개를 허용했습니다. 회수하면 보유자가 다음에 사용할 때 다시 묻습니다.</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1(%2)이(가) %3 권한을 가지고 있습니다: %4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>에이전트</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>패키지</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>Lua 스크립트</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>허용된 권한이 없습니다. 에이전트나 패키지는 권한이 처음 필요할 때 카드로 묻습니다.</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>에이전트 %1</translation>
+    </message>
 </context>
 </TS>

@@ -8247,5 +8247,97 @@ H J K L, Shift+arrows   resize it</translation>
         <source>P&amp;revious</source>
         <translation>P&amp;revious</translation>
     </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Close (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>&amp;Revoke…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>Revoke &amp;all…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>Agent permissions</translation>
+    </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>Agent &amp;permissions…</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1 no longer holds %2: its next use asks you again</translation>
+    </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>&amp;Keep</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>&amp;Revoke</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>revoke everything %1 holds?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>revoke %1 from %2?</translation>
+    </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>insert, replace and delete text in your open documents</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>read your open documents and buffers, and search in them</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1 (%2) holds %3: %4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>agent</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>package</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>Lua script</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>the agent %1</translation>
+    </message>
 </context>
 </TS>
