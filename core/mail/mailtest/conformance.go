@@ -582,9 +582,12 @@ func testAMessagesIDWithItsLeaseNamesTheItem(t *testing.T, h Harness) {
 	if err := r.m.Renew(r.ctx, "s-gold", msg, d.Lease); err != nil {
 		t.Fatalf("a renew by the message's id and the lease: %v", err)
 	}
-	resp, _, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)})
+	resp, ans, err := r.m.Reply(r.ctx, "s-gold", msg, d.Lease, mail.Reply{Body: "a", Key: mail.ReplyKey(msg)})
 	if err != nil || resp.ReplyTo != msg || resp.Kind != mail.KindResponse || resp.IdemKey != mail.ReplyKey(d.ID) {
 		t.Fatalf("the reply by the message's id: %+v %v; want the response, keyed as the delivery's", resp, err)
+	}
+	if ans.Delivery != d.ID || ans.State != mail.AnsweredReplied {
+		t.Fatalf("the reply by the message's id answered %+v; want the delivery it resolved to, replied", ans)
 	}
 	if r.delivery(d.ID).State != mail.Acked {
 		t.Fatal("the request's delivery is not acked")
@@ -1497,5 +1500,22 @@ func testAnInboxCountsTheDeliveriesHeldUnanswered(t *testing.T, h Harness) {
 	r.clock.Advance(mail.LeaseFor + time.Second)
 	if n := held("s-zen"); n != 0 {
 		t.Fatalf("zen's lease lapsed: held %d, want 0 (it waits to be received again)", n)
+	}
+	// a message that expires inside its delivery's lease: held while it lives, not once it has
+	// expired (it can't be answered), though nothing has written its delivery's end yet
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "brief", Key: "k4", TTL: time.Minute})
+	brief := r.receive("s-gold")
+	if len(brief.Items) != 1 {
+		t.Fatalf("gold's receive of the brief one: %d items", len(brief.Items))
+	}
+	if n := held("s-gold"); n != 1 {
+		t.Fatalf("the brief message, live: held %d, want 1", n)
+	}
+	r.clock.Advance(2 * time.Minute)
+	if n := held("s-gold"); n != 0 {
+		t.Fatalf("the brief message expired inside its lease: held %d, want 0", n)
+	}
+	if d := r.delivery(brief.Items[0].Delivery.ID); d.State != mail.Leased || d.Lease != brief.Items[0].Delivery.Lease {
+		t.Fatalf("the premise, the expired message's delivery still stored leased under its lease: %+v", d)
 	}
 }

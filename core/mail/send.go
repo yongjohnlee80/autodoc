@@ -837,15 +837,26 @@ func (m *Manager) Preview(ctx context.Context, credential string, limit int) (In
 			}
 		}
 		// held: the session's mail (its profile's, unbound or bound to it, as owned reads a
-		// delivery) leased under a lease that hasn't lapsed; a delivery doesn't record the session
-		// that leased it, and a profile has one live session
+		// delivery) leased under a lease that hasn't lapsed, of a message that hasn't expired (one
+		// that has can't be answered, though no write has expired its delivery yet); a delivery
+		// doesn't record the session that leased it, and a profile has one live session
 		unhandled, err := tx.Unhandled(s.Profile)
 		if err != nil {
 			return err
 		}
 		now := tx.Now().UnixNano()
 		for _, d := range unhandled {
-			if (d.Session == "" || d.Session == s.ID) && d.State == Leased && d.LeaseUntil != nil && *d.LeaseUntil > now {
+			if (d.Session != "" && d.Session != s.ID) || d.State != Leased || d.LeaseUntil == nil || *d.LeaseUntil <= now {
+				continue
+			}
+			msg, ok, err := tx.Message(d.Message)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("mail: delivery %s names no message %s", d.ID, d.Message)
+			}
+			if msg.Expires == nil || *msg.Expires > now {
 				out.Held++
 			}
 		}
