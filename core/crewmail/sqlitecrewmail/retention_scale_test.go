@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// A sweep reads only the mail older than its window (docs/decisions/crew.md#handled-mail-is-kept-for-a-window):
-// over a store of 20,000 young messages and three old handled ones, the old ones are deleted and
-// the young kept, and a sweep then costs what one over 200 young messages does, never a walk of
-// the store: each write reads a page of the oldest messages by mail_message_created, and no young
-// one is read at all.
+// A sweep reads only the mail older than its window
+// (docs/decisions/crew.md#handled-mail-is-kept-for-a-window): over a store of 20,000 young
+// messages of 4 KB each and three old handled ones, the old ones are deleted and the young kept,
+// and a sweep then costs what one over 200 young messages does, never a walk of the store: each
+// write reads a page of the oldest messages by mail_message_created, and no young one is read.
 func TestASweepReadsOnlyTheOldMail(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_800_000_000, 0)
@@ -34,9 +35,11 @@ func TestASweepReadsOnlyTheOldMail(t *testing.T) {
 		old := now.Add(-40 * 24 * time.Hour).UnixNano()
 		fresh := now.Add(-time.Hour).UnixNano()
 		if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
+			// a body as mail carries: the table keeps every row whole, so a walk of it reads each one
+			body := strings.Repeat("a message's text. ", 4096/18)
 			put := func(id string, at int64) error {
 				if err := tx.PutMessage(mail.Message{ID: id, Sender: "p-sender", IdemKey: id, Digest: []byte{1},
-					Kind: mail.KindMessage, Body: "b", State: mail.MessageOpen, Created: at}); err != nil {
+					Kind: mail.KindMessage, Body: body, State: mail.MessageOpen, Created: at}); err != nil {
 					return err
 				}
 				return tx.PutDelivery(mail.Delivery{ID: "d-" + id, Message: id, Recipient: "p-recipient", Seq: int64(len(id)) + at,
@@ -94,7 +97,8 @@ func TestASweepReadsOnlyTheOldMail(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, b := fastest(small), fastest(big)
-	if b > 10*s+5*time.Millisecond {
+	t.Logf("the fastest sweep over 200 young messages: %v; over 20,000: %v", s, b)
+	if b > 5*s+3*time.Millisecond {
 		t.Fatalf("a sweep over 20,000 young messages took %v, over 200 %v: it read the young mail, not only the old", b, s)
 	}
 }
