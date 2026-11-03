@@ -154,3 +154,12 @@ func TestAHelloProvesItsCrewCaller(t *testing.T) {
 		}
 	}
 }
+
+// TestNoSessionHasNoCaller: callerOf of no session is "", the user's surface, as clientOf's is (the
+// server always dispatches with the connection's session; the helpers answer for none all the same,
+// the mutant: none read as a caller).
+func TestNoSessionHasNoCaller(t *testing.T) {
+	if c := callerOf(nil); c != "" {
+		t.Errorf("no session's caller is %q, want the user's surface", c)
+	}
+}

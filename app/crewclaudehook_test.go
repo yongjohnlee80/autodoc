@@ -3,8 +3,11 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -185,6 +188,40 @@ func TestAClaudeHookRetriesWhatTheDaemonWasntTold(t *testing.T) {
 	if code := crewMain(d.ctx, []string{"crew", "attention", "--claude-hook"}, strings.NewReader("not json"), &out, &errOut); code != 0 ||
 		out.Len() != 0 || !strings.Contains(errOut.String(), "the hook's input") {
 		t.Fatalf("input that isn't a hook's: exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
+	}
+}
+
+// TestAWidenedPromptIsClosedOnlyByAnInputHoldingWhatItAsked: an AskUserQuestion's PostToolUse
+// closes the open prompt whose asked input it holds and adds to, and nothing else: one whose
+// question it changed, one kept from before inputs were (no input), and one asked with an input
+// that isn't a JSON object stay open.
+func TestAWidenedPromptIsClosedOnlyByAnInputHoldingWhatItAsked(t *testing.T) {
+	ran := claudeHookInput{ToolName: "AskUserQuestion", ToolInput: []byte(`{"questions":[{"question":"Which?"}],"answers":{"Which?":"A"}}`)}
+	for name, c := range map[string]struct {
+		input string
+		want  bool
+	}{
+		"widened":          {`{"questions":[{"question":"Which?"}]}`, true},
+		"changed question": {`{"questions":[{"question":"Second?"}]}`, false},
+		"no input":         {``, false},
+		"not an object":    {`["Which?"]`, false},
+	} {
+		dir := t.TempDir()
+		p := openPrompt{N: 1, Asks: "AskUserQuestion", Tool: "AskUserQuestion"}
+		if c.input != "" {
+			p.Input = json.RawMessage(c.input)
+		}
+		b, err := json.Marshal(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "p-open"), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ranPrompt(dir, ran)
+		if err != nil || (got == "p-open") != c.want {
+			t.Fatalf("%s: ranPrompt closed %q (%v), want closed %v", name, got, err, c.want)
+		}
 	}
 }
 
