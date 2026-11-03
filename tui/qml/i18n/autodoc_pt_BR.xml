@@ -8336,5 +8336,13 @@ Revogado, o próximo uso de %2 é recusado e pergunta a você de novo com um car
         <source>the agent %1</source>
         <translation>o agente %1</translation>
     </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permissões dos agentes: o que foi concedido a cada agente e pacote</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permissões dos agentes: o que foi concedido a cada agente e pacote</translation>
+    </message>
 </context>
 </TS>

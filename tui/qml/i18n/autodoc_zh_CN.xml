@@ -8322,5 +8322,13 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
         <source>the agent %1</source>
         <translation>智能体 %1</translation>
     </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>智能体权限：授予每个智能体和包的权限</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>智能体权限：授予每个智能体和包的权限</translation>
+    </message>
 </context>
 </TS>

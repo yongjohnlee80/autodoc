@@ -8329,5 +8329,13 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
         <source>the agent %1</source>
         <translation>에이전트 %1</translation>
     </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>에이전트 권한: 각 에이전트와 패키지에 허용한 것</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>에이전트 권한: 각 에이전트와 패키지에 허용한 것</translation>
+    </message>
 </context>
 </TS>

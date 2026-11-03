@@ -8337,5 +8337,13 @@ Revocado, su próximo uso de %2 se rechaza y te lo vuelve a preguntar con una ta
         <source>the agent %1</source>
         <translation>el agente %1</translation>
     </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permisos de los agentes: lo que se concedió a cada agente y paquete</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permisos de los agentes: lo que se concedió a cada agente y paquete</translation>
+    </message>
 </context>
 </TS>

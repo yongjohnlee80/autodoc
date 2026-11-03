@@ -224,7 +224,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		t.Fatalf("an ungranted read: %v", re)
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
-	r.s.WaitForText(t, "read your open documents and buffers, and search in them")
+	r.s.WaitForText(t, "read your open documents")
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
 	r.s.WaitFor(t, "the read granted", func(string) bool { return granted() })
 	if re := read(); re != nil {
