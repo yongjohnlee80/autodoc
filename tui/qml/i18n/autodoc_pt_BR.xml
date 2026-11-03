@@ -5614,7 +5614,7 @@ O QUE UMA TECLA PRECISA
     </message>
     <message id="autodoc.question.editorterminal.dont_run">
         <source>&amp;Don't run</source>
-        <translation>&amp;Não executar</translation>
+        <translation>Não executar(&amp;d)</translation>
     </message>
     <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
         <source>%1
@@ -5630,7 +5630,7 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     </message>
     <message id="autodoc.question.editorterminal.run">
         <source>&amp;Run</source>
-        <translation>&amp;Executar</translation>
+        <translation>Executa&amp;r</translation>
     </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>

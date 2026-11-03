@@ -5615,7 +5615,7 @@ LO QUE NECESITA UNA TECLA
     </message>
     <message id="autodoc.question.editorterminal.dont_run">
         <source>&amp;Don't run</source>
-        <translation>&amp;No ejecutar</translation>
+        <translation>No ejecutar(&amp;d)</translation>
     </message>
     <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
         <source>%1
@@ -5631,7 +5631,7 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
     </message>
     <message id="autodoc.question.editorterminal.run">
         <source>&amp;Run</source>
-        <translation>&amp;Ejecutar</translation>
+        <translation>Ejecuta&amp;r</translation>
     </message>
     <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
         <source>a capability AutoDoc does not know</source>
