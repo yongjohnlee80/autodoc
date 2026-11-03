@@ -37,6 +37,9 @@ func TestLoadFillsDefaults(t *testing.T) {
 	if c.Log.Severity() != "" {
 		t.Errorf("log level = %q, want none: every record logged", c.Log.Severity())
 	}
+	if c.Mail.KeepHandled.Duration != config.DefaultKeepHandled || config.DefaultKeepHandled != 720*time.Hour {
+		t.Errorf("mail.keep_handled = %v, want 720h (30 days)", c.Mail.KeepHandled.Duration)
+	}
 }
 
 func TestLoadReadsEverySetting(t *testing.T) {
@@ -51,6 +54,8 @@ poll_interval = "500ms"
 max_inflight = 2
 [log]
 level = "Notice"
+[mail]
+keep_handled = "48h"
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +66,9 @@ level = "Notice"
 	}
 	if c.Log.Severity() != logger.SeverityNotice {
 		t.Errorf("log level = %q, want Notice (any case)", c.Log.Severity())
+	}
+	if c.Mail.KeepHandled.Duration != 48*time.Hour {
+		t.Errorf("mail.keep_handled = %v, want 48h", c.Mail.KeepHandled.Duration)
 	}
 }
 
@@ -74,6 +82,7 @@ func TestLoadRejects(t *testing.T) {
 		{"not TOML", "[[server\n", "invalid"},
 		{"an unknown log level", "[log]\nlevel = \"loud\"\n", `log.level "loud": want debug, info, notice, warning, error or critical`},
 		{"an [embedding] section", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n", "kept in the store"},
+		{"handled mail kept under a day", "[mail]\nkeep_handled = \"12h\"\n", "mail.keep_handled must be at least 24h"},
 	} {
 		_, err := load(t, c.body)
 		if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
