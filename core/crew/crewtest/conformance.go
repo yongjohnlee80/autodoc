@@ -624,13 +624,19 @@ func Run(t *testing.T, h Harness) {
 		if w := wakeOf(t, store, waiting.Session); w.PendingGen != 1 {
 			t.Fatalf("a session whose profile has mail waiting: pending_gen %d, want 1", w.PendingGen)
 		}
-		// Its session ends with that mail unannounced: the row must stop being due, or ended
-		// sessions pile up ahead of live ones in the scheduler's look.
+		// Its session ends with that mail unannounced: its row goes, so it is never due again, and
+		// ended sessions neither pile up ahead of live ones in the scheduler's look nor grow the
+		// table every sweep reads
 		if err := m.Exit(ctx, scope, "run-a", e, waiting.Session, crew.EndedExit); err != nil {
 			t.Fatalf("exit: %v", err)
 		}
-		if w := wakeOf(t, store, waiting.Session); w.State != crew.WakeIdle || w.AnnouncedGen != w.PendingGen {
-			t.Fatalf("an ended session's wake row: %+v; want idle with announced_gen = pending_gen, never due again", w)
+		if err := store.Read(ctx, func(tx crew.Tx) error {
+			if w, ok, err := tx.Wake(waiting.Session); err != nil || ok {
+				t.Errorf("an ended session's wake row: %+v, found %v, %v; want it gone", w, ok, err)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	})
 

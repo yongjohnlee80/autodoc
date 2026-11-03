@@ -72,7 +72,7 @@ func TestTheWritePathReadsWhatIsDueNotTheHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, a := range agents[20:] {
-		if err := m.Exit(ctx, scope, "run-a", e, a.Session, "exited"); err != nil {
+		if err := m.Exit(ctx, scope, "run-a", e, a.Session, crew.EndedExit); err != nil {
 			t.Fatal(err)
 		}
 	}
