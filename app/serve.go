@@ -269,6 +269,7 @@ func (d *process) startWorkspaces() error {
 	}
 	d.startWakes()
 	d.reclaimBridges()
+	d.sweepMail(cfg.Mail.KeepHandled.Duration)
 	if err := d.ws.OpenAll(); err != nil {
 		return err
 	}
@@ -315,6 +316,46 @@ func (d *process) reclaimBridges() {
 		}
 	}()
 	d.stops.push(func() { cancel(); <-done })
+}
+
+// sweepMailEvery is how often the daemon deletes mail handled longer ago than mail.keep_handled.
+const sweepMailEvery = 24 * time.Hour
+
+// sweepMail deletes the crew's handled mail older than keep
+// (docs/decisions/crew.md#handled-mail-is-kept-for-a-window): once as the daemon starts, then every
+// sweepMailEvery, for as long as it serves, each sweep in short batched writes. It stops, a sweep in
+// progress ended, before the store closes.
+func (d *process) sweepMail(keep time.Duration) {
+	ctx, cancel := context.WithCancel(d.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// NOTE: mail ages past the window with no event to announce it: it is swept on a timer, once
+		// at the start and then every sweepMailEvery; ctx ends the loop.
+		t := time.NewTicker(sweepMailEvery)
+		defer t.Stop()
+		for {
+			d.sweepMailOnce(ctx, keep)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	d.stops.push(func() { cancel(); <-done })
+}
+
+// sweepMailOnce is one sweep of sweepMail's: what it deleted is logged, and a failed sweep warned
+// of, the next one coming as usual.
+func (d *process) sweepMailOnce(ctx context.Context, keep time.Duration) {
+	swept, err := d.deps.mail.Sweep(ctx, keep)
+	switch {
+	case err != nil && ctx.Err() == nil:
+		logger.Warning(d.log, err, "sweeping handled mail")
+	case swept.Messages > 0 || swept.Changes > 0:
+		logger.Info(d.log, logger.Fields{"event": "mail.swept", "messages": swept.Messages, "changes": swept.Changes, "kept": keep.String()})
+	}
 }
 
 // reclaimOnce is one look of reclaimBridges' (reclaim, the crew's Reclaim): each helper it ended

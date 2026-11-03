@@ -299,7 +299,7 @@ setting leaves every setting as it was, and the dialog opens again as it was typ
 
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]` and `[log]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]`, `[log]` and `[mail]` settings:
 
 ```toml
 # $XDG_CONFIG_HOME/autodoc/config.toml
@@ -316,9 +316,17 @@ max_inflight = 1            # requests to the shared provider, 1 or 2
 
 [log]
 level = ""                  # the least severe record logged; "" (the default) logs every one
+
+[mail]
+keep_handled = "720h"       # handled crew mail is deleted this long after it was handled; at least 24h
 ```
 
 A missing file is every default.
+
+`[mail] keep_handled` is how long the crew's mail is kept once it was handled: acked, read,
+answered, dismissed or expired. The daemon deletes older handled mail once when it starts and then
+once a day, with the Inbox's history behind it. An unread report or an open request is kept
+however old. A value under `24h` is refused when the daemon starts.
 
 `[log] level` is one of `debug`, `info`, `notice`, `warning`, `error` or `critical`, in any case:
 the daemon's log (in the state directory) then leaves out every record less severe. Any other
