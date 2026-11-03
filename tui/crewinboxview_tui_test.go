@@ -97,6 +97,8 @@ func TestTheInboxShowsTheMailOnScreen(t *testing.T) {
 	if got := <-f.acks; got != "m002" {
 		t.Fatalf("opened the report: acked %q, want m002", got)
 	}
+	r.s.WaitForText(t, "subject m002 — from gold") // the message read whole
+	r.keys(t, decltest.Rune('q'))                  // back to the list
 	r.s.WaitFor(t, "the report listed read", func(sc string) bool {
 		for _, line := range strings.Split(sc, "\n") {
 			if strings.Contains(line, "subject m002") {
@@ -164,9 +166,9 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	onLoop(r, func() bool { r.h.asker.rejected(); return true })
 	press('r')
 	press('s')
-	if got := onLoop(r, func() string { return fmt.Sprint(rec.replied, rec.raised) }); got != "[m060] [s-gold/gold]" {
-		t.Fatalf("r and s on the request: replied and raised %s, want its reply opened and its sender shown", got)
-	}
+	r.s.WaitFor(t, "r opening the request's reply and s showing its sender", func(string) bool {
+		return onLoop(r, func() string { return fmt.Sprint(rec.replied, rec.raised) }) == "[m060] [s-gold/gold]"
+	})
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
 	press('m')
 	if got := <-f.acks; got != "m059" {

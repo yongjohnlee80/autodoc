@@ -482,13 +482,16 @@ func (v *inboxView) openItem(i int) {
 		return
 	}
 	v.cursor, v.key = i, it.message
-	v.showDetail(i)
+	if it.unread() {
+		v.ack(it) // listed read at once, so the message reads as it now is
+		if now, ok := v.rows.At(v.cursor); ok && now.message == it.message {
+			it = now
+		}
+	}
+	v.showDetail(v.cursor)
 	v.c.Set("App.inboxMessageTitle", v.messageTitle(it))
 	v.c.Set("App.inboxMessageText", v.detailOf(it))
 	v.c.Open(inboxMessageDialog)
-	if it.unread() {
-		v.ack(it)
-	}
 }
 
 // messageClosed is the opened message's dialog closed: the keyboard back on the list.
