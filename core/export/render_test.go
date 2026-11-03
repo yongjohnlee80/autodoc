@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -160,9 +161,57 @@ func dumpDOM(t *testing.T, browser, dir, path string, flags ...string) string {
 		if strings.Contains(string(stderr), "No usable sandbox") {
 			t.Skip("the installed browser has no usable sandbox here")
 		}
+		if printedBeforeTeardown(out, stderr) {
+			t.Logf("the browser hung in its teardown after printing the page (%v); the page is checked as printed", err)
+			return string(out)
+		}
 		t.Fatalf("the browser: %v: %s", err, stderr)
 	}
 	return string(out)
+}
+
+// printedBeforeTeardown is whether a browser that failed had printed the whole page first, its
+// failure only its teardown: on a macOS runner with no display, Chrome can hang on its display link
+// (CVDisplayLinkCreateWithCGDisplay fails) as it shuts down, and its watchdog ends it with exit
+// status 2 after --dump-dom has written the page. The page is the callers' to check; a failure
+// before the page ended, or another failure, is still one.
+func printedBeforeTeardown(out, stderr []byte) bool {
+	return bytes.Contains(stderr, []byte("Teardown watchdog expired")) && bytes.Contains(out, []byte("</html>"))
+}
+
+// A browser whose teardown hangs after it has printed the page is the page, and a browser whose
+// teardown hangs before the page is whole, or that fails another way, is a failure.
+func TestABrowserThatHangsInItsTeardownAfterThePageIsThePage(t *testing.T) {
+	watchdog := []byte("[1:2:ERROR:ui/display/mac/cv_display_link_mac.mm:188] CVDisplayLinkCreateWithCGDisplay failed. CVReturn: -6670\n" +
+		"Teardown watchdog expired; recording dump and terminating.\n")
+	for _, c := range []struct {
+		what        string
+		out, stderr []byte
+		want        bool
+	}{
+		{"the page printed, then the teardown hung", []byte("<html><body>drawn</body></html>\n"), watchdog, true},
+		{"the teardown hung before the page ended", []byte("<html><body>half"), watchdog, false},
+		{"the page printed, then another failure", []byte("<html><body>drawn</body></html>\n"), []byte("Segmentation fault\n"), false},
+	} {
+		if got := printedBeforeTeardown(c.out, c.stderr); got != c.want {
+			t.Errorf("%s: printedBeforeTeardown = %v, want %v", c.what, got, c.want)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return // the stand-in is a shell script
+	}
+	// dumpDOM itself, with a stand-in browser that prints the page and then ends as the watchdog
+	// ends Chrome
+	dir := t.TempDir()
+	browser := filepath.Join(dir, "browser")
+	script := "#!/bin/sh\nprintf '<html><body>drawn</body></html>\\n'\n" +
+		"echo 'Teardown watchdog expired; recording dump and terminating.' >&2\nexit 2\n"
+	if err := os.WriteFile(browser, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if out := dumpDOM(t, browser, dir, filepath.Join(dir, "page.html")); !strings.Contains(out, "drawn</body></html>") {
+		t.Fatalf("dumpDOM gave %q, want the page the browser printed", out)
+	}
 }
 
 // fileURL is the file: URL of an absolute path whose every byte is safe in a URL, written by hand.
