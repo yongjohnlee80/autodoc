@@ -100,14 +100,14 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   time, shows the whole source, and creates the Lua file only at the user's yes.
 - `editor.terminal_run` runs a command an agent asks for in AutoDoc's own terminal, so a step that
   needs the user (sudo, pkexec, an installer) never needs a pasted command or a passphrase given to
-  the agent (ADR 1793665458). It needs the `terminal` grant, and every call shows the user the exact
+  the agent. It needs the `terminal` grant, and every call shows the user the exact
   line, the agent and the folder on a card: Run or Don't run. Nothing runs without that Run, and only
   the line the card showed runs, as `sh -c` in a new tab of its own, in the root of the workspace in
   use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
   user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
   when the command exits, its code reaches the agent as the user's mail, and the user is told when
   it failed. The tab stays for the user to read. A line is at most 5 lines of 60 cells (a CJK character
-  is two) and 300 bytes, so the card (64 wide, at most 80% high, wrapping, never scrolling) shows
+  is two), so the card (64 wide, at most 80% high, wrapping, never scrolling) shows
   all of it on the smallest window AutoDoc runs in, 80x20, in every shipped language, and holds only
   characters that draw as themselves: no tab (the card draws it as nothing), control, format or other default-ignorable character (bidi overrides, zero-width, U+034F, U+3164),
   no separator, private-use code point or space but the plain one. The card waits behind any card

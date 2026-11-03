@@ -14,14 +14,14 @@ import (
 )
 
 // TestALineTheCardCantShowIsRefused: editor.terminal_run refuses, before any card, a line the card
-// couldn't show whole and as itself: empty; past 5 lines, 60 characters a line or 300 bytes; a
+// couldn't show whole and as itself: empty; past 5 lines, 60 cells a line or 1200 bytes; a
 // control character (an escape redraws the card), a format character (a bidi override reorders
 // what's shown, a zero-width one hides), a separator, a private-use code point or any space but the
 // plain one, and a tab, which the card draws as nothing. Newline and printable text of any script
 // are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
 	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61), strings.Repeat("漢", 31),
-		strings.Repeat(strings.Repeat("x", 59)+"\n", 5)[:299] + "xx",
+		strings.Repeat("e"+strings.Repeat("\u0301", 10), 60), // 60 cells, 1260 bytes: past the byte backstop
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
 		"echo \ue000", "echo \ufffd", "printf\tfoo",
@@ -236,7 +236,7 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 		}
 		return strings.Join(lines, "\n")
 	}
-	folder := middleCut("/home/someone/Projects/"+strings.Repeat("deep/", 30)+"a-workspace", maxCardFolderRunes)
+	folder := cutMiddle("/home/someone/Projects/"+strings.Repeat("deep/", 30)+"a-workspace", maxCardFolderRunes)
 	for _, lang := range []string{"en", "es", "ja_JP", "ko_KR", "pt_BR", "zh_CN"} {
 		for _, line := range []string{longest("q", 1), longest("漢", 2)} {
 			if err := terminalLine(line); err != nil {
@@ -271,11 +271,11 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 // and its last folders kept, so it never pushes the line off the card.
 func TestALongFolderIsCutInTheMiddle(t *testing.T) {
 	long := "/home/someone/Projects/" + strings.Repeat("deep/", 30) + "a-workspace"
-	got := middleCut(long, maxCardFolderRunes)
+	got := cutMiddle(long, maxCardFolderRunes)
 	if n := len([]rune(got)); n != maxCardFolderRunes || !strings.HasPrefix(got, "/home/some") || !strings.HasSuffix(got, "a-workspace") || !strings.Contains(got, "…") {
-		t.Errorf("middleCut: %q (%d characters)", got, n)
+		t.Errorf("cutMiddle: %q (%d characters)", got, n)
 	}
-	if got := middleCut("/home/me/kb", maxCardFolderRunes); got != "/home/me/kb" {
+	if got := cutMiddle("/home/me/kb", maxCardFolderRunes); got != "/home/me/kb" {
 		t.Errorf("a short folder: %q, want it as it is", got)
 	}
 }

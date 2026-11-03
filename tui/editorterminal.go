@@ -12,7 +12,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// AN AGENT'S COMMAND IN THE TERMINAL (ADR 1793665458, docs/decisions/crew.md#the-editor-socket):
+// AN AGENT'S COMMAND IN THE TERMINAL (docs/decisions/crew.md#the-editor-socket):
 // editor.terminal_run runs one command line an agent asks for in a tab of AutoDoc's own terminal,
 // where the user sees it run and types any passphrase themselves; the agent never holds one. It
 // needs the terminal capability (asked once, as commands is), and every call shows the user the
@@ -30,11 +30,11 @@ import (
 const (
 	maxTerminalLines     = 5
 	maxTerminalLineCells = 60
-	maxTerminalBytes     = 300
+	maxTerminalBytes     = 1200 // a backstop: the lines and cells above bound what shows
 )
 
-// terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 5 lines, 60
-// cells a line or 300 bytes; or holding a character that draws as something else or nothing.
+// terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 5 lines or 60 cells
+// a line (or 1200 bytes); or holding a character that draws as something else or nothing.
 // That covers every control character but newline (an escape redraws the card; a tab draws as
 // nothing, so "printf<TAB>x" would read as "printfx"), format
 // characters (bidi overrides and isolates, zero-width), the rest of Unicode's default-ignorable code
@@ -71,9 +71,9 @@ func terminalLine(line string) error {
 // maxCardFolderRunes bounds the folder the card names, so a long one never pushes the line off it.
 const maxCardFolderRunes = 48
 
-// middleCut is s at most n characters, its middle replaced by "…" when longer: a path's start and
+// cutMiddle is s at most n characters, its middle replaced by "…" when longer: a path's start and
 // its last folders both stay.
-func middleCut(s string, n int) string {
+func cutMiddle(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
 		return s
@@ -136,7 +136,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		_, _, mailed := h.crewHeld()
 		h.asker.askWhenFree(Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
-			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, middleCut(dir, maxCardFolderRunes)),
+			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, cutMiddle(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
 			OnYes: func() {
 				if ctx.Err() != nil { // the agent stopped waiting: nothing runs for no one
