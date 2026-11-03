@@ -9,6 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // AN AGENT'S COMMAND IN THE TERMINAL (ADR 1793665458, docs/decisions/crew.md#the-editor-socket):
@@ -22,17 +23,18 @@ import (
 // ever read back for the agent: what the user typed there stays theirs.
 
 // The line an agent may ask to run: small enough that the card always shows all of it, its
-// explanation and buttons, on an 80x24 terminal (Confirm.qml is 64 wide and at most 80% high, wraps,
-// and doesn't scroll), so what the user approves is what they could read. A longer step is several
-// calls, or shell line continuations.
+// explanation and buttons, on the smallest window AutoDoc runs in, 80x20 (Confirm.qml is 64 wide and
+// at most 80% high, wraps, and doesn't scroll), in every shipped language: what the user approves is
+// what they could read. A line's width is in cells (a CJK character is two). A longer step is
+// several calls, or shell line continuations.
 const (
 	maxTerminalLines     = 5
-	maxTerminalLineRunes = 60
+	maxTerminalLineCells = 60
 	maxTerminalBytes     = 300
 )
 
 // terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 5 lines, 60
-// characters a line or 300 bytes; or holding a character that draws as something else or nothing.
+// cells a line or 300 bytes; or holding a character that draws as something else or nothing.
 // That covers every control character but newline (an escape redraws the card; a tab draws as
 // nothing, so "printf<TAB>x" would read as "printfx"), format
 // characters (bidi overrides and isolates, zero-width), line and paragraph separators, private-use
@@ -47,8 +49,8 @@ func terminalLine(line string) error {
 			len(lines), len(line), maxTerminalLines, maxTerminalBytes)
 	}
 	for i, l := range lines {
-		if n := len([]rune(l)); n > maxTerminalLineRunes {
-			return invalid("line %d is %d characters: each line the user is asked to run is at most %d, shown whole", i+1, n, maxTerminalLineRunes)
+		if n := tuicore.StringWidth(l); n > maxTerminalLineCells {
+			return invalid("line %d is %d cells wide: each line the user is asked to run is at most %d (a CJK character is two), shown whole", i+1, n, maxTerminalLineCells)
 		}
 	}
 	for _, r := range line {

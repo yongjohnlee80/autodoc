@@ -20,7 +20,7 @@ import (
 // plain one, and a tab, which the card draws as nothing. Newline and printable text of any script
 // are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
-	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61),
+	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61), strings.Repeat("漢", 31),
 		strings.Repeat(strings.Repeat("x", 59)+"\n", 5)[:299] + "xx",
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
@@ -30,7 +30,7 @@ func TestALineTheCardCantShowIsRefused(t *testing.T) {
 		}
 	}
 	for _, ok := range []string{"sudo apt-get install -y docker.io", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
-		"ls ~/문서 && echo 完了", strings.Repeat("x", 60), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
+		"ls ~/문서 && echo 完了", strings.Repeat("x", 60), strings.Repeat("漢", 30), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
 		}
@@ -216,40 +216,54 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 }
 
 // TestTheLongestLineShowsWholeOnASmallTerminal: the longest line editor.terminal_run accepts (5
-// lines of 60 characters) shows on the card whole, every line to its last character, with the card's
-// buttons, on an 80x24 terminal: what the user approves is what they could read.
+// lines of 60 cells), in ASCII or in two-cell CJK, shows on the card whole, every line to its last
+// character, with the longest folder the card names and both buttons, on the smallest window
+// AutoDoc runs in (80x20), in every shipped language: what the user approves is what they could read.
 func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	h := newHost(NewSession(d.sock, nil), Options{})
-	s := decltest.RunWith(t, 80, 24, h.attach, h.options(Options{})...)
+	s := decltest.RunWith(t, 80, 20, h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
 	r.connected(t)
-	var lines []string
-	for i := 1; i <= maxTerminalLines; i++ {
-		lines = append(lines, fmt.Sprintf("echo L%d-%s-E%d", i, strings.Repeat("q", maxTerminalLineRunes-12), i))
-	}
-	line := strings.Join(lines, "\n")
-	if err := terminalLine(line); err != nil {
-		t.Fatalf("the longest line is refused: %v", err)
-	}
-	onLoop(r, func() bool {
-		r.h.asker.askWhenFree(Question{
-			Title: r.h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", "zen"),
-			Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, middleCut("/home/someone/Projects/"+strings.Repeat("deep/", 30)+"a-workspace", maxCardFolderRunes)),
-			Yes:   r.h.tr("autodoc.question.editorterminal.run"), No: r.h.tr("autodoc.question.editorterminal.dont_run"),
-		})
-		return true
-	})
-	r.s.WaitForText(t, "let the agent zen run this in AutoDoc's terminal?")
-	r.s.WaitFor(t, "every line to its end, and the buttons", func(sc string) bool {
+	longest := func(fill string, cells int) string {
+		var lines []string
 		for i := 1; i <= maxTerminalLines; i++ {
-			if !strings.Contains(sc, fmt.Sprintf("-E%d", i)) {
-				return false
-			}
+			head, tail := fmt.Sprintf("echo L%d-", i), fmt.Sprintf("-E%d", i)
+			n := (maxTerminalLineCells - len(head) - len(tail)) / cells
+			lines = append(lines, head+strings.Repeat(fill, n)+tail)
 		}
-		return strings.Contains(sc, "Run") && strings.Contains(sc, "Don't run")
-	})
+		return strings.Join(lines, "\n")
+	}
+	folder := middleCut("/home/someone/Projects/"+strings.Repeat("deep/", 30)+"a-workspace", maxCardFolderRunes)
+	for _, lang := range []string{"en", "es", "ja_JP", "ko_KR", "pt_BR", "zh_CN"} {
+		for _, line := range []string{longest("q", 1), longest("漢", 2)} {
+			if err := terminalLine(line); err != nil {
+				t.Fatalf("the longest line is refused: %v\n%s", err, line)
+			}
+			onLoop(r, func() bool {
+				r.h.setLanguage(lang)
+				r.h.asker.askWhenFree(Question{
+					Title: r.h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", "zen"),
+					Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, folder),
+					Yes:   r.h.tr("autodoc.question.editorterminal.run"), No: r.h.tr("autodoc.question.editorterminal.dont_run"),
+				})
+				return true
+			})
+			yes := strings.ReplaceAll(onLoop(r, func() string { return r.h.tr("autodoc.question.editorterminal.run") }), "&", "")
+			no := strings.ReplaceAll(onLoop(r, func() string { return r.h.tr("autodoc.question.editorterminal.dont_run") }), "&", "")
+			yes, no = strings.SplitN(yes, "(", 2)[0], strings.SplitN(no, "(", 2)[0] // 実行(&r): the label before its key
+			r.s.WaitFor(t, lang+": every line to its end, and both buttons", func(sc string) bool {
+				for i := 1; i <= maxTerminalLines; i++ {
+					if !strings.Contains(sc, fmt.Sprintf("-E%d", i)) {
+						return false
+					}
+				}
+				return strings.Contains(sc, yes) && strings.Contains(sc, no)
+			})
+			onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+		}
+	}
 }
 
 // TestALongFolderIsCutInTheMiddle: the folder the card names is at most 48 characters, its start
