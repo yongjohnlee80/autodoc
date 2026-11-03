@@ -10,6 +10,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // grantsWindow is Agent permissions' program: the grants are its preference, a revoke takes them
@@ -278,4 +279,46 @@ func TestTheGoMenuOpensAgentPermissions(t *testing.T) {
 			t.Errorf("Grants.qml doesn't run %s", want)
 		}
 	}
+}
+
+// From the keyboard, on screen: Agent permissions opens with the list holding the keys (Down moves
+// its cursor, the detail following), and each button answers its letter with the list focused:
+// r asks to revoke the row's capability, a to revoke everything its holder holds (Esc keeps
+// both), and q closes the dialog.
+func TestAgentPermissionsAnswersItsKeysFromTheList(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: t.TempDir()})
+	r.connected(t)
+	onLoop(r, func() bool {
+		r.h.prefs.luaGrants = map[string]map[string]bool{"agent:zen": {"editor.read": true, "terminal": true}}
+		r.h.runEntry("agents.permissions")
+		return true
+	})
+	r.s.WaitFor(t, "Agent permissions drawn", func(sc string) bool {
+		return strings.Contains(sc, "Agent permissions") && strings.Contains(sc, "zen (agent) holds editor.read")
+	})
+	r.s.WaitFor(t, "the list holding the keys", func(string) bool {
+		return onLoop(r, func() bool { return core{r.h}.HasFocus("grantTable") })
+	})
+
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
+	r.s.WaitForText(t, "zen (agent) holds terminal")
+
+	r.keys(t, key('r'))
+	r.s.WaitForText(t, "revoke terminal from zen?")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the revoke card gone", func(sc string) bool { return !strings.Contains(sc, "revoke terminal from zen?") })
+
+	r.keys(t, key('a'))
+	r.s.WaitForText(t, "revoke everything zen holds?")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the revoke-all card gone", func(sc string) bool { return !strings.Contains(sc, "revoke everything zen holds?") })
+	if !onLoop(r, func() bool {
+		return r.h.prefs.luaGrants["agent:zen"]["editor.read"] && r.h.prefs.luaGrants["agent:zen"]["terminal"]
+	}) {
+		t.Fatal("Esc on a revoke card took a grant back")
+	}
+
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "the dialog closed", func(sc string) bool { return !strings.Contains(sc, "Agent permissions") })
 }
