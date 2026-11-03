@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
@@ -37,7 +38,9 @@ const (
 // a line (or 1200 bytes); or holding a character that draws as something else or nothing.
 // That covers every control character but newline (an escape redraws the card; a tab draws as
 // nothing, so "printf<TAB>x" would read as "printfx"), format
-// characters (bidi overrides and isolates, zero-width), the rest of Unicode's default-ignorable code
+// characters (bidi overrides and isolates, zero-width), the braille blank U+2800 (a space the shell
+// doesn't see), enclosing and overlay marks, more than two combining marks in a row, the rest of
+// Unicode's default-ignorable code
 // points (Other_Default_Ignorable_Code_Point, Variation_Selector: U+034F, U+3164 and their kind, which
 // count as printable and draw as nothing), line and paragraph separators, private-use
 // and unpaired surrogate code points, any space but the plain one, and U+FFFD.
@@ -59,14 +62,34 @@ func terminalLine(line string) error {
 		if r == '\n' || r == ' ' {
 			continue
 		}
-		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs,
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs, unicode.Me,
 			unicode.Other_Default_Ignorable_Code_Point, unicode.Variation_Selector) ||
-			r == unicode.ReplacementChar || !unicode.IsPrint(r) {
+			r == unicode.ReplacementChar || r == '\u2800' || overlay(r) || !unicode.IsPrint(r) {
 			return invalid("the command holds %U, which the card can't show as itself: only printable characters, the plain space and newline are allowed", r)
+		}
+	}
+	marks := 0 // combining marks in a row: more than two stack into something else
+	for _, r := range line {
+		if unicode.Is(unicode.Mn, r) {
+			if marks++; marks > 2 {
+				return invalid("the command stacks combining marks (%U), which the card can't show as themselves", r)
+			}
+		} else {
+			marks = 0
 		}
 	}
 	return nil
 }
+
+// overlay is a combining mark drawn over or around its base rather than beside it: the strokes
+// and slashes U+0334-U+0338, and the combining marks for symbols U+20D0-U+20F0 (overlays, rings,
+// enclosing shapes). It changes what its base reads as.
+func overlay(r rune) bool { return (r >= 0x0334 && r <= 0x0338) || (r >= 0x20D0 && r <= 0x20F0) }
+
+// terminalCardArm is how long a terminal card shows before its Run counts: a card queued behind
+// another opens the moment that one is answered, Run in the same place on the same key, so a key
+// typed ahead or a double click could run a line unread. A Run sooner is a Don't run, and said.
+var terminalCardArm = 400 * time.Millisecond
 
 // maxCardFolderRunes bounds the folder the card names, so a long one never pushes the line off it.
 const maxCardFolderRunes = 48
@@ -133,17 +156,21 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		if ws, ok := h.activeWorkspaceInfo(); ok {
 			dir = termDir(ws.root)
 		}
-		_, _, mailed := h.crewHeld()
 		h.asker.askWhenFree(Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
 			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, cutMiddle(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
+			Arm: terminalCardArm,
+			OnTooSoon: func() {
+				h.notify(h.trf("autodoc.notice.editorterminal.not_run_answered_before_it_showed", agent))
+			},
 			OnYes: func() {
 				if ctx.Err() != nil { // the agent stopped waiting: nothing runs for no one
 					h.notify(h.trf("autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting", agent))
 					answered <- ctx.Err()
 					return
 				}
+				_, _, mailed := h.crewHeld() // at the Run: the card may have waited while the scope changed
 				tab, err := h.terminals.runFor(agent, line, dir, func(code int) { h.terminalRunExited(agent, line, code, mailed) })
 				run = started{tab: tab, mailed: mailed}
 				answered <- err
@@ -180,7 +207,7 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 	subject, body := terminalExitBody(line, code)
 	h.crew.userSend(agent, mail.KindMessage, subject, body, func(err error) {
 		if err != nil && !errors.Is(err, errHandedOver) {
-			h.notify(h.trf("autodoc.crew.grant_answer_unsent", agent, err.Error()))
+			h.notify(h.trf("autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent", agent, err.Error()))
 		}
 	})
 }

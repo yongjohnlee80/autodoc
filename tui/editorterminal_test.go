@@ -21,7 +21,8 @@ import (
 // are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
 	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61), strings.Repeat("漢", 31),
-		strings.Repeat("e"+strings.Repeat("\u0301", 10), 60), // 60 cells, 1260 bytes: past the byte backstop
+		strings.Repeat(strings.Repeat("e\u0301\u0301", 60)+"\n", 5)[:1504], // 60 cells a line, 1504 bytes: past the byte backstop
+		"echo e\u0301\u0301\u0301", "ls\u2800-la", "echo 1\u20e3", "echo a\u20ddb", "echo =\u0338",
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
 		"echo \ue000", "echo \ufffd", "printf\tfoo",
@@ -31,7 +32,7 @@ func TestALineTheCardCantShowIsRefused(t *testing.T) {
 		}
 	}
 	for _, ok := range []string{"sudo apt-get install -y docker.io", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
-		"ls ~/문서 && echo 完了", "echo café naïve", "echo 한글", strings.Repeat("x", 60), strings.Repeat("漢", 30), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
+		"ls ~/문서 && echo 完了", "echo café naïve", "echo 한글", "echo e\u0301\u0302", "echo नमस्ते", strings.Repeat("x", 60), strings.Repeat("漢", 30), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
 		}
@@ -44,6 +45,7 @@ func TestALineTheCardCantShowIsRefused(t *testing.T) {
 // agent, and answers {started, tab}; its exit code is told to the user when it failed, and the tab
 // stays for the user to read.
 func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
+	disarm(t)
 	t.Setenv("SHELL", "/bin/sh")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PS1", "$ ")
@@ -277,5 +279,54 @@ func TestALongFolderIsCutInTheMiddle(t *testing.T) {
 	}
 	if got := cutMiddle("/home/me/kb", maxCardFolderRunes); got != "/home/me/kb" {
 		t.Errorf("a short folder: %q, want it as it is", got)
+	}
+}
+
+// disarm makes a terminal card's Run count at once, for a cell that answers cards as soon as they
+// show (TestARunTypedAheadNeverRunsTheNextLine keeps the arm).
+func disarm(t *testing.T) {
+	t.Helper()
+	was := terminalCardArm
+	terminalCardArm = 0
+	t.Cleanup(func() { terminalCardArm = was })
+}
+
+// TestARunTypedAheadNeverRunsTheNextLine: a terminal card queued behind another opens the moment
+// that one is answered, Run in the same place on the same key; a Run that reaches it before it is
+// armed (a key typed ahead, a double click) is its Don't run, said to the user, and its line never
+// runs. A Run once armed runs as ever.
+func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("HOME", t.TempDir())
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
+	r.connected(t)
+	var outcomes []string
+	ask := func(line string) {
+		onLoop(r, func() bool {
+			r.h.asker.askWhenFree(Question{Title: "run " + line, Text: line, Arm: terminalCardArm,
+				OnTooSoon: func() { outcomes = append(outcomes, line+": too soon") },
+				OnYes:     func() { outcomes = append(outcomes, line+": run") },
+				OnCancel:  func() { outcomes = append(outcomes, line+": not run") }})
+			return true
+		})
+	}
+	ask("first")
+	ask("second")
+	r.s.WaitForText(t, "run first")
+	time.Sleep(terminalCardArm + 100*time.Millisecond) // the first card read and armed
+	// the user presses Run twice, the second time before the next card has been on screen
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
+	got := onLoop(r, func() []string { return append([]string(nil), outcomes...) })
+	if strings.Join(got, "; ") != "first: run; second: too soon; second: not run" {
+		t.Fatalf("Run pressed twice: %q, want the first run and the second refused as too soon", got)
+	}
+	// armed, a Run counts
+	ask("third")
+	r.s.WaitForText(t, "run third")
+	time.Sleep(terminalCardArm + 100*time.Millisecond)
+	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	if got := onLoop(r, func() []string { return append([]string(nil), outcomes...) }); got[len(got)-1] != "third: run" {
+		t.Fatalf("an armed Run: %q, want third run", got)
 	}
 }
