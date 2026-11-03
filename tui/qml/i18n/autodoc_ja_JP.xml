@@ -1711,6 +1711,50 @@
         <source>Zoom &amp;out</source>
         <translation>縮小(&amp;o)</translation>
     </message>
+    <message id="autodoc.dialog.inbox.message_title">
+        <source>%1 — from %2</source>
+        <translation>%1 — %2 から</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_all">
+        <source>every message of yours, newest first</source>
+        <translation>あなた宛てのすべてのメッセージ（新しい順）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_dismiss">
+        <source>decline the request: asked first, and its agent is told</source>
+        <translation>依頼を断る（先に確認し、エージェントに伝わる）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_mark_read">
+        <source>mark the report read, without opening it</source>
+        <translation>報告を開かずに既読にする</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_more">
+        <source>read the next fifty, older ones</source>
+        <translation>次の50件（より古いもの）を読む</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_open">
+        <source>read the message whole; a report is marked read</source>
+        <translation>メッセージ全体を読む（報告は既読になる）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_reply">
+        <source>answer the request: its agent is told</source>
+        <translation>依頼に回答する（エージェントに伝わる）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_requests">
+        <source>the requests waiting for your answer</source>
+        <translation>あなたの回答を待っている依頼</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_sender">
+        <source>show the agent that sent it</source>
+        <translation>送信したエージェントを表示</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_undeliverable">
+        <source>the notices nobody could receive (the newest fifty)</source>
+        <translation>誰も受け取れなかった通知（最新の50件）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_unread">
+        <source>the reports you haven't read</source>
+        <translation>まだ読んでいない報告</translation>
+    </message>
     <message id="autodoc.dialog.luaPick.choose">
         <source>&amp;Choose</source>
         <translation>選択(&amp;c)</translation>
@@ -3680,6 +3724,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.image_previews">
         <source>&amp;Image previews</source>
         <translation>画像プレビュー(&amp;i)</translation>
+    </message>
+    <message id="autodoc.main.inbox">
+        <source>Inbo&amp;x…</source>
+        <translation>受信箱(&amp;x)…</translation>
     </message>
     <message id="autodoc.main.indentation_marks">
         <source>Indentation &amp;marks</source>

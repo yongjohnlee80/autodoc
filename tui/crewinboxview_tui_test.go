@@ -2,20 +2,30 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// fakeInbox serves inbox.list from items (the history; the undeliverable empty) and takes every
-// inbox.ack, counting them.
+// fakeInbox serves inbox.list from items (the history, newest first, paged by before and limit; the
+// undeliverable empty), counting the pages asked below a message, and takes every inbox.ack. Its
+// items may change while it serves (setItems): new mail.
 type fakeInbox struct {
+	mu    sync.Mutex
 	items []any
 	acks  chan string
+	older int // pages asked below a message (More)
 }
+
+func (f *fakeInbox) setItems(items ...any) { f.mu.Lock(); f.items = items; f.mu.Unlock() }
+func (f *fakeInbox) olderPages() int       { f.mu.Lock(); defer f.mu.Unlock(); return f.older }
 
 func (*fakeInbox) Name() string                 { return "inbox" }
 func (*fakeInbox) Errors() []module.PublicError { return nil }
@@ -34,10 +44,24 @@ func (f *fakeInbox) Verbs() []module.Verb {
 	}
 	return []module.Verb{
 		module.Handle(c("inbox.list", module.EffectRead), func(_ context.Context, p listParams) (map[string]any, error) {
-			if p.Filter != "" || p.Before != 0 {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if p.Filter != "" {
 				return map[string]any{"items": []any{}}, nil
 			}
-			return map[string]any{"items": f.items}, nil
+			var page []any
+			if p.Before != 0 {
+				f.older++
+			}
+			for _, x := range f.items {
+				if m := x.(map[string]any); p.Before == 0 || m["seq"].(int64) < p.Before {
+					page = append(page, x)
+				}
+				if len(page) == int(p.Limit) {
+					break
+				}
+			}
+			return map[string]any{"items": page}, nil
 		}),
 		module.Handle(c("inbox.ack", module.EffectWrite), func(_ context.Context, p ackParams) (struct{}, error) {
 			f.acks <- p.Message
@@ -80,5 +104,131 @@ func TestTheInboxShowsTheMailOnScreen(t *testing.T) {
 			}
 		}
 		return false
+	})
+}
+
+// inboxTUI is a window on a daemon serving f, its Inbox open on screen with the first message listed.
+func inboxTUI(t *testing.T, f *fakeInbox, first string) *running {
+	t.Helper()
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{modules: []module.Module{f}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.connected(t)
+	onLoop(r, func() bool { r.h.runEntry("crew.inbox"); return true })
+	r.s.WaitFor(t, "the inbox drawn", func(sc string) bool {
+		return strings.Contains(sc, "Inbox — All") && strings.Contains(sc, "subject "+first)
+	})
+	return r
+}
+
+// TestEveryInboxLetterWorksFromTheList: the Inbox opens with the list holding the keyboard, and
+// every tab's and button's marked letter works from it: u, t, v and a switch the tab; d asks to
+// dismiss the request under the cursor, r opens its reply, s shows its sender; m marks the report
+// under the cursor read; o reads the message whole in its own dialog (q back to the list) and marks
+// it read; e reads the page below.
+func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
+	var items []any
+	items = append(items, mailItem(60, "request", "open"), mailItem(59, "message", "open"), mailItem(58, "message", "open"))
+	for seq := int64(57); seq > 0; seq-- {
+		items = append(items, mailItem(seq, "message", "read"))
+	}
+	f := &fakeInbox{items: items, acks: make(chan string, 8)}
+	r := inboxTUI(t, f, "m060")
+	if !r.focused(inboxListID) {
+		t.Fatal("the Inbox opened with the keyboard elsewhere than its list")
+	}
+	rec := &inboxReplyRec{}
+	onLoop(r, func() bool { r.h.inboxView.replies = rec; return true })
+	press := func(ch rune) {
+		t.Helper()
+		if err := onLoop(r, func() error { return r.h.p.Call(inboxListID, "forceActiveFocus") }); err != nil {
+			t.Fatal(err)
+		}
+		r.keys(t, decltest.Rune(ch))
+	}
+	for _, c := range []struct {
+		key rune
+		tab int
+	}{{'u', inboxUnread}, {'t', inboxRequests}, {'v', inboxUndeliverable}, {'a', inboxAll}} {
+		press(c.key)
+		r.s.WaitFor(t, fmt.Sprintf("%c switching to tab %d", c.key, c.tab), func(string) bool {
+			return onLoop(r, func() int { return r.h.inboxView.tabOf }) == c.tab
+		})
+	}
+	r.s.WaitFor(t, "All listed again", func(sc string) bool { return strings.Contains(sc, "subject m060") })
+	press('d') // the request, under the cursor
+	r.s.WaitFor(t, "d asking to dismiss", func(string) bool {
+		return onLoop(r, func() bool {
+			return r.h.asker.pending && r.h.asker.current.Title == r.h.tr("autodoc.question.inbox.dismiss")
+		})
+	})
+	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	press('r')
+	press('s')
+	if got := onLoop(r, func() string { return fmt.Sprint(rec.replied, rec.raised) }); got != "[m060] [s-gold/gold]" {
+		t.Fatalf("r and s on the request: replied and raised %s, want its reply opened and its sender shown", got)
+	}
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
+	press('m')
+	if got := <-f.acks; got != "m059" {
+		t.Fatalf("m on the report: acked %q, want m059", got)
+	}
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
+	press('o')
+	r.s.WaitForText(t, "subject m058 — from gold")
+	if got := <-f.acks; got != "m058" {
+		t.Fatalf("o on the report: acked %q, want m058", got)
+	}
+	r.keys(t, decltest.Rune('q'))
+	r.s.WaitFor(t, "back on the list", func(string) bool { return r.focused(inboxListID) })
+	press('e')
+	r.s.WaitFor(t, "e reading the page below", func(string) bool { return f.olderPages() == 1 })
+}
+
+// TestTheInboxCursorStaysOnItsMessage: the cursor stays on the message it is on whatever re-reads the
+// list: a Mark read, More, new mail arriving above it, and the message read and closed again (the
+// mutant: the rows reset, the cursor at the top).
+func TestTheInboxCursorStaysOnItsMessage(t *testing.T) {
+	var items []any
+	for seq := int64(60); seq > 0; seq-- {
+		items = append(items, mailItem(seq, "message", "open"))
+	}
+	f := &fakeInbox{items: items, acks: make(chan string, 8)}
+	r := inboxTUI(t, f, "m060")
+	down := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}
+	r.keys(t, down, down)
+	on := func(when string) {
+		t.Helper()
+		r.s.WaitFor(t, when+": the cursor on m058", func(sc string) bool {
+			return strings.Contains(sc, "body of m058") && onLoop(r, func() string { return r.h.inboxView.key }) == "m058"
+		})
+	}
+	on("moved")
+	r.keys(t, decltest.Rune('m'))
+	<-f.acks
+	on("after Mark read")
+	r.keys(t, decltest.Rune('e'))
+	r.s.WaitFor(t, "the page below read", func(string) bool { return f.olderPages() == 1 })
+	on("after More")
+	f.setItems(append([]any{mailItem(62, "message", "open"), mailItem(61, "message", "open")}, items...)...)
+	onLoop(r, func() bool { r.h.inboxView.changed(); return true })
+	r.s.WaitForText(t, "subject m062")
+	on("after new mail")
+	r.keys(t, decltest.Rune('o'))
+	r.s.WaitForText(t, "subject m058 — from gold")
+	r.keys(t, decltest.Rune('q'))
+	on("after reading it")
+}
+
+// TestGoInboxOpensTheInbox: the menu bar's Go › Inbox (Alt+g, then x) opens the Inbox.
+func TestGoInboxOpensTheInbox(t *testing.T) {
+	f := &fakeInbox{items: []any{mailItem(1, "message", "open")}, acks: make(chan string, 1)}
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{modules: []module.Module{f}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.connected(t)
+	r.keys(t, decltest.Alt('g'))
+	r.s.WaitForText(t, "Inbox…")
+	r.keys(t, decltest.Rune('x'))
+	r.s.WaitFor(t, "the Inbox open", func(sc string) bool {
+		return strings.Contains(sc, "Inbox — All") && strings.Contains(sc, "subject m001")
 	})
 }

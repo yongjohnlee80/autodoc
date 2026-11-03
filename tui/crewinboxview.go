@@ -11,15 +11,19 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// THE INBOX (docs/decisions/crew.md#the-human-inbox): SPC a i, or :inbox, opens the user's mail in a
-// dialog of its own, newest first, fifty at a time (inbox.list, paged by seq: More reads the next
-// page). Its tabs are ways of reading it: All, Unread (reports not read yet), Open requests, and
-// Undeliverable (inbox.list's filter: the notices nobody could receive; the daemon answers its
-// newest only, so that tab lists them with no More). The message under the
-// cursor shows below the list, as Markdown; Open (Enter) opens it, and opening a report marks it
-// read (inbox.ack). A request is never marked read or answered by opening it: it stays open until
-// Reply (the reply dialog, crewreply.go) or Dismiss (asked first) answers it. Mark read marks any
-// report read; Sender shows the agent that sent it, here or in the window that shows it.
+// THE INBOX (docs/decisions/crew.md#the-human-inbox): SPC a i, :inbox, or Go › Inbox opens the
+// user's mail in a dialog of its own, newest first, fifty at a time (inbox.list, paged by seq: More
+// reads the next page while inbox.list's more says one is there). Its tabs are ways of reading it:
+// All, Unread (reports not read yet), Open requests, and Undeliverable (inbox.list's filter: the
+// notices nobody could receive; the daemon answers its newest only, so that tab lists them with no
+// More). The list has the keyboard from the start, so every tab's and button's marked letter reaches
+// it (a letter typed into the read-only Editor below would be the Editor's); each says what it does
+// when it has focus, in its tooltip. The message under the cursor shows below the list, as
+// Markdown; Open (Enter) reads it whole in a dialog of its own (InboxMessage.qml), and opening a report
+// marks it read (inbox.ack). A request is never marked read or answered by opening it: it stays open
+// until Reply (the reply dialog, crewreply.go) or Dismiss (asked first) answers it. Mark read marks
+// any report read; Sender shows the agent that sent it, here or in the window that shows it. A mark
+// read and a dismiss show at once, never waiting on the daemon, and are undone, said, when it refuses.
 //
 // The dialog holds no long-poll of its own: the window's crew inbox (crewinbox.go) keeps its one
 // inbox.watch, tells the dialog how many reports and requests are open (the title's count), and
@@ -28,14 +32,18 @@ import (
 // first (a page read before a change can hold rows the change moved past, and more than a page
 // arriving leaves a gap no More reaches); deeper is More again. Every read takes its source's next
 // generation, and so does each ack or dismiss that lands: an answer of an older one is dropped, so a
-// read that started before never undoes a newer read or what the user just did. The cursor stays on
-// the message it was on.
+// read that started before never undoes a newer read or what the user just did. The rows change in
+// place (rows.Update), so the table's cursor stays on the message it was on.
 
 // inboxPage is how many messages one inbox.list reads.
 const inboxPage = 50
 
-// inboxDialog is the dialog's id in the layout (main.qml's Inbox { id: inbox }).
-const inboxDialog = "inbox"
+// inboxDialog is the dialog's id in the layout (main.qml's Inbox { id: inbox }); inboxMessageDialog
+// the dialog Open reads one message in (InboxMessage { id: inboxMessage }).
+const (
+	inboxDialog        = "inbox"
+	inboxMessageDialog = "inboxMessage"
+)
 
 // The inbox's tabs.
 const (
@@ -56,6 +64,7 @@ type inboxCore interface {
 	Go(fn func(context.Context) any, then func(any))
 	Set(name string, v any)
 	Open(id string)
+	Focus(id string)
 	Ask(q Question) Asked
 	Notify(msg string)
 	Tr(id string) string
@@ -118,21 +127,22 @@ func (*inboxView) Name() string { return "inbox" }
 
 func (v *inboxView) State() map[string]any {
 	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxCanMore": false, "App.inboxTitle": "",
-		"App.inboxDetail": "", "App.inboxStatus": ""}
+		"App.inboxDetail": "", "App.inboxStatus": "", "App.inboxMessageTitle": "", "App.inboxMessageText": ""}
 }
 
 func (v *inboxView) Commands() map[string]Command {
 	return map[string]Command{
-		"App.openInbox":     none(v.open),
-		"App.inboxClosed":   none(v.closed),
-		"App.inboxMore":     none(v.more),
-		"App.inboxTab":      oneNumber("a tab", v.tab),
-		"App.inboxShown":    oneNumber("a row", v.shown),
-		"App.inboxOpen":     oneNumber("a row", v.openItem),
-		"App.inboxMarkRead": oneNumber("a row", v.markRead),
-		"App.inboxReply":    oneNumber("a row", v.reply),
-		"App.inboxDismiss":  oneNumber("a row", v.dismiss),
-		"App.inboxSender":   oneNumber("a row", v.sender),
+		"App.openInbox":          none(v.open),
+		"App.inboxClosed":        none(v.closed),
+		"App.inboxMore":          none(v.more),
+		"App.inboxTab":           oneNumber("a tab", v.tab),
+		"App.inboxShown":         oneNumber("a row", v.shown),
+		"App.inboxOpen":          oneNumber("a row", v.openItem),
+		"App.inboxMarkRead":      oneNumber("a row", v.markRead),
+		"App.inboxReply":         oneNumber("a row", v.reply),
+		"App.inboxDismiss":       oneNumber("a row", v.dismiss),
+		"App.inboxSender":        oneNumber("a row", v.sender),
+		"App.inboxMessageClosed": none(v.messageClosed),
 	}
 }
 
@@ -163,7 +173,11 @@ func (v *inboxView) open() {
 	v.render()
 	v.read(true)
 	v.c.Open(inboxDialog)
+	v.c.Focus(inboxListID) // the keyboard on the list, never a tab button: the letters reach every button from it
 }
+
+// inboxListID is the list's id in the layout, scoped to the dialog's instance.
+const inboxListID = "inboxTable@" + inboxDialog
 
 // closed is the dialog dismissed: a change read no more.
 func (v *inboxView) closed() {
@@ -246,10 +260,13 @@ func (v *inboxView) read(first bool) {
 		if err != nil {
 			return err
 		}
-		var page []inboxItem
+		var page inboxPageRead
+		if more, ok := asMap(res)["more"].(bool); ok { // since protocol 53: the daemon says
+			page.more, page.said = more, true
+		}
 		for _, x := range asList(asMap(res)["items"]) {
 			m := asMap(x)
-			page = append(page, inboxItem{message: str(m, "message"), kind: str(m, "kind"), from: str(m, "from"),
+			page.items = append(page.items, inboxItem{message: str(m, "message"), kind: str(m, "kind"), from: str(m, "from"),
 				scope: str(m, "scope"), session: str(m, "session"), subject: str(m, "subject"), body: str(m, "body"),
 				replyTo: str(m, "reply_to"), state: str(m, "state"), created: str(m, "created"), status: str(m, "status"),
 				why: str(m, "why"), seq: num(m, "seq")})
@@ -264,16 +281,27 @@ func (v *inboxView) read(first bool) {
 			v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.not_listed", wireMessage(err)))
 			return
 		}
-		page, _ := res.([]inboxItem)
+		page, _ := res.(inboxPageRead)
 		if first {
 			l.items, l.read = nil, true
 		}
-		l.items = mergeBySeq(l.items, page)
-		// inbox.list says nothing of what is left (a page is bounded by bytes too, so a short page
-		// isn't the end): a page that held some may have more under it, and an empty More ends it
-		l.more = !undeliv && len(page) > 0
+		l.items = mergeBySeq(l.items, page.items)
+		// inbox.list's more says whether an older page is there (protocol 53). An older daemon says
+		// nothing, and a page is bounded by bytes too, so a short one isn't the end: there, a page that
+		// held some may have more under it, and an empty More ends it
+		l.more = page.more
+		if !page.said {
+			l.more = len(page.items) > 0
+		}
+		l.more = l.more && !undeliv
 		v.render()
 	})
+}
+
+// inboxPageRead is one inbox.list answer: its messages, and whether it said an older page is there.
+type inboxPageRead struct {
+	items      []inboxItem
+	more, said bool
 }
 
 // mergeBySeq is items with page under it: a message read again replaces its row, a new one is
@@ -315,13 +343,16 @@ func (v *inboxView) visible() []inboxItem {
 // how much is listed under it.
 func (v *inboxView) render() {
 	items := v.visible()
-	v.rows.Reset(items)
+	// rows changed in place, or added above or below, keep the table's cursor on its row; a model
+	// reset would put it on the first, and the cursor would jump at every ack and every page
+	v.rows.Update(items, func(it inboxItem) string { return it.message })
 	if i := slices.IndexFunc(items, func(it inboxItem) bool { return it.message == v.key }); v.key != "" && i >= 0 {
-		v.cursor = i
+		v.cursor = i // the table follows its row's key itself: it is told nothing
+	} else {
+		v.cursor = min(max(v.cursor, 0), max(len(items)-1, 0))
+		v.c.Set("App.inboxIndex", -1) // moved away first, so the same row twice still moves the table's cursor
+		v.c.Set("App.inboxIndex", v.cursor)
 	}
-	v.cursor = min(max(v.cursor, 0), max(len(items)-1, 0))
-	v.c.Set("App.inboxIndex", -1) // moved away first, so the same row twice still moves the table's cursor
-	v.c.Set("App.inboxIndex", v.cursor)
 	v.c.Set("App.inboxCanMore", v.list().read && v.list().more)
 	switch l := v.list(); {
 	case !l.read:
@@ -397,6 +428,11 @@ func (v *inboxView) showDetail(i int) {
 		v.c.Set("App.inboxDetail", "")
 		return
 	}
+	v.c.Set("App.inboxDetail", v.detailOf(it))
+}
+
+// detailOf is a message as Markdown: who sent it, what it is, then its body.
+func (v *inboxView) detailOf(it inboxItem) string {
 	from := it.from
 	if it.scope != "" {
 		from += "@" + it.scope
@@ -413,7 +449,7 @@ func (v *inboxView) showDetail(i int) {
 		b.WriteString("\n\n" + v.c.Trf("autodoc.text.inbox.detail_undelivered", it.status, it.why))
 	}
 	b.WriteString("\n\n" + it.body + "\n")
-	v.c.Set("App.inboxDetail", b.String())
+	return b.String()
 }
 
 // openItem opens row i: its message below the list and, a report not read yet, marked read. A
@@ -425,9 +461,28 @@ func (v *inboxView) openItem(i int) {
 	}
 	v.cursor, v.key = i, it.message
 	v.showDetail(i)
+	v.c.Set("App.inboxMessageTitle", v.messageTitle(it))
+	v.c.Set("App.inboxMessageText", v.detailOf(it))
+	v.c.Open(inboxMessageDialog)
 	if it.unread() {
 		v.ack(it)
 	}
+}
+
+// messageClosed is the opened message's dialog closed: the keyboard back on the list.
+func (v *inboxView) messageClosed() {
+	if v.isOpen {
+		v.c.Focus(inboxListID)
+	}
+}
+
+// messageTitle is an opened message's dialog title: its subject, else its first line, and who sent it.
+func (v *inboxView) messageTitle(it inboxItem) string {
+	subject := it.subject
+	if subject == "" {
+		subject, _, _ = strings.Cut(strings.TrimSpace(it.body), "\n")
+	}
+	return v.c.Trf("autodoc.dialog.inbox.message_title", subject, it.from)
 }
 
 // markRead marks row i read: a report, never a request, which is answered or dismissed.
@@ -442,20 +497,27 @@ func (v *inboxView) markRead(i int) {
 	}
 }
 
-// ack marks it read (inbox.ack), and lists it so once the daemon took it.
+// ack marks it read (inbox.ack): listed so at once, and so again once the daemon took it, or as it
+// was, and said, when the daemon refused it. The click never waits on the daemon's answer.
 func (v *inboxView) ack(it inboxItem) {
-	gen := v.gen
+	gen, was := v.gen, it.state
+	v.setState(it.seq, "read")
 	v.c.Go(func(ctx context.Context) any {
 		_, err := v.c.Call(ctx, "inbox.ack", it.message)
 		return err
 	}, func(res any) {
-		if err, _ := res.(error); err != nil {
+		err, _ := res.(error)
+		if err != nil {
 			v.c.Notify(v.c.Trf("autodoc.text.inbox.not_marked", it.subject, wireMessage(err)))
+		}
+		if !v.isOpen || v.gen != gen {
 			return
 		}
-		if v.isOpen && v.gen == gen {
-			v.setState(it.seq, "read")
+		if err != nil {
+			v.setState(it.seq, was)
+			return
 		}
+		v.setState(it.seq, "read") // a read that began after the click, before the daemon took it, is dropped
 	})
 }
 
@@ -497,20 +559,28 @@ func (v *inboxView) dismiss(i int) {
 		v.c.Notify(v.c.Tr("autodoc.text.inbox.not_a_request"))
 		return
 	}
-	gen := v.gen
+	gen, was := v.gen, it.state
 	v.c.Ask(Question{Title: v.c.Tr("autodoc.question.inbox.dismiss"), Text: v.c.Trf("autodoc.question.inbox.dismiss_text", it.from, it.subject),
 		Yes: v.c.Tr("autodoc.question.inbox.dismiss_yes"), OnYes: func() {
+			if v.isOpen && v.gen == gen {
+				v.setState(it.seq, "dismissed") // listed so at once: the Yes never waits on the daemon
+			}
 			v.c.Go(func(ctx context.Context) any {
 				_, err := v.c.Call(ctx, "inbox.dismiss", it.message)
 				return err
 			}, func(res any) {
-				if err, _ := res.(error); err != nil {
+				err, _ := res.(error)
+				if err != nil {
 					v.c.Notify(v.c.Trf("autodoc.text.inbox.not_dismissed", it.subject, wireMessage(err)))
+				}
+				if !v.isOpen || v.gen != gen {
 					return
 				}
-				if v.isOpen && v.gen == gen {
-					v.setState(it.seq, "dismissed")
+				if err != nil {
+					v.setState(it.seq, was)
+					return
 				}
+				v.setState(it.seq, "dismissed")
 			})
 		}})
 }

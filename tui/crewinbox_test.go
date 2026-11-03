@@ -121,6 +121,7 @@ func (w *inboxWindow) SetPref(name, value string) {
 	}
 }
 func (w *inboxWindow) Open(id string)  { w.opened = append(w.opened, id) }
+func (w *inboxWindow) Focus(string)    {}
 func (w *inboxWindow) Close(id string) { w.closed = append(w.closed, id) }
 func (w *inboxWindow) raise(session string) bool {
 	w.raised = append(w.raised, session)
