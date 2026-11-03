@@ -367,6 +367,14 @@
         <source>AI agent</source>
         <translation>AI agent</translation>
     </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>agent permissions: what each agent and package was granted</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>agent permissions: what each agent and package was granted</translation>
+    </message>
     <message id="autodoc.cmd.app.command_line">
         <source>the command line</source>
         <translation>the command line</translation>
@@ -1782,6 +1790,22 @@
     <message id="autodoc.dialog.goPick.go_to">
         <source>go to</source>
         <translation>go to</translation>
+    </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Close (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>&amp;Revoke…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>Revoke &amp;all…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>Agent permissions</translation>
     </message>
     <message id="autodoc.dialog.htmlPreview.close_q">
         <source>Close (&amp;q)</source>
@@ -3731,6 +3755,10 @@ WHAT A KEY NEEDS
         <source>A&amp;gent</source>
         <translation>A&amp;gent</translation>
     </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>Agent &amp;permissions…</translation>
+    </message>
     <message id="autodoc.main.agent_profiles">
         <source>A&amp;gent profiles…</source>
         <translation>A&amp;gent profiles…</translation>
@@ -4622,6 +4650,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.golink.no_link_under_the_cursor_spc_l_shows_what_links">
         <source>no link under the cursor: SPC l shows what %1 links with</source>
         <translation>no link under the cursor: SPC l shows what %1 links with</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1 no longer holds %2: its next use asks you again</translation>
     </message>
     <message id="autodoc.notice.graphstore_gui.save_the_graph_groups">
         <source>save the graph groups (%1)</source>
@@ -5911,6 +5943,38 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>&amp;Run</source>
         <translation>&amp;Run</translation>
     </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>&amp;Keep</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>&amp;Revoke</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>revoke everything %1 holds?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>revoke %1 from %2?</translation>
+    </message>
     <message id="autodoc.question.inbox.dismiss">
         <source>Dismiss the request?</source>
         <translation>Dismiss the request?</translation>
@@ -5939,6 +6003,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>create, edit, rename and remove the files of this workspace, except hidden ones, and its tasks</source>
         <translation>create, edit, rename and remove the files of this workspace, except hidden ones, and its tasks</translation>
     </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>insert, replace and delete text in your open documents</translation>
+    </message>
     <message id="autodoc.question.luagate.let_use">
         <source>let %1 use %2?</source>
         <translation>let %1 use %2?</translation>
@@ -5963,6 +6031,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>read the files in your workspaces, except hidden ones, search them and follow their links</source>
         <translation>read the files in your workspaces, except hidden ones, search them and follow their links</translation>
     </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>read your open documents and buffers, and search in them</translation>
+    </message>
     <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
         <source>run any of AutoDoc's commands</source>
         <translation>run any of AutoDoc's commands</translation>
@@ -5970,6 +6042,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal">
         <source>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</source>
         <translation>run command lines in AutoDoc's terminal, each one only after you have seen it and said Run</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>the agent %1</translation>
     </message>
     <message id="autodoc.question.luagate.the_lua_script">
         <source>the Lua script %1</source>
@@ -6644,6 +6720,30 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.globesettings_gui.the_terminals">
         <source>the terminals'</source>
         <translation>the terminals'</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1 (%2) holds %3: %4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>agent</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>package</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>Lua script</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</translation>
     </message>
     <message id="autodoc.text.groupeditor_gui.a_document_wears_the_first_group_its_query_match">
         <source>a document wears the first group its query matches: type:&lt;type&gt;, tag:#&lt;tag&gt;, path:&lt;folder&gt;/ — kept in %1's .autodoc/graph.toml</source>
@@ -8246,106 +8346,6 @@ H J K L, Shift+arrows   resize it</translation>
     <message id="autodoc.view.tutorial.previous">
         <source>P&amp;revious</source>
         <translation>P&amp;revious</translation>
-    </message>
-    <message id="autodoc.dialog.grants.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>Close (&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.grants.revoke">
-        <source>&amp;Revoke…</source>
-        <translation>&amp;Revoke…</translation>
-    </message>
-    <message id="autodoc.dialog.grants.revoke_all">
-        <source>Revoke &amp;all…</source>
-        <translation>Revoke &amp;all…</translation>
-    </message>
-    <message id="autodoc.dialog.grants.title">
-        <source>Agent permissions</source>
-        <translation>Agent permissions</translation>
-    </message>
-    <message id="autodoc.main.agent_permissions">
-        <source>Agent &amp;permissions…</source>
-        <translation>Agent &amp;permissions…</translation>
-    </message>
-    <message id="autodoc.notice.grants.revoked">
-        <source>%1 no longer holds %2: its next use asks you again</source>
-        <translation>%1 no longer holds %2: its next use asks you again</translation>
-    </message>
-    <message id="autodoc.question.grants.keep">
-        <source>&amp;Keep</source>
-        <translation>&amp;Keep</translation>
-    </message>
-    <message id="autodoc.question.grants.revoke">
-        <source>&amp;Revoke</source>
-        <translation>&amp;Revoke</translation>
-    </message>
-    <message id="autodoc.question.grants.revoke_all_text">
-        <source>%1 holds %2.
-
-Revoked, each is refused at its next use, and asks you again by a card.</source>
-        <translation>%1 holds %2.
-
-Revoked, each is refused at its next use, and asks you again by a card.</translation>
-    </message>
-    <message id="autodoc.question.grants.revoke_all_title">
-        <source>revoke everything %1 holds?</source>
-        <translation>revoke everything %1 holds?</translation>
-    </message>
-    <message id="autodoc.question.grants.revoke_text">
-        <source>%1 holds %2: %3.
-
-Revoked, its next use of %2 is refused, and asks you again by a card.</source>
-        <translation>%1 holds %2: %3.
-
-Revoked, its next use of %2 is refused, and asks you again by a card.</translation>
-    </message>
-    <message id="autodoc.question.grants.revoke_title">
-        <source>revoke %1 from %2?</source>
-        <translation>revoke %1 from %2?</translation>
-    </message>
-    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
-        <source>insert, replace and delete text in your open documents</source>
-        <translation>insert, replace and delete text in your open documents</translation>
-    </message>
-    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
-        <source>read your open documents and buffers, and search in them</source>
-        <translation>read your open documents and buffers, and search in them</translation>
-    </message>
-    <message id="autodoc.text.grants.count">
-        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
-        <translation>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</translation>
-    </message>
-    <message id="autodoc.text.grants.detail">
-        <source>%1 (%2) holds %3: %4</source>
-        <translation>%1 (%2) holds %3: %4</translation>
-    </message>
-    <message id="autodoc.text.grants.kind_agent">
-        <source>agent</source>
-        <translation>agent</translation>
-    </message>
-    <message id="autodoc.text.grants.kind_package">
-        <source>package</source>
-        <translation>package</translation>
-    </message>
-    <message id="autodoc.text.grants.kind_script">
-        <source>Lua script</source>
-        <translation>Lua script</translation>
-    </message>
-    <message id="autodoc.text.grants.none">
-        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
-        <translation>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</translation>
-    </message>
-    <message id="autodoc.question.luagate.the_agent">
-        <source>the agent %1</source>
-        <translation>the agent %1</translation>
-    </message>
-    <message id="autodoc.cmd.agents.permissions">
-        <source>agent permissions: what each agent and package was granted</source>
-        <translation>agent permissions: what each agent and package was granted</translation>
-    </message>
-    <message id="autodoc.cmd.agents.permissions.help">
-        <source>agent permissions: what each agent and package was granted</source>
-        <translation>agent permissions: what each agent and package was granted</translation>
     </message>
 </context>
 </TS>
