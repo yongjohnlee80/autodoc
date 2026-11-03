@@ -33,7 +33,8 @@ const (
 
 // terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 5 lines, 60
 // characters a line or 300 bytes; or holding a character that draws as something else or nothing.
-// That covers control characters other than tab and newline (an escape redraws the card), format
+// That covers every control character but newline (an escape redraws the card; a tab draws as
+// nothing, so "printf<TAB>x" would read as "printfx"), format
 // characters (bidi overrides and isolates, zero-width), line and paragraph separators, private-use
 // and unpaired surrogate code points, any space but the plain one, and U+FFFD.
 func terminalLine(line string) error {
@@ -51,15 +52,29 @@ func terminalLine(line string) error {
 		}
 	}
 	for _, r := range line {
-		if r == '\t' || r == '\n' || r == ' ' {
+		if r == '\n' || r == ' ' {
 			continue
 		}
 		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs, unicode.Zs) ||
 			r == unicode.ReplacementChar || !unicode.IsPrint(r) {
-			return invalid("the command holds %U, which the card can't show as itself: only printable characters, the plain space, tab and newline are allowed", r)
+			return invalid("the command holds %U, which the card can't show as itself: only printable characters, the plain space and newline are allowed", r)
 		}
 	}
 	return nil
+}
+
+// maxCardFolderRunes bounds the folder the card names, so a long one never pushes the line off it.
+const maxCardFolderRunes = 48
+
+// middleCut is s at most n characters, its middle replaced by "…" when longer: a path's start and
+// its last folders both stay.
+func middleCut(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	head := (n - 1) / 2
+	return string(r[:head]) + "…" + string(r[len(r)-(n-1-head):])
 }
 
 // terminalExitBody is the mail that tells an agent how the command it ran in the terminal ended.
@@ -116,7 +131,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		_, _, mailed := h.crewHeld()
 		h.asker.askWhenFree(Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
-			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, dir),
+			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, middleCut(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
 			OnYes: func() {
 				if ctx.Err() != nil { // the agent stopped waiting: nothing runs for no one

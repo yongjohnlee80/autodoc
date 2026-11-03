@@ -109,7 +109,7 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   it failed. The tab stays for the user to read. A line is at most 5 lines of 60 characters and 300
   bytes, so the card (64 wide, at most 80% high, wrapping, never scrolling) shows all of it on an
   80x24 terminal, and holds only
-  characters that draw as themselves: no control or format character (bidi overrides, zero-width),
+  characters that draw as themselves: no tab (the card draws it as nothing), control or format character (bidi overrides, zero-width),
   no separator, private-use code point or space but the plain one. The card waits behind any card
   already open, and comes back after a question that displaces it; one closed unanswered is a Don't
   run.

@@ -17,18 +17,19 @@ import (
 // couldn't show whole and as itself: empty; past 5 lines, 60 characters a line or 300 bytes; a
 // control character (an escape redraws the card), a format character (a bidi override reorders
 // what's shown, a zero-width one hides), a separator, a private-use code point or any space but the
-// plain one. Tab, newline and printable text of any script are allowed.
+// plain one, and a tab, which the card draws as nothing. Newline and printable text of any script
+// are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
 	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61),
 		strings.Repeat(strings.Repeat("x", 59)+"\n", 5)[:299] + "xx",
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
-		"echo \ue000", "echo \ufffd"} {
+		"echo \ue000", "echo \ufffd", "printf\tfoo"} {
 		if err := terminalLine(bad); err == nil {
 			t.Errorf("terminalLine(%q): accepted, want refused", bad)
 		}
 	}
-	for _, ok := range []string{"sudo apt-get install -y docker.io", "echo a\techo b", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
+	for _, ok := range []string{"sudo apt-get install -y docker.io", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
 		"ls ~/문서 && echo 完了", strings.Repeat("x", 60), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
@@ -235,7 +236,7 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 	onLoop(r, func() bool {
 		r.h.asker.askWhenFree(Question{
 			Title: r.h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", "zen"),
-			Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, "/home/someone/Projects/a-workspace"),
+			Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, middleCut("/home/someone/Projects/"+strings.Repeat("deep/", 30)+"a-workspace", maxCardFolderRunes)),
 			Yes:   r.h.tr("autodoc.question.editorterminal.run"), No: r.h.tr("autodoc.question.editorterminal.dont_run"),
 		})
 		return true
@@ -249,4 +250,17 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 		}
 		return strings.Contains(sc, "Run") && strings.Contains(sc, "Don't run")
 	})
+}
+
+// TestALongFolderIsCutInTheMiddle: the folder the card names is at most 48 characters, its start
+// and its last folders kept, so it never pushes the line off the card.
+func TestALongFolderIsCutInTheMiddle(t *testing.T) {
+	long := "/home/someone/Projects/" + strings.Repeat("deep/", 30) + "a-workspace"
+	got := middleCut(long, maxCardFolderRunes)
+	if n := len([]rune(got)); n != maxCardFolderRunes || !strings.HasPrefix(got, "/home/some") || !strings.HasSuffix(got, "a-workspace") || !strings.Contains(got, "…") {
+		t.Errorf("middleCut: %q (%d characters)", got, n)
+	}
+	if got := middleCut("/home/me/kb", maxCardFolderRunes); got != "/home/me/kb" {
+		t.Errorf("a short folder: %q, want it as it is", got)
+	}
 }
