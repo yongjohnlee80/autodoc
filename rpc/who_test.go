@@ -26,3 +26,11 @@ func TestACLISaysWhoItIsInItsToken(t *testing.T) {
 		}
 	}
 }
+
+// A hello that names no client is still told a token of its own: "client", then its random part
+// (the mutant: a nameless token, "#…", which no event's client column names).
+func TestANamelessHelloIsAClientToken(t *testing.T) {
+	if tok := newClientToken(""); !regexp.MustCompile(`^client#[0-9a-f]{8}$`).MatchString(tok) {
+		t.Errorf("a nameless hello's token %q, want client#<8 hex>", tok)
+	}
+}
