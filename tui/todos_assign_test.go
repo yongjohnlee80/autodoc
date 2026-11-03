@@ -415,17 +415,26 @@ func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testin
 	v.assignPick.accept(0, "")
 	c.deferred = true
 	v.assignSet("")
-	shown := v.cur
-	v.list() // the stores listed again while the assign is out
-	if len(*assigned) != 1 || len(c.pending) != 2 {
-		t.Fatalf("the premise, the assign and the listing held: assigned %v, held %d", *assigned, len(c.pending))
+	if len(*assigned) != 1 || len(c.pending) != 1 {
+		t.Fatalf("the premise, the assign's answer held: assigned %v, held %d", *assigned, len(c.pending))
 	}
-	c.deliver(1) // the listing's answer first
+	assignAnswer := c.pending[0]
+	c.pending = nil
+	shown := v.cur
+	v.list()                 // the stores listed again while the assign is out
+	for len(c.pending) > 0 { // the listing to its end: the stores, their labels, the workspace's store
+		held := c.pending
+		c.pending = nil
+		for _, answer := range held {
+			answer()
+		}
+	}
 	if v.cur == shown || v.cur == nil || v.cur.id != shown.id {
 		t.Fatalf("the premise, the same store listed again as a new value: %p %p", shown, v.cur)
 	}
 	c.deferred = false
-	c.deliver(0) // then the assign's
+	before := len(c.calls)
+	assignAnswer() // then the assign's answer
 	inProgress := tabOf("in-progress")
 	if v.tab != inProgress || c.set["App.todoTab"] != inProgress {
 		t.Fatalf("after the assign the panel is on tab %d (App.todoTab %v), want In progress (%d)", v.tab, c.set["App.todoTab"], inProgress)
@@ -434,11 +443,11 @@ func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testin
 		t.Fatalf("the task followed: %+v, want t1", v.follow)
 	}
 	read := false
-	for _, call := range c.calls {
+	for _, call := range c.calls[before:] {
 		read = read || strings.HasPrefix(call, "todos.list") && strings.Contains(call, "in-progress")
 	}
 	if !read {
-		t.Fatalf("In progress was not read after the assign: %v", c.calls)
+		t.Fatalf("In progress was not read after the assign's answer: %v", c.calls[before:])
 	}
 }
 
