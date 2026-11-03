@@ -20,6 +20,13 @@ import (
 // writes it (stamped with this build's version and today's date), so an install without the Neovim
 // plugin can read it, or write it into a KB. A failed write is its error: a redirect into a KB
 // that fails must not look like a written manual.
+// managedOperations is this build's KB_OPERATIONS.md as a scaffold writes it today, stamped with
+// the managed version: what the daemon refreshes a served KB's older copy to.
+func managedOperations() []byte {
+	v := kbtype.Vars{Date: time.Now().Format(time.DateOnly), ManagedVersion: autodoc.KBManagedVersion()}
+	return v.Operations(autodoc.KBOperations)
+}
+
 func kbOperations(out io.Writer, version string) error {
 	v := kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: version, ManagedVersion: autodoc.KBManagedVersion()}
 	_, err := out.Write(v.Operations(autodoc.KBOperations))

@@ -166,6 +166,10 @@ type Options struct {
 	// (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): every served
 	// workspace's files are reached through it. nil: every bounded call is refused.
 	Guard *fsbounds.Guard
+	// Operations is this build's KB_OPERATIONS.md as a scaffold writes it, stamped with the managed
+	// version: each workspace's start brings an older root copy up to it (refreshOperations). nil:
+	// none is refreshed.
+	Operations func() []byte
 }
 
 // New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
@@ -355,6 +359,7 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 		docs.WithDeriver(m.opts.Registrations))
 	s.files = docs.New(s.fsys, nil, docs.WithRegistrations(m.opts.Registrations.Kinds()), docs.WithDeriver(m.opts.Registrations))
 	s.view = &view{m: m, s: s, name: c.Name}
+	m.refreshOperations(c.Name, s.fsys)
 	return s, nil
 }
 
