@@ -173,16 +173,25 @@ type Tx interface {
 	// AddInboxChange (the human feed's journal) comes with crew.Tx.
 
 	// Retention (docs/decisions/crew.md#handled-mail-is-kept-for-a-window), in bounded batches:
-	// HandledBefore is the ids of messages, after the id after (by id, so a sweep pages through),
-	// at most limit, created at or before cutoff, every delivery of which is done (acked, failed,
-	// expired, merged or withdrawn) at or before cutoff, with no fallback job still open or leased.
-	// An unread report or an open request has a delivery still queued or leased, and is never one.
-	HandledBefore(cutoff int64, after string, limit int) ([]string, error)
+	// HandledBefore reads the messages created at or before cutoff, oldest first by (created, id)
+	// past after, at most limit of them (read: fewer than limit when none are left), and answers
+	// those every delivery of which is done (acked, failed, expired, merged or withdrawn) at or
+	// before cutoff with no fallback job still open or leased, and last, the cursor past the last
+	// one read. It reads by mail_message_created, so a page costs its limit whatever the store
+	// holds. An unread report or an open request has a delivery still queued or leased, and is
+	// never one.
+	HandledBefore(cutoff int64, after MessageCursor, limit int) (ids []string, last MessageCursor, read int, err error)
 	// DeleteMessage deletes message id with its deliveries and its fallback jobs.
 	DeleteMessage(id string) error
 	// PruneInbox deletes the human feed's journal rows written before before, oldest first, at
 	// most limit, never the newest row: how many it deleted.
 	PruneInbox(before int64, limit int) (int, error)
+}
+
+// MessageCursor is a place in the messages' (created, id) order: the zero one is before every message.
+type MessageCursor struct {
+	Created int64
+	ID      string
 }
 
 // Store runs transactions over the crew and mail tables, each one atomic.

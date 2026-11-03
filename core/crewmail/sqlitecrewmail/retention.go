@@ -8,10 +8,11 @@ import (
 )
 
 // RETENTION (docs/decisions/crew.md#handled-mail-is-kept-for-a-window): each read is one bounded
-// page, by an index, so a sweep's every transaction is short. A message's deliveries are found by
-// mail_delivery's UNIQUE (message, recipient), and a delivery's fallback job by mail_fallback's
-// UNIQUE (delivery): mail_fallback has no index on message, so a job is reached through its
-// delivery, never by scanning the jobs.
+// page, by an index, so a sweep's every transaction is short: the messages are read oldest first
+// by mail_message_created (000034), at most a page of them, never the young ones. A message's
+// deliveries are found by mail_delivery's UNIQUE (message, recipient), and a delivery's fallback
+// job by mail_fallback's UNIQUE (delivery): mail_fallback has no index on message, so a job is
+// reached through its delivery, never by scanning the jobs.
 
 // pendingAt is a delivery that keeps its message past cutoff: not done (queued or leased, or no
 // done_at), done after cutoff, or with a fallback job still open or leased.
@@ -25,20 +26,30 @@ func pendingAt(cutoff int64) dao.Predicate {
 	)
 }
 
-func (t *Tx) HandledBefore(cutoff int64, after string, limit int) ([]string, error) {
+// HandledBefore reads one page of the oldest messages by mail_message_created, (created, id) past
+// after: the rows read are the page, whatever else the store holds, and each one's deliveries are
+// read by their (message, recipient) index.
+func (t *Tx) HandledBefore(cutoff int64, after mail.MessageCursor, limit int) ([]string, mail.MessageCursor, int, error) {
 	rows, err := t.m.messages.On(t.tx).
-		WithPredicate(dao.Gt(`"mail_message"."id"`, after)).
 		WithPredicate(dao.Lte(`"mail_message"."created"`, cutoff)).
-		WithPredicate(store.Correlated(true, "mail_delivery", "message", "mail_message", "id", pendingAt(cutoff))).
-		OrderBy(dao.Asc(byID)).Limit(uint64(limit)).Select()
+		WithPredicate(dao.Raw(`("mail_message"."created", "mail_message"."id") > (?, ?)`, after.Created, after.ID)).
+		OrderBy(dao.Asc(byAge)).Limit(uint64(limit)).Select()
 	if err != nil {
-		return nil, err
+		return nil, after, 0, err
 	}
-	ids := make([]string, len(rows))
-	for i, r := range rows {
-		ids[i] = r.ID
+	var ids []string
+	last := after
+	for _, r := range rows {
+		last = mail.MessageCursor{Created: r.Created, ID: r.ID}
+		pending, err := t.m.deliveries.On(t.tx).With(cMessage, r.ID).WithPredicate(pendingAt(cutoff)).Limit(1).Select()
+		if err != nil {
+			return nil, after, 0, err
+		}
+		if len(pending) == 0 {
+			ids = append(ids, r.ID)
+		}
 	}
-	return ids, nil
+	return ids, last, len(rows), nil
 }
 
 func (t *Tx) DeleteMessage(id string) error {

@@ -28,24 +28,26 @@ type Swept struct {
 }
 
 // Sweep deletes what was handled more than keep ago (a keep below MinKeepHandled is
-// MinKeepHandled), in batches of at most sweepBatch, each one write, until nothing more is due or
-// ctx ends. What it deleted before an error or ctx's end stays deleted, and is counted.
+// MinKeepHandled), in batches each one write that reads at most sweepBatch messages, oldest first,
+// and only those created before the window, until none is left or ctx ends. What it deleted
+// before an error or ctx's end stays deleted, and is counted.
 func (m *Manager) Sweep(ctx context.Context, keep time.Duration) (Swept, error) {
 	keep = max(keep, MinKeepHandled)
 	var out Swept
 	var cutoff int64
-	after := ""
+	var after MessageCursor
 	for {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
 		var ids []string
+		read := 0
 		err := m.store.Write(ctx, func(tx Tx) error {
 			if cutoff == 0 {
 				cutoff = tx.Now().Add(-keep).UnixNano() // one cutoff for the whole sweep
 			}
 			var err error
-			if ids, err = tx.HandledBefore(cutoff, after, sweepBatch); err != nil {
+			if ids, after, read, err = tx.HandledBefore(cutoff, after, sweepBatch); err != nil {
 				return err
 			}
 			for _, id := range ids {
@@ -59,10 +61,9 @@ func (m *Manager) Sweep(ctx context.Context, keep time.Duration) (Swept, error) 
 			return out, err
 		}
 		out.Messages += len(ids)
-		if len(ids) < sweepBatch {
+		if read < sweepBatch { // a short page: no older message is left to read
 			break
 		}
-		after = ids[len(ids)-1]
 	}
 	for {
 		if err := ctx.Err(); err != nil {
