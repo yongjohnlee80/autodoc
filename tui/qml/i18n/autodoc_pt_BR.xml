@@ -8008,6 +8008,10 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>%1 listed: More reads older ones</source>
         <translation>%1 listadas: Mais lê as anteriores</translation>
     </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>%1 listadas: os %2 avisos mais recentes</translation>
+    </message>
     <message id="autodoc.text.inbox.not_listed">
         <source>your mail could not be read: %1</source>
         <translation>não foi possível ler seu correio: %1</translation>

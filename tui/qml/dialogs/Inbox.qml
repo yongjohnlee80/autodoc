@@ -1,7 +1,8 @@
 // Inbox.qml — SPC a i, :inbox: the user's mail (crewinboxview.go), newest first, fifty at a time.
 // The tabs are ways of reading it; the message under the cursor shows below the list, as Markdown.
 // Open (Enter) opens it, a report marked read; Reply and Dismiss answer a request; Sender shows the
-// agent that sent it; More reads the next page.
+// agent that sent it; More reads the next page (Undeliverable has its newest only). The cursor stays
+// on its message when the list is read again (App.inboxIndex).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 90
@@ -24,6 +25,7 @@ Dialog {
             palette.highlight: Theme.document.highlight
             palette.highlightedText: Theme.document.highlightedText
             model: App.inbox
+            currentIndex: App.inboxIndex
             Layout.fillHeight: true
             onCurrentIndexChanged: App.inboxShown(index)
             onActivated: App.inboxOpen(index)

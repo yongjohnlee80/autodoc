@@ -11,9 +11,14 @@ import (
 )
 
 // mailWindow is the inbox dialog's program: inbox.list answers from its pages, by filter and before
-// (newest first, at most the limit), every call is recorded, questions are kept for the cell to
-// answer.
+// (newest first, at most the limit; undeliverable, as the daemon does, its newest only, before
+// ignored), every call is recorded, questions are kept for the cell to answer. With hold set, a
+// call is answered at once, as the daemon read it then, but its answer reaches the loop only when
+// the cell releases it, in the order the cell picks: the real core.Go's goroutines finish in any
+// order.
 type mailWindow struct {
+	hold                   bool
+	held                   []func()
 	history, undeliverable []map[string]any // newest first
 	calls                  [][]any          // each call: its verb, then its params
 	state                  map[string]any
@@ -31,6 +36,9 @@ func (w *mailWindow) Call(_ context.Context, verb string, p ...any) (any, error)
 			src = w.undeliverable
 		}
 		before, limit := p[1].(int64), int(p[2].(int64))
+		if p[0] == "undeliverable" {
+			before = 0 // FailedNotices(limit): the newest only
+		}
 		var page []any
 		for _, m := range src {
 			if before == 0 || m["seq"].(int64) < before {
@@ -46,13 +54,27 @@ func (w *mailWindow) Call(_ context.Context, verb string, p ...any) (any, error)
 	}
 	return nil, errors.New("unknown method: " + verb)
 }
-func (w *mailWindow) Go(fn func(context.Context) any, then func(any)) { then(fn(context.Background())) }
-func (w *mailWindow) Set(name string, v any)                          { w.state[name] = v }
-func (w *mailWindow) Open(id string)                                  { w.opened = append(w.opened, id) }
-func (w *mailWindow) Ask(q Question) Asked                            { w.asked = append(w.asked, q); return Asked{} }
-func (w *mailWindow) Notify(msg string)                               { w.notices = append(w.notices, msg) }
-func (w *mailWindow) Tr(id string) string                             { return w.Trf(id) }
-func (w *mailWindow) Trf(id string, args ...any) string               { return fill(englishText(id), args...) }
+func (w *mailWindow) Go(fn func(context.Context) any, then func(any)) {
+	res := fn(context.Background())
+	if w.hold {
+		w.held = append(w.held, func() { then(res) })
+		return
+	}
+	then(res)
+}
+
+// release delivers the held answer i (in the order held) to the loop.
+func (w *mailWindow) release(i int) {
+	f := w.held[i]
+	w.held[i] = func() {}
+	f()
+}
+func (w *mailWindow) Set(name string, v any)            { w.state[name] = v }
+func (w *mailWindow) Open(id string)                    { w.opened = append(w.opened, id) }
+func (w *mailWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
+func (w *mailWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
+func (w *mailWindow) Tr(id string) string               { return w.Trf(id) }
+func (w *mailWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
 
 // verbs is how many times the window called verb.
 func (w *mailWindow) verbs(verb string) [][]any {
@@ -159,39 +181,154 @@ func TestOpeningAReportMarksItReadButARequestStaysOpen(t *testing.T) {
 	}
 }
 
-// A change the crew inbox reports reads the first page again, merged by seq: the pages read before
-// stay, no message is listed twice, and the newer ones head the list (the mutants: the list
-// replaced by page 1; merged without the seq check).
-func TestAChangeReadsPageOneAgainAndKeepsThePagesRead(t *testing.T) {
+// A change the crew inbox reports reads the first page again, and that page is the list: the pages
+// More read go. So more than a page arriving between two changes leaves no gap (the row under the new
+// page is More's next), and a row read before (m001, read in another window meanwhile) is never listed
+// as it was (the mutant: the first page merged over the pages read).
+func TestAChangeReadsPageOneAgainAndDropsThePagesRead(t *testing.T) {
 	w := &mailWindow{history: mailRun(100, 100)}
 	v, _ := newInboxCell(w)
 	v.open()
 	v.more() // 100 listed: m100 down to m001
-	w.history = append(mailRun(103, 3), mailRun(100, 100)...)
-	w.history[3] = mailItem(100, "message", "read") // read in another window
+	if got := listed(v); len(got) != 100 {
+		t.Fatalf("after More: %d listed, want 100", len(got))
+	}
+	w.history = mailRun(151, 151) // 51 more arrived
+	w.history[150] = mailItem(1, "message", "read")
 	v.changed()
-	reads := w.verbs("inbox.list")
-	if len(reads) != 3 || reads[2][1] != int64(0) {
-		t.Fatalf("after the change: %v, want one more read, of the first page", reads)
-	}
 	got := listed(v)
-	if len(got) != 103 || got[0] != "m103" || got[3] != "m100" || got[102] != "m001" {
-		t.Fatalf("listed %d (%v … %v): want m103 down to m001, each once", len(got), got[:min(4, len(got))], got[max(0, len(got)-1):])
+	if len(got) != inboxPage || got[0] != "m151" || got[inboxPage-1] != "m102" {
+		t.Fatalf("after the change: %d listed (%v … %v), want the first page alone, m151 down to m102", len(got), got[:min(2, len(got))], got[max(0, len(got)-1):])
 	}
-	seen := map[string]bool{}
-	for _, id := range got {
-		if seen[id] {
-			t.Fatalf("%s listed twice", id)
-		}
-		seen[id] = true
+	if s, _ := w.state["App.inboxStatus"].(string); !strings.Contains(s, "More") {
+		t.Fatalf("the status %q: want More offered", s)
 	}
-	if it, _ := v.rows.At(3); it.state != "read" {
-		t.Fatalf("m100 after the change: %q, want the state page 1 read", it.state)
+	v.more()
+	if got := listed(v); len(got) != 2*inboxPage || got[inboxPage] != "m101" {
+		t.Fatalf("More after the change: %d listed, the 51st %q; want m101 next, no gap", len(got), got[min(inboxPage, len(got)-1)])
+	}
+	v.more() // m051 down to m002
+	v.more() // m001
+	v.more() // nothing: More ends
+	if it, ok := v.rows.At(150); !ok || it.message != "m001" || it.state != "read" {
+		t.Fatalf("the oldest after paging: %+v, want m001 as it is now, read", it)
+	}
+	if s, _ := w.state["App.inboxStatus"].(string); strings.Contains(s, "More") {
+		t.Fatalf("the status after the last page: %q, want no More", s)
 	}
 	v.closed()
+	reads := len(w.verbs("inbox.list"))
 	v.changed()
-	if reads := w.verbs("inbox.list"); len(reads) != 3 {
-		t.Fatalf("a change with the dialog closed read %d more", len(reads)-3)
+	if len(w.verbs("inbox.list")) != reads {
+		t.Fatal("a change with the dialog closed read the inbox")
+	}
+}
+
+// A read's answer is dropped when a later read has started since: two re-reads finishing in reverse
+// order (the daemon's goroutines finish in any order) leave the later's state, and a More overtaken
+// by a change never adds its page under the change's (the mutant: every answer applied).
+func TestAnOlderReadNeverUndoesANewerOne(t *testing.T) {
+	w := &mailWindow{history: mailRun(100, 100)}
+	v, _ := newInboxCell(w)
+	v.open()
+	w.hold = true
+	v.changed() // A reads m100 open
+	w.history[0] = mailItem(100, "message", "read")
+	v.changed() // B reads it read
+	w.release(1)
+	w.release(0)
+	if it, _ := v.rows.At(0); it.message != "m100" || it.state != "read" {
+		t.Fatalf("after B then A: %+v, want m100 read, as the later read had it", it)
+	}
+	v.more() // a More, overtaken by a change before its page lands
+	v.changed()
+	w.release(3)
+	w.release(2)
+	if got := listed(v); len(got) != inboxPage {
+		t.Fatalf("a More overtaken by a change: %d listed, want the change's first page alone", len(got))
+	}
+}
+
+// The user's ack or dismiss wins over a read that started before it landed: the read's older
+// answer would list the message as it was (the mutant: an ack's landing takes no generation).
+func TestAnAckWinsOverAReadInFlight(t *testing.T) {
+	w := &mailWindow{history: []map[string]any{mailItem(3, "request", "open"), mailItem(2, "message", "open"), mailItem(1, "message", "read")}}
+	v, _ := newInboxCell(w)
+	v.open()
+	w.hold = true
+	v.changed()   // a read in flight: m002 open
+	v.openItem(1) // the user opens m002: its ack lands first
+	w.release(1)
+	w.release(0)
+	if it, _ := v.rows.At(1); it.message != "m002" || it.state != "read" {
+		t.Fatalf("an ack, then the older read: %+v, want m002 read", it)
+	}
+	v.changed()
+	v.dismiss(0)
+	w.asked[0].OnYes()
+	w.release(3) // the dismiss lands
+	w.release(2) // then the read from before it
+	if it, _ := v.rows.At(0); it.message != "m003" || it.state != "dismissed" {
+		t.Fatalf("a dismiss, then the older read: %+v, want m003 dismissed", it)
+	}
+}
+
+// A change while History shows marks Undeliverable to be read again: switching to it lists the new
+// notice (the mutant: the hidden source kept as it was). Undeliverable lists the newest notices with
+// no More: the daemon answers its newest only, and the status says so.
+func TestUndeliverableIsReadAgainAfterAChangeAndOffersNoMore(t *testing.T) {
+	w := &mailWindow{history: mailRun(3, 3), undeliverable: mailRun(60, 60)}
+	v, _ := newInboxCell(w)
+	v.open()
+	v.tab(inboxUndeliverable)
+	if got := listed(v); len(got) != inboxPage || got[0] != "m060" {
+		t.Fatalf("Undeliverable: %d listed, from %v; want the newest 50", len(got), got[:min(1, len(got))])
+	}
+	if s, _ := w.state["App.inboxStatus"].(string); !strings.Contains(s, "newest 50") {
+		t.Fatalf("Undeliverable's status %q: want it said these are the newest 50", s)
+	}
+	reads := len(w.verbs("inbox.list"))
+	v.more()
+	if len(w.verbs("inbox.list")) != reads {
+		t.Fatal("More on Undeliverable read again: its daemon side has no older page")
+	}
+	v.tab(inboxAll)
+	w.undeliverable = append(mailRun(61, 1), w.undeliverable...)
+	v.changed()
+	v.tab(inboxUndeliverable)
+	if got := listed(v); len(got) == 0 || got[0] != "m061" {
+		t.Fatalf("Undeliverable after a change seen on All: %v…, want m061 first", got[:min(1, len(got))])
+	}
+}
+
+// A page shorter than fifty is not the end (a page is bounded by bytes too): More is offered while
+// the last page held some, and an empty one ends it.
+func TestMoreIsOfferedUntilAPageComesBackEmpty(t *testing.T) {
+	w := &mailWindow{history: mailRun(30, 30)}
+	v, _ := newInboxCell(w)
+	v.open()
+	if s, _ := w.state["App.inboxStatus"].(string); !strings.Contains(s, "More") {
+		t.Fatalf("after a short first page: %q, want More offered", s)
+	}
+	v.more()
+	if s, _ := w.state["App.inboxStatus"].(string); strings.Contains(s, "More") || len(listed(v)) != 30 {
+		t.Fatalf("after an empty More: %q, %d listed; want 30, no More", s, len(listed(v)))
+	}
+}
+
+// The cursor stays on its message when the list is read again with newer ones above it.
+func TestTheCursorStaysOnItsMessage(t *testing.T) {
+	w := &mailWindow{history: mailRun(100, 100)}
+	v, _ := newInboxCell(w)
+	v.open()
+	v.shown(2) // m098
+	w.history = mailRun(102, 102)
+	v.changed()
+	if i, _ := w.state["App.inboxIndex"].(int); i != 4 {
+		t.Fatalf("the table's cursor after two arrived: %d, want 4, still m098", i)
+	}
+	if d, _ := w.state["App.inboxDetail"].(string); !strings.Contains(d, "body of m098") {
+		t.Fatalf("the detail: %q, want m098's", d)
 	}
 }
 

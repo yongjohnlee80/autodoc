@@ -55,6 +55,8 @@ type crewInboxCore interface {
 	Prefs() prefs
 	SetPref(name, value string)
 	Bell()
+	// Ask asks the user a question: a dismiss is asked first
+	Ask(q Question) Asked
 	// SetText sets the text of the layout's text area id (the reply's, at each opening)
 	SetText(id, text string)
 }
@@ -248,12 +250,14 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 		x.show(snapshotParts{}) // an empty journal: what was shown, from before, is closed
 	}
 	x.cursor = num(m, "cursor")
-	again := false
+	again, mailChanged := false, false
 	for _, ch := range asList(m["changes"]) {
 		c := asMap(ch)
 		switch str(c, "kind") {
 		case "request", "report", "answered", "dismissed", "read", "expired", "attention", "cleared":
 			again = true // the open set may differ: read it again
+		case mail.ChangeUndeliverable:
+			mailChanged = true // a notice nobody could receive: the inbox dialog's Undeliverable
 		case "focus":
 			x.raise(str(c, "ref")) // the human asked for this agent: raised when it is this window's
 		case mail.ChangeFallback, mail.ChangeFallbackDone, mail.ChangeFallbackUnknown:
@@ -262,9 +266,9 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 	}
 	if again {
 		x.cursor = 0
-		if x.view != nil {
-			x.view.changed() // the inbox dialog, open, reads its first page again
-		}
+	}
+	if (again || mailChanged) && x.view != nil {
+		x.view.changed() // the inbox dialog, open, reads its first page again
 	}
 	x.watch(gen, "")
 }

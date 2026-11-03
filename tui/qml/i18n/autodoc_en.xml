@@ -6625,6 +6625,10 @@ WHAT A KEY NEEDS
         <source>%1 listed: More reads older ones</source>
         <translation>%1 listed: More reads older ones</translation>
     </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>%1 listed: the newest %2 notices</translation>
+    </message>
     <message id="autodoc.text.inbox.detail_head">
         <source>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</source>
         <translation>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</translation>

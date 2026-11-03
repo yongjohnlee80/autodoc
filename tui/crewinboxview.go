@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -13,7 +14,8 @@ import (
 // THE INBOX (docs/decisions/crew.md#the-human-inbox): SPC a i, or :inbox, opens the user's mail in a
 // dialog of its own, newest first, fifty at a time (inbox.list, paged by seq: More reads the next
 // page). Its tabs are ways of reading it: All, Unread (reports not read yet), Open requests, and
-// Undeliverable (inbox.list's filter: the notices nobody could receive). The message under the
+// Undeliverable (inbox.list's filter: the notices nobody could receive; the daemon answers its
+// newest only, so that tab lists them with no More). The message under the
 // cursor shows below the list, as Markdown; Open (Enter) opens it, and opening a report marks it
 // read (inbox.ack). A request is never marked read or answered by opening it: it stays open until
 // Reply (the reply dialog, crewreply.go) or Dismiss (asked first) answers it. Mark read marks any
@@ -21,8 +23,13 @@ import (
 //
 // The dialog holds no long-poll of its own: the window's crew inbox (crewinbox.go) keeps its one
 // inbox.watch, tells the dialog how many reports and requests are open (the title's count), and
-// tells it when the open set may have changed. Then the dialog reads its first page again and merges
-// it by seq: the pages read before stay, so a reader scrolled down is never thrown back to the top.
+// tells it when its mail may have changed. Then the dialog reads its first page again, and that page
+// is the list: the pages More read before go, so what is listed is always one consistent read, newest
+// first (a page read before a change can hold rows the change moved past, and more than a page
+// arriving leaves a gap no More reaches); deeper is More again. Every read takes its source's next
+// generation, and so does each ack or dismiss that lands: an answer of an older one is dropped, so a
+// read that started before never undoes a newer read or what the user just did. The cursor stays on
+// the message it was on.
 
 // inboxPage is how many messages one inbox.list reads.
 const inboxPage = 50
@@ -78,8 +85,10 @@ func (it inboxItem) openRequest() bool { return it.kind == "request" && it.state
 // there.
 type inboxList struct {
 	items []inboxItem
-	read  bool // its first page was read
-	more  bool
+	read  bool   // its first page was read, since the last change
+	more  bool   // More may read an older page: the last page read held some
+	gen   uint64 // its latest read's, or the latest ack or dismiss's: an older read's answer is dropped
+	busy  bool   // a read is in flight: More waits for it
 }
 
 // inboxView is the dialog. Its fields are the loop's.
@@ -92,6 +101,7 @@ type inboxView struct {
 	gen     uint64 // bumped by each open and close: an earlier opening's answers are dropped
 	tabOf   int
 	cursor  int
+	key     string    // the message under the cursor: a re-read keeps the cursor on it
 	history inboxList // inbox.list's history: the All, Unread and Open requests tabs read it
 	undeliv inboxList // inbox.list's undeliverable
 	// reports and requests are how many are open, as the crew inbox last said
@@ -107,7 +117,8 @@ func newInboxView(c inboxCore, replies inboxReplies) *inboxView {
 func (*inboxView) Name() string { return "inbox" }
 
 func (v *inboxView) State() map[string]any {
-	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxTitle": "", "App.inboxDetail": "", "App.inboxStatus": ""}
+	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxTitle": "", "App.inboxDetail": "",
+		"App.inboxStatus": ""}
 }
 
 func (v *inboxView) Commands() map[string]Command {
@@ -144,8 +155,8 @@ func (*inboxView) Cards() []Card { return nil }
 func (v *inboxView) open() {
 	v.gen++
 	v.isOpen = true
-	v.cursor = 0
-	v.history, v.undeliv = inboxList{}, inboxList{}
+	v.cursor, v.key = 0, ""
+	v.history, v.undeliv = inboxList{gen: v.history.gen}, inboxList{gen: v.undeliv.gen}
 	v.c.Set("App.inboxStatus", v.c.Tr("autodoc.text.inbox.reading"))
 	v.c.Set("App.inboxDetail", "")
 	v.title()
@@ -166,10 +177,16 @@ func (v *inboxView) openSet(reports, requests int) {
 	v.title()
 }
 
-// changed is the crew inbox's word that the open set may have changed: the dialog, open, reads the
-// first page of the tab shown again.
+// changed is the crew inbox's word that the user's mail may have changed (a message's state, a new
+// one, an undeliverable notice): the dialog, open, reads the first page of the tab shown again, and
+// the other source's at its next showing.
 func (v *inboxView) changed() {
 	if v.isOpen {
+		hidden := &v.undeliv
+		if v.tabOf == inboxUndeliverable {
+			hidden = &v.history
+		}
+		hidden.read = false
 		v.read(true)
 	}
 }
@@ -179,7 +196,7 @@ func (v *inboxView) tab(t int) {
 	if t < 0 || t >= inboxTabs {
 		return
 	}
-	v.tabOf, v.cursor = t, 0
+	v.tabOf, v.cursor, v.key = t, 0, ""
 	v.title()
 	if !v.list().read {
 		v.read(true)
@@ -188,8 +205,13 @@ func (v *inboxView) tab(t int) {
 	v.render()
 }
 
-// more reads the page below the oldest message listed.
-func (v *inboxView) more() { v.read(false) }
+// more reads the page below the oldest message listed: none on Undeliverable, whose daemon side
+// answers its newest only, nor while a read is in flight (what it pages below isn't known yet).
+func (v *inboxView) more() {
+	if l := v.list(); v.tabOf != inboxUndeliverable && l.read && l.more && !l.busy {
+		v.read(false)
+	}
+}
 
 // list is the source the tab shown reads.
 func (v *inboxView) list() *inboxList {
@@ -199,9 +221,9 @@ func (v *inboxView) list() *inboxList {
 	return &v.history
 }
 
-// read reads the tab's source: its first page, merged by seq over what was read (first), or the
-// page below the oldest read. An answer for an earlier opening, or after the dialog closed, is
-// dropped.
+// read reads the tab's source: its first page, which becomes the list (first), or the page below the
+// oldest listed, added under it. The read takes the source's next generation: its answer is dropped
+// when a later read or an ack or dismiss has landed since, or the dialog closed.
 func (v *inboxView) read(first bool) {
 	gen, undeliv := v.gen, v.tabOf == inboxUndeliverable
 	l := v.list()
@@ -213,6 +235,9 @@ func (v *inboxView) read(first bool) {
 	if undeliv {
 		filter = "undeliverable"
 	}
+	l.gen++
+	l.busy = true
+	read := l.gen
 	v.c.Go(func(ctx context.Context) any {
 		res, err := v.c.Call(ctx, "inbox.list", filter, before, int64(inboxPage))
 		if err != nil {
@@ -228,33 +253,28 @@ func (v *inboxView) read(first bool) {
 		}
 		return page
 	}, func(res any) {
-		if !v.isOpen || v.gen != gen {
-			return
+		if !v.isOpen || v.gen != gen || l.gen != read {
+			return // an earlier opening's, or overtaken by a later read, ack or dismiss
 		}
-		l := &v.history
-		if undeliv {
-			l = &v.undeliv
-		}
+		l.busy = false
 		if err, ok := res.(error); ok {
 			v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.not_listed", wireMessage(err)))
 			return
 		}
 		page, _ := res.([]inboxItem)
 		if first {
-			if !l.read {
-				l.more = len(page) == inboxPage
-			}
-			l.read = true
-		} else {
-			l.more = len(page) == inboxPage
+			l.items, l.read = nil, true
 		}
 		l.items = mergeBySeq(l.items, page)
+		// inbox.list says nothing of what is left (a page is bounded by bytes too, so a short page
+		// isn't the end): a page that held some may have more under it, and an empty More ends it
+		l.more = !undeliv && len(page) > 0
 		v.render()
 	})
 }
 
-// mergeBySeq is items with page in it: a message read again replaces its row (its state may have
-// changed), a new one is added, each once, newest first.
+// mergeBySeq is items with page under it: a message read again replaces its row, a new one is
+// added, each once, newest first.
 func mergeBySeq(items, page []inboxItem) []inboxItem {
 	at := make(map[int64]int, len(items))
 	out := slices.Clone(items)
@@ -269,17 +289,12 @@ func mergeBySeq(items, page []inboxItem) []inboxItem {
 		at[it.seq] = len(out)
 		out = append(out, it)
 	}
-	slices.SortStableFunc(out, func(a, b inboxItem) int {
-		switch {
-		case a.seq > b.seq:
-			return -1
-		case a.seq < b.seq:
-			return 1
-		}
-		return 0
-	})
+	slices.SortStableFunc(out, bySeq)
 	return out
 }
+
+// bySeq orders messages newest first, by seq.
+func bySeq(a, b inboxItem) int { return cmp.Compare(b.seq, a.seq) }
 
 // visible is what the tab shown lists, of what was read.
 func (v *inboxView) visible() []inboxItem {
@@ -293,14 +308,23 @@ func (v *inboxView) visible() []inboxItem {
 	return l.items
 }
 
-// render lists the tab shown and says how much is listed under it.
+// render lists the tab shown, the cursor on the message it was on (else the row it was at), and says
+// how much is listed under it.
 func (v *inboxView) render() {
 	items := v.visible()
 	v.rows.Reset(items)
+	if i := slices.IndexFunc(items, func(it inboxItem) bool { return it.message == v.key }); v.key != "" && i >= 0 {
+		v.cursor = i
+	}
+	v.cursor = min(max(v.cursor, 0), max(len(items)-1, 0))
+	v.c.Set("App.inboxIndex", -1) // moved away first, so the same row twice still moves the table's cursor
+	v.c.Set("App.inboxIndex", v.cursor)
 	switch l := v.list(); {
 	case !l.read:
 	case len(items) == 0:
 		v.c.Set("App.inboxStatus", v.c.Tr("autodoc.text.inbox.none"))
+	case v.tabOf == inboxUndeliverable:
+		v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.count_newest", len(items), inboxPage))
 	case l.more:
 		v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.count_more", len(items)))
 	default:
@@ -356,7 +380,9 @@ func (v *inboxView) when(created string) string {
 
 // shown is the cursor on row i: its message below the list, nothing marked.
 func (v *inboxView) shown(i int) {
-	v.cursor = i
+	if it, ok := v.rows.At(i); ok {
+		v.cursor, v.key = i, it.message
+	}
 	v.showDetail(i)
 }
 
@@ -393,7 +419,7 @@ func (v *inboxView) openItem(i int) {
 	if !ok {
 		return
 	}
-	v.cursor = i
+	v.cursor, v.key = i, it.message
 	v.showDetail(i)
 	if it.unread() {
 		v.ack(it)
@@ -429,9 +455,13 @@ func (v *inboxView) ack(it inboxItem) {
 	})
 }
 
-// setState lists the message at seq in state, as the daemon now has it.
+// setState lists the message at seq in state, as the daemon now has it after the user's ack or
+// dismiss: a read in flight since before it is dropped (its source's next generation), so its older
+// answer never lists the message as it was; the change the daemon reports reads it again.
 func (v *inboxView) setState(seq int64, state string) {
 	for _, l := range []*inboxList{&v.history, &v.undeliv} {
+		l.gen++
+		l.busy = false
 		for i := range l.items {
 			if l.items[i].seq == seq {
 				l.items[i].state = state

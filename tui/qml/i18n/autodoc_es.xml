@@ -8009,6 +8009,10 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>%1 listed: More reads older ones</source>
         <translation>%1 en la lista: Más lee los anteriores</translation>
     </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>%1 en la lista: los %2 avisos más recientes</translation>
+    </message>
     <message id="autodoc.text.inbox.not_listed">
         <source>your mail could not be read: %1</source>
         <translation>no se pudo leer tu correo: %1</translation>
