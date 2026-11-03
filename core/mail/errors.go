@@ -10,6 +10,8 @@ const (
 	CodeTooLarge    int64 = -32112 // a body past MaxBody
 	CodeLeaseLost   int64 = -32113 // the caller no longer holds the delivery's lease
 	CodeAmbiguous   int64 = -32114 // a bare name that two or more scopes' profiles have, none the sender's
+	CodeDone        int64 = -32115 // a show of the caller's own delivery, already acked (or replied to)
+	CodeEnded       int64 = -32116 // a show of the caller's own delivery, whose message expired or fell back
 )
 
 var (
@@ -37,6 +39,16 @@ var (
 
 	// ErrLeaseLost is an ack, renew or reply under a lease the caller no longer holds.
 	ErrLeaseLost = errs.Sentinel(errs.ErrPrecondition, "mail: the lease is lost")
+
+	// ErrDone is mail.show of the caller's own delivery that is acked: it is handled, so there is
+	// nothing to show or answer again. Its own code, not lease_lost's, so an agent that shows a
+	// delivery after its ack can tell the ack landed (a lapsed lease is still lease_lost).
+	ErrDone = errs.Sentinel(errs.ErrPrecondition, "mail: the delivery is done")
+
+	// ErrEnded is mail.show of the caller's own delivery that will never be its to answer: it failed,
+	// it expired or its message passed its expiry, it was withdrawn (handed to its host as a fallback),
+	// or it was merged into another delivery.
+	ErrEnded = errs.Sentinel(errs.ErrPrecondition, "mail: the delivery has ended")
 
 	// ErrInvalid is a param the mail verbs refuse; the message names it. It answers as invalid
 	// params.

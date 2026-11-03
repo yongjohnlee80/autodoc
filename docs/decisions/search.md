@@ -356,6 +356,20 @@ arrives is dropped. An answer without a cursor is the whole map.
 
 In the code: `tui/relationmap.go`, `tui/globemap_gui.go`
 
+## The unresolved links in pages
+
+`graph.unresolved` comes a page at a time, from protocol 50: `opts.limit` rows (500 by default,
+2,000 at most) after `opts.offset`, with `count`, the whole list's length, and `next`, the next
+page's offset, which the last page leaves out. An offset past the end is an empty page. The list is
+read whole on each call, so pages are offsets into its order, with no snapshot across them. A large
+KB's unresolved links ran to a megabyte in one reply, too much for an agent to read. A session
+below 50 keeps the one-reply list, and is refused `limit` and `offset`. The relations drawers, the
+window's and Neovim's, read every page for a document's supersession loops, up to 1000 pages each;
+past that, they show the loops of the pages read.
+
+In the code: `rpc/graph.go`, `rpc/unresolvedpages_test.go`, `tui/relations.go`,
+`lua/autodoc/relations.lua`
+
 ## Embedding setup
 
 A user can go from no provider to semantic search inside AutoDoc, and every step is a verb an agent

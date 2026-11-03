@@ -413,8 +413,11 @@ The agent verbs are `mail.send`, `mail.receive`, `mail.renew`, `mail.ack`, `mail
   lost lease, which says nothing of anyone else's mail.
 - `mail.show` (protocol 45) reads a delivery the caller holds again, under its lease, which stays as
   it was (lease, deadline, attempts): an agent whose reader cut a body short reads it whole, never
-  asking its sender to resend. Another session's, another lease, a lapsed one or a done delivery is a
-  lost lease. It writes nothing.
+  asking its sender to resend. The caller's own delivery that is done says so (protocol 51):
+  `mail.done` when it was acked or replied to, so an agent can tell its ack landed; `mail.ended` when
+  it failed, expired, was merged, or was withdrawn (handed to its host as a fallback), or its message
+  passed its expiry though no write has expired it yet. Another session's, another lease, or a lapsed
+  lease on a live message is a lost lease. It writes nothing.
 - What an agent reads of its mail costs only what it needs, since each byte is paid for in every
   session. The CLI and the MCP tools print one line of JSON, no indent and nothing HTML-escaped. A
   received item names its delivery once, as its `id`: the delivery's own id and lease aren't printed
@@ -501,7 +504,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   process, since it wouldn't start an agent it still runs, so the old session ends (`takeover`) and
   the new one is registered. A ghost (a session left live by a host that never sent `crew.exit`)
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
-- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `no_endpoint`, `wakes_failing` (with
+- `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
+  `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
+  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
@@ -860,12 +865,19 @@ the session doesn't start until someone answers it.
   run the same CLI as mise's tool for the name, or a later file on PATH, which are tried next. The
   TUI does this off the loop when the window starts and after each spawn; a spawn asks the binary it
   found again, which costs a stat when nothing changed.
+- mise can be held up while other agents start: a wrapper that runs `mise use` on each launch takes
+  mise's lock, or checks its remote. So `mise which` is bounded at 5 s, and asked once more, bounded
+  at 15 s, when that runs out. When mise still can't answer, nothing is taken in its place, not even
+  the binary an earlier lookup found: the launcher may run another one now (the user's mise selection
+  changed), and settings naming hooks that one doesn't know can stall its start. The floor is safe;
+  a guessed binary isn't.
 - The prompt hooks are written only when it knows what opens a prompt (`PermissionRequest`) and
   what closes them (`PostToolUse`, `UserPromptSubmit`, `Stop`). Without them, it gets
   `SessionStart` alone, and registers without `prompts`.
 - When no file reads as a Claude Code, it is taken to know `SessionStart` and
-  `crossSessionInbound` alone, and the window says once that its prompts aren't reported, naming
-  the files tried.
+  `crossSessionInbound` alone, and the window says once that its prompts aren't reported. The
+  notice says first why mise didn't answer (`mise which claude timed out (5s, then 15s)`, or its
+  failure), then names the files tried, so a notice cut short still shows its cause.
 - AutoDoc's hooks of an earlier start are taken out before the ones it writes now, so an event a
   downgraded Claude Code no longer knows is never left named.
 

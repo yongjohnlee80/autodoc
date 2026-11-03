@@ -194,6 +194,10 @@ func testAFallbackIsDueAtItsBoundaries(t *testing.T, h Harness) {
 	if w := r.delivery(d.ID); w.State != mail.Withdrawn || w.Why != mail.WhyFallback {
 		t.Fatalf("the delivery fallen back: %+v, want withdrawn (fallback)", w)
 	}
+	// its recipient's show of it, by its delivery id (never leased, so no lease): it has ended
+	if _, err := r.mm.Show(r.ctx, r.credential, d.ID, ""); !errors.Is(err, mail.ErrEnded) {
+		t.Fatalf("gold's show of its delivery fallen back: %v, want ended", err)
+	}
 	if r.told(mail.ChangeFallback) != 1 {
 		t.Fatalf("the user was told %d times, want once", r.told(mail.ChangeFallback))
 	}
