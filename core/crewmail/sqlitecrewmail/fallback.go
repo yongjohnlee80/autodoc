@@ -1,6 +1,8 @@
 package sqlitecrewmail
 
 import (
+	"slices"
+
 	"github.com/yongjohnlee80/golib/dao"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -88,10 +90,10 @@ func (t *Tx) FallbackDue(unreachableBefore, unansweredBefore int64, limit int) (
 // NextFallbackAt is the earliest max(created, opened)+after over the candidates, per live session:
 // a delivery's window opens at the later of its message's creation and its recipient's session's
 // opening, its start, or its first endpoint's for a kind that starts with it (windowOpenBy), so for
-// each live session the earliest-created message of its candidates (and of its
-// unreachable ones) decides, read by mail_message's own column. One ordered one-row read per live
-// session and kind, the crew's size. Never earlier than FallbackDue answers, so the timer never
-// wakes to find nothing due and asks again for the same instant.
+// each live session the earliest-created message of its candidates (and of its unreachable ones)
+// decides, read from its deliveries (earliestCreated), never by walking every message. Two reads
+// per live session, the crew's size, each as small as its due mail. Never earlier than FallbackDue
+// answers, so the timer never wakes to find nothing due and asks again for the same instant.
 func (t *Tx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) {
 	sessions, err := t.t.sessions.On(t.tx).WithPredicate(live).Select()
 	if err != nil {
@@ -113,17 +115,48 @@ func (t *Tx) NextFallbackAt(unreachable, unanswered int64) (int64, bool, error) 
 			after int64
 		}{{[]dao.Predicate{fallbackCandidate}, unanswered}, {[]dao.Predicate{fallbackCandidate, unreachableRecipient}, unreachable}} {
 			cond := append([]dao.Predicate{dao.Eq(`"mail_delivery"."recipient"`, s.Profile)}, c.cond...)
-			msg, ok, err := one(t.m.messages.On(t.tx).
-				WithPredicate(store.Correlated(false, "mail_delivery", "message", "mail_message", "id", cond...)).
-				OrderBy(dao.Asc(byCreated)).Limit(1).Select())
+			created, ok, err := t.earliestCreated(cond...)
 			if err != nil {
 				return 0, false, err
 			}
 			if !ok {
 				continue
 			}
-			if due := max(msg.Created, opened) + c.after; !has || due < at {
+			if due := max(created, opened) + c.after; !has || due < at {
 				at, has = due, true
+			}
+		}
+	}
+	return at, has, nil
+}
+
+// earliestMessagesPerRead bounds one read of earliestCreated's messages by id.
+const earliestMessagesPerRead = 500
+
+// earliestCreated is the earliest creation of the messages of the deliveries meeting cond (a
+// recipient's, first): read from those deliveries, by mail_delivery_open (recipient, state), then
+// their messages by id. Never a walk of mail_message in created order checking each message's
+// deliveries: the table keeps every message, so for a recipient with none due that walk read all of
+// it, once per live session and kind, inside every mail wait's write.
+func (t *Tx) earliestCreated(cond ...dao.Predicate) (int64, bool, error) {
+	ds, err := deliveries(t.m.deliveries.On(t.tx).WithPredicate(dao.And(cond...)).Select())
+	if err != nil || len(ds) == 0 {
+		return 0, false, err
+	}
+	ids := make([]any, 0, len(ds))
+	for _, d := range ds {
+		ids = append(ids, d.Message)
+	}
+	var at int64
+	has := false
+	for part := range slices.Chunk(ids, earliestMessagesPerRead) {
+		msgs, err := t.m.messages.On(t.tx).WithPredicate(dao.In(`"mail_message"."id"`, part)).Select()
+		if err != nil {
+			return 0, false, err
+		}
+		for _, m := range msgs {
+			if !has || m.Created < at {
+				at, has = m.Created, true
 			}
 		}
 	}
