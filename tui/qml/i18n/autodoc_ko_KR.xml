@@ -5612,7 +5612,7 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
         <source>%1
 
-It runs in a new terminal tab, in %2. If it asks for a passphrase, type it there: the agent never sees it, nor anything else in that tab. When it ends, the agent is told only its exit code.</source>
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
 새 터미널 탭의 %2에서 실행됩니다. 암호를 물으면 그 탭에 입력하세요. 에이전트는 그 암호도, 그 탭의 다른 어떤 내용도 보지 못합니다. 끝나면 에이전트에게는 종료 코드만 전달됩니다.</translation>

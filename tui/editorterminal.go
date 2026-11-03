@@ -21,16 +21,18 @@ import (
 // reaches the agent as the user's mail (exit_by_mail says whether it will). Nothing of the tab is
 // ever read back for the agent: what the user typed there stays theirs.
 
-// The line an agent may ask to run: small enough that the card always shows all of it (it wraps
-// and doesn't scroll), so what the user approves is what they could read.
+// The line an agent may ask to run: small enough that the card always shows all of it, its
+// explanation and buttons, on an 80x24 terminal (Confirm.qml is 64 wide and at most 80% high, wraps,
+// and doesn't scroll), so what the user approves is what they could read. A longer step is several
+// calls, or shell line continuations.
 const (
-	maxTerminalLines     = 6
-	maxTerminalLineRunes = 100
-	maxTerminalBytes     = 600
+	maxTerminalLines     = 5
+	maxTerminalLineRunes = 60
+	maxTerminalBytes     = 300
 )
 
-// terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 6 lines, 100
-// characters a line or 600 bytes; or holding a character that draws as something else or nothing.
+// terminalLine refuses a line the card couldn't show as exactly what runs: empty; past 5 lines, 60
+// characters a line or 300 bytes; or holding a character that draws as something else or nothing.
 // That covers control characters other than tab and newline (an escape redraws the card), format
 // characters (bidi overrides and isolates, zero-width), line and paragraph separators, private-use
 // and unpaired surrogate code points, any space but the plain one, and U+FFFD.
@@ -121,7 +123,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 					answered <- ctx.Err()
 					return
 				}
-				tab, err := h.terminals.runFor(agent, line, dir, func(code int) { h.terminalRunExited(agent, line, code) })
+				tab, err := h.terminals.runFor(agent, line, dir, func(code int) { h.terminalRunExited(agent, line, code, mailed) })
 				run = started{tab: tab, mailed: mailed}
 				answered <- err
 			},
@@ -145,13 +147,13 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 }
 
 // terminalRunExited tells the agent its command's exit code, as the user's mail (crewHost), and the
-// user too when it failed. A window with no crew scope says nothing to the agent: the call's
-// exit_by_mail said so.
-func (h *Host) terminalRunExited(agent, line string, code int) {
+// user too when it failed. Only when the call said it would (mailed: the window held a crew scope
+// then): a window that held none says nothing, then or later.
+func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 	if code != 0 {
 		h.notify(h.trf("autodoc.notice.editorterminal.the_agent_s_command_exited", agent, fmt.Sprint(code)))
 	}
-	if h.crew == nil {
+	if !mailed || h.crew == nil {
 		return
 	}
 	subject, body := terminalExitBody(line, code)

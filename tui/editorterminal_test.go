@@ -3,22 +3,24 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
 // TestALineTheCardCantShowIsRefused: editor.terminal_run refuses, before any card, a line the card
-// couldn't show whole and as itself: empty; past 6 lines, 100 characters a line or 600 bytes; a
+// couldn't show whole and as itself: empty; past 5 lines, 60 characters a line or 300 bytes; a
 // control character (an escape redraws the card), a format character (a bidi override reorders
 // what's shown, a zero-width one hides), a separator, a private-use code point or any space but the
 // plain one. Tab, newline and printable text of any script are allowed.
 func TestALineTheCardCantShowIsRefused(t *testing.T) {
-	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 6) + "echo x", strings.Repeat("x", 101),
-		strings.Repeat(strings.Repeat("x", 99)+"\n", 6)[:601],
+	for _, bad := range []string{"", "  \n ", strings.Repeat("echo x\n", 5) + "echo x", strings.Repeat("x", 61),
+		strings.Repeat(strings.Repeat("x", 59)+"\n", 5)[:299] + "xx",
 		"echo \x1b[2Jhidden", "echo a\rb", "echo \x00",
 		"rm -rf ~/\u202e/gnp.txt", "echo safe\u200b; rm -rf ~", "echo\u2066x\u2069", "echo a\u00a0b", "echo a\u2028b",
 		"echo \ue000", "echo \ufffd"} {
@@ -27,7 +29,7 @@ func TestALineTheCardCantShowIsRefused(t *testing.T) {
 		}
 	}
 	for _, ok := range []string{"sudo apt-get install -y docker.io", "echo a\techo b", "set -e\nsudo usermod -aG docker \"$USER\"\nid",
-		"ls ~/문서 && echo 完了", strings.Repeat("x", 100), strings.Repeat(strings.Repeat("y", 99)+"\n", 6)[:599]} {
+		"ls ~/문서 && echo 完了", strings.Repeat("x", 60), strings.Repeat(strings.Repeat("y", 59)+"\n", 5)[:299]} {
 		if err := terminalLine(ok); err != nil {
 			t.Errorf("terminalLine(%q): %v, want accepted", ok, err)
 		}
@@ -119,7 +121,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 
 	// Run: a tab of its own, named for the agent, that runs exactly the line the card showed
 	ch = run("echo ran-$((40+2)); exit 3")
-	r.s.WaitForText(t, "let the agent zen run this in AutoDoc's terminal?")
+	r.s.WaitForText(t, "echo ran-$((40+2)); exit 3")
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
 	a := wait("a line run", ch)
 	if a.re != nil || a.res["started"] != true || a.res["tab"] != "zen: run" || a.res["exit_by_mail"] != false {
@@ -141,8 +143,8 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	}
 
 	// a second one gets a tab of its own
-	ch = run("true")
-	r.s.WaitForText(t, "let the agent zen run this in AutoDoc's terminal?")
+	ch = run("echo second-run")
+	r.s.WaitForText(t, "echo second-run")
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
 	if a := wait("a second line", ch); a.re != nil || a.res["tab"] != "zen: run 2" {
 		t.Fatalf("a second run: %v %v, want tab zen: run 2", a.res, a.re)
@@ -190,8 +192,8 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 	if !strings.Contains(s, "Command done") || !strings.Contains(b, "exited 0") || !strings.Contains(b, "sudo apt-get install -y ollama") {
 		t.Errorf("success: %q / %q", s, b)
 	}
-	long := "echo " + strings.Repeat("z", 95)
-	if s, _ := terminalExitBody(long, 0); len([]rune(s)) > 80 || !strings.HasSuffix(s, "…") {
+	long := "echo " + strings.Repeat("z", 55)
+	if s, b := terminalExitBody(long, 0); len([]rune(s)) > 80 || !strings.HasSuffix(s, "…") || !strings.Contains(b, long) {
 		t.Errorf("a long line's subject: %q, want it cut short (the body carries the whole line)", s)
 	}
 	s, b = terminalExitBody("sudo usermod -aG docker me\nid", 1)
@@ -199,4 +201,41 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 		!strings.Contains(b, "don't read") {
 		t.Errorf("failure: %q / %q", s, b)
 	}
+}
+
+// TestTheLongestLineShowsWholeOnASmallTerminal: the longest line editor.terminal_run accepts (5
+// lines of 60 characters) shows on the card whole, every line to its last character, with the card's
+// buttons, on an 80x24 terminal: what the user approves is what they could read.
+func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	h := newHost(NewSession(d.sock, nil), Options{})
+	s := decltest.RunWith(t, 80, 24, h.attach, h.options(Options{})...)
+	t.Cleanup(h.cancel)
+	r := &running{h: h, s: s}
+	r.connected(t)
+	var lines []string
+	for i := 1; i <= maxTerminalLines; i++ {
+		lines = append(lines, fmt.Sprintf("echo L%d-%s-E%d", i, strings.Repeat("q", maxTerminalLineRunes-12), i))
+	}
+	line := strings.Join(lines, "\n")
+	if err := terminalLine(line); err != nil {
+		t.Fatalf("the longest line is refused: %v", err)
+	}
+	onLoop(r, func() bool {
+		r.h.asker.askWhenFree(Question{
+			Title: r.h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", "zen"),
+			Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, "/home/someone/Projects/a-workspace"),
+			Yes:   r.h.tr("autodoc.question.editorterminal.run"), No: r.h.tr("autodoc.question.editorterminal.dont_run"),
+		})
+		return true
+	})
+	r.s.WaitForText(t, "let the agent zen run this in AutoDoc's terminal?")
+	r.s.WaitFor(t, "every line to its end, and the buttons", func(sc string) bool {
+		for i := 1; i <= maxTerminalLines; i++ {
+			if !strings.Contains(sc, fmt.Sprintf("-E%d", i)) {
+				return false
+			}
+		}
+		return strings.Contains(sc, "Run") && strings.Contains(sc, "Don't run")
+	})
 }

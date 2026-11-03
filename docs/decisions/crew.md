@@ -106,8 +106,9 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
   user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
   when the command exits, its code reaches the agent as the user's mail, and the user is told when
-  it failed. The tab stays for the user to read. A line is at most 6 lines of 100 characters and 600
-  bytes, so the card (which wraps and doesn't scroll) always shows all of it, and holds only
+  it failed. The tab stays for the user to read. A line is at most 5 lines of 60 characters and 300
+  bytes, so the card (64 wide, at most 80% high, wrapping, never scrolling) shows all of it on an
+  80x24 terminal, and holds only
   characters that draw as themselves: no control or format character (bidi overrides, zero-width),
   no separator, private-use code point or space but the plain one. The card waits behind any card
   already open; one closed or replaced unanswered is a Don't run.

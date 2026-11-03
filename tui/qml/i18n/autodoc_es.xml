@@ -5620,7 +5620,7 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.question.editorterminal.it_runs_in_a_new_tab_in">
         <source>%1
 
-It runs in a new terminal tab, in %2. If it asks for a passphrase, type it there: the agent never sees it, nor anything else in that tab. When it ends, the agent is told only its exit code.</source>
+In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing of the tab, only the exit code.</source>
         <translation>%1
 
 Se ejecuta en una nueva pestaña del terminal, en %2. Si pide una frase de contraseña, escríbala allí: el agente nunca la ve, ni nada más de esa pestaña. Cuando termina, al agente solo se le dice su código de salida.</translation>
