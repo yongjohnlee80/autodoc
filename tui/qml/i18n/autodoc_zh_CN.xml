@@ -4114,6 +4114,10 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>智能体的编辑器套接字</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>未运行：代理 %1 的命令卡片在你能阅读之前就被回答了。代理可以再次请求。</translation>
+    </message>
     <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
         <source>Not run: the agent %1 stopped waiting before you answered.</source>
         <translation>未运行：在你回答之前，代理 %1 已停止等待。</translation>
@@ -4121,6 +4125,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
         <source>The command the agent %1 ran in the terminal exited %2.</source>
         <translation>代理 %1 在终端中运行的命令已退出，退出码为 %2。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>无法将命令的退出码通过邮件发送给代理 %1：%2</translation>
     </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>

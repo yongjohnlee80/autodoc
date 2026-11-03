@@ -4125,6 +4125,10 @@ WHAT A KEY NEEDS
         <source>the editor socket for agents</source>
         <translation>エージェント用のエディターソケット</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>実行されませんでした: エージェント %1 のコマンドのカードが、読む前に応答されました。エージェントはもう一度依頼できます。</translation>
+    </message>
     <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
         <source>Not run: the agent %1 stopped waiting before you answered.</source>
         <translation>実行されませんでした: エージェント %1 があなたの回答より前に待つのをやめました。</translation>
@@ -4132,6 +4136,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
         <source>The command the agent %1 ran in the terminal exited %2.</source>
         <translation>エージェント %1 がターミナルで実行したコマンドは %2 で終了しました。</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>コマンドの終了コードをエージェント %1 にメールで送れませんでした: %2</translation>
     </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>

@@ -4129,6 +4129,10 @@ LO QUE NECESITA UNA TECLA
         <source>the editor socket for agents</source>
         <translation>el socket del editor para los agentes</translation>
     </message>
+    <message id="autodoc.notice.editorterminal.not_run_answered_before_it_showed">
+        <source>Not run: the card for the agent %1's command was answered before you could read it. The agent can ask again.</source>
+        <translation>No se ejecutó: la tarjeta del comando del agente %1 se respondió antes de que pudiera leerla. El agente puede volver a pedirlo.</translation>
+    </message>
     <message id="autodoc.notice.editorterminal.not_run_the_agent_stopped_waiting">
         <source>Not run: the agent %1 stopped waiting before you answered.</source>
         <translation>No se ejecutó: el agente %1 dejó de esperar antes de que usted respondiera.</translation>
@@ -4136,6 +4140,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.editorterminal.the_agent_s_command_exited">
         <source>The command the agent %1 ran in the terminal exited %2.</source>
         <translation>El comando que el agente %1 ejecutó en el terminal terminó con %2.</translation>
+    </message>
+    <message id="autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent">
+        <source>The command's exit code could not be mailed to the agent %1: %2</source>
+        <translation>No se pudo enviar por correo al agente %1 el código de salida del comando: %2</translation>
     </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
