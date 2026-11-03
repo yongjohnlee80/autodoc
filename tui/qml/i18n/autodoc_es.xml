@@ -7941,6 +7941,166 @@ H J K L, Shift+flechas   redimensionarlo</translation>
         <source>&amp;Copy</source>
         <translation>&amp;Copiar</translation>
     </message>
+    <message id="autodoc.dialog.inbox.all">
+        <source>&amp;All</source>
+        <translation>Todo(&amp;a)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.unread">
+        <source>&amp;Unread</source>
+        <translation>Sin leer(&amp;u)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.requests">
+        <source>Open reques&amp;ts</source>
+        <translation>Solici&amp;tudes abiertas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.undeliverable">
+        <source>Undeli&amp;verable</source>
+        <translation>No entregables(&amp;v)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title">
+        <source>Inbox — %1</source>
+        <translation>Bandeja de entrada — %1</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.title_open">
+        <source>Inbox — %1 — %2 unread, %3 open requests</source>
+        <translation>Bandeja de entrada — %1 — %2 sin leer, %3 solicitudes abiertas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.open">
+        <source>&amp;Open</source>
+        <translation>Abrir(&amp;o)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.mark_read">
+        <source>&amp;Mark read</source>
+        <translation>&amp;Marcar como leído</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.reply">
+        <source>&amp;Reply…</source>
+        <translation>&amp;Responder…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.dismiss">
+        <source>&amp;Dismiss…</source>
+        <translation>&amp;Descartar…</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.sender">
+        <source>&amp;Sender</source>
+        <translation>Remitente(&amp;s)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.more">
+        <source>Mor&amp;e</source>
+        <translation>Más(&amp;e)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Cerrar (&amp;q)</translation>
+    </message>
+    <message id="autodoc.text.inbox.reading">
+        <source>reading your mail…</source>
+        <translation>leyendo tu correo…</translation>
+    </message>
+    <message id="autodoc.text.inbox.none">
+        <source>no mail here</source>
+        <translation>no hay correo aquí</translation>
+    </message>
+    <message id="autodoc.text.inbox.count">
+        <source>%1 listed</source>
+        <translation>%1 en la lista</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_more">
+        <source>%1 listed: More reads older ones</source>
+        <translation>%1 en la lista: Más lee los anteriores</translation>
+    </message>
+    <message id="autodoc.text.inbox.count_newest">
+        <source>%1 listed: the newest %2 notices</source>
+        <translation>%1 en la lista: los %2 avisos más recientes</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_listed">
+        <source>your mail could not be read: %1</source>
+        <translation>no se pudo leer tu correo: %1</translation>
+    </message>
+    <message id="autodoc.text.inbox.just_now">
+        <source>just now</source>
+        <translation>ahora mismo</translation>
+    </message>
+    <message id="autodoc.text.inbox.minutes_ago">
+        <source>%1 min ago</source>
+        <translation>hace %1 min</translation>
+    </message>
+    <message id="autodoc.text.inbox.hours_ago">
+        <source>%1 h ago</source>
+        <translation>hace %1 h</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_head">
+        <source>**From** %1 · **Kind** %2 · **State** %3 · **Sent** %4</source>
+        <translation>**De** %1 · **Tipo** %2 · **Estado** %3 · **Enviado** %4</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_reply_to">
+        <source>**In reply to** %1</source>
+        <translation>**En respuesta a** %1</translation>
+    </message>
+    <message id="autodoc.text.inbox.detail_undelivered">
+        <source>**Delivery** %1 · **Why** %2</source>
+        <translation>**Entrega** %1 · **Motivo** %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.request_not_read">
+        <source>a request isn't marked read: reply to it or dismiss it</source>
+        <translation>una solicitud no se marca como leída: respóndela o descártala</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_marked">
+        <source>“%1” was not marked read: %2</source>
+        <translation>“%1” no se marcó como leído: %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_a_request">
+        <source>only an open request is replied to or dismissed</source>
+        <translation>solo una solicitud abierta se responde o se descarta</translation>
+    </message>
+    <message id="autodoc.text.inbox.not_dismissed">
+        <source>“%1” was not dismissed: %2</source>
+        <translation>“%1” no se descartó: %2</translation>
+    </message>
+    <message id="autodoc.text.inbox.no_sender">
+        <source>%1 sent it from no session to show</source>
+        <translation>%1 lo envió desde ninguna sesión que mostrar</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss">
+        <source>Dismiss the request?</source>
+        <translation>¿Descartar la solicitud?</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_text">
+        <source>%1 asks: %2. Dismissing it tells them you declined.</source>
+        <translation>%1 pregunta: %2. Al descartarla se le dice que la rechazaste.</translation>
+    </message>
+    <message id="autodoc.question.inbox.dismiss_yes">
+        <source>&amp;Yes, dismiss it</source>
+        <translation>Sí, descartarla(&amp;y)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>la bandeja de entrada: tu correo (SPC a i)</translation>
+    </message>
+    <message id="autodoc.cmd.crew.inbox.help">
+        <source>the inbox: your mail (SPC a i)</source>
+        <translation>la bandeja de entrada: tu correo (SPC a i)</translation>
+    </message>
+    <message id="autodoc.key.the_inbox_your_mail">
+        <source>the inbox: your mail</source>
+        <translation>la bandeja de entrada: tu correo</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_all">
+        <source>All</source>
+        <translation>Todo</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_unread">
+        <source>Unread</source>
+        <translation>Sin leer</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_requests">
+        <source>Open requests</source>
+        <translation>Solicitudes abiertas</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tab_undeliverable">
+        <source>Undeliverable</source>
+        <translation>No entregables</translation>
+    </message>
     <message id="autodoc.dialog.crew_bridges.close_q">
         <source>Close (&amp;q)</source>
         <translation>Cerrar (&amp;q)</translation>

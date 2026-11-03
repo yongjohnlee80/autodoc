@@ -1055,6 +1055,7 @@ Window {
     Registrations { id: registrations }
     Vectors { id: vectorsDialog }
     CrewBridges { id: crewBridges }
+    Inbox { id: inbox }
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
     BufferCard { id: buffer }
