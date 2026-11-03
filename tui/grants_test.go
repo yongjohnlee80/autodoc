@@ -225,7 +225,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
 	r.s.WaitForText(t, "read your open documents")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read granted", func(string) bool { return granted() })
 	if re := read(); re != nil {
 		t.Fatalf("a granted read: %v", re)
@@ -244,7 +244,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "revoke editor.read from zen?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read revoked", func(string) bool { return !granted() })
 	r.s.WaitForText(t, "Nothing is granted.")
 
@@ -252,7 +252,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		t.Fatalf("a read after the revoke: %v, want needs editor.read", re)
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read granted again", func(string) bool { return granted() })
 	if re := read(); re != nil {
 		t.Fatalf("a read granted again: %v", re)
