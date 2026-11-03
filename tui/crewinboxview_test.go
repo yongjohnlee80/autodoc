@@ -301,6 +301,50 @@ func TestUndeliverableIsReadAgainAfterAChangeAndOffersNoMore(t *testing.T) {
 	}
 }
 
+// A read of the hidden tab's source, in flight from before a change, is dropped when it lands
+// after it: the change marked that source to be read again, and switching to it does, in both
+// directions (the mutant: the change leaves the hidden source's generation as it was, so the held
+// read lists its rows from before as read).
+func TestAHiddenReadHeldAcrossAChangeIsDropped(t *testing.T) {
+	t.Run("Undeliverable held while All shows", func(t *testing.T) {
+		w := &mailWindow{history: mailRun(3, 3), undeliverable: mailRun(5, 5)}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold = true
+		v.tab(inboxUndeliverable) // its read, held: m005 first
+		v.tab(inboxAll)
+		w.undeliverable = mailRun(6, 6) // a new notice
+		v.changed()                     // History read again, held; Undeliverable marked
+		w.release(0)                    // the read from before the change lands late
+		w.release(1)
+		v.tab(inboxUndeliverable)
+		w.release(2)
+		if got := listed(v); len(got) == 0 || got[0] != "m006" {
+			t.Fatalf("Undeliverable after the change: %v, want the new notice m006 first", got)
+		}
+	})
+	t.Run("History held while Undeliverable shows", func(t *testing.T) {
+		w := &mailWindow{history: mailRun(3, 3), undeliverable: mailRun(5, 5)}
+		v, _ := newInboxCell(w)
+		v.open()
+		v.tab(inboxUndeliverable)
+		v.tab(inboxAll)
+		w.hold = true
+		v.changed() // History's read, held: m003 first
+		v.tab(inboxUndeliverable)
+		w.history = mailRun(4, 4) // a new message
+		v.changed()               // Undeliverable read again; History marked
+		w.release(0)              // History's read from before the change lands late
+		w.release(1)
+		w.release(2)
+		v.tab(inboxAll)
+		w.release(3)
+		if got := listed(v); len(got) == 0 || got[0] != "m004" {
+			t.Fatalf("All after the change: %v, want the new message m004 first", got)
+		}
+	})
+}
+
 // A page shorter than fifty is not the end (a page is bounded by bytes too): More is offered while
 // the last page held some, and an empty one ends it.
 func TestMoreIsOfferedUntilAPageComesBackEmpty(t *testing.T) {

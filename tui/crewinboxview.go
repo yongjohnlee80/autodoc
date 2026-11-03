@@ -117,8 +117,8 @@ func newInboxView(c inboxCore, replies inboxReplies) *inboxView {
 func (*inboxView) Name() string { return "inbox" }
 
 func (v *inboxView) State() map[string]any {
-	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxTitle": "", "App.inboxDetail": "",
-		"App.inboxStatus": ""}
+	return map[string]any{"App.inbox": v.rows.Model(), "App.inboxIndex": -1, "App.inboxCanMore": false, "App.inboxTitle": "",
+		"App.inboxDetail": "", "App.inboxStatus": ""}
 }
 
 func (v *inboxView) Commands() map[string]Command {
@@ -186,7 +186,9 @@ func (v *inboxView) changed() {
 		if v.tabOf == inboxUndeliverable {
 			hidden = &v.history
 		}
-		hidden.read = false
+		// read again at its next showing; a read of it in flight, from before the change, is dropped
+		hidden.read, hidden.busy = false, false
+		hidden.gen++
 		v.read(true)
 	}
 }
@@ -320,6 +322,7 @@ func (v *inboxView) render() {
 	v.cursor = min(max(v.cursor, 0), max(len(items)-1, 0))
 	v.c.Set("App.inboxIndex", -1) // moved away first, so the same row twice still moves the table's cursor
 	v.c.Set("App.inboxIndex", v.cursor)
+	v.c.Set("App.inboxCanMore", v.list().read && v.list().more)
 	switch l := v.list(); {
 	case !l.read:
 	case len(items) == 0:

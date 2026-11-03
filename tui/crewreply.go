@@ -125,6 +125,8 @@ func (x *crewInbox) replyDismiss(typed string) {
 	}
 	if typed != "" {
 		x.drafts[id] = typed
+	} else {
+		delete(x.drafts, id) // emptied by the user: no older draft comes back
 	}
 	r := x.requests[id]
 	x.c.Ask(Question{Title: x.c.Tr("autodoc.question.inbox.dismiss"), Text: x.c.Trf("autodoc.question.inbox.dismiss_text", r.from, r.subject),

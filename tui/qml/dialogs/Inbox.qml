@@ -50,7 +50,7 @@ Dialog {
         Button { text: qsTrId("autodoc.dialog.inbox.reply"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxReply(inboxTable.currentIndex) }
         Button { text: qsTrId("autodoc.dialog.inbox.dismiss"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxDismiss(inboxTable.currentIndex) }
         Button { text: qsTrId("autodoc.dialog.inbox.sender"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxSender(inboxTable.currentIndex) }
-        Button { text: qsTrId("autodoc.dialog.inbox.more"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMore() }
+        Button { text: qsTrId("autodoc.dialog.inbox.more"); enabled: App.inboxCanMore; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.inboxMore() }
         Button { text: qsTrId("autodoc.dialog.inbox.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }
