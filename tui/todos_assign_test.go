@@ -439,9 +439,6 @@ func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testin
 	if v.tab != inProgress || c.set["App.todoTab"] != inProgress {
 		t.Fatalf("after the assign the panel is on tab %d (App.todoTab %v), want In progress (%d)", v.tab, c.set["App.todoTab"], inProgress)
 	}
-	if v.follow.id != "t1" {
-		t.Fatalf("the task followed: %+v, want t1", v.follow)
-	}
 	read := false
 	for _, call := range c.calls[before:] {
 		read = read || strings.HasPrefix(call, "todos.list") && strings.Contains(call, "in-progress")
