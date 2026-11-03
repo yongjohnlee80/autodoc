@@ -171,6 +171,18 @@ type Tx interface {
 	NextFallbackLease(host string) (int64, bool, error)
 
 	// AddInboxChange (the human feed's journal) comes with crew.Tx.
+
+	// Retention (docs/decisions/crew.md#handled-mail-is-kept-for-a-window), in bounded batches:
+	// HandledBefore is the ids of messages, after the id after (by id, so a sweep pages through),
+	// at most limit, created at or before cutoff, every delivery of which is done (acked, failed,
+	// expired, merged or withdrawn) at or before cutoff, with no fallback job still open or leased.
+	// An unread report or an open request has a delivery still queued or leased, and is never one.
+	HandledBefore(cutoff int64, after string, limit int) ([]string, error)
+	// DeleteMessage deletes message id with its deliveries and its fallback jobs.
+	DeleteMessage(id string) error
+	// PruneInbox deletes the human feed's journal rows written before before, oldest first, at
+	// most limit, never the newest row: how many it deleted.
+	PruneInbox(before int64, limit int) (int, error)
 }
 
 // Store runs transactions over the crew and mail tables, each one atomic.

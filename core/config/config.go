@@ -26,7 +26,22 @@ type Config struct {
 	Follow         Follow         `toml:"follow"`
 	EmbeddingQueue EmbeddingQueue `toml:"embedding_queue"`
 	Log            Log            `toml:"log"`
+	Mail           Mail           `toml:"mail"`
 }
+
+// Mail configures crew mail's retention (docs/decisions/crew.md#handled-mail-is-kept-for-a-window).
+type Mail struct {
+	// KeepHandled is how long handled mail is kept before the daemon deletes it: 720h (30 days) when
+	// unset, at least 24h. Unread reports and open requests are kept however old.
+	KeepHandled Duration `toml:"keep_handled"`
+}
+
+// DefaultKeepHandled and MinKeepHandled are mail.keep_handled's default and its least (core/mail's
+// own, which the daemon's sweep holds to as well).
+const (
+	DefaultKeepHandled = 30 * 24 * time.Hour
+	MinKeepHandled     = 24 * time.Hour
+)
 
 // Log configures the daemon's log.
 type Log struct {
@@ -151,6 +166,12 @@ func (c *Config) normalize() error {
 	}
 	if c.Follow.PollInterval.Duration < 0 {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
+	}
+	if c.Mail.KeepHandled.Duration == 0 {
+		c.Mail.KeepHandled.Duration = DefaultKeepHandled
+	}
+	if c.Mail.KeepHandled.Duration < MinKeepHandled {
+		return fmt.Errorf("%w: mail.keep_handled must be at least 24h (it is %s)", ErrInvalid, c.Mail.KeepHandled.Duration)
 	}
 	if c.Log.Level != "" {
 		if _, err := ParseLogLevel(c.Log.Level); err != nil {
