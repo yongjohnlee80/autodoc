@@ -831,6 +831,7 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"instead: its `[AutoDoc]` line arrives with the message). When `editor.document` says `foreign_workspace`, its path " +
 	"is relative to that workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not " +
 	"at all. Keep your task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
-	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>`. " +
+	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>` " +
+	"(code -32098: the user is asked by a card; wait for their answer by mail, then call again). " +
 	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
 	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"

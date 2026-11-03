@@ -209,6 +209,25 @@ func (m *Manager) WaitingSenders(ctx crew.Tx, s crew.Session) ([]crew.Sender, bo
 	return out, more, nil
 }
 
+// RungBefore is crew.RungBefore: whether every delivery waiting for s (the ones its notice counts)
+// was received before, its lease since lapsed (Attempts above 0). False when none waits.
+func (m *Manager) RungBefore(ctx crew.Tx, s crew.Session) (bool, error) {
+	tx, err := mailTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), noticeLook)
+	if err != nil || len(ds) == 0 {
+		return false, err
+	}
+	for _, d := range ds {
+		if d.Attempts == 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // Expire is mail's time-driven changes, for the wake scheduler's writes (crew.SessionEnder).
 func (m *Manager) Expire(ctx crew.Tx) error {
 	tx, err := mailTx(ctx)

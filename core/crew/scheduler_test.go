@@ -917,3 +917,52 @@ func TestEveryWakeNoticeSaysItIsAutoDocMail(t *testing.T) {
 		}
 	}
 }
+
+// A re-ring says it is one (NoticeForAgain): the mail is still waiting, "…, rung again", with or
+// without senders and on either mail mode; again false is NoticeFor's text, byte for byte.
+func TestAReRingSaysTheMailIsStillWaiting(t *testing.T) {
+	type S = crew.Sender
+	gold := []S{{"gold", "claude", 1}}
+	for _, c := range []struct {
+		what    string
+		via     crew.MailVia
+		senders []S
+		want    string
+	}{
+		{"named, the CLI", crew.MailViaCLI, gold,
+			"[AutoDoc mail] Mail is still waiting for you: 1 from gold (claude), rung again. Run: autodoc mail receive (not SendMessage)"},
+		{"named, MCP mail", crew.MailViaMCP, gold,
+			"[AutoDoc mail] Mail is still waiting for you: 1 from gold (claude), rung again. Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."},
+		{"no one named, the CLI", crew.MailViaCLI, nil, crew.WakeNoticeAgain},
+		{"no one named, MCP mail", crew.MailViaMCP, nil, crew.WakeNoticeMCPAgain},
+	} {
+		if got := crew.NoticeForAgain(c.via, c.senders, false, true); got != c.want {
+			t.Errorf("%s: %q, want %q", c.what, got, c.want)
+		}
+		if fresh := crew.NoticeForAgain(c.via, c.senders, false, false); fresh != crew.NoticeFor(c.via, c.senders, false) || strings.Contains(fresh, "rung again") {
+			t.Errorf("%s, fresh: %q changed", c.what, fresh)
+		}
+	}
+}
+
+// The scheduler rings again with the re-ring's notice: the first ring is a fresh one, the ring
+// after a failed (or unanswered) one says the mail is still waiting, and once the session has
+// received, new mail is a fresh ring again.
+func TestARingAfterAFailedOneIsAReRing(t *testing.T) {
+	r := newWakeRig(t, "run1")
+	s := r.session("gold")
+	r.w.answer = errors.New("refused")
+	r.look() // the first ring, refused
+	r.w.answer = nil
+	r.clock.Advance(5 * time.Second)
+	r.look() // rung again after the failure
+	r.received(s.Session)
+	r.write(func(tx crew.Tx) error { return r.m.RaisePending(tx, s.Profile) })
+	r.look() // new mail after the receive
+	r.w.mu.Lock()
+	notes := slices.Clone(r.w.notes)
+	r.w.mu.Unlock()
+	if want := []string{crew.WakeNotice, crew.WakeNoticeAgain, crew.WakeNotice}; !slices.Equal(notes, want) {
+		t.Fatalf("the rings' notices: %q, want %q", notes, want)
+	}
+}

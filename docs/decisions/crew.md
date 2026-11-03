@@ -92,7 +92,8 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   run a command line. Each runs on the UI loop, each edit is one undo step, and an edit given the
   revision it read is refused when the text has changed since.
 - Each agent is held to grants as a Lua package is (`editor.read`, `editor.write`, `commands`). An
-  ungranted call is refused at once, never held open, and the user is asked; an Allow works for the
+  ungranted call is refused at once, never held open, with a code of its own (-32098, not golib's
+  -32001, whose remedy is another socket), and the user is asked; an Allow works for the
   next call. When the window holds a crew scope, the user's answer reaches the agent as the user's own
   mail (allowed: call again; not allowed, or the card closed: don't), and the refusal says it will, so
   the agent waits for it rather than retrying blind. `editor.workspace` and `editor.commands` need
@@ -490,6 +491,12 @@ whatever reaches a session this way as "Another Claude session sent a message â€
 SendMessage", which isn't AutoDoc's to change; the notice itself says, inside that frame, that this
 is AutoDoc mail and how to read it, so an agent doesn't have to remember a rule that contradicts the
 text in front of it.
+
+A re-ring says it is one (`crew.NoticeForAgain`): "[AutoDoc mail] Mail is still waiting for you: 1
+from gold (claude), rung again. Run: â€¦", so an agent rung twice doesn't count the same mail twice.
+A ring is a re-ring when a ring since the session's last receive failed or went unanswered, or when
+every delivery waiting is one the session received before, its lease since lapsed. A first ring, or
+one for mail that arrived after a receive, reads as before, byte for byte.
 
 The notice names who the mail is from, so an agent can tell a request from the user from a peer's
 note before it receives: "[AutoDoc mail] Mail is waiting for you: 1 from gold (claude), 1 from user.

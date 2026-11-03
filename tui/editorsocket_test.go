@@ -94,7 +94,8 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		return callAs(token, verb, params...)
 	}
 
-	if _, re := call("editor.read"); re == nil || re.Code != codeEditorNotGranted || !strings.Contains(re.Message, "needs editor.read") {
+	// a capability not granted has its own code, never golib's -32001, whose remedy is another socket
+	if _, re := call("editor.read"); re == nil || re.Code != -32098 || !strings.Contains(re.Message, "needs editor.read") {
 		t.Fatalf("an ungranted read: %v", re)
 	}
 	r.s.WaitForText(t, "let the Lua script agent:zen use editor.read?")
@@ -131,7 +132,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		r.h.prefs.luaGrants["agent:zen"]["editor.write"] = false
 		return true
 	})
-	if _, re := callAs("other", "editor.insert", 1, 1, "X"); re == nil || re.Code != codeEditorNotGranted || !strings.Contains(re.Message, "not an agent's token") {
+	if _, re := callAs("other", "editor.insert", 1, 1, "X"); re == nil || re.Code != codeEditorNotAgent || !strings.Contains(re.Message, "not an agent's token") {
 		t.Fatalf("a codename for a token: %v", re)
 	}
 	if _, re := call("editor.insert", 1, 1, "X"); re == nil || !strings.Contains(re.Message, "needs editor.write") {

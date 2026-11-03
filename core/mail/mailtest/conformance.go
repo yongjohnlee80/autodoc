@@ -85,6 +85,7 @@ func Run(t *testing.T, h Harness) {
 		{"AJobIsLeasedReofferedAndReportedOnce", testAJobIsLeasedReofferedAndReportedOnce},
 		{"TheUsersUnrungSendIsAJobOfAHostThatTakesThem", testTheUsersUnrungSendIsAJobOfAHostThatTakesThem},
 		{"TheFeedReadsAJobAndItsHost", testTheFeedReadsAJobAndItsHost},
+		{"MailReceivedBeforeIsARering", testMailReceivedBeforeIsARering},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -1517,5 +1518,41 @@ func testAnInboxCountsTheDeliveriesHeldUnanswered(t *testing.T, h Harness) {
 	}
 	if d := r.delivery(brief.Items[0].Delivery.ID); d.State != mail.Leased || d.Lease != brief.Items[0].Delivery.Lease {
 		t.Fatalf("the premise, the expired message's delivery still stored leased under its lease: %+v", d)
+	}
+}
+
+// A wake for mail the session received before is a re-ring (crew.RungBefore): not before any
+// receive; after one whose lease lapsed, the delivery requeued (Expire, as the scheduler's writes
+// run it), it is; and once fresh mail waits beside it, it is not.
+func testMailReceivedBeforeIsARering(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	gold := crew.Session{ID: "s-gold", Profile: "p-gold"}
+	rungBefore := func() bool {
+		t.Helper()
+		var got bool
+		if err := r.st.Mail.Read(r.ctx, func(tx mail.Tx) error {
+			var err error
+			got, err = r.m.RungBefore(tx, gold)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "held", Key: "k1"})
+	if rungBefore() {
+		t.Fatal("mail never received is a re-ring")
+	}
+	if got := r.receive("s-gold"); len(got.Items) != 1 {
+		t.Fatalf("the receive: %+v", got)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	r.write(func(tx mail.Tx) error { return r.m.Expire(tx) })
+	if !rungBefore() {
+		t.Fatal("mail received before, its lease lapsed, is not a re-ring")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fresh", Key: "k2"})
+	if rungBefore() {
+		t.Fatal("fresh mail waiting beside mail received before is a re-ring")
 	}
 }
