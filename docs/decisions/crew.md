@@ -769,6 +769,25 @@ it in its file mailbox.
 - **A host that took part and went away** leaves its jobs open: they wait for it, and the user was
   told when each was made.
 
+## Handled mail is kept for a window
+
+Crew mail is durable, and until now nothing deleted it: every report read, request answered or
+dismissed, message acked or expired stayed in the store, and so did every row of the human feed's
+journal. The daemon now deletes mail once it has been handled for longer than `[mail] keep_handled`
+(`720h`, 30 days, by default; at least `24h`).
+
+- **What goes.** A message all of whose deliveries are done (acked, read, answered, dismissed,
+  failed, expired, merged or withdrawn) for longer than the window, with its deliveries and its
+  fallback jobs. A delivery whose fallback job is still open or leased keeps its message.
+- **What stays.** An unread report and an open request have a delivery not yet done, and stay
+  however old. So does anything handled inside the window.
+- **The journal.** The human feed's rows older than the window go too, but never the newest, so a
+  journal that had a row is never empty. A reader whose cursor is behind the oldest row left
+  resyncs, as for any pruned log.
+- **When.** One sweep as the daemon starts, then one a day. Each sweep is bounded batches, each
+  its own short write, so no other write waits behind it for long. A message older than the window
+  can't be shown again: `mail_show` on its delivery answers not found.
+
 ## The crew MCP server
 
 `autodoc crew mcp` serves the crew's mail as MCP tools, for an agent CLI that runs it as a stdio

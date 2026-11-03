@@ -769,6 +769,9 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "first"); err != nil {
 		t.Fatal(err)
 	}
+	// the window sees the model in use before the search is typed: a model change it sees later
+	// clears the search (showProgress), which would clear the words typed under the old one
+	r.s.WaitFor(t, "semantic search answering with first", func(string) bool { return r.markOf() == "green semantic search · first" })
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)

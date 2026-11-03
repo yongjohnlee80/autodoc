@@ -15,6 +15,9 @@ poll_interval = "2s"
 
 [embedding_queue]
 max_inflight = 1   # 1 or 2
+
+[mail]
+keep_handled = "720h"   # handled mail is deleted this long after it was handled; at least 24h
 ```
 
 | Name | What |

@@ -39,6 +39,7 @@ const (
 	byExpires sort = "expires"
 	byDone    sort = "done_at"
 	byCreated sort = "created"
+	byAge     sort = "age"
 )
 
 // recipientRow is one recipient's sequence high-water (mail_recipient).
@@ -73,7 +74,7 @@ func newMailTables(c dao.DataConn) *mailTables {
 	}
 	return &mailTables{
 		messages: sortedTable(c, "mail_message", map[sort]string{byExpires: `"mail_message"."expires"`,
-			byCreated: `"mail_message"."created"`}, map[col]func(*mail.Message) any{
+			byCreated: `"mail_message"."created"`, byAge: `"mail_message"."created", "mail_message"."id"`}, map[col]func(*mail.Message) any{
 			cID: func(r *mail.Message) any { return &r.ID }, cSender: func(r *mail.Message) any { return &r.Sender },
 			cSenderSession: func(r *mail.Message) any { return &r.SenderSession }, cIdemKey: func(r *mail.Message) any { return &r.IdemKey },
 			cDigest: func(r *mail.Message) any { return &r.Digest }, cKind: func(r *mail.Message) any { return &r.Kind },

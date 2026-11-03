@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
+	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 )
 
@@ -86,6 +87,7 @@ func Run(t *testing.T, h Harness) {
 		{"TheUsersUnrungSendIsAJobOfAHostThatTakesThem", testTheUsersUnrungSendIsAJobOfAHostThatTakesThem},
 		{"TheFeedReadsAJobAndItsHost", testTheFeedReadsAJobAndItsHost},
 		{"MailReceivedBeforeIsARering", testMailReceivedBeforeIsARering},
+		{"HandledMailIsDeletedAfterTheWindow", testHandledMailIsDeletedAfterTheWindow},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
 	}
@@ -1554,5 +1556,103 @@ func testMailReceivedBeforeIsARering(t *testing.T, h Harness) {
 	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fresh", Key: "k2"})
 	if rungBefore() {
 		t.Fatal("fresh mail waiting beside mail received before is a re-ring")
+	}
+}
+
+// Handled mail is kept for the window, then deleted (docs/decisions/crew.md#handled-mail-is-kept-for-a-window):
+// a message acked, a report read and a request dismissed more than the window ago go, with their
+// deliveries; an unread report, an open request, a message handled inside the window and one whose
+// delivery still has an open fallback job stay, however old; the human feed's journal keeps its
+// newest row. A second sweep deletes nothing more.
+func testHandledMailIsDeletedAfterTheWindow(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	r.profile("p-zen", "autovim:p", "zen", "s-zen")
+	const day = 24 * time.Hour
+	acked := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "acked", Key: "k1"})
+	// created as the others were, handled only inside the window: its age is its handling's, not its creation's
+	slow := r.send("s-jarvis", mail.Send{To: []string{"zen"}, Body: "acked a day before the sweep, sent long before", Key: "k8"})
+	withJob := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "its job is open", Key: "k2"})
+	read := r.send("s-jarvis", mail.Send{To: []string{"user"}, Body: "read", Key: "k3"})
+	unread := r.send("s-jarvis", mail.Send{To: []string{"user"}, Body: "unread", Key: "k4"})
+	open := r.send("s-jarvis", mail.Send{To: []string{"user"}, Kind: mail.KindRequest, Body: "open?", Key: "k5"})
+	dismissed := r.send("s-jarvis", mail.Send{To: []string{"user"}, Kind: mail.KindRequest, Body: "dismissed?", Key: "k6"})
+	for _, it := range r.receive("s-gold").Items {
+		if _, err := r.m.Ack(r.ctx, "s-gold", it.Delivery.ID, it.Delivery.Lease); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.m.Read(r.ctx, read.Message.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.m.Dismiss(r.ctx, dismissed.Message.ID); err != nil {
+		t.Fatal(err)
+	}
+	jd := withJob.Deliveries[0]
+	r.write(func(tx mail.Tx) error {
+		return tx.PutFallbackJob(mail.FallbackJob{ID: "job1", Delivery: jd.ID, Message: jd.Message, Recipient: jd.Recipient,
+			Host: "autovim:p", State: mail.JobOpen, Created: r.clock.Now().UnixNano()})
+	})
+	r.clock.Advance(29 * day)
+	fresh := r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "acked a day before the sweep", Key: "k7"})
+	for _, s := range []string{"s-gold", "s-zen"} {
+		for _, it := range r.receive(s).Items {
+			if _, err := r.m.Ack(r.ctx, s, it.Delivery.ID, it.Delivery.Lease); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	r.clock.Advance(day + time.Hour)
+
+	swept, err := r.m.Sweep(r.ctx, 30*day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, msg := range r.st.Inspect.Messages() {
+		have[msg.ID] = true
+	}
+	for what, c := range map[string]struct {
+		sent mail.Sent
+		kept bool
+	}{
+		"acked over the window ago": {acked, false}, "read over the window ago": {read, false},
+		"dismissed over the window ago": {dismissed, false}, "unread": {unread, true}, "open": {open, true},
+		"acked inside the window": {fresh, true}, "with an open fallback job": {withJob, true},
+		"sent long ago, acked inside the window": {slow, true},
+	} {
+		if have[c.sent.Message.ID] != c.kept {
+			t.Errorf("the message %s: kept %v, want %v", what, have[c.sent.Message.ID], c.kept)
+		}
+	}
+	if swept.Messages != 3 {
+		t.Errorf("the sweep deleted %d messages, want 3", swept.Messages)
+	}
+	for _, d := range r.st.Inspect.Deliveries() {
+		if !have[d.Message] {
+			t.Errorf("a deleted message's delivery is left: %+v", d)
+		}
+	}
+	var rows []inbox.Change
+	if err := r.st.Mail.Read(r.ctx, func(tx mail.Tx) error {
+		var err error
+		rows, err = tx.(interface {
+			Changes(after int64, limit int) ([]inbox.Change, error)
+		}).Changes(0, 100000)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cutoff := r.clock.Now().Add(-30 * day).UnixNano()
+	if len(rows) == 0 || swept.Changes == 0 {
+		t.Errorf("the feed's journal after the sweep: %d rows, %d pruned; want its old rows pruned and its newest kept", len(rows), swept.Changes)
+	}
+	for i, c := range rows {
+		if i < len(rows)-1 && c.At < cutoff {
+			t.Errorf("a journal row older than the window is left, and not the newest: %+v", c)
+		}
+	}
+	again, err := r.m.Sweep(r.ctx, 30*day)
+	if err != nil || again.Messages != 0 || again.Changes != 0 {
+		t.Errorf("a second sweep: %+v %v, want nothing more", again, err)
 	}
 }
