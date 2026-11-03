@@ -196,7 +196,7 @@ func (t *todos) assignSet(text string) {
 			return
 		}
 		task := asMap(v)
-		if to := str(task, "status"); to != "" && to != from && s == t.cur { // an open task is in progress now (D1)
+		if to := str(task, "status"); to != "" && to != from && t.shows(s) { // an open task is in progress now (D1)
 			t.followTask(task, to)
 		}
 		if a.agent.Peer != nil {

@@ -235,7 +235,7 @@ func (t *todos) setVar(s *todoStore, name, value, scope string) {
 		} else {
 			t.c.Notify(t.c.Trf("autodoc.notice.todos_vars.todos_set", name, scope))
 		}
-		if s == t.cur {
+		if t.shows(s) {
 			t.readVars()
 		}
 	})
