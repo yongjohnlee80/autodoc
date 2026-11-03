@@ -820,7 +820,13 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"way, not once the file is open: the user may be asked first (unsaved changes), so read `editor.document` " +
 	"until it shows the file before you act on it.\n" +
 	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
-	"to their lua/ folder only if they say yes.\n\n" +
+	"to their lua/ folder only if they say yes.\n" +
+	"- `editor.terminal_run '[\"command line\"]'`: run a command in AutoDoc's own terminal, for a step that needs " +
+	"the user: `sudo`, `pkexec`, an installer. It needs the `terminal` permission, and every call shows the user the " +
+	"exact line first: it answers `{started, tab, exit_by_mail}` once they click Run, or is refused when they don't. " +
+	"It runs in a new terminal tab, where the user types any passphrase themselves: never ask them for one, and " +
+	"you can't read that tab. When it ends, its exit code comes to you as mail; wait for it, and ask the user what " +
+	"it printed if you need to. At most 20 lines and 4 KiB, no control characters.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
 	"`$AUTODOC_ROOT` don't change. Before you act on each message from the user, run `autodoc --editor editor.workspace`, " +
 	"and when it has a `switch`, tell the user what changed (a Claude Code session in this folder is told by a hook " +

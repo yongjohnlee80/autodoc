@@ -98,11 +98,21 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   the agent waits for it rather than retrying blind. `editor.workspace` and `editor.commands` need
   no grant. `editor.add_command` asks every
   time, shows the whole source, and creates the Lua file only at the user's yes.
+- `editor.terminal_run` runs a command an agent asks for in AutoDoc's own terminal, so a step that
+  needs the user (sudo, pkexec, an installer) never needs a pasted command or a passphrase given to
+  the agent (ADR 1793665458). It needs the `terminal` grant, and every call shows the user the exact
+  line, the agent and the folder on a card: Run or Don't run. Nothing runs without that Run, and only
+  the line the card showed runs, as `sh -c` in a new tab of its own, in the root of the workspace in
+  use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
+  user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
+  when the command exits, its code reaches the agent as the user's mail, and the user is told when
+  it failed. The tab stays for the user to read. A line is at most 20 lines and 4 KiB, with no
+  control character but tab and newline.
 
 The TUI serves the page rather than the daemon, because the unsaved text, cursor and undo history
 are the TUI's, and several TUIs share one daemon.
 
-In the code: `tui/editorsocket.go`, `app/editor.go`, `tui/agent.go`
+In the code: `tui/editorsocket.go`, `tui/editorterminal.go`, `app/editor.go`, `tui/agent.go`
 
 ## Editor tokens and their limit
 
