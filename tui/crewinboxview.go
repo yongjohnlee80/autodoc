@@ -32,8 +32,8 @@ import (
 // first (a page read before a change can hold rows the change moved past, and more than a page
 // arriving leaves a gap no More reaches); deeper is More again. Every read takes its source's next
 // generation, and so does each ack or dismiss that lands: an answer of an older one is dropped, so a
-// read that started before never undoes a newer read or what the user just did. The rows change in
-// place (rows.Update), so the table's cursor stays on the message it was on.
+// read that started before never undoes a newer read or what the user just did. The table keeps its
+// cursor on the message it was on, by its key, across every re-read.
 
 // inboxPage is how many messages one inbox.list reads.
 const inboxPage = 50
@@ -365,11 +365,12 @@ func (v *inboxView) visible() []inboxItem {
 // how much is listed under it.
 func (v *inboxView) render() {
 	items := v.visible()
-	// rows changed in place, or added above or below, keep the table's cursor on its row; a model
-	// reset would put it on the first, and the cursor would jump at every ack and every page
-	v.rows.Update(items, func(it inboxItem) string { return it.message })
+	v.rows.Reset(items)
+	// the table keeps its cursor on its row's key across the reset itself: told an index as well, a
+	// stale one won, and the cursor jumped at every ack and every page. It is told one only when its
+	// message is gone, or none was chosen
 	if i := slices.IndexFunc(items, func(it inboxItem) bool { return it.message == v.key }); v.key != "" && i >= 0 {
-		v.cursor = i // the table follows its row's key itself: it is told nothing
+		v.cursor = i
 	} else {
 		v.cursor = min(max(v.cursor, 0), max(len(items)-1, 0))
 		v.c.Set("App.inboxIndex", -1) // moved away first, so the same row twice still moves the table's cursor

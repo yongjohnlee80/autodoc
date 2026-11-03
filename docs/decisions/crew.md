@@ -627,7 +627,7 @@ delivery between agents never waits on you.
   go, so the list is always one consistent read (more than a page arriving leaves no gap, and no
   older row is listed as it was); the other tab's source is read again at its next showing. A read
   overtaken by a later one, or by an ack or dismiss that landed, is dropped. The cursor stays on its
-  message: the rows change in place, so the list never jumps.
+  message, by its key, so the list never jumps.
 - A request's toast opens a reply dialog in any window. Send is `inbox.reply`, keyed by the request
   and the text, so a resend after a lost answer is the same reply; the first answer wins. Dismiss
   tells the sender. An attention's toast raises its agent, or asks the host that shows it to
