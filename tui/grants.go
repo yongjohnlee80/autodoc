@@ -22,6 +22,7 @@ type grantsCore interface {
 	Prefs() prefs
 	Set(name string, v any)
 	Open(id string)
+	Focus(id string)
 	Ask(q Question) Asked
 	Notify(msg string)
 	Tr(id string) string
@@ -80,11 +81,12 @@ func (g *grantsView) PreferencesChanged() {
 	}
 }
 
-// open lists the grants and opens the dialog, the cursor on the first.
+// open lists the grants and opens the dialog, the keyboard on the list, its cursor on the first.
 func (g *grantsView) open() {
 	g.shown, g.cursor, g.key = true, 0, ""
 	g.list()
 	g.c.Open("grants")
+	g.c.Focus("grantTable") // the list holds the keys: arrows move it, the buttons answer their letters
 }
 
 // closed is the dialog dismissed: the preference's changes stop listing it again.

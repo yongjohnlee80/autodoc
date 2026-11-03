@@ -20,6 +20,7 @@ type grantsWindow struct {
 	revoked [][]string // holder, then its capabilities, per RevokeGrants
 	state   map[string]any
 	opened  []string
+	focused string
 	asked   []Question
 	notices []string
 }
@@ -27,6 +28,7 @@ type grantsWindow struct {
 func (w *grantsWindow) Prefs() prefs                      { return prefs{luaGrants: w.grants} }
 func (w *grantsWindow) Set(name string, v any)            { w.state[name] = v }
 func (w *grantsWindow) Open(id string)                    { w.opened = append(w.opened, id) }
+func (w *grantsWindow) Focus(id string)                   { w.focused = id }
 func (w *grantsWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
 func (w *grantsWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
 func (w *grantsWindow) Tr(id string) string               { return w.Trf(id) }
@@ -74,6 +76,9 @@ func TestAgentPermissionsListsEveryGrantByHolder(t *testing.T) {
 	}
 	if len(w.opened) != 1 || w.opened[0] != "grants" {
 		t.Fatalf("the dialog opened %v, want grants", w.opened)
+	}
+	if w.focused != "grantTable" {
+		t.Fatalf("the keyboard went to %q at open, want the list (grantTable)", w.focused)
 	}
 	cases := []struct {
 		i               int
