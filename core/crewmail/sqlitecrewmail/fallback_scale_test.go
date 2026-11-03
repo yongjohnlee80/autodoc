@@ -53,7 +53,7 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 		for i := range handledAtScale {
 			id := fmt.Sprintf("m%05d", i)
 			to := agents[i%len(agents)].Profile
-			if err := tx.PutMessage(mail.Message{ID: id, Sender: agents[(i+1)%len(agents)].Profile, Kind: mail.KindMessage,
+			if err := tx.PutMessage(mail.Message{ID: id, Sender: agents[(i+1)%len(agents)].Profile, IdemKey: id, Kind: mail.KindMessage,
 				Subject: "s", Body: "b", Created: int64(i + 1)}); err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 				return err
 			}
 		}
-		return nil
+		return tx.TakeFallbacks("autodoc:aaaa", e) // the scope's host takes fallbacks: deliveries due are candidates
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -92,4 +92,41 @@ func TestTheNextFallbackIsReadFromTheDueMailNotEveryMessage(t *testing.T) {
 		t.Fatalf("with %d handled messages and %d live sessions, nothing due, NextFallbackAt took %s", handledAtScale, len(agents), took)
 	}
 
+	// among them, one agent's two queued messages: the earlier decides, from the later of its
+	// creation and the agent's session's start, plus the unanswered window, as fast
+	sent := clock.Now().UnixNano()
+	if err := st.Mail().Write(ctx, func(tx mail.Tx) error {
+		for i, created := range []int64{sent + 2, sent} {
+			id := fmt.Sprintf("due%d", i)
+			if err := tx.PutMessage(mail.Message{ID: id, Sender: agents[1].Profile, IdemKey: id, Kind: mail.KindMessage,
+				Subject: "s", Body: "b", Created: created}); err != nil {
+				return err
+			}
+			if err := tx.PutDelivery(mail.Delivery{ID: "d" + id, Message: id, Recipient: agents[7].Profile, Seq: int64(handledAtScale + i),
+				State: mail.Queued}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var started int64
+	if err := st.Mail().Read(ctx, func(tx mail.Tx) error {
+		ss, ok, err := tx.Session(agents[7].Session)
+		if !ok && err == nil {
+			t.Fatal("agent07's session is gone")
+		}
+		started = ss.Started
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	at, has, took = next()
+	if want := max(sent, started) + int64(10*time.Minute); !has || at != want {
+		t.Fatalf("with two messages queued to agent07 NextFallbackAt answered %d (%v), want %d", at, has, want)
+	}
+	if took > 500*time.Millisecond {
+		t.Fatalf("with mail due, NextFallbackAt took %s", took)
+	}
 }
