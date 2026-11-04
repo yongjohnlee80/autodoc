@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -333,7 +334,8 @@ func TestReissueSaysWhatEndedItsConfirmation(t *testing.T) {
 }
 
 // TestCrewReissueAnswersAsTheSessionTheCLIFinds: `autodoc crew reissue` runs reissue as the session
-// the CLI finds, its answer one JSON line: a healthy session keeps both its parts; an OpenCode
+// the CLI finds, its answer in sentences, or with --json one JSON line: a healthy session keeps both
+// its parts, and says nothing needed re-issuing; an OpenCode
 // session with no endpoint is told its plugin registers it; with no context for the whole --wait
 // (the CLI's own timer between looks), the session is not re-issued, naming the wait; another
 // store's context is the daemon's refusal on stderr, exit 1; a --wait that isn't a duration is
@@ -361,19 +363,39 @@ func TestCrewReissueAnswersAsTheSessionTheCLIFinds(t *testing.T) {
 	if _, err := d.deps.crew.SetEndpoint(d.ctx, c.Credential, "agy", reissueAgyLoc); err != nil {
 		t.Fatal(err)
 	}
-	if code, res, errOut := d.as(healthy, "", "crew", "reissue"); code != 0 || strs(res["kept"]) != "session,endpoint" || strs(res["reissued"]) != "" || strs(res["not"]) != "" {
+	if code, res, errOut := d.as(healthy, "", "crew", "reissue", "--json"); code != 0 || strs(res["kept"]) != "session,endpoint" || strs(res["reissued"]) != "" || strs(res["not"]) != "" {
 		t.Fatalf("crew reissue of a healthy session: exit %d, %v, %s; want both kept", code, res, errOut)
 	}
 
 	oc := d.agentOfKind("oc", "agent-2", "store-1", crew.KindOpenCode)
-	if code, res, errOut := d.as(oc, "", "crew", "reissue"); code != 0 || strs(res["kept"]) != "session" ||
+	if code, res, errOut := d.as(oc, "", "crew", "reissue", "--json"); code != 0 || strs(res["kept"]) != "session" ||
 		!strings.Contains(strs(res["not"]), "endpoint: AutoDoc's OpenCode plugin registers it") {
 		t.Fatalf("crew reissue of an OpenCode session with no endpoint: exit %d, %v, %s; want its plugin named", code, res, errOut)
 	}
 
-	if code, res, errOut := d.as("", "", "crew", "reissue", "--wait=1s"); code != 0 || strs(res["kept"]) != "" ||
+	if code, res, errOut := d.as("", "", "crew", "reissue", "--wait=1s", "--json"); code != 0 || strs(res["kept"]) != "" ||
 		!strings.Contains(strs(res["not"]), "session: no session context yet; its host did not re-join this slot within 1s") {
 		t.Fatalf("crew reissue with no context: exit %d, %v, %s; want the session not re-issued within the wait", code, res, errOut)
+	}
+
+	// without --json it says so in sentences, the way a person at the shell reads it
+	said := func(path string, args ...string) string {
+		t.Helper()
+		t.Setenv("AUTODOC_CREW_CONTEXT", path)
+		var out, errOut bytes.Buffer
+		if code := crewMain(d.ctx, append([]string{"crew", "reissue"}, args...), strings.NewReader(""), &out, &errOut); code != 0 {
+			t.Fatalf("crew reissue %q: exit %d, %s", args, code, errOut.String())
+		}
+		return out.String()
+	}
+	if got, want := said(healthy), "Nothing needed re-issuing: your session and how you're woken (your endpoint) stand as they were, and nothing changed.\n"; got != want {
+		t.Errorf("crew reissue of a healthy session said %q, want %q", got, want)
+	}
+	if got, want := said(oc), "Kept your session, as it stood.\nNot re-issued, how you're woken (your endpoint): AutoDoc's OpenCode plugin registers it, on the session's next message.\n"; got != want {
+		t.Errorf("crew reissue of an OpenCode session with no endpoint said %q, want %q", got, want)
+	}
+	if got := said("", "--wait=1s"); !strings.HasPrefix(got, "Not re-issued, your session: no session context yet; its host did not re-join this slot within 1s") || strings.Contains(got, "{") {
+		t.Errorf("crew reissue with no context said %q, want the session not re-issued, in a sentence", got)
 	}
 
 	foreign := d.agent("vision", "agent-3", "store-other")
@@ -382,7 +404,7 @@ func TestCrewReissueAnswersAsTheSessionTheCLIFinds(t *testing.T) {
 	}
 
 	for _, args := range [][]string{{"--wait", "soon"}, {"--wait=-1s"}, {"--wait"}, {"--later"}} {
-		if code, _, errOut := d.as(healthy, "", append([]string{"crew", "reissue"}, args...)...); code != 2 || !strings.Contains(errOut, "usage: autodoc crew reissue [--wait D]") {
+		if code, _, errOut := d.as(healthy, "", append([]string{"crew", "reissue"}, args...)...); code != 2 || !strings.Contains(errOut, "usage: autodoc crew reissue [--wait D] [--json]") {
 			t.Fatalf("crew reissue %q: exit %d, %s; want its usage", args, code, errOut)
 		}
 	}

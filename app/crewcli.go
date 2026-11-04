@@ -137,7 +137,7 @@ var crewCommands = map[string]crewCommand{
 		call: func(c sessionContext, _ *flag.FlagSet, _ []string, _ io.Reader) (string, []any, func(any) any, error) {
 			return "crew.whoami", []any{c.Credential, c.Store}, nil, nil
 		}},
-	"crew reissue": {usage: "[--wait D]: re-establish this session's crew access on the running daemon, when it was never given or the daemon restarted: waits up to D (40s) for its host to re-join the slot, then registers again how it is woken when that is missing or failing; answers {reissued, kept, not: [{item, why}]}",
+	"crew reissue": {usage: "[--wait D] [--json]: re-establish this session's crew access on the running daemon, when it was never given or the daemon restarted: waits up to D (40s) for its host to re-join the slot, then registers again how it is woken when that is missing or failing; says what it re-issued, kept and could not, in sentences (--json: {reissued, kept, not: [{item, why}]})",
 		example: "autodoc crew reissue",
 		call: func(sessionContext, *flag.FlagSet, []string, io.Reader) (string, []any, func(any) any, error) {
 			return "", nil, nil, errors.New("crew reissue runs on its own (crewReissueMain)")
