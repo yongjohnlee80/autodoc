@@ -495,7 +495,8 @@ text in front of it.
 A re-ring says it is one (`crew.NoticeForAgain`): "[AutoDoc mail] Mail is still waiting for you: 1
 from gold (claude), rung again. Run: …", so an agent rung twice doesn't count the same mail twice.
 A ring is a re-ring when a ring since the session's last receive failed or went unanswered, or when
-every delivery waiting is one the session received before, its lease since lapsed. A first ring, or
+every delivery waiting is one the session received before, its lease since lapsed (read as the
+notice reads them, at most 64: past that, the rest are unknown, so the ring is not a re-ring). A first ring, or
 one for mail that arrived after a receive, reads as before, byte for byte.
 
 The notice names who the mail is from, so an agent can tell a request from the user from a peer's

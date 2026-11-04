@@ -111,7 +111,7 @@ type WaitingSenders interface {
 
 // RungBefore is whether every delivery waiting for a session is one it received before, its lease
 // since lapsed, so a ring for it is a re-ring (NoticeForAgain). A SessionEnder that implements it is
-// asked in the attempt's read; false when nothing waits.
+// asked in the attempt's read; false when nothing waits, or when more wait than it reads.
 type RungBefore interface {
 	RungBefore(tx Tx, s Session) (bool, error)
 }

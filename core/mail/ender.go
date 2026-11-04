@@ -209,15 +209,16 @@ func (m *Manager) WaitingSenders(ctx crew.Tx, s crew.Session) ([]crew.Sender, bo
 	return out, more, nil
 }
 
-// RungBefore is crew.RungBefore: whether every delivery waiting for s (the ones its notice counts)
-// was received before, its lease since lapsed (Attempts above 0). False when none waits.
+// RungBefore is crew.RungBefore: whether every delivery waiting for s was received before, its lease
+// since lapsed (Attempts above 0). False when none waits, and when more than noticeLook wait: the
+// rest are not read, so one of them may be fresh, and a ring is a re-ring only when it is known.
 func (m *Manager) RungBefore(ctx crew.Tx, s crew.Session) (bool, error) {
 	tx, err := mailTx(ctx)
 	if err != nil {
 		return false, err
 	}
-	ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), noticeLook)
-	if err != nil || len(ds) == 0 {
+	ds, err := tx.Eligible(s.Profile, s.ID, tx.Now().UnixNano(), noticeLook+1)
+	if err != nil || len(ds) == 0 || len(ds) > noticeLook {
 		return false, err
 	}
 	for _, d := range ds {

@@ -1557,6 +1557,33 @@ func testMailReceivedBeforeIsARering(t *testing.T, h Harness) {
 	if rungBefore() {
 		t.Fatal("fresh mail waiting beside mail received before is a re-ring")
 	}
+
+	// a backlog longer than a notice reads: 64 received before, their leases lapsed, then one fresh
+	// one behind them. The fresh one is past the first 64, and it still waits: not a re-ring.
+	r = newRig(t, h)
+	for i := range 64 {
+		r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: fmt.Sprintf("held %d", i), Key: fmt.Sprintf("b%d", i)})
+	}
+	received := 0
+	for {
+		got := r.receive("s-gold")
+		if len(got.Items) == 0 {
+			break
+		}
+		received += len(got.Items)
+	}
+	if received != 64 {
+		t.Fatalf("the premise: received %d of the 64", received)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	r.write(func(tx mail.Tx) error { return r.m.Expire(tx) })
+	if !rungBefore() {
+		t.Fatal("64 deliveries received before, their leases lapsed, are not a re-ring")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fresh, the 65th", Key: "b64"})
+	if rungBefore() {
+		t.Fatal("fresh mail waiting behind 64 received before is a re-ring")
+	}
 }
 
 // Handled mail is kept for the window, then deleted (docs/decisions/crew.md#handled-mail-is-kept-for-a-window):
