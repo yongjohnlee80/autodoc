@@ -342,6 +342,7 @@ func (h *Host) features() []Feature {
 	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
+	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
 	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
 	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
 	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)

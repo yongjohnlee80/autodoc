@@ -40,8 +40,9 @@ func TestCtrlOWalksTheJumpListAcrossDocuments(t *testing.T) {
 	r.waitFile(t, "a.md")
 	col := strings.Index("see [[b]] and more", "b]]")
 	r.putCursor(2, col)
-	r.leader(t, 'j')
+	r.leader(t, 'j') // on a.md's page: its first link on screen, [[b]]
 	r.waitAt(t, "b.md", 0, 0)
+	r.asText(t) // G on the page scrolls it; in the text it is a jump
 	r.keys(t, key('G'))
 	r.s.WaitFor(t, "G", func(string) bool { return r.cursor()[0] > 0 })
 	r.keys(t, ctrlKey('o')) // back through G, in b
