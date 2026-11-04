@@ -169,6 +169,9 @@ func (h *Host) showFind() {
 		h.findMarks.Store(terms)
 		h.core.InvalidateHighlightPaint()
 	}
+	if p := h.notePage(); len(terms) == 0 && p != nil && p.view != nil {
+		p.view.SetMarks(nil) // the find ended: a note's page marks nothing either
+	}
 	if h.findCard == nil {
 		return
 	}
@@ -337,6 +340,9 @@ func (h *Host) escapeFind() bool {
 // as the editor finds them (FindAll: case-blind; whole words for * and #). It steps count of them
 // on (dir +1) or back, wrapping; includeCurrent lets one at the cursor count, for the first.
 func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
+	if h.notePageFind(dir, includeCurrent, count) {
+		return
+	}
 	f := &h.find
 	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
 	if len(all) == 0 {
@@ -379,6 +385,112 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 	f.at, f.total = sel+1, len(all)
 	h.showFind()
 	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), sel+1, len(all), f.target))
+}
+
+// notePageFind is the page's find on a note's page, when one is shown (notepage.go): what the page
+// shows is marked (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back,
+// from the one it is on, or for the first from the first at or after the page's top. It is brought
+// into view, the editor's cursor put at its block (Raw opens there) and the page given the
+// keyboard. A term the page doesn't show but the source has (a link's target, Markdown's own
+// syntax) is the text's: the page opens Raw at the reader's place, says so, and reports false, and
+// the text's find goes on, as with no page shown. A term in neither is not found, on the page.
+func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
+	p := h.notePage()
+	if p == nil || !p.shownHere() {
+		return false
+	}
+	f := &h.find
+	n := p.view.SetMarks(pageFindIn(f.query, f.whole))
+	if n == 0 {
+		if len(h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})) > 0 && p.toText() {
+			h.notify(h.trf("autodoc.notice.find.not_on_the_page_found_in_the_text", strconv.Quote(f.query)))
+			return false
+		}
+		f.at, f.total = 0, 0
+		h.showFind()
+		h.say(h.trf("autodoc.notice.find.no_match", strconv.Quote(f.query), f.target))
+		return true
+	}
+	sel := p.firstMarkFromTop(n)
+	switch {
+	case !includeCurrent && f.at > 0 && f.at <= n:
+		sel = (f.at - 1 + dir + n) % n
+	case !includeCurrent && dir < 0:
+		sel = (sel - 1 + n) % n
+	}
+	for range max(count, 1) - 1 {
+		sel = (sel + dir + n) % n
+	}
+	p.view.MarkTo(sel)
+	p.cursorToMark(sel)
+	f.at, f.total = sel+1, n
+	h.showFind()
+	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), sel+1, n, f.target))
+	h.keep(h.p.Call("editor", "forceActiveFocus")) // the page's hit gives the page the keyboard, as the text's
+	return true
+}
+
+// findRecount runs the page's find again in the view now drawn, the reader staying where they are:
+// its count, and the current match the first at or after the reader's place (a note's page: its
+// top; the text: its cursor). Ctrl+T can change "k of N": the page counts what it shows, the text
+// its source.
+func (h *Host) findRecount() {
+	f := &h.find
+	if f.query == "" || f.target != findPage {
+		return
+	}
+	if p := h.notePage(); p != nil && p.shownHere() {
+		n := p.view.SetMarks(pageFindIn(f.query, f.whole))
+		f.at, f.total = 0, n
+		if n > 0 {
+			sel := p.firstMarkFromTop(n)
+			p.currentMark(sel)
+			f.at = sel + 1
+		}
+		h.showFind()
+		return
+	}
+	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	f.at, f.total = 0, len(all)
+	ln, col := h.core.Line()
+	for i, r := range all {
+		if r.From.Line > ln || r.From.Line == ln && r.From.Col >= col {
+			h.core.SetCurrentMatch(r)
+			f.at = i + 1
+			break
+		}
+	}
+	h.showFind()
+}
+
+// pageFindIn is the page's find over a note's page: query's clusters case-blind, as the text's
+// FindAll reads them, whole words for * and #; byte ranges in the text the page shows.
+func pageFindIn(query string, whole bool) func(string) [][2]int {
+	needle := slices.Collect(tuicore.Graphemes(query))
+	return func(text string) [][2]int {
+		var hay []string
+		var at []int
+		i := 0
+		for c := range tuicore.Graphemes(text) {
+			hay, at = append(hay, c), append(at, i)
+			i += len(c)
+		}
+		at = append(at, len(text))
+		var out [][2]int
+		for s := 0; len(needle) > 0 && s+len(needle) <= len(hay); s++ {
+			if !strings.EqualFold(strings.Join(hay[s:s+len(needle)], ""), query) {
+				continue
+			}
+			e := s + len(needle)
+			if whole && (widget.IsKeyword(needle[0]) && s > 0 && widget.IsKeyword(hay[s-1]) ||
+				widget.IsKeyword(needle[len(needle)-1]) && e < len(hay) && widget.IsKeyword(hay[e])) {
+				continue
+			}
+			out = append(out, [2]int{at[s], at[e]})
+			s = e - 1
+		}
+		return out
+	}
 }
 
 // starFind is the editor's * and # (and g* g#): the word becomes the page's find, whole words or

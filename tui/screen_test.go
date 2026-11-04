@@ -250,7 +250,9 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	if strings.Count(short, "│") != 2 {
 		t.Fatalf("the short line's row has a guide inside the page as well as its edge: %q", short)
 	}
-	// the long line's end, in Normal mode: the view scrolls, and the guide shows inside the page
+	// the long line's end, in Normal mode: the view scrolls, and the guide shows inside the page. The
+	// centring above holds on the note's page (Rendered); the motions are the text's.
+	r.asText(t)
 	r.keys(t, decltest.Alt('2'), key('j'), key('$'))
 	r.s.WaitFor(t, "the guide inside the page", func(sc string) bool {
 		row := strings.Split(sc, "\n")[1]
@@ -270,6 +272,7 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
+	r.s.WaitForText(t, "still text") // the note's page renders in its own time
 	where := func() (int, int) {
 		x, y, ok := find(r.s.Backend.Snapshot(), "still text")
 		if !ok {
@@ -2130,6 +2133,7 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
+	r.asText(t) // wrap and line numbers are the text's
 	words := func(sc string) int { return strings.Count(sc, "word") }
 	r.s.WaitFor(t, "the long line wrapped", func(sc string) bool { return words(sc) == 40 })
 	r.h.p.Post(r.h.toggleWrap)
@@ -2192,6 +2196,7 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.s.WaitFor(t, "the note", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
+	r.asText(t) // the line numbers' gutter is the text's
 	r.s.WaitForText(t, "   1  "+line)
 	rows := strings.Split(r.s.String(), "\n")
 	// 60 columns of text, a 6-column gutter and the border: 68 wide
@@ -2218,6 +2223,8 @@ func TestTheIndentationMarksReachTheEditor(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("ind.md") })
+	r.s.WaitFor(t, "the note", func(string) bool { n := r.file(); return n.open && n.path == "ind.md" })
+	r.asText(t)                 // the marks are the text's
 	r.waitOpened(t, "····deep") // the cursor on the first line: marked because every line is
 	r.h.p.Post(func() { r.h.setIndentMarks("off") })
 	r.s.WaitFor(t, "the marks gone", func(sc string) bool {
@@ -2251,6 +2258,7 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
+	r.asText(t) // the cursor is the text's: the note's page has none
 	r.s.WaitFor(t, "dark's cursor", func(string) bool {
 		c, ok := r.s.Backend.CursorColor()
 		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xff, G: 0xaf, B: 0x00}

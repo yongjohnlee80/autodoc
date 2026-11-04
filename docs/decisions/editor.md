@@ -251,6 +251,46 @@ untouched commit writes nothing.
 
 In the code: `tui/tabledoc.go`, `tui/htmldoc.go`, `tui/files.go`
 
+## A terminal note's Rendered view
+
+In a terminal, a note's Rendered view is its page, as in the window: Raw is the text, Rendered the
+note exported in process (as the HTML pane exports it) and laid out in cells by golib's HTMLView.
+Tables are boxed, headings told apart by level, code set off, and a mind map drawn in box-drawing
+cells; any other diagram is a line saying it isn't drawn in the terminal and that Raw shows its
+source, in the UI's language. A note opens Rendered, as a table file does. Ctrl+T flips between the
+two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
+again puts the cursor at the block the reader scrolled the page to; when the
+note changes under it, it is exported again once typing rests and keeps the reader's place. Its
+links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
+either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
+
+The window's Rendered Markdown is edited in place, and the page is not, so the page reads by its own
+keys (the arrows, j/k, PgUp/PgDn, g/G, y, Ctrl+C), the mouse and its links. Any other key that types,
+or Esc, opens the text at the reader's place and goes on to the editor as that same key, so `i` lands
+in Insert mode. Space stays the leader, and chords stay the app's.
+
+The rest answers as over the text:
+
+- A right press opens the editor's menu.
+- Ctrl+O and Ctrl+I walk the jump list. A jump's place in the note comes to the page's top.
+- The breadcrumb follows the reader's place, the block at the page's top.
+
+The page has no cursor, which changes two things:
+
+- **SPC j** follows the first link at or after the page's top, among what is on screen. With none
+  on screen, it says so.
+- **Find** counts and marks what the page shows, while the text's find counts its source. Ctrl+T
+  runs the find again in the new view's terms, so "k of N" can change. The reader stays put, and the
+  current match is the first at or after their place.
+  - A hit on the page puts the editor's cursor at its block, so Raw opens there, and gives the page
+    the keyboard.
+  - A term the page doesn't show but the source has (a link's target, Markdown's own syntax such as
+    `- [ ]`) opens Raw at the reader's place, says so, and is found there. The same command means
+    the same thing whether a user or a script runs it.
+  - A term in neither view is not found, and the view stays as it is.
+
+In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`, `tui/outline.go`
+
 ## The table's clipboard, menu and row numbers
 
 The table shows row numbers and has a right-click menu of its commands. Copies and pastes use one
