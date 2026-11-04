@@ -80,8 +80,8 @@ type agentInstance struct {
 	// the session the user was told hadn't finished starting: each a session id, "" for none
 	started, told string
 	// env is what its process is started with over AutoDoc's own environment: its profile's env,
-	// then AutoDoc's (agentEnv), as its command line sets them (agentArgv); its setup's server is
-	// started with the same (runAgent)
+	// then AutoDoc's (agentEnv), in its environment (agentEnviron); its setup's server is started
+	// with the same (runAgent)
 	env              []string
 	tab              widget.TerminalTabID
 	token            string
@@ -292,10 +292,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	env := append(p.envList(), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
-	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), env)
-	if err != nil {
-		return nil, err
-	}
+	path, args := agentArgv(fillAgentCommand(p.Command, ws))
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
@@ -500,31 +497,21 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		if instance.context == "" {
 			return nil, errCrewStartHere
 		}
-		c.Args = withEnvArg(c.Args, "AUTODOC_CREW_CONTEXT="+instance.context)
 		// its setup's: AutoDoc's env (OpenCode's OPENCODE_CONFIG_CONTENT, its plugin and its MCP
 		// server), and its arguments (Claude Code's --mcp-config) after the program's own
 		if instance.profile.kind() == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
 			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
-		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
-			c.Args = withEnvArg(c.Args, k+"="+instance.setup.Env[k])
-		}
 		c.Args = withCommandArgs(c.Args, instance.setup.Argv)
 	}
+	c.Env = agentEnviron(instance)
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
 	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
-	// the CLI's terminal if it ends first (agentserver.go). Its environment is the CLI's, layer for
-	// layer, as agentArgv and the lines above give the CLI: AutoDoc's own without its spawner's
-	// identity, the profile's and AutoDoc's (instance.env: the daemon, the agent's PATH, the editor
-	// socket and the agent's token there), the session's context, then the setup's. A Codex shell
-	// runs under this server, not the CLI, so `autodoc --editor` there needs it.
+	// the CLI's terminal if it ends first (agentserver.go). A Codex shell runs under this server,
+	// not the CLI, so `autodoc --editor` there needs it.
 	var server *agentServer
 	if instance.crewed && len(instance.setup.Server) > 0 {
-		environ := slices.Concat(ownEnviron(), instance.env, []string{crew.EnvContext + "=" + instance.context})
-		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
-			environ = append(environ, k+"="+instance.setup.Env[k])
-		}
-		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, environ)
+		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env)
 		if err != nil {
 			return nil, err
 		}
@@ -1175,4 +1162,20 @@ func (a *agents) raiseSession(session string) bool {
 		}
 	}
 	return false
+}
+
+// agentEnviron is the environment an agent's CLI and its setup's server start with, layer for
+// layer, a later one winning: AutoDoc's own without its spawner's identity (ownEnviron), the
+// profile's and AutoDoc's (instance.env: the daemon, the agent's PATH, the editor socket and the
+// agent's token there), then a crewed start's session context and its setup's. All of it is the
+// process's environment, readable by the user alone, never its command line.
+func agentEnviron(instance *agentInstance) []string {
+	environ := slices.Concat(ownEnviron(), instance.env)
+	if instance.crewed {
+		environ = append(environ, crew.EnvContext+"="+instance.context)
+		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
+			environ = append(environ, k+"="+instance.setup.Env[k])
+		}
+	}
+	return environ
 }
