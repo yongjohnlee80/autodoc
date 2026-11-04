@@ -182,7 +182,9 @@ func newSurfaceRigCeiling(t *testing.T, ceiling int64) *surfaceRig {
 	r := &surfaceRig{sink: &fakeSink{}, plug: plug, infos: make(chan plugin.SurfaceInfo, 64),
 		violated: make(chan string, 8), msgs: make(chan map[string]any, 4096), inos: map[uint64]bool{}}
 	r.owner = newSurfaceOwnerCeiling(host, r.sink, func(i plugin.SurfaceInfo) { r.infos <- i }, func(why string) { r.violated <- why }, ceiling)
+	stop, read := make(chan struct{}), make(chan struct{})
 	go func() {
+		defer close(read)
 		for {
 			m, g, err := plug.Recv()
 			if err != nil {
@@ -191,17 +193,32 @@ func newSurfaceRigCeiling(t *testing.T, ceiling int64) *surfaceRig {
 			}
 			for i := range g.Len() { // before the op is read, so a cell's count after it includes them
 				var st unix.Stat_t
-				if fd := g.Take(i); unix.Fstat(fd, &st) == nil {
+				fd := g.Take(i)
+				if unix.Fstat(fd, &st) == nil {
 					r.inoMu.Lock()
 					r.inos[st.Ino] = true
 					r.inoMu.Unlock()
 				}
+				unix.Close(fd) // the plugin's memory buffers: the cells read the ops, not the pixels
 			}
-			g.CloseAll() // the plugin's memory buffers: the cells read the ops, not the pixels
-			r.msgs <- m
+			select {
+			case r.msgs <- m:
+			case <-stop:
+				return
+			}
 		}
 	}()
-	t.Cleanup(func() { r.owner.Close(); plug.Close() })
+	// The plugin's end is closed only once its reader is done (SurfaceConn.Close's contract, as the
+	// SDK's Surface.Close keeps it): closed under a reader still looping, the reader's next Recv
+	// took its fd's number as it was reused, by the next cell's host end, and that cell's frames
+	// went to this reader, never reaching its owner ("no frame reached the sink").
+	t.Cleanup(func() {
+		r.owner.Close()
+		close(stop)
+		plug.Shutdown()
+		<-read
+		plug.Close()
+	})
 	return r
 }
 
