@@ -79,6 +79,7 @@ configuration. `editor.commands` lists them with the rest.
 | `help.tutorial` |  |  | the tutorial |
 | `kbtype.apply` |  | `<name or git URL>` | create a KB type's folders and files in the open workspace, keeping every file already there: autovim.kb, zettelkasten.kb, para.kb, slipbox.kb, or a type's git URL |
 | `links.toggle` |  |  | the links |
+| `mindmap.toggle` |  |  | the Mindmap |
 | `notices.open` |  |  | notifications |
 | `panel.arrange` |  |  | arrange a panel |
 | `panel.maximize` |  |  | maximize or restore the terminal or agents |
