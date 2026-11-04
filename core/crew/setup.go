@@ -304,13 +304,15 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 // and never in Codex's shared daemon (started by whichever agent came first, and kept with that
 // one's identity). Given the crew MCP server too, that server is on its command line, with
 // each crew tool approved by name (`tools.<tool>.approval_mode`, never the server's whole default:
-// least privilege, as Claude's exact rules), and the TUI attaches to it (`--remote`). None of it is
-// written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a TUI given any
-// runs embedded, off every app-server: codex-cli 0.163.0), is left alone. AUTODOC_CODEX_SERVER names
-// the agent's server to its autodoc, for codex-here and the waker's locator. With no folder of its
-// own, a Codex that takes --no-daemon is given it (codexHasNoDaemon), and has no step: there is no
-// server to find its thread on, so it isn't woken, and the setup says so. One whose Codex can't be
-// read (not found, failing, or slow) is refused: either way of starting it could be wrong.
+// least privilege, as Claude's exact rules), and the TUI attaches to it (`--remote`). The MCP
+// server's environment is named there (`env_vars`), its values in Env, never on the command line.
+// None of it is written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a
+// TUI given any runs embedded, off every app-server: codex-cli 0.163.0), is left alone.
+// AUTODOC_CODEX_SERVER names the agent's server to its autodoc, for codex-here and the waker's
+// locator. With no folder of its own, a Codex that takes --no-daemon is given it
+// (codexHasNoDaemon), and has no step: there is no server to find its thread on, so it isn't woken,
+// and the setup says so. One whose Codex can't be read (not found, failing, or slow) is refused:
+// either way of starting it could be wrong.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
 	program := in.Program
 	if program == "" {
@@ -358,14 +360,25 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		}
 		server = append(server, "-c", key+".command="+tomlValue(sv.Command[0]), "-c", key+".args="+tomlValue(args))
 		// Codex starts a stdio MCP server with a filtered environment: the session's context, which
-		// the host gives the app-server, passes on by name, or `crew mcp` finds no session of its own
-		server = append(server, "-c", key+".env_vars="+tomlValue([]string{EnvContext}))
+		// the host gives the app-server, passes on by name, or `crew mcp` finds no session of its own.
+		// The server's own variables pass the same way, their values in the setup's Env, which the
+		// host gives the app-server too: never on its command line, which /proc/<pid>/cmdline shows
+		// every user of the machine for as long as it runs (a token in one would leak)
+		names := []string{EnvContext}
 		for _, k := range slices.Sorted(maps.Keys(sv.Env)) {
 			if !codexBareKey.MatchString(k) {
 				return fmt.Errorf("crew: MCP server %q env name %q isn't a bare TOML key", sv.Name, k)
 			}
-			server = append(server, "-c", key+".env."+k+"="+tomlValue(sv.Env[k]))
+			if k == EnvContext || k == EnvCodexServer {
+				return fmt.Errorf("crew: MCP server %q env name %q is AutoDoc's own", sv.Name, k)
+			}
+			if v, ok := s.Env[k]; ok && v != sv.Env[k] {
+				return fmt.Errorf("crew: MCP server %q env name %q has another value already: the app-server has one environment", sv.Name, k)
+			}
+			s.Env[k] = sv.Env[k]
+			names = append(names, k)
 		}
+		server = append(server, "-c", key+".env_vars="+tomlValue(names))
 		for _, t := range sv.Tools {
 			if !codexBareKey.MatchString(t) {
 				return fmt.Errorf("crew: MCP tool name %q isn't a bare TOML key", t)
