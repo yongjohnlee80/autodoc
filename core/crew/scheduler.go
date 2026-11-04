@@ -22,9 +22,19 @@ const WakeNotice = "[AutoDoc mail] Mail is waiting for you. Run: autodoc mail re
 // name alone, and that it takes no arguments, so the agent has no schema to look up (MCPToolArgs).
 const WakeNoticeMCP = "[AutoDoc mail] Mail is waiting for you: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
 
-// The texts a notice naming its senders is made of (NoticeFor): its head, then the senders, then
-// the way to read the mail.
+// WakeNoticeAgain and WakeNoticeMCPAgain are WakeNotice and WakeNoticeMCP for a re-ring: the mail
+// waiting is mail the session was already rung for, or received before (NoticeForAgain).
 const (
+	WakeNoticeAgain    = "[AutoDoc mail] Mail is still waiting for you, rung again. Run: autodoc mail receive (not SendMessage)"
+	WakeNoticeMCPAgain = "[AutoDoc mail] Mail is still waiting for you, rung again: call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
+)
+
+// The texts a notice naming its senders is made of (NoticeFor): its head, then the senders, then
+// the way to read the mail. A re-ring's head says the mail is still waiting, and its senders end
+// with noticeAgain.
+const (
+	noticeHeadAgain  = "[AutoDoc mail] Mail is still waiting for you: "
+	noticeAgain      = ", rung again"
 	noticeHead       = "[AutoDoc mail] Mail is waiting for you: "
 	noticeTailCLI    = ". Run: autodoc mail receive (not SendMessage)"
 	noticeTailMCP    = ". Call mail_receive, a tool of the autodoc MCP server, with no arguments, until more is false (not SendMessage)."
@@ -99,6 +109,13 @@ type WaitingSenders interface {
 	WaitingSenders(tx Tx, s Session) (senders []Sender, more bool, err error)
 }
 
+// RungBefore is whether every delivery waiting for a session is one it received before, its lease
+// since lapsed, so a ring for it is a re-ring (NoticeForAgain). A SessionEnder that implements it is
+// asked in the attempt's read; false when nothing waits, or when more wait than it reads.
+type RungBefore interface {
+	RungBefore(tx Tx, s Session) (bool, error)
+}
+
 // noticeName is a sender address a notice may print: a codename, user or autodoc, with an
 // @project or @<scope id>; nothing that could read as an instruction, a command, a path or a
 // variable.
@@ -114,6 +131,14 @@ var noticeKinds = []string{KindClaude, KindCodex, KindAgy, KindOpenCode}
 // (noticeName) is counted in the more, never printed; a kind not known is left out. With none, it
 // is WakeNotice or WakeNoticeMCP, byte for byte.
 func NoticeFor(via MailVia, senders []Sender, more bool) string {
+	return NoticeForAgain(via, senders, more, false)
+}
+
+// NoticeForAgain is NoticeFor for a re-ring when again holds: the session was rung for this mail
+// and hasn't received since, or every delivery waiting is one it received before (its lease
+// lapsed). Its text says the mail is still waiting and that this is a re-ring, so the agent never
+// takes it for new mail. With again false it is NoticeFor's text, byte for byte.
+func NoticeForAgain(via MailVia, senders []Sender, more, again bool) string {
 	var named []string
 	rest := 0
 	for _, s := range senders {
@@ -131,8 +156,13 @@ func NoticeFor(via MailVia, senders []Sender, more bool) string {
 		named = append(named, n)
 	}
 	if len(named) == 0 {
-		if via == MailViaMCP {
+		switch {
+		case via == MailViaMCP && again:
+			return WakeNoticeMCPAgain
+		case via == MailViaMCP:
 			return WakeNoticeMCP
+		case again:
+			return WakeNoticeAgain
 		}
 		return WakeNotice
 	}
@@ -145,6 +175,9 @@ func NoticeFor(via MailVia, senders []Sender, more bool) string {
 	tail := noticeTailCLI
 	if via == MailViaMCP {
 		tail = noticeTailMCP
+	}
+	if again {
+		return noticeHeadAgain + strings.Join(named, ", ") + noticeAgain + tail
 	}
 	return noticeHead + strings.Join(named, ", ") + tail
 }
@@ -423,6 +456,14 @@ func (m *Manager) stillCurrent(ctx context.Context, session, token string, gener
 		if !ok {
 			return err
 		}
+		// a re-ring: a ring since the session's last receive failed or went unanswered, or every
+		// delivery waiting is one it received before (its lease lapsed)
+		why.again = w.Failures > 0
+		if rb, is := m.ender.(RungBefore); is && !why.again {
+			if before, err := rb.RungBefore(tx, s); err == nil {
+				why.again = before
+			}
+		}
 		if ws, is := m.ender.(WaitingSenders); is {
 			// the notice's senders, in the same read: one it can't read names no one, and the wake
 			// goes on with the plain notice
@@ -441,11 +482,12 @@ type waiting struct {
 	via     string
 	senders []Sender
 	more    bool
+	again   bool // a re-ring (NoticeForAgain)
 }
 
 // notice is the attempt's wake text for an endpoint of kind (NoticeFor).
 func (w waiting) notice(kind string) string {
-	return NoticeFor(SessionMailVia(w.via, kind), w.senders, w.more)
+	return NoticeForAgain(SessionMailVia(w.via, kind), w.senders, w.more, w.again)
 }
 
 // Abandon gives up an attempt that never made its call: its row goes idle, its deadline kept.

@@ -86,6 +86,7 @@ func Run(t *testing.T, h Harness) {
 		{"AJobIsLeasedReofferedAndReportedOnce", testAJobIsLeasedReofferedAndReportedOnce},
 		{"TheUsersUnrungSendIsAJobOfAHostThatTakesThem", testTheUsersUnrungSendIsAJobOfAHostThatTakesThem},
 		{"TheFeedReadsAJobAndItsHost", testTheFeedReadsAJobAndItsHost},
+		{"MailReceivedBeforeIsARering", testMailReceivedBeforeIsARering},
 		{"HandledMailIsDeletedAfterTheWindow", testHandledMailIsDeletedAfterTheWindow},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.fn(t, h) })
@@ -1519,6 +1520,69 @@ func testAnInboxCountsTheDeliveriesHeldUnanswered(t *testing.T, h Harness) {
 	}
 	if d := r.delivery(brief.Items[0].Delivery.ID); d.State != mail.Leased || d.Lease != brief.Items[0].Delivery.Lease {
 		t.Fatalf("the premise, the expired message's delivery still stored leased under its lease: %+v", d)
+	}
+}
+
+// A wake for mail the session received before is a re-ring (crew.RungBefore): not before any
+// receive; after one whose lease lapsed, the delivery requeued (Expire, as the scheduler's writes
+// run it), it is; and once fresh mail waits beside it, it is not.
+func testMailReceivedBeforeIsARering(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	gold := crew.Session{ID: "s-gold", Profile: "p-gold"}
+	rungBefore := func() bool {
+		t.Helper()
+		var got bool
+		if err := r.st.Mail.Read(r.ctx, func(tx mail.Tx) error {
+			var err error
+			got, err = r.m.RungBefore(tx, gold)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "held", Key: "k1"})
+	if rungBefore() {
+		t.Fatal("mail never received is a re-ring")
+	}
+	if got := r.receive("s-gold"); len(got.Items) != 1 {
+		t.Fatalf("the receive: %+v", got)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	r.write(func(tx mail.Tx) error { return r.m.Expire(tx) })
+	if !rungBefore() {
+		t.Fatal("mail received before, its lease lapsed, is not a re-ring")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fresh", Key: "k2"})
+	if rungBefore() {
+		t.Fatal("fresh mail waiting beside mail received before is a re-ring")
+	}
+
+	// a backlog longer than a notice reads: 64 received before, their leases lapsed, then one fresh
+	// one behind them. The fresh one is past the first 64, and it still waits: not a re-ring.
+	r = newRig(t, h)
+	for i := range 64 {
+		r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: fmt.Sprintf("held %d", i), Key: fmt.Sprintf("b%d", i)})
+	}
+	received := 0
+	for {
+		got := r.receive("s-gold")
+		if len(got.Items) == 0 {
+			break
+		}
+		received += len(got.Items)
+	}
+	if received != 64 {
+		t.Fatalf("the premise: received %d of the 64", received)
+	}
+	r.clock.Advance(mail.LeaseFor + time.Second)
+	r.write(func(tx mail.Tx) error { return r.m.Expire(tx) })
+	if !rungBefore() {
+		t.Fatal("64 deliveries received before, their leases lapsed, are not a re-ring")
+	}
+	r.send("s-jarvis", mail.Send{To: []string{"gold"}, Body: "fresh, the 65th", Key: "b64"})
+	if rungBefore() {
+		t.Fatal("fresh mail waiting behind 64 received before is a re-ring")
 	}
 }
 

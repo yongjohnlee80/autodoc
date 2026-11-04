@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -63,7 +64,8 @@ func (w *fakeWaker) Wake(ctx context.Context, ep crew.Endpoint, notice string) e
 			return ctx.Err()
 		}
 	}
-	if !strings.HasPrefix(notice, "[AutoDoc mail] Mail is waiting for you") || !strings.HasSuffix(notice, "Run: autodoc mail receive (not SendMessage)") {
+	fresh, again := strings.HasPrefix(notice, "[AutoDoc mail] Mail is waiting for you"), strings.HasPrefix(notice, "[AutoDoc mail] Mail is still waiting for you")
+	if !(fresh || again) || !strings.HasSuffix(notice, "Run: autodoc mail receive (not SendMessage)") {
 		return fmt.Errorf("a notice that isn't a CLI wake notice: %q", notice)
 	}
 	w.mu.Lock()
@@ -189,6 +191,19 @@ func (r *wakeRig) drain(cred string) []string {
 	}
 }
 
+// rungAgain fails unless session's first notice is a fresh ring's ("Mail is waiting for you") and
+// its last a re-ring's ("Mail is still waiting for you"): the ring is for mail it was rung for before.
+func (r *wakeRig) rungAgain(session string) {
+	r.t.Helper()
+	r.waker.mu.Lock()
+	ns := slices.Clone(r.waker.notices[session])
+	r.waker.mu.Unlock()
+	if len(ns) < 2 || !strings.HasPrefix(ns[0], "[AutoDoc mail] Mail is waiting for you") ||
+		!strings.HasPrefix(ns[len(ns)-1], "[AutoDoc mail] Mail is still waiting for you") {
+		r.t.Fatalf("session %s's notices %q: want the first a fresh ring's, the last a re-ring's", session, ns)
+	}
+}
+
 func (r *wakeRig) wake(session string) crew.Wake {
 	r.t.Helper()
 	var w crew.Wake
@@ -243,6 +258,7 @@ func TestNoMailIsStranded(t *testing.T) {
 		r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeIdle && w.Failures == 1 })
 		r.advance(6 * time.Second)
 		r.woken(gold) // its retry, after the first backoff
+		r.rungAgain(gold)
 		if got := r.drain(goldCred); len(got) != 1 {
 			t.Fatalf("gold drained %v", got)
 		}
@@ -261,6 +277,7 @@ func TestNoMailIsStranded(t *testing.T) {
 		r.settled(gold, func(w crew.Wake) bool { return w.State == crew.WakeIdle && w.Failures == 1 })
 		r.advance(6 * time.Second) // and its backoff passes
 		r.woken(gold)
+		r.rungAgain(gold)
 		if got := r.drain(goldCred); len(got) != 1 {
 			t.Fatalf("gold drained %v", got)
 		}
@@ -277,6 +294,7 @@ func TestNoMailIsStranded(t *testing.T) {
 		} // and never acked
 		r.advance(mail.LeaseFor + time.Second) // the lease lapses: the delivery is queued again
 		r.woken(gold)
+		r.rungAgain(gold)
 		if got := r.drain(goldCred); len(got) != 1 {
 			t.Fatalf("gold drained %v after the lapse", got)
 		}

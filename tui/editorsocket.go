@@ -53,7 +53,8 @@ import (
 
 // The codes an editor verb refuses with, beside golib's invalid params.
 const (
-	codeEditorNotGranted       = golibrpc.CodeAccessDenied // the capability is not granted: the user was asked
+	codeEditorNotAgent         = golibrpc.CodeAccessDenied // param 1 is not the token of an agent AutoDoc started
+	codeEditorNotGranted int64 = -32098                    // the capability is not granted: the user is asked by a card; wait for their answer by mail, then call again
 	codeEditorStale      int64 = -32095                    // the text is not the revision the agent read
 	codeEditorReadOnly   int64 = -32096                    // the page is read-only
 	codeEditorRefused    int64 = -32097                    // the user said no, or the command line failed
@@ -227,7 +228,7 @@ func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 	}
 	agent := h.agents.agentOfToken(tok)
 	if agent == "" {
-		return "", nil, &golibrpc.Error{Code: codeEditorNotGranted,
+		return "", nil, &golibrpc.Error{Code: codeEditorNotAgent,
 			Message: "param 1 is not an agent's token: only the agents AutoDoc started reach the page ($AUTODOC_EDITOR_TOKEN)"}
 	}
 	return agent, editorArgs(req.Params[1:]), nil
