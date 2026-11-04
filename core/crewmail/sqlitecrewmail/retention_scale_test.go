@@ -167,8 +167,8 @@ func TestAPruneReadsOnlyTheOldJournal(t *testing.T) {
 	}
 	if err := only.Mail().Read(ctx, func(tx mail.Tx) error {
 		oldest, newest, err := tx.(*Tx).ChangeBounds()
-		if err == nil && (oldest == 0 || oldest != newest) {
-			t.Errorf("the old-only journal after the prune: rows %d to %d, want its newest alone", oldest, newest)
+		if err == nil && (oldest != 5 || newest != 5) { // seq 1 to 5 were written: 5 is the newest
+			t.Errorf("the old-only journal after the prune: rows %d to %d, want its newest alone, seq 5", oldest, newest)
 		}
 		return err
 	}); err != nil {
