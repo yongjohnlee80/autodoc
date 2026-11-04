@@ -234,6 +234,10 @@ func TestAPluginsCloneRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	r, _ := pluginTUI(t, t.TempDir())
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
 	env := envReported(t, r, report)
+	// the wrapper reports before it execs the clone, which then writes into the plugins' dir: the
+	// card is shown once the clone and its rev-parse have ended, so the test's cleanup never removes
+	// a dir git is still writing ("directory not empty")
+	r.question(t)
 	wantOwnEnv(t, "git's clone", env, polluted, kept)
 	if env["GIT_TERMINAL_PROMPT"] != "0" {
 		t.Errorf("git's clone has GIT_TERMINAL_PROMPT %q, want AutoDoc's 0", env["GIT_TERMINAL_PROMPT"])
