@@ -101,6 +101,8 @@ func TestTwoWorkspacesShareTheWriter(t *testing.T) {
 		switch {
 		case time.Now().After(stalled):
 			t.Fatalf("not both indexed: no progress in %s (pending, docs, chunks per workspace = %v)", indexStall, last)
+		case time.Now().After(capped) && capped.Before(start):
+			t.Fatalf("not both indexed: the cell started with less than 30 s of the test's deadline left (go test -timeout), so it could not wait (pending, docs, chunks per workspace = %v)", last)
 		case time.Now().After(capped):
 			t.Fatalf("not both indexed by %s, though still moving (pending, docs, chunks per workspace = %v)", time.Since(start).Round(time.Second), last)
 		}
