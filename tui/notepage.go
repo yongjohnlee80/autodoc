@@ -35,6 +35,9 @@ type cellNotePage struct {
 	// shownTop is top as the page was scrolled to the cursor: a page hidden at another top was
 	// scrolled by the reader, and Raw's cursor follows it there (hidden).
 	top, shownTop int
+	// toCursor is set while the page scrolls itself to the cursor (toCursorBlock): the breadcrumb
+	// is the cursor's then, and only a reader's scroll moves it to the page's top
+	toCursor bool
 }
 
 // notePageView is the page as the editor's document view: shown, it renders the note's text,
@@ -154,9 +157,17 @@ func (p *cellNotePage) Moved(_, at int) {
 		return
 	}
 	if from, to, _ := p.onScreen(len(p.h.core.Value())); at < from || at >= to {
-		p.view.ScrollToSource(at)
+		p.toCursorBlock(at)
 	}
 	p.shownTop = p.top
+}
+
+// toCursorBlock scrolls the page to the cursor's block, at source byte at: the page's own scroll,
+// which leaves the breadcrumb at the cursor.
+func (p *cellNotePage) toCursorBlock(at int) {
+	p.toCursor = true
+	p.view.ScrollToSource(at)
+	p.toCursor = false
 }
 
 // cursorToMark puts the editor's cursor at the start of the block holding the page's i-th mark:
@@ -249,7 +260,12 @@ const diagramNoticeID = "autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the
 func (p *cellNotePage) viewOf() *notePageView {
 	if p.view == nil {
 		// the reader's place: Raw opens there, and the breadcrumb follows it
-		scrolled := func(at int) { p.top = at; p.h.pagePlace(at) }
+		scrolled := func(at int) {
+			p.top = at
+			if !p.toCursor {
+				p.h.pagePlace(at)
+			}
+		}
 		hv := widget.NewHTMLView(widget.WithOnLink(p.h.htmlLink), widget.WithOnScroll(scrolled))
 		hv.SetOnRefused(p.h.resourceRefused)
 		p.view = &notePageView{HTMLView: hv, page: p}
@@ -339,7 +355,7 @@ func (p *cellNotePage) render(text []byte, toCursor bool) {
 		}
 		p.view.SetHTML(a.v)
 		if toCursor {
-			p.view.ScrollToSource(h.cursorBytes())
+			p.toCursorBlock(h.cursorBytes())
 			p.shownTop = p.top // the block the cursor is in: a report is synchronous, or none was due
 			h.findRecount()    // shown: a find on counts and marks what the page shows
 		}
