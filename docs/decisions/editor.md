@@ -260,10 +260,10 @@ cells; any other diagram is a line saying it isn't drawn in the terminal and tha
 source, in the UI's language. A note opens Rendered, as a table file does. Ctrl+T flips between the
 two, and the choice holds across files. Shown, the page brings the cursor's block to its top; when the
 note changes under it, it is exported again once typing rests and keeps the reader's place. Its
-links open as the pane's do, and its images load from the note's folder. A GUI build run in a
-terminal keeps the note as its text.
+links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
+either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
 
-In the code: `tui/notepage_tui.go`, `tui/relationviews_tui.go`
+In the code: `tui/notepage.go`, `tui/feature.go`
 
 ## The table's clipboard, menu and row numbers
 

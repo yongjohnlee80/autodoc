@@ -9,14 +9,7 @@ import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 const relationMenuQML, relationViewsQML = "", ""
 
-// relationViewFeatures are a terminal build's own features: a note's Rendered view, its page in
-// cells (notepage_tui.go). A terminal draws no GlobeMap and no Mindmap of the window's.
-func (h *Host) relationViewFeatures() []Feature {
-	if h.relationViews == nil {
-		h.relationViews = []Feature{newCellNotePage(h)}
-	}
-	return h.relationViews
-}
+func (h *Host) relationViewFeatures() []Feature { return nil }
 
 // relationViewChoices: a terminal has no GlobeMap or Mindmap choosers (language.go's choiceLabels).
 func relationViewChoices() map[string][]string { return nil }

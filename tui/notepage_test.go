@@ -1,5 +1,3 @@
-//go:build !gui
-
 package tui
 
 import (
@@ -13,7 +11,8 @@ import (
 const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- | ---: |\n| apple | 3 |\n\n" +
 	"```mermaid\nmindmap\n  root((Larder))\n    Shelf\n    Bin\n```\n\n```mermaid\nflowchart LR\n  A-->B\n```\n"
 
-// TestATerminalNoteIsItsPage (docs/decisions/editor.md#a-terminal-notes-rendered-view): a note
+// TestATerminalNoteIsItsPage (docs/decisions/editor.md#a-terminal-notes-rendered-view): on a
+// terminal backend, in either build (go test -tags gui runs it as a GUI build's --ui), a note
 // opens Rendered as its page in cells (its table boxed, its mind map drawn, another diagram said
 // not to be drawn here), Ctrl+T shows its text and back its page, and an edit while the page is
 // shown draws it again once typing rests.

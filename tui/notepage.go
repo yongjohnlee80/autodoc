@@ -1,5 +1,3 @@
-//go:build !gui
-
 package tui
 
 import (
@@ -13,7 +11,8 @@ import (
 )
 
 // A NOTE'S RENDERED VIEW IN A TERMINAL (docs/decisions/editor.md#a-terminal-notes-rendered-view):
-// Raw is the note's text, Rendered the page, as in the window. The page is the note exported in
+// on a terminal backend, in either build (a GUI build run with --ui too), Raw is the note's text,
+// Rendered the page, as in the window. A window keeps its own (native) path: this does nothing there. The page is the note exported in
 // process, as the HTML pane's is, and laid out in cells by golib's HTMLView: tables boxed, headings
 // by level, code set off, a mind map drawn, any other diagram a line saying it isn't drawn here, in
 // the UI's language. Ctrl+T flips between the two, as the window's does; the page shows the
@@ -52,9 +51,15 @@ func (*cellNotePage) Reread(Page)                  {}
 func (*cellNotePage) Closed()                      {}
 func (p *cellNotePage) notice(kind string) string  { return p.h.trf(diagramNoticeID, kind) }
 func (p *cellNotePage) isShown() bool              { return p.view != nil && p.view.Visible() }
-func (p *cellNotePage) editorIsTheTerminals() bool { _, ok := p.h.editor.(*widget.Editor); return ok }
-func (p *cellNotePage) LanguageChanged()           { p.giveNotice() }
-func (p *cellNotePage) giveNotice()                { widget.WithDiagramNotice(p.notice)(p.view.HTMLView) }
+
+// onATerminal reports whether the program draws in a terminal's cells: not a window's native views,
+// and the editor the terminal's (preview.go's showDiagram decides the same way).
+func (p *cellNotePage) onATerminal() bool {
+	_, ok := p.h.editor.(*widget.Editor)
+	return ok && !p.h.native()
+}
+func (p *cellNotePage) LanguageChanged() { p.giveNotice() }
+func (p *cellNotePage) giveNotice()      { widget.WithDiagramNotice(p.notice)(p.view.HTMLView) }
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
 // the terminal (Raw shows its source)".
@@ -72,11 +77,11 @@ func (p *cellNotePage) viewOf() *notePageView {
 	return p.view
 }
 
-// Shown makes the page the editor's Rendered view for a note: a Markdown page, in the terminal's
-// editor. Any other page keeps what documentFor gave it (a table file its table, the rest their
-// text). A note shown while the page is drawn renders at once.
+// Shown makes the page the editor's Rendered view for a note: a Markdown page, on a terminal. Any
+// other page keeps what documentFor gave it (a table file its table, the rest their text), and a
+// window's editor its own. A note shown while the page is drawn renders at once.
 func (p *cellNotePage) Shown(pg Page) {
-	if pg.Kind != kind.Markdown || !p.editorIsTheTerminals() {
+	if pg.Kind != kind.Markdown || !p.onATerminal() {
 		p.shown = fileRef{}
 		return
 	}
