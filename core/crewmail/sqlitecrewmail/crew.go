@@ -1,8 +1,10 @@
 package sqlitecrewmail
 
 import (
+	"cmp"
 	"errors"
 	"github.com/yongjohnlee80/golib/dao"
+	"slices"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -286,11 +288,16 @@ func (t *Tx) LiveSession(profile string) (crew.Session, bool, error) {
 	return *r, true, nil
 }
 
+// LiveSessionsOfScope is scope's live sessions, by id. They are read from the live sessions
+// (crew_session_live), the crew's size, and kept by host here: asked by host, SQLite searched every
+// session the host ever had (UNIQUE (host, epoch, instance)), which grows with each restart.
 func (t *Tx) LiveSessionsOfScope(scope string) ([]crew.Session, error) {
-	rows, err := t.t.sessions.On(t.tx).With(cHost, scope).WithPredicate(live).OrderBy(dao.Asc(byID)).Select()
+	rows, err := t.t.sessions.On(t.tx).WithPredicate(live).Select()
 	if err != nil {
 		return nil, err
 	}
+	rows = slices.DeleteFunc(rows, func(r *crew.Session) bool { return r.Host != scope })
+	slices.SortFunc(rows, func(a, b *crew.Session) int { return cmp.Compare(a.ID, b.ID) })
 	out := make([]crew.Session, len(rows))
 	for i, r := range rows {
 		out[i] = *r
