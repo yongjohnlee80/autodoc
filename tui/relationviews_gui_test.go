@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -759,10 +760,13 @@ func windowed(t *testing.T, d *daemon) *running {
 	return r
 }
 
-// The GUI build run in a terminal (no --gui) is a terminal: its document names neither view, it
-// has neither feature nor command, and Relations › Links is its only item; Preferences' GlobeMap…
-// says the settings are a window's. Run as a window, the same build has all three, and the dialog.
+// The GUI build run in a terminal (no --gui) is a terminal: its document names neither window view
+// (GlobeMap, the window's Mindmap), and its one relation view is the terminal's Mindmap in cells,
+// with its command beside Relations › Links (docs/decisions/editor.md); Preferences' GlobeMap… says
+// the settings are a window's. Run as a window, the same build has the window's two views, their
+// three commands, and the dialog.
 func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
+	windowMindmap := regexp.MustCompile(`(^|[^A-Za-z])Mindmap \{`) // the window's, not CellMindmap
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	for _, gui := range []bool{false, true} {
 		r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui})
@@ -777,13 +781,17 @@ func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 				}
 				return out
 			})
-		views := strings.Contains(doc, `qsTrId("autodoc.gui.relations.globemap")`) || strings.Contains(doc, "GlobeMap {") || strings.Contains(doc, "Mindmap {")
+		views := strings.Contains(doc, `qsTrId("autodoc.gui.relations.globemap")`) || strings.Contains(doc, "GlobeMap {") ||
+			windowMindmap.MatchString(doc)
+		cells := strings.Contains(doc, "CellMindmap {")
 		switch {
 		case !strings.Contains(doc, `MenuItem { text: qsTrId("autodoc.main.links_spc_l")`):
 			t.Errorf("gui %v: Relations › Links is gone", gui)
 		case gui != views:
-			t.Errorf("gui %v: the document has the relation views: %v", gui, views)
-		case gui && (feats != 2 || len(cmds) != 3), !gui && (feats != 0 || len(cmds) != 1):
+			t.Errorf("gui %v: the document has the window's relation views: %v", gui, views)
+		case gui == cells:
+			t.Errorf("gui %v: the document has the terminal's Mindmap: %v", gui, cells)
+		case gui && (feats != 2 || len(cmds) != 3), !gui && (feats != 1 || !slices.Equal(cmds, []string{"App.toggleMindmap", "App.toggleRelations"})):
 			t.Errorf("gui %v: %d relation view features, commands %v", gui, feats, cmds)
 		}
 		// Preferences › GlobeMap… names its command in every build: the dialog in a window, a word
