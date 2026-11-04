@@ -258,7 +258,8 @@ note exported in process (as the HTML pane exports it) and laid out in cells by 
 Tables are boxed, headings told apart by level, code set off, and a mind map drawn in box-drawing
 cells; any other diagram is a line saying it isn't drawn in the terminal and that Raw shows its
 source, in the UI's language. A note opens Rendered, as a table file does. Ctrl+T flips between the
-two, and the choice holds across files. Shown, the page brings the cursor's block to its top; when the
+two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
+again puts the cursor at the block the reader scrolled the page to; when the
 note changes under it, it is exported again once typing rests and keeps the reader's place. Its
 links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
 either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
