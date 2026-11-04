@@ -292,7 +292,10 @@ func crewReissueMain(ctx context.Context, configPath string, args []string, stdo
 		return 1
 	}
 	if !asJSON {
-		fmt.Fprintln(stdout, res.said())
+		if _, err := fmt.Fprintln(stdout, res.said()); err != nil {
+			fmt.Fprintln(stderr, "autodoc:", err)
+			return 1
+		}
 		return 0
 	}
 	enc := json.NewEncoder(stdout)
