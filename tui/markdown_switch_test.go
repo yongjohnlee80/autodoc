@@ -14,7 +14,7 @@ import (
 // body line) in its Raw view, its crumb naming the heading the cursor is under, the second as much
 // as the first: the page's syntax is Markdown both times, so no change of it reaches the editor,
 // and the buffer shown second must take the highlighting the editor already has. Opening the same
-// note again, and going back with Ctrl+O, draw it highlighted too.
+// note again, and the other again with :e, draw it highlighted too.
 func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 	note := func(h1 string) string { return "# " + h1 + "\n\nSome **bold** words.\n\n## Shelf\n\nbeans\n" }
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", note("Larder"), "b.md", note("Cellar")}})
@@ -67,8 +67,8 @@ func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 	check("the first again", "a.md", "Larder")
 	open("a.md")
 	check("the same note opened again", "a.md", "Larder")
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'o', Mods: tuicore.ModCtrl})
-	check("back with Ctrl+O", "b.md", "Cellar")
+	r.command(t, "e b.md")
+	check("the second again with :e", "b.md", "Cellar")
 }
 
 // cellOnScreen is the style of row's cell under byte offset i of its text.
