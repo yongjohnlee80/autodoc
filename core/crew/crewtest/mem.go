@@ -298,6 +298,7 @@ func (t *memTx) Endpoint(session string) (crew.Endpoint, bool, error) {
 func (t *memTx) PutEndpoint(e crew.Endpoint) error { t.st.ends[e.Session] = e; return nil }
 
 func (t *memTx) DeleteEndpoint(session string) error { delete(t.st.ends, session); return nil }
+func (t *memTx) DeleteWake(session string) error     { delete(t.st.wakes, session); return nil }
 
 func (t *memTx) Attention(session string) (crew.Attention, bool, error) {
 	a, ok := t.st.attn[session]

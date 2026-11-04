@@ -153,6 +153,9 @@ type Tx interface {
 
 	Wake(session string) (Wake, bool, error)
 	PutWake(Wake) error
+	// DeleteWake drops session's wake row: an ended session's, so the table stays the live crew's
+	// size (every scheduler sweep reads it). A missing row is no error.
+	DeleteWake(session string) error
 	// WakesDue is the idle rows with pending_gen past announced_gen whose next_at is unset or at or
 	// before now, of a live session with an endpoint of one of kinds (the kinds the scheduler has
 	// wakers for): the sessions a wake may be reserved for. An ended session's row, an

@@ -1,6 +1,7 @@
 package sqlitecrewmail
 
 import (
+	"cmp"
 	"slices"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -188,14 +189,28 @@ func (t *Tx) PutFallbackJob(j mail.FallbackJob) error {
 		cTries: j.Tries, cCreated: j.Created, cDoneAt: j.DoneAt, cOutcome: string(j.Outcome)}).Upsert()
 }
 
+// FallbackOffers is host's open jobs and its leased ones whose lease lapsed, oldest first, at most
+// limit. Each state is its own read by mail_fallback_host (host, state, created): asked as one OR of
+// the two, SQLite searched by host alone and read every job the host ever had, done ones included.
 func (t *Tx) FallbackOffers(host string, now int64, limit int) ([]mail.FallbackJob, error) {
 	if limit <= 0 {
 		return nil, errLimit
 	}
-	rows, err := t.m.jobs.On(t.tx).With(cHost, host).WithPredicate(dao.Or(dao.Eq(`"mail_fallback"."state"`, mail.JobOpen),
-		dao.And(dao.Eq(`"mail_fallback"."state"`, mail.JobLeased), dao.Lte(`"mail_fallback"."lease_until"`, now)))).
-		OrderBy(dao.Asc(byCreated)).Limit(uint64(limit)).Select()
-	return jobs(rows, err)
+	open, err := jobs(t.m.jobs.On(t.tx).With(cHost, host).With(cState, mail.JobOpen).
+		OrderBy(dao.Asc(byCreated)).Limit(uint64(limit)).Select())
+	if err != nil {
+		return nil, err
+	}
+	lapsed, err := jobs(t.m.jobs.On(t.tx).With(cHost, host).With(cState, mail.JobLeased).
+		WithPredicate(dao.Lte(`"mail_fallback"."lease_until"`, now)).OrderBy(dao.Asc(byCreated)).Limit(uint64(limit)).Select())
+	if err != nil {
+		return nil, err
+	}
+	out := append(open, lapsed...)
+	slices.SortFunc(out, func(a, b mail.FallbackJob) int {
+		return cmp.Or(cmp.Compare(a.Created, b.Created), cmp.Compare(a.ID, b.ID))
+	})
+	return out[:min(len(out), limit)], nil
 }
 
 func (t *Tx) NextFallbackLease(host string) (int64, bool, error) {
