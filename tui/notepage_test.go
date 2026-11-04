@@ -216,6 +216,18 @@ func shownView(r *running) widget.EditorView {
 	return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
 }
 
+// notePage is the run's terminal note page.
+func notePage(r *running) *cellNotePage {
+	return onLoop(r, func() *cellNotePage {
+		for _, f := range r.h.reg.features {
+			if p, ok := f.(*cellNotePage); ok {
+				return p
+			}
+		}
+		return nil
+	})
+}
+
 // TestTypingInAJustOpenedNoteEditsIt: a note opens as its page, and the
 // first editing key opens the text and acts: i, then the typing and Esc, edit the note where it was
 // read, and the text is shown.
@@ -231,7 +243,8 @@ func TestTypingInAJustOpenedNoteEditsIt(t *testing.T) {
 }
 
 // TestThePagesReadingKeysKeepItRendered: the keys that read the page (the arrows, j/k, PgUp/PgDn, g/G,
-// y and Ctrl+C) leave it Rendered and the note as it was.
+// y and Ctrl+C) leave it Rendered and the note as it was, and the page's own scroll is theirs: PgDn
+// moves its top on, PgUp back, G to the end, g to the start.
 func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 	var note strings.Builder
 	for i := range 40 {
@@ -239,13 +252,28 @@ func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 	}
 	r := openNotePage(t, "# Long\n\n"+note.String(), "Long")
 	before := r.editorText()
-	for _, k := range []tuicore.Event{key('j'), key('k'), tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown},
-		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp}, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown},
-		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, key('G'), key('g'), key('y'),
-		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}} {
-		r.keys(t, k)
+	page := notePage(r)
+	top := func() int { return onLoop(r, func() int { return page.top }) }
+	// the keys are taken on the loop in their own time (decltest's Keys): a scroll is waited for
+	var down, bottom int
+	for _, k := range []struct {
+		ev     tuicore.Event
+		scroll func() bool // the page's scroll the key makes, nil: none the page's top must show
+	}{
+		{key('j'), nil}, {key('k'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown}, func() bool { down = top(); return down > 0 }},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, func() bool { return top() < down }},
+		{key('G'), func() bool { bottom = top(); return bottom > down }},
+		{key('g'), func() bool { return top() == 0 }},
+		{key('y'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}, nil},
+	} {
+		r.keys(t, k.ev)
+		if k.scroll != nil {
+			r.s.WaitFor(t, fmt.Sprintf("%+v scrolls the page", k.ev), func(string) bool { return k.scroll() })
+		}
 		if v := shownView(r); v != widget.ViewRendered {
-			t.Fatalf("%+v left the page (view %v)", k, v)
+			t.Fatalf("%+v left the page (view %v)", k.ev, v)
 		}
 	}
 	if got := r.editorText(); got != before {
@@ -289,14 +317,7 @@ func TestAnEditingKeyEditsWhereThePageWasScrolledTo(t *testing.T) {
 	for range 3 {
 		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
 	}
-	page := onLoop(r, func() *cellNotePage {
-		for _, f := range r.h.reg.features {
-			if p, ok := f.(*cellNotePage); ok {
-				return p
-			}
-		}
-		return nil
-	})
+	page := notePage(r)
 	// the keys are taken on the loop in their own time (decltest's Keys): their effect is waited for
 	r.s.WaitFor(t, "the page scrolled on", func(string) bool { return onLoop(r, func() int { return page.top }) > 0 })
 	top := onLoop(r, func() int { return page.top })
