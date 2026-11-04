@@ -126,10 +126,8 @@ func TestATerminalNotesPageTakesRawToWhereTheReaderScrolled(t *testing.T) {
 		}
 		return nil
 	})
+	r.s.WaitFor(t, "the page scrolled on", func(string) bool { return onLoop(r, func() int { return page.top }) > 0 })
 	top := onLoop(r, func() int { return page.top })
-	if top <= 0 {
-		t.Fatalf("the page scrolled by three pages reports its top at byte %d", top)
-	}
 	r.keys(t, ctrlT)
 	r.s.WaitFor(t, "Raw at the reader's place", func(string) bool {
 		return shown() == widget.ViewRaw && onLoop(r, r.h.cursorBytes) == top
@@ -299,9 +297,11 @@ func TestAnEditingKeyEditsWhereThePageWasScrolledTo(t *testing.T) {
 		}
 		return nil
 	})
+	// the keys are taken on the loop in their own time (decltest's Keys): their effect is waited for
+	r.s.WaitFor(t, "the page scrolled on", func(string) bool { return onLoop(r, func() int { return page.top }) > 0 })
 	top := onLoop(r, func() int { return page.top })
 	text := r.editorText()
-	if top <= 0 || !strings.HasPrefix(text[top:], "Paragraph ") {
+	if !strings.HasPrefix(text[top:], "Paragraph ") {
 		t.Fatalf("the page scrolled by three pages reports its top at byte %d", top)
 	}
 	line := text[top : top+strings.IndexByte(text[top:], '\n')] // the block at the page's top
