@@ -794,9 +794,9 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	e.stop()
 	b := newFake("m2", "b")
 	e.stop = nil
-	e.open(options{Provider: b, onFlip: holdFlip})
+	e.open(options{Provider: b})
 	fpB := b.Model().Fingerprint()
-	e.flippedTo(fpB)
+	e.eventually("the flip to b", func() bool { return e.activeModel() == fpB })
 	for _, vb := range []vecBatch{{fp: fpA}, {fp: fpA, items: []vecItem{{textHash: []byte("late"), vec: make([]float32, 64)}}}} {
 		if err := e.ix.handVectors(context.Background(), vb); err != nil {
 			t.Fatal(err)
