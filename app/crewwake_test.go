@@ -191,15 +191,16 @@ func (r *wakeRig) drain(cred string) []string {
 	}
 }
 
-// rungAgain fails unless session's last notice is a re-ring's ("Mail is still waiting for you"):
-// the ring is for mail it was rung for before.
+// rungAgain fails unless session's first notice is a fresh ring's ("Mail is waiting for you") and
+// its last a re-ring's ("Mail is still waiting for you"): the ring is for mail it was rung for before.
 func (r *wakeRig) rungAgain(session string) {
 	r.t.Helper()
 	r.waker.mu.Lock()
 	ns := slices.Clone(r.waker.notices[session])
 	r.waker.mu.Unlock()
-	if len(ns) < 2 || !strings.HasPrefix(ns[len(ns)-1], "[AutoDoc mail] Mail is still waiting for you") {
-		r.t.Fatalf("session %s's notices %q: want the last a re-ring's", session, ns)
+	if len(ns) < 2 || !strings.HasPrefix(ns[0], "[AutoDoc mail] Mail is waiting for you") ||
+		!strings.HasPrefix(ns[len(ns)-1], "[AutoDoc mail] Mail is still waiting for you") {
+		r.t.Fatalf("session %s's notices %q: want the first a fresh ring's, the last a re-ring's", session, ns)
 	}
 }
 
