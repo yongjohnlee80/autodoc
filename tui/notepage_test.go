@@ -279,3 +279,36 @@ func TestTheCommandLineOpensFromThePage(t *testing.T) {
 	r.keys(t, key(':'))
 	r.s.WaitForText(t, "VIM Commands")
 }
+
+// TestAnEditingKeyEditsWhereThePageWasScrolledTo: scrolled on, the page's first editing key edits at
+// the block the reader scrolled to, not where the cursor was: o opens a line under that block's line.
+func TestAnEditingKeyEditsWhereThePageWasScrolledTo(t *testing.T) {
+	var note strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&note, "Paragraph %02d of the long note.\n\n", i)
+	}
+	r := openNotePage(t, note.String(), "Paragraph 00")
+	for range 3 {
+		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
+	}
+	page := onLoop(r, func() *cellNotePage {
+		for _, f := range r.h.reg.features {
+			if p, ok := f.(*cellNotePage); ok {
+				return p
+			}
+		}
+		return nil
+	})
+	top := onLoop(r, func() int { return page.top })
+	text := r.editorText()
+	if top <= 0 || !strings.HasPrefix(text[top:], "Paragraph ") {
+		t.Fatalf("the page scrolled by three pages reports its top at byte %d", top)
+	}
+	line := text[top : top+strings.IndexByte(text[top:], '\n')] // the block at the page's top
+	r.keys(t, key('o'))
+	r.keys(t, decltest.Type("here")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
+	r.s.WaitFor(t, "a line opened under the scrolled-to block", func(string) bool {
+		return strings.Contains(r.editorText(), line+"\nhere\n")
+	})
+}
