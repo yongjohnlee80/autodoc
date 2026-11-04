@@ -1,5 +1,3 @@
-//go:build !gui
-
 package tui
 
 import (
@@ -199,4 +197,33 @@ func TestTheCellMindmapGolden(t *testing.T) {
 	if bold, _ := s.style[y][x].GetBold(); !bold || s.text[y][x] == " " {
 		t.Errorf("the selected box %q is not drawn in the selection's style at (%d, %d): %q", sel.Label, x, y, s.text[y][x])
 	}
+}
+
+// TestATerminalRunOpensTheCellMindmap: on a terminal, in either build (go test -tags gui runs it as a
+// GUI build's --ui), main.qml has the Relations › Mindmap item, and App.toggleMindmap opens the
+// cell Mindmap's panel, its view the cell one.
+func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.toggleMindmap()`) {
+		t.Fatal("a terminal's main.qml has no Relations › Mindmap item")
+	}
+	m := onLoop(r, func() *cellMindmap {
+		for _, f := range r.h.reg.features {
+			if m, ok := f.(*cellMindmap); ok {
+				return m
+			}
+		}
+		return nil
+	})
+	if m == nil {
+		t.Fatal("a terminal host has no cell Mindmap registered")
+	}
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { m.toggle(); return true })
+	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
+		return onLoop(r, func() bool { return m.open && m.view != nil })
+	})
 }

@@ -1,5 +1,3 @@
-//go:build !gui
-
 package tui
 
 import (
@@ -15,7 +13,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE MINDMAP IN CELLS — a terminal's Relations › Mindmap: the page's document and the documents
+// THE MINDMAP IN CELLS — a terminal's Relations › Mindmap, in either build (a GUI build run with
+// --ui too; relationViewFeatures chooses it at run time, a window keeping its own, mindmap_gui.go): the page's document and the documents
 // one link from it (d: two links, and back), as the window's mind map (mindmap_gui.go) drawn in
 // box-drawing cells (golib tui/mermaid). The keys move a selection from box to box: h j k l and the
 // arrows go to the nearest box that way, Enter opens its document, Ctrl+d and Ctrl+u scroll. Every
