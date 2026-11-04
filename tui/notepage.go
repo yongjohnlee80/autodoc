@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
@@ -50,6 +51,15 @@ func (v *notePageView) SetVisible(on bool) {
 	if !on {
 		v.page.hidden()
 	}
+}
+
+// HandleEvent is the page's keys, but Space: the leader (SPC) is the app's over a note's page as
+// over its text, so the page never takes it as a page down (PgDn is).
+func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
+	if k, ok := ev.(tuicore.KeyEvent); ok && k.Code == ' ' && k.Mods == 0 {
+		return false
+	}
+	return v.HTMLView.HandleEvent(ev)
 }
 
 var _ widget.DocumentView = (*notePageView)(nil)

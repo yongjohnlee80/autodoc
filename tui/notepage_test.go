@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -45,6 +46,15 @@ func TestATerminalNoteIsItsPage(t *testing.T) {
 	if strings.Contains(r.s.String(), "**bold**") || strings.Contains(r.s.String(), "A-->B") {
 		t.Fatalf("the page shows the note's source:\n%s", r.s.String())
 	}
+
+	// the leader is the app's over the page as over the text: SPC o opens the picker
+	r.leader(t, 'o')
+	r.s.WaitForText(t, "open a document")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
+	r.s.WaitFor(t, "the picker closed, the page still shown", func(sc string) bool {
+		v, page := view()
+		return !strings.Contains(sc, "open a document") && page && v == widget.ViewRendered
+	})
 
 	r.keys(t, ctrlT)
 	r.s.WaitFor(t, "the note's text after Ctrl+T", func(string) bool { v, _ := view(); return v == widget.ViewRaw })
@@ -151,14 +161,18 @@ func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  A-->B\n```\n")}, tableInclude)
 	first := runTUI(t, NewSession(d.sock, nil), Options{})
 	first.connected(t)
-	onLoop(first, func() bool { core{first.h}.SetPref(prefLanguage, "ko_KR"); return true })
+	onLoop(first, func() bool { first.h.setLanguage("ko_KR"); return true }) // Options › Language
 	first.s.WaitFor(t, "the language stored", func(string) bool {
-		return onLoop(first, func() bool { return first.h.prefs.Value(prefLanguage) == "ko_KR" })
+		res, err := first.h.call(context.Background(), "preference.list")
+		return err == nil && asMap(res)[prefLanguage] == "ko_KR"
 	})
 
 	dir := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{CrashDir: dir})
 	r.connected(t) // the store's preferences in, within the normal bound: Korean applied at start
+	if lang := onLoop(r, func() string { return r.h.prefs.language }); lang != "ko_KR" {
+		t.Fatalf("the start's language is %q, want the stored ko_KR", lang)
+	}
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
 	}
