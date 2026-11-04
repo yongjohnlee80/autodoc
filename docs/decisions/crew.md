@@ -610,20 +610,24 @@ delivery between agents never waits on you.
   `inbox.watch` answers the changes after a cursor, or a snapshot when the cursor can't be resumed.
 - Every window shows the same toasts: one for each open request and each raised attention, ended in
   every window when it is answered, dismissed, expired or cleared, and a passing one for each report.
-- **The inbox** (`SPC a i`, or `:inbox`) lists your mail in a dialog, newest first, fifty at a time
-  (`inbox.list`, paged by seq; More reads the next page, while the last page held some). Its tabs
-  are All, Unread (reports not read yet), Open requests, and Undeliverable (`inbox.list`'s filter,
-  whose daemon side answers the newest fifty notices only: that tab lists them with no More, and
-  says so). The message under the cursor
-  shows below the list, as Markdown. Opening a report marks it read (`inbox.ack`); opening a request
-  never answers it or marks it read: it stays open until Reply (the reply dialog) or Dismiss (asked
-  first) answers it. Mark read marks any report read; Sender shows the agent that sent it. The
-  dialog holds no long-poll of its own: the window's one `inbox.watch` gives its title the count of
-  what is open, and a change (an undeliverable notice too) reads the first page of the tab shown
-  again, and that page is the list: the pages More read go, so the list is always one consistent
-  read (more than a page arriving leaves no gap, and no older row is listed as it was); the other
-  tab's source is read again at its next showing. A read overtaken by a later one, or by an ack or
-  dismiss that landed, is dropped. The cursor stays on its message.
+- **The inbox** (`SPC a i`, `:inbox`, or Go › Inbox) lists your mail in a dialog, newest first,
+  fifty at a time (`inbox.list`, paged by seq; More reads the next page while `inbox.list`'s `more`
+  says an older one is there, since protocol 53; from an older daemon, while the last page held
+  some). Its tabs are All, Unread (reports not read yet), Open requests, and Undeliverable
+  (`inbox.list`'s filter, whose daemon side answers the newest fifty notices only: that tab lists
+  them with no More, and says so). The list has the keyboard: every tab's and button's marked letter
+  reaches it from there, and each says what it does when it has focus. The message under the cursor
+  shows below the list, as Markdown; Open (Enter) reads it whole in a dialog of its own. Opening a
+  report marks it read (`inbox.ack`); opening a request never answers it or marks it read: it stays
+  open until Reply (the reply dialog) or Dismiss (asked first) answers it. Mark read marks any report
+  read; Sender shows the agent that sent it. A mark read and a dismiss show at once, and are undone,
+  and said, if the daemon refuses them. The dialog holds no long-poll of its own: the window's one
+  `inbox.watch` gives its title the count of what is open, and a change (an undeliverable notice
+  too) reads the first page of the tab shown again, and that page is the list: the pages More read
+  go, so the list is always one consistent read (more than a page arriving leaves no gap, and no
+  older row is listed as it was); the other tab's source is read again at its next showing. A read
+  overtaken by a later one, or by an ack or dismiss that landed, is dropped. The cursor stays on its
+  message, by its key, so the list never jumps.
 - A request's toast opens a reply dialog in any window. Send is `inbox.reply`, keyed by the request
   and the text, so a resend after a lost answer is the same reply; the first answer wins. Dismiss
   tells the sender. An attention's toast raises its agent, or asks the host that shows it to
