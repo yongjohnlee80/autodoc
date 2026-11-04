@@ -109,6 +109,26 @@ func TestCatalogFilters(t *testing.T) {
 	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
 		t.Errorf("doc.read: %v with codes %v", names(one), codes)
 	}
+	// invalid params' messages say no verb: a filter's row keeps its next step and lists none, the
+	// whole catalog every one
+	invalid := func(c Catalog) CatalogError {
+		for _, e := range c.Errors {
+			if e.Code == golibrpc.CodeInvalidParams {
+				return e
+			}
+		}
+		t.Fatalf("no invalid params row in %+v", c.Errors)
+		return CatalogError{}
+	}
+	if e := invalid(one); len(e.Messages) != 0 || e.Next == "" {
+		t.Errorf("doc.read's invalid params: %+v, want its next step and no message", e)
+	}
+	if e := invalid(s.Catalog(Protocol, "graph.*")); len(e.Messages) != 0 {
+		t.Errorf("graph.*'s invalid params lists %d messages, want none", len(e.Messages))
+	}
+	if e := invalid(all); len(e.Messages) < 2 {
+		t.Errorf("the whole catalog's invalid params lists %d messages, want every one", len(e.Messages))
+	}
 	if none := s.Catalog(Protocol, "todos.*"); len(none.Verbs) != 0 || len(none.Errors) != 0 {
 		t.Errorf("todos.* with no todos module: %+v", none)
 	}
