@@ -31,6 +31,9 @@ type grantsCore interface {
 	RevokeGrants(holder string, caps []string)
 }
 
+// grantsListID is the dialog's list, as an id inside a dialog is named: its own id @ the dialog's.
+const grantsListID = "grantTable@grants"
+
 // grantRow is one capability one holder holds.
 type grantRow struct{ holder, capability string }
 
@@ -86,7 +89,7 @@ func (g *grantsView) open() {
 	g.shown, g.cursor, g.key = true, 0, ""
 	g.list()
 	g.c.Open("grants")
-	g.c.Focus("grantTable") // the list holds the keys: arrows move it, the buttons answer their letters
+	g.c.Focus(grantsListID) // the list holds the keys: arrows move it, the buttons answer their letters
 }
 
 // closed is the dialog dismissed: the preference's changes stop listing it again.

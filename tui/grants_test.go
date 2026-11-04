@@ -77,8 +77,8 @@ func TestAgentPermissionsListsEveryGrantByHolder(t *testing.T) {
 	if len(w.opened) != 1 || w.opened[0] != "grants" {
 		t.Fatalf("the dialog opened %v, want grants", w.opened)
 	}
-	if w.focused != "grantTable" {
-		t.Fatalf("the keyboard went to %q at open, want the list (grantTable)", w.focused)
+	if w.focused != grantsListID {
+		t.Fatalf("the keyboard went to %q at open, want the list (%s)", w.focused, grantsListID)
 	}
 	cases := []struct {
 		i               int
@@ -303,7 +303,7 @@ func TestAgentPermissionsAnswersItsKeysFromTheList(t *testing.T) {
 		return strings.Contains(sc, "Agent permissions") && strings.Contains(sc, "zen (agent) holds editor.read")
 	})
 	r.s.WaitFor(t, "the list holding the keys", func(string) bool {
-		return onLoop(r, func() bool { return core{r.h}.HasFocus("grantTable") })
+		return r.focused(grantsListID)
 	})
 
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
