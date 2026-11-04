@@ -4381,6 +4381,10 @@ WHAT A KEY NEEDS
         <source>find: no %1 in the %2</source>
         <translation>찾기: %2에 %1 없음</translation>
     </message>
+    <message id="autodoc.notice.find.not_on_the_page_found_in_the_text">
+        <source>%1 is not on the page: found in the text (Raw)</source>
+        <translation>%1은(는) 페이지에 없습니다: 텍스트(Raw)에서 찾았습니다</translation>
+    </message>
     <message id="autodoc.notice.find.nothing_to_find_again_asks_what_to_find">
         <source>nothing to find again: / asks what to find</source>
         <translation>다시 찾을 내용 없음: /를 누르면 찾을 내용을 묻습니다</translation>
@@ -4440,6 +4444,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.golink.no_link_under_the_cursor_spc_l_shows_what_links">
         <source>no link under the cursor: SPC l shows what %1 links with</source>
         <translation>커서 아래에 링크가 없습니다: SPC l로 %1과(와) 연결된 항목을 봅니다</translation>
+    </message>
+    <message id="autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links">
+        <source>no link on the page here: SPC l shows what %1 links with</source>
+        <translation>페이지의 이 부분에 링크가 없습니다: SPC l로 %1과(와) 연결된 항목을 봅니다</translation>
     </message>
     <message id="autodoc.notice.graphstore_gui.save_the_graph_groups">
         <source>save the graph groups (%1)</source>
@@ -6294,6 +6302,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.mindmap_gui.is_not_indexed_yet">
         <source>%1 is not indexed yet</source>
         <translation>%1은(는) 아직 색인되지 않았습니다</translation>
+    </message>
+    <message id="autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal">
+        <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
+        <translation>%1 다이어그램: 터미널에서는 그리지 않습니다 (Raw에서 소스를 볼 수 있습니다)</translation>
     </message>
     <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>

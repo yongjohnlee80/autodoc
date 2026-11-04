@@ -17,6 +17,7 @@ func TestThePagesScrollbarReachesTheEnd(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "long.md")
 	r.waitFile(t, "long.md")
+	r.asText(t) // the text's scrollbar: on the note's page the 200 lines are one paragraph, and fit
 	r.s.WaitForText(t, "line 0")
 	r.keys(t, key('G')) // Normal mode: the last line
 	r.s.WaitForText(t, "line 199")
