@@ -1,7 +1,9 @@
 package sqlitecrewmail
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
 	"github.com/yongjohnlee80/golib/dao"
 
@@ -87,10 +89,23 @@ var (
 		dao.Eq(`"mail_message"."kind"`, mail.KindEvent))
 )
 
+// OpenToUser is the user's open requests and unread reports past seq after, in seq order, at most
+// limit. They are read from the user's unhandled deliveries (mail_delivery_state): every way the
+// human's message leaves open (answered, dismissed, read, expired) ends its delivery in the same
+// write, and the human never leases, so an open message's delivery to the user is queued. The order
+// and the limit are taken here: asked of SQLite, the order was satisfied by walking the user's
+// (recipient, seq) index, every delivery they were ever sent, at every window's start.
 func (t *Tx) OpenToUser(user string, after int64, limit int) ([]mail.Item, error) {
-	q := t.m.deliveries.On(t.tx).With(cRecipient, user).WithPredicate(openNonEvent).
-		WithPredicate(dao.Gt(`"mail_delivery"."seq"`, after)).OrderBy(dao.Asc(bySeq))
-	return t.items(deliveries(limited(q, limit).Select()))
+	ds, err := deliveries(t.m.deliveries.On(t.tx).With(cRecipient, user).WithPredicate(unhandled).WithPredicate(openNonEvent).
+		WithPredicate(dao.Gt(`"mail_delivery"."seq"`, after)).Select())
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(ds, func(a, b mail.Delivery) int { return cmp.Compare(a.Seq, b.Seq) })
+	if limit > 0 && len(ds) > limit {
+		ds = ds[:limit]
+	}
+	return t.items(ds, nil)
 }
 
 func (t *Tx) ToUser(user string, before int64, limit int) ([]mail.Item, error) {
