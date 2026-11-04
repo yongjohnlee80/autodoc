@@ -20,11 +20,12 @@ import (
 )
 
 // Run as a window, the GUI writes its relation views into main.qml once each: the Relations menu's
-// items, a panel each whose view is its own type, and the GlobeMap's settings dialog. Run in a terminal, the same build writes
-// nothing: the terminal has Links alone.
+// items, a panel each whose view is its own type, and the GlobeMap's settings dialog. Run in a
+// terminal, the same build writes the terminal's: its Mindmap in cells, and no GlobeMap.
 func TestTheGUIWritesTheRelationViews(t *testing.T) {
-	if !bytes.Equal(withRelationViews(layout, false), layout) {
-		t.Fatal("a terminal run of the GUI build wrote the relation views in")
+	term := withRelationViews(layout, false)
+	if !bytes.Contains(term, []byte("CellMindmap {")) || bytes.Contains(term, []byte("GlobeMap")) || bytes.Contains(term, []byte("        Mindmap {\n")) {
+		t.Fatal("a terminal run of the GUI build did not write the terminal's Mindmap alone")
 	}
 	doc := string(withRelationViews(layout, true))
 	for _, want := range []string{

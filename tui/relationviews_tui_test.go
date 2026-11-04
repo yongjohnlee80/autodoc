@@ -10,7 +10,7 @@ import (
 // A terminal writes its own relation view into main.qml, run as a window or not: Relations ›
 // Mindmap, drawn in cells (CellMindmap), and never the GUI's GlobeMap.
 func TestATerminalsRelationViewIsItsCellMindmap(t *testing.T) {
-	for _, gui := range []bool{false, true} { // a build without the GUI has its cell views, run as one or not
+	for _, gui := range []bool{false} { // a terminal: the build without the GUI never runs as a window
 		got := withRelationViews(layout, gui)
 		for _, want := range []string{`App.toggleMindmap()`, `CellMindmap {`, `id: mindmap`} {
 			if !bytes.Contains(got, []byte(want)) {
