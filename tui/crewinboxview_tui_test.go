@@ -237,12 +237,14 @@ func TestGoInboxOpensTheInbox(t *testing.T) {
 }
 
 // TestTheInboxListAndItsMessageAreSetApart: on an 80-column screen, the list full, an empty row
-// sets the list apart from the message under the cursor: between the last message listed and the
-// message's first row, a row with nothing on it. The list and that row share the list's half of
-// the dialog, so the message keeps its rows: 80×20 and 80×21, either parity of what the two share.
-// Each screen is logged, with the message's rows counted to the button row.
+// sets the list apart from the message under the cursor: between the last message listed (its
+// unread mark) and the message's first row, a row with nothing on it. The list and that row share
+// the list's half of the dialog, so the message keeps its rows: as many as the list's half (its
+// header, its rows, the empty row), less the one a tie gives the list. 80×20 and 80×22 draw a
+// dialog of 17 rows and one of 18, either parity of what the two halves share. Each screen is
+// logged.
 func TestTheInboxListAndItsMessageAreSetApart(t *testing.T) {
-	for _, height := range []int{20, 21} {
+	for _, height := range []int{20, 22} {
 		t.Run(fmt.Sprintf("80x%d", height), func(t *testing.T) {
 			var items []any
 			for seq := int64(40); seq > 0; seq-- {
@@ -253,28 +255,35 @@ func TestTheInboxListAndItsMessageAreSetApart(t *testing.T) {
 			r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, height)
 			r.connected(t)
 			onLoop(r, func() bool { r.h.runEntry("crew.inbox"); return true })
-			r.s.WaitForText(t, "subject m040")
+			r.s.WaitForText(t, "Inbox — All")
 			if err := onLoop(r, func() error {
 				return r.h.reg.handlers["App.inboxShown"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
 			}); err != nil {
 				t.Fatal(err)
 			}
 			const head = "**From** gold@autodoc:w"
-			r.s.WaitForText(t, head)
+			r.s.WaitFor(t, "the message and the status drawn", func(sc string) bool {
+				return strings.Contains(sc, head) && strings.Contains(sc, "40 listed")
+			})
 			lines := strings.Split(r.s.String(), "\n")
-			at, buttons := -1, -1
+			t.Logf("the screen:\n%s", strings.Join(lines, "\n"))
+			header, at, status := -1, -1, -1
 			for i, l := range lines {
-				if at < 0 && strings.Contains(l, head) {
+				switch {
+				case header < 0 && strings.Contains(l, "SUBJECT"):
+					header = i
+				case at < 0 && strings.Contains(l, head):
 					at = i
-				}
-				if at >= 0 && buttons < 0 && strings.Contains(l, "Dismiss") {
-					buttons = i
+				case at >= 0 && status < 0 && strings.Contains(l, "40 listed"):
+					status = i
 				}
 			}
-			t.Logf("the screen, the message's rows to the button row %d:\n%s", buttons-at, strings.Join(lines, "\n"))
+			if header < 0 || at < header || status < at {
+				t.Fatalf("the list's header at row %d, the message at %d, the status at %d: want them in that order", header, at, status)
+			}
 			last := -1 // the last message listed above the message's first row
-			for i := at - 1; i >= 0 && last < 0; i-- {
-				if strings.Contains(lines[i], "subject m0") {
+			for i := at - 1; i > header && last < 0; i-- {
+				if strings.Contains(lines[i], "●") {
 					last = i
 				}
 			}
@@ -288,6 +297,9 @@ func TestTheInboxListAndItsMessageAreSetApart(t *testing.T) {
 				if strings.Trim(lines[i], " │┃║|") != "" {
 					t.Errorf("row %d between the list and the message: %q, want it empty", i, lines[i])
 				}
+			}
+			if list, message := at-header, status-at; message < list-1 {
+				t.Errorf("the message has %d rows and the list's half %d: the empty row came out of the message's", message, list)
 			}
 		})
 	}
