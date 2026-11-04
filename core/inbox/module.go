@@ -125,6 +125,7 @@ type (
 	}
 	listResult struct {
 		Items []wireItem `json:"items"`
+		More  bool       `json:"more"` // an older page is there below the last item (since 53)
 	}
 	replyResult struct {
 		Message string `json:"message"` // the response's id
@@ -238,15 +239,17 @@ func (m *Manager) Verbs() []module.Verb {
 				w, err := m.Watch(ctx, p.Cursor, time.Duration(p.Timeout)*time.Millisecond, p.Page)
 				return toWireWatched(w), err
 			}),
-		module.Handle(user("inbox.list", module.EffectRead, "{items[]}",
-			"The human's history, newest first, or the generated notices nobody could receive (filter undeliverable)."),
+		module.Handle(user("inbox.list", module.EffectRead, "{items[], more}",
+			"The human's history, newest first, or the generated notices nobody could receive (filter undeliverable). "+
+				"more (since 53) says an older page is there below the last item: page on with before = its seq. "+
+				"The undeliverable notices are the newest only, so their more is false."),
 			func(ctx context.Context, p listParams) (listResult, error) {
 				limit := int(p.Limit)
 				if limit == 0 {
 					limit = listDefault
 				}
-				items, err := m.List(ctx, p.Filter, p.Before, limit)
-				return listResult{Items: toWireItems(items)}, err
+				items, more, err := m.List(ctx, p.Filter, p.Before, limit)
+				return listResult{Items: toWireItems(items), More: more}, err
 			}),
 		module.Handle(user("inbox.reply", module.EffectWrite, "{message}",
 			"Answer a request; the first answer wins. The key is bound to the request and the body: a retry after a lost answer returns the same response.",
