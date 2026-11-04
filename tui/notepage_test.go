@@ -343,3 +343,62 @@ func TestAnEditingKeyEditsWhereThePageWasScrolledTo(t *testing.T) {
 		return strings.Contains(r.editorText(), line+"\nhere\n")
 	})
 }
+
+// TestFindOnThePageCountsWhatItShows: on a note's page the find counts and marks what the page
+// shows, and the text its source: a link's target holds the word in the source only, so Ctrl+T
+// takes "1 of 2" on the page to "of 3" in the text, and back (docs/decisions/editor.md).
+func TestFindOnThePageCountsWhatItShows(t *testing.T) {
+	r := openNotePage(t, "# Birds\n\na kestrel, see [the hawk](kestrel.md), another kestrel\n", "Birds")
+	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
+	total := func() int { return onLoop(r, func() int { return r.h.find.total }) }
+	r.s.WaitFor(t, "found on the page", func(string) bool { return total() == 2 })
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("the find left the page: view %v", v)
+	}
+	r.keys(t, decltest.Ctrl('t'))
+	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && total() == 3 })
+	r.keys(t, decltest.Ctrl('t'))
+	r.s.WaitFor(t, "counted on the page again", func(string) bool { return shownView(r) == widget.ViewRendered && total() == 2 })
+	r.h.p.Post(r.h.clearFind)
+	r.s.WaitFor(t, "cleared", func(string) bool { return onLoop(r, func() string { return r.h.find.query }) == "" })
+}
+
+// TestSPCjOnThePageFollowsTheFirstLinkOnScreen: a note's page has no cursor, so SPC j follows the
+// first link at or after its top, among what is on screen: scrolled past the first link, the
+// second; with none on screen, it says so in the page's words (docs/decisions/editor.md).
+func TestSPCjOnThePageFollowsTheFirstLinkOnScreen(t *testing.T) {
+	var note strings.Builder
+	note.WriteString("# Links\n\nfirst [[b]]\n\n")
+	for i := range 60 {
+		fmt.Fprintf(&note, "Filler %02d of the note.\n\n", i)
+	}
+	note.WriteString("second [[c]]\n\n")
+	for i := range 60 {
+		fmt.Fprintf(&note, "Tail %02d of the note.\n\n", i)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note.String(), "b.md", "# B\n", "c.md", "# C\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitForText(t, "first b")
+	page := notePage(r)
+	r.keys(t, key('G')) // the page's end: no link on screen
+	r.s.WaitFor(t, "the page's end", func(sc string) bool { return strings.Contains(sc, "Tail 59") })
+	r.leader(t, 'j')
+	r.waitKeptNotice(t, "no link on the page here: SPC l shows what a.md links with")
+	r.keys(t, key('g')) // the top: [[b]] first on screen
+	r.s.WaitFor(t, "the page's top", func(string) bool { return onLoop(r, func() int { return page.top }) == 0 })
+	top := func() int { return onLoop(r, func() int { return page.top }) }
+	for !strings.Contains(r.s.String(), "second c") {
+		was := top()
+		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
+		r.s.WaitFor(t, "a page on", func(string) bool { return top() > was })
+		if strings.Contains(r.s.String(), "Tail 59") {
+			t.Fatal("paged past [[c]] without seeing it")
+		}
+	}
+	r.s.WaitFor(t, "[[b]] off the screen", func(sc string) bool { return !strings.Contains(sc, "first b") })
+	r.leader(t, 'j')
+	r.waitFile(t, "c.md")
+}

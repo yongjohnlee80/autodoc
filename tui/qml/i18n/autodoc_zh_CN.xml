@@ -4434,6 +4434,10 @@ WHAT A KEY NEEDS
         <source>no link under the cursor: SPC l shows what %1 links with</source>
         <translation>光标下没有链接：按 SPC l 查看 %1 链接了哪些内容</translation>
     </message>
+    <message id="autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links">
+        <source>no link on the page here: SPC l shows what %1 links with</source>
+        <translation>页面此处没有链接：按 SPC l 查看 %1 链接了哪些内容</translation>
+    </message>
     <message id="autodoc.notice.graphstore_gui.save_the_graph_groups">
         <source>save the graph groups (%1)</source>
         <translation>保存图谱分组(%1)</translation>

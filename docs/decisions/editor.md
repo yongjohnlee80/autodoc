@@ -264,7 +264,27 @@ note changes under it, it is exported again once typing rests and keeps the read
 links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
 either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
 
-In the code: `tui/notepage.go`, `tui/feature.go`
+The window's Rendered Markdown is edited in place, and the page is not, so the page reads by its own
+keys (the arrows, j/k, PgUp/PgDn, g/G, y, Ctrl+C), the mouse and its links. Any other key that types,
+or Esc, opens the text at the reader's place and goes on to the editor as that same key, so `i` lands
+in Insert mode. Space stays the leader, and chords stay the app's.
+
+The rest answers as over the text:
+
+- A right press opens the editor's menu.
+- Ctrl+O and Ctrl+I walk the jump list. A jump's place in the note comes to the page's top.
+- The breadcrumb follows the reader's place, the block at the page's top.
+
+The page has no cursor, which changes two things:
+
+- **SPC j** follows the first link at or after the page's top, among what is on screen. With none
+  on screen, it says so.
+- **Find** counts and marks what the page shows, while the text's find counts its source. A link's
+  target or a word inside Markdown syntax is found in Raw only. Ctrl+T runs the find again in the new
+  view's terms, so "k of N" can change. The reader stays put, and the current match is the first at
+  or after their place.
+
+In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`, `tui/outline.go`
 
 ## The table's clipboard, menu and row numbers
 
