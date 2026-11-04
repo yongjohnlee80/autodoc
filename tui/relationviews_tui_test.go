@@ -19,8 +19,12 @@ func TestATerminalHasNoRelationViews(t *testing.T) {
 		t.Fatal("main.qml lost a relation views' marker")
 	}
 	var h Host
-	if f, ty := h.relationViewFeatures(), h.relationViewTypes(); f != nil || ty != nil {
+	f, ty := h.relationViewFeatures(), h.relationViewTypes()
+	if ty != nil || len(f) != 1 {
 		t.Fatalf("a terminal's relation views: %v, %v", f, ty)
+	}
+	if _, ok := f[0].(*cellNotePage); !ok {
+		t.Fatalf("a terminal's own feature is %T, want its note page", f[0])
 	}
 	// Preferences' GlobeMap… names its command here too: it says the settings are a window's
 	th := newHost(NewSession("unused", nil), Options{}) // a host as the program makes one: its notices kept

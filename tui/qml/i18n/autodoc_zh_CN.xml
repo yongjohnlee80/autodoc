@@ -6288,6 +6288,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>%1 is not indexed yet</source>
         <translation>%1 尚未索引</translation>
     </message>
+    <message id="autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal">
+        <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
+        <translation>%1 图：终端中不绘制（Raw 显示其源码）</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 个文档 · 深度 %3 · d 深度，l 图例</translation>

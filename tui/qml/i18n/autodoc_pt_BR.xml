@@ -6302,6 +6302,10 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>%1 is not indexed yet</source>
         <translation>%1 ainda não foi indexado</translation>
     </message>
+    <message id="autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal">
+        <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
+        <translation>diagrama %1: não é desenhado no terminal (Raw mostra seu código)</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documentos · profundidade %3 · d profundidade, l legenda</translation>
