@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,6 +17,7 @@ func TestTheEasyKindsDrawInATerminalNotesPage(t *testing.T) {
 		drawn     []string // what the page draws
 		source    []string // the fence's text, never on the page
 	}{
+		{"plain.md", "# Plain\n\nhello there\n", []string{"hello there"}, nil},
 		{"timeline.md", "# Timeline\n\n```mermaid\ntimeline\n  title Social media\n  section Early\n    2002 : LinkedIn\n    2004 : Facebook : Google\n  section Later\n    2005 : YouTube\n```\n",
 			[]string{"┃ Early ┃", "│ 2002 ├", "┤ LinkedIn │", "┤ Google │", "▼"}, []string{"section Early", "2004 : Facebook"}},
 		{"journey.md", "# Journey\n\n```mermaid\njourney\n  title My working day\n  section Go to work\n    Make tea: 5: Me\n    Do work: 1: Me, Cat\n```\n",
@@ -31,7 +34,15 @@ func TestTheEasyKindsDrawInATerminalNotesPage(t *testing.T) {
 		files = append(files, n.file, n.src)
 	}
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, files...)}, tableInclude)
-	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 60)
+	crashes := t.TempDir()
+	r := runTUISized(t, NewSession(d.sock, nil), Options{CrashDir: crashes}, 120, 60)
+	t.Cleanup(func() { // a contained panic's crash log: its stack, and the check fails
+		es, _ := os.ReadDir(crashes)
+		for _, e := range es {
+			b, _ := os.ReadFile(filepath.Join(crashes, e.Name()))
+			t.Errorf("a crash log, %s:\n%s", e.Name(), b)
+		}
+	})
 	r.waitAttached(t, "kb")
 	page := func() bool {
 		return onLoop(r, func() bool {
@@ -48,7 +59,8 @@ func TestTheEasyKindsDrawInATerminalNotesPage(t *testing.T) {
 			r.s.WaitForText(t, want)
 		}
 		screen := r.s.String()
-		t.Logf("%s, Rendered:\n%s", n.file, screen)
+		es, _ := os.ReadDir(crashes)
+		t.Logf("%s, Rendered (crash logs so far: %d):\n%s", n.file, len(es), screen)
 		for _, src := range n.source {
 			if strings.Contains(screen, src) {
 				t.Errorf("%s: the page shows the fence's source %q", n.file, src)
