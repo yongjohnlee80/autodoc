@@ -4374,6 +4374,10 @@ WHAT A KEY NEEDS
         <source>find: no %1 in the %2</source>
         <translation>查找：%2中没有 %1</translation>
     </message>
+    <message id="autodoc.notice.find.not_on_the_page_found_in_the_text">
+        <source>%1 is not on the page: found in the text (Raw)</source>
+        <translation>%1 不在页面上：已在文本 (Raw) 中找到</translation>
+    </message>
     <message id="autodoc.notice.find.nothing_to_find_again_asks_what_to_find">
         <source>nothing to find again: / asks what to find</source>
         <translation>没有可再次查找的内容：按 / 输入要查找的内容</translation>

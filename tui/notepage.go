@@ -147,13 +147,43 @@ func (p *cellNotePage) onScreen(n int) (from, to int, ok bool) {
 }
 
 // Moved is the cursor landing elsewhere while the page is shown, a jump's (Ctrl+O, Ctrl+I): the
-// page brings the cursor's block to its top, and Raw opens there.
+// page brings the cursor's block to its top, unless it is on screen already (a find's mark put it
+// there), and Raw opens there.
 func (p *cellNotePage) Moved(_, at int) {
 	if !p.shownHere() {
 		return
 	}
-	p.view.ScrollToSource(at)
+	if from, to, _ := p.onScreen(len(p.h.core.Value())); at < from || at >= to {
+		p.view.ScrollToSource(at)
+	}
 	p.shownTop = p.top
+}
+
+// cursorToMark puts the editor's cursor at the start of the block holding the page's i-th mark:
+// where Raw opens, and where a script sees the find go.
+func (p *cellNotePage) cursorToMark(i int) {
+	l, ok := p.view.BoundLayout().(widget.HTMLLayoutMarks)
+	if !ok {
+		return
+	}
+	y, ok := l.MarkY(i)
+	if !ok {
+		return
+	}
+	if src, _ := p.view.BoundLayout().BlockAt(y); src >= 0 {
+		text := p.h.core.Value()
+		p.h.core.SetCursorPosition(cursorAt(text, min(src, len(text))))
+	}
+}
+
+// toText opens the note's text at the reader's place, as an editing key does: for a find the page
+// can't show. False when there is no terminal editor.
+func (p *cellNotePage) toText() bool {
+	e, ok := p.h.editor.(*widget.Editor)
+	if ok {
+		e.SetView(widget.ViewRaw)
+	}
+	return ok
 }
 
 // shownHere reports whether a note's page is shown on this terminal.

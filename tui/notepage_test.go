@@ -402,3 +402,25 @@ func TestSPCjOnThePageFollowsTheFirstLinkOnScreen(t *testing.T) {
 	r.leader(t, 'j')
 	r.waitFile(t, "c.md")
 }
+
+// TestAFindOnlyTheSourceHasGoesToTheText: on a note's page a term the page doesn't show but the
+// source has, a link's target, is the text's: the page opens Raw at the reader's place, says so,
+// and the find goes on there, the cursor on its match. A term in neither is not found, the page
+// staying (docs/decisions/editor.md).
+func TestAFindOnlyTheSourceHasGoesToTheText(t *testing.T) {
+	r := openNotePage(t, "# Birds\n\na kestrel, see [the hawk](hawk.md), another kestrel\n", "Birds")
+	find := func(term string) {
+		t.Helper()
+		r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind(term) })
+	}
+	find("zebra")
+	r.s.WaitForText(t, `find: no "zebra" in the page`)
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("a term in neither left the page: view %v", v)
+	}
+	find("hawk.md")
+	r.waitKeptNotice(t, `"hawk.md" is not on the page: found in the text (Raw)`)
+	r.s.WaitFor(t, "the find in the text, on its match", func(string) bool {
+		return shownView(r) == widget.ViewRaw && r.cursor()[0] == 2 && onLoop(r, func() int { return r.h.find.total }) == 1
+	})
+}

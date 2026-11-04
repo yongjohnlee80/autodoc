@@ -279,10 +279,15 @@ The page has no cursor, which changes two things:
 
 - **SPC j** follows the first link at or after the page's top, among what is on screen. With none
   on screen, it says so.
-- **Find** counts and marks what the page shows, while the text's find counts its source. A link's
-  target or a word inside Markdown syntax is found in Raw only. Ctrl+T runs the find again in the new
-  view's terms, so "k of N" can change. The reader stays put, and the current match is the first at
-  or after their place.
+- **Find** counts and marks what the page shows, while the text's find counts its source. Ctrl+T
+  runs the find again in the new view's terms, so "k of N" can change. The reader stays put, and the
+  current match is the first at or after their place.
+  - A hit on the page puts the editor's cursor at its block, so Raw opens there, and gives the page
+    the keyboard.
+  - A term the page doesn't show but the source has (a link's target, Markdown's own syntax such as
+    `- [ ]`) opens Raw at the reader's place, says so, and is found there. The same command means
+    the same thing whether a user or a script runs it.
+  - A term in neither view is not found, and the view stays as it is.
 
 In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`, `tui/outline.go`
 
