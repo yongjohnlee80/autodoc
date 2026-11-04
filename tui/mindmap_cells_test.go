@@ -41,7 +41,7 @@ func press(code rune, text string) tuicore.KeyEvent {
 	return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: code, Text: text}
 }
 
-// TestTheCellMindmapsArrowsReachEveryBox (ADR 1793541348 §5 case 4): from the root, the arrows,
+// TestTheCellMindmapsArrowsReachEveryBox: from the root, the arrows,
 // and h j k l alike, reach every box of the map; a key with no box that way keeps the selection.
 func TestTheCellMindmapsArrowsReachEveryBox(t *testing.T) {
 	m, v := builtMindmap(t, smallMind(), "a.md", 80, 30)
