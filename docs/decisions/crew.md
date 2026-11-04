@@ -388,7 +388,7 @@ endpoint, `registered`, `none` or `failing`. A credential of an ended session an
 session's state alone; one matching no session is `bad_credential`. It never answers a credential,
 so no caller can obtain another agent's identity through it. It writes nothing.
 
-`autodoc crew reissue [--wait D]`, and the crew MCP server's `crew_reissue`, read it and do what the
+`autodoc crew reissue [--wait D] [--json]`, and the crew MCP server's `crew_reissue`, read it and do what the
 agent can:
 
 - No context at its path yet, a credential the daemon no longer knows, or an ended session: it
@@ -402,8 +402,10 @@ agent can:
   10 s, else it says the daemon holds none.
 - A registered endpoint it keeps: a registration raises its generation and resets its wake state,
   so a re-issue of a healthy session changes nothing.
-- It answers `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access
-  it ended with.
+- It says what it re-issued, kept and could not, each with why, in sentences: a healthy session's
+  answer is that nothing needed re-issuing. `--json` (and the MCP tool) answers
+  `{reissued, kept, not: [{item, why}]}` for the session and the endpoint, and the access it ended
+  with.
 
 The guide's first step says to call it when `crew whoami` fails, then ask again.
 
