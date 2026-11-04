@@ -6303,6 +6303,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · ドキュメント %2 件 · 深さ %3 · d で深さ、l で凡例</translation>
     </message>
+    <message id="autodoc.text.mindmap_tui.mindmap_documents_depth_keys">
+        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</source>
+        <translation>Mindmap · %1 · ドキュメント %2 件 · 深さ %3 · d で深さ、Enter で開く</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map">
         <source>open a workspace's document to see its mind map</source>
         <translation>マインドマップを見るにはワークスペースのドキュメントを開いてください</translation>

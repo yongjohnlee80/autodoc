@@ -205,12 +205,12 @@ const (
 	relationViewsMarker = "    // ---- the relation views' panels (the GUI's) ----\n"
 )
 
-// withRelationViews is src with the GUI's relation views written in after their markers when gui
-// (the program runs as a window, not only built able to): nothing for a terminal, whatever the
-// build (relationMenuQML and relationViewsQML are empty in a build without the GUI), and nothing
-// where a marker is missing (a test's own layout).
+// withRelationViews is src with the build's relation views written in after their markers: the
+// GUI's when gui (the program runs as a window, not only built able to), nothing for a GUI build
+// run in a terminal; a terminal build's own (cellRelationViews: its Mindmap in cells) always; and
+// nothing where a marker is missing (a test's own layout).
 func withRelationViews(src []byte, gui bool) []byte {
-	if !gui {
+	if !gui && !cellRelationViews {
 		return src
 	}
 	return insertAfter(insertAfter(src, relationMenuMarker, relationMenuQML), relationViewsMarker, relationViewsQML)

@@ -6306,6 +6306,10 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documentos · profundidade %3 · d profundidade, l legenda</translation>
     </message>
+    <message id="autodoc.text.mindmap_tui.mindmap_documents_depth_keys">
+        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</source>
+        <translation>Mindmap · %1 · %2 documentos · profundidade %3 · d profundidade, Enter abre</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map">
         <source>open a workspace's document to see its mind map</source>
         <translation>abra um documento de um espaço de trabalho para ver o mapa mental dele</translation>
