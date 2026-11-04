@@ -229,19 +229,53 @@ func registerEndpoint(ctx context.Context, configPath string, c sessionContext, 
 	return nil
 }
 
-// crewReissueMain runs `autodoc crew reissue [--wait D]`: reissue as the session the CLI finds,
-// its answer on stdout as one line. Exit 0 with an answer, 1 when reissue could not run (several
-// contexts, another agent's, no daemon), 2 for usage.
+// reissuePart names an item as a sentence says it.
+var reissuePart = map[string]string{reissueSession: "your session", reissueEndpoint: "how you're woken (your endpoint)"}
+
+// said is res as sentences, one per line: what was re-issued, what stood, and what could not be, each
+// with why. A healthy session's says nothing needed re-issuing.
+func (res reissueResult) said() string {
+	parts := func(items []string) string {
+		out := make([]string, len(items))
+		for i, it := range items {
+			out[i] = reissuePart[it]
+		}
+		return strings.Join(out, " and ")
+	}
+	var lines []string
+	if len(res.Reissued) == 0 && len(res.Not) == 0 {
+		lines = append(lines, "Nothing needed re-issuing: "+parts(res.Kept)+" stand as they were, and nothing changed.")
+	} else {
+		if len(res.Reissued) > 0 {
+			lines = append(lines, "Re-issued "+parts(res.Reissued)+".")
+		}
+		if len(res.Kept) > 0 {
+			lines = append(lines, "Kept "+parts(res.Kept)+", as it stood.")
+		}
+		for _, n := range res.Not {
+			lines = append(lines, "Not re-issued, "+reissuePart[n.Item]+": "+n.Why+".")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// crewReissueMain runs `autodoc crew reissue [--wait D] [--json]`: reissue as the session the CLI
+// finds, its answer on stdout in sentences (said), or with --json as one line. Exit 0 with an answer,
+// 1 when reissue could not run (several contexts, another agent's, no daemon), 2 for usage.
 func crewReissueMain(ctx context.Context, configPath string, args []string, stdout, stderr io.Writer) int {
-	wait := reissueWait
+	wait, asJSON := reissueWait, false
 	for i := 0; i < len(args); i++ {
+		if args[i] == "--json" {
+			asJSON = true
+			continue
+		}
 		v, ok := strings.CutPrefix(args[i], "--wait=")
 		if args[i] == "--wait" && i+1 < len(args) {
 			v, ok, i = args[i+1], true, i+1
 		}
 		d, err := time.ParseDuration(v)
 		if !ok || err != nil || d < 0 {
-			fmt.Fprintln(stderr, "usage: autodoc crew reissue [--wait D]   e.g. autodoc crew reissue --wait 40s")
+			fmt.Fprintln(stderr, "usage: autodoc crew reissue [--wait D] [--json]   e.g. autodoc crew reissue --wait 40s")
 			return 2
 		}
 		wait = d
@@ -256,6 +290,10 @@ func crewReissueMain(ctx context.Context, configPath string, args []string, stdo
 			fmt.Fprintln(stderr, "autodoc:", err)
 		}
 		return 1
+	}
+	if !asJSON {
+		fmt.Fprintln(stdout, res.said())
+		return 0
 	}
 	enc := json.NewEncoder(stdout)
 	enc.SetEscapeHTML(false)
