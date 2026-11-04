@@ -224,8 +224,11 @@ func relationViewChoices() map[string][]string {
 }
 
 func (h *Host) relationViewFeatures() []Feature {
-	if !h.gui {
-		return nil
+	if !h.gui { // run as a terminal (--ui): the terminal's Mindmap, in cells (mindmap_cells.go)
+		if h.relationViews == nil {
+			h.relationViews = []Feature{newCellMindmap(core{h})}
+		}
+		return h.relationViews
 	}
 	if h.relationViews == nil {
 		store := newGraphStore(core{h}, core{h}, h.graphUserFile) // the views' groups, one store for both
@@ -256,6 +259,8 @@ func (h *Host) relationViewTypes() []tuidecl.Type {
 					f.view, f.drag = nil, nil // its gesture goes with it
 				}
 			}))
+		case *cellMindmap:
+			out = append(out, f.viewType())
 		case *mindmap:
 			out = append(out, relationViewType("Mindmap", f.newView, func(c tuicore.Component) {
 				if f.view == c {
