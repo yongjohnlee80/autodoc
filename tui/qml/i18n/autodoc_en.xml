@@ -6953,6 +6953,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>%1 is not indexed yet</source>
         <translation>%1 is not indexed yet</translation>
     </message>
+    <message id="autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal">
+        <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
+        <translation>%1 diagram: not drawn in the terminal (Raw shows its source)</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</translation>
