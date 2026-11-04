@@ -147,8 +147,9 @@ func (m *Manager) endScopeSessions(tx Tx, after *afterCommit, scope, why string)
 }
 
 // endSession ends s in tx and applies what follows from it, in the same transaction: its
-// endpoint goes, its attention clears, its wake row stops (no attempt, no deadline, nothing left
-// to announce), and the mail module's effect on its deliveries (SessionEnder). Its endpoint's secret
+// endpoint goes, its attention clears, its wake row goes (an ended session is never woken again, and
+// a row kept for every session ever made each scheduler sweep read the crew's whole history), and the
+// mail module's effect on its deliveries (SessionEnder). Its endpoint's secret
 // is forgotten once tx has committed (after), never before: an end that rolls back keeps it.
 func (m *Manager) endSession(tx Tx, after *afterCommit, s Session, why string) error {
 	at := tx.Now().UnixNano()
@@ -163,15 +164,11 @@ func (m *Manager) endSession(tx Tx, after *afterCommit, s Session, why string) e
 	if err := clearAttention(tx, s.ID); err != nil {
 		return err
 	}
-	if w, ok, err := tx.Wake(s.ID); err != nil {
+	// An ended session is never announced to, and nothing writes its row again: every later write
+	// of a wake reads the row first (an attempt's end, a timeout) or is for a live session
+	// (RaisePending), so a gone row stays gone.
+	if err := tx.DeleteWake(s.ID); err != nil {
 		return err
-	} else if ok {
-		// An ended session is never announced to: with its pending work marked announced, its
-		// row is no longer due, so it can't hold a place in the scheduler's look ahead of a live one.
-		w.State, w.Token, w.NextAt, w.AnnouncedGen = WakeIdle, "", nil, w.PendingGen
-		if err := tx.PutWake(w); err != nil {
-			return err
-		}
 	}
 	if m.ender != nil {
 		return m.ender.EndSessionDeliveries(tx, s, why)
