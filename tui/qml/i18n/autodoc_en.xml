@@ -6957,10 +6957,6 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</translation>
     </message>
-    <message id="autodoc.text.mindmap_tui.mindmap_documents_depth_keys">
-        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</source>
-        <translation>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</translation>
-    </message>
     <message id="autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map">
         <source>open a workspace's document to see its mind map</source>
         <translation>open a workspace's document to see its mind map</translation>
@@ -6968,6 +6964,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.text.mindmap_gui.reading">
         <source>reading %1…</source>
         <translation>reading %1…</translation>
+    </message>
+    <message id="autodoc.text.mindmap_tui.mindmap_documents_depth_keys">
+        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</source>
+        <translation>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</translation>
     </message>
     <message id="autodoc.text.notices.notifications">
         <source>notifications (%1)</source>
