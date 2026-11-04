@@ -296,7 +296,8 @@ func TestAnEditingKeyFromThePageActsOnce(t *testing.T) {
 	r.keys(t, key('o'))
 	r.keys(t, decltest.Type("z")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
-	r.s.WaitFor(t, "o acted once", func(string) bool { return r.editorText() == " Pantry\nz\n\nshelf\n" })
+	// o keeps the line's indent, as vim's does: the space x left
+	r.s.WaitFor(t, "o acted once", func(string) bool { return r.editorText() == " Pantry\n z\n\nshelf\n" })
 }
 
 // TestTheCommandLineOpensFromThePage: ':' from a note's page opens the command line, as from its text.

@@ -69,7 +69,13 @@ func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
 	if v.HTMLView.HandleEvent(ev) {
 		return true
 	}
-	if isKey && k.Kind == tuicore.KeyPress && editingKey(k) {
+	if !isKey || k.Kind != tuicore.KeyPress {
+		return false
+	}
+	if _, copies := v.Context().KeyCommand(k, widget.HTMLViewCopy); copies {
+		return true // Copy (y) with nothing selected copies nothing: a reading key, the page's still
+	}
+	if editingKey(k) {
 		return v.page.edit(k)
 	}
 	return false
