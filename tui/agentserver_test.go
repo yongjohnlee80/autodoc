@@ -257,18 +257,21 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 
 // TestTheServerIsStartedWithTheCLIsEnvironment, end to end through runAgent: a crew Codex agent's
 // server runs the shell commands of its agent, so it is started with what its CLI is: every
-// variable the CLI's command line sets (the daemon, the agent's PATH, the editor socket and the
-// agent's token there, the session's context), and none of the window's spawner identity (R4).
+// variable the CLI's environment holds (the daemon, the agent's PATH, the editor socket and the
+// agent's token there, the session's context, the setup's own), and none of the window's spawner
+// identity (R4). None of them is on the CLI's command line or the server's, which
+// /proc/<pid>/cmdline shows every user of the machine: the CLI is /bin/sh -c <command>.
 func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	t.Setenv("AUTO_AGENTS_MAILBOX_ID", "agent:the-window:1") // the window's spawner identity
 	a, c, _ := crewAgents(t, crewKinds)
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("codex-one")
+	const secret = "tok-setup-9a1b"
 	var socket, envFile string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
 		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
-		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
+		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP, Env: map[string]string{"SVC_TOKEN": secret}}, nil
 	}
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -276,8 +279,8 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	}
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.tab]
-	var spawned []string // the CLI's command line, as runAgent gives it
-	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c.Args; return newFakeTerminal(), nil }
+	var spawned pty.Cmd // the CLI, as runAgent gives it
+	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -292,20 +295,10 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 		k, v, _ := strings.Cut(kv, "=")
 		server[k] = v
 	}
-	// the CLI's: its command line is env [-u NAME]... NAME=VALUE... sh -c COMMAND
-	cli := map[string]string{}
-	for i := 0; i < len(spawned) && spawned[i] != "/bin/sh"; i++ {
-		if spawned[i] == "-u" {
-			i++
-			continue
-		}
-		if k, v, ok := strings.Cut(spawned[i], "="); ok {
-			cli[k] = v
-		}
-	}
-	for _, k := range []string{crew.EnvContext, "AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH"} {
+	cli := environMap(spawned.Env)
+	for _, k := range []string{crew.EnvContext, "AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH", "SVC_TOKEN"} {
 		if cli[k] == "" {
-			t.Fatalf("fixture: the CLI's command line sets no %s: %q", k, spawned)
+			t.Fatalf("fixture: the CLI's environment has no %s: %q", k, spawned.Env)
 		}
 	}
 	for k, v := range cli {
@@ -313,9 +306,77 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 			t.Errorf("the server's %s is %q, the CLI's %q", k, server[k], v)
 		}
 	}
-	if v, ok := server["AUTO_AGENTS_MAILBOX_ID"]; ok {
-		t.Errorf("the server has the window's spawner identity: AUTO_AGENTS_MAILBOX_ID=%s", v)
+	for _, env := range []map[string]string{cli, server} {
+		if v, ok := env["AUTO_AGENTS_MAILBOX_ID"]; ok {
+			t.Errorf("the CLI or its server has the window's spawner identity: AUTO_AGENTS_MAILBOX_ID=%s", v)
+		}
 	}
+	argv := slices.Concat([]string{spawned.Path}, spawned.Args, instance.setup.Server)
+	for _, k := range []string{"AUTODOC_EDITOR_TOKEN", crew.EnvContext, "SVC_TOKEN"} {
+		for _, arg := range argv {
+			if strings.Contains(arg, cli[k]) {
+				t.Errorf("%s's value is on a command line: %q", k, arg)
+			}
+		}
+	}
+	if spawned.Path != "/bin/sh" || len(spawned.Args) < 2 || spawned.Args[0] != "-c" {
+		t.Errorf("the CLI is %q %q, want /bin/sh -c <command>", spawned.Path, spawned.Args)
+	}
+}
+
+// TestAPlainAgentsVariablesAreInItsEnvironment: an agent outside a crew is started as /bin/sh -c
+// <command> too, the window's variables (the editor socket and the agent's token there among them)
+// in its environment, none on its command line, and the spawner's identity not in it.
+func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
+	t.Setenv("AUTO_AGENTS_MAILBOX_ID", "agent:the-window:1")
+	c := newIdentityHost(crewKinds)
+	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
+	a := testAgents(c, t.TempDir(), "")
+	a.editorPath = func() string { return "/run/the-editor.sock" }
+	p, _ := a.profile("claude-one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if instance.crewed {
+		t.Fatal("fixture: the agent is crewed")
+	}
+	cfg := c.panel.configs[instance.tab]
+	var spawned pty.Cmd
+	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = proc.Close() }()
+	env := environMap(spawned.Env)
+	for _, k := range []string{"AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH"} {
+		if env[k] == "" {
+			t.Fatalf("the agent's environment has no %s: %q", k, spawned.Env)
+		}
+	}
+	if _, ok := env["AUTO_AGENTS_MAILBOX_ID"]; ok {
+		t.Error("the agent has the window's spawner identity")
+	}
+	for _, arg := range append([]string{spawned.Path}, spawned.Args...) {
+		if strings.Contains(arg, env["AUTODOC_EDITOR_TOKEN"]) || strings.Contains(arg, "AUTODOC_SOCKET=") {
+			t.Errorf("a variable is on the agent's command line: %q", arg)
+		}
+	}
+	if spawned.Path != "/bin/sh" || len(spawned.Args) != 2 || spawned.Args[0] != "-c" {
+		t.Errorf("the agent is %q %q, want /bin/sh -c <command>", spawned.Path, spawned.Args)
+	}
+}
+
+// environMap is environ (os.Environ's form) as a map, a later entry winning, as exec.Cmd takes it.
+func environMap(environ []string) map[string]string {
+	out := map[string]string{}
+	for _, kv := range environ {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // fakeTerminal is an agent CLI's process: Wait returns once ended, Close records the terminal closed.

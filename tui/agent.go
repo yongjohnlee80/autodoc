@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -498,28 +497,12 @@ func shellWords(command string) []shellWord {
 	return out
 }
 
-// agentArgv is how the terminal runs command: env, dropping the identity another agent host gave
-// the TUI (spawnerIdentity) and setting AutoDoc's variables, running the shell on the command as
-// the user wrote it, so its quoting and arguments are the shell's.
-func agentArgv(command string, env []string) (string, []string, error) {
-	envPath, err := exec.LookPath("env")
-	if err != nil {
-		return "", nil, err
-	}
-	shell := "/bin/sh"
-	var args []string
-	for _, name := range spawnerIdentity(os.Environ()) {
-		args = append(args, "-u", name)
-	}
-	args = append(append(args, env...), shell, "-c", command)
-	return envPath, args, nil
-}
-
-// withEnvArg is agentArgv's args with kv set for the program as well: among its variables, before
-// the shell that runs the command (the args end with the shell, -c and the command).
-func withEnvArg(args []string, kv string) []string {
-	i := max(len(args)-3, 0)
-	return slices.Concat(args[:i:i], []string{kv}, args[i:])
+// agentArgv is how the terminal runs command: the shell on the command as the user wrote it, so
+// its quoting and arguments are the shell's. Its variables are never on a command line, which
+// /proc/<pid>/cmdline shows every user of the machine (AUTODOC_EDITOR_TOKEN among them): the
+// process gets them in its environment (agentEnviron, runAgent).
+func agentArgv(command string) (string, []string) {
+	return "/bin/sh", []string{"-c", command}
 }
 
 // withCommandArgs is agentArgv's args with extra appended to the program's own command line, each

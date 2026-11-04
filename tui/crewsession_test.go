@@ -106,15 +106,22 @@ func contextFiles(t *testing.T, dir string) []string {
 	return out
 }
 
-// startedEnv is the variables instance's tab starts its program with, through the tab's own start
-// (runAgent), its program not run; err is the start's refusal.
-func startedEnv(a *agents, c *identityHost, instance *agentInstance) (args []string, spawned bool, err error) {
+// startedEnv is the variables instance's tab starts its program with (its environment, a later
+// entry winning), through the tab's own start (runAgent), its program not run; err is the start's
+// refusal.
+func startedEnv(a *agents, c *identityHost, instance *agentInstance) (env []string, spawned bool, err error) {
+	cmd, spawned, err := startedCmd(a, c, instance)
+	return cmd.Env, spawned, err
+}
+
+// startedCmd is the command instance's tab starts its program with, as startedEnv.
+func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
 	cfg := c.panel.configs[instance.tab]
 	spawn := a.spawn
 	defer func() { a.spawn = spawn }()
-	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) { args, spawned = cmd.Args, true; return nil, nil }
+	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) { started, spawned = cmd, true; return nil, nil }
 	_, err = cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
-	return args, spawned, err
+	return started, spawned, err
 }
 
 // TestAnAgentIsRegisteredBeforeItStarts (docs/decisions/crew.md#sessions-and-the-guard,
