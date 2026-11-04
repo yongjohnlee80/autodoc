@@ -540,20 +540,25 @@ func testAReportIsReadOnce(t *testing.T, h Harness) {
 	}
 }
 
-// The history is the human's deliveries, newest first, paged by seq; the undeliverable list is
-// the generated notices nobody could receive, newest first. Both read the same on every engine.
+// The history is the human's deliveries, newest first, paged by seq, each page saying whether an
+// older one is there (more); the undeliverable list is the generated notices nobody could receive,
+// newest first, never paged (more false). Both read the same on every engine.
 func testTheHistoryAndUndeliverableNotices(t *testing.T, h Harness) {
 	r := newRig(t, h)
 	for _, s := range []string{"one", "two", "three"} {
 		r.ask("s-gold", "", s, 0)
 	}
-	all, err := r.in.List(r.ctx, inbox.ListAll, 0, 50)
-	if err != nil || !slices.Equal(messages(all), []string{"three", "two", "one"}) {
-		t.Fatalf("the history: %v, %v; want newest first", messages(all), err)
+	all, more, err := r.in.List(r.ctx, inbox.ListAll, 0, 50)
+	if err != nil || !slices.Equal(messages(all), []string{"three", "two", "one"}) || more {
+		t.Fatalf("the history: %v, more %v, %v; want newest first, nothing older", messages(all), more, err)
 	}
-	page, err := r.in.List(r.ctx, inbox.ListAll, all[0].Delivery.Seq, 1)
-	if err != nil || !slices.Equal(messages(page), []string{"two"}) {
-		t.Fatalf("the page below %d: %v, %v; want two", all[0].Delivery.Seq, messages(page), err)
+	page, more, err := r.in.List(r.ctx, inbox.ListAll, all[0].Delivery.Seq, 1)
+	if err != nil || !slices.Equal(messages(page), []string{"two"}) || !more {
+		t.Fatalf("the page below %d: %v, more %v, %v; want two, one older below it", all[0].Delivery.Seq, messages(page), more, err)
+	}
+	last, more, err := r.in.List(r.ctx, inbox.ListAll, page[0].Delivery.Seq, 1)
+	if err != nil || !slices.Equal(messages(last), []string{"one"}) || more {
+		t.Fatalf("the last page: %v, more %v, %v; want one, nothing older", messages(last), more, err)
 	}
 	// two notices that failed, at different times, and one delivered: only the failed are listed
 	r.write(func(tx inbox.Tx) error {
@@ -574,7 +579,11 @@ func testTheHistoryAndUndeliverableNotices(t *testing.T, h Harness) {
 		}
 		return nil
 	})
-	gone, err := r.in.List(r.ctx, inbox.ListUndeliverable, 0, 50)
+	gone, more, err := r.in.List(r.ctx, inbox.ListUndeliverable, 0, 1)
+	if err != nil || len(gone) != 1 || more {
+		t.Fatalf("the newest undeliverable notice: %d, more %v, %v; want one, and no paging (more false)", len(gone), more, err)
+	}
+	gone, _, err = r.in.List(r.ctx, inbox.ListUndeliverable, 0, 50)
 	var ids []string
 	for _, it := range gone {
 		ids = append(ids, it.Delivery.ID)
@@ -582,7 +591,20 @@ func testTheHistoryAndUndeliverableNotices(t *testing.T, h Harness) {
 	if err != nil || !slices.Equal(ids, []string{"d-ev2", "d-ev1"}) {
 		t.Fatalf("the undeliverable notices: %v, %v; want the two failed, newest first", ids, err)
 	}
-	if _, err := r.in.List(r.ctx, "bogus", 0, 1); !errors.Is(err, inbox.ErrInvalid) {
+	// a page the byte bound cut short has more, though fewer than the limit came back
+	big := newRig(t, h)
+	body := strings.Repeat("x", mail.MaxBody)
+	for i := range 40 {
+		if _, err := big.m.Send(big.ctx, "s-jarvis", mail.Send{To: []string{mail.UserCodename}, Kind: mail.KindRequest,
+			Subject: fmt.Sprintf("big%02d", i), Body: body, Key: fmt.Sprintf("big%02d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cut, more, err := big.in.List(big.ctx, inbox.ListAll, 0, 50)
+	if err != nil || len(cut) == 0 || len(cut) >= 40 || !more {
+		t.Fatalf("40 requests of 64 KiB, limit 50: %d answered, more %v, %v; want a page cut by bytes, more true", len(cut), more, err)
+	}
+	if _, _, err := r.in.List(r.ctx, "bogus", 0, 1); !errors.Is(err, inbox.ErrInvalid) {
 		t.Fatalf("an unknown filter: %v, want ErrInvalid", err)
 	}
 }
