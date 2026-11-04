@@ -202,7 +202,8 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	args, _, err := startedEnv(a, c, instance)
+	cmd, _, err := startedCmd(a, c, instance)
+	args := cmd.Args
 	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") {
 		t.Fatalf("the spawn: %v, args %v; want --mcp-config on its command line, never --strict-mcp-config", err, args)
 	}
