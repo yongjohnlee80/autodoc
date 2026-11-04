@@ -302,6 +302,9 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 		}
 	}
 	for k, v := range cli {
+		if shellSets[k] {
+			continue // the server's shell sets its own, as the CLI's /bin/sh does
+		}
 		if server[k] != v {
 			t.Errorf("the server's %s is %q, the CLI's %q", k, server[k], v)
 		}
@@ -367,6 +370,9 @@ func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
 		t.Errorf("the agent is %q %q, want /bin/sh -c <command>", spawned.Path, spawned.Args)
 	}
 }
+
+// shellSets are the variables a POSIX shell sets itself at its start, whatever its environment held.
+var shellSets = map[string]bool{"PWD": true, "OLDPWD": true, "SHLVL": true, "_": true}
 
 // environMap is environ (os.Environ's form) as a map, a later entry winning, as exec.Cmd takes it.
 func environMap(environ []string) map[string]string {
