@@ -216,6 +216,15 @@ func shownView(r *running) widget.EditorView {
 	return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
 }
 
+// asText takes the note shown from its page to its text (Ctrl+T), for a cell whose subject is the
+// text's own (its cursor, gutter, marks, wrap, motions): a note on a terminal opens Rendered.
+func (r *running) asText(t *testing.T) {
+	t.Helper()
+	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.keys(t, decltest.Ctrl('t'))
+	r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })
+}
+
 // notePage is the run's terminal note page.
 func notePage(r *running) *cellNotePage {
 	return onLoop(r, func() *cellNotePage {
