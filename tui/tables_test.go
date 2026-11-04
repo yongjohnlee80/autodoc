@@ -74,7 +74,8 @@ func TestACSVFileIsATableInTheTerminal(t *testing.T) {
 
 	onLoop(r, func() bool { r.h.openPath("c.md"); return true })
 	r.waitFile(t, "c.md")
-	r.s.WaitFor(t, "a note drawn as text", func(string) bool { return now().view == widget.ViewRaw })
+	// a note is its page on a terminal, in either build (notepage.go)
+	r.s.WaitFor(t, "a note drawn as its page", func(string) bool { s := now(); return s.view == widget.ViewRendered && s.table == nil })
 
 	onLoop(r, func() bool { r.h.openPath("a.csv"); return true }) // its buffer, shown again: no load
 	r.s.WaitFor(t, "a.csv's buffer shown", func(string) bool { return r.file().path == "a.csv" })
