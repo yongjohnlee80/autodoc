@@ -452,6 +452,9 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	}
 	committed := time.Since(started)
 	if flipped {
+		if x.opts.onFlip != nil {
+			x.opts.onFlip()
+		}
 		m.mu.Lock()
 		m.activeFP = vb.fp
 		fillStart, fillTexts, fillTotal := m.fillStart, m.fillTexts+int64(len(vb.items)), m.fillTotal

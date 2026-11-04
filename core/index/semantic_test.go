@@ -152,6 +152,22 @@ func via(r Result) []string {
 	return out
 }
 
+// flippedTo waits for fp to be the active model everywhere a reader sees it: the store's model row,
+// the writer's own record (Status's) and the published snapshot (queries'). The writer commits a
+// flip, then records and publishes it, so a wait on the store alone can return while Status still
+// reports the old model.
+func (e *env) flippedTo(fp string) {
+	e.t.Helper()
+	e.eventually("the flip to "+fp, func() bool {
+		snap := e.ix.sem.snap.Load()
+		return e.activeModel() == fp && e.ix.sem.active() == fp && snap != nil && snap.Model() == fp
+	})
+}
+
+// holdFlip is an onFlip that holds the window between a flip's commit and its record, as a busy
+// writer goroutine may: a cell that reads the store and then Status meets it every time.
+func holdFlip() { time.Sleep(100 * time.Millisecond) }
+
 func (e *env) activeModel() string {
 	e.t.Helper()
 	var fp string
@@ -778,9 +794,9 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	e.stop()
 	b := newFake("m2", "b")
 	e.stop = nil
-	e.open(options{Provider: b})
+	e.open(options{Provider: b, onFlip: holdFlip})
 	fpB := b.Model().Fingerprint()
-	e.eventually("the flip to b", func() bool { return e.activeModel() == fpB })
+	e.flippedTo(fpB)
 	for _, vb := range []vecBatch{{fp: fpA}, {fp: fpA, items: []vecItem{{textHash: []byte("late"), vec: make([]float32, 64)}}}} {
 		if err := e.ix.handVectors(context.Background(), vb); err != nil {
 			t.Fatal(err)
@@ -808,8 +824,8 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 	b := newFake("m2", "b")
 	b.refuse = "oversized"
 	e.stop = nil
-	e.open(options{Provider: b})
-	e.eventually("the flip despite refusal", func() bool { return e.activeModel() == b.Model().Fingerprint() })
+	e.open(options{Provider: b, onFlip: holdFlip})
+	e.flippedTo(b.Model().Fingerprint())
 	es := e.embStatus()
 	if es.Model != b.Model().Fingerprint() || es.Target != "" || es.Pending != 1 || es.Refused != 1 ||
 		es.Semantic != SemanticPartial || len(es.RefusedTexts) != 1 || es.RefusedTexts[0].Path != "y.md" {
