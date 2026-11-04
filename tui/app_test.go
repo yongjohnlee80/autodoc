@@ -847,6 +847,7 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 					t.Errorf("%q: foreground equals background (%+v)", text, c.Attrs)
 				}
 			}
+			r.s.WaitForText(t, "legible text") // a note's page is drawn once its export is back (notepage.go)
 			legible("legible text")
 			legible("opened a.md")
 			// the explorer, over the page's left

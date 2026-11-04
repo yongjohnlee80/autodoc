@@ -177,11 +177,25 @@ func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
 		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
 	}
 	onLoop(r, func() bool { r.h.openPath("flow.md"); return true })
-	r.waitFile(t, "flow.md")
+	// its toast is Korean now: the file is waited for, not its English "opened"
+	r.s.WaitFor(t, "flow.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "flow.md" })
 	r.s.WaitForText(t, koNotice) // the page made after the language: its words already Korean
 	onLoop(r, func() bool { r.h.useLanguage("en"); return true })
 	r.s.WaitForText(t, "flowchart diagram: not drawn in the terminal (Raw shows its source)")
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a handler crashed on the way:\n%s", logs[0])
 	}
+}
+
+// TestTheLeaderWorksOverTheStartsNotePage: at start the untitled note is shown as its page; SPC is
+// the app's over it, as over the text: SPC o opens the picker.
+func TestTheLeaderWorksOverTheStartsNotePage(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.connected(t)
+	r.s.WaitFor(t, "the start's page", func(string) bool {
+		return onLoop(r, func() bool { _, ok := r.h.editor.(*widget.Editor).DocumentView().(*notePageView); return ok })
+	})
+	r.leader(t, 'o')
+	r.s.WaitForText(t, "open a document")
 }
