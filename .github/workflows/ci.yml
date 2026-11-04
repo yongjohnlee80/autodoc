@@ -244,8 +244,10 @@ jobs:
           CGO_ENABLED=1 GOARCH=arm64 go build -tags gui -o /dev/null ./cmd/autodoc
           CGO_ENABLED=1 GOARCH=amd64 go build -tags gui -o /dev/null ./cmd/autodoc
 
+      # 45 m per package, as the Linux job's: core/index and core/crewmail/sqlitecrewmail take 12-14
+      # min a count under -race on a macOS runner, and a slow one put both on a 20 m line
       - name: test the follower and the daemon (FSEvents)
-        run: CGO_ENABLED=1 go test -race -count=2 -timeout 20m ./core/... ./rpc/...
+        run: CGO_ENABLED=1 go test -race -count=2 -timeout 45m ./core/... ./rpc/...
 
   # The Linux GUI build (make build-gui, the release's -gui artifacts): cgo against the window
   # system's libraries. The static TUI build is the job above's.
@@ -352,6 +354,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Both coverage runs take 45 m per package, as the race job's: -coverpkg=./... in atomic mode
+      # slows every package, and the longest (core/index) is near a 20 m line on a slow runner.
       # The head run gets the service's URL and the requirement: without it
       # the cells would skip and the changed package would report no coverage
       # at all, failing the policy for a reason the log would not show.
@@ -360,7 +364,7 @@ jobs:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
         run: >-
-          go test -count=1 -timeout 20m -tags server -covermode=atomic
+          go test -count=1 -timeout 45m -tags server -covermode=atomic
           -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-head.out" ./...
 
       # The base run gets the URL only when the base tree already has
@@ -379,7 +383,7 @@ jobs:
           if [ -f app/server_on.go ]; then
             tags=server
           fi
-          go test -count=1 -timeout 20m -tags "$tags" -covermode=atomic \
+          go test -count=1 -timeout 45m -tags "$tags" -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
