@@ -139,8 +139,8 @@ func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
 // opens nothing and says so.
 func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r := attached(t, startDaemon(t, linksKB))
-	r.leader(t, 'j') // the draft, empty: no link
-	r.waitKeptNotice(t, "no link under the cursor: SPC l shows what untitled links with")
+	r.leader(t, 'j') // the draft, empty: no link. The draft is a note, so its page answers
+	r.waitKeptNotice(t, "no link on the page here: SPC l shows what untitled links with")
 
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
@@ -153,6 +153,7 @@ func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r.bufferKey(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
+	r.asText(t) // the link under the cursor is the text's: on the page SPC j takes the first on screen
 	r.putCursor(2, strings.Index(line, "the c"))
 	r.leader(t, 'j')
 	r.waitFile(t, "c.md")

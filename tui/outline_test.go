@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 const guideFile = "# Guide\n\nintro\n\n## Setup\n\nsteps\n\n### Linux\n\napt\n\n## Usage\n\nrun\n"
@@ -34,11 +37,43 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 	r.s.WaitFor(t, "the crumb under Linux", func(string) bool {
 		return strings.Contains(r.frameTitle(), "guide.md › Guide › Setup › Linux")
 	})
+	r.asText(t)         // G on a note's page scrolls it, and this one fits: in the text G moves the cursor
 	r.keys(t, key('G')) // a key moves it too: the last line, under Usage
 	r.s.WaitFor(t, "the crumb under Usage", func(string) bool {
 		t := r.frameTitle()
 		return strings.Contains(t, "guide.md › Guide › Usage") && !strings.Contains(t, "Linux")
 	})
+}
+
+// On a note's page, which has no cursor, the breadcrumb follows the reader's place: the heading of
+// the block at the page's top, as PgDn takes it past a heading (docs/decisions/editor.md).
+func TestTheBreadcrumbFollowsThePagesTop(t *testing.T) {
+	var note strings.Builder
+	note.WriteString("# Guide\n\n")
+	for i := range 40 {
+		fmt.Fprintf(&note, "Intro %02d of the guide.\n\n", i)
+	}
+	note.WriteString("## Later\n\n")
+	for i := range 40 {
+		fmt.Fprintf(&note, "Later %02d of the guide.\n\n", i)
+	}
+	r := openNotePage(t, note.String(), "Intro 00")
+	r.s.WaitFor(t, "the crumb at the first heading", func(string) bool {
+		return strings.Contains(r.frameTitle(), "n.md › Guide") && !strings.Contains(r.frameTitle(), "Later")
+	})
+	page := notePage(r)
+	top := func() int { return onLoop(r, func() int { return page.top }) }
+	for i := 0; !strings.Contains(r.frameTitle(), "› Later"); i++ {
+		if i > 20 {
+			t.Fatalf("paged %d times and the crumb never reached Later: %q", i, r.frameTitle())
+		}
+		was := top()
+		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
+		r.s.WaitFor(t, "a page on", func(string) bool { return top() > was })
+	}
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("paging left the page: view %v", v)
+	}
 }
 
 // An unsaved heading edit is in the outline, and Enter jumps to where it is now.
