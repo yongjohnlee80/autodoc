@@ -13,6 +13,8 @@ Dialog {
         direction: Tui.Vertical
         TableView {
             id: grantTable
+            // the list holds the keys at open: arrows move it, the buttons answer their letters
+            focus: true
             palette.highlight: Theme.document.highlight
             palette.highlightedText: Theme.document.highlightedText
             model: App.grants
