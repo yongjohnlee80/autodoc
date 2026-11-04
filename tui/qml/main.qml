@@ -126,6 +126,7 @@ Window {
             MenuSeparator {}
             MenuItem { text: qsTrId("autodoc.main.explorer"); onTriggered: App.toggleExplorer() }
             MenuItem { text: qsTrId("autodoc.main.notifications"); onTriggered: App.openNotices() }
+            MenuItem { text: qsTrId("autodoc.main.inbox"); onTriggered: App.openInbox() }
             MenuItem { text: qsTrId("autodoc.main.agent_permissions"); onTriggered: App.openGrants() }
             MenuSeparator {}
             // the panels that stay open, checked while they show
@@ -1057,6 +1058,7 @@ Window {
     Vectors { id: vectorsDialog }
     CrewBridges { id: crewBridges }
     Inbox { id: inbox }
+    InboxMessage { id: inboxMessage }
     Grants { id: grants }
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }

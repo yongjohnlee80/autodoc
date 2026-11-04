@@ -1711,6 +1711,50 @@
         <source>Zoom &amp;out</source>
         <translation>축소(&amp;o)</translation>
     </message>
+    <message id="autodoc.dialog.inbox.message_title">
+        <source>%1 — from %2</source>
+        <translation>%1 — %2 보냄</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_all">
+        <source>every message of yours, newest first</source>
+        <translation>받은 모든 메시지, 최신순</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_dismiss">
+        <source>decline the request: asked first, and its agent is told</source>
+        <translation>요청 거절: 먼저 묻고, 그 에이전트에게 전달됨</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_mark_read">
+        <source>mark the report read, without opening it</source>
+        <translation>보고를 열지 않고 읽음으로 표시</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_more">
+        <source>read the next fifty, older ones</source>
+        <translation>다음 50개(더 오래된 것) 읽기</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_open">
+        <source>read the message whole; a report is marked read</source>
+        <translation>메시지 전체 읽기; 보고는 읽음으로 표시됨</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_reply">
+        <source>answer the request: its agent is told</source>
+        <translation>요청에 답하기: 그 에이전트에게 전달됨</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_requests">
+        <source>the requests waiting for your answer</source>
+        <translation>답을 기다리는 요청</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_sender">
+        <source>show the agent that sent it</source>
+        <translation>보낸 에이전트 보기</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_undeliverable">
+        <source>the notices nobody could receive (the newest fifty)</source>
+        <translation>아무도 받지 못한 알림 (최신 50개)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_unread">
+        <source>the reports you haven't read</source>
+        <translation>아직 읽지 않은 보고</translation>
+    </message>
     <message id="autodoc.dialog.luaPick.choose">
         <source>&amp;Choose</source>
         <translation>선택(&amp;c)</translation>
@@ -3676,6 +3720,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.image_previews">
         <source>&amp;Image previews</source>
         <translation>이미지 미리 보기(&amp;i)</translation>
+    </message>
+    <message id="autodoc.main.inbox">
+        <source>Inbo&amp;x…</source>
+        <translation>받은 편지함(&amp;x)…</translation>
     </message>
     <message id="autodoc.main.indentation_marks">
         <source>Indentation &amp;marks</source>

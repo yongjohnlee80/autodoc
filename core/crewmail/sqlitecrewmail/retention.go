@@ -32,7 +32,7 @@ func pendingAt(cutoff int64) dao.Predicate {
 func (t *Tx) HandledBefore(cutoff int64, after mail.MessageCursor, limit int) ([]string, mail.MessageCursor, int, error) {
 	rows, err := t.m.messages.On(t.tx).
 		WithPredicate(dao.Lte(`"mail_message"."created"`, cutoff)).
-		WithPredicate(dao.Raw(`("mail_message"."created", "mail_message"."id") > (?, ?)`, after.Created, after.ID)).
+		WithPredicate(store.RowAfter([]string{`"mail_message"."created"`, `"mail_message"."id"`}, after.Created, after.ID)).
 		OrderBy(dao.Asc(byAge)).Limit(uint64(limit)).Select()
 	if err != nil {
 		return nil, after, 0, err

@@ -1711,6 +1711,50 @@
         <source>Zoom &amp;out</source>
         <translation>Alejar (&amp;o)</translation>
     </message>
+    <message id="autodoc.dialog.inbox.message_title">
+        <source>%1 — from %2</source>
+        <translation>%1 — de %2</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_all">
+        <source>every message of yours, newest first</source>
+        <translation>todos tus mensajes, los más recientes primero</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_dismiss">
+        <source>decline the request: asked first, and its agent is told</source>
+        <translation>rechazar la solicitud: se pregunta antes, y se le dice a su agente</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_mark_read">
+        <source>mark the report read, without opening it</source>
+        <translation>marcar el informe como leído, sin abrirlo</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_more">
+        <source>read the next fifty, older ones</source>
+        <translation>leer los cincuenta siguientes, más antiguos</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_open">
+        <source>read the message whole; a report is marked read</source>
+        <translation>leer el mensaje completo; un informe se marca como leído</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_reply">
+        <source>answer the request: its agent is told</source>
+        <translation>responder la solicitud: se le dice a su agente</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_requests">
+        <source>the requests waiting for your answer</source>
+        <translation>las solicitudes que esperan tu respuesta</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_sender">
+        <source>show the agent that sent it</source>
+        <translation>mostrar el agente que lo envió</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_undeliverable">
+        <source>the notices nobody could receive (the newest fifty)</source>
+        <translation>los avisos que nadie pudo recibir (los cincuenta más recientes)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_unread">
+        <source>the reports you haven't read</source>
+        <translation>los informes que no has leído</translation>
+    </message>
     <message id="autodoc.dialog.luaPick.choose">
         <source>&amp;Choose</source>
         <translation>Es&amp;coger</translation>
@@ -3684,6 +3728,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.main.image_previews">
         <source>&amp;Image previews</source>
         <translation>Vistas previas de &amp;imágenes</translation>
+    </message>
+    <message id="autodoc.main.inbox">
+        <source>Inbo&amp;x…</source>
+        <translation>Bandeja de entrada (&amp;x)…</translation>
     </message>
     <message id="autodoc.main.indentation_marks">
         <source>Indentation &amp;marks</source>

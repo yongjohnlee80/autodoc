@@ -1711,6 +1711,50 @@
         <source>Zoom &amp;out</source>
         <translation>缩小(&amp;O)</translation>
     </message>
+    <message id="autodoc.dialog.inbox.message_title">
+        <source>%1 — from %2</source>
+        <translation>%1 — 来自 %2</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_all">
+        <source>every message of yours, newest first</source>
+        <translation>你的所有消息，最新的在前</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_dismiss">
+        <source>decline the request: asked first, and its agent is told</source>
+        <translation>拒绝请求：先询问，并告知其代理</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_mark_read">
+        <source>mark the report read, without opening it</source>
+        <translation>不打开即将报告标为已读</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_more">
+        <source>read the next fifty, older ones</source>
+        <translation>读取接下来的五十条（更早的）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_open">
+        <source>read the message whole; a report is marked read</source>
+        <translation>阅读整条消息；报告会标为已读</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_reply">
+        <source>answer the request: its agent is told</source>
+        <translation>回答请求：会告知其代理</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_requests">
+        <source>the requests waiting for your answer</source>
+        <translation>等待你回答的请求</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_sender">
+        <source>show the agent that sent it</source>
+        <translation>显示发送它的代理</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_undeliverable">
+        <source>the notices nobody could receive (the newest fifty)</source>
+        <translation>无人能接收的通知（最新的五十条）</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_unread">
+        <source>the reports you haven't read</source>
+        <translation>你尚未阅读的报告</translation>
+    </message>
     <message id="autodoc.dialog.luaPick.choose">
         <source>&amp;Choose</source>
         <translation>选择(&amp;C)</translation>
@@ -3669,6 +3713,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.image_previews">
         <source>&amp;Image previews</source>
         <translation>图片预览(&amp;I)</translation>
+    </message>
+    <message id="autodoc.main.inbox">
+        <source>Inbo&amp;x…</source>
+        <translation>收件箱(&amp;X)…</translation>
     </message>
     <message id="autodoc.main.indentation_marks">
         <source>Indentation &amp;marks</source>

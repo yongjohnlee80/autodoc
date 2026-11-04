@@ -1839,6 +1839,10 @@
         <source>&amp;Mark read</source>
         <translation>&amp;Mark read</translation>
     </message>
+    <message id="autodoc.dialog.inbox.message_title">
+        <source>%1 — from %2</source>
+        <translation>%1 — from %2</translation>
+    </message>
     <message id="autodoc.dialog.inbox.more">
         <source>Mor&amp;e</source>
         <translation>Mor&amp;e</translation>
@@ -1874,6 +1878,46 @@
     <message id="autodoc.dialog.inbox.tab_unread">
         <source>Unread</source>
         <translation>Unread</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_all">
+        <source>every message of yours, newest first</source>
+        <translation>every message of yours, newest first</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_dismiss">
+        <source>decline the request: asked first, and its agent is told</source>
+        <translation>decline the request: asked first, and its agent is told</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_mark_read">
+        <source>mark the report read, without opening it</source>
+        <translation>mark the report read, without opening it</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_more">
+        <source>read the next fifty, older ones</source>
+        <translation>read the next fifty, older ones</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_open">
+        <source>read the message whole; a report is marked read</source>
+        <translation>read the message whole; a report is marked read</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_reply">
+        <source>answer the request: its agent is told</source>
+        <translation>answer the request: its agent is told</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_requests">
+        <source>the requests waiting for your answer</source>
+        <translation>the requests waiting for your answer</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_sender">
+        <source>show the agent that sent it</source>
+        <translation>show the agent that sent it</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_undeliverable">
+        <source>the notices nobody could receive (the newest fifty)</source>
+        <translation>the notices nobody could receive (the newest fifty)</translation>
+    </message>
+    <message id="autodoc.dialog.inbox.tip_unread">
+        <source>the reports you haven't read</source>
+        <translation>the reports you haven't read</translation>
     </message>
     <message id="autodoc.dialog.inbox.title">
         <source>Inbox — %1</source>
@@ -3882,6 +3926,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.main.image_previews">
         <source>&amp;Image previews</source>
         <translation>&amp;Image previews</translation>
+    </message>
+    <message id="autodoc.main.inbox">
+        <source>Inbo&amp;x…</source>
+        <translation>Inbo&amp;x…</translation>
     </message>
     <message id="autodoc.main.indentation_marks">
         <source>Indentation &amp;marks</source>

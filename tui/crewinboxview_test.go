@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // mailWindow is the inbox dialog's program: inbox.list answers from its pages, by filter and before
@@ -23,6 +26,9 @@ type mailWindow struct {
 	calls                  [][]any          // each call: its verb, then its params
 	state                  map[string]any
 	opened                 []string
+	focused                []string
+	more                   *bool // inbox.list's more, when the daemon says it
+	refuse                 bool  // inbox.ack and inbox.dismiss answer an error
 	asked                  []Question
 	notices                []string
 }
@@ -48,8 +54,15 @@ func (w *mailWindow) Call(_ context.Context, verb string, p ...any) (any, error)
 				break
 			}
 		}
-		return map[string]any{"items": page}, nil
+		answer := map[string]any{"items": page}
+		if w.more != nil { // since protocol 53 the daemon says whether an older page is there
+			answer["more"] = *w.more
+		}
+		return answer, nil
 	case "inbox.ack", "inbox.dismiss":
+		if w.refuse {
+			return nil, errors.New("the daemon refused it")
+		}
 		return map[string]any{}, nil
 	}
 	return nil, errors.New("unknown method: " + verb)
@@ -69,8 +82,16 @@ func (w *mailWindow) release(i int) {
 	w.held[i] = func() {}
 	f()
 }
+
+// drain releases every answer still held, in the order held, including those the releases hold.
+func (w *mailWindow) drain() {
+	for i := 0; i < len(w.held); i++ {
+		w.release(i)
+	}
+}
 func (w *mailWindow) Set(name string, v any)            { w.state[name] = v }
 func (w *mailWindow) Open(id string)                    { w.opened = append(w.opened, id) }
+func (w *mailWindow) Focus(id string)                   { w.focused = append(w.focused, id) }
 func (w *mailWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
 func (w *mailWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
 func (w *mailWindow) Tr(id string) string               { return w.Trf(id) }
@@ -366,10 +387,14 @@ func TestTheCursorStaysOnItsMessage(t *testing.T) {
 	v, _ := newInboxCell(w)
 	v.open()
 	v.shown(2) // m098
+	w.state["App.inboxIndex"] = "untouched"
 	w.history = mailRun(102, 102)
 	v.changed()
-	if i, _ := w.state["App.inboxIndex"].(int); i != 4 {
-		t.Fatalf("the table's cursor after two arrived: %d, want 4, still m098", i)
+	if v.cursor != 4 || v.key != "m098" {
+		t.Fatalf("the cursor after two arrived: %d on %q, want 4, still m098", v.cursor, v.key)
+	}
+	if got := w.state["App.inboxIndex"]; got != "untouched" {
+		t.Fatalf("the table's index set to %v: the table follows its row's key itself, told nothing", got)
 	}
 	if d, _ := w.state["App.inboxDetail"].(string); !strings.Contains(d, "body of m098") {
 		t.Fatalf("the detail: %q, want m098's", d)
@@ -500,5 +525,142 @@ func TestSPCaiOpensTheInbox(t *testing.T) {
 	}
 	if verb != "inbox" {
 		t.Fatalf("the inbox's command: %q, want :inbox", verb)
+	}
+}
+
+// More follows what the daemon says (protocol 53): a full page it says ends the mail offers no More
+// (none read below it), and a short one it says has more under it does.
+func TestMoreFollowsWhatTheDaemonSays(t *testing.T) {
+	no, yes := false, true
+	w := &mailWindow{history: mailRun(50, 50), more: &no}
+	v, _ := newInboxCell(w)
+	v.open()
+	v.more()
+	if reads := w.verbs("inbox.list"); len(reads) != 1 {
+		t.Fatalf("More past a page the daemon says is the last: %d reads, want none more", len(reads)-1)
+	}
+	if s, _ := w.state["App.inboxStatus"].(string); strings.Contains(s, "More") {
+		t.Fatalf("the status %q offers More the daemon says isn't there", s)
+	}
+	w2 := &mailWindow{history: mailRun(30, 30), more: &yes}
+	v2, _ := newInboxCell(w2)
+	v2.open()
+	if s, _ := w2.state["App.inboxStatus"].(string); !strings.Contains(s, "More") {
+		t.Fatalf("a short page the daemon says has more under it: status %q, want More offered", s)
+	}
+}
+
+// A Mark read and a Dismiss show on the row at once, before the daemon answers; refused, each is said
+// and the dialog reads the daemon again, which lists the row as the daemon has it (here, open still).
+func TestMarkReadAndDismissShowAtOnceAndAreUndoneWhenRefused(t *testing.T) {
+	for _, refuse := range []bool{false, true} {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold, w.refuse = true, refuse
+		v.markRead(1)
+		v.dismiss(0)
+		w.asked[0].OnYes()
+		state := func(i int) string { it, _ := v.rows.At(i); return it.state }
+		if state(1) != "read" || state(0) != "dismissed" {
+			t.Fatalf("before the daemon answered: %q and %q, want read and dismissed at once", state(1), state(0))
+		}
+		w.release(0)
+		w.release(1)
+		w.drain() // a refusal's read of the daemon
+		want1, want0 := "read", "dismissed"
+		if refuse {
+			want1, want0 = "open", "open"
+		}
+		if state(1) != want1 || state(0) != want0 {
+			t.Fatalf("refused %v: %q and %q after the answers, want %q and %q", refuse, state(1), state(0), want1, want0)
+		}
+		if refuse && len(w.notices) != 2 {
+			t.Fatalf("refused: notices %q, want each refusal said", w.notices)
+		}
+	}
+}
+
+// A refusal lists the daemon's state, never the one at the click: a request answered in another
+// window while its Dismiss question showed stays answered once the dismiss is refused; so does one
+// answered while the dismiss was out; and a report that expired while its Mark read was out stays
+// expired (the mutant: the click-time state put back on a refusal).
+func TestARefusalListsTheDaemonsStateNotTheClicks(t *testing.T) {
+	state := func(v *inboxView, i int) string { it, _ := v.rows.At(i); return it.state }
+	t.Run("answered while the question showed", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		v.dismiss(0) // the question shows
+		w.history[0] = mailItem(2, "request", "answered")
+		v.changed() // another window's answer: listed answered
+		w.hold, w.refuse = true, true
+		w.asked[0].OnYes()
+		w.drain()
+		if got := state(v, 0); got != "answered" {
+			t.Fatalf("a dismiss refused after the request was answered: %q, want answered, as the daemon has it", got)
+		}
+	})
+	t.Run("answered while the dismiss was out", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold, w.refuse = true, true
+		v.dismiss(0)
+		w.asked[0].OnYes() // its call held
+		w.history[0] = mailItem(2, "request", "answered")
+		v.changed()  // held too
+		w.release(1) // the change's read lands first
+		w.release(0) // then the refusal
+		w.drain()
+		if got := state(v, 0); got != "answered" {
+			t.Fatalf("a dismiss refused after a read showed the request answered: %q, want answered", got)
+		}
+	})
+	t.Run("expired while the ack was out", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold, w.refuse = true, true
+		v.markRead(1)
+		w.history[1] = mailItem(1, "message", "expired")
+		v.changed()
+		w.release(1)
+		w.release(0)
+		w.drain()
+		if got := state(v, 1); got != "expired" {
+			t.Fatalf("an ack refused after a read showed the report expired: %q, want expired", got)
+		}
+	})
+}
+
+// The Inbox's tabs' and buttons' letters are one each: no two take the same key, among the tabs, the
+// buttons and Close's q (the language check holds every translation to English's letter, so English
+// is every language's).
+func TestTheInboxLettersAreOneEach(t *testing.T) {
+	seen := map[rune]string{}
+	for _, id := range []string{"all", "unread", "requests", "undeliverable", "open", "mark_read", "reply", "dismiss", "sender", "more", "close_q"} {
+		_, key, _ := tuicore.ParseMnemonic(englishText("autodoc.dialog.inbox." + id))
+		if key == 0 {
+			t.Fatalf("%s marks no letter", id)
+		}
+		key = unicode.ToLower(key)
+		if other, dup := seen[key]; dup {
+			t.Fatalf("%s and %s both take %q", other, id, key)
+		}
+		seen[key] = id
+	}
+}
+
+// Each tab and button says what it does when it has focus: its tooltip, set at the opening in the
+// UI's language (a tooltip takes a string, not a catalog message).
+func TestEachInboxButtonSaysWhatItDoes(t *testing.T) {
+	w := &mailWindow{history: mailRun(2, 2)}
+	v, _ := newInboxCell(w)
+	v.open()
+	for _, tip := range inboxTips {
+		if got, _ := w.state[tip.state].(string); got == "" || got != englishText(tip.id) {
+			t.Errorf("%s: %q, want %s's words", tip.state, got, tip.id)
+		}
 	}
 }

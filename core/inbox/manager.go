@@ -289,13 +289,16 @@ func fitPage(items []Item, limit int) []Item {
 }
 
 // List is inbox.list: the human's history, newest first (filter ""), or the generated notices
-// nobody could receive (filter "undeliverable"). before pages the history by seq.
-func (m *Manager) List(ctx context.Context, filter string, before int64, limit int) ([]Item, error) {
+// nobody could receive (filter "undeliverable"). before pages the history by seq; more is whether
+// the history holds an older page below the last item answered (one past the limit is read to
+// know, and a page the byte bound cut short has more). The undeliverable notices are the newest
+// only, never paged, so their more is false.
+func (m *Manager) List(ctx context.Context, filter string, before int64, limit int) (items []Item, more bool, err error) {
 	limit = min(max(limit, 1), listMax)
 	out := []Item{}
 	// a history page is bounded by bytes as a snapshot is: the caller pages on with before = the
 	// last item's seq
-	err := m.store.Read(ctx, func(tx Tx) error {
+	err = m.store.Read(ctx, func(tx Tx) error {
 		var items []mail.Item
 		switch filter {
 		case ListAll:
@@ -303,7 +306,7 @@ func (m *Manager) List(ctx context.Context, filter string, before int64, limit i
 			if err != nil || !ok {
 				return err
 			}
-			if items, err = tx.ToUser(user.ID, before, limit); err != nil {
+			if items, err = tx.ToUser(user.ID, before, limit+1); err != nil {
 				return err
 			}
 		case ListUndeliverable:
@@ -316,9 +319,10 @@ func (m *Manager) List(ctx context.Context, filter string, before int64, limit i
 		}
 		all, err := named(tx, items)
 		out = fitPage(all, limit)
+		more = filter == ListAll && len(out) < len(all)
 		return err
 	})
-	return out, err
+	return out, more, err
 }
 
 // Focused is the session inbox.focus asked to raise, and its current owner: the host whose
