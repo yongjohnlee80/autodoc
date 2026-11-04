@@ -235,3 +235,60 @@ func TestGoInboxOpensTheInbox(t *testing.T) {
 		return strings.Contains(sc, "Inbox — All") && strings.Contains(sc, "subject m001")
 	})
 }
+
+// TestTheInboxListAndItsMessageAreSetApart: on an 80-column screen, the list full, an empty row
+// sets the list apart from the message under the cursor: between the last message listed and the
+// message's first row, a row with nothing on it. The list and that row share the list's half of
+// the dialog, so the message keeps its rows: 80×20 and 80×21, either parity of what the two share.
+// Each screen is logged, with the message's rows counted to the button row.
+func TestTheInboxListAndItsMessageAreSetApart(t *testing.T) {
+	for _, height := range []int{20, 21} {
+		t.Run(fmt.Sprintf("80x%d", height), func(t *testing.T) {
+			var items []any
+			for seq := int64(40); seq > 0; seq-- {
+				items = append(items, mailItem(seq, "message", "open"))
+			}
+			f := &fakeInbox{items: items, acks: make(chan string, 4)}
+			d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{modules: []module.Module{f}})
+			r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, height)
+			r.connected(t)
+			onLoop(r, func() bool { r.h.runEntry("crew.inbox"); return true })
+			r.s.WaitForText(t, "subject m040")
+			if err := onLoop(r, func() error {
+				return r.h.reg.handlers["App.inboxShown"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
+			}); err != nil {
+				t.Fatal(err)
+			}
+			const head = "**From** gold@autodoc:w"
+			r.s.WaitForText(t, head)
+			lines := strings.Split(r.s.String(), "\n")
+			at, buttons := -1, -1
+			for i, l := range lines {
+				if at < 0 && strings.Contains(l, head) {
+					at = i
+				}
+				if at >= 0 && buttons < 0 && strings.Contains(l, "Dismiss") {
+					buttons = i
+				}
+			}
+			t.Logf("the screen, the message's rows to the button row %d:\n%s", buttons-at, strings.Join(lines, "\n"))
+			last := -1 // the last message listed above the message's first row
+			for i := at - 1; i >= 0 && last < 0; i-- {
+				if strings.Contains(lines[i], "subject m0") {
+					last = i
+				}
+			}
+			if last < 0 {
+				t.Fatal("no message listed above the message under the cursor")
+			}
+			if last >= at-1 {
+				t.Fatalf("the list runs into the message: row %d lists %q, and the message starts at row %d", last, lines[last], at)
+			}
+			for i := last + 1; i < at; i++ {
+				if strings.Trim(lines[i], " │┃║|") != "" {
+					t.Errorf("row %d between the list and the message: %q, want it empty", i, lines[i])
+				}
+			}
+		})
+	}
+}
