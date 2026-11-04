@@ -398,6 +398,15 @@ func TestCrewReissueAnswersAsTheSessionTheCLIFinds(t *testing.T) {
 		t.Errorf("crew reissue with no context said %q, want the session not re-issued, in a sentence", got)
 	}
 
+	// an answer that can't be written is a failure in either form, said on stderr, exit 1
+	for _, args := range [][]string{nil, {"--json"}} {
+		t.Setenv("AUTODOC_CREW_CONTEXT", healthy)
+		var errOut bytes.Buffer
+		if code := crewMain(d.ctx, append([]string{"crew", "reissue"}, args...), strings.NewReader(""), failingWriter{}, &errOut); code != 1 || !strings.Contains(errOut.String(), "no space left on device") {
+			t.Errorf("crew reissue %q to a stdout that fails: exit %d, %q; want exit 1 and the write's error", args, code, errOut.String())
+		}
+	}
+
 	foreign := d.agent("vision", "agent-3", "store-other")
 	if code, _, errOut := d.as(foreign, "", "crew", "reissue", "--wait", "0s"); code != 1 || !strings.Contains(errOut, `"code":-32095`) {
 		t.Fatalf("crew reissue with another store's context: exit %d, %s; want crew.context_mismatch", code, errOut)
