@@ -154,6 +154,22 @@ a dismissal into a permanent refusal; a refused capability is asked about again 
 
 In the code: `tui/luagate.go`, `tui/prefs.go`
 
+## A grant can be taken back
+
+Go › Agent permissions… (and `:permissions`) lists every capability in `lua.grants`, one row each:
+agents (`agent:<codename>`, the editor socket's) first, then plugins' packages, then gated scripts.
+Each row says what the capability lets its holder do, in the words of its card. Revoke takes the
+row's capability back, and Revoke all everything its holder holds; each asks first. A capability
+taken back is gone from the preference at once: its holder's next call that needs it is refused, as
+a first call is, and its card asks again. The dialog never grants. A grant is still given only on
+the card, at the moment of use, so the user sees what asks for it. While the dialog is open it
+follows the preference, so a card answered meanwhile shows in it at once.
+
+A card names its asker as what it is: "the agent zen", "the plugin globe's Lua package", "the Lua
+script tools/run.lua".
+
+In the code: `tui/grants.go`, `tui/luagate.go`
+
 ## A gated script's files stay in the workspace
 
 A gated script may use `file.*` and every other path verb, but only inside the workspace: reads

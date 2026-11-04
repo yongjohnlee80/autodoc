@@ -98,7 +98,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if _, re := call("editor.read"); re == nil || re.Code != -32098 || !strings.Contains(re.Message, "needs editor.read") {
 		t.Fatalf("an ungranted read: %v", re)
 	}
-	r.s.WaitForText(t, "let the Lua script agent:zen use editor.read?")
+	r.s.WaitForText(t, "let the agent zen use editor.read?")
 	onLoop(r, func() bool { r.h.asker.accepted(); return true })
 	r.s.WaitFor(t, "the read granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["editor.read"] })

@@ -8278,5 +8278,105 @@ H J K L, Shift+方向键   调整大小</translation>
         <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
         <translation>守护进程早于团队桥接：请重启后端（系统 › 重启后端…）</translation>
     </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>关闭(&amp;Q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>撤销(&amp;R)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>全部撤销(&amp;A)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>智能体权限</translation>
+    </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>智能体权限(&amp;P)…</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1 不再拥有 %2：下次使用时会再次询问你</translation>
+    </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>保留(&amp;K)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>撤销(&amp;R)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1 拥有 %2。
+
+撤销后，每一项在下次使用时都会被拒绝，并通过卡片再次询问你。</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>撤销 %1 的全部权限?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1 拥有 %2：%3。
+
+撤销后，它下次使用 %2 时会被拒绝，并通过卡片再次询问你。</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>撤销 %2 的 %1?</translation>
+    </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>在你打开的文档中插入、替换和删除文本</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>读取你打开的文档和缓冲区，并在其中搜索</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>已向 %2 个持有者授予 %1 项权限。撤销后，持有者下次使用时会再次询问你。</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1（%2）拥有 %3：%4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>智能体</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>包</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>Lua 脚本</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>尚未授予任何权限。智能体或包在首次需要某项权限时，会通过卡片询问你。</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>智能体 %1</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>智能体权限：授予每个智能体和包的权限</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>智能体权限：授予每个智能体和包的权限</translation>
+    </message>
 </context>
 </TS>

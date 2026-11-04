@@ -75,6 +75,8 @@ func (h *Host) askLuaGrants() {
 		who := h.trf("autodoc.question.luagate.the_lua_script", a.script)
 		if name, ok := strings.CutPrefix(a.script, "plugin:"); ok {
 			who = h.trf("autodoc.question.luagate.the_plugin_s_lua_package", name)
+		} else if name, ok := strings.CutPrefix(a.script, "agent:"); ok { // the editor socket's (editorsocket.go ungranted)
+			who = h.trf("autodoc.question.luagate.the_agent", name)
 		}
 		h.ask(Question{
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
@@ -102,6 +104,27 @@ func (h *Host) grantLua(script string, caps []string) {
 	b, _ := json.Marshal(all)
 	h.setPref(prefLuaGrants, string(b), func(p *prefs) { p.luaGrants = all })
 }
+
+// revokeLua takes caps back from script (docs/decisions/contract.md#a-grant-can-be-taken-back): its
+// next call needing one is refused and asks again, as a first one does. A holder left with none is
+// dropped from the preference.
+func (h *Host) revokeLua(script string, caps []string) {
+	all := map[string]map[string]bool{}
+	for s, g := range h.prefs.luaGrants {
+		all[s] = maps.Clone(g)
+	}
+	for _, c := range caps {
+		delete(all[script], c)
+	}
+	if len(all[script]) == 0 {
+		delete(all, script)
+	}
+	b, _ := json.Marshal(all)
+	h.setPref(prefLuaGrants, string(b), func(p *prefs) { p.luaGrants = all })
+}
+
+// RevokeGrants is revokeLua, for Agent permissions (grants.go).
+func (c core) RevokeGrants(holder string, caps []string) { c.h.revokeLua(holder, caps) }
 
 // luaGrantsOf reads the preference's JSON; anything else is no grants.
 func luaGrantsOf(s string) map[string]map[string]bool {
@@ -136,6 +159,9 @@ var luaCapabilityText = map[string]string{
 	"agents":          "autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can",
 	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
 	"terminal":        "autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal",
+	// the editor socket's (editorsocket.go editorVerbs): an agent's reach into the page
+	"editor.read":  "autodoc.question.luagate.read_your_open_documents_and_find_in_them",
+	"editor.write": "autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents",
 }
 
 var _ script.Grants = luaGrants{}
