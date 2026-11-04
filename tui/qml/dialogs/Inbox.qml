@@ -1,10 +1,10 @@
 // Inbox.qml — SPC a i, :inbox, Go › Inbox: the user's mail (crewinboxview.go), newest first, fifty at
-// a time. The tabs are ways of reading it; the message under the cursor shows below the list, as
-// Markdown. Open (Enter) reads it whole in a dialog of its own (InboxMessage.qml), a report marked
-// read; Reply and Dismiss answer a request; Sender shows the agent that sent it; More reads the next
-// page while there is one. The list has the keyboard: every tab's and button's letter reaches it from
-// there, and each says what it does when it has focus (its tooltip). The cursor stays on its message
-// when the list is read again.
+// a time. The tabs are ways of reading it; the message under the cursor shows below the list, an
+// empty row between them, as Markdown. Open (Enter) reads it whole in a dialog of its own
+// (InboxMessage.qml), a report marked read; Reply and Dismiss answer a request; Sender shows the
+// agent that sent it; More reads the next page while there is one. The list has the keyboard: every
+// tab's and button's letter reaches it from there, and each says what it does when it has focus (its
+// tooltip). The cursor stays on its message when the list is read again.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 90
@@ -22,22 +22,28 @@ Dialog {
             Button { text: qsTrId("autodoc.dialog.inbox.undeliverable"); toolTipText: App.inboxTipUndeliverable; onClicked: App.inboxTab(3) }
             Text { text: " "; Layout.fillWidth: true }
         }
-        TableView {
-            id: inboxTable
-            focus: true
-            palette.highlight: Theme.document.highlight
-            palette.highlightedText: Theme.document.highlightedText
-            model: App.inbox
-            currentIndex: App.inboxIndex
+        // the list and an empty row under it share the list's half, so the message keeps all its rows
+        Flex {
+            direction: Tui.Vertical
             Layout.fillHeight: true
-            onCurrentIndexChanged: App.inboxShown(index)
-            onActivated: App.inboxOpen(index)
-            TableViewColumn { role: "mark"; title: ""; width: 2 }
-            TableViewColumn { role: "kind"; title: "KIND"; width: 9 }
-            TableViewColumn { role: "from"; title: "FROM"; width: 16 }
-            TableViewColumn { role: "subject"; title: "SUBJECT"; width: 0 }
-            TableViewColumn { role: "state"; title: "STATE"; width: 10 }
-            TableViewColumn { role: "when"; title: "WHEN"; width: 12 }
+            TableView {
+                id: inboxTable
+                focus: true
+                palette.highlight: Theme.document.highlight
+                palette.highlightedText: Theme.document.highlightedText
+                model: App.inbox
+                currentIndex: App.inboxIndex
+                Layout.fillHeight: true
+                onCurrentIndexChanged: App.inboxShown(index)
+                onActivated: App.inboxOpen(index)
+                TableViewColumn { role: "mark"; title: ""; width: 2 }
+                TableViewColumn { role: "kind"; title: "KIND"; width: 9 }
+                TableViewColumn { role: "from"; title: "FROM"; width: 16 }
+                TableViewColumn { role: "subject"; title: "SUBJECT"; width: 0 }
+                TableViewColumn { role: "state"; title: "STATE"; width: 10 }
+                TableViewColumn { role: "when"; title: "WHEN"; width: 12 }
+            }
+            Text { text: " " }
         }
         Editor {
             readOnly: true
