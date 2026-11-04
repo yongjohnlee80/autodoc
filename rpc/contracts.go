@@ -60,6 +60,9 @@ var codeDocs = []struct {
 
 // Catalog is the catalog at protocol p of the verbs filter names: "" or "*" for all, "domain.*" for
 // a domain's, or one verb by name. A filter lists the codes its verbs name and invalid params.
+// Invalid params' messages are rpc's own (publicErrs: no module may answer the code), and none says
+// which verbs answer it, so a filter's row lists none: its next step says the message names the
+// param. The whole catalog lists every one.
 func (s *Server) Catalog(p int64, filter string) Catalog {
 	c := Catalog{Protocol: p, MinProtocol: MinProtocol, Verbs: []module.Contract{}, Errors: []CatalogError{}}
 	codes := map[int64]bool{}
@@ -79,6 +82,9 @@ func (s *Server) Catalog(p int64, filter string) Catalog {
 	add := func(code int64, name, next, message string) {
 		if !all && !codes[code] {
 			return
+		}
+		if !all && code == golibrpc.CodeInvalidParams {
+			message = "" // every verb's, not the filter's (Catalog)
 		}
 		e, ok := byCode[code]
 		if !ok {
