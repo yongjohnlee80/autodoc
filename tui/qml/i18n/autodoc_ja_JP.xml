@@ -8289,5 +8289,105 @@ H J K L、Shift+矢印キー   サイズ変更</translation>
         <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
         <translation>デーモンがクルーのブリッジより古いバージョンです。バックエンドを再起動してください (システム › バックエンドを再起動…)</translation>
     </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>閉じる(&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>取り消す(&amp;r)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>すべて取り消す(&amp;a)…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>エージェントの権限</translation>
+    </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>エージェントの権限(&amp;p)…</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1 は %2 を持たなくなりました。次に使うときに改めて確認します</translation>
+    </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>そのまま(&amp;k)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>取り消す(&amp;r)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1 は %2 を持っています。
+
+取り消すと、それぞれ次に使うときに拒否され、カードで改めて確認します。</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>%1 の権限をすべて取り消しますか?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1 は %2 を持っています: %3。
+
+取り消すと、次に %2 を使うときに拒否され、カードで改めて確認します。</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>%2 の %1 を取り消しますか?</translation>
+    </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>開いている文書のテキストを挿入・置換・削除する</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>開いている文書とバッファーを読み、その中を検索する</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>%2 件の保持者に %1 件の権限を許可しています。取り消すと、保持者が次に使うときに改めて確認します。</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1（%2）は %3 を持っています: %4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>エージェント</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>パッケージ</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>Lua スクリプト</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>許可されたものはありません。エージェントやパッケージは、権限が初めて必要になったときにカードで確認します。</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>エージェント %1</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>エージェントの権限: 各エージェントとパッケージに許可したもの</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>エージェントの権限: 各エージェントとパッケージに許可したもの</translation>
+    </message>
 </context>
 </TS>

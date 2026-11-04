@@ -149,11 +149,12 @@ type Host struct {
 	arrange                                *arrangeState      // an arrangement in progress (arrange.go)
 	arranged                               string             // the panel an arrangement kept, given the keyboard as its card closes (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
-	terminals *terminals
-	agents    *agents
-	crew      *crewHost  // the window's crew scope (crewhost.go)
-	crewInbox *crewInbox // the human's crew inbox in this window (crewinbox.go)
-	inboxView *inboxView // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
+	terminals  *terminals
+	agents     *agents
+	crew       *crewHost   // the window's crew scope (crewhost.go)
+	crewInbox  *crewInbox  // the human's crew inbox in this window (crewinbox.go)
+	inboxView  *inboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
+	grantsView *grantsView // Agent permissions: the grants given, and Revoke (grants.go)
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
@@ -515,6 +516,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents.inbox = h.crewInbox
 	h.inboxView = newInboxView(core{h}, h.crewInbox)
 	h.crewInbox.view = h.inboxView
+	h.grantsView = newGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
