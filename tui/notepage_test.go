@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -198,4 +199,83 @@ func TestTheLeaderWorksOverTheStartsNotePage(t *testing.T) {
 	})
 	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
+}
+
+// openNotePage is r with note open on a terminal, its page shown and drawn (title on screen).
+func openNotePage(t *testing.T, note, title string) *running {
+	t.Helper()
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "n.md", note)}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("n.md"); return true })
+	r.waitFile(t, "n.md")
+	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitForText(t, title)
+	return r
+}
+
+func shownView(r *running) widget.EditorView {
+	return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+}
+
+// TestTypingInAJustOpenedNoteEditsIt: a note opens as its page, and the
+// first editing key opens the text and acts: i, then the typing and Esc, edit the note where it was
+// read, and the text is shown.
+func TestTypingInAJustOpenedNoteEditsIt(t *testing.T) {
+	r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+	r.keys(t, key('i'))
+	r.keys(t, decltest.Type("xy")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
+	r.s.WaitFor(t, "the typing in the note", func(string) bool { return strings.HasPrefix(r.editorText(), "xy# Pantry") })
+	if v := shownView(r); v != widget.ViewRaw {
+		t.Fatalf("after typing the note shows view %v, want its text", v)
+	}
+}
+
+// TestThePagesReadingKeysKeepItRendered: the keys that read the page (the arrows, j/k, PgUp/PgDn, g/G,
+// y and Ctrl+C) leave it Rendered and the note as it was.
+func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
+	var note strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&note, "Line %02d of the note.\n\n", i)
+	}
+	r := openNotePage(t, "# Long\n\n"+note.String(), "Long")
+	before := r.editorText()
+	for _, k := range []tuicore.Event{key('j'), key('k'), tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown},
+		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp}, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown},
+		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, key('G'), key('g'), key('y'),
+		tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}} {
+		r.keys(t, k)
+		if v := shownView(r); v != widget.ViewRendered {
+			t.Fatalf("%+v left the page (view %v)", k, v)
+		}
+	}
+	if got := r.editorText(); got != before {
+		t.Fatalf("reading the page changed the note:\n%q\nwant\n%q", got, before)
+	}
+}
+
+// TestAnEditingKeyFromThePageActsOnce: x from the page deletes the character the cursor is on, once,
+// in the text; o from the page opens a line below, once, in Insert mode.
+func TestAnEditingKeyFromThePageActsOnce(t *testing.T) {
+	r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+	ctrlT := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl}
+	r.keys(t, key('x'))
+	r.s.WaitFor(t, "x acted once", func(string) bool { return r.editorText() == " Pantry\n\nshelf\n" })
+	if v := shownView(r); v != widget.ViewRaw {
+		t.Fatalf("x left the view %v, want the text", v)
+	}
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "the page again", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.keys(t, key('o'))
+	r.keys(t, decltest.Type("z")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
+	r.s.WaitFor(t, "o acted once", func(string) bool { return r.editorText() == " Pantry\nz\n\nshelf\n" })
+}
+
+// TestTheCommandLineOpensFromThePage: ':' from a note's page opens the command line, as from its text.
+func TestTheCommandLineOpensFromThePage(t *testing.T) {
+	r := openNotePage(t, "# Pantry\n", "Pantry")
+	r.keys(t, key(':'))
+	r.s.WaitForText(t, "VIM Commands")
 }

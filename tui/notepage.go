@@ -13,7 +13,10 @@ import (
 
 // A NOTE'S RENDERED VIEW IN A TERMINAL (docs/decisions/editor.md#a-terminal-notes-rendered-view):
 // on a terminal backend, in either build (a GUI build run with --ui too), Raw is the note's text,
-// Rendered the page, as in the window. A window keeps its own (native) path: this does nothing there. The page is the note exported in
+// Rendered the page, as in the window. A window keeps its own (native) path: this does nothing there.
+// The view is the window's rule (rendered_gui.go): Rendered at every start, one choice for notes and
+// tables, Ctrl+T switching it. The window's Rendered Markdown stays editable; the page is read-only,
+// so its first editing key opens the text and edits (HandleEvent). The page is the note exported in
 // process, as the HTML pane's is, and laid out in cells by golib's HTMLView: tables boxed, headings
 // by level, code set off, a mind map drawn, any other diagram a line saying it isn't drawn here, in
 // the UI's language. Ctrl+T flips between the two, as the window's does; the page shows the
@@ -53,13 +56,40 @@ func (v *notePageView) SetVisible(on bool) {
 	}
 }
 
-// HandleEvent is the page's keys, but Space: the leader (SPC) is the app's over a note's page as
-// over its text, so the page never takes it as a page down (PgDn is).
+// HandleEvent reads the page by its own keys (the arrows, j/k, PgUp/PgDn, g/G, y and Ctrl+C), the
+// mouse and its links. Space is the app's leader (SPC) here as over the text; PgDn pages. An editing
+// key, any other the page doesn't read (i, a, o, x, ':', Esc, typing), opens the text at the
+// reader's place and goes on to the editor as that same key: Rendered reads as in the window, and the
+// first editing key edits, as there. A chord (Ctrl, Alt) stays the app's.
 func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
-	if k, ok := ev.(tuicore.KeyEvent); ok && k.Code == ' ' && k.Mods == 0 {
+	k, isKey := ev.(tuicore.KeyEvent)
+	if isKey && k.Code == ' ' && k.Mods == 0 {
 		return false
 	}
-	return v.HTMLView.HandleEvent(ev)
+	if v.HTMLView.HandleEvent(ev) {
+		return true
+	}
+	if isKey && k.Kind == tuicore.KeyPress && editingKey(k) {
+		return v.page.edit(k)
+	}
+	return false
+}
+
+// editingKey reports whether k, a key the page doesn't read, edits: Esc, or a key that types (its
+// text, with no modifier but Shift).
+func editingKey(k tuicore.KeyEvent) bool {
+	return k.Code == tuicore.KeyEscape || k.Text != "" && k.Mods&^tuicore.ModShift == 0
+}
+
+// edit opens the text at the reader's place (hidden maps it) and gives it k, the editing key that
+// left the page.
+func (p *cellNotePage) edit(k tuicore.KeyEvent) bool {
+	e, ok := p.h.editor.(*widget.Editor)
+	if !ok {
+		return false
+	}
+	e.SetView(widget.ViewRaw)
+	return e.HandleEvent(k)
 }
 
 var _ widget.DocumentView = (*notePageView)(nil)
