@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -72,5 +73,57 @@ func TestTheTerminalNotePagesNoticeIsTheCatalogs(t *testing.T) {
 	}
 	if !strings.Contains(p.h.trf(diagramNoticeID, "%s"), "%s") {
 		t.Errorf("the notice takes no kind: %q", p.h.trf(diagramNoticeID, "%s"))
+	}
+}
+
+// TestATerminalNotesPageTakesRawToWhereTheReaderScrolled: the page shows the cursor's block; scrolled
+// on in it, Ctrl+T opens Raw with the cursor at the first byte of the block then at the page's top.
+// Unscrolled, the cursor stays where it was.
+func TestATerminalNotesPageTakesRawToWhereTheReaderScrolled(t *testing.T) {
+	var note strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&note, "Paragraph %02d of the long note.\n\n", i)
+	}
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "long.md", note.String())}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	ctrlT := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl}
+	shown := func() widget.EditorView {
+		return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+	}
+	onLoop(r, func() bool { r.h.openPath("long.md"); return true })
+	r.waitFile(t, "long.md")
+	r.s.WaitFor(t, "the page", func(string) bool { return shown() == widget.ViewRendered })
+	r.s.WaitForText(t, "Paragraph 00")
+
+	// unscrolled: Raw keeps the cursor at the note's start
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "Raw", func(string) bool { return shown() == widget.ViewRaw })
+	if at := onLoop(r, r.h.cursorBytes); at != 0 {
+		t.Fatalf("an unscrolled page moved the cursor to byte %d", at)
+	}
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "the page again", func(string) bool { return shown() == widget.ViewRendered })
+	for range 3 {
+		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
+	}
+	page := onLoop(r, func() *cellNotePage {
+		for _, f := range r.h.reg.features {
+			if p, ok := f.(*cellNotePage); ok {
+				return p
+			}
+		}
+		return nil
+	})
+	top := onLoop(r, func() int { return page.top })
+	if top <= 0 {
+		t.Fatalf("the page scrolled by three pages reports its top at byte %d", top)
+	}
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "Raw at the reader's place", func(string) bool {
+		return shown() == widget.ViewRaw && onLoop(r, r.h.cursorBytes) == top
+	})
+	if !strings.HasPrefix(onLoop(r, r.h.core.Value)[top:], "Paragraph ") {
+		t.Errorf("the cursor is at byte %d, not a paragraph's start", top)
 	}
 }

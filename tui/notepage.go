@@ -27,6 +27,10 @@ type cellNotePage struct {
 	shown  fileRef
 	dirKey string // the folder the page's images load from, as last given to the view
 	dirSet bool
+	// top is the source byte of the block at the page's top, as it last reported it (-1 none);
+	// shownTop is top as the page was scrolled to the cursor: a page hidden at another top was
+	// scrolled by the reader, and Raw's cursor follows it there (hidden).
+	top, shownTop int
 }
 
 // notePageView is the page as the editor's document view: shown, it renders the note's text,
@@ -39,9 +43,18 @@ type notePageView struct {
 // ShowDocument renders text, the note, as its page: the editor calls it as the view is shown.
 func (v *notePageView) ShowDocument(text []byte) { v.page.render(text, true) }
 
+// SetVisible shows or hides the page; hidden (Ctrl+T to Raw), the cursor goes where the reader
+// scrolled to.
+func (v *notePageView) SetVisible(on bool) {
+	v.HTMLView.SetVisible(on)
+	if !on {
+		v.page.hidden()
+	}
+}
+
 var _ widget.DocumentView = (*notePageView)(nil)
 
-func newCellNotePage(h *Host) *cellNotePage { return &cellNotePage{h: h} }
+func newCellNotePage(h *Host) *cellNotePage { return &cellNotePage{h: h, top: -1, shownTop: -1} }
 
 func (*cellNotePage) Name() string                 { return "notepage" }
 func (*cellNotePage) State() map[string]any        { return map[string]any{} }
@@ -69,7 +82,7 @@ const diagramNoticeID = "autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the
 // doesn't draw is said in the UI's language.
 func (p *cellNotePage) viewOf() *notePageView {
 	if p.view == nil {
-		hv := widget.NewHTMLView(widget.WithOnLink(p.h.htmlLink))
+		hv := widget.NewHTMLView(widget.WithOnLink(p.h.htmlLink), widget.WithOnScroll(func(at int) { p.top = at }))
 		hv.SetOnRefused(p.h.resourceRefused)
 		p.view = &notePageView{HTMLView: hv, page: p}
 		p.giveNotice()
@@ -109,6 +122,19 @@ func (p *cellNotePage) Edited(pg Page) {
 	}
 }
 
+// hidden maps the page's place back to the text: when the reader scrolled the page of the note
+// still shown to another block, the cursor goes to that block's first byte, so Raw opens where they
+// were reading. Unscrolled, the cursor stays where it was.
+func (p *cellNotePage) hidden() {
+	h := p.h
+	if p.top < 0 || p.top == p.shownTop || !p.onATerminal() || h.file == nil || h.file.ws != p.shown.ws || h.file.path != p.shown.path {
+		return
+	}
+	text := h.core.Value()
+	h.core.SetCursorPosition(cursorAt(text, min(p.top, len(text))))
+	p.shownTop = p.top
+}
+
 // images points the page's images at the note's folder (resourcesFor), only when that changes: a
 // new resolver drops the page's images.
 func (p *cellNotePage) images(pg Page) {
@@ -146,6 +172,7 @@ func (p *cellNotePage) render(text []byte, toCursor bool) {
 		p.view.SetHTML(a.v)
 		if toCursor {
 			p.view.ScrollToSource(h.cursorBytes())
+			p.shownTop = p.top // the block the cursor is in: a report is synchronous, or none was due
 		}
 	})
 }
