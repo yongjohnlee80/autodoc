@@ -33,7 +33,10 @@ type memState struct {
 	ends     map[string]crew.Endpoint
 	attn     map[string]crew.Attention
 	inbox    []InboxChange
-	inboxAt  []int64 // each journal row's time; its seq is its index + 1 (Mem never prunes)
+	inboxAt  []int64 // each journal row's time; its seq is its index + 1
+	// inboxFrom is how many of the journal's first rows retention pruned (PruneInbox): the oldest
+	// retained row's seq is inboxFrom + 1
+	inboxFrom int64
 }
 
 // InboxChange is one row of the human feed's journal, as Mem keeps it.
@@ -59,7 +62,7 @@ func (s memState) clone() memState {
 	return memState{hosts: maps.Clone(s.hosts), scopes: maps.Clone(s.scopes),
 		profiles: maps.Clone(s.profiles), sessions: maps.Clone(s.sessions), wakes: maps.Clone(s.wakes),
 		ends: maps.Clone(s.ends), attn: maps.Clone(s.attn), inbox: slices.Clone(s.inbox),
-		inboxAt: slices.Clone(s.inboxAt)}
+		inboxAt: slices.Clone(s.inboxAt), inboxFrom: s.inboxFrom}
 }
 
 // SetSignals sets what a committed write tells (crew.Signals), as the engine's adapter does.
@@ -325,7 +328,7 @@ func (t *memTx) AddInboxChange(kind, ref string) error {
 // InboxRows is the journal's rows after seq, at most limit (0: all), for the inbox module's Mem.
 func (t *memTx) InboxRows(after int64, limit int) []InboxRow {
 	var out []InboxRow
-	for i := max(after, 0); i < int64(len(t.st.inbox)) && (limit <= 0 || len(out) < limit); i++ {
+	for i := max(after, t.st.inboxFrom, 0); i < int64(len(t.st.inbox)) && (limit <= 0 || len(out) < limit); i++ {
 		out = append(out, InboxRow{Seq: i + 1, Kind: t.st.inbox[i].Kind, Ref: t.st.inbox[i].Ref, At: t.st.inboxAt[i]})
 	}
 	return out
@@ -336,7 +339,18 @@ func (t *memTx) InboxBounds() (int64, int64) {
 	if len(t.st.inbox) == 0 {
 		return 0, 0
 	}
-	return 1, int64(len(t.st.inbox))
+	return t.st.inboxFrom + 1, int64(len(t.st.inbox))
+}
+
+// PruneInbox drops the journal's oldest rows written before before, at most limit, never the
+// newest: how many it dropped (mail.Tx's, for retention).
+func (t *memTx) PruneInbox(before int64, limit int) (int, error) {
+	n := 0
+	for n < limit && t.st.inboxFrom < int64(len(t.st.inbox))-1 && t.st.inboxAt[t.st.inboxFrom] < before {
+		t.st.inboxFrom++
+		n++
+	}
+	return n, nil
 }
 
 // Raised is the attention rows not cleared, by session, past after, at most limit (0: all).

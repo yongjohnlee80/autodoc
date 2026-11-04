@@ -115,7 +115,7 @@ A new workspace-owned table follows the same rule.
 | `crew_endpoint` | how a session is woken: its CLI's channel and locator, never a secret (000026), and when its first generation registered (`first_registered`, 000033) | `session` |
 | `crew_wake` | a live session's wake scheduler state: pending and announced generations, the attempt in flight, failures, the next deadline (000026); searched by state, an ended session's row deleted at its end (000035) | `session`, `(state, next_at)` |
 | `crew_attention` | a permission prompt or block an agent's adapter reported, shown to the human (000026) | `session` |
-| `mail_message` | a message, sent by an authenticated profile; idempotent by (sender, idem_key) (000026) | `id`, `(sender, idem_key)` |
+| `mail_message` | a message, sent by an authenticated profile; idempotent by (sender, idem_key) (000026); found by its age for retention (000034) | `id`, `(sender, idem_key)`, `(created, id)` |
 | `mail_recipient` | a recipient's delivery sequence high-water, never reused (000026) | `profile` |
 | `mail_delivery` | one delivery of a message to one recipient: queued, leased, acked, failed, expired, merged or withdrawn (000026); searched by state for what is due (000035) | `id`, `(recipient, seq)`, `(message, recipient)`, `(state, recipient, seq)` |
 | `mail_fallback` | a delivery not received in time, handed once to its recipient's host as a job: open, leased, done or unknown, with the host's outcome (000029, [the fallback](../decisions/crew.md#the-fallback-exactly-once)) | `id`, `delivery` |

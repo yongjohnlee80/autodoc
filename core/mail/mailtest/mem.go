@@ -391,6 +391,68 @@ func sorted(ds []mail.Delivery) []mail.Delivery {
 	return ds
 }
 
+// HandledBefore is mail.Tx's, over the copies.
+func (t *memTx) HandledBefore(cutoff int64, after mail.MessageCursor, limit int) ([]string, mail.MessageCursor, int, error) {
+	var page []mail.Message
+	for _, msg := range t.st.messages {
+		if msg.Created <= cutoff && (msg.Created > after.Created || msg.Created == after.Created && msg.ID > after.ID) {
+			page = append(page, msg)
+		}
+	}
+	slices.SortFunc(page, func(a, b mail.Message) int {
+		if a.Created != b.Created {
+			return cmp.Compare(a.Created, b.Created)
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	if len(page) > limit {
+		page = page[:limit]
+	}
+	var ids []string
+	last := after
+	for _, msg := range page {
+		last = mail.MessageCursor{Created: msg.Created, ID: msg.ID}
+		handled := true
+		for _, d := range t.st.deliveries {
+			if d.Message == msg.ID && (d.State == mail.Queued || d.State == mail.Leased || d.DoneAt == nil || *d.DoneAt > cutoff) {
+				handled = false
+			}
+		}
+		for _, j := range t.st.jobs {
+			if j.Message == msg.ID && (j.State == mail.JobOpen || j.State == mail.JobLeased) {
+				handled = false
+			}
+		}
+		if handled {
+			ids = append(ids, msg.ID)
+		}
+	}
+	return ids, last, len(page), nil
+}
+
+// DeleteMessage is mail.Tx's, over the copies.
+func (t *memTx) DeleteMessage(id string) error {
+	delete(t.st.messages, id)
+	for k, d := range t.st.deliveries {
+		if d.Message == id {
+			delete(t.st.deliveries, k)
+		}
+	}
+	for k, j := range t.st.jobs {
+		if j.Message == id {
+			delete(t.st.jobs, k)
+		}
+	}
+	return nil
+}
+
+// PruneInbox is mail.Tx's: crewtest's journal.
+func (t *memTx) PruneInbox(before int64, limit int) (int, error) {
+	return t.Tx.(interface {
+		PruneInbox(before int64, limit int) (int, error)
+	}).PruneInbox(before, limit)
+}
+
 // The inbox module's reads (inbox.Tx), over the same copies: the journal and attention are
 // crewtest's, the messages and deliveries this Mem's.
 
