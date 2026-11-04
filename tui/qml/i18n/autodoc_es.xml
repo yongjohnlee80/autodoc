@@ -6307,6 +6307,10 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documentos · profundidad %3 · d profundidad, l leyenda</translation>
     </message>
+    <message id="autodoc.text.mindmap_tui.mindmap_documents_depth_keys">
+        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, Enter opens</source>
+        <translation>Mindmap · %1 · %2 documentos · profundidad %3 · d profundidad, Enter abre</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map">
         <source>open a workspace's document to see its mind map</source>
         <translation>abre un documento de un espacio de trabajo para ver su mapa mental</translation>
