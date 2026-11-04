@@ -82,7 +82,7 @@ func TestARetryWhileItsGrantCardIsOpenGetsTheOneAnswer(t *testing.T) {
 		{"answered yes", func() { r.h.asker.accepted(); r.h.asker.closed() }, "agent:zen editor.write yes"},
 	} {
 		request("agent:zen")
-		r.s.WaitForText(t, "let the Lua script agent:zen use editor.write?")
+		r.s.WaitForText(t, "let the agent zen use editor.write?")
 		request("agent:zen") // the agent retries while its card is open
 		onLoop(r, func() bool { end.answer(); return true })
 		settled(end.name)
@@ -92,11 +92,11 @@ func TestARetryWhileItsGrantCardIsOpenGetsTheOneAnswer(t *testing.T) {
 	}
 
 	request("agent:one")
-	r.s.WaitForText(t, "let the Lua script agent:one use editor.write?")
+	r.s.WaitForText(t, "let the agent one use editor.write?")
 	request("agent:two")
 	request("agent:two") // queued, asked twice: one card in its turn
 	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
-	r.s.WaitForText(t, "let the Lua script agent:two use editor.write?")
+	r.s.WaitForText(t, "let the agent two use editor.write?")
 	request("agent:two")
 	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
 	settled("the queued request answered")

@@ -105,7 +105,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	if a := wait("an ungranted run", run("echo never")); a.re == nil || a.re.Code != codeEditorNotGranted || !strings.Contains(a.re.Message, "needs terminal") {
 		t.Fatalf("an ungranted run: %v %v, want needs terminal", a.res, a.re)
 	}
-	r.s.WaitForText(t, "let the Lua script agent:zen use terminal?")
+	r.s.WaitForText(t, "let the agent zen use terminal?")
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
 	r.s.WaitFor(t, "the terminal grant kept", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["terminal"] })

@@ -8292,5 +8292,105 @@ H J K L, Shift+setas   redimensionam</translation>
         <source>the daemon is older than Crew Bridges: restart the backend (System › Restart backend…)</source>
         <translation>o daemon é anterior a Pontes da equipe: reinicie o backend (Sistema › Reiniciar backend…)</translation>
     </message>
+    <message id="autodoc.dialog.grants.close_q">
+        <source>Close (&amp;q)</source>
+        <translation>Fechar (&amp;q)</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke">
+        <source>&amp;Revoke…</source>
+        <translation>&amp;Revogar…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.revoke_all">
+        <source>Revoke &amp;all…</source>
+        <translation>Revog&amp;ar tudo…</translation>
+    </message>
+    <message id="autodoc.dialog.grants.title">
+        <source>Agent permissions</source>
+        <translation>Permissões dos agentes</translation>
+    </message>
+    <message id="autodoc.main.agent_permissions">
+        <source>Agent &amp;permissions…</source>
+        <translation>&amp;Permissões dos agentes…</translation>
+    </message>
+    <message id="autodoc.notice.grants.revoked">
+        <source>%1 no longer holds %2: its next use asks you again</source>
+        <translation>%1 não tem mais %2: o próximo uso pergunta a você de novo</translation>
+    </message>
+    <message id="autodoc.question.grants.keep">
+        <source>&amp;Keep</source>
+        <translation>Manter (&amp;k)</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke">
+        <source>&amp;Revoke</source>
+        <translation>&amp;Revogar</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_text">
+        <source>%1 holds %2.
+
+Revoked, each is refused at its next use, and asks you again by a card.</source>
+        <translation>%1 tem %2.
+
+Revogados, cada um é recusado no próximo uso e pergunta a você de novo com um cartão.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_all_title">
+        <source>revoke everything %1 holds?</source>
+        <translation>revogar tudo o que %1 tem?</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_text">
+        <source>%1 holds %2: %3.
+
+Revoked, its next use of %2 is refused, and asks you again by a card.</source>
+        <translation>%1 tem %2: %3.
+
+Revogado, o próximo uso de %2 é recusado e pergunta a você de novo com um cartão.</translation>
+    </message>
+    <message id="autodoc.question.grants.revoke_title">
+        <source>revoke %1 from %2?</source>
+        <translation>revogar %1 de %2?</translation>
+    </message>
+    <message id="autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents">
+        <source>insert, replace and delete text in your open documents</source>
+        <translation>inserir, substituir e excluir texto nos seus documentos abertos</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_your_open_documents_and_find_in_them">
+        <source>read your open documents and buffers, and search in them</source>
+        <translation>ler seus documentos e buffers abertos, e buscar neles</translation>
+    </message>
+    <message id="autodoc.text.grants.count">
+        <source>%1 capability grant(s) to %2 holder(s). Revoke takes one back: its holder's next use of it asks you again.</source>
+        <translation>%1 permissão(ões) concedida(s) a %2 titular(es). Revogar retira uma: o próximo uso do titular pergunta a você de novo.</translation>
+    </message>
+    <message id="autodoc.text.grants.detail">
+        <source>%1 (%2) holds %3: %4</source>
+        <translation>%1 (%2) tem %3: %4</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_agent">
+        <source>agent</source>
+        <translation>agente</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_package">
+        <source>package</source>
+        <translation>pacote</translation>
+    </message>
+    <message id="autodoc.text.grants.kind_script">
+        <source>Lua script</source>
+        <translation>script Lua</translation>
+    </message>
+    <message id="autodoc.text.grants.none">
+        <source>Nothing is granted. An agent or a package asks, by a card, the first time it needs a capability.</source>
+        <translation>Nada foi concedido. Um agente ou um pacote pede, com um cartão, na primeira vez que precisa de uma permissão.</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_agent">
+        <source>the agent %1</source>
+        <translation>o agente %1</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permissões dos agentes: o que foi concedido a cada agente e pacote</translation>
+    </message>
+    <message id="autodoc.cmd.agents.permissions.help">
+        <source>agent permissions: what each agent and package was granted</source>
+        <translation>permissões dos agentes: o que foi concedido a cada agente e pacote</translation>
+    </message>
 </context>
 </TS>

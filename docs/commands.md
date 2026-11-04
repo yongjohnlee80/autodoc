@@ -29,6 +29,7 @@ configuration. `editor.commands` lists them with the rest.
 | `agent.bell` | `:agent-bell` |  | ring a bell when an agent asks you or waits on you |
 | `agent.setup` |  |  | set up an agent |
 | `agent.toggle` |  |  | AI agent |
+| `agents.permissions` | `:permissions` |  | agent permissions: what each agent and package was granted |
 | `app.command_line` |  |  | the command line |
 | `app.quit` |  |  | quit |
 | `app.restart_backend` |  |  | restart the backend |

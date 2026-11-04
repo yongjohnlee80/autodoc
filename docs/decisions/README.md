@@ -129,6 +129,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Every verb states its effect](contract.md#every-verb-states-its-effect)
 - [Gated scripts and their capabilities](contract.md#gated-scripts-and-their-capabilities)
 - [Grants are remembered as a yes](contract.md#grants-are-remembered-as-a-yes)
+- [A grant can be taken back](contract.md#a-grant-can-be-taken-back)
 - [A gated script's files stay in the workspace](contract.md#a-gated-scripts-files-stay-in-the-workspace)
 - [User-only commands](contract.md#user-only-commands)
 - [Path commands run within the workspace](contract.md#path-commands-run-within-the-workspace)
