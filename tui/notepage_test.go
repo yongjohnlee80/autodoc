@@ -127,3 +127,47 @@ func TestATerminalNotesPageTakesRawToWhereTheReaderScrolled(t *testing.T) {
 		t.Errorf("the cursor is at byte %d, not a paragraph's start", top)
 	}
 }
+
+// TestATerminalNotePageTakesALanguageBeforeItsFirstNote: a language applied before any note is shown
+// (applyPrefs at start) tells the page nothing and makes none; the page made later is told, and
+// told again at the next change.
+func TestATerminalNotePageTakesALanguageBeforeItsFirstNote(t *testing.T) {
+	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
+	p.LanguageChanged() // no page yet: it failed here, stopping the preferences' read
+	if p.view != nil {
+		t.Fatal("a language change made the page")
+	}
+	p.viewOf()
+	p.LanguageChanged()
+}
+
+const koNotice = "flowchart 다이어그램: 터미널에서는 그리지 않습니다 (Raw에서 소스를 볼 수 있습니다)"
+
+// TestAStoredLanguageReachesTheTerminalNotePage: a start with a language stored (Korean) has the store's
+// preferences in, with no handler failed on the way (a page told of the language before it was made
+// stopped the preferences' read); the first note shown says a diagram it doesn't draw in Korean, and
+// a switch to English with the page shown says it in English.
+func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  A-->B\n```\n")}, tableInclude)
+	first := runTUI(t, NewSession(d.sock, nil), Options{})
+	first.connected(t)
+	onLoop(first, func() bool { core{first.h}.SetPref(prefLanguage, "ko_KR"); return true })
+	first.s.WaitFor(t, "the language stored", func(string) bool {
+		return onLoop(first, func() bool { return first.h.prefs.Value(prefLanguage) == "ko_KR" })
+	})
+
+	dir := t.TempDir()
+	r := runTUI(t, NewSession(d.sock, nil), Options{CrashDir: dir})
+	r.connected(t) // the store's preferences in, within the normal bound: Korean applied at start
+	if logs := crashLogs(t, dir); len(logs) != 0 {
+		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
+	}
+	onLoop(r, func() bool { r.h.openPath("flow.md"); return true })
+	r.waitFile(t, "flow.md")
+	r.s.WaitForText(t, koNotice) // the page made after the language: its words already Korean
+	onLoop(r, func() bool { r.h.useLanguage("en"); return true })
+	r.s.WaitForText(t, "flowchart diagram: not drawn in the terminal (Raw shows its source)")
+	if logs := crashLogs(t, dir); len(logs) != 0 {
+		t.Fatalf("a handler crashed on the way:\n%s", logs[0])
+	}
+}

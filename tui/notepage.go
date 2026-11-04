@@ -72,7 +72,17 @@ func (p *cellNotePage) onATerminal() bool {
 	return ok && !p.h.native()
 }
 func (p *cellNotePage) LanguageChanged() { p.giveNotice() }
-func (p *cellNotePage) giveNotice()      { widget.WithDiagramNotice(p.notice)(p.view.HTMLView) }
+
+// giveNotice gives the page its words for a diagram it doesn't draw, in the language now: when it is
+// made (viewOf) and as the language changes. Until a note is first shown there is no page, which is a
+// state of its own (the page is made on first use): a language applied at start (applyPrefs) tells it
+// nothing, and the page made later is given the words of that moment.
+func (p *cellNotePage) giveNotice() {
+	if p.view == nil {
+		return
+	}
+	widget.WithDiagramNotice(p.notice)(p.view.HTMLView)
+}
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
 // the terminal (Raw shows its source)".
