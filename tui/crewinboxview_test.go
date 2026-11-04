@@ -82,6 +82,13 @@ func (w *mailWindow) release(i int) {
 	w.held[i] = func() {}
 	f()
 }
+
+// drain releases every answer still held, in the order held, including those the releases hold.
+func (w *mailWindow) drain() {
+	for i := 0; i < len(w.held); i++ {
+		w.release(i)
+	}
+}
 func (w *mailWindow) Set(name string, v any)            { w.state[name] = v }
 func (w *mailWindow) Open(id string)                    { w.opened = append(w.opened, id) }
 func (w *mailWindow) Focus(id string)                   { w.focused = append(w.focused, id) }
@@ -543,9 +550,8 @@ func TestMoreFollowsWhatTheDaemonSays(t *testing.T) {
 	}
 }
 
-// A Mark read and a Dismiss show on the row at once, before the daemon answers; refused, the row is
-// as it was again, and the user is told (the mutants: the row waiting on the answer; a refusal left
-// showing as done).
+// A Mark read and a Dismiss show on the row at once, before the daemon answers; refused, each is said
+// and the dialog reads the daemon again, which lists the row as the daemon has it (here, open still).
 func TestMarkReadAndDismissShowAtOnceAndAreUndoneWhenRefused(t *testing.T) {
 	for _, refuse := range []bool{false, true} {
 		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
@@ -561,6 +567,7 @@ func TestMarkReadAndDismissShowAtOnceAndAreUndoneWhenRefused(t *testing.T) {
 		}
 		w.release(0)
 		w.release(1)
+		w.drain() // a refusal's read of the daemon
 		want1, want0 := "read", "dismissed"
 		if refuse {
 			want1, want0 = "open", "open"
@@ -572,6 +579,59 @@ func TestMarkReadAndDismissShowAtOnceAndAreUndoneWhenRefused(t *testing.T) {
 			t.Fatalf("refused: notices %q, want each refusal said", w.notices)
 		}
 	}
+}
+
+// A refusal lists the daemon's state, never the one at the click: a request answered in another
+// window while its Dismiss question showed stays answered once the dismiss is refused; so does one
+// answered while the dismiss was out; and a report that expired while its Mark read was out stays
+// expired (the mutant: the click-time state put back on a refusal).
+func TestARefusalListsTheDaemonsStateNotTheClicks(t *testing.T) {
+	state := func(v *inboxView, i int) string { it, _ := v.rows.At(i); return it.state }
+	t.Run("answered while the question showed", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		v.dismiss(0) // the question shows
+		w.history[0] = mailItem(2, "request", "answered")
+		v.changed() // another window's answer: listed answered
+		w.hold, w.refuse = true, true
+		w.asked[0].OnYes()
+		w.drain()
+		if got := state(v, 0); got != "answered" {
+			t.Fatalf("a dismiss refused after the request was answered: %q, want answered, as the daemon has it", got)
+		}
+	})
+	t.Run("answered while the dismiss was out", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold, w.refuse = true, true
+		v.dismiss(0)
+		w.asked[0].OnYes() // its call held
+		w.history[0] = mailItem(2, "request", "answered")
+		v.changed()  // held too
+		w.release(1) // the change's read lands first
+		w.release(0) // then the refusal
+		w.drain()
+		if got := state(v, 0); got != "answered" {
+			t.Fatalf("a dismiss refused after a read showed the request answered: %q, want answered", got)
+		}
+	})
+	t.Run("expired while the ack was out", func(t *testing.T) {
+		w := &mailWindow{history: []map[string]any{mailItem(2, "request", "open"), mailItem(1, "message", "open")}}
+		v, _ := newInboxCell(w)
+		v.open()
+		w.hold, w.refuse = true, true
+		v.markRead(1)
+		w.history[1] = mailItem(1, "message", "expired")
+		v.changed()
+		w.release(1)
+		w.release(0)
+		w.drain()
+		if got := state(v, 1); got != "expired" {
+			t.Fatalf("an ack refused after a read showed the report expired: %q, want expired", got)
+		}
+	})
 }
 
 // The Inbox's tabs' and buttons' letters are one each: no two take the same key, among the tabs, the

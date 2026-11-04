@@ -368,7 +368,9 @@ func (v *inboxView) render() {
 	v.rows.Reset(items)
 	// the table keeps its cursor on its row's key across the reset itself: told an index as well, a
 	// stale one won, and the cursor jumped at every ack and every page. It is told one only when its
-	// message is gone, or none was chosen
+	// message is gone, or none was chosen. App.inboxIndex keeps the last index told, which rows
+	// arriving above make stale: only this may set it, after the key is looked up, or the cursor
+	// jumps back to whatever row now sits at that stale index
 	if i := slices.IndexFunc(items, func(it inboxItem) bool { return it.message == v.key }); v.key != "" && i >= 0 {
 		v.cursor = i
 	} else {
@@ -523,10 +525,12 @@ func (v *inboxView) markRead(i int) {
 	}
 }
 
-// ack marks it read (inbox.ack): listed so at once, and so again once the daemon took it, or as it
-// was, and said, when the daemon refused it. The click never waits on the daemon's answer.
+// ack marks it read (inbox.ack): listed so at once, and so again once the daemon took it. The click
+// never waits on the daemon's answer. Refused, it is said, and the dialog reads the daemon again
+// (changed): never the state the click saw, which another window's answer or an expiry may have
+// moved on since.
 func (v *inboxView) ack(it inboxItem) {
-	gen, was := v.gen, it.state
+	gen := v.gen
 	v.setState(it.seq, "read")
 	v.c.Go(func(ctx context.Context) any {
 		_, err := v.c.Call(ctx, "inbox.ack", it.message)
@@ -540,10 +544,12 @@ func (v *inboxView) ack(it inboxItem) {
 			return
 		}
 		if err != nil {
-			v.setState(it.seq, was)
+			v.changed()
 			return
 		}
-		v.setState(it.seq, "read") // a read that began after the click, before the daemon took it, is dropped
+		// a read in flight at the click is dropped (setState's generation); one that began after it,
+		// before the daemon took the ack, lands and lists the row unread a moment: listed read again
+		v.setState(it.seq, "read")
 	})
 }
 
@@ -575,7 +581,9 @@ func (v *inboxView) reply(i int) {
 	}
 }
 
-// dismiss declines row i, an open request, once the user says so: its sender is told.
+// dismiss declines row i, an open request, once the user says so: its sender is told. Listed
+// dismissed at the Yes; refused (answered elsewhere, or expired, while the question showed), it is
+// said and the dialog reads the daemon again.
 func (v *inboxView) dismiss(i int) {
 	it, ok := v.rows.At(i)
 	switch {
@@ -585,7 +593,7 @@ func (v *inboxView) dismiss(i int) {
 		v.c.Notify(v.c.Tr("autodoc.text.inbox.not_a_request"))
 		return
 	}
-	gen, was := v.gen, it.state
+	gen := v.gen
 	v.c.Ask(Question{Title: v.c.Tr("autodoc.question.inbox.dismiss"), Text: v.c.Trf("autodoc.question.inbox.dismiss_text", it.from, it.subject),
 		Yes: v.c.Tr("autodoc.question.inbox.dismiss_yes"), OnYes: func() {
 			if v.isOpen && v.gen == gen {
@@ -602,8 +610,8 @@ func (v *inboxView) dismiss(i int) {
 				if !v.isOpen || v.gen != gen {
 					return
 				}
-				if err != nil {
-					v.setState(it.seq, was)
+				if err != nil { // the daemon's state, never the one the question was asked over (ack)
+					v.changed()
 					return
 				}
 				v.setState(it.seq, "dismissed")
