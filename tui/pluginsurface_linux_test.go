@@ -4,6 +4,7 @@ package tui
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ type fakeSink struct {
 	issued []*fakeReceipt // every receipt handed out, which Close completes
 	auto   string         // non-empty: complete each push at once with this outcome, and drop it
 	closed bool
+	pushed chan struct{} // a frame is held: the signal take waits on (pushedC)
 }
 
 type fakeHeld struct {
@@ -49,6 +51,7 @@ func (k *fakeSink) Push(f *extimage.Frame) surfaceReceipt {
 	auto := k.auto
 	if auto == "" {
 		k.held = append(k.held, &fakeHeld{f, r})
+		k.signal()
 	}
 	k.mu.Unlock()
 	if auto != "" {
@@ -56,6 +59,22 @@ func (k *fakeSink) Push(f *extimage.Frame) surfaceReceipt {
 		f.Drop()
 	}
 	return r
+}
+
+// pushedC is the sink's signal that a frame is held, made at its first use; k.mu held.
+func (k *fakeSink) pushedC() chan struct{} {
+	if k.pushed == nil {
+		k.pushed = make(chan struct{}, 1)
+	}
+	return k.pushed
+}
+
+// signal tells a waiting take a frame is held; k.mu held.
+func (k *fakeSink) signal() {
+	select {
+	case k.pushedC() <- struct{}{}:
+	default:
+	}
 }
 
 func (k *fakeSink) Close() {
@@ -68,11 +87,66 @@ func (k *fakeSink) Close() {
 	}
 }
 
-// surfaceWait bounds every wait a surface cell makes for what must come (a frame at the sink, a side-
-// channel op, a violation, the owner's end): each returns as soon as it comes, so only a failing
-// cell spends it, and it is scaled under -race, whose slower goroutines a loaded run (-count, other
-// packages) leaves a frame in flight past a bare 5 s.
+// surfaceWait is when a surface cell still waiting for what must come (a frame at the sink, a side-
+// channel op, a violation, the owner's end) logs every goroutine's stack, once: what the owner was
+// doing, should the wait end in a failure. It is not the bound: see patience.
 const surfaceWait = 5 * time.Second * raceFactor
+
+// surfaceMargin is what a cell's deadline keeps back for the failure's report.
+const surfaceMargin = 10 * time.Second
+
+// patience bounds one wait of a surface cell by the cell's own deadline (go test -timeout, less
+// surfaceMargin), never a fixed wall clock: the owner answers each step at once (it never waits on
+// the plugin), so only its goroutines not being run hold a frame up, and a loaded -race run of the
+// whole gui suite on two CPUs has held one past 20 s. A real stall still fails, with the stacks
+// logged at surfaceWait. Each wait returns as soon as what it waits for comes.
+type patience struct {
+	t      *testing.T
+	what   string
+	timer  *time.Timer
+	logged bool
+}
+
+// surfaceWaitFor is the patience of one wait for what, failing as what when it ends.
+func surfaceWaitFor(t *testing.T, what string) *patience {
+	return &patience{t: t, what: what, timer: time.NewTimer(surfaceWait)}
+}
+
+func (p *patience) C() <-chan time.Time { return p.timer.C }
+func (p *patience) stop()               { p.timer.Stop() }
+
+// late takes the timer's firing: at the first (surfaceWait), every goroutine's stack is logged
+// and the timer set to the cell's deadline; at the second, the cell fails.
+func (p *patience) late() {
+	p.t.Helper()
+	if p.logged {
+		p.t.Fatal(p.what)
+	}
+	p.logged = true
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	p.t.Logf("still waiting after %v (%s); every goroutine:\n%s", surfaceWait, p.what, buf)
+	rest := 10 * time.Minute // go test -timeout 0: no deadline
+	if d, ok := p.t.Deadline(); ok {
+		rest = max(time.Until(d)-surfaceMargin, 0)
+	}
+	p.timer.Reset(rest)
+}
+
+// surfaceEventually waits until cond holds, polling it: for what the owner does without a word to
+// the plugin (a buffer unmapped), whose own signal is cond.
+func surfaceEventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	p := surfaceWaitFor(t, what)
+	defer p.stop()
+	for !cond() {
+		select {
+		case <-p.C():
+			p.late()
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
 
 // surfaceRig is a host's owner and the plugin's end of its side channel.
 type surfaceRig struct {
@@ -137,23 +211,29 @@ var rigGeometry = surfaceGeometry{W: 16, H: 8, Scale: 1, Kinds: []plugin.Surface
 // rather than the op that then never comes.
 func (r *surfaceRig) next(t *testing.T) map[string]any {
 	t.Helper()
-	select {
-	case m, ok := <-r.msgs:
-		if !ok {
-			t.Fatalf("the side channel closed%s", r.violatedSince())
+	p := surfaceWaitFor(t, "no side-channel op arrived")
+	defer p.stop()
+	for {
+		select {
+		case m, ok := <-r.msgs:
+			if !ok {
+				t.Fatalf("the side channel closed%s", r.violatedSince())
+			}
+			return m
+		case <-p.C():
+			p.what = "no side-channel op arrived" + r.violatedSince()
+			p.late()
 		}
-		return m
-	case <-time.After(surfaceWait):
-		t.Fatalf("no side-channel op arrived%s", r.violatedSince())
 	}
-	return nil
 }
 
 // take is the sink's oldest held frame (fakeSink.take), or a violation the owner closed the plugin
 // for, which no frame follows.
 func (r *surfaceRig) take(t *testing.T) *fakeHeld {
 	t.Helper()
-	for deadline := time.Now().Add(surfaceWait); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+	p := surfaceWaitFor(t, "no frame reached the sink")
+	defer p.stop()
+	for {
 		r.sink.mu.Lock()
 		if len(r.sink.held) > 0 {
 			h := r.sink.held[0]
@@ -161,15 +241,16 @@ func (r *surfaceRig) take(t *testing.T) *fakeHeld {
 			r.sink.mu.Unlock()
 			return h
 		}
+		pushed := r.sink.pushedC()
 		r.sink.mu.Unlock()
 		select {
+		case <-pushed:
 		case why := <-r.violated:
 			t.Fatalf("no frame reached the sink: the owner closed the plugin: %s", why)
-		default:
+		case <-p.C():
+			p.late()
 		}
 	}
-	t.Fatal("no frame reached the sink")
-	return nil
 }
 
 // violatedSince is ", after a violation: why", or "" when there was none.
@@ -239,13 +320,16 @@ func (r *surfaceRig) noViolation(t *testing.T) {
 
 func (r *surfaceRig) violation(t *testing.T) string {
 	t.Helper()
-	select {
-	case why := <-r.violated:
-		return why
-	case <-time.After(surfaceWait):
-		t.Fatal("no violation")
+	p := surfaceWaitFor(t, "no violation")
+	defer p.stop()
+	for {
+		select {
+		case why := <-r.violated:
+			return why
+		case <-p.C():
+			p.late()
+		}
 	}
-	return ""
 }
 
 // mappings is how many of this rig's surface buffers the process has mapped: by inode, so another
@@ -370,10 +454,7 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	r.present(t, 1, gen, ids[0])
 	h := r.take(t)
 	r.owner.Close()
-	deadline := time.Now().Add(surfaceWait)
-	for r.mappings(t) > before+1 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
+	surfaceEventually(t, "the idle buffers still mapped after Close", func() bool { return r.mappings(t) <= before+1 })
 	if n := r.mappings(t) - before; n != 1 {
 		t.Fatalf("%d buffers mapped after Close, want the held one alone", n)
 	}
@@ -383,10 +464,15 @@ func TestASurfaceCloseDestroysEachBufferAfterItsLastHolder(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	h.f.Drop() // the positive control: the frame was held past Close
-	select {
-	case <-r.owner.Ended():
-	case <-time.After(surfaceWait):
-		t.Fatal("the owner did not end at the last release")
+	p := surfaceWaitFor(t, "the owner did not end at the last release")
+	defer p.stop()
+	for ended := false; !ended; {
+		select {
+		case <-r.owner.Ended():
+			ended = true
+		case <-p.C():
+			p.late()
+		}
 	}
 	if n := r.mappings(t) - before; n != 0 {
 		t.Errorf("%d buffers still mapped after the last release", n)
@@ -435,10 +521,15 @@ func TestAStalledSurfacePluginIsClosedAndNeverBlocksARelease(t *testing.T) {
 			t.Fatal("no stall after two million frames")
 		}
 	}
-	select {
-	case <-violated:
-	case <-time.After(surfaceWait):
-		t.Fatal("a plugin that never read was not closed")
+	p := surfaceWaitFor(t, "a plugin that never read was not closed")
+	defer p.stop()
+	for closed := false; !closed; {
+		select {
+		case <-violated:
+			closed = true
+		case <-p.C():
+			p.late()
+		}
 	}
 }
 
@@ -541,10 +632,7 @@ func TestASaturatedSurfaceBudgetKeepsAHeldFrame(t *testing.T) {
 	}
 	h.r.complete("drawn")
 	h.f.Drop()
-	deadline := time.Now().Add(surfaceWait)
-	for r.mappings(t)-before != plugin.MaxPoolBuffers && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
+	surfaceEventually(t, "the held frame's buffer still mapped after its drop", func() bool { return r.mappings(t)-before == plugin.MaxPoolBuffers })
 	if n := r.mappings(t) - before; n != plugin.MaxPoolBuffers {
 		t.Errorf("%d buffers mapped after the held frame was dropped", n)
 	}
