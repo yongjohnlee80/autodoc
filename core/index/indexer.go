@@ -82,6 +82,10 @@ type options struct {
 	// onRebuild, when set (tests only), is told each time a publication reloads every document's
 	// codes rather than the changed ones'.
 	onRebuild func()
+	// onFlip, when set (tests only), runs when a model's flip to active has committed, before the
+	// writer records it (semantic.activeFP) and publishes it: the window in which the store has the
+	// new model and Status, and queries, still the old one.
+	onFlip func()
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
 	// one active, or, while another is active, the one filling to replace it. The model it replaces
 	// is offline while it fills: nothing embeds with it, so the server holds one model at a time,
