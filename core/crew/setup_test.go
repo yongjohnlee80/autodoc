@@ -470,8 +470,8 @@ func TestMailViaIsCLIOrMCPOnTheWire(t *testing.T) {
 // TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare: what a Codex agent's server gets on its command line
 // is spelled as TOML `-c` keys, so each name in a key (the MCP server's, an env name, a tool's) must
 // be a bare key, or it could close the key and set another (`autodoc.command=x`); a server with no
-// command has nothing to run. Each is refused with its name, and no server is given. An env value
-// goes in quoted (a quote in it escaped); a program by path starts the server. With no agent folder
+// command has nothing to run. Each is refused with its name, and no server is given. An env name is
+// passed on by name (env_vars); a program by path starts the server. With no agent folder
 // the MCP server can't be given (its socket would have nowhere to go): the setup says so once, and
 // the agent stays on the CLI's mail.
 func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
@@ -487,8 +487,8 @@ func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Server) == 0 || s.Server[0] != "/opt/codex/bin/codex" || !slices.Contains(s.Server, `mcp_servers.autodoc.env.AUTODOC_X="a\"b"`) {
-		t.Fatalf("its server %q: want it started by /opt/codex/bin/codex, the env value quoted with its quote escaped", s.Server)
+	if len(s.Server) == 0 || s.Server[0] != "/opt/codex/bin/codex" || !slices.Contains(s.Server, `mcp_servers.autodoc.env_vars=["AUTODOC_CREW_CONTEXT","AUTODOC_X"]`) {
+		t.Fatalf("its server %q: want it started by /opt/codex/bin/codex, the env name passed on by name", s.Server)
 	}
 	for name, c := range map[string]struct {
 		mut  func(*crew.MCPServer)
@@ -507,6 +507,55 @@ func TestSetupForCodexSpellsOnlyWhatTOMLCanTakeBare(t *testing.T) {
 	nf, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": codexOnPath(t, codexOlderHelp)}, Dir: t.TempDir(), Servers: server(nil)}, "")
 	if err != nil || len(nf.Server) != 0 || nf.MailVia != crew.MailViaCLI || len(nf.Notices) != 1 || !strings.Contains(nf.Notices[0], "needs the agent's own folder") {
 		t.Fatalf("no agent folder: %+v %v; want no server, the CLI's mail, and it said once", nf, err)
+	}
+}
+
+// TestACodexMCPServersEnvValuesNeverRideTheCommandLine: an MCP server's Env values (a token, say)
+// reach it through the app-server's environment, never its command line, which /proc/<pid>/cmdline
+// shows every user of the machine while it runs: no argument of the server or the TUI holds a value;
+// each value is in the setup's Env, which the host gives the app-server, and its name in the
+// server's env_vars, after the session's context. Two servers may share a name with one value; a
+// name with two values is refused (the app-server has one environment), as is a name AutoDoc sets
+// itself (the session's context, the agent's server).
+func TestACodexMCPServersEnvValuesNeverRideTheCommandLine(t *testing.T) {
+	const token, other = "tok-3f9c1e", "url-https-x"
+	servers := []crew.MCPServer{
+		{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Env: map[string]string{"SVC_TOKEN": token, "SVC_URL": other}},
+		{Name: "second", Command: []string{"/x/second"}, Env: map[string]string{"SVC_TOKEN": token}},
+	}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: host, AgentDir: t.TempDir(), Servers: servers}, "")
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		for _, a := range slices.Concat(s.Server, s.Argv) {
+			if strings.Contains(a, token) || strings.Contains(a, other) {
+				t.Errorf("%s: an Env value on the command line: %q", host, a)
+			}
+		}
+		if s.Env["SVC_TOKEN"] != token || s.Env["SVC_URL"] != other {
+			t.Errorf("%s: the setup's Env %v, want the servers' values in it, for the app-server's environment", host, s.Env)
+		}
+		for _, want := range []string{`mcp_servers.autodoc.env_vars=["AUTODOC_CREW_CONTEXT","SVC_TOKEN","SVC_URL"]`,
+			`mcp_servers.second.env_vars=["AUTODOC_CREW_CONTEXT","SVC_TOKEN"]`} {
+			if at := slices.Index(s.Server, want); at < 1 || s.Server[at-1] != "-c" {
+				t.Errorf("%s: its server %q, want -c %s", host, s.Server, want)
+			}
+		}
+	}
+	for name, c := range map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"a name with another value": {map[string]string{"SVC_TOKEN": "tok-other"}, `env name "SVC_TOKEN" has another value already`},
+		"the session's context":     {map[string]string{crew.EnvContext: "/x"}, `env name "AUTODOC_CREW_CONTEXT" is AutoDoc's own`},
+		"the agent's server":        {map[string]string{crew.EnvCodexServer: "/x"}, `env name "AUTODOC_CODEX_SERVER" is AutoDoc's own`},
+	} {
+		two := []crew.MCPServer{servers[0], {Name: "second", Command: []string{"/x/second"}, Env: c.env}}
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, AgentDir: t.TempDir(), Servers: two}, "")
+		if err == nil || !strings.Contains(err.Error(), c.want) || len(s.Server) != 0 {
+			t.Errorf("%s: %v, server %q; want refused with %q and no server", name, err, s.Server, c.want)
+		}
 	}
 }
 
