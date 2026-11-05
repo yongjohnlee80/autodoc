@@ -49,6 +49,42 @@ func TestTheOutlineFollowsThePageAndItsCursor(t *testing.T) {
 	crumbs("server", "database", "host")
 }
 
+// A note page's reader's place moves the breadcrumb as the cursor does (placeAt, which a page reads
+// with no cursor move): with no page outlined there's nothing to place, and nothing changes; a
+// place past either end of the text is held at it.
+func TestThePagesPlaceMovesTheCrumbAndNothingWithoutAPage(t *testing.T) {
+	c := newScripted("kb")
+	o := newOutline(c)
+	o.placeAt(at(guideFile, 14, 1)) // no page shown yet
+	if len(c.crumbs) != 0 || o.line != 0 || o.at != 0 {
+		t.Fatalf("with no page, the place moved something: crumbs %q, line %d, at %d", c.crumbs, o.line, o.at)
+	}
+	o.Shown(Page{Ref: fileRef{"kb", "guide.md"}, Kind: kind.Markdown, Text: []byte(guideFile), Line: 10, At: at(guideFile, 10, 0)})
+	o.placeAt(at(guideFile, 14, 1)) // "run", under Usage
+	if want := []string{"Guide", "Usage"}; !slices.Equal(c.crumbs, want) {
+		t.Fatalf("crumbs %q, want %q", c.crumbs, want)
+	}
+	o.placeAt(len(guideFile) + 100) // past the end: held at it
+	if o.at != len(guideFile) {
+		t.Fatalf("a place past the end is at %d, want the end %d", o.at, len(guideFile))
+	}
+	o.placeAt(-5) // before the start: held at it
+	if o.at != 0 || o.line != 0 {
+		t.Fatalf("a place before the start is line %d at %d, want 0, 0", o.line, o.at)
+	}
+	// once the page is closed there's no outline: a place that comes late moves nothing, and the
+	// cursor's place the outline kept stays as it was
+	o.Moved(14, at(guideFile, 14, 1))
+	o.Closed()
+	o.placeAt(at(guideFile, 3, 0))
+	if o.line != 14 || o.at != at(guideFile, 14, 1) {
+		t.Fatalf("after the page closed, a place moved the cursor's: line %d at %d, want line 14 at %d", o.line, o.at, at(guideFile, 14, 1))
+	}
+	if len(c.crumbs) != 0 {
+		t.Fatalf("crumbs %q after the page closed", c.crumbs)
+	}
+}
+
 // Go › Outline lists the headings of the page as it is now and jumps to the one chosen; a page
 // without headings says what its breadcrumb shows instead.
 func TestTheOutlinePickerOpensAndJumps(t *testing.T) {
