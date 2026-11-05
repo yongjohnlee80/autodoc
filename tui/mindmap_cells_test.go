@@ -230,11 +230,17 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 }
 
 // TestTheCellMindmapTakesTheKeyboard: Relations › Mindmap opened over a note's page (Rendered) or
-// over its text (Raw) takes the keyboard, as the window's Mindmap does: its next key (d: two links
-// out) is the map's, and the note is as it was. Closed, it gives the keyboard back to the editor.
+// over its text (Raw), from the menu (Alt+L, m, as a reader opens it) or by its command, takes the
+// keyboard, as the window's Mindmap does: its next key (d: two links out) is the map's, and the note
+// is as it was. Closed, it gives the keyboard back to the editor.
 func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
-	for _, raw := range []bool{false, true} {
-		t.Run(map[bool]string{false: "from the page", true: "from the text"}[raw], func(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		raw, menu bool
+	}{{"the menu, from the page", false, true}, {"the menu, from the text", true, true},
+		{"its command, from the page", false, false}, {"its command, from the text", true, false}} {
+		raw := c.raw
+		t.Run(c.name, func(t *testing.T) {
 			r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
 			if raw {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
@@ -249,7 +255,13 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 				return nil
 			})
 			before := r.editorText()
-			onLoop(r, func() bool { m.toggle(); return true })
+			if c.menu {
+				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'l', Mods: tuicore.ModAlt})
+				r.s.WaitFor(t, "the Relations menu", func(string) bool { return r.focused("menuBar") || strings.Contains(r.s.String(), "Mindmap") })
+				r.keys(t, key('m'))
+			} else {
+				onLoop(r, func() bool { m.toggle(); return true })
+			}
 			r.s.WaitFor(t, "the Mindmap built", func(string) bool {
 				return onLoop(r, func() bool { return m.open && m.cur != nil })
 			})
