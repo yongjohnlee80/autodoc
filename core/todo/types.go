@@ -336,4 +336,3 @@ type Assigned struct {
 	Task
 	Reach *Reach `json:"reach,omitempty"`
 }
-
