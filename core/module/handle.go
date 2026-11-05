@@ -77,7 +77,7 @@ func Handle[P, R any](c Contract, fn func(context.Context, P) (R, error)) Verb {
 			}
 		}
 		return fn(ctx, p)
-	}}
+	}, Returns: reflect.TypeFor[R]()}
 }
 
 func fieldsOf(verb string, pt reflect.Type) []field {
