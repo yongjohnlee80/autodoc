@@ -344,6 +344,9 @@ Window {
                         id: editor
                         autoIndent: true
                         contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
+                        // [ Raw | Rendered ] on the page's first row, at its right, while the file has a
+                        // Rendered view (a note's page, a table), as the window has it on its title bar
+                        modeSwitch: true
                         focus: true
                         palette.highlight: Theme.document.selection
                         palette.highlightedText: Theme.document.selectedText
