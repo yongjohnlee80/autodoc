@@ -263,7 +263,12 @@ func (p *cellNotePage) onATerminal() bool {
 	_, ok := p.h.editor.(*widget.Editor)
 	return ok && !p.h.native()
 }
-func (p *cellNotePage) LanguageChanged() { p.giveNotice() }
+func (p *cellNotePage) LanguageChanged() { p.giveNotice(); p.giveSyntax() }
+
+// ThemeChanged re-gives the page the highlighting its Editor has: a theme switch reloads the
+// layout and tells every ThemeSink; the page's code blocks lay out again in the new theme's
+// syntax colours, the one thing on the page not token-painted at draw time.
+func (p *cellNotePage) ThemeChanged() { p.giveSyntax() }
 
 // giveNotice gives the page its words for a diagram it doesn't draw, in the language now: when it is
 // made (viewOf) and as the language changes. Until a note is first shown there is no page, which is a
@@ -274,6 +279,18 @@ func (p *cellNotePage) giveNotice() {
 		return
 	}
 	widget.WithDiagramNotice(p.notice)(p.view.HTMLView)
+}
+
+// giveSyntax gives the page the highlighting its Editor has — the same catalog and the same
+// SyntaxStyles — when a note is shown (with the program attached, whenever the page was made), as
+// the language changes, and as the theme changes (a switch reloads the layout and tells every
+// ThemeSink). A page made before the host has a Program gets nothing, until one of these calls
+// comes with one.
+func (p *cellNotePage) giveSyntax() {
+	if p.view == nil || p.h.p == nil {
+		return
+	}
+	widget.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
 }
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
@@ -295,6 +312,7 @@ func (p *cellNotePage) viewOf() *notePageView {
 		hv.SetOnRefused(p.h.resourceRefused)
 		p.view = &notePageView{HTMLView: hv, page: p}
 		p.giveNotice()
+		p.giveSyntax()
 	}
 	return p.view
 }
@@ -309,6 +327,7 @@ func (p *cellNotePage) Shown(pg Page) {
 	}
 	p.shown = pg.Ref
 	v := p.viewOf()
+	p.giveSyntax() // the page may have been made before the program attached
 	p.images(pg)
 	setDocumentView(p.h.editor, v)
 	switch h := p.h; {
