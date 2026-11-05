@@ -1,0 +1,45 @@
+package tui
+
+import (
+	"testing"
+)
+
+// TestACodeFenceOnThePageIsDrawnInItsLanguage: a go fenced block on a note's Rendered page draws
+// in the theme's syntax colours — the page's keyword in the same colour the Editor's Raw view
+// paints a keyword of its own with (a markdown heading is the markdown highlighter's Keyword),
+// one SyntaxStyles colouring both surfaces. The code inside Raw is a string of the markdown
+// highlighter, by that highlighter's documented design, so the cell pins the styles the two views
+// share: the styles themselves.
+func TestACodeFenceOnThePageIsDrawnInItsLanguage(t *testing.T) {
+	note := "# Title\n\n```go\nfunc main() {\n\tprintln()\n}\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+
+	// the page: the go keyword coloured, the function after it plain (the theme colours no function)
+	r.s.WaitFor(t, "the page's go drawn", func(string) bool {
+		_, _, ok := find(r.s.Backend.Snapshot(), "func main()")
+		return ok
+	})
+	snap := r.s.Backend.Snapshot()
+	fx, fy, _ := find(snap, "func main()")
+	pageKw := snap[fy][fx].Attrs.FG
+	pageFn := snap[fy][fx+5].Attrs.FG
+	if pageKw == pageFn {
+		t.Fatalf("the page's keyword and the function after it share one colour %v", pageKw)
+	}
+
+	// Raw: the markdown heading is the same keyword style — the two views wear one SyntaxStyles
+	r.keys(t, ctrlKey('t'))
+	r.s.WaitFor(t, "Raw drawn", func(string) bool {
+		_, _, ok := find(r.s.Backend.Snapshot(), "```go")
+		return ok
+	})
+	snap = r.s.Backend.Snapshot()
+	hx, hy, _ := find(snap, "# Title")
+	if rawKw := snap[hy][hx].Attrs.FG; rawKw != pageKw {
+		t.Fatalf("the page's go keyword %v and Raw's markdown keyword %v differ", pageKw, rawKw)
+	}
+}

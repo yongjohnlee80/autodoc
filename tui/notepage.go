@@ -238,7 +238,7 @@ func (p *cellNotePage) onATerminal() bool {
 	_, ok := p.h.editor.(*widget.Editor)
 	return ok && !p.h.native()
 }
-func (p *cellNotePage) LanguageChanged() { p.giveNotice() }
+func (p *cellNotePage) LanguageChanged() { p.giveNotice(); p.giveSyntax() }
 
 // giveNotice gives the page its words for a diagram it doesn't draw, in the language now: when it is
 // made (viewOf) and as the language changes. Until a note is first shown there is no page, which is a
@@ -249,6 +249,16 @@ func (p *cellNotePage) giveNotice() {
 		return
 	}
 	widget.WithDiagramNotice(p.notice)(p.view.HTMLView)
+}
+
+// giveSyntax gives the page the highlighting its Editor has — the same catalog and the same
+// SyntaxStyles — when it is made, as the language changes, and as a note is shown again (a theme
+// switch reloads the layout; the re-shown note re-gives them the theme's).
+func (p *cellNotePage) giveSyntax() {
+	if p.view == nil {
+		return
+	}
+	widget.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
 }
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
@@ -270,6 +280,7 @@ func (p *cellNotePage) viewOf() *notePageView {
 		hv.SetOnRefused(p.h.resourceRefused)
 		p.view = &notePageView{HTMLView: hv, page: p}
 		p.giveNotice()
+		p.giveSyntax()
 	}
 	return p.view
 }
