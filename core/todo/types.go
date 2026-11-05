@@ -333,6 +333,6 @@ type Reach struct {
 // Assigned is todos.assign's and todos.add's answer: the task, and where its assignee is told when
 // the caller gave its crew scope and the assignee is a bare agent name.
 type Assigned struct {
-	Task
-	Reach *Reach `json:"reach,omitempty"`
+	Task  `json:",inline"` // the task's own keys, flat, as todos.assign answered before 54
+	Reach *Reach           `json:"reach,omitempty"`
 }

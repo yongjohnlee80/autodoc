@@ -3,6 +3,7 @@ package todo_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -87,9 +88,11 @@ func TestAnAssignmentSaysWhoItReaches(t *testing.T) {
 func TestAnAssignmentWithNothingToSayHasNoReach(t *testing.T) {
 	e := claimed(t)
 	e.reach = func(crew, name string) (todo.Reach, error) { return todo.Reach{State: todo.ReachOwn}, nil }
+	n := 0
 	add := func() todo.Task {
 		t.Helper()
-		out, err := verb(t, e.m, "todos.add").Call(ctx, []any{"kb", map[string]any{"title": "Nothing to say"}})
+		n++
+		out, err := verb(t, e.m, "todos.add").Call(ctx, []any{"kb", map[string]any{"title": fmt.Sprintf("Nothing to say %d", n)}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,8 +118,8 @@ func TestAnAssignmentWithNothingToSayHasNoReach(t *testing.T) {
 		if r := out.(todo.Assigned).Reach; r != nil {
 			t.Errorf("%q crew %v: reach %+v; want none", c.assignee, c.crew, r)
 		}
-		if wire := wireOf(t, out); wire["reach"] != nil {
-			t.Errorf("%q crew %v: the wire answer has reach %v; want the key left out", c.assignee, c.crew, wire["reach"])
+		if wire := wireOf(t, out); wire["reach"] != nil || wire["id"] != task.ID || wire["Task"] != nil {
+			t.Errorf("%q crew %v: the wire answer %v; want the task's keys flat (id %s) and no reach", c.assignee, c.crew, wire, task.ID)
 		}
 	}
 	if len(e.asked) != 0 {

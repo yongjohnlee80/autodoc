@@ -194,6 +194,34 @@ func TestWireCarriesAStructByItsJSONTags(t *testing.T) {
 	}
 }
 
+// Inner is an embedded struct for TestWireFlattensAnInlineStruct: exported, as an embedded field
+// Wire carries must be.
+type Inner struct {
+	ID   string `json:"id"`
+	Same string `json:"same"`
+}
+
+// An embedded struct tagged json:",inline" is flattened into its parent's map, as encoding/json
+// flattens it, the parent's own key winning a clash; one without the tag keeps its type's name as
+// one key, as it always has (a MapPage's Map), so no answer that embeds today changes.
+func TestWireFlattensAnInlineStruct(t *testing.T) {
+	got, err := module.Wire(struct {
+		Inner `json:",inline"`
+		Same  string `json:"same"`
+		Extra string `json:"extra,omitempty"`
+	}{Inner: Inner{ID: "a", Same: "inner"}, Same: "outer"})
+	if want := map[string]any{"id": "a", "same": "outer"}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("inline: %#v, %v; want %#v", got, err, want)
+	}
+	got, err = module.Wire(struct {
+		Inner
+		Next string
+	}{Inner: Inner{ID: "b"}, Next: "n"})
+	if want := map[string]any{"Inner": map[string]any{"id": "b", "same": ""}, "Next": "n"}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("untagged: %#v, %v; want %#v: an embedding without inline keeps its key", got, err, want)
+	}
+}
+
 func TestEventsOfNamesTheParams(t *testing.T) {
 	v := module.Verb{Contract: module.Contract{Verb: "workspace.rename",
 		Params: []module.Param{{Name: "name"}, {Name: "new name"}},
