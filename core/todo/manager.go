@@ -66,6 +66,7 @@ type options struct {
 	stores       func()
 	settled      func(context.Context) error
 	refreshCheck time.Duration
+	reach        func(ctx context.Context, crew, name string) (Reach, error)
 }
 
 // Option configures New.
@@ -114,6 +115,14 @@ func (m *Manager) awaitStores(ctx context.Context) {
 	if err := m.o.settled(wait); err != nil && ctx.Err() == nil {
 		logger.Warning(m.o.log, err, "waiting for the workspaces to read the todo stores: the verb answers anyway")
 	}
+}
+
+// WithReach sets how an assignment's answer finds where its assignee is told
+// (docs/decisions/todos.md#an-assignment-says-who-it-reaches): fn is where mail to the bare name
+// sent from the crew scope crew goes, as a send resolves it (the daemon's mail.Reach), its
+// Warning left for the verb to say. Unset, an answer has no reach.
+func WithReach(fn func(ctx context.Context, crew, name string) (Reach, error)) Option {
+	return func(o *options) { o.reach = fn }
 }
 
 // WithRefreshCheck sets how often RefreshDaily looks for a claimed store due its daily refresh;
