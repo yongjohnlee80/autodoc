@@ -233,7 +233,12 @@ import (
 // inbox.list's more, true when a page holds the items it could (by count or by bytes) and an older
 // one is there below the last; the undeliverable notices are the newest only, never paged, so their
 // more is false. A client below 53 reads items alone and pages on until a page comes back empty.
-const Protocol int64 = 53
+// Protocol 54 is who an assignment reaches (docs/decisions/todos.md#an-assignment-says-who-it-reaches):
+// todos.assign's and todos.add's crew, the assigner's crew scope, and their answers' reach, where
+// mail to a bare agent assignee from that scope goes (own, another project's, none, or ambiguous,
+// with a warning when nobody will be told). crew routes nothing. A session below 54 is refused
+// crew, and its answers carry no reach.
+const Protocol int64 = 54
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
