@@ -14,7 +14,9 @@ import (
 // body line) in its Raw view, its crumb naming the heading the cursor is under, the second as much
 // as the first: the page's syntax is Markdown both times, so no change of it reaches the editor,
 // and the buffer shown second must take the highlighting the editor already has. Opening the same
-// note again, and the other again with :e, draw it highlighted too.
+// note again, and the other again with :e, draw it highlighted too. A note on a terminal opens
+// Rendered (notepage.go): the first is taken to its text with Ctrl+T, as a reader does, and every
+// switch after it keeps that choice, so each check finds the Raw view without asking for it again.
 func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 	note := func(h1 string) string { return "# " + h1 + "\n\nSome **bold** words.\n\n## Shelf\n\nbeans\n" }
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", note("Larder"), "b.md", note("Cellar")}})
@@ -60,6 +62,7 @@ func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 	}
 	open := func(p string) { onLoop(r, func() bool { r.h.openPath(p); return true }) }
 	open("a.md")
+	r.asText(t) // the note opens as its page; the highlighting under test is its text's
 	check("the first note", "a.md", "Larder")
 	open("b.md")
 	check("a second Markdown note after the first", "b.md", "Cellar")
