@@ -194,7 +194,7 @@ func TestTheCellMindmapGolden(t *testing.T) {
 	}
 	// where the box is drawn: the grid centred across the view (left) and scrolled (x0, y0)
 	x, y := sel.Rect.X+v.left()-m.x0, sel.Rect.Y-m.y0
-	if bold, _ := s.style[y][x].GetBold(); !bold || s.text[y][x] == " " {
+	if reverse, _ := s.style[y][x].GetReverse(); !reverse || s.text[y][x] == " " {
 		t.Errorf("the selected box %q is not drawn in the selection's style at (%d, %d): %q", sel.Label, x, y, s.text[y][x])
 	}
 }

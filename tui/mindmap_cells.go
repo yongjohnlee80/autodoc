@@ -312,19 +312,15 @@ func (v *cellMindView) left() int {
 	return max((v.cells.W-v.m.cur.grid.Size.W)/2, 0)
 }
 
-// cellMindTheme is the painter's styles in the theme's tokens: lines and outlines a border's, labels
-// the text's, the selected box bold in the accent.
-var cellMindTheme = tuimermaid.Theme{
-	Line:     style.New().Foreground(style.TokenBorder),
-	Box:      style.New().Foreground(style.TokenBorder),
-	Label:    style.New().Foreground(style.TokenForeground),
-	Selected: style.New().Foreground(style.TokenAccent).Bold(true),
-}
+// cellMindTheme is golib's own diagram theme (mermaid.TokenTheme): the page's tokens on the
+// page's own background, so the pane's boxes follow the theme by construction, never the
+// terminal's own background (which a foreground-only style punches through).
+var cellMindTheme = tuimermaid.TokenTheme()
 
 func (v *cellMindView) Render(s tuicore.Surface) {
 	m := v.m
 	if m.cur == nil {
-		x, st := 1, style.New().Foreground(style.TokenTextMuted)
+		x, st := 1, style.PageText().Foreground(style.TokenTextMuted)
 		for g := range tuicore.Graphemes(m.statusText()) {
 			s.SetCell(x, 0, g, st)
 			x += s.StringWidth(g)
