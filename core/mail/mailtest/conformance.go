@@ -50,6 +50,7 @@ func Run(t *testing.T, h Harness) {
 		{"ASendsKeyMakesOneMessage", testASendsKeyMakesOneMessage},
 		{"ASendsAddresses", testASendsAddresses},
 		{"ABareNameReachesTheOneOtherScope", testABareNameReachesTheOneOtherScope},
+		{"ReachIsWhereASendGoes", testReachIsWhereASendGoes},
 		{"ALapsedLeaseIsRedeliveredThenFails", testALapsedLeaseIsRedeliveredThenFails},
 		{"ARenewKeepsTheLease", testARenewKeepsTheLease},
 		{"AShowReadsAHeldDeliveryAgain", testAShowReadsAHeldDeliveryAgain},
@@ -385,6 +386,60 @@ func testABareNameReachesTheOneOtherScope(t *testing.T, h Harness) {
 	for _, to := range []string{"kai", "autodoc", "nobody"} {
 		if _, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{to}, Body: "b", Key: "k-none-" + to}); !errors.Is(err, mail.ErrNoRecipient) {
 			t.Errorf("%s (only in a gone scope, the daemon's, or no one's): %v, want ErrNoRecipient", to, err)
+		}
+	}
+}
+
+// Reach (docs/decisions/todos.md#an-assignment-says-who-it-reaches) answers where a send of the
+// bare name from a scope goes, without sending: own for the sender's scope's profile, other (its
+// address) for the one other scope's, ambiguous (each address, sorted) for two or more, none for
+// nobody's, a gone scope's only, or the daemon's. Each answer is the send's own outcome, checked
+// against a real send of the same name after it, and Reach stores nothing. A profile with no live
+// session counts, as for a send. A name that isn't bare is ErrInvalid.
+func testReachIsWhereASendGoes(t *testing.T, h Harness) {
+	r := newRig(t, h)
+	const from = "autovim:p" // s-jarvis's scope
+	r.profile("p-zen", "autodoc:w1", "zen", "s-zen")
+	r.profile("p-ash", "autovim:m", "ash", "") // a stopped agent: an active profile, no session
+	r.profile("p-kai", "autodoc:w2", "kai", "s-kai")
+	r.profile("p-moe", "autovim:m", "moe", "s-moe-m")
+	r.profile("p-moe-q", "autovim:q", "moe", "s-moe-q")
+	r.write(func(tx mail.Tx) error {
+		return tx.PutScope(crew.Scope{ID: "autodoc:w2", Kind: "autodoc", State: crew.ScopeGone})
+	})
+	for i, c := range []struct {
+		name string
+		want mail.Reach
+		sent string // the send's recipient profile; "" when the send is refused
+		err  error  // the refused send's error
+	}{
+		{"gold", mail.Reach{State: mail.ReachOwn}, "p-gold", nil},
+		{"zen", mail.Reach{State: mail.ReachOther, Address: "zen@autodoc:w1"}, "p-zen", nil},
+		{"ash", mail.Reach{State: mail.ReachOther, Address: "ash@m"}, "p-ash", nil},
+		{"moe", mail.Reach{State: mail.ReachAmbiguous, Candidates: []string{"moe@m", "moe@q"}}, "", mail.ErrAmbiguous},
+		{"kai", mail.Reach{State: mail.ReachNone}, "", mail.ErrNoRecipient},
+		{"autodoc", mail.Reach{State: mail.ReachNone}, "", mail.ErrNoRecipient},
+		{"nobody", mail.Reach{State: mail.ReachNone}, "", mail.ErrNoRecipient},
+	} {
+		before := len(r.st.Inspect.Messages())
+		got, err := r.m.Reach(r.ctx, from, c.name)
+		if err != nil || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("Reach(%s, %s) = %+v, %v; want %+v", from, c.name, got, err, c.want)
+		}
+		if n := len(r.st.Inspect.Messages()); n != before {
+			t.Errorf("Reach(%s) stored %d message(s)", c.name, n-before)
+		}
+		sent, err := r.m.Send(r.ctx, "s-jarvis", mail.Send{To: []string{c.name}, Body: "b", Key: fmt.Sprintf("k-reach-%d", i)})
+		switch {
+		case c.err != nil && !errors.Is(err, c.err):
+			t.Errorf("a send to %s: %v; want %v, as its Reach (%s) says", c.name, err, c.err, c.want.State)
+		case c.err == nil && (err != nil || len(sent.Deliveries) != 1 || sent.Deliveries[0].Recipient != c.sent):
+			t.Errorf("a send to %s: %+v, %v; want one delivery to %s, as its Reach (%s) says", c.name, sent, err, c.sent, c.want.State)
+		}
+	}
+	for _, name := range []string{"", mail.UserCodename, "zen@q", "session:s-zen"} {
+		if _, err := r.m.Reach(r.ctx, from, name); !errors.Is(err, mail.ErrInvalid) {
+			t.Errorf("Reach(%q): %v; want ErrInvalid: not a bare codename", name, err)
 		}
 	}
 }

@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 53,
+  protocol = 54,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -920,10 +920,11 @@ return {
       params = {
         { name = "at", type = "workspace | {root}" },
         { name = "spec", type = "map" },
-        { name = "scope", type = "string", optional = true }
+        { name = "scope", type = "string", optional = true },
+        { name = "crew", type = "string", optional = true }
       },
-      result = "task: {id, version, status, title, …, rev, path, description}",
-      doc = "Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told.",
+      result = "task, and reach?: {state: own|other|none|ambiguous, address?, candidates?, warning?, note?} when crew is given and the assignee is a bare agent:<name>",
+      doc = "Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told; with crew, the answer says where (reach).",
     },
     ["todos.assign"] = {
       since = 20, scope = "global", audience = "agent",
@@ -933,10 +934,11 @@ return {
         { name = "rev", type = "string" },
         { name = "assignee", type = "string" },
         { name = "reason", type = "string", optional = true },
-        { name = "scope", type = "string", optional = true }
+        { name = "scope", type = "string", optional = true },
+        { name = "crew", type = "string", optional = true }
       },
-      result = "task: {id, version, status, title, …, rev, path, description}",
-      doc = "Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told.",
+      result = "task, and reach?: {state: own|other|none|ambiguous, address?, candidates?, warning?, note?} when crew is given and the assignee is a bare agent:<name>",
+      doc = "Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told; with crew, the answer says where (reach).",
     },
     ["todos.changes"] = {
       since = 20, scope = "global", audience = "user",
