@@ -16,14 +16,10 @@ func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
 	var row, col int
-	r.s.WaitFor(t, "the switch on the page's first row", func(sc string) bool {
-		for y, line := range strings.Split(sc, "\n") {
-			if i := strings.Index(line, "[ Raw | Rendered ]"); i >= 0 {
-				row, col = y, len([]rune(line[:i]))
-				return true
-			}
-		}
-		return false
+	r.s.WaitFor(t, "the switch on the page's first row", func(string) bool {
+		var ok bool
+		col, row, ok = find(r.s.Backend.Snapshot(), "[ Raw | Rendered ]") // its cell column, whatever is left of it
+		return ok
 	})
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + 2, Y: row})
 	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == widget.ViewRaw })
