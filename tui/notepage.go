@@ -111,12 +111,12 @@ func (v *notePageView) inEditor(at tuicore.Point) tuicore.Point {
 	if !ok || pc == nil || e.Context() == nil {
 		return at
 	}
-	page, okP := pc.ResolveAnchor(pc.NodeAnchor())
-	ed, okE := e.Context().ResolveAnchor(e.Context().NodeAnchor())
-	if !okP || !okE {
+	// resolved from the editor's context, the page's rect is in the editor's frame
+	page, ok := e.Context().ResolveAnchor(pc.NodeAnchor())
+	if !ok {
 		return at
 	}
-	return tuicore.Point{X: at.X + page.X - ed.X, Y: at.Y + page.Y - ed.Y}
+	return tuicore.Point{X: at.X + page.X, Y: at.Y + page.Y}
 }
 
 // menu opens the editor's menu at at, in the editor's frame.
