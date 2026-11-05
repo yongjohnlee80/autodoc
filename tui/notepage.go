@@ -257,10 +257,12 @@ func (p *cellNotePage) giveNotice() {
 }
 
 // giveSyntax gives the page the highlighting its Editor has — the same catalog and the same
-// SyntaxStyles — when it is made (viewOf), as the language changes, and as the theme changes
-// (ThemeChanged: a switch reloads the layout and tells every ThemeSink).
+// SyntaxStyles — when a note is shown (with the program attached, whenever the page was made), as
+// the language changes, and as the theme changes (a switch reloads the layout and tells every
+// ThemeSink). A page made before the host has a Program gets nothing, until one of these calls
+// comes with one.
 func (p *cellNotePage) giveSyntax() {
-	if p.view == nil {
+	if p.view == nil || p.h.p == nil {
 		return
 	}
 	widget.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
@@ -300,6 +302,7 @@ func (p *cellNotePage) Shown(pg Page) {
 	}
 	p.shown = pg.Ref
 	v := p.viewOf()
+	p.giveSyntax() // the page may have been made before the program attached
 	p.images(pg)
 	setDocumentView(p.h.editor, v)
 	switch h := p.h; {

@@ -46,6 +46,34 @@ func TestACodeFenceOnThePageIsDrawnInItsLanguage(t *testing.T) {
 	}
 }
 
+// A page made before the program attaches is given no highlighting yet; the first note shown with
+// the program attached highlights it. The unit test's construction panics before the fix: the page
+// is made with no Program, and giveSyntax read p.h.p anyway.
+func TestAPageMadeBeforeTheProgramHighlightsWhenShown(t *testing.T) {
+	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
+	if p.view != nil {
+		t.Fatal("a page was made before its first use")
+	}
+	_ = p
+	note := "# Title\n\n```go\nfunc main() {\n\tprintln()\n}\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "the page's go drawn", func(string) bool {
+		_, _, ok := find(r.s.Backend.Snapshot(), "func main()")
+		return ok
+	})
+	snap := r.s.Backend.Snapshot()
+	fx, fy, _ := find(snap, "func main()")
+	pageKw := snap[fy][fx].Attrs.FG
+	pageFn := snap[fy][fx+5].Attrs.FG
+	if pageKw == pageFn {
+		t.Fatalf("the page's keyword and the function after it share one colour %v", pageKw)
+	}
+}
+
 // A theme switch re-gives the page the theme's syntax colours: the layout reload shows the note
 // again, and the page's go keyword takes the new theme's syntax.keyword — still one colour with
 // Raw's markdown keywords. Without the re-give, the page keeps the old theme's colour.
