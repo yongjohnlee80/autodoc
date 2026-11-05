@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -8,11 +9,12 @@ import (
 
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/style"
 )
 
 // THE PAGE'S OWN BACKGROUND, under every theme: a style with no background punches the TERMINAL's
-// background through the page's fill (Johno's sepia bug — dark patches behind text runs and box
-// labels). The page's text styles and the diagram themes carry the page's background now
+// background through the page's fill (on a sepia page in a dark terminal, dark patches behind text
+// runs and box labels). The page's text styles and the diagram themes carry the page's background now
 // (style.PageText and mermaid.TokenTheme), so a text run, a heading, a link, a diagram's label and
 // box and the Mindmap pane's boxes paint on the theme's base, never the terminal's own: started in
 // the theme and switched into it.
@@ -28,7 +30,9 @@ func bgIs(a tuicore.CellAttrs) string {
 // themeValue is the named theme's one value, as its values hold it: r,g,b.
 func themeValue(t *testing.T, r *running, name, key string) string {
 	t.Helper()
-	vals, err := r.h.themeValues(name)
+	var vals map[string]string
+	var err error
+	onLoop(r, func() bool { vals, err = r.h.themeValues(name); return true })
 	if err != nil {
 		t.Fatalf("theme %q: %v", name, err)
 	}
@@ -67,7 +71,7 @@ func storeTheme(t *testing.T, r *running, name string) string {
 
 // keywordFG is the window palette's syntax keyword colour, r,g,b ("" when unset).
 func keywordFG(r *running) string {
-	fg, _ := r.h.p.SyntaxStyles()[highlight.Keyword].GetForeground()
+	fg, _ := onLoop(r, func() style.Style { return r.h.p.SyntaxStyles()[highlight.Keyword] }).GetForeground()
 	red, green, blue, ok := fg.RGBValues()
 	if !ok {
 		return ""
@@ -120,34 +124,60 @@ func outlined(snap [][]tuicore.Cell, label string) (x, y int, ok bool) {
 	return 0, 0, false
 }
 
-// wantBase is the cell's background against the theme's base.
-func wantBase(t *testing.T, what string, snap [][]tuicore.Cell, x, y int, base string) {
+// probe is a cell the check reads: what it is, and where.
+type probe struct {
+	what string
+	x, y int
+}
+
+// settlesOnBase waits for every probed cell to show the theme's base: a switch's repaint comes after
+// the palette carries the theme, and a frame painted before it is no answer. It fails, naming each
+// wrong cell, when they haven't within the deadline: a page a switch left stale fails here. probes
+// says what to read in a snapshot, or "" and what it couldn't find.
+func settlesOnBase(t *testing.T, r *running, theme string, probes func(snap [][]tuicore.Cell) ([]probe, string)) {
 	t.Helper()
-	if got := bgIs(snap[y][x].Attrs); got != base {
-		t.Errorf("%s at %d,%d (%q): background %q, want the theme's base %q", what, x, y, snap[y][x].Content, got, base)
+	base := themeBase(t, r, theme)
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		snap := r.s.Backend.Snapshot()
+		ps, missing := probes(snap)
+		var wrong []string
+		for _, p := range ps {
+			if got := bgIs(snap[p.y][p.x].Attrs); got != base {
+				wrong = append(wrong, fmt.Sprintf("%s at %d,%d (%q): background %q", p.what, p.x, p.y, snap[p.y][p.x].Content, got))
+			}
+		}
+		if missing == "" && len(wrong) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			if missing != "" {
+				t.Fatalf("%s isn't on screen, so it wasn't checked:\n%s", missing, r.s.Backend.String())
+			}
+			t.Fatalf("under %s, want the theme's base %q:\n  %s", theme, base, strings.Join(wrong, "\n  "))
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
-// checkPage is every kind of cell on the shown page against the theme's base. A thing it can't
-// find fails: it wasn't checked.
+// checkPage is every kind of cell on the shown page against the theme's base.
 func checkPage(t *testing.T, r *running, theme string) {
 	t.Helper()
-	r.s.WaitFor(t, "the page drawn, its diagram too", func(string) bool {
-		_, _, ok := outlined(r.s.Backend.Snapshot(), "hub")
-		return ok
-	})
-	base := themeBase(t, r, theme)
-	snap := r.s.Backend.Snapshot()
-	for _, text := range []string{"Heading", "link", "text.", "leaf"} {
-		x, y, ok := find(snap, text)
-		if !ok {
-			t.Fatalf("%q not on the page:\n%s", text, r.s.Backend.String())
+	settlesOnBase(t, r, theme, func(snap [][]tuicore.Cell) ([]probe, string) {
+		var ps []probe
+		for _, text := range []string{"Heading", "link", "text.", "leaf"} {
+			x, y, ok := find(snap, text)
+			if !ok {
+				return nil, strconv.Quote(text)
+			}
+			ps = append(ps, probe{strconv.Quote(text), x, y})
 		}
-		wantBase(t, strconv.Quote(text), snap, x, y, base)
-	}
-	x, y, _ := outlined(snap, "hub")
-	wantBase(t, "the diagram's label", snap, x, y, base)
-	wantBase(t, "the diagram's box", snap, x-2, y-1, base)
+		x, y, ok := outlined(snap, "hub")
+		if !ok {
+			return nil, "the diagram's box"
+		}
+		return append(ps, probe{"the diagram's label", x, y}, probe{"the diagram's box", x - 2, y - 1}), ""
+	})
 }
 
 // The page's text, heading, link, and a diagram's label and box carry the theme's own base, never
@@ -195,25 +225,23 @@ func openMindmap(t *testing.T, r *running) *cellMindmap {
 // checkMindmap is a box of the pane's map against the theme's base: its label and its outline.
 func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
 	t.Helper()
-	var label string // the root's, as the laid-out map has it: a title or a file's name
-	r.s.WaitFor(t, "a box in the Mindmap", func(string) bool {
-		label = onLoop(r, func() string {
+	settlesOnBase(t, r, theme, func(snap [][]tuicore.Cell) ([]probe, string) {
+		// the root's label, as the laid-out map has it: a title or a file's name
+		label := onLoop(r, func() string {
 			if m.cur == nil || len(m.cur.grid.Boxes) == 0 {
 				return ""
 			}
 			return m.cur.grid.Boxes[0].Label
 		})
 		if label == "" {
-			return false
+			return nil, "the Mindmap's map"
 		}
-		_, _, ok := outlined(r.s.Backend.Snapshot(), label)
-		return ok
+		x, y, ok := outlined(snap, label)
+		if !ok {
+			return nil, "the Mindmap's root box " + strconv.Quote(label)
+		}
+		return []probe{{"the Mindmap box's label", x, y}, {"the Mindmap box's outline", x - 2, y - 1}}, ""
 	})
-	base := themeBase(t, r, theme)
-	snap := r.s.Backend.Snapshot()
-	x, y, _ := outlined(snap, label)
-	wantBase(t, "the Mindmap box's label", snap, x, y, base)
-	wantBase(t, "the Mindmap box's outline", snap, x-2, y-1, base)
 }
 
 // The Mindmap pane's boxes carry the theme's base too, switched into it and started in it.

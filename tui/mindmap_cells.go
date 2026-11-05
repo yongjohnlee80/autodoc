@@ -314,7 +314,7 @@ func (v *cellMindView) left() int {
 
 // cellMindTheme is golib's own diagram theme (mermaid.TokenTheme): the page's tokens on the
 // page's own background, so the pane's boxes follow the theme by construction, never the
-// terminal's own background (Johno's sepia bug: a foreground-only style punches it through).
+// terminal's own background (which a foreground-only style punches through).
 var cellMindTheme = tuimermaid.TokenTheme()
 
 func (v *cellMindView) Render(s tuicore.Surface) {
