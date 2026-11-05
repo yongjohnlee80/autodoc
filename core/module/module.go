@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 // Scope is what a verb's first param names, and so what the host resolves before the handler runs.
@@ -137,6 +138,9 @@ type Verb struct {
 	// Events, when set, are the events a success logs, in place of the one Event's params name: for
 	// a verb whose workspace or detail is inside a param or in its result, or that logs several.
 	Events func(ctx context.Context, params []any, result any) []Event
+	// Returns is the Go type of a success's result, as Handle took it from its handler; nil for a
+	// verb built by hand. The wire's own checks read it (every answer type, encoded).
+	Returns reflect.Type
 }
 
 // Logs reports whether a success of v logs anything.
