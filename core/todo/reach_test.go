@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
 // An assignment says who it reaches (docs/decisions/todos.md#an-assignment-says-who-it-reaches):

@@ -642,7 +642,9 @@ func modules(d *moduleDeps) []module.Module {
 		return []module.Module{todo.New(nil, nil, nil), crew.New(nil), mail.New(nil, nil), inbox.New(nil, nil, nil)}
 	}
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }),
-		todo.WithReach(func(ctx context.Context, crew, name string) (todo.Reach, error) { return assignReach(ctx, d, crew, name) })}
+		todo.WithReach(func(ctx context.Context, crew, name string) (todo.Reach, error) {
+			return assignReach(ctx, d, crew, name)
+		})}
 	if d.onStores != nil {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
 	}
