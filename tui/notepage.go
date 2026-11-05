@@ -83,7 +83,7 @@ func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
 		return true
 	}
 	if m, ok := ev.(tuicore.MouseEvent); ok && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight {
-		return v.page.menu(tuicore.Point{X: m.X, Y: m.Y})
+		return v.page.menu(v.inEditor(tuicore.Point{X: m.X, Y: m.Y}))
 	}
 	if !isKey || k.Kind != tuicore.KeyPress {
 		return false
@@ -103,8 +103,23 @@ func editingKey(k tuicore.KeyEvent) bool {
 	return k.Code == tuicore.KeyEscape || k.Text != "" && k.Mods&^tuicore.ModShift == 0
 }
 
-// menu opens the editor's menu at at, in the page's frame: the page lies over the editor's whole
-// area, so its frame is the editor's.
+// inEditor is at, a point in the page's frame, in the editor's: the page lies under the editor's
+// Raw | Rendered row when it shows one, so the two frames differ by where the page was placed.
+func (v *notePageView) inEditor(at tuicore.Point) tuicore.Point {
+	e, ok := v.page.h.editor.(*widget.Editor)
+	pc := v.Context()
+	if !ok || pc == nil || e.Context() == nil {
+		return at
+	}
+	// resolved from the editor's context, the page's rect is in the editor's frame
+	page, ok := e.Context().ResolveAnchor(pc.NodeAnchor())
+	if !ok {
+		return at
+	}
+	return tuicore.Point{X: at.X + page.X, Y: at.Y + page.Y}
+}
+
+// menu opens the editor's menu at at, in the editor's frame.
 func (p *cellNotePage) menu(at tuicore.Point) bool {
 	e, ok := p.h.editor.(*widget.Editor)
 	return ok && e.ContextMenu().OpenAt(at)
