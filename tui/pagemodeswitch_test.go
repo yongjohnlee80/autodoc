@@ -27,7 +27,7 @@ func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 	})
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + 2, Y: row})
 	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == widget.ViewRaw })
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + len(widget.ModeSwitchRaw) + 3, Y: row})
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + len("[ Raw ") + 3, Y: row})
 	r.s.WaitFor(t, "the page after a press on Rendered", func(string) bool { return shownView(r) == widget.ViewRendered })
 }
 
