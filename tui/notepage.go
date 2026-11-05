@@ -68,16 +68,20 @@ func (v *notePageView) SetVisible(on bool) {
 	}
 }
 
-// HandleEvent reads the page by its own keys (the arrows, j/k, PgUp/PgDn, g/G, y and Ctrl+C), the
-// mouse and its links; a right press opens the editor's menu there, as over the text (the window's
-// Rendered view has it too). Space is the app's leader (SPC) here as over the text; PgDn pages. An editing
-// key, any other the page doesn't read (i, a, o, x, ':', Esc, typing), opens the text at the
-// reader's place and goes on to the editor as that same key: Rendered reads as in the window, and the
-// first editing key edits, as there. A chord (Ctrl, Alt) stays the app's.
+// HandleEvent reads the page by golib's HTMLView, whose keys follow the editor's keyset (the editor
+// gives its page its keyset): in every keyset the keys that never type (the arrows, PgUp/PgDn,
+// Home/End, Ctrl+C; Left/Right pan a diagram wider than the page, Alt+Down/Alt+Up go by block and
+// Alt+Shift+Down/Up by heading), and under Vim the printing ones too (j/k, g/G, y, h/l, ] [, } {).
+// It reads the mouse and its links too; a right press opens the editor's menu there, as over the text
+// (the window's Rendered view has it too). Under Vim, Space is the app's leader (SPC) here as over the
+// text. An editing key, any other the page doesn't read (i, a, o, x, ':', Esc, typing: under Text
+// every printing key, Space too), opens the text at the reader's place and goes on to the editor as
+// that same key: Rendered reads as in the window, and the first editing key edits, as there. A
+// chord (Ctrl, Alt) the page doesn't read stays the app's.
 func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
 	k, isKey := ev.(tuicore.KeyEvent)
-	if isKey && k.Code == ' ' && k.Mods == 0 {
-		return false
+	if isKey && k.Code == ' ' && k.Mods == 0 && v.page.vimKeys() {
+		return false // Vim's leader, as over the text
 	}
 	if v.HTMLView.HandleEvent(ev) {
 		return true
@@ -88,13 +92,19 @@ func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
 	if !isKey || k.Kind != tuicore.KeyPress {
 		return false
 	}
-	if _, copies := v.Context().KeyCommand(k, widget.HTMLViewCopy); copies {
-		return true // Copy (y) with nothing selected copies nothing: a reading key, the page's still
+	if v.ReadsKey(k) {
+		return true // a key the page reads but can't act on now (a copy with nothing selected): still the page's
 	}
 	if editingKey(k) {
 		return v.page.edit(k)
 	}
 	return false
+}
+
+// vimKeys reports whether the editor reads keys by Vim's keyset: Space is then the app's leader.
+func (p *cellNotePage) vimKeys() bool {
+	e, ok := p.h.editor.(*widget.Editor)
+	return !ok || e.Core().Keyset() == widget.KeysetVim
 }
 
 // editingKey reports whether k, a key the page doesn't read, edits: Esc, or a key that types (its

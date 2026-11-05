@@ -252,8 +252,10 @@ func TestTypingInAJustOpenedNoteEditsIt(t *testing.T) {
 }
 
 // TestThePagesReadingKeysKeepItRendered: the keys that read the page (the arrows, j/k, PgUp/PgDn, g/G,
-// y and Ctrl+C) leave it Rendered and the note as it was, and the page's own scroll is theirs: PgDn
-// moves its top on, PgUp back, G to the end, g to the start.
+// y and Ctrl+C; h/l and Left/Right, which pan a wide diagram; ] [ and } {, which go by block and by
+// heading) leave it Rendered and the note as it was, and the page's own scroll is theirs: PgDn
+// moves its top on, PgUp back, G to the end, g to the start, ] to the next block and [ back. With
+// no diagram the pan keys move nothing, and with one heading } and { stay; still none of them edits.
 func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 	var note strings.Builder
 	for i := range 40 {
@@ -275,6 +277,11 @@ func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, func() bool { return top() < down }},
 		{key('G'), func() bool { bottom = top(); return bottom > down }},
 		{key('g'), func() bool { return top() == 0 }},
+		{key(']'), func() bool { return top() > 0 }},
+		{key('['), func() bool { return top() == 0 }},
+		{key('}'), nil}, {key('{'), nil},
+		{key('h'), nil}, {key('l'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyLeft}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyRight}, nil},
 		{key('y'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}, nil},
 	} {
 		r.keys(t, k.ev)
@@ -287,6 +294,38 @@ func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 	}
 	if got := r.editorText(); got != before {
 		t.Fatalf("reading the page changed the note:\n%q\nwant\n%q", got, before)
+	}
+}
+
+// TestTheTextKeymapTypesEveryPrintingKeyOnThePage: under Text (modeless) every printing key types,
+// so the keys Vim reads the page by (h j k l [ ] { } g G y, and Space, Vim's leader) open the text
+// at the reader's place and type there exactly; the page travels by Alt and an arrow instead.
+func TestTheTextKeymapTypesEveryPrintingKeyOnThePage(t *testing.T) {
+	var note strings.Builder
+	note.WriteString("# Long\n\n")
+	for i := range 20 {
+		fmt.Fprintf(&note, "Line %02d of the note.\n\n", i)
+	}
+	r := openNotePage(t, note.String(), "Long")
+	r.leader(t, 'k') // Vim to Text
+	r.s.WaitForText(t, "editor mode: Text (modeless)")
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("after the keymap switch the note shows view %v, want its page", v)
+	}
+	page := notePage(r)
+	top := func() int { return onLoop(r, func() int { return page.top }) }
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown, Mods: tuicore.ModAlt})
+	r.s.WaitFor(t, "Alt+Down travels to the next block", func(string) bool { return top() > 0 })
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp, Mods: tuicore.ModAlt})
+	r.s.WaitFor(t, "Alt+Up travels back", func(string) bool { return top() == 0 })
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("travelling left the page (view %v)", v)
+	}
+	const typed = " hjkl[]{}gGy"
+	r.keys(t, decltest.Type(typed)...)
+	r.s.WaitFor(t, "the keys typed into the note", func(string) bool { return strings.HasPrefix(r.editorText(), typed+"# Long") })
+	if v := shownView(r); v != widget.ViewRaw {
+		t.Fatalf("after typing the note shows view %v, want its text", v)
 	}
 }
 
