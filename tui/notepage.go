@@ -240,6 +240,11 @@ func (p *cellNotePage) onATerminal() bool {
 }
 func (p *cellNotePage) LanguageChanged() { p.giveNotice(); p.giveSyntax() }
 
+// ThemeChanged re-gives the page the highlighting its Editor has: a theme switch reloads the
+// layout and tells every ThemeSink; the page's code blocks lay out again in the new theme's
+// syntax colours, the one thing on the page not token-painted at draw time.
+func (p *cellNotePage) ThemeChanged() { p.giveSyntax() }
+
 // giveNotice gives the page its words for a diagram it doesn't draw, in the language now: when it is
 // made (viewOf) and as the language changes. Until a note is first shown there is no page, which is a
 // state of its own (the page is made on first use): a language applied at start (applyPrefs) tells it
@@ -252,8 +257,8 @@ func (p *cellNotePage) giveNotice() {
 }
 
 // giveSyntax gives the page the highlighting its Editor has — the same catalog and the same
-// SyntaxStyles — when it is made, as the language changes, and as a note is shown again (a theme
-// switch reloads the layout; the re-shown note re-gives them the theme's).
+// SyntaxStyles — when it is made (viewOf), as the language changes, and as the theme changes
+// (ThemeChanged: a switch reloads the layout and tells every ThemeSink).
 func (p *cellNotePage) giveSyntax() {
 	if p.view == nil {
 		return

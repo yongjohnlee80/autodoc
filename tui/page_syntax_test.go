@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // TestACodeFenceOnThePageIsDrawnInItsLanguage: a go fenced block on a note's Rendered page draws
@@ -41,5 +43,46 @@ func TestACodeFenceOnThePageIsDrawnInItsLanguage(t *testing.T) {
 	hx, hy, _ := find(snap, "# Title")
 	if rawKw := snap[hy][hx].Attrs.FG; rawKw != pageKw {
 		t.Fatalf("the page's go keyword %v and Raw's markdown keyword %v differ", pageKw, rawKw)
+	}
+}
+
+// A theme switch re-gives the page the theme's syntax colours: the layout reload shows the note
+// again, and the page's go keyword takes the new theme's syntax.keyword — still one colour with
+// Raw's markdown keywords. Without the re-give, the page keeps the old theme's colour.
+func TestASwitchedThemeRecoloursThePagesCode(t *testing.T) {
+	note := "# Title\n\n```go\nfunc main() {\n\tprintln()\n}\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "the page's go drawn", func(string) bool {
+		_, _, ok := find(r.s.Backend.Snapshot(), "func main()")
+		return ok
+	})
+	kw := func() tuicore.CellColor {
+		snap := r.s.Backend.Snapshot()
+		x, y, _ := find(snap, "func main()")
+		return snap[y][x].Attrs.FG
+	}
+	before := kw()
+	to := "dark"
+	if r.h.theme == to {
+		to = "sepia"
+	}
+	onLoop(r, func() bool { r.h.switchTheme(to); return true })
+	r.s.WaitFor(t, "the page recoloured", func(string) bool {
+		return kw() != before
+	})
+	after := kw()
+	r.keys(t, ctrlKey('t'))
+	r.s.WaitFor(t, "Raw drawn", func(string) bool {
+		_, _, ok := find(r.s.Backend.Snapshot(), "```go")
+		return ok
+	})
+	snap := r.s.Backend.Snapshot()
+	hx, hy, _ := find(snap, "# Title")
+	if rawKw := snap[hy][hx].Attrs.FG; rawKw != after {
+		t.Fatalf("the page's go keyword %v and Raw's markdown keyword %v differ after the switch", after, rawKw)
 	}
 }
