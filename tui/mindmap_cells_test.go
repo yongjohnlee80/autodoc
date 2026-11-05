@@ -10,6 +10,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
 	"github.com/yongjohnlee80/golib/tui/style"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // smallMind is a small graph.map answer: a.md links b, c and d; b links e; c links d.
@@ -226,4 +227,58 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
 		return onLoop(r, func() bool { return m.open && m.view != nil })
 	})
+}
+
+// TestTheCellMindmapTakesTheKeyboard: Relations › Mindmap opened over a note's page (Rendered) or
+// over its text (Raw), from the menu (Alt+L, m, as a reader opens it) or by its command, takes the
+// keyboard, as the window's Mindmap does: its next key (d: two links out) is the map's, and the note
+// is as it was. Closed, it gives the keyboard back to the editor.
+func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		raw, menu bool
+	}{{"the menu, from the page", false, true}, {"the menu, from the text", true, true},
+		{"its command, from the page", false, false}, {"its command, from the text", true, false}} {
+		raw := c.raw
+		t.Run(c.name, func(t *testing.T) {
+			r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+			if raw {
+				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
+				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })
+			}
+			m := onLoop(r, func() *cellMindmap {
+				for _, f := range r.h.reg.features {
+					if m, ok := f.(*cellMindmap); ok {
+						return m
+					}
+				}
+				return nil
+			})
+			before := r.editorText()
+			if c.menu {
+				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'l', Mods: tuicore.ModAlt})
+				r.s.WaitFor(t, "the Relations menu", func(string) bool { return r.focused("menuBar") || strings.Contains(r.s.String(), "Mindmap") })
+				r.keys(t, key('m'))
+			} else {
+				onLoop(r, func() bool { m.toggle(); return true })
+			}
+			r.s.WaitFor(t, "the Mindmap built", func(string) bool {
+				return onLoop(r, func() bool { return m.open && m.cur != nil })
+			})
+			r.s.WaitFor(t, "the Mindmap has the keyboard", func(string) bool {
+				return onLoop(r, func() bool { return r.h.paneHasKeyboard(mindmapViewID) })
+			})
+			r.keys(t, key('d'))
+			r.s.WaitFor(t, "d reached the Mindmap (two links out)", func(string) bool {
+				return onLoop(r, func() int { return m.depth }) == 2
+			})
+			if got := r.editorText(); got != before {
+				t.Fatalf("a key for the Mindmap changed the note:\n%q\nwant\n%q", got, before)
+			}
+			onLoop(r, func() bool { m.toggle(); return true })
+			r.s.WaitFor(t, "the editor has the keyboard again", func(string) bool {
+				return onLoop(r, func() bool { return !m.open && r.h.paneHasKeyboard("editor") })
+			})
+		})
+	}
 }
