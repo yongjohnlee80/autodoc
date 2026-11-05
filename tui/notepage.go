@@ -68,8 +68,9 @@ func (v *notePageView) SetVisible(on bool) {
 	}
 }
 
-// HandleEvent reads the page by its own keys (the arrows, j/k, PgUp/PgDn, g/G, y and Ctrl+C), the
-// mouse and its links; a right press opens the editor's menu there, as over the text (the window's
+// HandleEvent reads the page by its own keys (the arrows, j/k, PgUp/PgDn, g/G, y and Ctrl+C; h/l
+// and Left/Right pan a diagram wider than the page, ] [ go by block and } { by heading, golib's
+// HTMLView's), the mouse and its links; a right press opens the editor's menu there, as over the text (the window's
 // Rendered view has it too). Space is the app's leader (SPC) here as over the text; PgDn pages. An editing
 // key, any other the page doesn't read (i, a, o, x, ':', Esc, typing), opens the text at the
 // reader's place and goes on to the editor as that same key: Rendered reads as in the window, and the

@@ -252,8 +252,10 @@ func TestTypingInAJustOpenedNoteEditsIt(t *testing.T) {
 }
 
 // TestThePagesReadingKeysKeepItRendered: the keys that read the page (the arrows, j/k, PgUp/PgDn, g/G,
-// y and Ctrl+C) leave it Rendered and the note as it was, and the page's own scroll is theirs: PgDn
-// moves its top on, PgUp back, G to the end, g to the start.
+// y and Ctrl+C; h/l and Left/Right, which pan a wide diagram; ] [ and } {, which go by block and by
+// heading) leave it Rendered and the note as it was, and the page's own scroll is theirs: PgDn
+// moves its top on, PgUp back, G to the end, g to the start, ] to the next block and [ back. With
+// no diagram the pan keys move nothing, and with one heading } and { stay; still none of them edits.
 func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 	var note strings.Builder
 	for i := range 40 {
@@ -275,6 +277,11 @@ func TestThePagesReadingKeysKeepItRendered(t *testing.T) {
 		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, func() bool { return top() < down }},
 		{key('G'), func() bool { bottom = top(); return bottom > down }},
 		{key('g'), func() bool { return top() == 0 }},
+		{key(']'), func() bool { return top() > 0 }},
+		{key('['), func() bool { return top() == 0 }},
+		{key('}'), nil}, {key('{'), nil},
+		{key('h'), nil}, {key('l'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyLeft}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyRight}, nil},
 		{key('y'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}, nil},
 	} {
 		r.keys(t, k.ev)
