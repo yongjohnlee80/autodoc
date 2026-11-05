@@ -398,9 +398,26 @@ func addresses(tx Tx, scope string, to []string) ([]address, error) {
 // (its scope not gone) and not the daemon's: ok false when there is none, ErrAmbiguous naming each
 // as name@scope when two or more have it, so the sender can say which.
 func uniqueProfileNamed(tx Tx, scope, name string) (crew.Profile, bool, error) {
-	all, err := tx.ActiveProfiles()
+	found, err := profilesNamedElsewhere(tx, scope, name)
 	if err != nil {
 		return crew.Profile{}, false, err
+	}
+	switch len(found) {
+	case 0:
+		return crew.Profile{}, false, nil
+	case 1:
+		return found[0], true, nil
+	}
+	return crew.Profile{}, false, fmt.Errorf("%w: %s is %s", ErrAmbiguous, name, strings.Join(addressesOf(found), " or "))
+}
+
+// profilesNamedElsewhere are the active profiles of codename name in scopes other than scope, live
+// (their scope not gone) and not the daemon's: the ones a bare name the sender's scope lacks may
+// reach.
+func profilesNamedElsewhere(tx Tx, scope, name string) ([]crew.Profile, error) {
+	all, err := tx.ActiveProfiles()
+	if err != nil {
+		return nil, err
 	}
 	var found []crew.Profile
 	for _, p := range all {
@@ -409,27 +426,98 @@ func uniqueProfileNamed(tx Tx, scope, name string) (crew.Profile, bool, error) {
 		}
 		gone, err := scopeGone(tx, p.Scope)
 		if err != nil {
-			return crew.Profile{}, false, err
+			return nil, err
 		}
 		if !gone {
 			found = append(found, p)
 		}
 	}
-	switch len(found) {
-	case 0:
-		return crew.Profile{}, false, nil
-	case 1:
-		return found[0], true, nil
-	}
-	names := make([]string, len(found))
-	for i, p := range found {
-		names[i] = name + "@" + p.Scope // the address that reaches it: an AutoVim project's by its name
-		if proj, ok := strings.CutPrefix(p.Scope, "autovim:"); ok {
-			names[i] = name + "@" + proj
-		}
+	return found, nil
+}
+
+// addressesOf is each profile as the address that reaches it, name@scope (an AutoVim project's by
+// its name), sorted.
+func addressesOf(ps []crew.Profile) []string {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = addressOf(p)
 	}
 	slices.Sort(names)
-	return crew.Profile{}, false, fmt.Errorf("%w: %s is %s", ErrAmbiguous, name, strings.Join(names, " or "))
+	return names
+}
+
+// addressOf is p as the address that reaches it from any scope: codename@scope, an AutoVim
+// project's by its name (jarvis@mcat).
+func addressOf(p crew.Profile) string {
+	if proj, ok := strings.CutPrefix(p.Scope, "autovim:"); ok {
+		return p.Codename + "@" + proj
+	}
+	return p.Codename + "@" + p.Scope
+}
+
+// ReachState is where a bare name sent from a scope goes.
+type ReachState string
+
+const (
+	ReachOwn       ReachState = "own"       // the sender's scope has a profile of it
+	ReachOther     ReachState = "other"     // the one other scope's profile of it (Reach.Address)
+	ReachNone      ReachState = "none"      // no profile of it anywhere: a send is ErrNoRecipient
+	ReachAmbiguous ReachState = "ambiguous" // two or more other scopes': a send is ErrAmbiguous
+)
+
+// Reach is where mail sent to a bare name from a scope goes, resolved as a send resolves it
+// (resolveAddress), without sending.
+type Reach struct {
+	State      ReachState
+	Address    string   // ReachOther: the address that reaches it, name@scope
+	Candidates []string // ReachAmbiguous: each one's address, sorted
+}
+
+// Reach is where mail sent to the bare name from scope would go: its own scope's profile, the one
+// other scope's, none, or two or more (each named, so the sender can say which). A read: it sends
+// and records nothing. The user's codename and a name with an @ or a session: prefix are not bare,
+// and are ErrInvalid.
+func (m *Manager) Reach(ctx context.Context, scope, name string) (Reach, error) {
+	if name == "" || name == UserCodename || strings.Contains(name, "@") || strings.HasPrefix(name, "session:") {
+		return Reach{}, fmt.Errorf("%w: %q is not a bare codename", ErrInvalid, name)
+	}
+	var out Reach
+	err := m.store.Read(ctx, func(tx Tx) error {
+		p, ok, err := tx.ActiveProfile(scope, name)
+		if err != nil {
+			return err
+		}
+		if ok && p.ID == DaemonProfile {
+			out = Reach{State: ReachNone} // as a send: the daemon's own profile is never a recipient
+			return nil
+		}
+		if ok {
+			gone, err := scopeGone(tx, p.Scope)
+			if err != nil {
+				return err
+			}
+			if gone {
+				out = Reach{State: ReachNone} // a send is refused: its scope is gone
+			} else {
+				out = Reach{State: ReachOwn}
+			}
+			return nil
+		}
+		found, err := profilesNamedElsewhere(tx, scope, name)
+		if err != nil {
+			return err
+		}
+		switch len(found) {
+		case 0:
+			out = Reach{State: ReachNone}
+		case 1:
+			out = Reach{State: ReachOther, Address: addressOf(found[0])}
+		default:
+			out = Reach{State: ReachAmbiguous, Candidates: addressesOf(found)}
+		}
+		return nil
+	})
+	return out, err
 }
 
 func resolveAddress(tx Tx, scope, to string) (address, error) {

@@ -37,6 +37,11 @@ const protocolWorkspaceVars = 24
 // (docs/decisions/todos.md#a-lists-summary): a session below it is refused summary.
 const protocolListSummary = 50
 
+// protocolAssignReach is the protocol todos.assign's and todos.add's crew param and their answers'
+// reach arrived in (docs/decisions/todos.md#an-assignment-says-who-it-reaches): a session below it
+// is refused crew.
+const protocolAssignReach = 54
+
 // Name is the module's name: its verbs are todos.*.
 func (m *Manager) Name() string { return "todos" }
 
@@ -95,6 +100,7 @@ type (
 		At    At     `param:"at"`
 		Spec  Spec   `param:"spec" doc:"{title, id?, description?, status?, due?, priority?, assignee?, tags?, adr?, review?, blocked?}"`
 		Scope string `param:"scope,optional" doc:"with an assignee, the assigner's scope, as todos.assign's (protocol 30)"`
+		Crew  string `param:"crew,optional" doc:"with an assignee, the assigner's crew scope, as todos.assign's (protocol 54)"`
 	}
 	updateParams struct {
 		At    At             `param:"at"`
@@ -115,6 +121,7 @@ type (
 		Assignee string `param:"assignee" doc:"\"\" clears it"`
 		Reason   string `param:"reason,optional"`
 		Scope    string `param:"scope,optional" doc:"the assigner's scope, at most 256 bytes: kept on the change and the snapshot, never read (protocol 30)"`
+		Crew     string `param:"crew,optional" doc:"the assigner's crew scope (autovim:<project>): the answer's reach says where a bare agent assignee is told from it; read for nothing else (protocol 54)"`
 	}
 	revParams struct {
 		At  At     `param:"at"`
@@ -204,6 +211,7 @@ func (m *Manager) Verbs() []module.Verb {
 	agent, user := module.AudienceAgent, module.AudienceUser
 	writes := []int64{CodeNotWritable, CodeUnclaimed}
 	task := "task: {id, version, status, title, …, rev, path, description}"
+	assigned := "task, and reach?: {state: own|other|none|ambiguous, address?, candidates?, warning?, note?} when crew is given and the assignee is a bare agent:<name>"
 	verbs := []module.Verb{
 		module.Handle(read("todos.resolve", "{store_id, store, root, override?, writable, claimed, released?}",
 			"Where an at's store is, and whether the daemon may write it."),
@@ -249,10 +257,19 @@ func (m *Manager) Verbs() []module.Verb {
 			}),
 		module.Handle(read("todos.get", task, "One task, with its rev and body. body is the file's raw text after the frontmatter, its managed header comment and H1 included; description is the task's own text. To change the description, patch description with todos.update, never send body back.", CodeNoTask, CodeNotAStore),
 			func(ctx context.Context, p idParams) (Task, error) { return m.Get(ctx, p.At, p.ID) }),
-		module.Handle(write("todos.add", task,
-			"Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told.",
+		module.Handle(write("todos.add", assigned,
+			"Creates a task. With an assignee it is an assignment: open becomes in-progress, and the assignee is told; with crew, the answer says where (reach).",
 			agent, append(writes, CodeInvalid, CodeExists)...),
-			func(ctx context.Context, p addParams) (Task, error) { return m.Add(ctx, p.At, p.Spec, p.Scope) }),
+			func(ctx context.Context, p addParams) (Assigned, error) {
+				if err := crewParam(ctx, "todos.add", p.Crew); err != nil {
+					return Assigned{}, err
+				}
+				t, err := m.Add(ctx, p.At, p.Spec, p.Scope)
+				if err != nil {
+					return Assigned{}, err
+				}
+				return Assigned{Task: t, Reach: m.reachOf(ctx, p.Crew, t.Assignee)}, nil
+			}),
 		module.Handle(write("todos.update", task,
 			"Changes hand-editable fields of a task read at rev; status and assignee have their own verbs.",
 			agent, append(writes, CodeStale, CodeNoTask, CodeInvalid)...),
@@ -264,11 +281,18 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p statusParams) (Task, error) {
 				return m.Status(ctx, p.At, p.ID, p.Rev, p.Status)
 			}),
-		module.Handle(write("todos.assign", task,
-			"Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told.",
+		module.Handle(write("todos.assign", assigned,
+			"Assigns a task read at rev (\"\" clears it); assigning an open task makes it in-progress, and the assignee is told; with crew, the answer says where (reach).",
 			agent, append(writes, CodeStale, CodeNoTask)...),
-			func(ctx context.Context, p assignParams) (Task, error) {
-				return m.Assign(ctx, p.At, p.ID, p.Rev, p.Assignee, p.Reason, p.Scope)
+			func(ctx context.Context, p assignParams) (Assigned, error) {
+				if err := crewParam(ctx, "todos.assign", p.Crew); err != nil {
+					return Assigned{}, err
+				}
+				t, err := m.Assign(ctx, p.At, p.ID, p.Rev, p.Assignee, p.Reason, p.Scope)
+				if err != nil {
+					return Assigned{}, err
+				}
+				return Assigned{Task: t, Reach: m.reachOf(ctx, p.Crew, t.Assignee)}, nil
 			}),
 		module.Handle(write("todos.remove", "nil", "Deletes a task read at rev.", agent, append(writes, CodeStale, CodeNoTask)...),
 			func(ctx context.Context, p revParams) (none, error) { return nil, m.Remove(ctx, p.At, p.ID, p.Rev) }),
@@ -396,3 +420,19 @@ func compatVars(ctx context.Context, vars []Var) []Var {
 	}
 	return vars
 }
+
+// crewParam refuses crew from a session below protocolAssignReach, as every param newer than its
+// session is refused.
+func crewParam(ctx context.Context, verb, crew string) error {
+	if crew == "" {
+		return nil
+	}
+	if len(crew) > MaxScope {
+		return fmt.Errorf("%w: a crew scope of %d bytes; at most %d", ErrInvalid, len(crew), MaxScope)
+	}
+	if pr := module.ProtocolFrom(ctx); pr != 0 && pr < protocolAssignReach {
+		return &module.ParamError{Verb: verb, Param: "crew", Want: fmt.Sprintf("sent at protocol %d or later", protocolAssignReach)}
+	}
+	return nil
+}
+
