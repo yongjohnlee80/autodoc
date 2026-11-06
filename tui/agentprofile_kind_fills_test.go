@@ -45,7 +45,7 @@ func storedProfile(r *running, codename string) (agentProfile, bool) {
 		onLoop(r, func() bool { _, ok := r.h.agents.profile(codename); return ok })
 }
 
-// TestChoosingAKindIsEnoughToAddAnAgent is Johno's 2026-11-06 report (v0.3.9 GUI): a name typed,
+// TestChoosingAKindIsEnoughToAddAnAgent is the add-agent form as the window shows it: a name typed,
 // Antigravity chosen, no command typed, Save — refused with "a profile is a name and the command
 // that starts the agent". Choosing the kind fills in its command, and the profile saves.
 func TestChoosingAKindIsEnoughToAddAnAgent(t *testing.T) {
