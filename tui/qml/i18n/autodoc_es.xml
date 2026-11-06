@@ -5753,6 +5753,26 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>the plugin %1's Lua package</source>
         <translation>el paquete Lua del plugin %1</translation>
     </message>
+    <message id="autodoc.question.pluginlaunch.start_the_plugin_with_autodoc">
+        <source>Start %1 with AutoDoc?</source>
+        <translation>¿Iniciar %1 con AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.it_is_a_program_of_its_own">
+        <source>The plugin %1 asks to start each time AutoDoc does. A plugin is a program of its own, with AutoDoc's whole socket: allow it only if you trust it. Your answer is remembered: Agent permissions can take a Yes back, and with a No the Plugins menu still starts it by hand.</source>
+        <translation>El complemento %1 pide iniciarse cada vez que se inicia AutoDoc. Un complemento es un programa propio, con todo el socket de AutoDoc: permítelo solo si confías en él. Tu respuesta se recuerda: Permisos de agentes puede retirar un Sí y, con un No, el menú Complementos aún lo inicia a mano.</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.yes_start_it">
+        <source>&amp;Yes, start it</source>
+        <translation>Sí, iniciarlo (&amp;y)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.no_not_with_autodoc">
+        <source>&amp;No, not with AutoDoc</source>
+        <translation>&amp;No, no con AutoDoc</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.start_with_autodoc">
+        <source>start with AutoDoc, each time it starts (the plugin's start = &quot;launch&quot;)</source>
+        <translation>iniciarse con AutoDoc, cada vez que se inicia (start = &quot;launch&quot; del complemento)</translation>
+    </message>
     <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
         <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>
         <translation>El Lua de un paquete se ejecuta en AutoDoc, limitado a lo que le concedas.</translation>

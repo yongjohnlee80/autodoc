@@ -5752,6 +5752,26 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>the plugin %1's Lua package</source>
         <translation>o pacote Lua do plugin %1</translation>
     </message>
+    <message id="autodoc.question.pluginlaunch.start_the_plugin_with_autodoc">
+        <source>Start %1 with AutoDoc?</source>
+        <translation>Iniciar %1 com o AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.it_is_a_program_of_its_own">
+        <source>The plugin %1 asks to start each time AutoDoc does. A plugin is a program of its own, with AutoDoc's whole socket: allow it only if you trust it. Your answer is remembered: Agent permissions can take a Yes back, and with a No the Plugins menu still starts it by hand.</source>
+        <translation>O plugin %1 pede para iniciar sempre que o AutoDoc inicia. Um plugin é um programa próprio, com todo o socket do AutoDoc: permita apenas se confiar nele. Sua resposta é lembrada: Permissões de agentes pode retirar um Sim e, com um Não, o menu Plugins ainda o inicia manualmente.</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.yes_start_it">
+        <source>&amp;Yes, start it</source>
+        <translation>Sim, iniciar (&amp;y)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.no_not_with_autodoc">
+        <source>&amp;No, not with AutoDoc</source>
+        <translation>&amp;Não, não com o AutoDoc</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.start_with_autodoc">
+        <source>start with AutoDoc, each time it starts (the plugin's start = &quot;launch&quot;)</source>
+        <translation>iniciar com o AutoDoc, sempre que ele inicia (start = &quot;launch&quot; do plugin)</translation>
+    </message>
     <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
         <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>
         <translation>O Lua de um pacote roda no AutoDoc, limitado ao que você conceder.</translation>

@@ -159,6 +159,8 @@ var luaCapabilityText = map[string]string{
 	"agents":          "autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can",
 	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
 	"terminal":        "autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal",
+	// a plugin's start with AutoDoc, its manifest's start = "launch" (pluginlaunch.go)
+	launchCapability: "autodoc.question.pluginlaunch.start_with_autodoc",
 	// the editor socket's (editorsocket.go editorVerbs): an agent's reach into the page
 	"editor.read":  "autodoc.question.luagate.read_your_open_documents_and_find_in_them",
 	"editor.write": "autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents",
