@@ -1,11 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"strconv"
-	"strings"
 	"testing"
-	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -52,51 +49,18 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 				x, y, ok := find(snap, "z")
 				return ok && fgIs(snap[y][x].Attrs) == pageAccent
 			})
-			// (2) an open menu's access keys keep the menu's accent — the blast radius, pinned:
-			// the document's red does not reach the chrome
+			// (2) a menu's access key still reads the menu's accent — the blast radius, pinned:
+			// the document's red does not reach the chrome. The theme menu's Sepia row: a plain
+			// row (neither the first, which the cursor highlights inverted, nor the check on
+			// the current theme), so its key wears the menu's accent, underlined.
 			r.keys(t, decltest.Alt('o'))
 			r.s.WaitForText(t, "Editor mode")
 			r.keys(t, key('t'))
-			deadline := time.Now().Add(20 * time.Second)
-			for {
+			r.s.WaitFor(t, "the theme menu's Sepia access key in "+theme+"'s menu accent", func(string) bool {
 				snap := r.s.Backend.Snapshot()
-				var wrong []string
-				for _, row := range snap {
-					for _, c := range row {
-						if c.Attrs.Mask&tuicore.AttrUnderline == 0 {
-							continue
-						}
-						if fg := fgIs(c.Attrs); fg != menuAccent {
-							wrong = append(wrong, fmt.Sprintf("%q fg=%s", c.Content, fg))
-						}
-					}
-				}
-				if hasText(snap, "Dark") && len(wrong) == 0 {
-					return
-				}
-				if time.Now().After(deadline) {
-					t.Fatalf("under %s, want the menu's access keys in its menu accent %s; the underlined cells that wear another colour:\n  %s",
-						theme, menuAccent, strings.Join(wrong, "\n  "))
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
+				x, y, ok := find(snap, "Sepia")
+				return ok && snap[y][x].Attrs.Mask&tuicore.AttrUnderline != 0 && fgIs(snap[y][x].Attrs) == menuAccent
+			})
 		})
 	}
-}
-
-// hasText reports whether s holds text as one run of cells.
-func hasText(snap [][]tuicore.Cell, text string) bool {
-	rs := []rune(text)
-	for _, row := range snap {
-	cols:
-		for x := 0; x+len(rs) <= len(row); x++ {
-			for i, r := range rs {
-				if row[x+i].Content != string(r) {
-					continue cols
-				}
-			}
-			return true
-		}
-	}
-	return false
 }
