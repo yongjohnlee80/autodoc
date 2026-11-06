@@ -320,6 +320,8 @@ Window {
             TileManager.maximumWidth: App.pageWidth // its most, tiled: the strips beside it take the rest, and alone it is centred
             Frame {
                 title: App.fileTitle
+                // a title too long for the row loses its start, so a badge after the path stays whole
+                titleElide: Tui.ElideLeft
                 palette.window: Theme.document.window
                 palette.windowText: Theme.document.windowText
                 palette.highlight: Theme.document.highlight
