@@ -4,6 +4,13 @@
 # agents AutoDoc starts find claude, codex, git and nvim.
 p=$(/bin/zsh -lic 'print -r -- $PATH' </dev/null 2>/dev/null | tail -1)
 [[ -n $p ]] && export PATH=$p
+# Finder gives no locale either: take the login shell's LANG and LC_* too, and
+# without one a UTF-8 locale, so the agents and the tools they run read and
+# print UTF-8. (TERM is not the app's to set: AutoDoc gives its terminals theirs.)
+for kv in ${(f)"$(/bin/zsh -lic 'for v in LANG ${(k)parameters[(I)LC_*]}; do [[ -n ${(P)v} ]] && print -r -- "$v=${(P)v}"; done' </dev/null 2>/dev/null)"}; do
+	[[ $kv == (LANG|LC_[A-Z_]##)=* ]] && export "$kv"
+done
+[[ -n ${LANG-} || -n ${LC_ALL-} || -n ${LC_CTYPE-} ]] || export LANG=en_US.UTF-8
 cd "$HOME"
 # autodoc-bin, a symlink to the installed autodoc, runs it from inside the
 # bundle so macOS shows its window as AutoDoc.app; without it, the one on PATH.
