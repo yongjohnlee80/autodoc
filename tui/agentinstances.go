@@ -1164,13 +1164,20 @@ func (a *agents) raiseSession(session string) bool {
 	return false
 }
 
+// agentTerminalEnv is the terminal an agent runs in: AutoDoc's own (golib's Terminal emulates an
+// xterm with 256 colours and truecolor). It is never inherited: AutoDoc started from the Dock or by
+// launchd has no TERM at all, so a CLI that reads it (Claude Code, Antigravity) drew no colour, and
+// AutoDoc started from tmux has tmux's, which names another terminal than the agent's.
+var agentTerminalEnv = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+
 // agentEnviron is the environment an agent's CLI and its setup's server start with, layer for
 // layer, a later one winning: AutoDoc's own without its spawner's identity (ownEnviron), the
-// profile's and AutoDoc's (instance.env: the daemon, the agent's PATH, the editor socket and the
-// agent's token there), then a crewed start's session context and its setup's. All of it is the
-// process's environment, readable by the user alone, never its command line.
+// terminal it runs in (agentTerminalEnv), the profile's and AutoDoc's (instance.env: the daemon,
+// the agent's PATH, the editor socket and the agent's token there), then a crewed start's session
+// context and its setup's. All of it is the process's environment, readable by the user alone,
+// never its command line.
 func agentEnviron(instance *agentInstance) []string {
-	environ := slices.Concat(ownEnviron(), instance.env)
+	environ := slices.Concat(ownEnviron(), agentTerminalEnv, instance.env)
 	if instance.crewed {
 		environ = append(environ, crew.EnvContext+"="+instance.context)
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
