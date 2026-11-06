@@ -263,7 +263,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	r.asText(t)
 	r.keys(t, decltest.Alt('2'), key('j'), key('$'))
 	r.s.WaitFor(t, "the guide inside the page", func(sc string) bool {
-		row := strings.Split(sc, "\n")[2] // the text's first row, under the switch's
+		row := strings.Split(sc, "\n")[1] // the text's first row: the switch is on the title row
 		return strings.Count(row, "│") == 3
 	})
 }
