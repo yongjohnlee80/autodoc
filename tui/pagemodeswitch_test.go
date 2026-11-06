@@ -8,19 +8,24 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// The page shows the window's [ Raw | Rendered ] switch on its first row, at its right, while the
-// note has its page; a press on Raw opens the text, and on Rendered the page again.
+// The page shows the window's [ Raw | Rendered ] switch on its frame's title row, at its right, while
+// the note has its page, and nowhere else (not on the page's own first row); a press on Raw opens
+// the text, and on Rendered the page again.
 func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 	r := attached(t, startDaemon(t, map[string][]string{"kb": {"a.md", "# Larder\n\nbeans\n"}}))
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
 	var row, col int
-	r.s.WaitFor(t, "the switch on the page's first row", func(string) bool {
+	r.s.WaitFor(t, "the switch on the page's title row", func(string) bool {
 		var ok bool
 		col, row, ok = find(r.s.Backend.Snapshot(), "[ Raw | Rendered ]") // its cell column, whatever is left of it
 		return ok
 	})
+	rows := strings.Split(r.s.String(), "\n")
+	if !strings.Contains(rows[row], "┌") || strings.Count(r.s.String(), "[ Raw | Rendered ]") != 1 {
+		t.Fatalf("the switch is on row %d, which isn't the page's frame's title row, or it shows twice:\n%s", row, r.s)
+	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + 2, Y: row})
 	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == widget.ViewRaw })
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + len("[ Raw ") + 3, Y: row})
@@ -28,7 +33,7 @@ func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 }
 
 // A right press opens the editor's menu where the pointer is, over the page as over the text: the
-// page lies under the switch's row, and its point is moved into the editor's frame.
+// page's point is moved into the editor's frame, wherever the switch sits.
 func TestThePagesMenuOpensWhereThePressIsUnderTheSwitch(t *testing.T) {
 	r := attached(t, startDaemon(t, map[string][]string{"kb": {"a.md", "# Larder\n\nbeans\n\nmore\n\nand more\n"}}))
 	r.openByPicker(t, "a.md")

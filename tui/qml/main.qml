@@ -321,6 +321,8 @@ Window {
             TileManager.maximumWidth: App.pageWidth // its most, tiled: the strips beside it take the rest, and alone it is centred
             Frame {
                 title: App.fileTitle
+                // a title too long for the row loses its start, so a badge after the path stays whole
+                titleElide: Tui.ElideLeft
                 palette.window: Theme.document.window
                 palette.windowText: Theme.document.windowText
                 palette.highlight: Theme.document.highlight
@@ -345,9 +347,9 @@ Window {
                         id: editor
                         autoIndent: true
                         contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
-                        // [ Raw | Rendered ] on the page's first row, at its right, while the file has a
-                        // Rendered view (a note's page, a table), as the window has it on its title bar
-                        modeSwitch: true
+                        // [ Raw | Rendered ] on the page's frame's title row, at its right, while the file
+                        // has a Rendered view (a note's page, a table), as the window has it on its title bar
+                        modeSwitch: "title"
                         focus: true
                         palette.highlight: Theme.document.selection
                         palette.highlightedText: Theme.document.selectedText
