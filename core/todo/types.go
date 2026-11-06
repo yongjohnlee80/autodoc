@@ -315,3 +315,24 @@ type Event struct {
 	ID        string
 	Detail    string
 }
+
+// Reach is where an assignment's assignee is told (docs/decisions/todos.md#an-assignment-says-who-it-reaches):
+// mail to its bare name from the assigner's crew scope, resolved as a send resolves it. State is
+// own (the assigner's project has the agent), other (one other project's, Address), none (no agent
+// of that name anywhere) or ambiguous (two or more other projects', Candidates). Warning says, the
+// same way on every surface, that nobody will be told and what to do; Note says where it goes when
+// that is another project.
+type Reach struct {
+	State      string   `json:"state"`
+	Address    string   `json:"address,omitempty"`
+	Candidates []string `json:"candidates,omitempty"`
+	Warning    string   `json:"warning,omitempty"`
+	Note       string   `json:"note,omitempty"`
+}
+
+// Assigned is todos.assign's and todos.add's answer: the task, and where its assignee is told when
+// the caller gave its crew scope and the assignee is a bare agent name.
+type Assigned struct {
+	Task  `json:",inline"` // the task's own keys, flat, as todos.assign answered before 54
+	Reach *Reach           `json:"reach,omitempty"`
+}

@@ -40,6 +40,9 @@ type env struct {
 	m      *todo.Manager
 	events []todo.Event
 	stores int // how many times WithStoresChanged was told
+	// reach answers WithReach (an assignment's reach); nil fails the lookup
+	reach func(crew, name string) (todo.Reach, error)
+	asked []string // each reach lookup, as crew|name
 }
 
 func newEnv(t *testing.T) *env {
@@ -69,7 +72,16 @@ func (e *env) restart() {
 		todo.WithClock(func() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now }),
 		todo.WithHome("/home/u"),
 		todo.WithEvents(func(ev todo.Event) { e.mu.Lock(); defer e.mu.Unlock(); e.events = append(e.events, ev) }),
-		todo.WithStoresChanged(func() { e.mu.Lock(); defer e.mu.Unlock(); e.stores++ }))
+		todo.WithStoresChanged(func() { e.mu.Lock(); defer e.mu.Unlock(); e.stores++ }),
+		todo.WithReach(func(_ context.Context, crew, name string) (todo.Reach, error) {
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			e.asked = append(e.asked, crew+"|"+name)
+			if e.reach == nil {
+				return todo.Reach{}, errors.New("no reach in this test")
+			}
+			return e.reach(crew, name)
+		}))
 }
 
 func (e *env) advance(d time.Duration) { e.mu.Lock(); e.now = e.now.Add(d); e.mu.Unlock() }

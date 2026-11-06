@@ -90,7 +90,7 @@ func TestTheVerbsServeTheManager(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	added := out.(todo.Task)
+	added := out.(todo.Assigned).Task
 	if added.Status != "in-progress" || added.Assignee != "agent:jarvis" {
 		t.Errorf("added %+v: an assignee makes it in-progress", added)
 	}
@@ -151,7 +151,7 @@ func TestEveryVerbAnswers(t *testing.T) {
 		}
 		return out
 	}
-	added := call("todos.add", "kb", map[string]any{"title": "Every verb"}).(todo.Task)
+	added := call("todos.add", "kb", map[string]any{"title": "Every verb"}).(todo.Assigned).Task
 	if r := call("todos.resolve", "kb").(todo.Resolved); !r.Claimed {
 		t.Errorf("resolve %+v", r)
 	}
@@ -207,7 +207,7 @@ func TestEveryVerbAnswers(t *testing.T) {
 		t.Errorf("a plan rewrote: %+v", p)
 	}
 	updated := call("todos.update", "kb", added.ID, added.Rev, map[string]any{"priority": "high"}).(todo.Task)
-	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours", "auto-agents:p1").(todo.Task)
+	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours", "auto-agents:p1").(todo.Assigned).Task
 	statused := call("todos.status", "kb", added.ID, assigned.Rev, "completed").(todo.Task)
 	if statused.Status != "completed" || statused.Assignee != "agent:jarvis" {
 		t.Errorf("after the writes %+v", statused)
@@ -258,8 +258,8 @@ func TestAReaderThatDoesntDeclareScopesGetsNoScopedAssignee(t *testing.T) {
 		}
 		return out
 	}
-	a := call("todos.add", "kb", map[string]any{"title": "scoped"}).(todo.Task)
-	b := call("todos.add", "kb", map[string]any{"title": "unscoped"}).(todo.Task)
+	a := call("todos.add", "kb", map[string]any{"title": "scoped"}).(todo.Assigned).Task
+	b := call("todos.add", "kb", map[string]any{"title": "unscoped"}).(todo.Assigned).Task
 	call("todos.assign", "kb", a.ID, a.Rev, "agent:jarvis", "", "auto-agents:p1")
 	call("todos.assign", "kb", b.ID, b.Rev, "agent:ada")
 
@@ -337,7 +337,7 @@ func TestAListsSummaryLeavesOutTheText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task := added.(todo.Task)
+	task := added.(todo.Assigned).Task
 
 	out, err := call(ctx, "kb")
 	if err != nil {
