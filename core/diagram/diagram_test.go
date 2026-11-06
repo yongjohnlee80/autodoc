@@ -32,8 +32,8 @@ func TestADiagramTheViewerCantDrawIsDiagnosedAtItsLine(t *testing.T) {
 		"```",
 		"",
 		"> ```mermaid", // 17: a fence in a block quote is a fence
-		"> gantt",      // 18
-		">   title x",
+		"> gitGraph",   // 18: a kind the parser doesn't read
+		">   commit",
 		"> ```",
 		"",
 		"```mermaid",
@@ -67,7 +67,7 @@ func TestADiagramTheViewerCantDrawIsDiagnosedAtItsLine(t *testing.T) {
 	}
 	want := []got{
 		{9, "HTML in a label, diagram not drawn natively"},
-		{18, `"gantt" diagrams, diagram not drawn natively`},
+		{18, `"gitGraph" diagrams, diagram not drawn natively`},
 	}
 	if len(have) != 3 || !slices.Equal(have[:2], want) || have[2].line != 24 || !strings.HasSuffix(have[2].msg, ", diagram malformed") {
 		t.Errorf("diagnostics %+v, want %+v and a malformed one at line 24", have, want)
@@ -78,5 +78,16 @@ func TestADiagramTheViewerCantDrawIsDiagnosedAtItsLine(t *testing.T) {
 	}
 	if !slices.Equal(langs, []string{diagram.Mermaid, diagram.Mermaid, diagram.Mermaid, diagram.Mermaid, diagram.VegaLite}) {
 		t.Errorf("fences %v: want the four mermaid ones and the vegalite one, as vega-lite, none from inside the longer fence", langs)
+	}
+}
+
+// TestAKindTheParserReadsButCantDrawIsDiagnosedWithItsReason: a kind the parser reads, whose
+// diagram it still refuses (a gantt chart with no task), is one diagnostic at the fence's first line
+// with the parser's own reason, not a kind it doesn't read.
+func TestAKindTheParserReadsButCantDrawIsDiagnosedWithItsReason(t *testing.T) {
+	doc := kind.ParseMarkdown([]byte("# Plan\n\n```mermaid\ngantt\n  title x\n```\n"))
+	ds := diagram.Diagnostics(doc)
+	if len(ds) != 1 || ds[0].Rule != diagram.Rule || ds[0].Line != 4 || ds[0].Message != "a gantt chart with no task, diagram not drawn natively" {
+		t.Errorf("diagnostics %+v, want one at line 4: a gantt chart with no task", ds)
 	}
 }
