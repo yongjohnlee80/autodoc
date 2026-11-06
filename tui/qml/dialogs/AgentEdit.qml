@@ -20,7 +20,7 @@ Dialog {
         Text { text: qsTrId("autodoc.dialog.agentEdit.command") }
         TextField { id: aCommand; text: App.agentCommand; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_model_opus_codex_opencode_root") }
         Text { text: qsTrId("autodoc.dialog.agentEdit.kind") }
-        ComboBox { model: App.agentKinds; textRole: "label"; currentIndex: App.agentKindIndex; onActivated: App.agentKindPicked(index) }
+        ComboBox { model: App.agentKinds; textRole: "label"; currentIndex: App.agentKindIndex; onActivated: App.agentKindPicked(index, aName.text, aCommand.text) }
         Text { text: qsTrId("autodoc.dialog.agentEdit.env") }
         TextField { id: aEnv; text: App.agentEnv; placeholderText: qsTrId("autodoc.dialog.agentEdit.env_placeholder") }
         Text { wrapMode: Tui.WordWrap; text: qsTrId("autodoc.dialog.agentEdit.env_not_for_secrets") }
