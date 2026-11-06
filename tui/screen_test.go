@@ -246,11 +246,11 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	if l, rt := col(rows[0], "┌"), col(rows[0], "┐"); l != 49 || rt != 110 {
 		t.Fatalf("the page spans columns %d to %d, want 49 to 110:\n%s", l, rt, r.s)
 	}
-	// the page's first row is its Raw | Rendered switch; the text starts under it
-	if !strings.Contains(rows[1], "[ Raw | Rendered ]") {
-		t.Fatalf("no switch on the page's first row:\n%s", r.s)
+	// the page's Raw | Rendered switch is on its frame's title row; the text starts on its first row
+	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || strings.Contains(rows[1], "[ Raw | Rendered ]") {
+		t.Fatalf("the switch isn't on the page's title row alone:\n%s", r.s)
 	}
-	short := rows[2]
+	short := rows[1]
 	if c := col(short, "short"); c != 50 {
 		t.Fatalf("the text starts at column %d, want 50:\n%s", c, r.s)
 	}
@@ -2211,9 +2211,9 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	if l, rt := col(rows[0], "┌"), col(rows[0], "┐"); rt-l+1 != 68 {
 		t.Fatalf("the page is %d wide, want 68 (60 of text, the gutter, the border):\n%s", rt-l+1, r.s)
 	}
-	// the 60 y's fill the text's columns, under the page's Raw | Rendered row; the 61st column's z
-	// wraps to the next row
-	if !strings.Contains(rows[1], "[ Raw | Rendered ]") || !strings.Contains(rows[2], "   1  "+line+"│") || !strings.Contains(rows[3], "z") {
+	// the 60 y's fill the text's columns, from the page's first row (its Raw | Rendered switch is on
+	// the title row); the 61st column's z wraps to the next row
+	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || !strings.Contains(rows[1], "   1  "+line+"│") || !strings.Contains(rows[2], "z") {
 		t.Fatalf("the ruler's 60 columns are not the text's:\n%s", r.s)
 	}
 	// hidden, the page is the ruler and its border again
