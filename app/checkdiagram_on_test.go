@@ -18,15 +18,15 @@ import (
 // for a chart, a syntax error at its line in the file, and a .md's fences each at its line. Every
 // file drawn exits 0; any not drawn exits 1.
 func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
-	pie := "pie\n  \"a\": 1\n"
-	_, pieWhy := pm.Parse(pie)
-	if pieWhy == nil {
-		t.Fatal("golib's parser takes a pie: the cell needs a kind outside its subset")
+	git := "gitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n"
+	_, gitWhy := pm.Parse(git)
+	if gitWhy == nil {
+		t.Fatal("golib's parser takes a gitGraph: the cell needs a kind outside its subset")
 	}
 	bar := `{"data":{"values":[{"k":"a","v":1}]},"mark":"bar","encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}`
 	md := "# Report\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```vega-lite\n" + ruleByField + "\n```\n"
 	dir := writeFiles(t, map[string]string{
-		"flow.mmd": "flowchart LR\n  A --> B\n", "pie.mmd": pie, "broken.mmd": "flowchart TB\n  A[unclosed --> B\n",
+		"flow.mmd": "flowchart LR\n  A --> B\n", "git.mmd": git, "broken.mmd": "flowchart TB\n  A[unclosed --> B\n",
 		"bar.chart.json": bar, "levels.chart.json": ruleByField, "report.md": md,
 	})
 	at := func(name string) string { return filepath.Join(dir, name) }
@@ -36,12 +36,12 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 		t.Fatalf("diagrams golib draws: %d\n%s", code, out)
 	}
 
-	code, out = runMain(t, nil, "--check-diagram", at("pie.mmd"), at("levels.chart.json"), at("broken.mmd"), at("report.md"))
+	code, out = runMain(t, nil, "--check-diagram", at("git.mmd"), at("levels.chart.json"), at("broken.mmd"), at("report.md"))
 	if code != diagramsNotDrawn {
 		t.Errorf("diagrams golib does not draw: exit %d, want %d\n%s", code, diagramsNotDrawn, out)
 	}
 	for _, want := range []string{
-		at("pie.mmd") + ":1: not drawn: ", pieWhy.Error(),
+		at("git.mmd") + ":1: not drawn: ", gitWhy.Error(),
 		at("levels.chart.json") + ":1: not drawn: ", "a rule coloured by a field",
 		at("broken.mmd") + ":2: not drawn: mermaid: line 2",
 		at("report.md") + ":4: ok (mermaid)",
@@ -52,8 +52,8 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 		}
 	}
 
-	// the fences are the Markdown parser's: a fence shown inside a longer one is no diagram, a pie
-	// in a block quote is one, and a closing fence with trailing spaces ends the flowchart it closes
+	// the fences are the Markdown parser's: a fence shown inside a longer one is no diagram, a
+	// gitGraph in a block quote is one, and a closing fence with trailing spaces ends the flowchart it closes
 	example := strings.SplitAfter(diagramShapes, "````\n")[0]
 	spaced := "```mermaid\nflowchart LR\n  A --> B\n```   \nAfter the fence, prose.\n"
 	dir = writeFiles(t, map[string]string{"example.md": example, "spaced.md": spaced, "shapes.md": diagramShapes,
@@ -68,9 +68,9 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 		t.Errorf("a flowchart whose closing fence has trailing spaces: %d\n%s", code, out)
 	}
 	code, out = runMain(t, nil, "--check-diagram", at("shapes.md"))
-	if code != diagramsNotDrawn || !strings.Contains(out, at("shapes.md")+":11: not drawn: "+pieWhy.Error()) ||
+	if code != diagramsNotDrawn || !strings.Contains(out, at("shapes.md")+":11: not drawn: "+gitWhy.Error()) ||
 		!strings.Contains(out, at("shapes.md")+":16: ok (mermaid)") || strings.Contains(out, at("shapes.md")+":4:") {
-		t.Errorf("a quoted pie, a text example and a flowchart: %d\n%s", code, out)
+		t.Errorf("a quoted gitGraph, a text example and a flowchart: %d\n%s", code, out)
 	}
 }
 
@@ -100,6 +100,19 @@ func TestTheDiagramReferenceIsGolibs(t *testing.T) {
 		want = append(want, "- "+place+": "+code1(keys)+"\n")
 	}
 	want = append(want, "- flowchart: `flowchart`, `graph`\n", "- timeline: `timeline`\n", "`rule`", "`average`", "`utc`")
+	// the kinds it says aren't drawn are none it draws: any golib reads and doesn't draw, then ones its
+	// parser doesn't read (a pie and a gantt are drawn now, so they're no example)
+	drawnNames := map[string]bool{}
+	for _, k := range guimermaid.Kinds() {
+		drawnNames[k.Kind.String()] = true
+	}
+	var undrawn []string
+	for _, k := range pm.Kinds() {
+		if !drawnNames[k.Kind.String()] {
+			undrawn = append(undrawn, k.Kind.String())
+		}
+	}
+	want = append(want, "A diagram of any other kind ("+code1(append(undrawn, "gitGraph", "sankey"))+", …) is not drawn")
 	for _, w := range want {
 		if !strings.Contains(out, w) {
 			t.Errorf("the reference lacks %q:\n%s", w, out)
