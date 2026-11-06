@@ -70,9 +70,13 @@ func under(path string, roots ...string) bool {
 }
 
 // ClaudeSocketDirs are the folders Claude Code binds its sessions' inbox sockets in, for user uid.
+// Claude Code 2.1.3xx binds them in /tmp/cc-socks/ (its CLAUDE_CODE_MESSAGING_SOCKET), on Linux
+// and macOS alike: a folder named for no user, which Claude makes 0700 for the user who first runs
+// it. The path is never the proof: every wake also binds the socket to the session's own process,
+// the daemon's user (boundTo).
 func ClaudeSocketDirs(uid int) []string {
 	u := strconv.Itoa(uid)
-	return []string{"/run/user/" + u + "/cc-socks", "/tmp/cc-socks-" + u}
+	return []string{"/run/user/" + u + "/cc-socks", "/tmp/cc-socks-" + u, "/tmp/cc-socks"}
 }
 
 // OpenCodeSocketDirs are the folders AutoDoc's OpenCode plugin binds its sockets in, for user uid:
@@ -116,7 +120,7 @@ func checkLocator(kind, locator string, uid int) (string, error) {
 			return bad(err.Error())
 		}
 		if !under(l.Socket, ClaudeSocketDirs(uid)...) {
-			return bad("the socket is not under /run/user/<uid>/cc-socks/ or /tmp/cc-socks-<uid>/")
+			return bad("the socket is not under /run/user/<uid>/cc-socks/, /tmp/cc-socks-<uid>/ or /tmp/cc-socks/")
 		}
 		if l.PID <= 0 || l.Start == "" || l.Session == "" {
 			return bad("pid, start and session are required")
