@@ -238,8 +238,10 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
     then asks again.
   - **No** (or Esc) keeps it from starting with AutoDoc (`tui.plugins.launchDeclined`). Its Plugins
     menu entry or its commands still start it by hand.
-  - A card closed any other way (another question in its place, the TUI quitting) remembers
-    nothing, and the next start asks again.
+  - A card another question takes the place of comes back once that one is answered. One that goes
+    away unanswered (closed, the TUI quitting) remembers nothing, and the next start asks again.
+  - A plugin you allowed has the whole socket, so it could change these preferences itself, as it
+    could any other: the first answer is always yours, since it cannot run before it.
 - The close is bounded. It starts on Esc (a dialog's), on the plugin's `host.close` (a dialog's or a
   service's), on its menu's Turn off, on an update or a removal, on a fault, or when the TUI quits:
   1. AutoDoc sends `plugin.close`;

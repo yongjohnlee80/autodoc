@@ -10,9 +10,10 @@ import (
 // once before it starts one with the TUI, and remembers the answer. A Yes is a grant, the
 // capability "launch" held by plugin:<name> in lua.grants, where Agent permissions shows it and can
 // take it back (the next start asks again). A No is kept in tui.plugins.launchDeclined: the
-// plugin is not started with AutoDoc, and the Plugins menu still starts it by hand. A card closed
-// any other way (replaced, the TUI quitting) remembers nothing and asks at the next start. The
-// question waits for the answers already given to be read, as a Lua grant's does (luagate.go).
+// plugin is not started with AutoDoc, and the Plugins menu still starts it by hand. A card another
+// question displaces is asked again once the card is free (askWhenFree); one that goes away
+// unanswered (closed, the TUI quitting) remembers nothing and asks at the next start. The question
+// waits for the answers already given to be read, as a Lua grant's does (luagate.go).
 
 const (
 	// launchCapability is the grant a plugin's start with AutoDoc is (lua.grants, plugin:<name>)
