@@ -289,6 +289,10 @@ type pluginHost interface {
 	MenuRows() *menuRows                     // the menus' added rows: a manifest's [[menu]] joins them (menurows.go)
 	// SetPluginPref sets a tui.plugin.* preference, applied and stored; ErrNotPluginPref for any other
 	SetPluginPref(name, value string) error
+	// LaunchConsent runs start for the plugin name (title its label) whose manifest says start =
+	// "launch" once the user allows it: at once when allowed before, never when refused before,
+	// else after asking (pluginlaunch.go)
+	LaunchConsent(name, title string, start func())
 	Context() context.Context // the program's lifetime: a running plugin's calls end with it
 	// After runs fn on the loop once d has passed (the feed's rest after typing and moving)
 	After(d time.Duration, fn func())

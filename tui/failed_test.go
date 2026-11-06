@@ -47,6 +47,9 @@ func TestAFailureSaysWhatFailedAndWhy(t *testing.T) {
 		fed := pluginEntry{dir: t.TempDir(), m: manifest{Name: "fed", Kind: "service", Start: "use", Command: gone}}
 		fed.m.Feed.Document = true
 		r.h.plugins.pluginList = []pluginEntry{cmd, launched, fed}
+		// launched was allowed to start with AutoDoc, and the answers given are read (pluginlaunch.go)
+		r.h.prefs.luaGrants = map[string]map[string]bool{launchHolder("launched"): {launchCapability: true}}
+		r.h.luaPrefsRead = true
 		r.h.plugins.runPluginCommand("bycommand", "x")
 		r.h.plugins.launchServices()
 		r.h.plugins.feedDocuments()

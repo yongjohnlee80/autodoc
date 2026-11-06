@@ -22,6 +22,11 @@ type Question struct {
 	// Stopped is a fallback for failures that skip normal teardown; in that case
 	// it runs after the loop on the stopping goroutine and must not post UI work.
 	OnCancel func()
+	// OnNo, when set, runs once, on the loop, when the card's own No answers it: the No button or
+	// Escape (the dialog's reject), and a Yes before Arm. Never on a close, a replacement or the
+	// host stopping. OnCancel runs after it, as for every way out but Yes: OnNo is for an answer
+	// remembered (a plugin's launch, pluginlaunch.go), OnCancel for the request it ends.
+	OnNo func()
 	// Other, when set, is a third button between No and Yes, its mnemonic marked ("&Audit…"):
 	// OnOther runs once when it is chosen, and neither OnYes nor OnCancel does, so what was asked
 	// lives on (a candidate's Audit…, candidate.go).
@@ -53,6 +58,7 @@ type asker struct {
 	c             Core
 	seq           uint64 // the question asked: a newer one, or an answer, moves it
 	yes           func() // the asked question's OnYes; nil once answered
+	no            func() // its OnNo
 	cancel        func()
 	other         func() // its OnOther
 	pending       bool
@@ -137,7 +143,7 @@ func (a *asker) show(q Question, polite bool) Asked {
 		}
 		return Asked{}
 	}
-	a.yes, a.other = q.OnYes, q.OnOther
+	a.yes, a.no, a.other = q.OnYes, q.OnNo, q.OnOther
 	a.cancel, a.pending = q.OnCancel, true
 	a.polite, a.current = polite, q
 	a.armedAt, a.tooSoon = time.Now().Add(q.Arm), q.OnTooSoon
@@ -201,12 +207,21 @@ func (a *asker) idle() {
 	}
 }
 
+// rejected is the card's own No: OnNo, then OnCancel, as cancelCurrent runs it.
 func (a *asker) rejected() {
 	if !a.pending {
 		return
 	}
 	a.answerClosing = true
-	a.cancelCurrent()
+	no, cancel := a.no, a.cancel
+	a.answered()
+	if no != nil {
+		no()
+	}
+	if cancel != nil {
+		cancel()
+	}
+	a.idle()
 }
 
 // closed also covers programmatic close, which raises no rejected signal.
@@ -247,7 +262,7 @@ func (a *asker) Stopped() { a.Stopping() }
 // answered ends the question: a late Say, or a second accept, does nothing.
 func (a *asker) answered() {
 	a.seq++
-	a.yes, a.other = nil, nil
+	a.yes, a.no, a.other = nil, nil, nil
 	a.cancel, a.pending = nil, false
 	a.polite, a.current = false, Question{}
 }
