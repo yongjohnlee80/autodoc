@@ -238,6 +238,12 @@ func openNotePage(t *testing.T, note, title string) *running {
 	r.waitFile(t, "n.md")
 	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
 	r.s.WaitForText(t, title)
+	// the page laid out: it is Rendered, and the title is in the crumb, before the export run off
+	// the loop has handed it the HTML; a find on an empty page marks nothing and goes to the text
+	p := notePage(r)
+	r.s.WaitFor(t, "the note's page laid out", func(string) bool {
+		return onLoop(r, func() bool { l := p.view.BoundLayout(); return l != nil && l.Height() > 0 })
+	})
 	return r
 }
 
@@ -457,11 +463,16 @@ func TestSPCjOnThePageFollowsTheFirstLinkOnScreen(t *testing.T) {
 	r.waitKeptNotice(t, "no link on the page here: SPC l shows what a.md links with")
 	r.keys(t, key('g')) // the top: [[b]] first on screen
 	r.s.WaitFor(t, "the page's top", func(string) bool { return onLoop(r, func() int { return page.top }) == 0 })
+	r.s.WaitForText(t, "first b") // drawn: page.top moves on the loop a frame before the screen does
 	top := func() int { return onLoop(r, func() int { return page.top }) }
 	for !strings.Contains(r.s.String(), "second c") {
 		was := top()
 		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
 		r.s.WaitFor(t, "a page on", func(string) bool { return top() > was })
+		// the block at the page's new top drawn, so the screen read is this page's, not the last's
+		at := r.editorText()[top():]
+		at = strings.NewReplacer("[[", "", "]]", "").Replace(at[:strings.IndexByte(at, '\n')])
+		r.s.WaitForText(t, at)
 		if strings.Contains(r.s.String(), "Tail 59") {
 			t.Fatal("paged past [[c]] without seeing it")
 		}
