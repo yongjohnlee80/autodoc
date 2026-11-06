@@ -312,3 +312,38 @@ func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
 		t.Fatalf("the stopped host's question cancelled %d times, want once", cancel)
 	}
 }
+
+// A question's OnNo runs once, for the card's own No alone (its No button or Escape, the dialog's
+// reject), and OnCancel after it; a close, a replacement or the host stopping run OnCancel and
+// never OnNo, and a Yes runs neither: an answer remembered (a plugin's launch) is never a card
+// that merely went away.
+func TestAskOnNoIsTheCardsOwnNoAlone(t *testing.T) {
+	for _, ending := range []string{"no", "close", "replacement", "shutdown", "yes"} {
+		t.Run(ending, func(t *testing.T) {
+			a := newAsker(newScripted("kb"))
+			var order []string
+			a.ask(Question{Text: "start it?", OnYes: func() { order = append(order, "yes") },
+				OnNo: func() { order = append(order, "no") }, OnCancel: func() { order = append(order, "cancel") }})
+			switch ending {
+			case "no":
+				a.rejected()
+				a.closed() // the card's closed notification after the button
+			case "close":
+				a.closed()
+			case "replacement":
+				a.ask(Question{Text: "another"})
+			case "shutdown":
+				a.Stopping()
+			case "yes":
+				a.accepted()
+				a.closed()
+			}
+			a.rejected() // answered already: nothing more
+			want := map[string][]string{"no": {"no", "cancel"}, "close": {"cancel"}, "replacement": {"cancel"},
+				"shutdown": {"cancel"}, "yes": {"yes"}}[ending]
+			if !slices.Equal(order, want) {
+				t.Fatalf("%s ran %v, want %v", ending, order, want)
+			}
+		})
+	}
+}

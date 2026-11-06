@@ -229,7 +229,17 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **When it starts.**
   - A dialog or a card starts from its Plugins menu entry, or from one of its commands.
   - A service with `start = "use"` starts on its first command, or on its feed's first document.
-    One with `start = "launch"` starts with the TUI.
+    One with `start = "launch"` starts with the TUI, once you allow it (below).
+- <a id="starting-with-autodoc"></a>**Starting with AutoDoc** (`start = "launch"`). A plugin is a
+  program of its own with the daemon's whole socket, so AutoDoc asks once, the first time such a
+  plugin would start with the TUI: *Start <plugin> with AutoDoc?* The answer is remembered:
+  - **Yes** starts it, now and at every start. It is a grant, `launch` held by `plugin:<name>`, and
+    the agent permissions view (`agents.permissions`) shows it and can take it back; the next start
+    then asks again.
+  - **No** (or Esc) keeps it from starting with AutoDoc (`tui.plugins.launchDeclined`). Its Plugins
+    menu entry or its commands still start it by hand.
+  - A card closed any other way (another question in its place, the TUI quitting) remembers
+    nothing, and the next start asks again.
 - The close is bounded. It starts on Esc (a dialog's), on the plugin's `host.close` (a dialog's or a
   service's), on its menu's Turn off, on an update or a removal, on a fault, or when the TUI quits:
   1. AutoDoc sends `plugin.close`;

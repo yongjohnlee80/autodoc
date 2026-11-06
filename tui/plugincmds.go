@@ -303,18 +303,32 @@ func (pl *plugins) commandParams(e pluginEntry, id string) []any {
 }
 
 // launchServices starts the services whose manifest says start = "launch": with the TUI, and again
-// when the plugins are read anew (one added, say). A running one is left as it is.
+// when the plugins are read anew (one added, say), each once the user said it may
+// (LaunchConsent, pluginlaunch.go). A running one is left as it is.
 func (pl *plugins) launchServices() {
 	for _, e := range pl.pluginList {
 		if e.reason != "" || !e.m.Service() || e.m.Start != "launch" || pl.running[e.key()] != nil {
 			continue
 		}
-		r, err := pl.startPlugin(e)
-		if err != nil {
-			pl.c.Failed(pl.c.Trf("autodoc.notice.plugincmds.did_not_start", e.m.Name), err)
-			continue
-		}
-		pl.running[e.key()] = r
+		key := e.key()
+		pl.c.LaunchConsent(e.m.Name, e.label(), func() { pl.launch(key) })
 	}
+	pl.refreshPlugins()
+}
+
+// launch starts the launch service key, once its start with AutoDoc is allowed: not when it went
+// from the folder meanwhile, or was started by hand.
+func (pl *plugins) launch(key string) {
+	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
+	if i < 0 || pl.running[key] != nil {
+		return
+	}
+	e := pl.pluginList[i]
+	r, err := pl.startPlugin(e)
+	if err != nil {
+		pl.c.Failed(pl.c.Trf("autodoc.notice.plugincmds.did_not_start", e.m.Name), err)
+		return
+	}
+	pl.running[key] = r
 	pl.refreshPlugins()
 }
