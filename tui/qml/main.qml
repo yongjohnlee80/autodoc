@@ -29,6 +29,7 @@ Window {
     palette.buttonText: Theme.app.buttonText
     palette.highlight: Theme.app.highlight
     palette.accent: Theme.menu.accent    // the access keys' colour: the menu bar's, and the dialogs' buttons'
+    palette.documentAccent: Theme.document.accent    // the document page's: inline code, its headings' and callouts' accents, the diagrams'
     palette.highlightedText: Theme.app.highlightedText
     palette.base: Theme.app.base
     palette.text: Theme.app.text
