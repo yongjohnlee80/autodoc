@@ -209,11 +209,12 @@ func openNotePage(t *testing.T, note, title string) *running {
 	r.waitFile(t, "n.md")
 	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
 	r.s.WaitForText(t, title)
-	// the page laid out: it is Rendered, and the title is in the crumb, before the export run off
-	// the loop has handed it the HTML; a find on an empty page marks nothing and goes to the text
+	// the page holds the note: it is Rendered, and the title is in the crumb, before the export run
+	// off the loop has handed it the note's HTML (it lays out and marks from it at once); a find on a
+	// page without it marks nothing and goes to the text
 	p := notePage(r)
-	r.s.WaitFor(t, "the note's page laid out", func(string) bool {
-		return onLoop(r, func() bool { l := p.view.BoundLayout(); return l != nil && l.Height() > 0 })
+	r.s.WaitFor(t, "the note's HTML on its page", func(string) bool {
+		return onLoop(r, func() bool { return strings.Contains(string(p.view.Source()), title) })
 	})
 	return r
 }
