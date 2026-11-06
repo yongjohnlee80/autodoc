@@ -121,11 +121,9 @@ func (h *agents) kindList() *tuidecl.ListModel {
 
 // kindChoices are the dropdown's rows, agentKinds' order: the command's first, then each CLI by name.
 func (h *agents) kindChoices() []rowOf {
-	names := map[string]string{crew.KindClaude: "Claude Code", crew.KindCodex: "Codex", crew.KindAgy: "Antigravity",
-		crew.KindOpenCode: "OpenCode"}
 	rows := make([]rowOf, len(agentKinds))
 	for i, k := range agentKinds {
-		label := names[k]
+		label := agentKindLabel(k)
 		if k == "" {
 			label = h.c.Tr("autodoc.text.agentprofiles.kind_from_the_command")
 		}
@@ -134,10 +132,36 @@ func (h *agents) kindChoices() []rowOf {
 	return rows
 }
 
+// agentKindLabel is a kind's name as the form shows it, "" for the command's.
+func agentKindLabel(kind string) string {
+	return map[string]string{crew.KindClaude: "Claude Code", crew.KindCodex: "Codex", crew.KindAgy: "Antigravity",
+		crew.KindOpenCode: "OpenCode"}[kind]
+}
+
 // agentKindPicked is the form's dropdown at row i: the kind its Save keeps.
 func (h *agents) agentKindPicked(i int) {
 	if i >= 0 && i < len(agentKinds) {
 		h.formKind = agentKinds[i]
+	}
+}
+
+// agentKindChosen is the form's dropdown at row i (App.agentKindPicked), with the name and command
+// its fields hold: choosing a kind is enough to add an agent. A kind's CLI is its command (claude,
+// codex, agy, opencode), so an empty command, or the one the last choice filled in, becomes the
+// chosen kind's; an empty name, or the last choice's, becomes the kind's name. What the user typed
+// is never replaced.
+func (h *agents) agentKindChosen(i int, name, command string) {
+	was := h.formKind
+	h.agentKindPicked(i)
+	kind := h.formKind
+	if kind == "" || kind == was {
+		return
+	}
+	if c := strings.TrimSpace(command); c == "" || (was != "" && c == was) {
+		h.c.SetFormText("App.agentCommand", kind)
+	}
+	if n := strings.TrimSpace(name); n == "" || (was != "" && n == agentKindLabel(was)) {
+		h.c.SetFormText("App.agentName", agentKindLabel(kind))
 	}
 }
 
@@ -174,6 +198,14 @@ func (h *agents) saveAgentProfileWithEnv(name, command, codename, env string) {
 func (h *agents) storeAgentProfile(name, command, codename, envText, kind string) (agentProfile, bool) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	codename = strings.TrimSpace(codename)
+	if kind != "" && slices.Contains(agentKinds, kind) { // a kind chosen is enough: its CLI and its name
+		if command == "" {
+			command = kind
+		}
+		if name == "" {
+			name = agentKindLabel(kind)
+		}
+	}
 	if codename == "" {
 		codename = agentCodename(name)
 	}

@@ -128,6 +128,18 @@ func numberAndString(what string, fn func(int, string)) Command {
 	}}
 }
 
+// numberAndTwoStrings takes a whole number and two strings: a row and two of a form's fields.
+func numberAndTwoStrings(what string, fn func(int, string, string)) Command {
+	return Command{Args: []qml.SpecValueKind{argNum, argStr, argStr}, What: what, Run: func(a []qml.SpecValue) error {
+		n, err := strconv.Atoi(a[0].Raw)
+		if err != nil {
+			return argError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
+		}
+		fn(n, a[1].Raw, a[2].Raw)
+		return nil
+	}}
+}
+
 // stringAndTwoNumbers takes a name and two whole numbers: a panel and its size and length.
 func stringAndTwoNumbers(what string, fn func(string, int, int)) Command {
 	return Command{Args: []qml.SpecValueKind{argStr, argNum, argNum}, What: what, Run: func(a []qml.SpecValue) error {

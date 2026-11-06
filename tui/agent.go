@@ -161,7 +161,7 @@ func (a *agents) Commands() map[string]Command {
 		"App.saveAgent":               twoStrings("a name and a command", a.saveAgent),
 		"App.saveAgentProfile":        threeStrings("a name, command and codename", a.saveAgentProfile),
 		"App.saveAgentProfileWithEnv": fourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
-		"App.agentKindPicked":         oneNumber("a row", a.agentKindPicked),
+		"App.agentKindPicked":         numberAndTwoStrings("a row, the name and the command", a.agentKindChosen),
 		"App.removeAgent":             oneNumber("a row", a.removeAgent),
 		"App.makeAgentDefault":        oneNumber("a row", a.makeAgentDefault),
 		"App.openAgentSetup":          none(a.openAgentSetup),
