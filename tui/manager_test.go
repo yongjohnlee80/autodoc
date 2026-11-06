@@ -83,7 +83,7 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	// wait until every root's files are indexed, so the first listing has them
 	for _, w := range ws.List() {
 		want := admitted(t, w)
-		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		for deadline := time.Now().Add(indexWait); ; time.Sleep(10 * time.Millisecond) {
 			st, _ := w.Index().Status(ctx)
 			if st.Docs == want && st.PendingJobs == 0 {
 				break

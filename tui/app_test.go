@@ -265,7 +265,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		cores.Go(func() { _ = f.Run(ctx) })
 		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
 		// wait until the files are indexed, so the first listing has them (a held daemon does not)
-		for deadline := time.Now().Add(10 * time.Second); o.hold == nil; time.Sleep(10 * time.Millisecond) {
+		for deadline := time.Now().Add(indexWait); o.hold == nil; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
 			if st.Docs == int64(len(notes)/2) && st.PendingJobs == 0 {
 				break
