@@ -9,7 +9,10 @@ import (
 
 // Wire is v as a host encodes it: the values msgpack and JSON both carry — nil, bool, integers,
 // floats, string, []byte, []any and map[string]any. A struct becomes a map by its json tags
-// (omitempty and "-" honoured), a time its RFC 3339 text. Anything else is an error: a handler's
+// (omitempty and "-" honoured), a time its RFC 3339 text. An embedded struct tagged `json:",inline"`
+// is flattened into its parent's map, as encoding/json flattens it (todo.Assigned: the task's
+// own keys, and reach beside them); one without the tag keeps its type's name as one key, as it
+// always has (a MapPage's Map). Anything else is an error: a handler's
 // result type is a bug, never a client's.
 func Wire(v any) (any, error) {
 	return wire(reflect.ValueOf(v))
@@ -81,6 +84,18 @@ func wire(v reflect.Value) (any, error) {
 			if name == "-" {
 				continue
 			}
+			if sf.Anonymous && name == "" && hasOpt(opts, "inline") && sf.Type.Kind() == reflect.Struct {
+				inner, err := wire(v.Field(i))
+				if err != nil {
+					return nil, err
+				}
+				for k, e := range inner.(map[string]any) {
+					if _, set := out[k]; !set { // the parent's own key wins, as encoding/json's shallower field
+						out[k] = e
+					}
+				}
+				continue
+			}
 			if name == "" {
 				name = sf.Name
 			}
@@ -109,4 +124,14 @@ func empty(v reflect.Value) bool {
 		return false
 	}
 	return v.IsZero()
+}
+
+// hasOpt reports whether a json tag's options (after the name) hold opt.
+func hasOpt(opts, opt string) bool {
+	for o := range strings.SplitSeq(opts, ",") {
+		if o == opt {
+			return true
+		}
+	}
+	return false
 }

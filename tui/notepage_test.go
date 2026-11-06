@@ -12,12 +12,12 @@ import (
 )
 
 const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- | ---: |\n| apple | 3 |\n\n" +
-	"```mermaid\nmindmap\n  root((Larder))\n    Shelf\n    Bin\n```\n\n```mermaid\nflowchart LR\n  A-->B\n```\n"
+	"```mermaid\nmindmap\n  root((Larder))\n    Shelf\n    Bin\n```\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n"
 
 // TestATerminalNoteIsItsPage (docs/decisions/editor.md#a-terminal-notes-rendered-view): on a
 // terminal backend, in either build (go test -tags gui runs it as a GUI build's --ui), a note
-// opens Rendered as its page in cells (its table boxed, its mind map drawn, another diagram said
-// not to be drawn here), Ctrl+T shows its text and back its page, and an edit while the page is
+// opens Rendered as its page in cells (its table boxed, its mind map drawn, a diagram of a kind golib
+// doesn't read said not to be drawn here), Ctrl+T shows its text and back its page, and an edit while the page is
 // shown draws it again once typing rests.
 func TestATerminalNoteIsItsPage(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "pantry.md", notePageNote)}, tableInclude)
@@ -43,8 +43,8 @@ func TestATerminalNoteIsItsPage(t *testing.T) {
 	r.s.WaitForText(t, "Pantry")
 	r.s.WaitForText(t, "┌") // the table, boxed
 	r.s.WaitForText(t, "Larder")
-	r.s.WaitForText(t, "flowchart diagram: not drawn in the terminal (Raw shows its source)")
-	if strings.Contains(r.s.String(), "**bold**") || strings.Contains(r.s.String(), "A-->B") {
+	r.s.WaitForText(t, "mermaid diagram: not drawn in the terminal (Raw shows its source)")
+	if strings.Contains(r.s.String(), "**bold**") || strings.Contains(r.s.String(), "checkout dev") {
 		t.Fatalf("the page shows the note's source:\n%s", r.s.String())
 	}
 
@@ -150,14 +150,14 @@ func TestATerminalNotePageTakesALanguageBeforeItsFirstNote(t *testing.T) {
 	p.LanguageChanged()
 }
 
-const koNotice = "flowchart 다이어그램: 터미널에서는 그리지 않습니다 (Raw에서 소스를 볼 수 있습니다)"
+const koNotice = "mermaid 다이어그램: 터미널에서는 그리지 않습니다 (Raw에서 소스를 볼 수 있습니다)"
 
 // TestAStoredLanguageReachesTheTerminalNotePage: a start with a language stored (Korean) has the store's
 // preferences in, with no handler failed on the way (a page told of the language before it was made
 // stopped the preferences' read); the first note shown says a diagram it doesn't draw in Korean, and
 // a switch to English with the page shown says it in English.
 func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
-	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  A-->B\n```\n")}, tableInclude)
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "history.md", "# History\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n")}, tableInclude)
 	first := runTUI(t, NewSession(d.sock, nil), Options{})
 	first.connected(t)
 	onLoop(first, func() bool { first.h.setLanguage("ko_KR"); return true }) // Options › Language
@@ -175,15 +175,44 @@ func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
 	}
-	onLoop(r, func() bool { r.h.openPath("flow.md"); return true })
+	onLoop(r, func() bool { r.h.openPath("history.md"); return true })
 	// its toast is Korean now: the file is waited for, not its English "opened"
-	r.s.WaitFor(t, "flow.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "flow.md" })
+	r.s.WaitFor(t, "history.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "history.md" })
 	r.s.WaitForText(t, koNotice) // the page made after the language: its words already Korean
 	onLoop(r, func() bool { r.h.useLanguage("en"); return true })
-	r.s.WaitForText(t, "flowchart diagram: not drawn in the terminal (Raw shows its source)")
+	r.s.WaitForText(t, "mermaid diagram: not drawn in the terminal (Raw shows its source)")
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a handler crashed on the way:\n%s", logs[0])
 	}
+}
+
+// TestATerminalNotePageDrawsAFlowchartAndAPie: kinds golib now draws in cells are drawn on the
+// terminal's page, not said to be undrawn: a flowchart's boxes and the line between, and a pie's
+// title, circle and legend (a note each: a pie is as tall as the page).
+func TestATerminalNotePageDrawsAFlowchartAndAPie(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t,
+		"flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  Jar-->Shelf\n```\n",
+		"pets.md", "```mermaid\npie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n```\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	undrawn := func() {
+		t.Helper()
+		if sc := r.s.String(); strings.Contains(sc, "not drawn in the terminal") || strings.Contains(sc, "Jar-->Shelf") || strings.Contains(sc, "\"Dogs\"") {
+			t.Fatalf("a kind golib draws was said undrawn, or its source shown:\n%s", sc)
+		}
+	}
+	onLoop(r, func() bool { r.h.openPath("flow.md"); return true })
+	r.waitFile(t, "flow.md")
+	r.s.WaitFor(t, "the flowchart drawn: its boxes, the line between", func(sc string) bool {
+		return strings.Contains(sc, "│ Jar ├") && strings.Contains(sc, "►│ Shelf │")
+	})
+	undrawn()
+	onLoop(r, func() bool { r.h.openPath("pets.md"); return true })
+	r.waitFile(t, "pets.md")
+	r.s.WaitFor(t, "the pie drawn: its title, its legend, its circle", func(sc string) bool {
+		return strings.Contains(sc, "Pets") && strings.Contains(sc, "Dogs") && strings.Contains(sc, "Cats") && strings.ContainsAny(sc, "█▓")
+	})
+	undrawn()
 }
 
 // TestTheLeaderWorksOverTheStartsNotePage: at start the untitled note is shown as its page; SPC is

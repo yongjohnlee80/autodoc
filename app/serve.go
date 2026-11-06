@@ -641,7 +641,10 @@ func modules(d *moduleDeps) []module.Module {
 	if d == nil {
 		return []module.Module{todo.New(nil, nil, nil), crew.New(nil), mail.New(nil, nil), inbox.New(nil, nil, nil)}
 	}
-	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
+	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }),
+		todo.WithReach(func(ctx context.Context, crew, name string) (todo.Reach, error) {
+			return assignReach(ctx, d, crew, name)
+		})}
 	if d.onStores != nil {
 		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
 	}
@@ -683,6 +686,20 @@ func crewModules(d *moduleDeps) {
 // crewPort is mail's port to crew (mail.Crew), set once crew is built: the two depend on each
 // other. It embeds the crew Manager, so the port follows whatever mail.Crew asks of crew.
 type crewPort struct{ *crew.Manager }
+
+// assignReach is the todo system's WithReach: where mail to the bare name from the crew scope crew
+// goes, as mail.Reach resolves it (docs/decisions/todos.md#an-assignment-says-who-it-reaches). The
+// todo system is built before mail, so it reads d.mail when an assignment asks, never at New.
+func assignReach(ctx context.Context, d *moduleDeps, crew, name string) (todo.Reach, error) {
+	if d.mail == nil {
+		return todo.Reach{}, errors.New("app: no mail to resolve an assignee with")
+	}
+	r, err := d.mail.Reach(ctx, crew, name)
+	if err != nil {
+		return todo.Reach{}, err
+	}
+	return todo.Reach{State: string(r.State), Address: r.Address, Candidates: r.Candidates}, nil
+}
 
 // todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
 // ambiguous change, a blocked store move, a consumer dropped, a root registered, a daily refresh

@@ -146,6 +146,40 @@ and is left for later.
 In the code: `app/call.go`, `rpc/sys.go`, `core/crew/auth.go`, `core/todo/ops.go`,
 `core/todo/assignedby.go`, `core/inbox/manager.go`, `core/mail/send.go`, `tui/crewtodos.go`
 
+## An assignment says who it reaches
+
+An assignment's notice goes by mail, sent from the assigner's Neovim to the assignee's bare name.
+The daemon resolves that name in the sender's crew scope first. A name that scope has no profile of
+reaches the one other scope's profile of it ([one daemon is one crew](crew.md#one-daemon-is-one-crew)).
+When no scope has the name, or more than one other scope does, the send is refused and nobody is
+told. Without this answer, the assigner never hears of it.
+
+- **The assigner says where it is.** `todos.assign` and `todos.add` take `crew` (protocol 54): the
+  assigner's crew scope, as its host holds it (`autovim:<project>`). It is not the assignment's
+  `scope`, which is the todo scope and is kept on the change. `crew` is read for the answer alone:
+  it routes nothing and is never stored, so it needs no claim, and a wrong one only changes the
+  advice.
+- **The answer says where it goes.** With `crew`, and an assignee written `agent:<name>`, the
+  answer carries `reach`, resolved as a send would be (`mail.Reach`), with nothing sent:
+  - `own`: the assigner's project has the agent. Nothing to say.
+  - `other`: one other project's, `address` (`name@project`), with a `note` saying so.
+  - `none`: no project has an agent of that name. A `warning` says nobody will be told.
+  - `ambiguous`: two or more other projects' have it, listed in `candidates`. A `warning` says
+    nobody will be told, and to assign one of them by `name@project`.
+- **Each surface shows the warning.** Every surface shows the warning and note as given, so every
+  client says it the same way. The assignment itself stands either way; the warning comes when it
+  is made, never later.
+- **What counts.** A profile counts while it is active and its scope isn't gone, whether or not a
+  session of it is live now, as for any send. Mail to a stopped agent queues for it, and must not
+  go to a namesake elsewhere.
+- **No answer to give.** A caller below 54 sends no `crew`, and a session below 54 is refused it.
+  An assignee in another form (the user, an AutoDoc window's, an instance's, an address) gets no
+  `reach`, and neither does a lookup that fails: the assignment is written already, so the answer
+  still carries it.
+
+In the code: `core/mail/send.go` (`Reach`), `core/todo/reach.go`, `core/todo/module.go`,
+`app/serve.go` (`assignReach`)
+
 ## AutoDoc's own todos view
 
 The TUI and GUI show the todo stores in a native view, reached with `SPC x` or the Todos menu. It
