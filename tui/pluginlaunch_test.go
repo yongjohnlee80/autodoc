@@ -95,14 +95,24 @@ func TestAPluginRefusedDoesNotStartWithAutoDocButStartsByHand(t *testing.T) {
 	waitSaid(t, logs2, "atstart", "command run")
 }
 
-// A card that goes away without an answer (another question in its place; the TUI quitting)
-// remembers nothing: the plugin does not start, and the next start asks again.
-func TestALaunchQuestionClosedUnansweredRemembersNothing(t *testing.T) {
+// A card another question takes the place of comes back once that one is answered, still
+// unanswered; one that goes away without an answer (closed) remembers nothing: the plugin does not
+// start, and the next start asks again.
+func TestALaunchQuestionDisplacedReturnsAndClosedRemembersNothing(t *testing.T) {
 	d, dir := launchStore(t)
 	r, _ := pluginTUIOn(t, d, dir, "")
 	r.s.WaitForText(t, launchQuestion)
 	onLoop(r, func() bool { r.h.asker.ask(Question{Title: "something else?"}); return true })
 	r.s.WaitForText(t, "something else?")
+	if onLoop(r, func() bool { return !r.h.launchAsking["atstart"] }) {
+		t.Fatal("displaced, and no longer asked")
+	}
+	onLoop(r, func() bool { r.h.asker.rejected(); return true }) // the other question's No
+	r.s.WaitForText(t, launchQuestion)                           // the launch question again, when the card is free
+	if got := launchPref(t, d, prefPluginLaunchDeclined); got != "" && got != "[]" {
+		t.Fatalf("the other question's No was taken for the launch's: %s", got)
+	}
+	onLoop(r, func() bool { r.h.asker.closed(); return true }) // gone, unanswered
 	decided(t, r)
 	if onLoop(r, func() bool { return r.h.plugins.running["atstart"] != nil }) {
 		t.Fatal("unanswered, and started")
