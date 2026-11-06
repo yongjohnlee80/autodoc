@@ -109,7 +109,7 @@ func TestALaunchQuestionDisplacedReturnsAndClosedRemembersNothing(t *testing.T) 
 	}
 	// the other question's No, then its card's closed, as the card sends them
 	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
-	r.s.WaitForText(t, launchQuestion)                           // the launch question again, when the card is free
+	r.s.WaitForText(t, launchQuestion) // the launch question again, when the card is free
 	if got := launchPref(t, d, prefPluginLaunchDeclined); got != "" && got != "[]" {
 		t.Fatalf("the other question's No was taken for the launch's: %s", got)
 	}
