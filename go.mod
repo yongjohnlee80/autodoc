@@ -7,7 +7,7 @@ require (
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
 	github.com/yongjohnlee80/golib v0.8.33
-	github.com/yongjohnlee80/golib/gui v0.3.11
+	github.com/yongjohnlee80/golib/gui v0.3.12
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.48.0
