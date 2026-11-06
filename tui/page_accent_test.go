@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -54,10 +57,8 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 			r.keys(t, decltest.Alt('o'))
 			r.s.WaitForText(t, "Editor mode")
 			r.keys(t, key('t'))
-			r.s.WaitFor(t, theme+"'s theme menu open with its rows", func(string) bool {
-				return hasText(r.s.Backend.Snapshot(), "Dark")
-			})
-			r.s.WaitFor(t, "the menu's access keys in "+theme+"'s menu accent", func(string) bool {
+			deadline := time.Now().Add(20 * time.Second)
+			for {
 				snap := r.s.Backend.Snapshot()
 				var wrong []string
 				for _, row := range snap {
@@ -66,12 +67,19 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 							continue
 						}
 						if fg := fgIs(c.Attrs); fg != menuAccent {
-							wrong = append(wrong, fg)
+							wrong = append(wrong, fmt.Sprintf("%q fg=%s", c.Content, fg))
 						}
 					}
 				}
-				return len(wrong) == 0
-			})
+				if hasText(snap, "Dark") && len(wrong) == 0 {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("under %s, want the menu's access keys in its menu accent %s; the underlined cells that wear another colour:\n  %s",
+						theme, menuAccent, strings.Join(wrong, "\n  "))
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
 		})
 	}
 }
