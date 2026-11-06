@@ -1697,7 +1697,8 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
 	installPlugin2(t, dir, "onfeed", "service", "echo", "[feed]\ndocument = true\n")
 	installPlugin2(t, dir, "atstart", "service", "echo", "start = \"launch\"\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n")
-	r, logs := pluginTUI(t, dir)
+	// allowed before (pluginlaunch.go): it starts with the TUI, unasked
+	r, logs := pluginTUIWith(t, dir, map[string]string{prefLuaGrants: `{"plugin:atstart":{"launch":true}}`})
 	waitSaid(t, logs, "atstart", "open 0x0 dark")
 	if running := onLoop(r, func() []string { return slices.Sorted(maps.Keys(r.h.plugins.running)) }); !reflect.DeepEqual(running, []string{"atstart"}) {
 		t.Fatalf("running at start: %v, want atstart alone", running)

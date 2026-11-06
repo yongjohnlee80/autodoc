@@ -60,6 +60,10 @@ func (r *running) ready(t *testing.T) {
 // slower under -race. The clock only turns what never comes into a failure rather than a hang.
 var daemonWait = 2 * decltest.WaitTimeout * raceFactor
 
+// indexWait bounds a test daemon's first index of its workspaces (startDaemon, startManaged): CPU-
+// bound Go work too, raceFactor slower under -race, and slower again on a loaded box.
+var indexWait = 10 * time.Second * raceFactor
+
 // waitOpened waits for text of a note just opened: the open is a read through the daemon, a
 // round trip, so it waits on daemonWait, not a frame's clock.
 func (r *running) waitOpened(t *testing.T, text string) {

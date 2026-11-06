@@ -355,7 +355,8 @@ func (h *Host) loadPrefs() {
 		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
 		h.luaPrefsRead = true
-		h.askLuaGrants() // a gated script's question waits for the answers already given
+		h.askLuaGrants()   // a gated script's question waits for the answers already given
+		h.decideLaunches() // so does a plugin's start with AutoDoc (pluginlaunch.go)
 		if migrated {
 			// The row setter persists even when the projected value already matches.
 			core{h}.SetPref(prefAgentDefaultCodename, p.Value(prefAgentDefaultCodename))

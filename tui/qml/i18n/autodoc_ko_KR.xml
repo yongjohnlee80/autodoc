@@ -5745,6 +5745,26 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>the plugin %1's Lua package</source>
         <translation>플러그인 %1의 Lua 패키지</translation>
     </message>
+    <message id="autodoc.question.pluginlaunch.start_the_plugin_with_autodoc">
+        <source>Start %1 with AutoDoc?</source>
+        <translation>%1을(를) AutoDoc과 함께 시작할까요?</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.it_is_a_program_of_its_own">
+        <source>The plugin %1 asks to start each time AutoDoc does. A plugin is a program of its own, with AutoDoc's whole socket: allow it only if you trust it. Your answer is remembered: Agent permissions can take a Yes back, and with a No the Plugins menu still starts it by hand.</source>
+        <translation>플러그인 %1이(가) AutoDoc이 시작될 때마다 함께 시작하기를 요청합니다. 플러그인은 독립된 프로그램이며 AutoDoc의 소켓 전체를 사용할 수 있으니, 신뢰하는 경우에만 허용하세요. 답은 기억됩니다. '예'는 에이전트 권한에서 되돌릴 수 있고, '아니요'를 고르면 플러그인 메뉴에서 직접 시작할 수 있습니다.</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.yes_start_it">
+        <source>&amp;Yes, start it</source>
+        <translation>예, 시작(&amp;y)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.no_not_with_autodoc">
+        <source>&amp;No, not with AutoDoc</source>
+        <translation>아니요, AutoDoc과 함께 시작하지 않음(&amp;n)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.start_with_autodoc">
+        <source>start with AutoDoc, each time it starts (the plugin's start = &quot;launch&quot;)</source>
+        <translation>AutoDoc이 시작될 때마다 함께 시작 (플러그인의 start = &quot;launch&quot;)</translation>
+    </message>
     <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
         <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>
         <translation>패키지의 Lua는 AutoDoc 안에서, 허용한 범위 안에서만 실행됩니다.</translation>

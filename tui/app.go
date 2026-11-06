@@ -297,6 +297,10 @@ type Host struct {
 	// answers have been read
 	luaAsks                 []luaAsk
 	luaAsking, luaPrefsRead bool
+	// launchWaiting are the plugins whose start with AutoDoc waits for the answers given to be
+	// read, launchAsking those asked now (pluginlaunch.go)
+	launchWaiting []launchAsk
+	launchAsking  map[string]bool
 	// luaShown is the grant ask whose card is open, until it is answered: a retry of it asks
 	// nothing more, so one card has one answer (luaGrants.Request). onGrantAnswered, when set (a
 	// test), hears each answer grantAnswered gives.

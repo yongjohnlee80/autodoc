@@ -5738,6 +5738,26 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>the plugin %1's Lua package</source>
         <translation>插件 %1 的 Lua 包</translation>
     </message>
+    <message id="autodoc.question.pluginlaunch.start_the_plugin_with_autodoc">
+        <source>Start %1 with AutoDoc?</source>
+        <translation>要随 AutoDoc 启动 %1 吗？</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.it_is_a_program_of_its_own">
+        <source>The plugin %1 asks to start each time AutoDoc does. A plugin is a program of its own, with AutoDoc's whole socket: allow it only if you trust it. Your answer is remembered: Agent permissions can take a Yes back, and with a No the Plugins menu still starts it by hand.</source>
+        <translation>插件 %1 请求在每次 AutoDoc 启动时一同启动。插件是独立的程序，拥有 AutoDoc 的完整套接字：仅在你信任它时才允许。你的回答会被记住：“是”可在代理权限中撤回；选择“否”后，仍可从插件菜单手动启动它。</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.yes_start_it">
+        <source>&amp;Yes, start it</source>
+        <translation>是，启动(&amp;Y)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.no_not_with_autodoc">
+        <source>&amp;No, not with AutoDoc</source>
+        <translation>否，不随 AutoDoc 启动(&amp;N)</translation>
+    </message>
+    <message id="autodoc.question.pluginlaunch.start_with_autodoc">
+        <source>start with AutoDoc, each time it starts (the plugin's start = &quot;launch&quot;)</source>
+        <translation>每次 AutoDoc 启动时随之启动（插件的 start = &quot;launch&quot;）</translation>
+    </message>
     <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
         <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>
         <translation>包的 Lua 代码在 AutoDoc 中运行，仅限于你授予它的权限。</translation>
