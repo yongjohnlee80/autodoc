@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	tuivegalite "github.com/yongjohnlee80/golib/tui/vegalite"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // luacard_test.go: autodoc.ui.card, its tick, and :usage (docs/decisions/editor.md#lua-cards,
@@ -264,8 +267,9 @@ end }`)
 	r.s.WaitFor(t, "both answered", func(string) bool { return r.noticed("app " + want + " daemon " + want + " nil") })
 }
 
-// :usage in a terminal: the tables, no chart; in a window that draws charts, two vega-lite fences
-// whose JSON is a line chart of golib's subset.
+// :usage in a terminal: the tables, then two vega-lite fences whose JSON is a line chart of golib's
+// subset, which a card draws there too (ADR 1792256101 Amendment 1): each lays out in cells through
+// golib's tiers, never as its notice; a window's are the same fences.
 func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
@@ -283,11 +287,14 @@ func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	if bad := misaligned(text()); bad != "" {
 		t.Fatalf("a table's rows do not line up in a terminal:\n%s", bad)
 	}
-	if strings.Contains(text(), "```vega-lite") {
-		t.Fatalf("a terminal's card has a chart: %s", text())
+	r.s.WaitFor(t, "the charts in a terminal", func(string) bool { return strings.Count(text(), "```vega-lite") == 2 })
+	for _, spec := range vegaFences(text()) {
+		if _, err := tuivegalite.Lay(context.Background(), spec, cellMeasure{}, 60); err != nil {
+			t.Errorf("a terminal draws a chart of :usage as its notice: %v\n%s", err, spec)
+		}
 	}
 	onLoop(r, func() bool { r.h.nativeViews = func() bool { return true }; return true })
-	r.s.WaitFor(t, "the charts", func(string) bool { return strings.Count(text(), "```vega-lite") == 2 })
+	r.s.WaitFor(t, "the charts in a window", func(string) bool { return strings.Count(text(), "```vega-lite") == 2 })
 	for _, spec := range vegaFences(text()) {
 		var v struct {
 			Mark     string                     `json:"mark"`
@@ -312,4 +319,48 @@ func vegaFences(md string) []string {
 		}
 	}
 	return out
+}
+
+// A card on a terminal is drawn Rendered, as in a window (cardpage.go): its Markdown is the card
+// editor's page, and a vega-lite fence on it a chart in cells, bars with their categories and
+// values, never the spec's JSON; card:set draws the new text, a line in Braille.
+func TestACardDrawsItsChartsInATerminal(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.luaLoad(t, `
+local fence = string.rep(string.char(96), 3) -- a Markdown fence
+autodoc.command{ name = "bars", run = function()
+  shown = autodoc.ui.card{ title = "chart", text = "## Bars\n\n" .. fence .. "vega-lite\n" .. [[{"mark":"bar","data":{"values":[{"c":"north","v":12.5},{"c":"south","v":7.9}]},"encoding":{"y":{"field":"c","type":"nominal"},"x":{"field":"v","type":"quantitative"}}}]] .. "\n" .. fence .. "\n" }
+end }
+autodoc.command{ name = "line", run = function()
+  shown:set("## Line\n\n" .. fence .. "vega-lite\n" .. [[{"mark":"line","data":{"values":[{"t":1,"v":2},{"t":2,"v":5},{"t":3,"v":3}]},"encoding":{"x":{"field":"t","type":"quantitative"},"y":{"field":"v","type":"quantitative"}}}]] .. "\n" .. fence .. "\n")
+end }`)
+	if err := r.luaRun("bars"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the card's bars drawn", func(sc string) bool {
+		return strings.Contains(sc, "north") && strings.Contains(sc, "12.5") && strings.Contains(sc, "█")
+	})
+	page := onLoop(r, func() bool {
+		c, ok := r.h.p.Find(luaCardView)
+		if !ok {
+			return false
+		}
+		e, ok := c.(*widget.Editor)
+		if !ok {
+			return false
+		}
+		_, page := e.DocumentView().(*cardPageView)
+		return page && e.ShownView() == widget.ViewRendered
+	})
+	if !page {
+		t.Fatal("the card's editor shows no page, Rendered")
+	}
+	if sc := r.s.String(); strings.Contains(sc, `"mark"`) {
+		t.Fatalf("the card shows a spec's JSON:\n%s", sc)
+	}
+	if err := r.luaRun("line"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the card's line drawn", func(sc string) bool { return braille(sc) && !strings.Contains(sc, "north") })
 }

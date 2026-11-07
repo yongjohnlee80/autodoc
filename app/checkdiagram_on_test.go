@@ -112,7 +112,7 @@ func TestTheDiagramReferenceIsGolibs(t *testing.T) {
 			undrawn = append(undrawn, k.Kind.String())
 		}
 	}
-	want = append(want, "A diagram of any other kind ("+code1(append(undrawn, "gitGraph", "sankey"))+", …) is not drawn")
+	want = append(want, "A diagram of any other kind ("+code1(append(undrawn, "gitGraph", "kanban"))+", …) is not drawn")
 	for _, w := range want {
 		if !strings.Contains(out, w) {
 			t.Errorf("the reference lacks %q:\n%s", w, out)
