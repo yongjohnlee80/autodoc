@@ -6221,6 +6221,14 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>supersedes</source>
         <translation>reemplaza</translation>
     </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l selecciona, H J K L desplaza, + - zoom, 0 ajustar, f filtro, g leyenda, Enter abre</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>%1 grupos más</translation>
+    </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
         <translation>un color es #rrggbb, o nada para el del tema</translation>

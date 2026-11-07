@@ -13,7 +13,7 @@ flowchart LR
 
 **O Mindmap** (SPC M). A sua nota no centro, as notas a um link de distância em volta dela; **d** chega a dois. Clique numa nota para abri-la, e o mapa se centraliza nela. Num terminal, ele é desenhado com caracteres: **h j k l** ou as setas passam de uma nota a outra, e **Enter** abre uma.
 
-**O GlobeMap** (na GUI). O espaço de trabalho inteiro de uma vez: todas as notas e todos os links, assentando no lugar enquanto você olha.
+**O GlobeMap**. O espaço de trabalho inteiro de uma vez: todas as notas e todos os links, assentando no lugar enquanto você olha. Num terminal, ele é desenhado já assentado, com pontos Braille: **h j k l** ou as setas passam de uma nota a outra, **Enter** abre uma, **H J K L** deslocam a vista e **g** mostra a legenda.
 
 - arraste para mover a vista, use a roda do mouse ou **+** e **-** para o zoom, e **0** para enquadrar tudo de novo;
 - **f** escolhe quais links aparecem: todos os links, os links do corpo ou as relações do frontmatter;

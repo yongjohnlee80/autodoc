@@ -198,6 +198,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [The terminal text size](editor.md#the-terminal-text-size)
 - [Files outside every workspace](editor.md#files-outside-every-workspace)
 - [The Relations drawer](editor.md#the-relations-drawer)
+- [The GlobeMap in a terminal](editor.md#the-globemap-in-a-terminal)
 - [Process stats](editor.md#process-stats)
 - [Lua cards](editor.md#lua-cards)
 - [The usage card](editor.md#the-usage-card)

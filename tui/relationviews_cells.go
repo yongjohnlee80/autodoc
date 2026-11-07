@@ -5,13 +5,21 @@ import (
 	"strings"
 )
 
-// A TERMINAL'S RELATION VIEWS, in either build: Relations › Mindmap drawn in cells (mindmap_cells.go)
-// and its settings, beside Relations › Links (relationmap.go). withRelationViews writes them into
-// main.qml on a terminal; a window writes the window's (relationviews_gui.go). A terminal draws no
-// GlobeMap.
+// A TERMINAL'S RELATION VIEWS, in either build: Relations › GlobeMap and Relations › Mindmap drawn
+// in cells (globemap_cells.go, mindmap_cells.go) and the Mindmap's settings, beside Relations ›
+// Links (relationmap.go). withRelationViews writes them into main.qml on a terminal; a window
+// writes the window's (relationviews_gui.go).
 
-// cellRelationMenuQML is the terminal's Relations menu items for its Mindmap.
-const cellRelationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }
+// cellRelationViews are a terminal's relation views, one graph store for both: the GlobeMap and
+// the Mindmap, in cells.
+func cellRelationViews(h *Host) []Feature {
+	store := newGraphStore(core{h}, core{h}, h.graphUserFile)
+	return []Feature{newCellGlobeMap(core{h}, store), newCellMindmap(core{h}, store)}
+}
+
+// cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.
+const cellRelationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
+            MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }
             MenuItem { text: qsTrId("autodoc.gui.relations.mindmap_settings"); onTriggered: App.openMindmapSettings() }
 `
 
@@ -45,9 +53,28 @@ func inlineDialog(file, id string) string {
 	return out.String()
 }
 
-// cellRelationViewsQML is the terminal Mindmap's panel, a large float in the middle until the user
-// moves or sizes it, as the window's is, and its settings, the window's dialog.
-var cellRelationViewsQML = `    // the Mindmap in cells (mindmap_tui.go): the page's document and those a link or two from it
+// cellRelationViewsQML is the terminal GlobeMap's and Mindmap's panels, each a large float in the
+// middle until the user moves or sizes it, as the window's are, and the Mindmap's settings, the
+// window's dialog.
+var cellRelationViewsQML = `    // the GlobeMap in cells (globemap_cells.go): the workspace's documents and their links, in Braille
+    Panel {
+        id: globeMap
+        heading: App.globeMapTitle
+        closeOnQ: true
+        edge: Tui.Center
+        size: 85
+        length: 90
+        floating: App.globeMapFloating
+        floatX: App.globeMapX; floatY: App.globeMapY; floatWidth: App.globeMapW; floatHeight: App.globeMapH
+        onPlaced: App.panelPlaced("globeMap", x, y, width, height)
+        minimumSize: 20
+        onOpened: App.panelOpened("globeMap")
+        onClosed: App.panelClosed("globeMap")
+        CellGlobeMap {
+            id: globeMapView
+        }
+    }
+    // the Mindmap in cells (mindmap_cells.go): the page's document and those a link or two from it
     Panel {
         id: mindmap
         heading: App.mindmapTitle

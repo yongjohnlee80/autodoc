@@ -4,10 +4,14 @@ package tui
 
 import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
-// A terminal build's relation views: Relations › Mindmap, drawn in cells (mindmap_cells.go,
-// relationviews_cells.go), beside Relations › Links (relationmap.go). A terminal draws no GlobeMap.
+// A terminal build's relation views: Relations › GlobeMap and Relations › Mindmap, drawn in cells
+// (globemap_cells.go, mindmap_cells.go, relationviews_cells.go), beside Relations › Links
+// (relationmap.go).
 
-const mindmapPanelID, mindmapViewID = "mindmap", "mindmapView"
+const (
+	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
+	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
+)
 
 // relationMenuQML and relationViewsQML are the window's: a build without the GUI has none, and
 // writes the terminal's (relationviews_cells.go).
@@ -15,7 +19,7 @@ const relationMenuQML, relationViewsQML = "", ""
 
 func (h *Host) relationViewFeatures() []Feature {
 	if h.relationViews == nil {
-		h.relationViews = []Feature{newCellMindmap(core{h}, newGraphStore(core{h}, core{h}, h.graphUserFile))}
+		h.relationViews = cellRelationViews(h)
 	}
 	return h.relationViews
 }
@@ -31,8 +35,11 @@ func (h *Host) openGlobeSettings() { h.notify(h.globeSettingsElsewhereNotice()) 
 func (h *Host) relationViewTypes() []tuidecl.Type {
 	var out []tuidecl.Type
 	for _, f := range h.relationViewFeatures() {
-		if m, ok := f.(*cellMindmap); ok {
-			out = append(out, m.viewType())
+		switch f := f.(type) {
+		case *cellGlobeMap:
+			out = append(out, f.viewType())
+		case *cellMindmap:
+			out = append(out, f.viewType())
 		}
 	}
 	return out
