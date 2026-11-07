@@ -1,15 +1,14 @@
 // About.qml — the version and its date; where the config, the daemon's log, the plugins and the
 // daemon's socket are; the author and the licence. Each label is bold, its value beside it; the
 // log is under the config, in brackets and italic. A program that replaces About's text
-// (LaunchOptions.About) shows that instead.
+// (LaunchOptions.About) shows that instead. Update shows when install-autodoc.sh installed this
+// AutoDoc (its record says so): update.sh runs in the terminal panel (update.go).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: qsTrId("autodoc.view.about.about_autodoc")
     dim: true
-    standardButtons: Dialog.Close
-    defaultButton: Dialog.Close
     Flex {
         Text { text: App.aboutCustom ? App.aboutText : App.aboutHeadline; wrapMode: Tui.WordWrap }
         Text { text: "" }
@@ -23,5 +22,9 @@ Dialog {
         Text { text: App.aboutUpdateShown ? " " : "" }
         Flex { direction: Tui.Horizontal; Text { text: App.aboutUpdateShown ? qsTrId("autodoc.view.about.update") : ""; font.bold: true } Text { text: App.aboutUpdate; wrapMode: Tui.WordWrap } }
         Text { text: App.aboutError; wrapMode: Tui.WordWrap; font.italic: true }
+    }
+    DialogButtonBox {
+        Button { text: qsTrId("autodoc.view.about.update_now"); visible: App.aboutCanUpdate; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.updateAutoDoc() }
+        Button { text: qsTrId("autodoc.view.about.close"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }
