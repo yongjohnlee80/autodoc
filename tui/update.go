@@ -91,7 +91,7 @@ func (h *Host) restartUpdated() {
 func (h *Host) relaunch() {
 	h.relaunchAfterRestart = false
 	h.guardAll(h.askBefore("quit"), func() {
-		h.relaunching = true
+		h.relaunching.Store(true)
 		h.p.Quit()
 	})
 }

@@ -122,9 +122,8 @@ func TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: scriptInstall("/u.sh")})
 	r.connected(t)
 	r.h.p.Post(r.h.restartUpdated)
-	r.waitWithin(t, "the quit to relaunch", daemonWait, func() bool {
-		return onLoop(r, func() bool { return r.h.relaunching })
-	})
+	// the relaunch quits the loop: the flag is read off it
+	r.waitWithin(t, "the quit to relaunch", daemonWait, r.h.relaunching.Load)
 }
 
 // TestRestartNowRestartsTheBackendThenRelaunches: with a backend of its own, Restart now restarts it
@@ -159,14 +158,13 @@ func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
 		}
 		return true
 	})
-	if onLoop(r, func() bool { return r.h.relaunching }) {
+	if r.h.relaunching.Load() {
 		t.Fatal("relaunching before Restart now")
 	}
 	r.h.p.Post(r.h.restartUpdated)
 	r.s.WaitForText(t, "backend restarted: autodoc v1 → v2")
-	r.waitWithin(t, "the quit to relaunch", daemonWait, func() bool {
-		return onLoop(r, func() bool { return r.h.relaunching })
-	})
+	// the relaunch quits the loop: the flag is read off it
+	r.waitWithin(t, "the quit to relaunch", daemonWait, r.h.relaunching.Load)
 	// the program has quit: the session is read directly, not on the loop
 	if v := r.h.session.Version(); v != "v2" {
 		t.Errorf("relaunched against %q, want the installed v2", v)
