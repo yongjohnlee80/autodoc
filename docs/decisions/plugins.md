@@ -417,8 +417,9 @@ the card closes or hides.
 
   A card-sized frame encodes well inside 15 frames a second; a large photo-like one shows at a
   lower rate.
-- **Geometry.** The card's cells at the terminal's cell size in pixels, scale 1, memory RGBA and
-  BGRA frames. The pointer arrives in the same pixels; IME composition does not apply.
+- **Geometry.** The card's cells at 10 × 20 pixels a cell (the scale a diagram preview is drawn at,
+  since a terminal reports no cell size of its own), scale 1, memory RGBA and BGRA frames. The
+  pointer arrives in the same pixels; IME composition does not apply.
 
 In the code: `tui/pluginsurface_cells.go`, `tui/pluginview.go`
 

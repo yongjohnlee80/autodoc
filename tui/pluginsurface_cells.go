@@ -299,7 +299,7 @@ func (v *pluginView) paintCellSurface(sz tuicore.Size) {
 	if p.dirty == nil {
 		p.dirty = ctx.MarkDirty
 	}
-	cp := ctx.CellPixels()
+	cp := surfaceCellPixels(ctx)
 	g := surfaceGeometry{W: float32(sz.W) * cp.W, H: float32(sz.H) * cp.H, Scale: 1, Kinds: cellSurfaceKinds}
 	if !g.same(v.lastSurface) {
 		v.lastSurface = g

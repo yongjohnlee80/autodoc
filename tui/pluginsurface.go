@@ -7,6 +7,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/gio/op/extimage"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // A PLUGIN'S PIXEL SURFACE, AS THE REST OF THE HOST SEES IT
@@ -18,6 +19,16 @@ import (
 
 // surfaceMaxPixels is a frame's side in device pixels: protocol 10's, below the window's MaxSize.
 const surfaceMaxPixels = 4096
+
+// surfaceCellPixels is a cell's size in a surface's device pixels: the backend's, where it reads
+// them (a window's); else the scale a terminal's pictures are drawn at (widget.CellPixelsW and
+// CellPixelsH, as a diagram preview's), so a terminal's surface has a size and its pointer a place.
+func surfaceCellPixels(ctx *tuicore.Context) tuicore.CellPixels {
+	if cp := ctx.CellPixels(); cp.W > 0 && cp.H > 0 {
+		return cp
+	}
+	return tuicore.CellPixels{W: widget.CellPixelsW, H: widget.CellPixelsH}
+}
 
 // pointerShapes are host.surface.cursor's names, as the SDK's SetPointerShape lists them.
 var pointerShapes = map[string]tuicore.PointerShape{
