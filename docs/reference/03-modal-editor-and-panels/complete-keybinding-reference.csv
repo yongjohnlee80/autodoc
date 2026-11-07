@@ -31,5 +31,5 @@ Leader Chords,SPC L,Normal,Arrange a Panel,Move it with h j k l and resize it wi
 Leader Chords,SPC M,Normal,Mindmap,Toggle the Mindmap of the document shown (Relations › Mindmap)
 Leader Chords,SPC z / F11,Normal,Maximize,Maximize or restore the terminal or the agents (the one with the keyboard; else the newest open)
 Rendered View,Ctrl+T,Normal / Insert / Text,Toggle Rendered View,Switch between the Markdown source and the native Rendered View in --gui (Mermaid / Vega-Lite / CSV)
-Rendered View,SPC H,Normal,Preview HTML,The note's page: a pane beside the editor, drawn natively in --gui and in cells in --ui
+Rendered View,SPC H,Normal,Preview HTML,"The note's page: a pane beside the editor, drawn natively in --gui and in cells in --ui"
 Window,Ctrl+S / Ctrl+W / Ctrl+Q,Normal / Text,Save / Workspace / Quit,Save; switch workspace (in Vim Insert Ctrl+W deletes a word); quit
