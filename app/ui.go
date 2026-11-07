@@ -46,5 +46,5 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 	if window {
 		return runGUI(ctx, o, owned)
 	}
-	return finishRun(tui.Launch(ctx, o), owned...)
+	return afterRun(finishRun(tui.Launch(ctx, o), owned...))
 }

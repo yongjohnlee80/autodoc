@@ -12,8 +12,9 @@ import (
 	"time"
 )
 
-// STARTUP — About as the program starts, and word of a newer release. AutoDoc only says that one is
-// out and how to get it; it never downloads or installs anything.
+// STARTUP — About as the program starts, and word of a newer release. AutoDoc says that one is out
+// and how to get it; when install-autodoc.sh installed it, how is About's Update (update.go), which
+// the user starts.
 
 // latestURL is the latest release of AutoDoc, as GitHub answers it; tests point it elsewhere.
 var latestURL = "https://api.github.com/repos/yongjohnlee80/autodoc/releases/latest"
@@ -26,14 +27,15 @@ type release struct {
 
 // startup is the feature that runs once the program has started.
 type startup struct {
-	c       Core
-	version string
-	latest  func(ctx context.Context) (release, error) // the latest release; tests answer it
-	exe     func() (string, error)                     // this program's path, for how to update
+	c        Core
+	version  string
+	latest   func(ctx context.Context) (release, error) // the latest release; tests answer it
+	exe      func() (string, error)                     // this program's path, for how to update
+	scripted func() bool                                // install-autodoc.sh installed it: About's Update updates it
 }
 
-func newStartup(c Core, version string) *startup {
-	return &startup{c: c, version: version, latest: latestRelease, exe: os.Executable}
+func newStartup(c Core, version string, scripted func() bool) *startup {
+	return &startup{c: c, version: version, latest: latestRelease, exe: os.Executable, scripted: scripted}
 }
 
 func (*startup) Name() string { return "startup" }
@@ -82,6 +84,9 @@ func (s *startup) Started() {
 
 // how is how to update, by where this program was installed from.
 func (s *startup) how(r release) string {
+	if s.scripted != nil && s.scripted() {
+		return s.c.Tr("autodoc.text.startup.about_update")
+	}
 	path, _ := s.exe()
 	switch {
 	case strings.Contains(path, "/Cellar/autodoc/") || strings.Contains(path, "/homebrew/"):
