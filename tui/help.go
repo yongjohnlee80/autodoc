@@ -430,16 +430,17 @@ func (h *Host) aboutTextNow() string {
 func (h *Host) aboutState() map[string]any {
 	a := h.aboutInfo
 	return map[string]any{
-		"App.aboutText":     h.aboutTextNow(),
-		"App.aboutCustom":   h.about != "",
-		"App.aboutHeadline": h.aboutHeadline(),
-		"App.aboutConfig":   a.Config,
-		"App.aboutLog":      h.trf("autodoc.text.help.log", a.Log),
-		"App.aboutPlugins":  a.Plugins,
-		"App.aboutSocket":   h.session.Address(),
-		"App.aboutAuthor":   author,
-		"App.aboutLicence":  licence,
-		"App.aboutError":    "",
+		"App.aboutText":      h.aboutTextNow(),
+		"App.aboutCustom":    h.about != "",
+		"App.aboutHeadline":  h.aboutHeadline(),
+		"App.aboutConfig":    a.Config,
+		"App.aboutLog":       h.trf("autodoc.text.help.log", a.Log),
+		"App.aboutPlugins":   a.Plugins,
+		"App.aboutSocket":    h.session.Address(),
+		"App.aboutAuthor":    author,
+		"App.aboutLicence":   licence,
+		"App.aboutError":     "",
+		"App.aboutCanUpdate": h.canUpdate(),
 	}
 }
 

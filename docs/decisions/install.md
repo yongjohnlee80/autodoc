@@ -81,3 +81,16 @@ Exit codes: 0 updated or current; 2 not a script install; 3 a download or a chec
 nothing changed; 4 the install failed, with the old AutoDoc untouched.
 
 In the code: `scripts/install/update.sh`, `scripts/install/test/run.sh`
+
+## About's Update and the restart
+
+When the record says the script installed this AutoDoc, About offers Update, and a newer release's
+notice names it as the way to update. Update runs update.sh in a tab of the terminal panel: the user
+sees its progress, can answer it, and can read why it failed. When it ends well and the binary at
+AutoDoc's path is newer than the one running, AutoDoc asks to restart: the backend restarts as
+Restart backend… does, and once the new one answers, the UI quits and the program starts the new
+binary in its place with the same arguments. Unsaved work is asked about first, as a quit asks.
+Nothing is downloaded or replaced without the user's Update, and AutoDoc reads no output of
+update.sh: it trusts only the new binary's `--version`.
+
+In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`

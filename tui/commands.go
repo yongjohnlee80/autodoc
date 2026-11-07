@@ -121,6 +121,7 @@ func (h *Host) commands() map[string]Command {
 
 		// the backend
 		"App.startRestart":            none(h.startRestart),
+		"App.updateAutoDoc":           none(h.updateAutoDoc),
 		"App.restartMismatch":         none(h.restartMismatch),
 		"App.quitMismatch":            none(h.quitMismatch),
 		"App.restartForRegistrations": none(h.restartForRegistrations),

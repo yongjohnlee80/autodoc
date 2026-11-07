@@ -226,6 +226,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Launchers](install.md#launchers)
 - [Nothing moves until everything is checked](install.md#nothing-moves-until-everything-is-checked)
 - [update.sh runs the newest installer](install.md#updatesh-runs-the-newest-installer)
+- [About's Update and the restart](install.md#abouts-update-and-the-restart)
 
 ## [The enterprise search server](server.md)
 
