@@ -50,7 +50,11 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 	return afterRun(finishRun(tui.Launch(ctx, o), owned...))
 }
 
-// terminalOptions open AutoDoc's terminal: the platform's (termOptions), and the clipboard read
+// terminalOptions open AutoDoc's terminal: the platform's (termOptions); the clipboard read
 // through the terminal, OSC 52's, on by default (docs/decisions/editor.md#reading-the-clipboard-in-a-terminal):
-// a terminal that ignores it costs one wait a session.
-func terminalOptions() []term.Option { return append(termOptions(), term.WithClipboardRead()) }
+// a terminal that ignores it costs one wait a session; and a panel moved by a plain drag of its
+// title row and resized by one of its border, as a window's are
+// (docs/decisions/editor.md#fonts-zoom-and-floating-panels).
+func terminalOptions() []term.Option {
+	return append(termOptions(), term.WithClipboardRead(), term.WithFrameDrag())
+}
