@@ -235,7 +235,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: shellcheck
         if: runner.os == 'Linux'
-        run: shellcheck -s sh scripts/install/install-autodoc.sh scripts/install/update.sh scripts/install/test/run.sh
+        # warnings and errors: the info notes are the scripts' deliberate `a && b || c`
+        run: shellcheck -s sh -S warning scripts/install/install-autodoc.sh scripts/install/update.sh scripts/install/test/run.sh
       - name: the installer's cells
         run: sh scripts/install/test/run.sh
 
