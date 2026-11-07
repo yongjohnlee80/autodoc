@@ -218,6 +218,15 @@ the code ever disagree, the code is right and the page is fixed.
 - [A trimmed Markdown renderer](neovim.md#a-trimmed-markdown-renderer)
 - [The browser view goes through the export](neovim.md#the-browser-view-goes-through-the-export)
 
+## [Installing and updating](install.md)
+
+- [Scripts over the release's tarballs](install.md#scripts-over-the-releases-tarballs)
+- [A user-level install](install.md#a-user-level-install)
+- [The install record](install.md#the-install-record)
+- [Launchers](install.md#launchers)
+- [Nothing moves until everything is checked](install.md#nothing-moves-until-everything-is-checked)
+- [update.sh runs the newest installer](install.md#updatesh-runs-the-newest-installer)
+
 ## [The enterprise search server](server.md)
 
 - [A headless server mode](server.md#a-headless-server-mode)

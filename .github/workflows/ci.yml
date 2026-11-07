@@ -220,6 +220,25 @@ jobs:
       - name: lua suites
         run: ./tests/run-all.sh
 
+  # The installer's scripts (docs/decisions/install.md#scripts-over-the-releases-tarballs):
+  # shellcheck, then their cells against a fake release, on Linux and on a Mac (the launcher
+  # differs: a desktop entry, an app bundle).
+  installer:
+    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
+    name: installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh scripts/install/install-autodoc.sh scripts/install/update.sh scripts/install/test/run.sh
+      - name: the installer's cells
+        run: sh scripts/install/test/run.sh
+
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.
   macos:
