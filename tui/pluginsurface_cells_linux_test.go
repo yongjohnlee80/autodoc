@@ -5,6 +5,8 @@ package tui
 import (
 	"bytes"
 	"image/png"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,7 +81,15 @@ func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	// it comes back
 	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "false"); return true })
 	waitImages(t, r, "Plugin pixels off", 0)
-	r.waitShown(t, "open ")
+	r.waitShown(t, "open ") // the plugin's own cells
+	x, y := r.textAt("open ")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y, Count: 1})
+	waitSaid(t, logs, "card", "pointer press left") // a press on the cells reaches it as a card's, in cells
+	if got := said(t, logs, "card"); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "spointer press") }) {
+		t.Fatalf("a press on the cells went to the hidden surface: %q", got)
+	}
+	r.keys(t, key('z'))
+	waitSaid(t, logs, "card", "key z") // and keys
 	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "true"); return true })
 	waitImages(t, r, "Plugin pixels on again", 1)
 

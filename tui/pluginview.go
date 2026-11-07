@@ -84,8 +84,15 @@ type pluginView struct {
 // ok false otherwise, and the cells are painted (docs/decisions/plugins.md#pixel-surfaces).
 func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
 
-// surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.
-func (v *pluginView) surfaceMode() bool { return v.run != nil && v.run.surface != nil }
+// surfaceMode: the run has a pixel surface shown, so the pointer goes to it in dp. A terminal's
+// surface whose pictures are off (pluginsurface_cells.go) shows the card's cells, and the pointer
+// goes to them as any card's does.
+func (v *pluginView) surfaceMode() bool {
+	if v.run == nil || v.run.surface == nil {
+		return false
+	}
+	return v.cellPicturesOf() == nil || v.cellSurfaceLive()
+}
 
 // PreciseScroll: a surface takes every precise scroll, the part a wheel step can't tell included
 // (tuicore.PreciseScroller).
