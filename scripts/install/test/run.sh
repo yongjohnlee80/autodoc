@@ -168,6 +168,7 @@ case $out in *FETCHED-UPDATE-RAN*) ran=1 ;; *) ran=0 ;; esac
 	[ "$(sum "$STATE/update.sh")" = "$(sum "$R/download/v1.1.0/update.sh")" ] && ok "update.sh runs the release's update.sh and updates" || bad "update.sh runs the release's update.sh and updates" "status $st; $out"
 cp "$work/upd.keep" "$R/download/v1.1.0/update.sh"
 cp "$work/updsha.keep" "$R/download/v1.1.0/update.sh.sha256"
+latest v1.0.0
 
 fresh update-fails
 inst --yes >/dev/null 2>&1
