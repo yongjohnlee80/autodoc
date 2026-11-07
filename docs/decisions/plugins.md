@@ -419,7 +419,11 @@ the card closes or hides.
   lower rate.
 - **Geometry.** The card's cells at 10 × 20 pixels a cell (the scale a diagram preview is drawn at,
   since a terminal reports no cell size of its own), scale 1, memory RGBA and BGRA frames. The
-  pointer arrives in the same pixels; IME composition does not apply.
+  picture is placed by the card's columns and rows, and the terminal scales it to them, so it fills
+  the card at any real cell size; 10 × 20 sets only its resolution. The pointer arrives in the same
+  pixels; IME composition does not apply. To follow: golib's terminal backend reads no cell size in
+  pixels (`CSI 16 t`, or the window size's pixel fields); once it does, a picture can be drawn at the
+  terminal's own resolution.
 
 In the code: `tui/pluginsurface_cells.go`, `tui/pluginview.go`
 

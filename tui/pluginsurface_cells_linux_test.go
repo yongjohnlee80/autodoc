@@ -3,6 +3,8 @@
 package tui
 
 import (
+	"bytes"
+	"image/png"
 	"testing"
 	"time"
 
@@ -52,6 +54,17 @@ func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	var id uint32
 	for k := range first {
 		id = k
+	}
+	// placed by the card's columns and rows, whatever its pixels: the terminal scales the picture to
+	// them, so it fills the card at any real cell size (9×18, 14×28); its pixels are only its
+	// resolution, 10×20 a cell here
+	p := first[id]
+	cols, rows := onLoop(r, func() int { return run.view.laidW }), onLoop(r, func() int { return run.view.laidH })
+	if p.Cols != cols || p.Rows != rows {
+		t.Fatalf("the picture is placed over %d×%d cells; want the card's %d×%d", p.Cols, p.Rows, cols, rows)
+	}
+	if cfg, err := png.DecodeConfig(bytes.NewReader(p.PNG)); err != nil || cfg.Width != cols*10 || cfg.Height != rows*20 {
+		t.Fatalf("the picture is %dx%d px (%v); want the card's cells at 10×20, %dx%d", cfg.Width, cfg.Height, err, cols*10, rows*20)
 	}
 
 	r.s.Backend.InjectResize(120, 40) // a new size: the card's cells change, a new generation
