@@ -19,18 +19,58 @@ import (
 // bufferTabWidth cells: a longer name is cut in its middle (bufferTabLabel), and a tab never
 // changes width as tabs open and close or the window resizes (consistent, not re-fitted each
 // time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
-// and →. The TUI has no title bar: its editor has no strip (bufferStrip is nil there), and :b and
-// the Buffers picker switch instead.
+// and →. The terminal has the same strip, the same model, on the page's frame's bottom border
+// (golib's Editor.FrameTabs), its full width, from the second buffer on (showTerminalTabs): the
+// title row keeps the file's title, its badges and breadcrumb, and Raw | Rendered
+// (docs/decisions/editor.md#switching-buffers); a terminal tab is never wider than terminalTabWidth
+// cells, so a page holds more than two.
+// :b and the Buffers picker switch too, in both.
 
 // bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
 // its middle there, the same however many tabs are open; its menu's Go to › has the name whole.
 const bufferTabWidth = 32
 
+// terminalTabWidth is bufferTabWidth on the terminal's bottom border: a page is some 80 to 100 cells.
+const terminalTabWidth = 20
+
+// tabStripper is an editor with buffer tabs: the window's on its title bar, the terminal's on its
+// frame's bottom border (golib's Editor.Tabs, in either).
+type tabStripper interface{ Tabs() *widget.TabStrip }
+
+// bufferStrip is the editor's strip for the buffers, nil for an editor with none.
+func (h *Host) bufferStrip() *widget.TabStrip {
+	if t, ok := h.editor.(tabStripper); ok {
+		return t.Tabs()
+	}
+	return nil
+}
+
+// tabWidth is a buffer tab's widest on the editor's strip: terminalTabWidth on the terminal's (a
+// cell Editor's), bufferTabWidth on the window's.
+func (h *Host) tabWidth() int {
+	if _, cells := h.editor.(*widget.Editor); cells {
+		return terminalTabWidth
+	}
+	return bufferTabWidth
+}
+
 // syncBufferTabs feeds the editor's strip the buffers as they are now.
-func (h *Host) syncBufferTabs() { h.feedBufferTabs(h.bufferStrip()) }
+func (h *Host) syncBufferTabs() {
+	h.feedBufferTabs(h.bufferStrip())
+	h.showTerminalTabs()
+}
+
+// showTerminalTabs shows the terminal's tabs, on its page's bottom border, while two or more
+// buffers are open: one buffer's name is the title row's already, and the page reads as it did
+// before there were tabs. The window's editor has its tabs on its title bar always, and isn't one.
+func (h *Host) showTerminalTabs() {
+	if e, ok := h.editor.(*widget.Editor); ok {
+		e.SetTabsInFrame(len(h.buffers) > 1)
+	}
+}
 
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
-// it is seen (a new editor, after a reload, is a new strip); nil, the TUI's editor's, is left.
+// it is seen (a new editor, after a reload, is a new strip); nil, an editor with none, is left.
 func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 	if strip == nil {
 		return
@@ -44,10 +84,10 @@ func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 		})
 		strip.SetMenu(h.bufferTabRows)
 		strip.SetActions(h.newEmptyBuffer, nil)
-		strip.SetMaxTabWidth(bufferTabWidth) // a backstop: each label comes cut to fit (bufferTabLabel)
+		strip.SetMaxTabWidth(h.tabWidth()) // a backstop: each label comes cut to fit (bufferTabLabel)
 		strip.SetOnClose(h.closeBufferTab)
 	}
-	labels := h.bufferTabLabels(bufferTabWidth - 2) // 2: the padding
+	labels := h.bufferTabLabels(h.tabWidth() - 2) // 2: the padding
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
 		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: labels[b]}
