@@ -25,59 +25,12 @@ import (
 // is read again when it opens, when another workspace is entered, and when the filter changes. How it
 // draws (its theme, colours, names, dots and pace) is its settings' (globesettings_gui.go).
 
-// globeLimits bound a build: a knowledge base of twenty thousand documents.
-var globeLimits = graphlayout.Limits{MaxNodes: 20000, MaxEdges: 200000, MaxWork: 2_000_000_000}
-
 const (
 	globeDot      = 3.5 // a document's dot's radius on screen, in logical pixels, at medium size, before its links add to it
 	globeLabelCap = 300 // the most documents in view whose names are drawn
 	globeZoomStep = 1.15
-	// A node pushes only within globeReach link lengths, and each link is a spring of
-	// globeLinkPull: the unlinked documents settle round the linked ones, not on a far ring, and a
-	// dense part spreads out rather than drawing tight (golib graph/layout's Reach and LinkPull).
-	globeReach    = 8
-	globeLinkPull = 0.5
-	globeSteps    = 300 // the simulation's steps to settle, which its progress counts
 	globeToast    = "globemap"
 )
-
-// globeFilter is a choice of the links the GlobeMap follows.
-type globeFilter struct {
-	key, name string // the stored name (prefGlobeFilter), and the title's
-	nameMsg   string // name's catalog id: the title's, in the UI's language
-	kinds     []any  // graph.map's kinds; nil every kind
-}
-
-// globeFilters are the links the GlobeMap follows, f cycling through them: the relations first (the
-// default), every link one press away.
-var globeFilters = []globeFilter{
-	{"relations", "relations", "autodoc.text.globemap_gui.relations",
-		[]any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
-	{"every", "every link", "autodoc.text.globemap_gui.every_link", nil},
-	{"body", "body links", "autodoc.text.globemap_gui.body_links", []any{"wikilink", "embed", "markdown"}},
-}
-
-// Edge classes, each one path and one colour: body links, supersession, every other relation.
-const (
-	edgeBody = iota
-	edgeSupersession
-	edgeRelation
-	edgeClasses
-)
-
-func edgeClass(kind string) int {
-	switch kind {
-	case "wikilink", "embed", "markdown":
-		return edgeBody
-	case "supersedes", "superseded_by":
-		return edgeSupersession
-	}
-	return edgeRelation
-}
-
-// globeMapPage is the documents a page of the GlobeMap's map asks for; 0 is the daemon's default.
-// A test makes it small, to read a map of a few documents over several pages.
-var globeMapPage = 0
 
 // globe is one GlobeMap frame: one graph.map answer placed as the simulation has it at one step,
 // made off the loop and never changed once handed over.
@@ -90,25 +43,6 @@ type globe struct {
 	edges  [edgeClasses]*gui.Path
 	grid   hitGrid
 	final  bool // the simulation has settled
-}
-
-// globeForceInput is the simulation of m: seeded, so one map settles the same way each time.
-func globeForceInput(m relMap) graphlayout.ForceInput {
-	in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1, Steps: globeSteps, Reach: globeReach, LinkPull: globeLinkPull}
-	for _, e := range m.Edges {
-		in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
-	}
-	return in
-}
-
-// degrees counts each document's links.
-func degrees(m relMap) []int {
-	deg := make([]int, len(m.Nodes))
-	for _, e := range m.Edges {
-		deg[e.Src]++
-		deg[e.Dst]++
-	}
-	return deg
 }
 
 // newGlobe is the frame of m placed at at: its edges' paths, and its hit grid.
