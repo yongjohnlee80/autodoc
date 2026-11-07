@@ -16,6 +16,6 @@ A vista Renderizada continua sendo o editor. Toda linha é editável: a linha so
 
 **O menu do botão direito**: Desfazer, Refazer, Copiar, Recortar e Colar, Ver diagrama, Ir para o link, Voltar e, na GUI, o Zoom. Pelo teclado: **Shift+F10**, a tecla **Menu** se o seu teclado tiver uma, ou **SPC .**.
 
-Num terminal, a vista Renderizada de uma nota é a sua página desenhada em células: títulos, tabelas com borda, blocos de código, os seus diagramas Mermaid e os seus gráficos Vega-Lite. Lê-se como a página da janela; para editar, Ctrl+T volta à Bruta.
+Num terminal, a vista Renderizada de uma nota é a sua página desenhada em células: títulos, tabelas com borda, blocos de código, os seus diagramas Mermaid e os seus gráficos Vega-Lite. Num terminal que mostra os gráficos do kitty (kitty ou Ghostty, por exemplo), uma imagem sozinha no seu parágrafo é desenhada no lugar; nos outros aparece o seu texto alternativo. Lê-se como a página da janela; para editar, Ctrl+T volta à Bruta.
 
 Mais: [Referência, Capítulo 4: Autoria rica, incorporações e exportação](../../reference/04-rich-authoring-embeds-and-export.md).
