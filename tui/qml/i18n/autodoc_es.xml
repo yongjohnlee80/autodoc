@@ -6335,6 +6335,10 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
         <translation>diagrama %1: no se dibuja en la terminal (Raw muestra su código)</translation>
     </message>
+    <message id="autodoc.text.rendered_tui.vega_lite_chart_not_drawn_in_the_terminal">
+        <source>vega-lite chart: not drawn in the terminal (Raw shows its source)</source>
+        <translation>gráfico vega-lite: no se dibuja en la terminal (Raw muestra su código)</translation>
+    </message>
     <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
         <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
         <translation>Mindmap · %1 · %2 documentos · profundidad %3 · d profundidad, l leyenda</translation>

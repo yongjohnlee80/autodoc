@@ -255,9 +255,11 @@ In the code: `tui/tabledoc.go`, `tui/htmldoc.go`, `tui/files.go`
 
 In a terminal, a note's Rendered view is its page, as in the window: Raw is the text, Rendered the
 note exported in process (as the HTML pane exports it) and laid out in cells by golib's HTMLView.
-Tables are boxed, headings told apart by level, code set off, and every Mermaid kind golib's parser
-reads drawn in box-drawing cells; a diagram of a kind it doesn't read is a line saying it isn't
-drawn in the terminal and that Raw shows its source, in the UI's language. A note opens Rendered, as a table file does. Ctrl+T flips between the
+Tables are boxed, headings told apart by level, code set off, every Mermaid kind golib's parser
+reads drawn in box-drawing cells, and its Vega-Lite charts drawn in cells: bars in eighths of a cell,
+line, point and area charts in Braille, and a table for the rest of golib's subset. A diagram of a
+kind it doesn't read, or a chart outside that subset, is a line saying it isn't drawn in the
+terminal and that Raw shows its source, in the UI's language; never its source. A note opens Rendered, as a table file does. Ctrl+T flips between the
 two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
 again puts the cursor at the block the reader scrolled the page to; when the
 note changes under it, it is exported again once typing rests and keeps the reader's place. Its
@@ -376,19 +378,19 @@ In the code: `core/procstat/procstat.go`, `rpc/sys.go`
 ## Lua cards
 
 `autodoc.ui.card{title, text, every, tick}` shows a script's Markdown in one docked card panel and
-returns a handle: `card:set(text)` replaces it, `card:close()` ends it. In the GUI the card is
-drawn Rendered, so a `vega-lite` fence draws as a chart; a terminal shows the Markdown.
-`autodoc.ui.charts()` says which. `tick` runs every `every` ms (never faster than 250 ms) while the
+returns a handle: `card:set(text)` replaces it, `card:close()` ends it. The card is drawn Rendered,
+so a `vega-lite` fence draws as a chart: in the GUI natively, in a terminal on the card's page, in
+cells, as a note's page draws one. `autodoc.ui.charts()` says whether a card draws charts. `tick` runs every `every` ms (never faster than 250 ms) while the
 panel is open, and a close and reopen never leave two tick chains. One panel shows one card: a new
 card replaces the old, whose handle then does nothing, and `:lua-reload` ends it.
 
-In the code: `tui/luacard.go`, `tui/luahost.go`
+In the code: `tui/luacard.go`, `tui/cardpage.go`, `tui/luahost.go`
 
 ## The usage card
 
 `:usage` is the first card, shipped as a Lua file: the daemon's and the app's memory and CPU, and
-the workspace's index, refreshed each second while the card is open. In a window that draws charts,
-line charts of the last minute follow the tables; a terminal shows the tables alone.
+the workspace's index, refreshed each second while the card is open. Line charts of the last minute
+follow the tables, in a window and in a terminal alike.
 
 In the code: `tui/lua/usage.lua`, `tui/luacard.go`
 

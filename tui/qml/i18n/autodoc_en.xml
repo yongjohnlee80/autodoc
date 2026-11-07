@@ -7789,6 +7789,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>%1 diagram: not drawn in the terminal (Raw shows its source)</source>
         <translation>%1 diagram: not drawn in the terminal (Raw shows its source)</translation>
     </message>
+    <message id="autodoc.text.rendered_tui.vega_lite_chart_not_drawn_in_the_terminal">
+        <source>vega-lite chart: not drawn in the terminal (Raw shows its source)</source>
+        <translation>vega-lite chart: not drawn in the terminal (Raw shows its source)</translation>
+    </message>
     <message id="autodoc.text.restart.restart_failed_retry_or_quit">
         <source>Restart failed: %1. Retry or quit.</source>
         <translation>Restart failed: %1. Retry or quit.</translation>

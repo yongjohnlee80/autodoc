@@ -15,12 +15,14 @@ import (
 // (docs/decisions/editor.md#lua-cards):
 //
 //	autodoc.ui.card{title=, text=, every=, tick=}   the luaCard panel shows text (Markdown, drawn
-//	                                                Rendered in the GUI, a vega-lite fence a chart);
+//	                                                Rendered, a vega-lite fence a chart, in a
+//	                                                window or a terminal);
 //	                                                answers the card's handle
 //	card:set(text)     the panel shows text now
 //	card:close()       the panel closes and the card ends: set and close then do nothing
 //	card:open()        true while this is the panel's card and the panel is open
-//	autodoc.ui.charts()   whether this window draws a vega-lite fence as a chart
+//	autodoc.ui.charts()   whether a card draws a vega-lite fence as a chart: in a window and in a
+//	                      terminal alike (cardpage.go), where cards are shown
 //	autodoc.ui.width(s)   the terminal columns s takes, for padding text to line up
 //	autodoc.app.stats()   the app's own process, keyed as sys.stats answers the daemon's
 //
@@ -56,6 +58,7 @@ type cardHost interface {
 	appStats() procstat.Stats
 	appVersion() string
 	native() bool
+	cardText(text string) // the card's text set: a terminal's card page draws it (cardpage.go)
 }
 
 // bindCard gives the engine ui.card, ui.charts and app.stats: ui is the engine's autodoc.ui.
@@ -97,6 +100,7 @@ func (s *scripting) luaCard(L *lua.LState) int {
 	s.card = c
 	s.c.Set("App.luaCardTitle", cmp.Or(lua.LVAsString(spec.RawGetString("title")), "card"))
 	s.c.Set("App.luaCardText", lua.LVAsString(spec.RawGetString("text")))
+	h.cardText(lua.LVAsString(spec.RawGetString("text")))
 	if h.panelOpen(luaCardPanel) {
 		s.armCard() // open already: no Opened comes, so this card's chain starts here
 	} else {
@@ -133,6 +137,9 @@ func (s *scripting) cardSet(L *lua.LState) int {
 	text := L.CheckString(2)
 	if s.handleCard(L) != nil {
 		s.c.Set("App.luaCardText", text)
+		if h := s.cardHost(); h != nil {
+			h.cardText(text)
+		}
 	}
 	return 0
 }
@@ -206,7 +213,7 @@ func luaWidth(L *lua.LState) int {
 
 func (s *scripting) luaCharts(L *lua.LState) int {
 	h := s.cardHost()
-	L.Push(lua.LBool(h != nil && h.native()))
+	L.Push(lua.LBool(h != nil)) // a window's Editor draws a card's charts, a terminal's card page (cardpage.go)
 	return 1
 }
 
