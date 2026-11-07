@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image/color"
+	"os"
 	"strings"
 	"testing"
 
@@ -179,4 +180,59 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 	// f: every link, the title saying so
 	r.keys(t, key('f'))
 	r.s.WaitFor(t, "every link followed", func(s string) bool { return strings.Contains(s, "every link") })
+}
+
+// TestATerminalsGlobeMapSettingsEditItsGroups: Relations › GlobeMap settings… opens in a terminal,
+// the window's dialog less the rows cells can't use (dots, pace, colours): its groups listed, and an
+// edit there is written to the graph file and drawn at once; turning its names off leaves only the
+// selected document's name on the map.
+func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
+	kb := groupsKB(t, "[[globemap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\n")
+	d := startManaged(t, map[string]string{"kb": kb})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "kb")
+	r.waitListed(t, 2)
+	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.openGlobeSettings()`) {
+		t.Fatal("a terminal's Relations menu has no GlobeMap settings… item")
+	}
+	g := onLoop(r, func() *cellGlobeMap {
+		for _, f := range r.h.reg.features {
+			if g, ok := f.(*cellGlobeMap); ok {
+				return g
+			}
+		}
+		return nil
+	})
+	onLoop(r, func() bool { g.toggle(); return true })
+	r.s.WaitFor(t, "the GlobeMap built in its groups", func(s string) bool {
+		return strings.Contains(s, "Beta") && onLoop(r, func() bool { return g.cur != nil && g.groupsWS == "kb" })
+	})
+	onLoop(r, func() bool { g.openSettings(); return true })
+	r.s.WaitFor(t, "the settings, the group listed", func(s string) bool {
+		return strings.Contains(s, "GlobeMap settings") && strings.Contains(s, "path:notes/  #edc948")
+	})
+	if s := r.s.String(); strings.Contains(s, "dot size") || strings.Contains(s, "settling speed") {
+		t.Fatalf("a terminal's GlobeMap settings show a window's rows:\n%s", s)
+	}
+	t.Logf("the settings:\n%s", r.s)
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "the settings closed", func(s string) bool { return !strings.Contains(s, "GlobeMap settings") })
+
+	onLoop(r, func() bool { g.editor.setColour("#123456"); return true })
+	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
+	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
+	if c := onLoop(r, func() color.NRGBA { return g.groups.list[0].Colour }); c != hexColour(0x123456) {
+		t.Fatalf("the map's group colour %v; want the edit's", c)
+	}
+
+	// names off: the selected document's name alone
+	sel := onLoop(r, func() string { return g.cur.m.label(g.selected) })
+	other := "Beta"
+	if sel == "Beta" {
+		other = "Alpha"
+	}
+	onLoop(r, func() bool { core{r.h}.SetPref(prefGlobeNames, "false"); return true })
+	r.s.WaitFor(t, "only the selected document named", func(s string) bool {
+		return strings.Contains(s, " "+sel+" ") && !strings.Contains(s, " "+other+" ")
+	})
 }

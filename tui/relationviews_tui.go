@@ -24,12 +24,25 @@ func (h *Host) relationViewFeatures() []Feature {
 	return h.relationViews
 }
 
-// relationViewChoices are the Mindmap's settings' choosers (language.go's choiceLabels): a terminal
-// has no GlobeMap.
-func relationViewChoices() map[string][]string { return mindChoices() }
+// relationViewChoices are the GlobeMap's and the Mindmap's settings' choosers (language.go's
+// choiceLabels).
+func relationViewChoices() map[string][]string {
+	out := mindChoices()
+	out["App.globeFilters"] = globeFilterNames()
+	return out
+}
 
-// openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build.
-func (h *Host) openGlobeSettings() { h.notify(h.globeSettingsElsewhereNotice()) }
+// openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build: the
+// GlobeMap's settings, the terminal's.
+func (h *Host) openGlobeSettings() {
+	for _, f := range h.relationViewFeatures() {
+		if g, ok := f.(*cellGlobeMap); ok {
+			g.openSettings()
+			return
+		}
+	}
+	h.notify(h.globeSettingsElsewhereNotice())
+}
 
 // relationViewTypes are their views' QML types: the Mindmap's view joins its feature.
 func (h *Host) relationViewTypes() []tuidecl.Type {

@@ -6,6 +6,41 @@ import graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 // simulation that places a workspace's documents (golib graph/layout), which a window's GlobeMap
 // draws as it settles (globemap_gui.go) and a terminal's once settled, in Braille (globemap_cells.go).
 
+// The GlobeMap's settings both builds keep: whether it names the documents in view, and the links
+// it opens following (a window's keep more, globesettings_gui.go).
+const (
+	prefGlobeNames  = "tui.globemap.names"
+	prefGlobeFilter = "tui.globemap.filter"
+)
+
+// globeFilterPref is the filter the preferences open the map with: globeFilters' index.
+func globeFilterPref(c Core) int {
+	for i, f := range globeFilters {
+		if f.key == c.Prefs().Value(prefGlobeFilter) {
+			return i
+		}
+	}
+	return 0
+}
+
+// globeFilterNames are the filters' names, as the settings' chooser lists them.
+func globeFilterNames() []string {
+	out := make([]string, len(globeFilters))
+	for i, f := range globeFilters {
+		out[i] = f.name
+	}
+	return out
+}
+
+// globeFilterKeys are the filters' stored names.
+func globeFilterKeys() []string {
+	out := make([]string, len(globeFilters))
+	for i, f := range globeFilters {
+		out[i] = f.key
+	}
+	return out
+}
+
 // globeLimits bound a build: a knowledge base of twenty thousand documents.
 var globeLimits = graphlayout.Limits{MaxNodes: 20000, MaxEdges: 200000, MaxWork: 2_000_000_000}
 

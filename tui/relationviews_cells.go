@@ -19,6 +19,7 @@ func cellRelationViews(h *Host) []Feature {
 
 // cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.
 const cellRelationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
+            MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }
             MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }
             MenuItem { text: qsTrId("autodoc.gui.relations.mindmap_settings"); onTriggered: App.openMindmapSettings() }
 `
@@ -54,8 +55,8 @@ func inlineDialog(file, id string) string {
 }
 
 // cellRelationViewsQML is the terminal GlobeMap's and Mindmap's panels, each a large float in the
-// middle until the user moves or sizes it, as the window's are, and the Mindmap's settings, the
-// window's dialog.
+// middle until the user moves or sizes it, as the window's are, and their settings, the window's
+// dialogs.
 var cellRelationViewsQML = `    // the GlobeMap in cells (globemap_cells.go): the workspace's documents and their links, in Braille
     Panel {
         id: globeMap
@@ -92,4 +93,4 @@ var cellRelationViewsQML = `    // the GlobeMap in cells (globemap_cells.go): th
             id: mindmapView
         }
     }
-` + inlineDialog("MindmapSettings.qml", "mindmapSettings")
+` + inlineDialog("GlobeMapSettings.qml", "globeMapSettings") + inlineDialog("MindmapSettings.qml", "mindmapSettings")

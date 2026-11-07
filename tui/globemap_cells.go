@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"maps"
 	"math"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
@@ -24,6 +25,8 @@ import (
 // Enter opens it. H J K L and Shift with the arrows pan, + and - zoom, 0 fits it again, f cycles the
 // links it follows, g shows or hides the legend (the window's l is a direction here); a press on a
 // document opens it, the wheel zooms (docs/decisions/editor.md#the-globemap-in-a-terminal).
+// Relations › GlobeMap settings… is the window's dialog less what cells can't use: whether it names
+// the documents, the links it opens following, and its groups (groupeditor.go).
 
 // cellGlobeNames is the most documents in view whose names are drawn beside their dots.
 const cellGlobeNames = 24
@@ -48,8 +51,9 @@ type cellGlobeMap struct {
 	status    string // what a load says, a catalog id statusArg (and statusN) fill; "" none
 	statusArg string
 	statusN   int
-	store     *graphStore // the workspaces' graph files: the groups; nil for none
-	groups    *relGroups  // groupsWS's groups: each document's colour
+	store     *graphStore  // the workspaces' graph files: the groups; nil for none
+	editor    *groupEditor // the settings' groups
+	groups    *relGroups   // groupsWS's groups: each document's colour
 	groupsWS  string
 	view      *cellGlobeView
 	selected  int     // a document of cur, by its index in cur.m.Nodes; -1 none
@@ -62,6 +66,8 @@ type cellGlobeMap struct {
 
 func newCellGlobeMap(c Core, store *graphStore) *cellGlobeMap {
 	g := &cellGlobeMap{c: c, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
+	g.editor = &groupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
+		ground: func() color.NRGBA { return g.ground }}
 	g.opens = func(ws, path string) {
 		g.c.HidePanel(globeMapPanelID) // hidden, not closed, as the window's: the dock shows it again
 		g.c.OpenRef(ws, path)
@@ -75,7 +81,7 @@ func (g *cellGlobeMap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
 		Edge: func(prefs) string { return "center" },
 		Opened: func(PanelHost) {
-			g.open = true
+			g.open, g.filter = true, globeFilterPref(g.c) // it opens following the links its settings choose
 			g.load()
 		},
 		Closed: func(c PanelHost) {
@@ -85,14 +91,80 @@ func (g *cellGlobeMap) Panels() []PanelSpec {
 		}}}
 }
 
-func (g *cellGlobeMap) State() map[string]any { return map[string]any{"App.globeMapTitle": "GlobeMap"} }
+func (g *cellGlobeMap) Prefs() []PrefSpec {
+	return []PrefSpec{
+		ValuePref(prefGlobeNames, "true", []string{"true", "false"}).chooser("App.globeNamesIndex", "App.setGlobeNames").
+			then(func(prefs) { g.dirty() }),
+		ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).chooser("App.globeFilterIndex", "App.setGlobeFilter").
+			then(func(prefs) { g.filterChosen() }),
+	}
+}
+
+// filterChosen: the map shown follows the links chosen in its settings.
+func (g *cellGlobeMap) filterChosen() {
+	if f := globeFilterPref(g.c); g.open && f != g.filter {
+		g.filter = f
+		g.load()
+	}
+}
+
+// globeWindowSources are the settings dialog's sources and commands for what only a window's
+// GlobeMap has (a theme, dots, pace, colours): its rows hide in a terminal, and these stand in.
+var globeWindowSources = []string{"App.globeThemeIndex", "App.globeDotsIndex", "App.globeSpeedIndex"}
+
+// State is the panel's heading and the settings' sources.
+func (g *cellGlobeMap) State() map[string]any {
+	st := g.editor.state()
+	maps.Copy(st, map[string]any{
+		"App.globeMapTitle": "GlobeMap", "App.globeSettingsError": "",
+		"App.globeThemes": choices(), "App.globeDotSizes": choices(), "App.globeSpeeds": choices(),
+		"App.globeFilters":     choiceModel(g.c, "App.globeFilters"),
+		"App.globeOtherColour": "", "App.globeBodyLinkColour": "", "App.globeSupersessionLinkColour": "",
+		"App.globeRelationLinkColour": "", "App.globeRingColour": "",
+	})
+	for _, src := range globeWindowSources {
+		st[src] = 0
+	}
+	return st
+}
 
 func (g *cellGlobeMap) Commands() map[string]Command {
-	return map[string]Command{"App.toggleGlobeMap": none(g.toggle)}
+	c := g.editor.commands()
+	c["App.toggleGlobeMap"] = none(g.toggle)
+	c["App.openGlobeSettings"] = none(g.openSettings)
+	for _, name := range []string{"App.setGlobeTheme", "App.setGlobeDots", "App.setGlobeSpeed"} {
+		c[name] = oneNumber("a row", func(int) {}) // a window's alone: its row hides here
+	}
+	c["App.setGlobeColour"] = twoStrings("a colour's key and #rrggbb", func(string, string) {})
+	return c
 }
 
 func (g *cellGlobeMap) Catalog() []Entry {
-	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle)}
+	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
+		builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
+}
+
+// openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap…: the workspace's
+// groups, read first when this workspace's are not yet.
+func (g *cellGlobeMap) openSettings() {
+	ws := g.c.Workspace()
+	g.c.Open("globeMapSettings")
+	if ws == "" || g.groupsWS == ws {
+		g.editor.show("")
+		return
+	}
+	var types []string
+	if g.cur != nil && g.cur.ws == ws {
+		types = g.cur.m.Types
+	}
+	g.readGroups(ws, types)
+}
+
+// groupsEdited draws in list: the settings' edit.
+func (g *cellGlobeMap) groupsEdited(list []relGroup) {
+	gs := newRelGroups(list)
+	g.groups = &gs
+	g.dirty()
 }
 
 func (g *cellGlobeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
@@ -192,9 +264,9 @@ func (g *cellGlobeMap) readGroups(ws string, types []string) {
 		if ws != g.c.Workspace() {
 			return
 		}
-		gs := newRelGroups(list)
-		g.groups, g.groupsWS = &gs, ws
-		g.dirty()
+		g.editor.listed(ws, types, list)
+		g.groupsWS = ws
+		g.groupsEdited(list)
 	})
 }
 
@@ -481,7 +553,7 @@ func (v *cellGlobeView) Render(s tuicore.Surface) {
 		taken[[2]int{x, y}] = true
 		name(g.selected, page.Reverse(true))
 	}
-	if inView <= cellGlobeNames {
+	if inView <= cellGlobeNames && g.c.Prefs().Value(prefGlobeNames) != "false" {
 		for i := range g.cur.at {
 			if i != g.selected && g.inView(i) {
 				name(i, page.Foreground(style.TokenTextMuted))
