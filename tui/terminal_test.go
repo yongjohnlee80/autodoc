@@ -752,9 +752,9 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 	}
 }
 
-// TestF11AndSPCMToggleMaximize: F11 maximizes the terminal panel and restores it, from the page (the
-// terminal opened last); SPC M does the same; the tab menu's row follows, Maximize and Restore.
-func TestF11AndSPCMToggleMaximize(t *testing.T) {
+// TestF11AndSPCZToggleMaximize: F11 maximizes the terminal panel and restores it, from the page (the
+// terminal opened last); SPC z does the same; the tab menu's row follows, Maximize and Restore.
+func TestF11AndSPCZToggleMaximize(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -774,18 +774,18 @@ func TestF11AndSPCMToggleMaximize(t *testing.T) {
 	r.keys(t, f11)
 	r.s.WaitFor(t, "F11 restored it", func(string) bool { return !maximized() })
 
-	r.leader(t, 'M')
-	r.s.WaitFor(t, "SPC M maximized it from the page", func(string) bool { return maximized() })
+	r.leader(t, 'z')
+	r.s.WaitFor(t, "SPC z maximized it from the page", func(string) bool { return maximized() })
 	if got := label(); got != "Restore" {
-		t.Errorf("maximized by SPC M, the menu reads %q", got)
+		t.Errorf("maximized by SPC z, the menu reads %q", got)
 	}
-	r.leader(t, 'M')
-	r.s.WaitFor(t, "SPC M restored it", func(string) bool { return !maximized() })
+	r.leader(t, 'z')
+	r.s.WaitFor(t, "SPC z restored it", func(string) bool { return !maximized() })
 }
 
-// TestSPCMReachesTheNewestPanelStillOpen: the terminal opened, then the agents opened and hidden,
-// the keyboard on the page: SPC M maximizes the terminal, the newest of them still open.
-func TestSPCMReachesTheNewestPanelStillOpen(t *testing.T) {
+// TestSPCZReachesTheNewestPanelStillOpen: the terminal opened, then the agents opened and hidden,
+// the keyboard on the page: SPC z maximizes the terminal, the newest of them still open.
+func TestSPCZReachesTheNewestPanelStillOpen(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -795,16 +795,16 @@ func TestSPCMReachesTheNewestPanelStillOpen(t *testing.T) {
 	r.s.WaitFor(t, "the agents hidden", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
 	onLoop(r, func() bool { return r.h.p.Call("editor", "forceActiveFocus") == nil })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
-	r.leader(t, 'M')
+	r.leader(t, 'z')
 	r.s.WaitFor(t, "the terminal maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) })
 }
 
-// TestSPCMWithNoPanelOpenSaysWhatItMaximizes: neither the terminal nor the agents open, SPC M
+// TestSPCZWithNoPanelOpenSaysWhatItMaximizes: neither the terminal nor the agents open, SPC z
 // maximizes nothing and says which panels it is for.
-func TestSPCMWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
+func TestSPCZWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	r.leader(t, 'M')
+	r.leader(t, 'z')
 	r.s.WaitFor(t, "the notice", func(string) bool {
 		return r.noticed("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
 	})
@@ -814,7 +814,7 @@ func TestSPCMWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 }
 
 // TestMaximizePanelPrefersThePanelWithTheKeyboard: the agents opened, then the terminal, the
-// keyboard back in the agents: maximizePanel (what F11 and SPC M run; TestF11AndSPCMToggleMaximize
+// keyboard back in the agents: maximizePanel (what F11 and SPC z run; TestF11AndSPCZToggleMaximize
 // presses the keys) maximizes the agents, the panel with the keyboard, not the terminal opened
 // last. A Drawer's change that is not a maximize leaves Restore as it was.
 func TestMaximizePanelPrefersThePanelWithTheKeyboard(t *testing.T) {
@@ -925,7 +925,7 @@ func panelHeight(screen, title string) int {
 }
 
 // TestARefusedMaximizeSaysWhatItRefused: with a modal dialog over the page (Theme and font…), the
-// terminal's Drawer refuses a window operation from outside it, so F11 and SPC M's maximizePanel
+// terminal's Drawer refuses a window operation from outside it, so F11 and SPC z's maximizePanel
 // cannot maximize the panel: what was refused is kept and shown, naming the operation and the panel
 // (Maximize, docked; Restore, maximized), and the panel stays as it was.
 func TestARefusedMaximizeSaysWhatItRefused(t *testing.T) {

@@ -226,7 +226,7 @@ var windowKeys = []Key{
 	{Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"},
 	{Seq: "Ctrl+W", Show: "Ctrl+W", Run: "App.pickWorkspace()"},
 	{Seq: "Ctrl+Q", Show: "Ctrl+Q", Run: "App.quit()"},
-	// the terminal's or the agents' panel maximized or restored, from inside it too (SPC M off it)
+	// the terminal's or the agents' panel maximized or restored, from inside it too (SPC z off it)
 	{Seq: "F11", Show: "F11", Run: "App.maximizePanel()"},
 	// the terminal's or the agents' next or previous tab, from inside it (Host.cyclePanelTab); the
 	// TUI tells Ctrl+Tab from Tab only with kitty's keyboard protocol, elsewhere it is Tab
@@ -272,13 +272,14 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
 		{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
 		{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},
+		{Seq: "Shift+M", Show: "M", Does: "the Mindmap", Run: "App.toggleMindmap()"},
 	}),
 	inGroup(groupPanels, []Key{
 		{Seq: "e", Show: "e", Does: "the explorer", Run: "App.toggleExplorer()"},
 		{Seq: "l", Show: "l", Does: "the links", Run: "App.toggleRelations()"},
 		{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
 		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
-		{Seq: "Shift+M", Show: "M", Does: "maximize panel", Run: "App.maximizePanel()"},
+		{Seq: "z", Show: "z", Does: "maximize panel", Run: "App.maximizePanel()"},
 		{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
 	}),
 	// a opens the agents' card, which their feature brings (agenttabs.go)

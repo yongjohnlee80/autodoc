@@ -67,7 +67,7 @@ func floatState(m map[string][4]float64, specs []PanelSpec) map[string]any {
 var maximizable = []string{"terminal", "agent"}
 
 // toggleMaximize maximizes panel, or restores it: its Drawer's own toggleMaximize. The tab menus'
-// Maximize (Restore), F11 and SPC M all come here.
+// Maximize (Restore), F11 and SPC z all come here.
 func (h *Host) toggleMaximize(panel string) error { return h.p.Call(panel, "toggleMaximize") }
 
 // panelInHand is the terminal or the agents, whichever has the keyboard, else the most recently
@@ -135,7 +135,7 @@ func (h *Host) panelHasKeyboard(panel string) bool {
 	return s != nil && h.paneHasKeyboard(s.View)
 }
 
-// maximizePanel is F11 and SPC M (panel.maximize): the panel in hand (panelInHand).
+// maximizePanel is F11 and SPC z (panel.maximize): the panel in hand (panelInHand).
 func (h *Host) maximizePanel() {
 	target := h.panelInHand()
 	if target == "" {
