@@ -174,7 +174,7 @@ Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page an
 The explorer, the links, the todos, the terminal and the AI agent each open over the page from an edge. Preferences sets the edge each first appears at, and `Escape` or the panel's key again closes it.
 
 - **Every panel moves and resizes**: the explorer, the terminal, the agent, the HTML
-  preview, and in the GUI the GlobeMap and the Mindmap.
+  preview, the Mindmap, and in the GUI the GlobeMap.
   - `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
     with the right button it resizes.
   - A plain drag does it too, in a terminal as in the GUI: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it. A tab or a button on the frame keeps its click.
