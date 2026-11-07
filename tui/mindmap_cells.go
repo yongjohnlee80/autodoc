@@ -143,8 +143,8 @@ func (m *cellMindmap) Catalog() []Entry {
 func (m *cellMindmap) openSettings() {
 	ws := m.c.Workspace()
 	m.c.Open("mindmapSettings")
-	if ws == "" || m.groupsWS == ws {
-		m.editor.show("")
+	if ws == "" || (m.groupsWS == ws && m.editor.ws == ws && !m.editor.loading) {
+		m.editor.show("") // its groups listed already: as they are
 		return
 	}
 	var types []string
