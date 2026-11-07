@@ -10,7 +10,7 @@ flowchart LR
 
 A vista Renderizada continua sendo o editor. Toda linha é editável: a linha sob o cursor mostra o seu Markdown, as outras mostram o resultado. Ctrl+T de novo volta à Bruta.
 
-**Arquivos HTML** perguntam como abrir: **Simplificado**, o texto deles somente leitura, ou **Bruto**, o próprio HTML para editar e salvar. A vista Renderizada de um arquivo HTML bruto é a página dele, desenhada nativamente com as próprias folhas de estilo e imagens: `j k` rolam, e os links abrem notas, arquivos e o navegador.
+**Arquivos HTML** perguntam como abrir: **Simplificado**, o texto deles somente leitura, ou **Bruto**, o próprio HTML para editar e salvar. A vista Renderizada de um arquivo HTML bruto é a página dele: na janela, desenhada nativamente com as próprias folhas de estilo e imagens; num terminal, desenhada em células. `j k` rolam, e os links abrem notas, arquivos e o navegador.
 
 **Arquivo › Pré-visualizar HTML** (SPC H) abre a página da nota ao lado do editor, ao vivo enquanto você digita.
 
