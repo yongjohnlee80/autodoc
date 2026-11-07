@@ -57,11 +57,11 @@ func TestTheTerminalShowsTheBuffersAsTitleRowTabs(t *testing.T) {
 	}
 	r.press(t, ax, y)
 	r.s.WaitFor(t, "a.md shown by its tab", func(string) bool { return r.file().path == "a.md" })
-	r.keys(t, tuicore.KeyEvent{Code: 'L'})
-	r.s.WaitFor(t, "L shows b.md", func(string) bool { return r.file().path == "b.md" })
-	if strip := onLoop(r, func() string { return r.h.bufferStrip().Active() }); strip != onLoop(r, func() string { return tabID(r.h.active) }) {
-		t.Fatalf("after L the strip's active tab is %q: want the shown buffer's", strip)
-	}
+	// switched elsewhere (SPC b 2, the picker, H and L in Vim's keys), the tabs follow
+	onLoop(r, func() bool { r.h.showBufferAt(2); return true })
+	r.s.WaitFor(t, "b.md shown, its tab active", func(string) bool {
+		return r.file().path == "b.md" && onLoop(r, func() bool { return r.h.bufferStrip().Active() == tabID(r.h.active) })
+	})
 }
 
 // A press on the shown buffer's × closes it: its tab goes, and the buffer before it is shown.
@@ -95,7 +95,7 @@ func TestTheTitleRowTabsScrollInANarrowRoom(t *testing.T) {
 	}
 	d := startDaemon(t, map[string][]string{"kb": files})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 70, 20)
-	r.waitAttached(t, "kb")
+	r.ready(t) // 70 columns leave the status line no room for the workspace's name
 	r.waitListed(t, len(names))
 	for _, p := range names {
 		onLoop(r, func() bool { r.h.openPath(p); return true })
