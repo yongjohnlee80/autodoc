@@ -165,8 +165,8 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 		r.s.WaitFor(t, theme+": the pane's code and diagram", func(string) bool {
 			snap := r.s.Backend.Snapshot()
 			px, py, ok := r.inPane("func main()")
-			ex, ey, eok := find(snap, "func main()")
-			if !ok || !eok || ex >= px || !r.paneHas("Start", "Finish") {
+			ex, ey, eok := r.leftOfPane("func main()") // the editor's page: the pane may draw it a row higher
+			if !ok || !eok || !r.paneHas("Start", "Finish") {
 				return false
 			}
 			kw = snap[py][px].Attrs.FG
@@ -227,6 +227,20 @@ func (r *running) paneText() string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// leftOfPane finds text in the cells left of the pane's border: the editor's.
+func (r *running) leftOfPane(text string) (int, int, bool) {
+	snap := r.s.Backend.Snapshot()
+	left, _, ok := find(snap, "┌ preview")
+	if !ok {
+		return 0, 0, false
+	}
+	beside := make([][]tuicore.Cell, len(snap))
+	for y, row := range snap {
+		beside[y] = row[:min(left, len(row))]
+	}
+	return find(beside, text)
 }
 
 // inPane finds text in the pane's cells (right of its border's corner: the editor beside it may
