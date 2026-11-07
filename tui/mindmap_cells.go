@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"maps"
 
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -21,14 +22,25 @@ import (
 // arrows go to the nearest box that way, Enter opens its document, Ctrl+d and Ctrl+u scroll. A
 // document wears its group's outline and colour, the window's groups (groups.go), kept in the
 // workspace's graph file (graphstore.go); a document in no group is a rounded box, the root a bang.
-// Each colour is made legible on the page it is painted on (onGround), whatever the theme. The map
-// opens at the depth its settings choose (tui.mindmap.depth), as the window's does.
+// Each colour is made legible on the page it is painted on (onGround), whatever the theme.
+// Relations › Mindmap settings… is the window's dialog (qmlrelations/MindmapSettings.qml) less its
+// theme: the depth the map opens at (tui.mindmap.depth) and the groups (groupeditor.go).
 
 // The Mindmap's settings, in either build: the window's choose its theme too (mindsettings_gui.go).
 const (
 	prefMindTheme = "tui.mindmap.theme"
 	prefMindDepth = "tui.mindmap.depth"
 )
+
+// mindChoices are the Mindmap's settings' fixed choosers, by their App.* source (language.go's
+// choiceLabels): each row's key its English, its label in the UI's language.
+func mindChoices() map[string][]string {
+	shapes := make([]string, len(mindShapes))
+	for i, s := range mindShapes {
+		shapes[i] = s.name
+	}
+	return map[string][]string{"App.mindDepths": {"one link out", "two links out"}, "App.mindShapeChoices": shapes}
+}
 
 // mindDepth is the depth the Mindmap's settings open it at: 1, or 2.
 func mindDepth(c Core) int {
@@ -65,6 +77,7 @@ type cellMindmap struct {
 	x0, y0    int                   // the scroll: the grid's cell at the view's top left
 	opens     func(ws, path string) // Enter's: the panel hidden, the document opened
 	store     *graphStore           // the workspaces' graph files: the groups; nil for none
+	editor    *groupEditor          // the settings' groups
 	groups    *relGroups            // groupsWS's groups: each document's outline and colour
 	groupsWS  string
 	ground    color.NRGBA // the page's background, as last painted: what new groups are legible on
@@ -72,6 +85,8 @@ type cellMindmap struct {
 
 func newCellMindmap(c Core, store *graphStore) *cellMindmap {
 	m := &cellMindmap{c: c, depth: 1, store: store, ground: themeGround(nil)}
+	m.editor = &groupEditor{c: c, store: store, view: viewMindmap, name: "mind", shapes: true,
+		changed: m.groupsEdited, ground: func() color.NRGBA { return m.ground }}
 	m.opens = func(ws, path string) {
 		m.c.HidePanel(mindmapPanelID) // hidden, not closed, as the window's: the dock shows it again
 		m.c.OpenRef(ws, path)
@@ -96,17 +111,57 @@ func (m *cellMindmap) Panels() []PanelSpec {
 }
 
 func (*cellMindmap) Prefs() []PrefSpec {
-	return []PrefSpec{ValuePref(prefMindDepth, "1", []string{"1", "2"})}
+	return []PrefSpec{ValuePref(prefMindDepth, "1", []string{"1", "2"}).chooser("App.mindDepthIndex", "App.setMindDepth")}
 }
 
-func (m *cellMindmap) State() map[string]any { return map[string]any{"App.mindmapTitle": "Mindmap"} }
+// State is the panel's heading and the settings' sources: the theme chooser, which a terminal
+// hides, has no rows.
+func (m *cellMindmap) State() map[string]any {
+	st := m.editor.state()
+	maps.Copy(st, map[string]any{
+		"App.mindmapTitle": "Mindmap", "App.mindThemes": choices(), "App.mindThemeIndex": 0,
+		"App.mindDepths": choiceModel(m.c, "App.mindDepths"), "App.mindShapeChoices": choiceModel(m.c, "App.mindShapeChoices"),
+	})
+	return st
+}
 
 func (m *cellMindmap) Commands() map[string]Command {
-	return map[string]Command{"App.toggleMindmap": none(m.toggle)}
+	c := m.editor.commands()
+	c["App.toggleMindmap"] = none(m.toggle)
+	c["App.openMindmapSettings"] = none(m.openSettings)
+	c["App.setMindTheme"] = oneNumber("a row", func(int) {}) // a terminal's map is in the page's theme
+	return c
 }
 
 func (m *cellMindmap) Catalog() []Entry {
-	return []Entry{builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle)}
+	return []Entry{builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
+		builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
+}
+
+// openSettings is Relations › Mindmap settings…: the workspace's groups, read first when this
+// workspace's are not yet (the page's neighbourhood names the schema's types).
+func (m *cellMindmap) openSettings() {
+	ws := m.c.Workspace()
+	m.c.Open("mindmapSettings")
+	if ws == "" || (m.groupsWS == ws && m.editor.ws == ws && !m.editor.loading) {
+		m.editor.show("") // its groups listed already: as they are
+		return
+	}
+	var types []string
+	if m.cur != nil && m.cur.root.ws == ws {
+		types = m.cur.m.Types
+	}
+	m.editor.loadingFor(ws) // not the last workspace's groups while ws's are read
+	m.readGroups(ws, types)
+}
+
+// groupsEdited lays the map out again in list: the settings' edit.
+func (m *cellMindmap) groupsEdited(list []relGroup) {
+	gs := newRelGroups(list)
+	m.groups = &gs
+	if m.open {
+		m.load()
+	}
 }
 
 func (m *cellMindmap) toggle() { m.c.TogglePanel(mindmapPanelID) }
@@ -185,11 +240,9 @@ func (m *cellMindmap) readGroups(ws string, types []string) {
 		if ws != m.c.Workspace() {
 			return
 		}
-		gs := newRelGroups(list)
-		m.groups, m.groupsWS = &gs, ws
-		if m.open {
-			m.load()
-		}
+		m.editor.listed(ws, types, list)
+		m.groupsWS = ws
+		m.groupsEdited(list)
 	})
 }
 
