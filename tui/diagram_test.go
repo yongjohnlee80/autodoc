@@ -52,7 +52,8 @@ func TestAnEmbeddedDiagramIsADiagramAtItsLine(t *testing.T) {
 
 // The diagram view shows the .mmd file a note embeds when the cursor is on the embed's line, read
 // beside the note on disk, as File › Preview Mermaid diagram and the editor's View diagram do;
-// that menu item is enabled there.
+// that menu item is enabled there. It shows as its source, an image, or, on a terminal that shows
+// no image, drawn in characters.
 func TestTheDiagramViewShowsTheEmbedUnderTheCursor(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	dir := filepath.Dir(abs)
@@ -78,7 +79,10 @@ func TestTheDiagramViewShowsTheEmbedUnderTheCursor(t *testing.T) {
 	r.s.WaitFor(t, "the embedded diagram shown", func(string) bool {
 		return onLoop(r, func() bool {
 			text, _ := r.h.p.Tree().Source("App.diagramText")
-			return strings.Contains(text.Raw, "embedded --> shown") || r.h.lastDiagramImage()
+			if strings.Contains(text.Raw, "embedded --> shown") || r.h.lastDiagramImage() {
+				return true
+			}
+			return strings.HasPrefix(r.h.diagramHelpText, "Drawn natively")
 		})
 	})
 }

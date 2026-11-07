@@ -45,7 +45,7 @@ func TestATerminalWithoutImagesDrawsTheDiagramInCharacters(t *testing.T) {
 	for _, theme := range []string{"sepia", "dark"} {
 		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
 		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
-		r.h.p.Post(func() { r.h.previewDiagram() })
+		r.h.p.Post(func() { r.h.diagramHelpText = ""; r.h.previewDiagram() }) // no help left from the last: this preview's alone
 		r.s.WaitFor(t, theme+": the diagram drawn in characters", func(string) bool { return r.nativeShown() })
 		if help := r.diagramHelp(); !strings.Contains(help, "Drawn natively, as mermaid.js is not") || !strings.Contains(help, "does not draw images") {
 			t.Fatalf("%s: help %q; want it drawn natively, saying the terminal draws no images", theme, help)
@@ -89,7 +89,7 @@ func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
 	r.closeDiagram(t)
 	r.s.WaitFor(t, "the image gone", func(string) bool { return len(r.s.Backend.Images()) == 0 })
 
-	r.h.p.Post(func() { r.h.setMermaidEngine("native"); r.h.previewDiagram() })
+	r.h.p.Post(func() { r.h.setMermaidEngine("native"); r.h.diagramHelpText = ""; r.h.previewDiagram() })
 	r.s.WaitFor(t, "the native engine's drawing", func(string) bool { return r.nativeShown() })
 	if help := r.diagramHelp(); !strings.Contains(help, "Drawn natively (File › Preview option)") {
 		t.Fatalf("the native engine: help %q", help)
@@ -98,7 +98,7 @@ func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
 
 	r.h.p.Post(func() { r.h.openPath("bad.md") })
 	r.waitFile(t, "bad.md")
-	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.h.p.Post(func() { r.h.diagramHelpText = ""; r.h.previewDiagram() })
 	r.placedImage(t)
 	if help := r.diagramHelp(); !strings.Contains(help, "not drawn natively") || !onLoop(r, func() bool { return r.h.diagramImage }) {
 		t.Fatalf("a block golib does not draw, the native engine chosen: help %q; want mermaid.js's image, saying why", help)
