@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// The preview, written to the cache, reads the file's relative links from the file's own folder.
-func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
+// The preview pane's Open in browser writes the note's page, as the editor holds it, to the cache in
+// the theme's colours; the page reads the file's relative links from the file's own folder.
+func TestOpenInBrowserOpensTheThemedPage(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	root := fileDir(t, "n.md", "# On disk\n")
@@ -24,7 +25,7 @@ func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 			return nil
 		}
 		r.h.show(r.h.active, "kb", "n.md", "# Unsaved heading\n\n[other](other.md#s)\n", "version", false)
-		r.h.previewHTML()
+		r.h.openPaneInBrowser()
 	})
 	select {
 	case path := <-opened:
@@ -39,6 +40,6 @@ func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 			t.Fatalf("the preview lacks %s", want)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("HTML preview did not launch browser")
+		t.Fatal("Open in browser did not launch the browser")
 	}
 }

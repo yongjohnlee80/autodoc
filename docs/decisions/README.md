@@ -189,7 +189,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Going to a widget by name](editor.md#going-to-a-widget-by-name)
 - [Open files follow the disk](editor.md#open-files-follow-the-disk)
 - [HTML files open raw or simplified](editor.md#html-files-open-raw-or-simplified)
-- [The native HTML preview](editor.md#the-native-html-preview)
+- [The HTML preview pane](editor.md#the-html-preview-pane)
 - [Where a page's stylesheets and images come from](editor.md#where-a-pages-stylesheets-and-images-come-from)
 - [The rendered view is kept across files](editor.md#the-rendered-view-is-kept-across-files)
 - [CSV and TSV files as editable tables](editor.md#csv-and-tsv-files-as-editable-tables)

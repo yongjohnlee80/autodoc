@@ -271,10 +271,10 @@ In the code: `core/diagram/diagram.go`, `core/index/frontmatter.go`, `rpc/doc.go
 
 The outline and the breadcrumb come from the document's own parse: Markdown and derived documents
 by headings, YAML by key paths, plain text by title. The editor outlines its unsaved text, so a
-heading typed a moment ago is a jump target. Mermaid diagrams and HTML previews render as images in
-a terminal with kitty graphics and a headless browser, offline and in the active theme. Otherwise
-HTML opens in the browser and a diagram shows its source with the reason. A preview always ends as
-an image or its fallback, never blank.
+heading typed a moment ago is a jump target. A Mermaid diagram's preview renders as an image in a
+terminal with kitty graphics and a headless browser, offline and in the active theme. Otherwise it
+shows its source with the reason. A preview always ends as an image or its source, never blank.
+(The HTML preview is a pane in cells: editor.md#the-html-preview-pane.)
 
 In the code: `tui/outline.go`, `tui/preview.go`, `rpc/doc.go`, `core/outline/outline.go`
 

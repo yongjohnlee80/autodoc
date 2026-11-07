@@ -90,7 +90,7 @@ Every file opened is a buffer, and the GUI shows them as tabs. The status line (
   - `s` (or `:b`) switches buffer from a picker, each buffer previewed with its unsaved text. `:b <number>` or `:b <name>` goes straight to one.
   - `b` goes back to the previous document.
 
-AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the GUI's HTML preview pane (`SPC H`) sit beside or over it.
+AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the HTML preview pane (`SPC H`) sit beside or over it.
 
 ### Files anywhere
 
@@ -222,7 +222,7 @@ The page is a window of its own, and the explorer, the terminal, the agent, the 
 6. **The notifications (`SPC h`, Go › Notifications…)**: a dialog listing what happened (a save, the connection, indexing). It is a dialog, not a panel: it has no edge and doesn't move.
 7. **The results (Go › Results)**: a table of rows a plugin returns, such as a query's.
 8. **Plugin cards (`SPC p`)**: a plugin's card, beside the page.
-9. **The HTML preview (`SPC H`)**: under `--gui`, a pane beside the editor, the note's page drawn live as you type. In the terminal, a dialog shows the page as an image when View › Image previews is on, the terminal confirmed kitty graphics, and a headless Chromium or Chrome is there; otherwise the page opens in the browser.
+9. **The HTML preview (`SPC H`)**: a pane beside the editor, the note's page drawn live as you type and following the cursor. Under `--gui` it is drawn natively; in the terminal it is drawn in cells, its diagrams and charts included, with nothing needed on the host (it works over ssh).
 
 The outline (`SPC O`) is a list over the page, not a panel.
 
