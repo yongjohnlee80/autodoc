@@ -9,14 +9,14 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// buffertabs_terminal_test.go: the buffer tabs on the terminal's page, at the left of its frame's
-// title row (buffertabs.go): the window's model, drawn in cells.
+// buffertabs_terminal_test.go: the buffer tabs on the terminal's page, on its frame's bottom border
+// (buffertabs.go): the window's model, drawn in cells; the title row keeps the title.
 
-// titleTab is where the tab labelled label is drawn on the page's frame's title row: the column of
+// frameTab is where the tab labelled label is drawn on the page's frame's bottom border: the column of
 // its × and of its label, and the row; ok is false while it isn't drawn there.
-func (r *running) titleTab(label string) (closeX, x, y int, ok bool) {
+func (r *running) frameTab(label string) (closeX, x, y int, ok bool) {
 	for y, row := range strings.Split(r.s.String(), "\n") {
-		if !strings.Contains(row, "┌") {
+		if !strings.Contains(row, "└") {
 			continue
 		}
 		if j := strings.Index(row, "× "+label); j >= 0 {
@@ -34,10 +34,10 @@ func (r *running) press(t *testing.T, x, y int) {
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
 
-// The terminal shows the buffers as tabs at the left of the page's frame's title row, in opening
-// order, the file's title after them: a press on a tab shows its buffer, and H moves to the one
-// before, the tabs following it.
-func TestTheTerminalShowsTheBuffersAsTitleRowTabs(t *testing.T) {
+// The terminal shows the buffers as tabs on the page's frame's bottom border, in opening order, and
+// no tab on any frame's title row, which keeps the page's title as it was: a press on a tab shows
+// its buffer, and a switch made elsewhere (SPC b 2) moves the tabs' active one with it.
+func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -45,15 +45,20 @@ func TestTheTerminalShowsTheBuffersAsTitleRowTabs(t *testing.T) {
 		r.openByPicker(t, p)
 		r.waitFile(t, p)
 	}
-	r.s.WaitFor(t, "a.md's and b.md's tabs on the title row", func(string) bool {
-		_, _, ya, oka := r.titleTab("a.md")
-		_, _, yb, okb := r.titleTab("b.md")
+	r.s.WaitFor(t, "a.md's and b.md's tabs on the bottom border", func(string) bool {
+		_, _, ya, oka := r.frameTab("a.md")
+		_, _, yb, okb := r.frameTab("b.md")
 		return oka && okb && ya == yb
 	})
-	_, ax, y, _ := r.titleTab("a.md")
-	_, bx, _, _ := r.titleTab("b.md")
+	_, ax, y, _ := r.frameTab("a.md")
+	_, bx, _, _ := r.frameTab("b.md")
 	if ax >= bx {
 		t.Fatalf("a.md's tab at %d, b.md's at %d: want them in opening order", ax, bx)
+	}
+	for _, row := range strings.Split(r.s.String(), "\n") {
+		if strings.Contains(row, "┌") && strings.Contains(row, "× ") {
+			t.Fatalf("a tab on a title row %q: want the tabs on the bottom border alone", row)
+		}
 	}
 	r.press(t, ax, y)
 	r.s.WaitFor(t, "a.md shown by its tab", func(string) bool { return r.file().path == "a.md" })
@@ -65,7 +70,7 @@ func TestTheTerminalShowsTheBuffersAsTitleRowTabs(t *testing.T) {
 }
 
 // A press on the shown buffer's × closes it: its tab goes, and the buffer before it is shown.
-func TestATitleRowTabsCloseClosesTheShownBuffer(t *testing.T) {
+func TestABorderTabsCloseClosesTheShownBuffer(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -73,11 +78,11 @@ func TestATitleRowTabsCloseClosesTheShownBuffer(t *testing.T) {
 		r.openByPicker(t, p)
 		r.waitFile(t, p)
 	}
-	r.s.WaitFor(t, "b.md's tab", func(string) bool { _, _, _, ok := r.titleTab("b.md"); return ok })
-	cx, _, y, _ := r.titleTab("b.md")
+	r.s.WaitFor(t, "b.md's tab", func(string) bool { _, _, _, ok := r.frameTab("b.md"); return ok })
+	cx, _, y, _ := r.frameTab("b.md")
 	r.press(t, cx, y)
 	r.s.WaitFor(t, "b.md closed, a.md shown", func(string) bool {
-		_, _, _, still := r.titleTab("b.md")
+		_, _, _, still := r.frameTab("b.md")
 		return !still && r.file().path == "a.md"
 	})
 	if n := onLoop(r, func() int { return len(r.h.buffers) }); n != 1 {
@@ -85,9 +90,9 @@ func TestATitleRowTabsCloseClosesTheShownBuffer(t *testing.T) {
 	}
 }
 
-// In a narrow terminal the tabs scroll between the arrows in the room the title row has, the shown
+// In a narrow terminal the tabs scroll between the arrows in the room the bottom border has, the shown
 // buffer's tab in view, and no tab is wider than terminalTabWidth.
-func TestTheTitleRowTabsScrollInANarrowRoom(t *testing.T) {
+func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
 	files := []string{}
 	names := []string{"one.md", "two.md", "three.md", "four.md", "five.md", "a-rather-long-name-for-a-tab.md"}
 	for _, n := range names {
@@ -103,7 +108,7 @@ func TestTheTitleRowTabsScrollInANarrowRoom(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the tabs scrolled, the shown one's in view", func(screen string) bool {
 		for _, row := range strings.Split(screen, "\n") {
-			if strings.Contains(row, "┌") && strings.Contains(row, "→") && strings.Contains(row, "…") && !strings.Contains(row, "× one.md") {
+			if strings.Contains(row, "└") && strings.Contains(row, "→") && strings.Contains(row, "…") && !strings.Contains(row, "× one.md") {
 				return true
 			}
 		}
@@ -113,14 +118,14 @@ func TestTheTitleRowTabsScrollInANarrowRoom(t *testing.T) {
 	if w := tuicore.StringWidth(label); w > terminalTabWidth-2 {
 		t.Fatalf("the long name's tab %q is %d cells: want at most %d", label, w, terminalTabWidth-2)
 	}
-	if _, _, _, ok := r.titleTab(strings.TrimSuffix(label, " [+]")); !ok {
-		t.Fatalf("the shown buffer's tab %q isn't on the title row:\n%s", label, r.s)
+	if _, _, _, ok := r.frameTab(strings.TrimSuffix(label, " [+]")); !ok {
+		t.Fatalf("the shown buffer's tab %q isn't on the bottom border:\n%s", label, r.s)
 	}
 }
 
 // The tabs read in sepia and in dark: the shown buffer's tab stands apart from the others, its text
 // apart from its own paper, and each theme draws it in its own colours.
-func TestTheTitleRowTabsReadInSepiaAndDark(t *testing.T) {
+func TestTheBorderTabsReadInSepiaAndDark(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 24)
 	r.waitAttached(t, "kb")
@@ -134,8 +139,8 @@ func TestTheTitleRowTabsReadInSepiaAndDark(t *testing.T) {
 		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
 		var active, other tuicore.CellAttrs
 		r.s.WaitFor(t, theme+": the shown tab apart from the other, in this theme's colours", func(string) bool {
-			_, bx, by, okb := r.titleTab("b.md")
-			_, ax, ay, oka := r.titleTab("a.md")
+			_, bx, by, okb := r.frameTab("b.md")
+			_, ax, ay, oka := r.frameTab("a.md")
 			if !okb || !oka {
 				return false
 			}

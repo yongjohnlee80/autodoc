@@ -19,21 +19,21 @@ import (
 // bufferTabWidth cells: a longer name is cut in its middle (bufferTabLabel), and a tab never
 // changes width as tabs open and close or the window resizes (consistent, not re-fitted each
 // time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
-// and →. The terminal has the same strip, the same model, at the left of the page's frame's title row
-// (golib's Editor.TitleTabs, main.qml's titleTabs), the file's title after it and Raw | Rendered at
-// its right; a terminal tab is never wider than terminalTabWidth cells, so a page holds more than two.
+// and →. The terminal has the same strip, the same model, on the page's frame's bottom border
+// (golib's Editor.FrameTabs, main.qml's frameTabs), its full width: the title row keeps the file's
+// title, its badges and breadcrumb, and Raw | Rendered (Johno, 2026-11-07); a terminal tab is never
+// wider than terminalTabWidth cells, so a page holds more than two.
 // :b and the Buffers picker switch too, in both.
 
 // bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
 // its middle there, the same however many tabs are open; its menu's Go to › has the name whole.
 const bufferTabWidth = 32
 
-// terminalTabWidth is bufferTabWidth on the terminal's title row: a page is some 80 to 100 cells, the
-// file's title and Raw | Rendered on the row besides.
+// terminalTabWidth is bufferTabWidth on the terminal's bottom border: a page is some 80 to 100 cells.
 const terminalTabWidth = 20
 
 // tabStripper is an editor with buffer tabs: the window's on its title bar, the terminal's on its
-// frame's title row (golib's Editor.Tabs, in either).
+// frame's bottom border (golib's Editor.Tabs, in either).
 type tabStripper interface{ Tabs() *widget.TabStrip }
 
 // bufferStrip is the editor's strip for the buffers, nil for an editor with none.
