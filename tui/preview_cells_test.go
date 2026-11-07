@@ -104,3 +104,38 @@ func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
 		t.Fatalf("a block golib does not draw, the native engine chosen: help %q; want mermaid.js's image, saying why", help)
 	}
 }
+
+// TestATerminalsSourceWinsOverTheNativeEngine: with the native engine chosen and image previews off,
+// a terminal's preview shows the diagram's source, as image previews off asks; turned off while the
+// native drawing is learned, the source too.
+func TestATerminalsSourceWinsOverTheNativeEngine(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriNo }; return true })
+	r.h.p.Post(func() { r.h.openPath("f.md") })
+	r.waitFile(t, "f.md")
+	r.h.p.Post(func() {
+		r.h.setMermaidEngine("native")
+		r.h.toggleImagePreviews()
+		r.h.diagramHelpText = ""
+		r.h.previewDiagram()
+	})
+	r.s.WaitForText(t, "flowchart LR")
+	if help := r.diagramHelp(); !strings.Contains(help, "image previews are off") || strings.HasPrefix(help, "Drawn natively") {
+		t.Fatalf("native engine, image previews off: help %q; want the source, saying image previews are off", help)
+	}
+	r.closeDiagram(t)
+	// on again, then off in the same turn as the preview: the native drawing learned off the loop
+	// meanwhile gives way to the source
+	r.h.p.Post(func() {
+		r.h.toggleImagePreviews()
+		r.h.diagramHelpText = ""
+		r.h.previewDiagram()
+		r.h.toggleImagePreviews()
+	})
+	r.s.WaitForText(t, "flowchart LR")
+	if help := r.diagramHelp(); strings.HasPrefix(help, "Drawn natively") {
+		t.Fatalf("image previews turned off while the native drawing was learned: help %q; want the source", help)
+	}
+}

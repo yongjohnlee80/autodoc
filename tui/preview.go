@@ -122,6 +122,11 @@ var mermaidEngines = []string{"mermaidjs", "native"}
 // mermaidNative reports whether golib's Mermaid draws the preview's diagrams: the user's choice.
 func (h *Host) mermaidNative() bool { return h.prefs.mermaid == "native" }
 
+// sourceAsked reports whether a terminal's previews are to show a diagram's source: image previews
+// turned off (View › Image previews), whatever engine File › Preview option chooses. A window draws
+// natively all the same.
+func (h *Host) sourceAsked() bool { return !h.native() && !h.prefs.images }
+
 // drawsNatively is what learns, off the loop, whether golib's Mermaid draws a diagram here: a
 // window's engine, or a terminal's.
 func (h *Host) drawsNatively() func(string) error {
@@ -178,15 +183,21 @@ func (h *Host) showDiagram(source string) {
 	// option is the native engine, or where no image can be shown, golib's Mermaid draws it
 	// natively (in a window's pixels, a terminal's characters) where golib draws its type; else
 	// mermaid.js, else its source. A terminal whose image previews are off shows the source, as
-	// asked. Whether golib draws it is learned off the loop: a newer preview, or the dialog closed,
-	// meanwhile withdraws this one (its ticket), and an engine changed meanwhile is the one it is
-	// drawn by
+	// asked, whichever engine is chosen (sourceAsked). Whether golib draws it is learned off the
+	// loop: a newer preview, or the dialog closed, meanwhile withdraws this one (its ticket), and an
+	// engine or a preference changed meanwhile is the one it is drawn by
 	tk := h.ticket(&h.previewGen, TicketLocal)
+	if h.sourceAsked() {
+		h.showDiagramImage(source, "") // no image: the source, saying image previews are off
+		return
+	}
 	draws := h.drawsNatively()
 	if h.mermaidNative() {
 		do(h, func(context.Context) error { return draws(source) }, func(err error) {
 			switch {
 			case !tk.Current():
+			case h.sourceAsked():
+				h.showDiagramImage(source, "")
 			case !h.mermaidNative():
 				h.showDiagramImage(source, "")
 			case err == nil:
@@ -198,13 +209,15 @@ func (h *Host) showDiagram(source string) {
 		return
 	}
 	ok, why := h.imageMode()
-	if ok || (!h.native() && !h.prefs.images) {
+	if ok {
 		h.showDiagramImage(source, "")
 		return
 	}
 	do(h, func(context.Context) error { return draws(source) }, func(err error) {
 		switch {
 		case !tk.Current():
+		case h.sourceAsked():
+			h.showDiagramImage(source, "")
 		case err == nil:
 			h.showDiagramNative(source, why)
 		default:
