@@ -148,6 +148,7 @@ var sqliteSuites = []struct {
 	{"AnAssignmentSaysWhoItReaches", TestAnAssignmentSaysWhoItReaches},
 	{"AnAssignmentWithNothingToSayHasNoReach", TestAnAssignmentWithNothingToSayHasNoReach},
 	{"CrewIsRefusedBelowProtocol54AndBounded", TestCrewIsRefusedBelowProtocol54AndBounded},
+	{"ARefusedAssignmentAnswersItsErrorAndNoReach", TestARefusedAssignmentAnswersItsErrorAndNoReach},
 }
 
 // TestEveryEnvSuiteRunsOnSQLite: a test that builds an env (newEnv, claimed) is in sqliteSuites, so

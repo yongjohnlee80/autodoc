@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
@@ -246,5 +247,29 @@ func TestATaskIsCheckedByTheTodoFormatNotTheKBSchema(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the task indexed %v, diagnosed %v: want indexed and not diagnosed", seen, listed)
 		}
+	}
+}
+
+// TestAnAssignmentsReachIsMailsAnswer: the todo system's reach (assignReach) is mail.Reach's answer
+// from the crew scope, its state as mail names it; with no mail yet there is nothing to resolve
+// with, and mail's own refusal (a name that isn't a bare codename) passes through.
+func TestAnAssignmentsReachIsMailsAnswer(t *testing.T) {
+	ctx := context.Background()
+	if _, err := assignReach(ctx, &moduleDeps{}, "autovim:plugins", "jarvis"); err == nil {
+		t.Fatal("no mail: a reach was answered")
+	}
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	deps := &moduleDeps{store: db, workspaces: rpc.Fixed(rpc.Static(rpc.WorkspaceInfo{Name: "kb", Root: t.TempDir()})), journal: sqlitejournal.New(db), log: logger.Nop{}}
+	modules(deps)
+	r, err := assignReach(ctx, deps, "autovim:plugins", "jarvis")
+	if err != nil || r.State != string(mail.ReachNone) || r.Address != "" || len(r.Candidates) != 0 {
+		t.Fatalf("an unregistered name: %+v, %v; want state none", r, err)
+	}
+	if _, err := assignReach(ctx, deps, "autovim:plugins", "jarvis@mcat"); !errors.Is(err, mail.ErrInvalid) {
+		t.Fatalf("a name that isn't bare: %v; want mail's ErrInvalid", err)
 	}
 }

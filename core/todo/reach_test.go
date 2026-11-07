@@ -172,3 +172,24 @@ func TestCrewIsRefusedBelowProtocol54AndBounded(t *testing.T) {
 		t.Errorf("a crew scope of %d bytes: %v; want ErrInvalid", todo.MaxScope+1, err)
 	}
 }
+
+// A write the verb refuses answers its own error, never a reach: todos.add with no title and
+// todos.assign at a stale rev, crew given to both, so no lookup is made for a task not written.
+func TestARefusedAssignmentAnswersItsErrorAndNoReach(t *testing.T) {
+	e := claimed(t)
+	e.reach = func(crew, name string) (todo.Reach, error) { return todo.Reach{State: todo.ReachOwn}, nil }
+	if out, err := verb(t, e.m, "todos.add").Call(ctx, []any{"kb", map[string]any{"title": "", "assignee": "agent:jarvis"}, "", "autovim:plugins"}); !errors.Is(err, todo.ErrInvalid) || out != nil && out.(todo.Assigned).Reach != nil {
+		t.Errorf("todos.add with no title: %v, %v; want ErrInvalid and no reach", out, err)
+	}
+	added, err := verb(t, e.m, "todos.add").Call(ctx, []any{"kb", map[string]any{"title": "Stale"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := added.(todo.Assigned).Task
+	if _, err := verb(t, e.m, "todos.assign").Call(ctx, []any{"kb", task.ID, task.Rev + "x", "agent:jarvis", "", "", "autovim:plugins"}); !errors.Is(err, todo.ErrStale) {
+		t.Errorf("todos.assign at a stale rev: %v; want ErrStale", err)
+	}
+	if len(e.asked) != 0 {
+		t.Errorf("reach asked %q for writes refused; want none", e.asked)
+	}
+}
