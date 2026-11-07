@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/decl"
@@ -222,7 +223,7 @@ type Host struct {
 	// restart under way that relaunches once the new backend answers, and a quit that relaunches
 	installRecord        func() (install.Record, bool, error)
 	relaunchAfterRestart bool
-	relaunching          bool
+	relaunching          atomic.Bool // set on the loop; read after it has stopped (Run, tests)
 	remember             func(name string)
 	installed            func() (string, error) // Options.Installed
 	browser              func(context.Context, string) error
@@ -685,7 +686,7 @@ func (h *Host) Run(ctx context.Context) error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.relaunching { // About's Update, then Restart now (update.go)
+	if h.relaunching.Load() { // About's Update, then Restart now (update.go)
 		return errors.Join(append([]error{ErrRelaunch, err, keepErr}, h.errs...)...)
 	}
 	return errors.Join(append([]error{err, keepErr}, h.errs...)...)
