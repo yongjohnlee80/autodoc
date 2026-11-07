@@ -1,5 +1,3 @@
-//go:build gui
-
 package tui
 
 import (
@@ -12,7 +10,8 @@ import (
 // groups (groups.go): a row a group, in order; the selected one's query and colour (and, the
 // Mindmap's, outline) as fields; add, remove, move up and down, and add a group for each schema
 // type and folder no group queries. Each edit is saved to the workspace's graph file
-// (graphstore_gui.go) and handed to the view, which draws in it at once.
+// (graphstore.go) and handed to the view, which draws in it at once. A window's GlobeMap and
+// Mindmap have one each; a terminal's Mindmap in cells has its own (mindmap_cells.go).
 
 type groupEditor struct {
 	c       Core
@@ -27,13 +26,23 @@ type groupEditor struct {
 	list  []relGroup
 	types []string // the workspace's schema types, as graph.map last said
 	row   int
+	// loading: ws's groups are being read, and every edit is refused until they are listed, so
+	// nothing is saved into another workspace's file, nor over ws's before its own are read
+	loading bool
+}
+
+// loadingFor binds the editor to ws, whose groups are being read: no rows, and no edits, until
+// they are listed.
+func (e *groupEditor) loadingFor(ws string) {
+	e.ws, e.list, e.row, e.loading = ws, nil, 0, true
+	e.show(e.c.Trf("autodoc.text.mindmap_gui.reading", ws))
 }
 
 func (e *groupEditor) source(s string) string { return "App." + e.name + s }
 
 // listed is the view's groups for ws, as read or edited: the dialog shows them.
 func (e *groupEditor) listed(ws string, types []string, list []relGroup) {
-	e.ws, e.types, e.list = ws, types, list
+	e.ws, e.types, e.list, e.loading = ws, types, list, false
 	e.show("")
 }
 
@@ -71,6 +80,9 @@ func (e *groupEditor) show(note string) {
 
 // edit puts list as the groups: saved, shown, and handed to the view.
 func (e *groupEditor) edit(list []relGroup) {
+	if e.loading {
+		return
+	}
 	e.list = list
 	if e.store != nil && e.ws != "" {
 		e.store.save(e.ws, e.view, list)
@@ -130,6 +142,9 @@ func (e *groupEditor) setShape(i int) {
 // add is a new group after the one selected, a tag's for the user to name, in a colour of the
 // palette none of the groups wears when there is one, legible on the view's ground.
 func (e *groupEditor) add() {
+	if e.loading {
+		return
+	}
 	ground := e.ground()
 	col := onGround(groupPalette[len(e.list)%len(groupPalette)], ground)
 	for _, c := range groupPalette {
@@ -163,10 +178,14 @@ func (e *groupEditor) move(d int) {
 
 // addMissing adds a group for each schema type and folder no group queries.
 func (e *groupEditor) addMissing() {
-	if e.store == nil || e.ws == "" {
+	if e.store == nil || e.ws == "" || e.loading {
 		return
 	}
-	e.store.addMissing(e.ws, e.view, e.list, e.types, e.ground(), func(list []relGroup) {
+	ws := e.ws
+	e.store.addMissing(ws, e.view, e.list, e.types, e.ground(), func(list []relGroup) {
+		if e.ws != ws || e.loading { // bound to another workspace meanwhile: its own groups stand
+			return
+		}
 		e.list = list
 		e.show("")
 		if e.changed != nil {
