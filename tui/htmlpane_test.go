@@ -437,3 +437,40 @@ func TestThePanesKeysPressItsButtons(t *testing.T) {
 	r.keys(t, key('q'))
 	r.s.WaitFor(t, "q closed the pane", func(string) bool { return onLoop(r, func() bool { return !r.h.panelOpen["htmlPane"] }) })
 }
+
+// A chart the pane doesn't draw (a geoshape, outside golib's subset) says so in the page's words
+// for a chart, not a diagram's: the notice a note's page and a card's show (pageNotice). After a
+// language switch, with the pane open, it says it in the new language.
+func TestThePanesUndrawnChartSaysItIsAChart(t *testing.T) {
+	note := "# Map\n\n```vega-lite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"geoshape\"}\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.h.p.Post(r.h.previewHTML)
+	chart := onLoop(r, func() string { return r.h.pageNotice("vega-lite") })
+	diagram := onLoop(r, func() string { return r.h.trf(diagramNoticeID, "vega-lite") })
+	head := func(s string) string { // the sentence's start: a narrow pane wraps the rest
+		rs := []rune(s)
+		return string(rs[:min(len(rs), 16)])
+	}
+	r.s.WaitFor(t, "the pane's chart notice", func(string) bool { _, _, ok := r.inPane(head(chart)); return ok })
+	if _, _, ok := r.inPane(head(diagram)); ok {
+		t.Fatalf("the pane says the chart is a diagram:\n%s", r.paneText())
+	}
+	onLoop(r, func() bool { r.h.setLanguage("ko_KR"); return true })
+	ko := ""
+	r.s.WaitFor(t, "the chart notice in Korean", func(string) bool {
+		ko = onLoop(r, func() string { return r.h.pageNotice("vega-lite") })
+		if ko == chart {
+			return false // the switch hasn't landed
+		}
+		_, _, ok := r.inPane(head(ko))
+		return ok
+	})
+	if _, _, ok := r.inPane(head(onLoop(r, func() string { return r.h.trf(diagramNoticeID, "vega-lite") }))); ok {
+		t.Fatalf("in Korean, the pane says the chart is a diagram:\n%s", r.paneText())
+	}
+	t.Logf("the pane, in Korean:\n%s", r.paneText())
+}
