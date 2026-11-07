@@ -1,5 +1,5 @@
 // OpenHTML.qml — an HTML file is opened: simplified, its derived text read-only as before, or raw,
-// its own HTML to edit (and, in the GUI, its page drawn by Ctrl+T). Simplified takes initial focus:
+// its own HTML to edit (and its page drawn by Ctrl+T, in the GUI and in a terminal). Simplified takes initial focus:
 // Enter opens the file as it always opened.
 Dialog {
     closeOnQ: true
