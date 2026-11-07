@@ -5549,6 +5549,22 @@ LO QUE NECESITA UNA TECLA
         <source>todos: $%1 set (%2)</source>
         <translation>tareas: $%1 fijada (%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>Actualizar: AutoDoc está al día (%1)</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>Actualizar: install-autodoc.sh no instaló este AutoDoc; actualízalo como lo instalaste</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>Actualizar: update.sh terminó con %1; su pestaña en el panel del terminal dice por qué</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>Actualizar</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>cancelar el cambio</translation>
@@ -5906,6 +5922,18 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
     <message id="autodoc.question.todos_vars.clear_the_variable">
         <source>clear the variable?</source>
         <translation>¿borrar la variable?</translation>
+    </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>Más tarde (&amp;l)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>¿reiniciar AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>&amp;Reiniciar ahora</translation>
     </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
@@ -7417,6 +7445,10 @@ La última conexión falló:
         <source>Rerank (%1)</source>
         <translation>Reordenar (%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>Acerca de › Actualizar</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>ya salió %1 (esta es %2): %3</translation>
@@ -7595,6 +7627,10 @@ no cambia nada</translation>
         <source>%1 of %2 · %3</source>
         <translation>%1 de %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1 está instalado (este es %2). ¿Reiniciar ahora? Primero se reinicia el backend y luego AutoDoc se abre de nuevo como %1.</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3 (%4 bytes, %5 tokens estimados; reintento %6)</translation>
@@ -7719,6 +7755,10 @@ no cambia nada</translation>
         <source>AUTHOR: </source>
         <translation>AUTOR: </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>Cerrar (&amp;q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>CONFIGURACIÓN: </translation>
@@ -7734,6 +7774,10 @@ no cambia nada</translation>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>ACTUALIZACIÓN: </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>Act&amp;ualizar</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

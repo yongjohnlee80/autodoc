@@ -134,6 +134,7 @@ func (h *Host) restartConfirmed() {
 		}, func(err error) {
 			if err != nil {
 				h.session.RemoveHandoff()
+				h.relaunchAfterRestart = false
 				h.failed(h.tr("autodoc.notice.restart.restart"), err)
 				if h.mismatchRecovery {
 					h.set("App.mismatchQuestion", h.trf("autodoc.text.restart.restart_failed_retry_or_quit", err.Error()))
@@ -158,6 +159,7 @@ func (h *Host) restartConfirmed() {
 		if err != nil && gen == h.session.Gen() {
 			h.session.RemoveHandoff()
 			h.restartPID, h.restartFrom = 0, ""
+			h.relaunchAfterRestart = false
 			h.failed(h.tr("autodoc.notice.restart.restart_refused"), err)
 		}
 	})

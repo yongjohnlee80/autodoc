@@ -5541,6 +5541,22 @@ WHAT A KEY NEEDS
         <source>todos: $%1 set (%2)</source>
         <translation>할 일: $%1 설정함 (%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>업데이트: AutoDoc이 최신입니다 (%1)</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>업데이트: 이 AutoDoc은 install-autodoc.sh로 설치되지 않았습니다. 설치한 방법으로 업데이트하세요</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>업데이트: update.sh가 %1(으)로 종료되었습니다. 이유는 터미널 패널의 탭에 있습니다</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>업데이트</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>전환 취소</translation>
@@ -5898,6 +5914,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.todos_vars.clear_the_variable">
         <source>clear the variable?</source>
         <translation>변수를 지울까요?</translation>
+    </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>나중에(&amp;l)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>AutoDoc을 다시 시작할까요?</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>지금 다시 시작(&amp;r)</translation>
     </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
@@ -7409,6 +7437,10 @@ The last connect failed:
         <source>Rerank (%1)</source>
         <translation>재순위 (%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>AutoDoc 정보 › 업데이트</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1이(가) 나왔습니다 (현재 %2): %3</translation>
@@ -7587,6 +7619,10 @@ changes nothing</source>
         <source>%1 of %2 · %3</source>
         <translation>%1 / %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1이(가) 설치되었습니다 (현재 %2). 지금 다시 시작할까요? 백엔드가 먼저 다시 시작되고, AutoDoc이 %1(으)로 다시 열립니다.</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3 (%4바이트, 예상 토큰 %5개. %6에 재시도)</translation>
@@ -7711,6 +7747,10 @@ changes nothing</source>
         <source>AUTHOR: </source>
         <translation>만든 이: </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>닫기(&amp;q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>설정: </translation>
@@ -7726,6 +7766,10 @@ changes nothing</source>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>업데이트: </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>업데이트(&amp;u)</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>
