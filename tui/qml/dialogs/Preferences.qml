@@ -65,6 +65,12 @@ Dialog {
                         Text { text: qsTrId("autodoc.dialog.preferences.image_previews"); Layout.preferredWidth: 21 }
                         ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }
                     }
+                    // a surface plugin's pixels in a terminal that shows pictures (pluginsurface_cells.go)
+                    Flex {
+                        direction: Tui.Horizontal
+                        Text { text: qsTrId("autodoc.dialog.preferences.plugin_pixels"); Layout.preferredWidth: 21; toolTipText: "a surface plugin's pixels shown in a terminal that draws pictures (kitty's graphics, image previews on); off, it draws cells. A window always draws them" }
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.pluginPixelsIndex; onActivated: App.setPluginPixelsIndex(index) }
+                    }
                     // a document with two views (HTML): its source raw, or its text simplified
                     Flex {
                         direction: Tui.Horizontal

@@ -1955,6 +1955,10 @@
         <source>page width (40–400)</source>
         <translation>페이지 너비 (40–400)</translation>
     </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>플러그인 픽셀</translation>
+    </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
         <translation>화면</translation>

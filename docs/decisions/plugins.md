@@ -390,12 +390,45 @@ In the code: `plugin/surfaceconn_linux.go`, `plugin/surfacewire.go`, `tui/plugin
 
 In the code: `tui/pluginsurface_linux.go`, `plugin/surface_linux.go`
 
+## Pixel surfaces in a terminal
+
+A terminal that confirmed kitty's graphics protocol shows a surface plugin's pixels too, as a
+window does. It needs View › Image previews on and **Preferences › Plugin pixels** on, which is the
+default; turning either off gives the plugin cells (below). The plugin and AutoDoc share a machine,
+so frames still come over the shared-memory side channel. What crosses to the terminal, over ssh
+too, is the picture: each frame encoded as a PNG off the loop and placed over the card's cells, as
+a diagram preview is. A card keeps one image id, replaced in place, and its picture is deleted when
+the card closes or hides.
+
+- **Newest wins.** One frame is in flight at a time. A frame overtaken while it waits is answered
+  `superseded`, so a slow encoder or link lowers the frame rate and never builds a backlog.
+- **Bounded.** At most 15 frames a second are shown. After a picture of n bytes the next waits
+  n ÷ 4 MiB seconds, so a terminal is sent about 4 MiB a second at most.
+- **PNG at Go's BestSpeed.** Measured on the review machine (Go, 30 frames each), it costs about
+  half the bytes of kitty's own zlib'd raw RGBA (`f=32,o=z`) on picture-like frames, and the bytes
+  are what crosses ssh:
+
+  | frame | PNG BestSpeed | zlib'd RGBA |
+  |---|---|---|
+  | 800×480, UI-like | 62 KiB, 10.8 ms | 78 KiB, 3.8 ms |
+  | 800×480, photo-like | 585 KiB, 33 ms | 1192 KiB, 8 ms |
+  | 1600×960, UI-like | 241 KiB, 39 ms | 302 KiB, 14 ms |
+  | 1600×960, photo-like | 2.1 MiB, 118 ms | 4.0 MiB, 79 ms |
+
+  A card-sized frame encodes well inside 15 frames a second; a large photo-like one shows at a
+  lower rate.
+- **Geometry.** The card's cells at the terminal's cell size in pixels, scale 1, memory RGBA and
+  BGRA frames. The pointer arrives in the same pixels; IME composition does not apply.
+
+In the code: `tui/pluginsurface_cells.go`, `tui/pluginview.go`
+
 ## Surfaces without pixels
 
-The terminal draws no pixels, so `plugin.surface` is never sent there and the plugin draws
-`host.frame` cells as any plugin does. A plugin whose surface is `required` is not opened where
-there are no pixels. In the GUI the card shows its own background and title until the first frame is
-drawn.
+Where no pixels can be shown (a terminal without kitty's graphics, behind a multiplexer that does
+not pass them through, with image previews or Preferences › Plugin pixels off), `plugin.surface` is
+never sent and the plugin draws `host.frame` cells as any plugin does. A plugin whose surface is
+`required` is not opened there. In the GUI the card shows its own background and title until the
+first frame is drawn.
 
 In the code: `tui/pluginsurface_tui.go`, `tui/pluginsurface_other.go`, `tui/pluginview.go`
 

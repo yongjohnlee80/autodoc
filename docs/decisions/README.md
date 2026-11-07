@@ -171,6 +171,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Pixel surfaces](plugins.md#pixel-surfaces)
 - [The surface side channel](plugins.md#the-surface-side-channel)
 - [Surface buffers and generations](plugins.md#surface-buffers-and-generations)
+- [Pixel surfaces in a terminal](plugins.md#pixel-surfaces-in-a-terminal)
 - [Surfaces without pixels](plugins.md#surfaces-without-pixels)
 - [Lab notes](plugins.md#lab-notes)
 - [Plugins that open file types](plugins.md#plugins-that-open-file-types)

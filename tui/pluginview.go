@@ -216,6 +216,10 @@ func (v *pluginView) Render(s tuicore.Surface) {
 	if v.run == nil {
 		return
 	}
+	if v.cellPicturesOf() != nil { // a terminal's surface: its picture covers the card (Image)
+		v.paintCellSurface(sz)
+		return
+	}
 	v.run.mu.Lock()
 	frame := v.run.frame
 	v.run.mu.Unlock()

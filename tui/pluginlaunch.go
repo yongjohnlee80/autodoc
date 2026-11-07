@@ -32,9 +32,11 @@ type launchAsk struct {
 // launchHolder is the grants' holder a plugin's start is: the one its Lua package's grants have.
 func launchHolder(name string) string { return "plugin:" + name }
 
-// Prefs is the refused plugins' list, as the store keeps it: no chooser, the question sets it.
+// Prefs is the refused plugins' list, as the store keeps it (no chooser: the question sets it), and
+// whether a plugin's pixel surface shows in a terminal (pluginsurface_cells.go): on by default.
 func (pl *plugins) Prefs() []PrefSpec {
-	return []PrefSpec{ValuePref(prefPluginLaunchDeclined, "[]", nil)}
+	return []PrefSpec{ValuePref(prefPluginLaunchDeclined, "[]", nil),
+		ValuePref(prefPluginPixels, "true", []string{"true", "false"}).chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex")}
 }
 
 // LaunchConsent is launchConsent, for the plugins (pluginHost).

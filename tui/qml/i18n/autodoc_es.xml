@@ -1955,6 +1955,10 @@
         <source>page width (40–400)</source>
         <translation>ancho de página (40–400)</translation>
     </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>píxeles de plugins</translation>
+    </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
         <translation>pantalla</translation>
