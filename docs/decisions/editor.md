@@ -433,11 +433,15 @@ In the code: `core/export/site.go`, `app/export.go`, `docs/site.toml`, `.github/
 
 ## Charts drawn as SVG
 
-The site draws Vega-Lite charts as the app does: the GUI build passes the export a chart hook that
-lays the chart out with the UI library's chart code and writes it as inline SVG in the export's
-palette. A chart outside the supported subset is captioned with the reason. The export package
-never imports the GUI; the terminal build passes no hook and leaves the spec as it is. The site
-workflow therefore builds with `-tags gui`, which needs the window system's libraries but no
-display.
+The site and `--export=html` draw Vega-Lite charts as the app does, in either build. Each build
+passes the export a chart hook that lays the chart out with golib's chart code and writes it as
+inline SVG in the export's palette. A chart outside the supported subset is captioned with the
+reason. The export package never imports the GUI. The GUI build lays the chart out with the
+window's chart code and measures its labels with the window's fonts. A build without the GUI (the
+terminal's, a headless server's) uses golib's `chart/vegalite`, which needs no window system, and
+measures its labels by Helvetica's advances, since it has no fonts loaded. The browser draws the
+labels in its own sans-serif either way, so the two builds' charts differ only by a label's width
+here and there. The site workflow still builds with `-tags gui`, for the measured labels; it needs
+the window system's libraries but no display.
 
-In the code: `app/exportchart_on.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`
+In the code: `app/exportchart.go`, `app/exportchart_on.go`, `app/exportchart_off.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`

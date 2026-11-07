@@ -1,5 +1,3 @@
-//go:build gui
-
 package app
 
 import (
@@ -11,9 +9,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-// In the GUI build an exported chart is drawn as SVG by golib's gui/vegalite, its labels written,
-// in the export's palette; a chart outside the subset stays its spec.
-func TestTheGUIBuildDrawsAnExportedChart(t *testing.T) {
+// Either build draws an exported chart as SVG, its labels written, in the export's palette: the GUI
+// build with golib's gui/vegalite, a build without the GUI with chart/vegalite. A chart outside
+// the subset stays its spec.
+func TestEveryBuildDrawsAnExportedChart(t *testing.T) {
 	spec := `{"mark":"bar","data":{"values":[{"k":"Apples","v":3},{"k":"Pears","v":5}]},` +
 		`"encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}`
 	svg, err := chartSVG([]byte(spec), "light")
