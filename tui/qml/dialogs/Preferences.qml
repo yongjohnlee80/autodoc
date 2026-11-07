@@ -180,8 +180,8 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: qsTrId("autodoc.dialog.preferences.file_types"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openActiveSettings() }
-        // the GUI's alone: a terminal draws no GlobeMap (globesettings_gui.go)
-        Button { text: qsTrId("autodoc.dialog.preferences.globemap"); visible: App.gui; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openGlobeSettings() }
+        // the GlobeMap's settings: a window's (globesettings_gui.go) or a terminal's (globemap_cells.go)
+        Button { text: qsTrId("autodoc.dialog.preferences.globemap"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openGlobeSettings() }
         Button { text: qsTrId("autodoc.dialog.preferences.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }
