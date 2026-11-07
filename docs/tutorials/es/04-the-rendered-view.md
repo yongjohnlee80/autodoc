@@ -16,6 +16,6 @@ La vista Renderizada sigue siendo el editor. Cada línea se puede editar: la lí
 
 **El menú contextual**: Deshacer, Rehacer, Copiar, Cortar y Pegar, Ver diagrama, Ir al enlace, Atrás y, en la GUI, el Zoom. Desde el teclado: **Shift+F10**, la tecla **Menu** si tu teclado la tiene, o **SPC .**.
 
-Un terminal no tiene vista Renderizada: allí la página se queda Sin procesar.
+En un terminal, la vista Renderizada de una nota es su página dibujada en celdas: encabezados, tablas con borde, bloques de código, sus diagramas Mermaid y sus gráficos Vega-Lite. Se lee como la página de la ventana; para editar, Ctrl+T vuelve a Sin procesar.
 
 Más: [Referencia, capítulo 4: Redacción enriquecida, incrustaciones y exportación](../../reference/04-rich-authoring-embeds-and-export.md).

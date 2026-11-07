@@ -255,11 +255,11 @@ In the code: `tui/tabledoc.go`, `tui/htmldoc.go`, `tui/files.go`
 
 In a terminal, a note's Rendered view is its page, as in the window: Raw is the text, Rendered the
 note exported in process (as the HTML pane exports it) and laid out in cells by golib's HTMLView.
-Tables are boxed, headings told apart by level, code set off, a Mermaid diagram of a kind golib draws
-in cells drawn in box-drawing cells, and a `vega-lite` chart drawn in cells: bars in eighths of a
-cell, line, point and area charts in Braille, and a table for the rest of golib's subset. Any other
-diagram or chart is a line saying it isn't drawn in the terminal and that Raw shows its source, in
-the UI's language; never its source. A note opens Rendered, as a table file does. Ctrl+T flips between the
+Tables are boxed, headings told apart by level, code set off, every Mermaid kind golib's parser
+reads drawn in box-drawing cells, and its Vega-Lite charts drawn in cells: bars in eighths of a cell,
+line, point and area charts in Braille, and a table for the rest of golib's subset. A diagram of a
+kind it doesn't read, or a chart outside that subset, is a line saying it isn't drawn in the
+terminal and that Raw shows its source, in the UI's language; never its source. A note opens Rendered, as a table file does. Ctrl+T flips between the
 two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
 again puts the cursor at the block the reader scrolled the page to; when the
 note changes under it, it is exported again once typing rests and keeps the reader's place. Its

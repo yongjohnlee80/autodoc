@@ -16,6 +16,6 @@ The Rendered view is still the editor. Every line is editable: the line under th
 
 **The right-click menu**: Undo, Redo, Copy, Cut and Paste, View diagram, Go to link, Back, and in the GUI the Zoom. From the keyboard: **Shift+F10**, the **Menu** key where your keyboard has one, or **SPC .**.
 
-A terminal has no Rendered view: there the page stays Raw.
+In a terminal, a note's Rendered view is its page drawn in cells: headings, boxed tables, code blocks, its Mermaid diagrams and its Vega-Lite charts. It reads like the window's page; to edit, Ctrl+T goes back to Raw.
 
 More: [Reference, Chapter 4: Rich Authoring, Embeds, and Export](../reference/04-rich-authoring-embeds-and-export.md).
