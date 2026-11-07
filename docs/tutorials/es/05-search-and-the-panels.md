@@ -21,6 +21,6 @@ flowchart LR
 
 **Ctrl+h j k l** (modo Normal) van de la página a un panel y de vuelta.
 
-**Todo panel se mueve y se redimensiona.** Alt (Option en un Mac) con el botón izquierdo lo arrastra a cualquier lugar; con el botón derecho lo redimensiona. **SPC L** (Ir › Organizar panel…) hace ambas cosas con el teclado: `h j k l` lo mueven, `H J K L` lo redimensionan, Enter lo conserva, Esc lo devuelve a su sitio. Se abre donde lo dejaste; **Ir › Restablecer disposición de paneles** vuelve a acoplarlos todos.
+**Todo panel se mueve y se redimensiona.** Arrastra su fila de título para moverlo, y su borde lateral o inferior para redimensionarlo. Alt (Option en un Mac) con el botón izquierdo lo arrastra desde cualquier punto; con el botón derecho lo redimensiona. **SPC L** (Ir › Organizar panel…) hace ambas cosas con el teclado: `h j k l` lo mueven, `H J K L` lo redimensionan, Enter lo conserva, Esc lo devuelve a su sitio. Se abre donde lo dejaste; **Ir › Restablecer disposición de paneles** vuelve a acoplarlos todos.
 
 Más: [Referencia, capítulo 3: Editor modal y paneles](../../reference/03-modal-editor-and-panels.md), y [Referencia, capítulo 5: El flujo de búsqueda híbrida](../../reference/05-hybrid-search-pipeline.md).

@@ -331,8 +331,11 @@ GUI follow-ups that a terminal does not need:
   this shows there.
 - **The menu key.** Shift+F10, and `SPC .` from Normal mode, open the page's right-click menu at
   the cursor.
-- **Floating panels.** The drawers move and resize anywhere over the page: Alt-drag moves one,
-  Alt-right-drag resizes it, and Go › Arrange panel does both by keys. Where one ends is kept as
+- **Floating panels.** The drawers move and resize anywhere over the page: a plain drag of a
+  drawer's title row moves it and of its side or bottom border resizes it, in a terminal as in a
+  window (the terminal reports golib's frame drags, term.WithFrameDrag; a control on the frame, a
+  tab or a button, keeps its click); Alt-drag moves one from anywhere in it, Alt-right-drag resizes
+  it, and Go › Arrange panel does both by keys. Where one ends is kept as
   percentages of the window (`tui.<panel>.float`), and it opens there from then on; its edge
   preference only says where it first appears. Go › Reset panel layout, or a new edge in
   Preferences, docks it at its edge again. No corner grip is drawn.

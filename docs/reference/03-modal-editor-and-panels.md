@@ -177,7 +177,7 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
   preview, and in the GUI the GlobeMap and the Mindmap.
   - `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
     with the right button it resizes.
-  - In the GUI (`--gui`), a plain drag does it too: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it.
+  - A plain drag does it too, in a terminal as in the GUI: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it. A tab or a button on the frame keeps its click.
   - `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
     `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
     keeps it and `Esc` puts it back.
