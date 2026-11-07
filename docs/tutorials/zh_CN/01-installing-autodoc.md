@@ -15,7 +15,7 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 - 下载适合你系统的最新版本，并用该版本的校验和进行校验；
 - 安装为 `~/.local/bin/autodoc`，只为你自己安装，从不需要 `sudo`；
 - 添加启动器，让 AutoDoc 出现在你的应用程序中（macOS 上是 AutoDoc.app，Linux 上是桌面条目）；
-- 在旁边安装 `update.sh`，用来让 AutoDoc 保持最新。
+- 在 `~/.local/state/autodoc` 中安装 `update.sh`，用来让 AutoDoc 保持最新。
 
 如果 `~/.local/bin` 不在你的 `PATH` 中，脚本会打印需要加到 shell 启动文件里的那一行；它从不自己修改这个文件。如果没有适合你系统的预编译版本，它会先询问，再从该版本的源码构建。
 

@@ -57,8 +57,9 @@ It also:
   install line and never installs itself (`--build` builds without asking, `--yes` asks nothing and
   answers no).
 
-Rerunning it upgrades or repairs the install; nothing is duplicated, and a failed download or check
-leaves the old install as it was. On Windows it installs nothing and says so: use WSL2.
+Rerunning it upgrades or repairs the install, and nothing is duplicated. A failed download or check of
+the new binary leaves the old one as it was; the binary is swapped in one rename. A launcher or
+`update.sh` that fails after that leaves the new AutoDoc installed, and the script says what failed. On Windows it installs nothing and says so: use WSL2.
 
 **Updates.** An AutoDoc the script installed has **Help › About › Update**: it runs `update.sh` in
 the terminal panel, then offers **Restart Now** into the new version (the daemon restarts with it).
