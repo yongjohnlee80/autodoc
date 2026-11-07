@@ -307,6 +307,19 @@ table's edge.
 
 In the code: `tui/tabledoc.go`
 
+## Reading the clipboard in a terminal
+
+The terminal reads the system clipboard as it writes it: through the terminal, by OSC 52, so it
+works over ssh and inside tmux (with `set-clipboard on`) where the terminal allows it. A read is
+`autodoc.clipboard.read` and the editor's `"+p` and `"*p`. It is on by default (decided 2026-11-07),
+as Neovim's OSC 52 paste is. A terminal decides for itself: foot, WezTerm and an iTerm2 that allows
+it answer; kitty asks the user each time; GNOME Terminal and a default xterm ignore the query. The
+first read such a terminal ignores waits two seconds, then fails (`"timeout"` to a script, the
+register's own text to `"+p`), and every read after it that session fails at once, as
+`"unsupported"`, with no wait.
+
+In the code: `app/ui.go` (golib's `term.WithClipboardRead`), `tui/scripts.go`
+
 ## Fonts, zoom and floating panels
 
 GUI follow-ups that a terminal does not need:
