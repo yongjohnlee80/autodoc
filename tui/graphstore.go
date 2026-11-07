@@ -1,5 +1,3 @@
-//go:build gui
-
 package tui
 
 import (
@@ -13,11 +11,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE VIEWS' GRAPH FILES — one graphStore for the GlobeMap and the Mindmap: each workspace's graph
-// file (graphconf.go) read once through the daemon (its root is on the daemon's disk), the user's
-// beside the config; a view's groups initialised the first time it asks for them and the file
-// written; the views' settings writing their edits. All on the loop: its reads and writes run off
-// it, and hand back on it.
+// THE VIEWS' GRAPH FILES — one graphStore for a window's GlobeMap and Mindmap, or for a terminal's
+// Mindmap in cells (mindmap_cells.go): each workspace's graph file (graphconf.go) read once through
+// the daemon (its root is on the daemon's disk), the user's beside the config; a view's groups
+// initialised the first time it asks for them and the file written; the views' settings writing
+// their edits. All on the loop: its reads and writes run off it, and hand back on it.
 
 type graphStore struct {
 	c        Core
