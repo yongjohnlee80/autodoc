@@ -90,11 +90,12 @@ policy allows that script and the one that starts it, by digest, and no other, a
 a diagram has no script at all.
 
 `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
-terminal, as §4.11 describes; where it cannot, it shows the block's source and why. The GUI's
+terminal, as §4.11 describes: mermaid.js's image where the terminal shows images, else golib's
+Mermaid in characters, else the block's source, saying why. The GUI's
 `Preview Mermaid diagram…` draws it the same way, by mermaid.js, and so does its HTML pane each
 diagram of the page; with **File › Preview option** set to native, or in a window with no browser,
-they are drawn natively, by golib's Mermaid, where golib draws their type. The terminal always uses
-mermaid.js. A line embedding a `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a
+they are drawn natively, by golib's Mermaid, where golib draws their type. A terminal's **File ›
+Preview option** is the same choice, native drawing in characters. A line embedding a `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a
 fence is, read as the preview reads it.
 
 ---
@@ -324,10 +325,14 @@ previews` on, a terminal that confirms kitty's graphics protocol (inside tmux,
 `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline. The whole diagram
 is rendered and **scrolls** in its dialog: the arrows, `j` `k` `h` `l`, `Page Up`/`Page Down`,
 `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in** and **Zoom out** draw it again larger or
-smaller (50 % to 200 %, as a browser zooms), in the same dialog. Elsewhere the dialog shows the
-diagram's source and says which was missing; turning `Image previews` off compares the two on the
-same file. The image follows the active theme's colours (light, dark, sepia, retro, mono), as
-`autodoc --export html --theme …` does.
+smaller (50 % to 200 %, as a browser zooms), in the same dialog. Elsewhere (no kitty graphics,
+over ssh say, or no browser) the dialog draws the diagram in characters, by golib's Mermaid
+(`golib/tui/mermaid`), where golib draws its type, and says which was missing; else it shows the
+diagram's source. Turning `Image previews` off shows the source, as asked, and compares the two on
+the same file. **`File › Preview option`** chooses the engine, as in the GUI: **native** draws in
+characters at once, with no browser, and falls back to the image for a diagram golib does not
+draw. The image follows the active theme's colours (light, dark, sepia, retro, mono), as
+`autodoc --export html --theme …` does; the characters, the page's.
 
 ---
 
