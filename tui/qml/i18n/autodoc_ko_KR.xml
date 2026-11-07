@@ -3028,7 +3028,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3155,7 +3156,7 @@ WHAT A KEY NEEDS
   편집과 저장은 안 됩니다. 파일 › 기본 앱으로 열기로 원본을 엽니다. 긴 파일은 한 번 읽을 수 있는
   만큼만 표시되며, 잘린 위치를 알려 줍니다.
   HTML 파일은 먼저 묻습니다: 간략(위와 같이 읽기 전용 추출 텍스트) 또는 원본(편집하고
-  저장할 HTML 그대로). GUI에서 원본 파일의 렌더링 보기(Ctrl+T)는 그 페이지입니다: j k 또는
+  저장할 HTML 그대로). 원본 파일의 렌더링 보기(Ctrl+T)는 GUI와 터미널 모두에서 그 페이지입니다: j k 또는
   화살표로 스크롤, Ctrl+D Ctrl+U로 반 페이지, g G로 처음과 끝, 링크는 노트,
   파일 또는 브라우저로 열립니다. 스타일시트와 이미지는 워크스페이스에서 불러옵니다 (어느 워크스페이스에도
   없는 파일은 자기 폴더에서만. ../assets를 공유하는 사이트라면 그 폴더를 워크스페이스로 추가하세요).

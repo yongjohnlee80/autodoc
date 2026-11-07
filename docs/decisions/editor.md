@@ -205,11 +205,14 @@ way it was opened. The daemon reads and writes the bytes with `doc.read_raw`, `d
 `file.read_raw` and `file.write_raw`; they reach only formats whose source is text, never a DOCX
 or PDF, and versions and conflicts work as for any write.
 
-Under `--gui` a raw HTML file's Rendered view is the drawn page itself, in place of the text body.
-Ctrl+T flips between the source and the page; the page scrolls with the usual keys, its links open
-as the preview's do, and it is never edited. In a terminal, Raw is the plain editor on the source.
+A raw HTML file's Rendered view is the drawn page itself, in place of the text body: under `--gui`
+the UI library's HTML view, in a terminal the note page's cell view (golib's HTMLView in cells, as
+a note's page is), the file's own bytes in either, its images from where a page's come from. Ctrl+T
+flips between the source and the page; the page scrolls with the usual keys, its links open as the
+preview's do, and it is never edited: in a terminal its first editing key opens the source there, as
+on a note's page.
 
-In the code: `tui/files.go`, `tui/htmldoc.go`, `rpc/server.go`
+In the code: `tui/files.go`, `tui/htmldoc.go`, `tui/notepage.go`, `rpc/server.go`
 
 ## The native HTML preview
 

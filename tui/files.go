@@ -516,9 +516,9 @@ func (h *Host) readPage() {
 	k := h.resolver().Of(p) // the daemon's registrations: it is the one indexing
 	// Tab walks a Markdown table's cells (a draft with no hint is Markdown too)
 	h.core.SetTableEditing(k == kind.Markdown || p == "")
-	// a raw HTML file's Rendered view is its page (documentFor), where there is one: the GUI's; a
-	// CSV or TSV file's is its table, in either editor
-	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw && h.native() ||
+	// a raw HTML file's Rendered view is its page: the GUI's own (documentFor), a terminal's the
+	// note page's (notepage.go); a CSV or TSV file's is its table, in either editor
+	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw ||
 		!h.file.raw && tableComma(p) != 0)
 	switch {
 	case h.file.raw:

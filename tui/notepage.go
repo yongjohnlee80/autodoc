@@ -29,6 +29,7 @@ type cellNotePage struct {
 	view   *notePageView
 	gen    uint64 // numbers the renders; a later one supersedes an earlier
 	shown  fileRef
+	html   bool   // the page shown is a raw HTML file's own bytes, not a note exported
 	dirKey string // the folder the page's images load from, as last given to the view
 	dirSet bool
 	// top is the source byte of the block at the page's top, as it last reported it (-1 none);
@@ -317,15 +318,17 @@ func (p *cellNotePage) viewOf() *notePageView {
 	return p.view
 }
 
-// Shown makes the page the editor's Rendered view for a note: a Markdown page, on a terminal. Any
-// other page keeps what documentFor gave it (a table file its table, the rest their text), and a
-// window's editor its own. A note shown while the page is drawn renders at once.
+// Shown makes the page the editor's Rendered view for a note, a Markdown page, or for an HTML file
+// opened Raw, its own page (docs/decisions/editor.md#html-files-open-raw-or-simplified), on a
+// terminal. Any other page keeps what documentFor gave it (a table file its table, the rest their
+// text), and a window's editor its own. A page shown while the page view is drawn renders at once.
 func (p *cellNotePage) Shown(pg Page) {
-	if pg.Kind != kind.Markdown || !p.onATerminal() {
-		p.shown = fileRef{}
+	html := p.h.file.open && p.h.file.raw && pg.Ref.path != ""
+	if pg.Kind != kind.Markdown && !html || !p.onATerminal() {
+		p.shown, p.html = fileRef{}, false
 		return
 	}
-	p.shown = pg.Ref
+	p.shown, p.html = pg.Ref, html
 	v := p.viewOf()
 	p.giveSyntax() // the page may have been made before the program attached
 	p.images(pg)
@@ -382,6 +385,12 @@ func (p *cellNotePage) images(pg Page) {
 func (p *cellNotePage) render(text []byte, toCursor bool) {
 	h := p.h
 	tk := h.ticket(&p.gen, TicketLocal)
+	if p.html {
+		// a raw HTML file is its own page: its bytes as they are (the GUI's page reads them so too);
+		// they carry no source spans, so the page keeps its place rather than finding the cursor's
+		p.view.SetHTML(append([]byte(nil), text...))
+		return
+	}
 	source, theme := append([]byte(nil), text...), h.exportTheme()
 	options := export.Options{SourceSpans: true}
 	if full := h.diskPath(); full != "" {

@@ -10,7 +10,7 @@ flowchart LR
 
 The Rendered view is still the editor. Every line is editable: the line under the cursor shows its Markdown, the rest show what they make. Ctrl+T again goes back to Raw.
 
-**HTML files** ask how to open: **Simplified**, their text read-only, or **Raw**, the HTML itself to edit and save. A raw HTML file's Rendered view is its page, drawn natively with its own stylesheets and images: `j k` scroll, its links open notes, files and the browser.
+**HTML files** ask how to open: **Simplified**, their text read-only, or **Raw**, the HTML itself to edit and save. A raw HTML file's Rendered view is its page: in the window drawn natively with its own stylesheets and images, in a terminal drawn in cells. `j k` scroll, and its links open notes, files and the browser.
 
 **File › Preview HTML** (SPC H) opens the note's page beside the editor, live as you type.
 

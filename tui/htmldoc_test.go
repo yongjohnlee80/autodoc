@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -85,7 +87,7 @@ func TestOpeningAnHTMLFileAsksSimplifiedOrRaw(t *testing.T) {
 
 // TestARawHTMLFilesPageIsItsRenderedView: under a GUI, a file opened Raw turns the editor's page on
 // before its text arrives, and any other file, opened Simplified or not HTML, turns it off; in a
-// terminal it is never on.
+// terminal the window's page stays off and the note page's cell view takes its place, on.
 func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r, kb := runHTML(t)
 	dir := t.TempDir()
@@ -126,11 +128,52 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r.h.p.Post(func() { seen = nil })
 	r.openHTMLAnswer(t, page, "raw")
 	r.waitOpen(t, "", page)
-	for _, on := range onLoop(r, func() []bool { return append([]bool(nil), seen...) }) {
-		if on {
-			t.Error("a terminal turned the page on")
-		}
+	r.s.WaitFor(t, "the raw file's cell page on", func(string) bool {
+		return onLoop(r, func() bool {
+			e, ok := r.h.editor.(*widget.Editor)
+			if !ok || len(seen) == 0 || !seen[len(seen)-1] {
+				return false
+			}
+			_, page := e.DocumentView().(*notePageView)
+			return page
+		})
+	})
+}
+
+// TestATerminalDrawsARawHTMLFilesPage (docs/decisions/editor.md#html-files-open-raw-or-simplified):
+// in a terminal, an HTML file opened Raw shows its page Rendered, drawn in cells from its own bytes
+// (its heading, its table boxed, never its tags); Ctrl+T shows its source and back its page; an edit
+// while the page is shown draws it again once typing rests.
+func TestATerminalDrawsARawHTMLFilesPage(t *testing.T) {
+	r, _ := runHTML(t)
+	page := filepath.Join(t.TempDir(), "page.html")
+	body := "<h1>Harbour</h1>\n<p>Some <b>bold</b> words.</p>\n<table><tr><th>Boat</th><th>Berth</th></tr><tr><td>Gull</td><td>4</td></tr></table>\n"
+	if err := os.WriteFile(page, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	r.openHTMLAnswer(t, page, "raw")
+	r.waitOpen(t, "", page)
+	shown := func() widget.EditorView {
+		return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+	}
+	r.s.WaitFor(t, "the file's page, Rendered", func(sc string) bool {
+		return shown() == widget.ViewRendered && strings.Contains(sc, "Harbour") && strings.Contains(sc, "Gull") && strings.Contains(sc, "┌")
+	})
+	if sc := r.s.String(); strings.Contains(sc, "<h1>") || strings.Contains(sc, "<td>") {
+		t.Fatalf("the page shows the file's tags:\n%s", sc)
+	}
+	ctrlT := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl}
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "the source after Ctrl+T", func(sc string) bool { return shown() == widget.ViewRaw && strings.Contains(sc, "<h1>Harbour</h1>") })
+	r.keys(t, ctrlT)
+	r.s.WaitFor(t, "the page again", func(sc string) bool { return shown() == widget.ViewRendered && !strings.Contains(sc, "<h1>") })
+	onLoop(r, func() bool {
+		if _, err := r.h.core.Insert(widget.TextPos{}, "<h2>Tides</h2>\n"); err != nil {
+			t.Error(err)
+		}
+		return true
+	})
+	r.s.WaitFor(t, "the edit drawn", func(sc string) bool { return strings.Contains(sc, "Tides") && !strings.Contains(sc, "<h2>") })
 }
 
 // TestTheRenderedViewIsToldTheNotesFile: as a document opens, before its text arrives, the window's

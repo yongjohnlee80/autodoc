@@ -3033,7 +3033,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3160,7 +3161,8 @@ WHAT A KEY NEEDS
   las ediciones y el guardado no. Archivo › Abrir con la aplicación predeterminada abre el original. Uno largo muestra tanto como
   admite una lectura, e indica dónde se cortó.
   Un archivo HTML pregunta primero: Simplificado, su texto derivado en solo lectura como arriba, o Sin procesar, el propio
-  HTML para editar y guardar. En la GUI la vista Renderizada (Ctrl+T) de un archivo sin procesar es su página: j k o
+  HTML para editar y guardar. La vista Renderizada (Ctrl+T) de un archivo sin procesar es su página, en la GUI y en
+  la terminal: j k o
   las flechas desplazan, Ctrl+D Ctrl+U media página, g G los extremos, y sus enlaces se abren como notas,
   archivos o en el navegador. Sus hojas de estilo e imágenes se cargan desde su espacio de trabajo (un archivo fuera de todo
   espacio de trabajo: solo su propia carpeta; añade la carpeta como espacio de trabajo para un sitio que comparte ../assets).
