@@ -1,5 +1,3 @@
-//go:build gui
-
 package tui
 
 import (
@@ -12,7 +10,8 @@ import (
 // groups (groups.go): a row a group, in order; the selected one's query and colour (and, the
 // Mindmap's, outline) as fields; add, remove, move up and down, and add a group for each schema
 // type and folder no group queries. Each edit is saved to the workspace's graph file
-// (graphstore_gui.go) and handed to the view, which draws in it at once.
+// (graphstore.go) and handed to the view, which draws in it at once. A window's GlobeMap and
+// Mindmap have one each; a terminal's Mindmap in cells has its own (mindmap_cells.go).
 
 type groupEditor struct {
 	c       Core

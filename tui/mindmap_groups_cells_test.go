@@ -163,3 +163,64 @@ func TestATerminalsMindmapWritesItsFirstGroups(t *testing.T) {
 		t.Errorf("the map opened at depth %d; want its settings' 2", d)
 	}
 }
+
+// screenRows is the screen's rows as text.
+func screenRows(r *running) []string {
+	var out []string
+	for _, row := range r.s.Backend.Snapshot() {
+		var b strings.Builder
+		for _, c := range row {
+			b.WriteString(c.Content)
+		}
+		out = append(out, strings.TrimRight(b.String(), " "))
+	}
+	return out
+}
+
+// TestATerminalsMindmapSettingsEditItsGroups: Relations › Mindmap settings… opens in a terminal, as
+// the window's dialog less its theme row (the map is drawn in the page's): its groups listed, each a
+// query, a colour and an outline, and the depth it opens at. An edit there is written to the graph
+// file and drawn at once; the menu has the item. The dialog's rows are logged in sepia and dark.
+func TestATerminalsMindmapSettingsEditItsGroups(t *testing.T) {
+	kb := groupsKB(t, "[[mindmap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\nshape = \"hexagon\"\n")
+	r, m := openCellMindmap(t, kb, nil)
+	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.openMindmapSettings()`) {
+		t.Fatal("a terminal's Relations menu has no Mindmap settings… item")
+	}
+	for _, theme := range []string{"sepia", "dark"} {
+		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
+		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
+		onLoop(r, func() bool { m.openSettings(); return true })
+		r.s.WaitFor(t, theme+": the settings, the group listed", func(s string) bool {
+			return strings.Contains(s, "Mindmap settings") && strings.Contains(s, "path:notes/  #edc948  hexagon") && strings.Contains(s, "opens at")
+		})
+		rows := screenRows(r)
+		for y, row := range rows {
+			if strings.Contains(row, "opens at") && y > 0 && strings.Contains(rows[y-1], "theme") {
+				t.Fatalf("%s: a terminal's Mindmap settings show a theme row:\n%s", theme, strings.Join(rows, "\n"))
+			}
+		}
+		var dialog []string
+		for _, row := range rows {
+			if strings.Contains(row, "│") {
+				dialog = append(dialog, row)
+			}
+		}
+		t.Logf("%s: the settings:\n%s", theme, strings.Join(dialog, "\n"))
+		r.keys(t, key('q'))
+		r.s.WaitFor(t, theme+": the settings closed", func(s string) bool { return !strings.Contains(s, "Mindmap settings") })
+	}
+	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
+	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
+	r.s.WaitFor(t, "the map drawn in the edit", func(string) bool {
+		return onLoop(r, func() bool {
+			for _, c := range m.cur.tints {
+				if c == hexColour(0x123456) {
+					return true
+				}
+			}
+			return false
+		})
+	})
+}
