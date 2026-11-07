@@ -42,7 +42,8 @@ func waitImages(t *testing.T, r *running, what string, n int) map[uint32]tuicore
 // TestATerminalShowsASurfaceCardsPixels: on a terminal that confirmed kitty's graphics, a surface
 // card gets its surface, sized by its cells, and its frame is drawn as one picture over the card's
 // cells. A new size is a new generation and a new frame, the same picture replaced in place, never a
-// second one; hidden, the card's picture goes and comes back when it shows; closed, it goes.
+// second one; Plugin pixels turned off while it runs, its picture goes and its cells show, and on
+// again it comes back; hidden, the card's picture goes and comes back when it shows; closed, it goes.
 func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	r, logs, run := surfaceTerminal(t, tuicore.TriYes, nil)
 	if onLoop(r, func() bool { return run.surface == nil }) {
@@ -73,6 +74,14 @@ func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	if got := waitImages(t, r, "after a new size", 1); got[id].ID != id {
 		t.Fatalf("a new size made picture %v; want %d replaced in place", got, id)
 	}
+
+	// pictures turned off while the surface is live: its picture goes and its cells show; on again,
+	// it comes back
+	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "false"); return true })
+	waitImages(t, r, "Plugin pixels off", 0)
+	r.waitShown(t, "open ")
+	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "true"); return true })
+	waitImages(t, r, "Plugin pixels on again", 1)
 
 	panel := cardPanelID("card")
 	onLoop(r, func() bool { r.h.hidePanel(panel); return true })

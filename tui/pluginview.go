@@ -216,7 +216,7 @@ func (v *pluginView) Render(s tuicore.Surface) {
 	if v.run == nil {
 		return
 	}
-	if v.cellPicturesOf() != nil { // a terminal's surface: its picture covers the card (Image)
+	if v.cellSurfaceLive() { // a terminal's surface: its picture covers the card (Image)
 		v.paintCellSurface(sz)
 		return
 	}

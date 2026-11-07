@@ -24,7 +24,9 @@ import (
 // while it waits is answered "superseded". At most cellSurfaceFPS frames a second are shown, and
 // fewer for large ones: after a picture of n bytes the next waits n / cellSurfaceBudget seconds, so
 // a terminal over ssh is never sent more than about cellSurfaceBudget a second. Elsewhere a surface
-// plugin draws cells.
+// plugin draws cells, and so does a card whose terminal stops showing pictures while it runs (the
+// preference or image previews turned off): its picture goes, its cells show, and its frames are
+// answered "not_shown" until pictures are on again.
 
 const (
 	cellSurfaceFPS    = 15      // the most frames a second shown in a terminal
@@ -42,15 +44,16 @@ var cellSurfaceKinds = []plugin.SurfaceKind{
 }
 
 // cellPictures is a card's picture, between its sink and its view: the newest PNG, its version and
-// its image id, and a signal of the view's paint.
+// its image id, the version the view last painted, and a signal of each paint.
 type cellPictures struct {
-	id      uint32
-	post    func(func()) // the loop's: the card painted again
-	dirty   func()       // on the loop: marks the card's view for a paint; nil before it has one
-	mu      sync.Mutex
-	png     []byte
-	version uint64
-	painted chan struct{} // one signal a paint, dropped when one is already waiting
+	id         uint32
+	post       func(func()) // the loop's: the card painted again
+	dirty      func()       // on the loop: marks the card's view for a paint; nil before it has one
+	mu         sync.Mutex
+	png        []byte
+	version    uint64
+	paintedVer uint64        // the version the view's last paint showed
+	painted    chan struct{} // one signal a paint, dropped when one is already waiting
 }
 
 func newCellPictures(post func(func())) *cellPictures {
@@ -67,35 +70,48 @@ func (p *cellPictures) image() (tuicore.Image, bool) {
 	return tuicore.Image{ID: p.id, PNG: p.png, Version: p.version}, true
 }
 
-// show makes b the card's picture (nil: none) and reports whether the card painted it within
-// cellSurfaceShown: a hidden card isn't painted.
-func (p *cellPictures) show(b []byte) bool {
-	select {
-	case <-p.painted: // a paint before this picture says nothing of it
-	default:
-	}
+// publish makes b the card's picture (nil: none), and asks the card for a paint: the picture's
+// version.
+func (p *cellPictures) publish(b []byte) uint64 {
 	p.mu.Lock()
 	p.png = b
 	p.version++
+	ver := p.version
 	p.mu.Unlock()
 	p.post(func() {
 		if p.dirty != nil {
 			p.dirty()
 		}
 	})
-	if b == nil {
-		return false
-	}
-	select {
-	case <-p.painted:
-		return true
-	case <-time.After(cellSurfaceShown):
-		return false
+	return ver
+}
+
+// waitPainted reports whether the card painted version ver, or a later one, within
+// cellSurfaceShown: a hidden card isn't painted. A paint of an earlier version, its signal still
+// waiting, acknowledges nothing.
+func (p *cellPictures) waitPainted(ver uint64) bool {
+	deadline := time.NewTimer(cellSurfaceShown)
+	defer deadline.Stop()
+	for {
+		p.mu.Lock()
+		done := p.paintedVer >= ver
+		p.mu.Unlock()
+		if done {
+			return true
+		}
+		select {
+		case <-p.painted:
+		case <-deadline.C:
+			return false
+		}
 	}
 }
 
-// paintedNow is the view's paint, in surface mode: what show waits for.
+// paintedNow is the view's paint of the picture as it is now: what waitPainted waits for.
 func (p *cellPictures) paintedNow() {
+	p.mu.Lock()
+	p.paintedVer = p.version
+	p.mu.Unlock()
 	select {
 	case p.painted <- struct{}{}:
 	default:
@@ -136,6 +152,9 @@ type cellSink struct {
 	closed bool
 	stop   chan struct{} // closed by Close: a wait for the next turn ends
 	turn   time.Time     // the earliest the next picture may be shown
+	// publishing runs as a frame's picture is published, under mu, with the close fenced out: a
+	// test's seam, nil otherwise
+	publishing func()
 }
 
 func newCellSink(pics *cellPictures) *cellSink {
@@ -182,15 +201,24 @@ func (s *cellSink) run(c cellFrame) {
 		}
 		b, err := s.encode(c.f)
 		c.f.Drop()
+		// the close check and the publication are one step under mu, as Close's own clearing is:
+		// a picture published is never one a close has already cleared
 		s.mu.Lock()
 		closed := s.closed
+		var ver uint64
+		if !closed && err == nil {
+			if s.publishing != nil {
+				s.publishing()
+			}
+			ver = s.pics.publish(b)
+		}
 		s.mu.Unlock()
 		switch {
 		case closed:
 			c.r.settle("closed")
 		case err != nil:
 			c.r.settle("unsupported")
-		case s.pics.show(b):
+		case s.pics.waitPainted(ver):
 			s.mu.Lock()
 			s.turn = time.Now().Add(max(time.Second/cellSurfaceFPS, time.Duration(len(b))*time.Second/cellSurfaceBudget))
 			s.mu.Unlock()
@@ -210,7 +238,7 @@ func (s *cellSink) run(c cellFrame) {
 }
 
 // Close ends the sink: a frame behind the one in flight is answered "closed", the one in flight is
-// when it ends, and the card's picture goes.
+// when it ends, and the card's picture goes, under mu, so no frame in flight publishes after it.
 func (s *cellSink) Close() {
 	s.mu.Lock()
 	if s.closed {
@@ -221,12 +249,12 @@ func (s *cellSink) Close() {
 	close(s.stop)
 	next := s.next
 	s.next = nil
+	s.pics.publish(nil)
 	s.mu.Unlock()
 	if next != nil {
 		next.f.Drop()
 		next.r.settle("closed")
 	}
-	s.pics.show(nil)
 }
 
 // errFrameKind is a frame a terminal can't show: not a memory RGBA or BGRA one.
@@ -280,12 +308,20 @@ func (v *pluginView) cellPicturesOf() *cellPictures {
 var _ tuicore.ImageReporter = (*pluginView)(nil)
 
 // Image is the card's picture over its cells, in a terminal (tuicore.ImageReporter): the App
-// places it, replaces it in place by its id, and deletes it when the card closes or hides.
+// places it, replaces it in place by its id, and deletes it when the card closes or hides, or the
+// terminal stops showing pictures.
 func (v *pluginView) Image() (tuicore.Image, bool) {
-	if p := v.cellPicturesOf(); p != nil {
-		return p.image()
+	if v.cellSurfaceLive() {
+		return v.cellPicturesOf().image()
 	}
 	return tuicore.Image{}, false
+}
+
+// cellSurfaceLive reports whether the card shows its surface's picture now: it has one, in a
+// terminal still showing pictures (the preference and image previews read at each paint). Off,
+// the card shows its cells.
+func (v *pluginView) cellSurfaceLive() bool {
+	return v.cellPicturesOf() != nil && v.pl != nil && v.pl.c.TerminalPictures()
 }
 
 // paintCellSurface is Render's in a terminal surface's mode: tells the owner the geometry the

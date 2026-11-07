@@ -178,3 +178,46 @@ func waitResult(t *testing.T, r surfaceReceipt) (string, time.Time) {
 		return "", time.Time{}
 	}
 }
+
+// TestACloseIsNotUndoneByAFrameInFlight: a close that comes while a frame's picture is being
+// published waits for it, then clears it, so a picture never outlives its close. The interleaving is
+// controlled: the close starts at the moment of publication.
+func TestACloseIsNotUndoneByAFrameInFlight(t *testing.T) {
+	var shown, released atomic.Int32
+	pics := paintedPictures(&shown)
+	s := newCellSink(pics)
+	closed := make(chan struct{})
+	s.publishing = func() {
+		go func() { s.Close(); close(closed) }()
+		select { // under the fence the close waits for this publication; without it, it clears first
+		case <-closed:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	r := s.Push(memFrame(t, 2, 2, extimage.FormatRGBA8, [4]byte{1, 1, 1, 255}, &released))
+	waitResult(t, r)
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the close never ended")
+	}
+	if _, ok := pics.image(); ok {
+		t.Fatal("a frame published as the card closed outlived the close")
+	}
+}
+
+// TestAnOldPaintAcknowledgesNoNewerPicture: a paint of an earlier picture, its signal still waiting,
+// doesn't make a newer one drawn; a paint of the newer one does.
+func TestAnOldPaintAcknowledgesNoNewerPicture(t *testing.T) {
+	pics := newCellPictures(func(fn func()) { fn() })
+	pics.publish([]byte("first"))
+	pics.paintedNow() // the first painted: its signal waits unread
+	v2 := pics.publish([]byte("second"))
+	if pics.waitPainted(v2) {
+		t.Fatal("the first picture's paint acknowledged the second")
+	}
+	pics.paintedNow()
+	if !pics.waitPainted(v2) {
+		t.Fatal("the second picture's paint did not acknowledge it")
+	}
+}

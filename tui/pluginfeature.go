@@ -226,6 +226,11 @@ func (*plugins) Cards() []Card { return nil }
 // choices are preferences; and the
 // results panel takes the size the user left it at.
 func (pl *plugins) PreferencesChanged() {
+	for _, r := range pl.running { // a card's picture or its cells, as Plugin pixels and image previews now say
+		if r.view != nil {
+			r.view.MarkDirty()
+		}
+	}
 	pl.refreshPlugins()
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
