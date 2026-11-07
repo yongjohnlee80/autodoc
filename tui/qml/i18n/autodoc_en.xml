@@ -2135,6 +2135,10 @@
         <source>page width (40–400)</source>
         <translation>page width (40–400)</translation>
     </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>plugin pixels</translation>
+    </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
         <translation>screen</translation>

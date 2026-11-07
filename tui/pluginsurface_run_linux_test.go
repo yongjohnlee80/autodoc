@@ -125,7 +125,7 @@ func TestASurfacePointerIsInDpForEachKind(t *testing.T) {
 		if _, ok := v.NativeView(); ok {
 			t.Error("a terminal's view has a native view")
 		}
-		cp := v.Context().CellPixels()
+		cp := surfaceCellPixels(v.Context()) // a terminal's: the pictures' scale
 		for _, c := range []struct {
 			m    tuicore.MouseEvent
 			want plugin.SurfacePointer
@@ -198,7 +198,7 @@ func TestASurfaceScrollIsPreciseAndItsPointerShapeArrives(t *testing.T) {
 		if !v.PreciseScroll() {
 			t.Error("a surface does not take precise scrolls")
 		}
-		cp := v.Context().CellPixels()
+		cp := surfaceCellPixels(v.Context()) // a terminal's: the pictures' scale
 		wheel := func(b tuicore.MouseButton, dx, dy float32) (plugin.SurfacePointer, bool) {
 			return v.surfacePointer(tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: b, X: 1, Y: 1, ScrollX: dx, ScrollY: dy})
 		}

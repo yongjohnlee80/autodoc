@@ -1955,6 +1955,10 @@
         <source>page width (40–400)</source>
         <translation>ページ幅 (40–400)</translation>
     </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>プラグインのピクセル</translation>
+    </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
         <translation>画面</translation>
