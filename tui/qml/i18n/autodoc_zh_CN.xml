@@ -3079,12 +3079,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3194,12 +3195,13 @@ WHAT A KEY NEEDS
   在 Normal 模式下按 Escape，或再按 SPC `，即可隐藏它；键盘焦点移到仍打开的最上层窗口。
   shell 退出时(exit、Ctrl+D)其标签页关闭，异常退出会保留为通知；最后一个 shell
   退出时关闭窗格，下次按 SPC ` 会启动新的 shell。
-  所有面板均可移动和调整大小。按住 Alt(Mac 上为 Option)用左键可拖到任意位置，
+  所有面板均可移动和调整大小。拖动标题行可移动面板，拖动左右或底部边框可调整大小；
+  按住 Alt(Mac 上为 Option)用左键可从面板任意处拖动，
   用右键可调整大小；SPC L(转到 › 排列面板…)用按键完成两者：h j k l 或
   方向键移动，H J K L 或 Shift+方向键调整大小，Enter 保留，Esc 还原。之后它
   会在上次的位置打开。“转到 › 重置面板布局”会将所有面板重新停靠到各自
   边缘，就像在首选项中为某个面板设置新边缘一样。终端可能会自己占用 Alt+单击；
-  按键方式始终可用。
+  拖动边框和按键方式始终可用。
 
 按键的前提条件
   这里的一切都需要守护进程(autodoc --serve)。没有响应时 --ui 会启动它；若
