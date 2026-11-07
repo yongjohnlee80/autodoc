@@ -98,7 +98,7 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 	if ctx == nil {
 		return plugin.SurfacePointer{}, false
 	}
-	cp := ctx.CellPixels()
+	cp := surfaceCellPixels(ctx)
 	p := plugin.SurfacePointer{
 		X: (float32(m.X) + m.SubX) * cp.W, Y: (float32(m.Y) + m.SubY) * cp.H, Count: m.Count,
 		Ctrl: m.Mods&tuicore.ModCtrl != 0, Alt: m.Mods&tuicore.ModAlt != 0, Shift: m.Mods&tuicore.ModShift != 0,
@@ -214,6 +214,10 @@ func (v *pluginView) Render(s tuicore.Surface) {
 	base := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
 	s.Fill(tuicore.Rect{W: sz.W, H: sz.H}, " ", base)
 	if v.run == nil {
+		return
+	}
+	if v.cellPicturesOf() != nil { // a terminal's surface: its picture covers the card (Image)
+		v.paintCellSurface(sz)
 		return
 	}
 	v.run.mu.Lock()
