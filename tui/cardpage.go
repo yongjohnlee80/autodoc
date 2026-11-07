@@ -9,7 +9,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-// A CARD'S PAGE IN A TERMINAL (docs/decisions/editor.md#lua-cards; ADR 1792256101 Amendment 1): a
+// A CARD'S PAGE IN A TERMINAL (docs/decisions/editor.md#lua-cards): a
 // card's text is Markdown, drawn Rendered. A window's Editor draws it natively; a terminal's draws
 // this page, golib's HTMLView over the text exported in process, as a note's page is (notepage.go).
 // So a vega-lite fence on a card is a chart in either (in cells: bars, Braille plots or a table), a

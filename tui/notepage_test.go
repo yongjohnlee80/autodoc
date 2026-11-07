@@ -521,7 +521,7 @@ func braille(s string) bool {
 	return strings.ContainsFunc(s, func(r rune) bool { return r > 0x2800 && r <= 0x28ff })
 }
 
-// TestATerminalNoteDrawsItsCharts (ADR 1792256101 Amendment 1): a note's vega-lite fences on a
+// TestATerminalNoteDrawsItsCharts (docs/decisions/editor.md#a-terminal-notes-rendered-view): a note's vega-lite fences on a
 // terminal's page are charts in cells, bars in eighths with their categories and values and a line
 // in Braille, and a spec outside golib's subset is the notice, in the UI's language (English, then
 // Korean); never a spec's JSON.

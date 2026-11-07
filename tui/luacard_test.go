@@ -268,7 +268,7 @@ end }`)
 }
 
 // :usage in a terminal: the tables, then two vega-lite fences whose JSON is a line chart of golib's
-// subset, which a card draws there too (ADR 1792256101 Amendment 1): each lays out in cells through
+// subset, which a card draws there too (docs/decisions/editor.md#the-usage-card): each lays out in cells through
 // golib's tiers, never as its notice; a window's are the same fences.
 func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
