@@ -350,6 +350,9 @@ Window {
                         // [ Raw | Rendered ] on the page's frame's title row, at its right, while the file
                         // has a Rendered view (a note's page, a table), as the window has it on its title bar
                         modeSwitch: "title"
+                        // the buffers as tabs at the left of the page's frame's title row, the title
+                        // after them, as the window has them on its title bar (buffertabs.go)
+                        titleTabs: true
                         focus: true
                         palette.highlight: Theme.document.selection
                         palette.highlightedText: Theme.document.selectedText

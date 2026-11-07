@@ -52,15 +52,15 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 	want := onLoop(r, func() []widget.StripTab {
 		var out []widget.StripTab
 		for _, b := range r.h.buffers {
-			out = append(out, widget.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, bufferTabWidth-2)})
+			out = append(out, widget.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, r.h.tabWidth()-2)})
 		}
 		return out
 	})
 	if !slices.Equal(got.tabs, want) || got.active != want[2].ID {
 		t.Fatalf("fed tabs %q, active %q: want %q, the last opened active", got.tabs, got.active, want)
 	}
-	if l := got.tabs[2].Label; l == long || len([]rune(l)) > bufferTabWidth-2 {
-		t.Fatalf("the long name's tab is %q: want it cut to %d cells", l, bufferTabWidth-2)
+	if l := got.tabs[2].Label; l == long || len([]rune(l)) > r.h.tabWidth()-2 {
+		t.Fatalf("the long name's tab is %q: want it cut to %d cells", l, r.h.tabWidth()-2)
 	}
 	// the strip's row: a.md, b.md, the long one, then + and ≡; a tab's × is its first cells
 	if len(got.spans) != 5 {

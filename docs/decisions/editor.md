@@ -88,8 +88,13 @@ In the code: `script/buffers.go`, `tui/luabuffers.go`, `tui/luaevents.go`, `tui/
 Each surface switches its own way. The terminal has `:b <n|name>`, with Tab completion, and a
 Buffers picker that lists each buffer by number and name, `[+]` on a modified one, and previews its
 text as it is, unsaved edits included. The GUI shows the buffers as tabs in the editor's title bar.
+The terminal shows the same tabs at the left of the page's frame's title row, the file's title after
+them and `[ Raw | Rendered ]` at its right: a press shows a buffer, its `×` closes it (asking first
+over unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the window.
+A terminal tab is at most 20 cells wide (the window's, 32), so a page holds several; more scroll
+between the arrows. `H` and `L` move between them in both.
 
-In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/qml/main.qml`
+In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/buffertabs.go`, `tui/qml/main.qml`
 
 ## A Lua shell in the terminal panel
 
