@@ -76,6 +76,22 @@ jobs:
         with:
           merge-multiple: true
           path: dist
+      # The installer's files (docs/decisions/install.md#scripts-over-the-releases-tarballs): its two
+      # scripts, the launcher assets (the icon, the macOS app bundle) and the source, for a system
+      # with no prebuilt build. Each gets a checksum, as the binaries do: the scripts check every
+      # file they fetch.
+      - name: the installer's files
+        run: |
+          set -euo pipefail
+          V="${GITHUB_REF_NAME}"
+          cp scripts/install/install-autodoc.sh scripts/install/update.sh dist/
+          tar czf "dist/autodoc-${V}-assets.tar.gz" assets/icon assets/macos
+          git archive --format=tar.gz --prefix="autodoc-${V}/" -o "dist/autodoc-${V}-src.tar.gz" HEAD
+          cd dist
+          for f in install-autodoc.sh update.sh "autodoc-${V}-assets.tar.gz" "autodoc-${V}-src.tar.gz"; do
+            sha256sum "$f" > "$f.sha256"
+          done
+
       # Create when absent, upload either way: `gh release create` fails when
       # the release already exists (notes written by hand, a re-run, a retry),
       # and the binaries are the part a consumer cannot rebuild themselves.
@@ -93,17 +109,17 @@ jobs:
               --generate-notes
           fi
           gh release upload "${GITHUB_REF_NAME}" \
-            dist/*.tar.gz dist/*.tar.gz.sha256 \
+            dist/*.tar.gz dist/*.sh dist/*.sha256 \
             --clobber
 
       # An upload of a glob that matched nothing, or a partial upload, exits 0,
-      # so the count is asserted: a tarball and a checksum per platform built.
+      # so the count is asserted: a tarball and a checksum per platform built, and the installer's files.
       - name: verify every artifact reached the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          want=$(ls -1 dist/*.tar.gz dist/*.tar.gz.sha256 | wc -l)
+          want=$(ls -1 dist/*.tar.gz dist/*.sh dist/*.sha256 | wc -l)
           got=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets | length')
           echo "artifacts built: ${want}; assets on the release: ${got}"
           if [ "${got}" -lt "${want}" ]; then
