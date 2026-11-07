@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
 	"image/color"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
@@ -161,5 +164,74 @@ func TestATerminalsMindmapWritesItsFirstGroups(t *testing.T) {
 	}
 	if d := onLoop(r, func() int { return m.depth }); d != 2 {
 		t.Errorf("the map opened at depth %d; want its settings' 2", d)
+	}
+}
+
+// gatedFiles reads a file only once open is closed: a daemon slow to answer.
+type gatedFiles struct {
+	absoluteFiles
+	open chan struct{}
+}
+
+func (f gatedFiles) ReadAbsolute(ctx context.Context, path string) ([]byte, string, error) {
+	<-f.open
+	return f.absoluteFiles.ReadAbsolute(ctx, path)
+}
+
+// TestAGroupsRequestKeepsToItsWorkspace: a request for workspace a's first groups whose graph file is
+// read only after b has become the workspace in use makes a's groups of a's folders, never b's, and
+// writes them into a's graph file alone.
+func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
+	dir := func(folder, name string) string {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, folder), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, folder, name), []byte("# "+name+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	a, b := dir("alpha", "x.md"), dir("beta", "y.md")
+	d := startManaged(t, map[string]string{"a": a, "b": b})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "a")
+	r.h.p.Post(func() { r.h.enter("a") })
+	listed := func(ws, path string) func() bool {
+		return func() bool {
+			return onLoop(r, func() bool { return r.h.ws == ws && slices.Contains(r.h.files.Paths, path) })
+		}
+	}
+	r.waitWithin(t, "a's files listed", daemonWait, listed("a", "alpha/x.md"))
+	open := make(chan struct{})
+	store := onLoop(r, func() *graphStore { return newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") })
+	got := make(chan []relGroup, 1)
+	onLoop(r, func() bool {
+		store.groups("a", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []relGroup) { got <- l })
+		return true
+	})
+	r.h.p.Post(func() { r.h.enter("b") })
+	r.waitWithin(t, "b in use, its files listed", daemonWait, listed("b", "beta/y.md"))
+	close(open) // a's graph file read only now
+	var list []relGroup
+	select {
+	case list = <-got:
+	case <-time.After(daemonWait):
+		t.Fatal("a's groups never came")
+	}
+	var queries []string
+	for _, g := range list {
+		queries = append(queries, g.Query)
+	}
+	if !slices.Contains(queries, "path:alpha/") || slices.Contains(queries, "path:beta/") {
+		t.Fatalf("a's groups %q; want a's folder alone, never b's", queries)
+	}
+	file := func(root string) string { b, _ := os.ReadFile(graphFile(root)); return string(b) }
+	r.waitWithin(t, "a's graph file written", daemonWait, func() bool { return strings.Contains(file(a), "path:alpha/") })
+	if f := file(a); strings.Contains(f, "beta") {
+		t.Fatalf("a's graph file holds b's folder:\n%s", f)
+	}
+	if f := file(b); f != "" {
+		t.Fatalf("b's graph file was written by a's request:\n%s", f)
 	}
 }
