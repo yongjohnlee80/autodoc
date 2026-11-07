@@ -107,13 +107,14 @@ func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
 		files = append(files, n, n+"\n")
 	}
 	d := startDaemon(t, map[string][]string{"kb": files})
-	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 70, 20)
-	r.ready(t) // 70 columns leave the status line no room for the workspace's name
+	// 80 columns: AutoDoc's least (narrower shows "Screen too small"); six tabs of up to 20 cells
+	// still overflow it
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 20)
+	r.waitAttached(t, "kb")
 	r.waitListed(t, len(names))
 	for _, p := range names {
 		onLoop(r, func() bool { r.h.openPath(p); return true })
-		// on the file, not the status line's "opened": 70 columns leave the status no room for it
-		r.s.WaitFor(t, p+" open", func(string) bool { return r.file().path == p })
+		r.waitFile(t, p)
 	}
 	r.s.WaitFor(t, "the tabs scrolled, the shown one's in view", func(screen string) bool {
 		for _, row := range strings.Split(screen, "\n") {
