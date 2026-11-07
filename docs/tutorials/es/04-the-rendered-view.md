@@ -10,7 +10,7 @@ flowchart LR
 
 La vista Renderizada sigue siendo el editor. Cada línea se puede editar: la línea bajo el cursor muestra su Markdown, y las demás muestran su resultado. Ctrl+T otra vez vuelve a Sin procesar.
 
-**Los archivos HTML** preguntan cómo abrirse: **Simplificado**, su texto en solo lectura, o **Sin procesar**, el propio HTML para editarlo y guardarlo. La vista Renderizada de un archivo HTML sin procesar es su página, dibujada de forma nativa con sus propias hojas de estilo e imágenes: `j k` desplazan, y sus enlaces abren notas, archivos y el navegador.
+**Los archivos HTML** preguntan cómo abrirse: **Simplificado**, su texto en solo lectura, o **Sin procesar**, el propio HTML para editarlo y guardarlo. La vista Renderizada de un archivo HTML sin procesar es su página: en la ventana, dibujada de forma nativa con sus propias hojas de estilo e imágenes; en una terminal, dibujada en celdas. `j k` desplazan, y sus enlaces abren notas, archivos y el navegador.
 
 **Archivo › Vista previa HTML** (SPC H) abre la página de la nota junto al editor, en vivo mientras escribes.
 
