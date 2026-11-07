@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -314,4 +315,58 @@ func TestAZoomedInGlobeMapDrawsQuickly(t *testing.T) {
 	if d := time.Since(start); d > 2*time.Second*raceFactor {
 		t.Fatalf("a paint at 64x of %d links took %v; want well under a second's work", links, d)
 	}
+}
+
+// TestTheGlobeMapSettingsListACachedWorkspacesGroups: b's groups read, then a entered and b again
+// (the editor cleared for each), the settings opened in b list b's groups, read already, and take
+// an edit: never an empty editor that refuses every edit.
+func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
+	kb := func(folder string) string {
+		root := t.TempDir()
+		for _, p := range []string{folder, ".autodoc"} {
+			if err := os.MkdirAll(filepath.Join(root, p), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(root, folder, "x.md"), []byte("# x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		graph := "[[globemap.groups]]\nquery = \"path:" + folder + "/\"\ncolour = \"#4e79a7\"\n"
+		if err := os.WriteFile(graphFile(root), []byte(graph), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	a, b := kb("alpha"), kb("beta")
+	d := startManaged(t, map[string]string{"a": a, "b": b})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "a")
+	g := onLoop(r, func() *cellGlobeMap {
+		for _, f := range r.h.reg.features {
+			if c, ok := f.(*cellGlobeMap); ok {
+				return c
+			}
+		}
+		return nil
+	})
+	enter := func(ws string) {
+		r.h.p.Post(func() { r.h.enter(ws) })
+		r.waitWithin(t, ws+" in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == ws }) })
+	}
+	listedIn := func(ws string) func() bool {
+		return func() bool {
+			return onLoop(r, func() bool { return g.editor.ws == ws && !g.editor.loading && len(g.editor.list) == 1 })
+		}
+	}
+	enter("b")
+	onLoop(r, func() bool { g.openSettings(); return true })
+	r.waitWithin(t, "b's groups listed", daemonWait, listedIn("b"))
+	r.keys(t, key('q'))
+	enter("a")
+	enter("b")
+	onLoop(r, func() bool { g.openSettings(); return true })
+	r.waitWithin(t, "b's groups listed again on its revisit", daemonWait, listedIn("b"))
+	onLoop(r, func() bool { g.editor.setColour("#123456"); return true })
+	file := func() string { bs, _ := os.ReadFile(graphFile(b)); return string(bs) }
+	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(), `colour = "#123456"`) })
 }

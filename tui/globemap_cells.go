@@ -210,8 +210,8 @@ func (g *cellGlobeMap) Catalog() []Entry {
 func (g *cellGlobeMap) openSettings() {
 	ws := g.c.Workspace()
 	g.c.Open("globeMapSettings")
-	if ws == "" || g.groupsWS == ws {
-		g.editor.show("")
+	if ws == "" || (g.groupsWS == ws && g.editor.ws == ws && !g.editor.loading) {
+		g.editor.show("") // its groups listed already: as they are
 		return
 	}
 	var types []string
