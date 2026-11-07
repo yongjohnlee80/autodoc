@@ -266,7 +266,7 @@ terminal and that Raw shows its source, in the UI's language; never its source. 
 two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
 again puts the cursor at the block the reader scrolled the page to; when the
 note changes under it, it is exported again once typing rests and keeps the reader's place. Its
-links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
+links open as the pane's do, and its images load from the note's folder: an image alone in its paragraph is drawn in place where the terminal draws kitty's graphics, and is its alt text elsewhere. It is the terminal's, in
 either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
 
 The window's Rendered Markdown is edited in place, and the page is not, so the page reads by its own
