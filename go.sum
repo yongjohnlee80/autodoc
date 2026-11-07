@@ -79,6 +79,8 @@ github.com/yongjohnlee80/golib v0.8.35 h1:/+4fki9tgFAtZSCf2ATHMho0l6bKrX0uVrje1U
 github.com/yongjohnlee80/golib v0.8.35/go.mod h1:GG9nwIgYc9a3hu2BkNjN0JeJyqZO5bmuT8/7OewDTsM=
 github.com/yongjohnlee80/golib/gui v0.3.12 h1:zSglc38RdeNHc1goDk2gGbCRiEUiNZYW96jnjs87sq8=
 github.com/yongjohnlee80/golib/gui v0.3.12/go.mod h1:VgIy2ViTIOm7vvRvYaHMiq6ZFZtGpJ2xyIqp8c+lGeE=
+github.com/yongjohnlee80/golib/gui v0.3.13 h1:1qACmK9nd3oBvf8K21+qK0U3mZ1g0pVL4yCx6aMSDbM=
+github.com/yongjohnlee80/golib/gui v0.3.13/go.mod h1:vEvS7GwjEhFj6YePYvEyHZ3wYYpCOFBSkXcVUJfmPH8=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
 github.com/yuin/gopher-lua v1.1.2/go.mod h1:7aRmXIWl37SqRf0koeyylBEzJ+aPt8A+mmkQ4f1ntR8=
 go.yaml.in/yaml/v2 v2.4.3 h1:6gvOSjQoTB3vt1l+CU+tSyi/HOjfOjRLJ4YwYZGwRO0=
