@@ -2891,10 +2891,10 @@
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F11, SPC M  maximize or restore the terminal or the agents (the one with the keyboard, in a
+  F11, SPC z  maximize or restore the terminal or the agents (the one with the keyboard, in a
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
-              screen) keeps it: SPC M always works
+              screen) keeps it: SPC z always works
   Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
@@ -2962,10 +2962,10 @@
   SPC k       编辑器模式：Vim(模式化)或 Text(无模式，普通文本编辑器的按键)
   ?           Vim 按键卡片，显示在右下角(Normal 模式)；再按 ? 关闭
   SPC h       通知历史(转到 › 通知…)
-  F11, SPC M  最大化或还原终端或智能体(键盘所在的那个，在 shell 中也可用，
+  F11, SPC z  最大化或还原终端或智能体(键盘所在的那个，在 shell 中也可用，
               否则为最新打开的)，与其标签页菜单中的“最大化”相同：面板中的程序
               收不到 F11；自身占用 F11 的终端模拟器(如 GNOME Terminal 的全屏)
-              会保留它：SPC M 始终可用
+              会保留它：SPC z 始终可用
   Ctrl+Tab and Ctrl+Shift+Tab  终端或智能体(键盘所在的那个)的下一个/上一个标签页，
               首尾循环；程序收不到它们(先按 Ctrl+\ 则发送给程序)。在终端中，仅当终端能
               区分 Ctrl+Tab 与 Tab 时有效(kitty 键盘协议)
@@ -3522,6 +3522,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.the_links">
         <source>the links</source>
         <translation>链接</translation>
+    </message>
+    <message id="autodoc.key.the_mindmap">
+        <source>the Mindmap</source>
+        <translation>Mindmap</translation>
     </message>
     <message id="autodoc.key.the_months_archived">
         <source>the months (Archived)</source>

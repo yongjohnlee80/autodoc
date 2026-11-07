@@ -229,6 +229,36 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	})
 }
 
+// TestSPCMOpensTheMindmap: SPC M (the leader's M, on SPC's card under THIS FILE) opens the Mindmap
+// of the document shown, and again closes it. Maximize is SPC z, never SPC M.
+func TestSPCMOpensTheMindmap(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	m := onLoop(r, func() *cellMindmap {
+		for _, f := range r.h.reg.features {
+			if m, ok := f.(*cellMindmap); ok {
+				return m
+			}
+		}
+		return nil
+	})
+	if m == nil {
+		t.Fatal("a terminal host has no cell Mindmap registered")
+	}
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M opened the Mindmap", func(string) bool {
+		return onLoop(r, func() bool { return m.open && m.view != nil })
+	})
+	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
+		t.Error("SPC M maximized a panel")
+	}
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M closed it", func(string) bool { return !onLoop(r, func() bool { return m.open }) })
+}
+
 // TestTheCellMindmapTakesTheKeyboard: Relations › Mindmap opened over a note's page (Rendered) or
 // over its text (Raw), from the menu (Alt+L, m, as a reader opens it) or by its command, takes the
 // keyboard, as the window's Mindmap does: its next key (d: two links out) is the map's, and the note
