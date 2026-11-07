@@ -194,6 +194,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [The rendered view is kept across files](editor.md#the-rendered-view-is-kept-across-files)
 - [CSV and TSV files as editable tables](editor.md#csv-and-tsv-files-as-editable-tables)
 - [The table's clipboard, menu and row numbers](editor.md#the-tables-clipboard-menu-and-row-numbers)
+- [Reading the clipboard in a terminal](editor.md#reading-the-clipboard-in-a-terminal)
 - [Fonts, zoom and floating panels](editor.md#fonts-zoom-and-floating-panels)
 - [The terminal text size](editor.md#the-terminal-text-size)
 - [Files outside every workspace](editor.md#files-outside-every-workspace)
