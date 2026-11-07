@@ -93,7 +93,9 @@ whole width (decided 2026-11-07). A press shows a buffer, its `×` closes it (as
 unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the window.
 They are not on the title row, as the window's are: in a terminal that row holds the file's title,
 its badges, the breadcrumb that follows the cursor and `[ Raw | Rendered ]`, and tabs there would
-squeeze them. A single buffer shows its one tab, as the window does. A terminal tab is at most 20
+squeeze them. The terminal shows them from the second buffer on: one buffer's name is the title
+row's already, and a page with one reads as it did before there were tabs (the window shows its one
+tab). A terminal tab is at most 20
 cells wide (the window's, 32), so a page holds several; more scroll between the arrows. `H` and `L`
 move between them in both.
 

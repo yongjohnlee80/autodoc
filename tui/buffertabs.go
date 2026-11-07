@@ -20,9 +20,10 @@ import (
 // changes width as tabs open and close or the window resizes (consistent, not re-fitted each
 // time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
 // and →. The terminal has the same strip, the same model, on the page's frame's bottom border
-// (golib's Editor.FrameTabs, main.qml's frameTabs), its full width: the title row keeps the file's
-// title, its badges and breadcrumb, and Raw | Rendered (Johno, 2026-11-07); a terminal tab is never
-// wider than terminalTabWidth cells, so a page holds more than two.
+// (golib's Editor.FrameTabs), its full width, from the second buffer on (showTerminalTabs): the
+// title row keeps the file's title, its badges and breadcrumb, and Raw | Rendered
+// (docs/decisions/editor.md#switching-buffers); a terminal tab is never wider than terminalTabWidth
+// cells, so a page holds more than two.
 // :b and the Buffers picker switch too, in both.
 
 // bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
@@ -54,7 +55,19 @@ func (h *Host) tabWidth() int {
 }
 
 // syncBufferTabs feeds the editor's strip the buffers as they are now.
-func (h *Host) syncBufferTabs() { h.feedBufferTabs(h.bufferStrip()) }
+func (h *Host) syncBufferTabs() {
+	h.feedBufferTabs(h.bufferStrip())
+	h.showTerminalTabs()
+}
+
+// showTerminalTabs shows the terminal's tabs, on its page's bottom border, while two or more
+// buffers are open: one buffer's name is the title row's already, and the page reads as it did
+// before there were tabs. The window's editor has its tabs on its title bar always, and isn't one.
+func (h *Host) showTerminalTabs() {
+	if e, ok := h.editor.(*widget.Editor); ok {
+		e.SetTabsInFrame(len(h.buffers) > 1)
+	}
+}
 
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
 // it is seen (a new editor, after a reload, is a new strip); nil, an editor with none, is left.

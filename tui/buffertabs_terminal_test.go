@@ -34,17 +34,25 @@ func (r *running) press(t *testing.T, x, y int) {
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
 
-// The terminal shows the buffers as tabs on the page's frame's bottom border, in opening order, and
-// no tab on any frame's title row, which keeps the page's title as it was: a press on a tab shows
+// The terminal shows the buffers as tabs on the page's frame's bottom border once two are open (one
+// shows none), in opening order, and no tab on any frame's title row, which keeps the page's title
+// as it was: a press on a tab shows
 // its buffer, and a switch made elsewhere (SPC b 2) moves the tabs' active one with it.
 func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
-	for _, p := range []string{"a.md", "b.md"} {
-		r.openByPicker(t, p)
-		r.waitFile(t, p)
+	// one buffer: no tabs, the page as it was before there were tabs (its name is the title row's)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	if n := onLoop(r, func() int { return len(r.h.buffers) }); n != 1 {
+		t.Fatalf("%d buffers after one open: want 1", n)
 	}
+	if _, _, _, ok := r.frameTab("a.md"); ok {
+		t.Fatalf("a tab with one buffer open:\n%s", r.s)
+	}
+	r.openByPicker(t, "b.md")
+	r.waitFile(t, "b.md")
 	r.s.WaitFor(t, "a.md's and b.md's tabs on the bottom border", func(string) bool {
 		_, _, ya, oka := r.frameTab("a.md")
 		_, _, yb, okb := r.frameTab("b.md")
@@ -104,7 +112,8 @@ func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
 	r.waitListed(t, len(names))
 	for _, p := range names {
 		onLoop(r, func() bool { r.h.openPath(p); return true })
-		r.waitFile(t, p)
+		// on the file, not the status line's "opened": 70 columns leave the status no room for it
+		r.s.WaitFor(t, p+" open", func(string) bool { return r.file().path == p })
 	}
 	r.s.WaitFor(t, "the tabs scrolled, the shown one's in view", func(screen string) bool {
 		for _, row := range strings.Split(screen, "\n") {
