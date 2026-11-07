@@ -88,8 +88,8 @@ func boxOf(r *running, m *cellMindmap, label string) (tuimermaid.Box, bool) {
 // accent. In sepia, then in dark switched to with the map open, the outline reads at 3:1 at least
 // on its page; the map's rows are logged, each theme's, for review.
 func TestTheTerminalsMindmapWearsItsGroups(t *testing.T) {
-	const red = 0xe15759
-	kb := groupsKB(t, "[[mindmap.groups]]\nquery = \"path:notes/\"\ncolour = \"#e15759\"\nshape = \"hexagon\"\n")
+	const yellow = 0xedc948 // illegible on sepia's paper as it is: onGround darkens it there
+	kb := groupsKB(t, "[[mindmap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\nshape = \"hexagon\"\n")
 	r, m := openCellMindmap(t, kb, func(r *running) {
 		onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
 		r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
@@ -121,7 +121,7 @@ func TestTheTerminalsMindmapWearsItsGroups(t *testing.T) {
 			if bg.Kind != tuicore.CellColorRGB || !strings.ContainsRune("─╱╲", []rune(edge.Content + " ")[0]) {
 				return false
 			}
-			want := onGround(hexColour(red), color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
+			want := onGround(hexColour(yellow), color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
 			return fg == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: want.R, G: want.G, B: want.B} &&
 				(len(seen) == 0 || bg != seen[0])
 		})
