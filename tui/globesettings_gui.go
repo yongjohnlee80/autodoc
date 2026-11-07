@@ -21,8 +21,6 @@ import (
 
 const (
 	prefGlobeTheme  = "tui.globemap.theme"
-	prefGlobeNames  = "tui.globemap.names"
-	prefGlobeFilter = "tui.globemap.filter"
 	prefGlobeDots   = "tui.globemap.dots"
 	prefGlobeSpeed  = "tui.globemap.speed"
 	prefGlobeColour = "tui.globemap.colour." // and a globeColourFields key
@@ -207,7 +205,7 @@ func (g *globeMap) Prefs() []PrefSpec {
 			return map[string]any{"App.globeThemeIndex": max(slices.Index(names, p.Value(prefGlobeTheme)), 0)}
 		}),
 		ValuePref(prefGlobeNames, "true", []string{"true", "false"}).chooser("App.globeNamesIndex", "App.setGlobeNames"),
-		ValuePref(prefGlobeFilter, globeFilters[0].key, keys(len(globeFilters), func(i int) string { return globeFilters[i].key })).
+		ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).
 			chooser("App.globeFilterIndex", "App.setGlobeFilter").then(func(prefs) { g.filterChosen() }),
 		ValuePref(prefGlobeDots, "medium", keys(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name })).
 			chooser("App.globeDotsIndex", "App.setGlobeDots"),
@@ -221,11 +219,7 @@ func (g *globeMap) Prefs() []PrefSpec {
 }
 
 // prefFilter is the filter the preferences open the map with.
-func (g *globeMap) prefFilter() int {
-	return max(slices.IndexFunc(globeFilters, func(f globeFilter) bool {
-		return f.key == g.c.Prefs().Value(prefGlobeFilter)
-	}), 0)
-}
+func (g *globeMap) prefFilter() int { return globeFilterPref(g.c) }
 
 // filterChosen: the map shown follows the links chosen.
 func (g *globeMap) filterChosen() {
@@ -239,7 +233,11 @@ func (g *globeMap) filterChosen() {
 // the GlobeMap's settings in a window, and a word of why not elsewhere.
 func (h *Host) openGlobeSettings() {
 	for _, f := range h.relationViewFeatures() {
-		if g, ok := f.(*globeMap); ok {
+		switch g := f.(type) {
+		case *globeMap:
+			g.openSettings()
+			return
+		case *cellGlobeMap: // a GUI build run as a terminal (--ui)
 			g.openSettings()
 			return
 		}

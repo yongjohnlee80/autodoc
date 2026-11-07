@@ -6207,6 +6207,14 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>supersedes</source>
         <translation>取代</translation>
     </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l 选择，H J K L 平移，+ - 缩放，0 适应，f 筛选，g 图例，Enter 打开</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>另有 %1 个分组</translation>
+    </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
         <translation>颜色格式为 #rrggbb，留空则使用主题颜色</translation>

@@ -27,7 +27,15 @@ func smallMind() relMap {
 func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*cellMindmap, *cellMindView) {
 	t.Helper()
 	host := newHost(NewSession("unused", nil), Options{})
-	m := host.relationViewFeatures()[0].(*cellMindmap)
+	var m *cellMindmap
+	for _, f := range host.relationViewFeatures() { // the GlobeMap's and the Mindmap's, in cells
+		if c, ok := f.(*cellMindmap); ok {
+			m = c
+		}
+	}
+	if m == nil {
+		t.Fatal("a terminal host has no cell Mindmap")
+	}
 	v := m.newView().(*cellMindView)
 	v.cells = tuicore.Size{W: w, H: h}
 	grid, err := tuimermaid.LayMindmap(context.Background(), mindmapModel(rm, root, cellMindShape(root)), cellMeasure{})

@@ -1,7 +1,9 @@
 // GlobeMapSettings.qml — Relations › GlobeMap settings… and Preferences › GlobeMap…: the GlobeMap's own
-// settings (globesettings_gui.go). The GUI's alone: written into main.qml whole (relationviews_gui.go),
-// not an autodoc.dialogs component, which a terminal's document could name. Each applies at once and
-// the store keeps it; a colour field applies as it is typed, once it is #rrggbb or empty (the theme's).
+// settings (globesettings_gui.go; a terminal's, globemap_cells.go, which has the names, the links it
+// opens with and the groups: its rows for a theme, dots, pace and colours are the window's alone).
+// Written into main.qml whole (relationviews_gui.go, relationviews_cells.go), not an autodoc.dialogs
+// component. Each applies at once and the store keeps it; a colour field applies as it is typed,
+// once it is #rrggbb or empty (the theme's).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 96
@@ -24,6 +26,7 @@ Dialog {
                     Layout.fillWidth: true
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.theme"); Layout.preferredWidth: 18; toolTipText: "the terminals' theme (the default), the page's, or one of its own" }
                         ComboBox { model: App.globeThemes; textRole: "label"; currentIndex: App.globeThemeIndex; onActivated: App.setGlobeTheme(index) }
                     }
@@ -39,11 +42,13 @@ Dialog {
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.dot_size"); Layout.preferredWidth: 18 }
                         ComboBox { model: App.globeDotSizes; textRole: "label"; currentIndex: App.globeDotsIndex; onActivated: App.setGlobeDots(index) }
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.settling_speed"); Layout.preferredWidth: 18; toolTipText: "how fast the map settles: slow 1, gentle 2, normal 4, fast 8 steps a frame" }
                         ComboBox { model: App.globeSpeeds; textRole: "label"; currentIndex: App.globeSpeedIndex; onActivated: App.setGlobeSpeed(index) }
                     }
@@ -90,30 +95,35 @@ Dialog {
                         Button { text: qsTrId("autodoc.gui.globeMapSettings.down"); onClicked: App.globeGroupDown() }
                         Button { text: qsTrId("autodoc.gui.globeMapSettings.add_missing"); toolTipText: "a group for each schema type and folder no group queries"; onClicked: App.globeGroupsAddMissing() }
                     }
-                    Text { text: "" }
-                    Text { text: qsTrId("autodoc.gui.globeMapSettings.other_colours_rrggbb_empty_the_theme_s") }
+                    Text { text: ""; visible: App.gui }
+                    Text { text: qsTrId("autodoc.gui.globeMapSettings.other_colours_rrggbb_empty_the_theme_s"); visible: App.gui }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.no_group_s"); Layout.preferredWidth: 18 }
                         TextField { text: App.globeOtherColour; placeholderText: qsTrId("autodoc.gui.globeMapSettings.the_theme_s"); onTextEdited: App.setGlobeColour("other", text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.body_links"); Layout.preferredWidth: 18; toolTipText: "wikilinks, embeds and Markdown links" }
                         TextField { text: App.globeBodyLinkColour; placeholderText: qsTrId("autodoc.gui.globeMapSettings.the_theme_s"); onTextEdited: App.setGlobeColour("link.body", text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.supersession_links"); Layout.preferredWidth: 18 }
                         TextField { text: App.globeSupersessionLinkColour; placeholderText: qsTrId("autodoc.gui.globeMapSettings.the_theme_s"); onTextEdited: App.setGlobeColour("link.supersession", text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.other_relations"); Layout.preferredWidth: 18; toolTipText: "amends, related, sources, adr, review, blocked" }
                         TextField { text: App.globeRelationLinkColour; placeholderText: qsTrId("autodoc.gui.globeMapSettings.the_theme_s"); onTextEdited: App.setGlobeColour("link.relation", text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // the window's alone: a terminal draws in the page's tokens, settled at once
                         Text { text: qsTrId("autodoc.gui.globeMapSettings.superseded_ring"); Layout.preferredWidth: 18 }
                         TextField { text: App.globeRingColour; placeholderText: qsTrId("autodoc.gui.globeMapSettings.the_theme_s"); onTextEdited: App.setGlobeColour("superseded", text) }
                     }

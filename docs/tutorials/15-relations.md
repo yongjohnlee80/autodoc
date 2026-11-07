@@ -13,7 +13,7 @@ flowchart LR
 
 **The Mindmap** (SPC M). Your note at the centre, the notes one link away around it; **d** reaches two. Click a note to open it, and the map centres on it. In a terminal it is drawn in characters: **h j k l** or the arrows move from note to note, and **Enter** opens one.
 
-**The GlobeMap** (in the GUI). The whole workspace at once: every note and every link, settling into place as you watch.
+**The GlobeMap**. The whole workspace at once: every note and every link, settling into place as you watch. In a terminal it is drawn once settled, in Braille dots: **h j k l** or the arrows move from note to note, **Enter** opens one, **H J K L** pan, and **g** shows the legend.
 
 - drag to pan, the mouse wheel or **+** and **-** to zoom, **0** to fit it all again;
 - **f** chooses which links show: every link, the body's links, or the frontmatter's relations;
