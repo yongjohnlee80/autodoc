@@ -70,7 +70,7 @@ Typing types. The keys are an ordinary text editor's:
 - `Ctrl+X` / `Ctrl+C` / `Ctrl+V` cut, copy and paste;
 - `Ctrl+A` selects all;
 - `Ctrl+G` searches the workspace;
-- `Ctrl+T` toggles the Rendered View (a Markdown or HTML file's in `--gui` only; a CSV or TSV file's table in `--gui` and in the terminal, §3.3);
+- `Ctrl+T` toggles the Rendered View (a Markdown note's page in `--gui` and in the terminal, drawn there in cells; an HTML file's page in `--gui` only; a CSV or TSV file's table in both, §3.3);
 - `Ctrl+Space` opens SPC's card;
 - `Ctrl+;` opens the command line.
 
