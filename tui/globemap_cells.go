@@ -128,10 +128,11 @@ func (g *cellGlobeMap) State() map[string]any {
 	return st
 }
 
+// Commands are the map's and its settings' (App.openGlobeSettings is the host's in every build,
+// which opens these: relationviews_tui.go, globesettings_gui.go).
 func (g *cellGlobeMap) Commands() map[string]Command {
 	c := g.editor.commands()
 	c["App.toggleGlobeMap"] = none(g.toggle)
-	c["App.openGlobeSettings"] = none(g.openSettings)
 	for _, name := range []string{"App.setGlobeTheme", "App.setGlobeDots", "App.setGlobeSpeed"} {
 		c[name] = oneNumber("a row", func(int) {}) // a window's alone: its row hides here
 	}
