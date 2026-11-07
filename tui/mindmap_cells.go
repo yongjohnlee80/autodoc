@@ -151,6 +151,7 @@ func (m *cellMindmap) openSettings() {
 	if m.cur != nil && m.cur.root.ws == ws {
 		types = m.cur.m.Types
 	}
+	m.editor.loadingFor(ws) // not the last workspace's groups while ws's are read
 	m.readGroups(ws, types)
 }
 

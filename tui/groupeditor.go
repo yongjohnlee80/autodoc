@@ -26,13 +26,23 @@ type groupEditor struct {
 	list  []relGroup
 	types []string // the workspace's schema types, as graph.map last said
 	row   int
+	// loading: ws's groups are being read, and every edit is refused until they are listed, so
+	// nothing is saved into another workspace's file, nor over ws's before its own are read
+	loading bool
+}
+
+// loadingFor binds the editor to ws, whose groups are being read: no rows, and no edits, until
+// they are listed.
+func (e *groupEditor) loadingFor(ws string) {
+	e.ws, e.list, e.row, e.loading = ws, nil, 0, true
+	e.show(e.c.Trf("autodoc.text.mindmap_gui.reading", ws))
 }
 
 func (e *groupEditor) source(s string) string { return "App." + e.name + s }
 
 // listed is the view's groups for ws, as read or edited: the dialog shows them.
 func (e *groupEditor) listed(ws string, types []string, list []relGroup) {
-	e.ws, e.types, e.list = ws, types, list
+	e.ws, e.types, e.list, e.loading = ws, types, list, false
 	e.show("")
 }
 
@@ -70,6 +80,9 @@ func (e *groupEditor) show(note string) {
 
 // edit puts list as the groups: saved, shown, and handed to the view.
 func (e *groupEditor) edit(list []relGroup) {
+	if e.loading {
+		return
+	}
 	e.list = list
 	if e.store != nil && e.ws != "" {
 		e.store.save(e.ws, e.view, list)
@@ -129,6 +142,9 @@ func (e *groupEditor) setShape(i int) {
 // add is a new group after the one selected, a tag's for the user to name, in a colour of the
 // palette none of the groups wears when there is one, legible on the view's ground.
 func (e *groupEditor) add() {
+	if e.loading {
+		return
+	}
 	ground := e.ground()
 	col := onGround(groupPalette[len(e.list)%len(groupPalette)], ground)
 	for _, c := range groupPalette {
@@ -162,10 +178,14 @@ func (e *groupEditor) move(d int) {
 
 // addMissing adds a group for each schema type and folder no group queries.
 func (e *groupEditor) addMissing() {
-	if e.store == nil || e.ws == "" {
+	if e.store == nil || e.ws == "" || e.loading {
 		return
 	}
-	e.store.addMissing(e.ws, e.view, e.list, e.types, e.ground(), func(list []relGroup) {
+	ws := e.ws
+	e.store.addMissing(ws, e.view, e.list, e.types, e.ground(), func(list []relGroup) {
+		if e.ws != ws || e.loading { // bound to another workspace meanwhile: its own groups stand
+			return
+		}
 		e.list = list
 		e.show("")
 		if e.changed != nil {

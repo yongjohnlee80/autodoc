@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
 	"image/color"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
@@ -223,4 +226,145 @@ func TestATerminalsMindmapSettingsEditItsGroups(t *testing.T) {
 			return false
 		})
 	})
+}
+
+// gatedFiles reads a file only once open is closed: a daemon slow to answer.
+type gatedFiles struct {
+	absoluteFiles
+	open chan struct{}
+}
+
+func (f gatedFiles) ReadAbsolute(ctx context.Context, path string) ([]byte, string, error) {
+	<-f.open
+	return f.absoluteFiles.ReadAbsolute(ctx, path)
+}
+
+// TestAGroupsRequestKeepsToItsWorkspace: a request for workspace a's first groups whose graph file is
+// read only after b has become the workspace in use makes a's groups of a's folders, never b's, and
+// writes them into a's graph file alone.
+func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
+	dir := func(folder, name string) string {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, folder), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, folder, name), []byte("# "+name+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	a, b := dir("alpha", "x.md"), dir("beta", "y.md")
+	d := startManaged(t, map[string]string{"a": a, "b": b})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "a")
+	r.h.p.Post(func() { r.h.enter("a") })
+	listed := func(ws, path string) func() bool {
+		return func() bool {
+			return onLoop(r, func() bool { return r.h.ws == ws && slices.Contains(r.h.files.Paths, path) })
+		}
+	}
+	r.waitWithin(t, "a's files listed", daemonWait, listed("a", "alpha/x.md"))
+	open := make(chan struct{})
+	store := onLoop(r, func() *graphStore { return newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") })
+	got := make(chan []relGroup, 1)
+	onLoop(r, func() bool {
+		store.groups("a", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []relGroup) { got <- l })
+		return true
+	})
+	r.h.p.Post(func() { r.h.enter("b") })
+	r.waitWithin(t, "b in use, its files listed", daemonWait, listed("b", "beta/y.md"))
+	close(open) // a's graph file read only now
+	var list []relGroup
+	select {
+	case list = <-got:
+	case <-time.After(daemonWait):
+		t.Fatal("a's groups never came")
+	}
+	var queries []string
+	for _, g := range list {
+		queries = append(queries, g.Query)
+	}
+	if !slices.Contains(queries, "path:alpha/") || slices.Contains(queries, "path:beta/") {
+		t.Fatalf("a's groups %q; want a's folder alone, never b's", queries)
+	}
+	file := func(root string) string { b, _ := os.ReadFile(graphFile(root)); return string(b) }
+	r.waitWithin(t, "a's graph file written", daemonWait, func() bool { return strings.Contains(file(a), "path:alpha/") })
+	if f := file(a); strings.Contains(f, "beta") {
+		t.Fatalf("a's graph file holds b's folder:\n%s", f)
+	}
+	if f := file(b); f != "" {
+		t.Fatalf("b's graph file was written by a's request:\n%s", f)
+	}
+}
+
+// TestTheMindmapSettingsEditOnlyTheirWorkspace: the settings opened in b while b's groups are still
+// being read show none and refuse every edit, so nothing lands in a's graph file (the editor's last
+// workspace) nor over b's before b's are read; once b's are listed, an edit is b's alone.
+func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
+	kb := func(folder, colour string) string {
+		root := t.TempDir()
+		for _, p := range []string{folder, ".autodoc"} {
+			if err := os.MkdirAll(filepath.Join(root, p), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(root, folder, "x.md"), []byte("# x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		graph := "[[mindmap.groups]]\nquery = \"path:" + folder + "/\"\ncolour = \"" + colour + "\"\nshape = \"hexagon\"\n"
+		if err := os.WriteFile(graphFile(root), []byte(graph), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	a, b := kb("alpha", "#4e79a7"), kb("beta", "#e15759")
+	d := startManaged(t, map[string]string{"a": a, "b": b})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "a")
+	r.h.p.Post(func() { r.h.enter("a") })
+	r.waitWithin(t, "a in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "a" }) })
+	var m *cellMindmap
+	onLoop(r, func() bool {
+		for _, f := range r.h.reg.features {
+			if c, ok := f.(*cellMindmap); ok {
+				m = c
+			}
+		}
+		m.openSettings()
+		return true
+	})
+	r.waitWithin(t, "a's groups listed", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "a" && !m.editor.loading && len(m.editor.list) == 1 })
+	})
+	r.keys(t, key('q'))
+	open := make(chan struct{})
+	onLoop(r, func() bool {
+		s := newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") // b's file read only once open closes
+		m.store, m.editor.store = s, s
+		return true
+	})
+	r.h.p.Post(func() { r.h.enter("b") })
+	r.waitWithin(t, "b in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "b" }) })
+	onLoop(r, func() bool { m.openSettings(); return true })
+	r.waitWithin(t, "the settings bound to b, reading", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "b" && m.editor.loading && len(m.editor.list) == 0 })
+	})
+	file := func(root string) string { b, _ := os.ReadFile(graphFile(root)); return string(b) }
+	beforeA, beforeB := file(a), file(b)
+	onLoop(r, func() bool { m.editor.setColour("#123456"); m.editor.add(); m.editor.addMissing(); return true })
+	if file(a) != beforeA || strings.Contains(file(a), "#123456") {
+		t.Fatalf("an edit while b's groups were read changed a's graph file:\n%s", file(a))
+	}
+	close(open)
+	r.waitWithin(t, "b's groups listed", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "b" && !m.editor.loading && len(m.editor.list) == 1 })
+	})
+	if file(b) != beforeB {
+		t.Fatalf("an edit while b's groups were read was written over b's:\n%s", file(b))
+	}
+	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(b), `colour = "#123456"`) })
+	if strings.Contains(file(a), "#123456") {
+		t.Fatalf("b's edit reached a's graph file:\n%s", file(a))
+	}
 }

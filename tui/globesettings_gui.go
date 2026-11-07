@@ -249,6 +249,14 @@ func (h *Host) openGlobeSettings() {
 func (g *globeMap) openSettings() {
 	g.c.Set("App.globeSettingsError", "")
 	g.c.Open("globeMapSettings")
+	if ws := g.c.Workspace(); ws != "" && (g.editor.loading || g.editor.ws != ws) {
+		var types []string
+		if g.cur != nil && g.cur.ws == ws {
+			types = g.cur.m.Types
+		}
+		g.editor.loadingFor(ws)
+		g.readGroups(ws, types) // its groups, read now: the map may not have been opened since ws was entered
+	}
 }
 
 // setTheme is the theme chooser's row i.
