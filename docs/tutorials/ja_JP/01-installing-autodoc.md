@@ -15,13 +15,13 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 - お使いのシステム向けの最新リリースをダウンロードし、リリースのチェックサムで検証します。
 - `~/.local/bin/autodoc` として、あなたのユーザーだけにインストールします。`sudo` は一切求めません。
 - ランチャーを追加し、AutoDoc をアプリケーション一覧に表示します (macOS では AutoDoc.app、Linux ではデスクトップエントリ)。
-- AutoDoc を最新に保つ `update.sh` を一緒にインストールします。
+- AutoDoc を最新に保つ `update.sh` を `~/.local/state/autodoc` にインストールします。
 
 `~/.local/bin` が `PATH` に入っていない場合は、シェルの起動ファイルに追加する行を表示します。そのファイルを自分で書き換えることはありません。お使いのシステムに合うビルド済みのものがない場合は、リリースのソースからビルドしてよいか先に確認します。
 
 いつ実行し直しても構いません。インストールを更新または修復し、ランチャーを二重に追加することはありません。`sh install-autodoc.sh --help` でオプションの一覧が出ます (特定のリリースを入れる `--version`、`--no-launcher` など)。
 
-**アップデート。** スクリプトでインストールした AutoDoc は自分で更新できます。**ヘルプ › AutoDoc について** を開き、**更新** を押します。更新は AutoDoc のターミナルパネルで実行され、新しいバージョンの準備ができると **今すぐ再起動** を提案します。シェルからは `~/.local/state/autodoc/update.sh` で同じことができます。
+**アップデート。** スクリプトでインストールした AutoDoc は自分で更新できます。**ヘルプ › バージョン情報** を開き、**更新** を押します。更新は AutoDoc のターミナルパネルで実行され、新しいバージョンの準備ができると **今すぐ再起動** を提案します。シェルからは `~/.local/state/autodoc/update.sh` で同じことができます。
 
 ## ほかの方法
 
@@ -31,7 +31,7 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 - プロジェクトの Releases ページのリリースアーカイブ
 - Windows: WSL2 を入れてから、インストールスクリプト
 
-これらはインストールしたときと同じ方法で更新します (`brew upgrade`、`mise upgrade`、もう一度 `go install`)。そのため **ヘルプ › AutoDoc について** に更新ボタンは出ません。サーバー、コンテナ、ソースからのビルドについては [リファレンス 第 2 章](../../reference/02-quickstart-and-workspaces.md) を参照してください。
+これらはインストールしたときと同じ方法で更新します (`brew upgrade`、`mise upgrade`、もう一度 `go install`)。そのため **ヘルプ › バージョン情報** に更新ボタンは出ません。サーバー、コンテナ、ソースからのビルドについては [リファレンス 第 2 章](../../reference/02-quickstart-and-workspaces.md) を参照してください。
 
 **実行方法は 2 つあります。** `autodoc --ui` はターミナルの中で動きます。`autodoc --gui` は専用のウィンドウを開き、図を描画し、お好みのフォントで表示します。
 

@@ -15,7 +15,7 @@ El script:
 - descarga la versión más reciente para tu sistema y la comprueba con el checksum de la versión;
 - la instala como `~/.local/bin/autodoc`, solo para ti: nunca pide `sudo`;
 - añade un lanzador, para que AutoDoc esté entre tus aplicaciones (AutoDoc.app en macOS, una entrada de escritorio en Linux);
-- instala `update.sh` a su lado, que mantiene AutoDoc al día.
+- instala `update.sh` en `~/.local/state/autodoc`, que mantiene AutoDoc al día.
 
 Si `~/.local/bin` no está en tu `PATH`, el script muestra la línea que debes añadir al archivo de inicio de tu shell; nunca edita ese archivo por sí mismo. Cuando ninguna versión ya compilada sirve para tu sistema, pregunta antes de compilar una a partir del código fuente de la versión.
 

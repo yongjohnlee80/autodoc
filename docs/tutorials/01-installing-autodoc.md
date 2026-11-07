@@ -15,7 +15,7 @@ The script:
 - downloads the newest release for your system and checks it against the release's checksum;
 - installs it as `~/.local/bin/autodoc`, for you alone: it never asks for `sudo`;
 - adds a launcher, so AutoDoc is in your applications (AutoDoc.app on macOS, a desktop entry on Linux);
-- installs `update.sh` beside it, which keeps AutoDoc up to date.
+- installs `update.sh` in `~/.local/state/autodoc`, which keeps AutoDoc up to date.
 
 If `~/.local/bin` isn't on your `PATH`, the script prints the line to add to your shell's startup file; it never edits that file itself. Where no ready-made build fits your system, it asks before building one from the release's source.
 
