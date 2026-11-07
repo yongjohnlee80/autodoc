@@ -28,8 +28,68 @@ import (
 // Relations › GlobeMap settings… is the window's dialog less what cells can't use: whether it names
 // the documents, the links it opens following, and its groups (groupeditor.go).
 
-// cellGlobeNames is the most documents in view whose names are drawn beside their dots.
-const cellGlobeNames = 24
+// cellGlobeNames is the most documents in view whose names are drawn beside their dots, and
+// cellGlobeNameWidth the most cells a name takes, its margins included.
+const (
+	cellGlobeNames     = 24
+	cellGlobeNameWidth = 26
+)
+
+// labelCluster is one grapheme cluster of a label and the cells it takes.
+type labelCluster struct {
+	text  string
+	width int
+}
+
+// cellLabel is text as clusters, measured as s draws them (a wide one two cells, a cluster with
+// combining marks one), cut to at most max cells with "…" and a margin; and the cells it takes.
+func cellLabel(s tuicore.Surface, text string, limit int) ([]labelCluster, int) {
+	var out []labelCluster
+	w := 0
+	for c := range tuicore.Graphemes(text) {
+		out = append(out, labelCluster{c, max(s.StringWidth(c), 1)})
+		w += out[len(out)-1].width
+	}
+	if w <= limit {
+		return out, w
+	}
+	for w > limit-2 && len(out) > 0 { // room for "… "
+		w -= out[len(out)-1].width
+		out = out[:len(out)-1]
+	}
+	return append(out, labelCluster{"…", 1}, labelCluster{" ", 1}), w + 2
+}
+
+// clipLine is the segment (x0, y0)–(x1, y1) cut to the dot rectangle [0, w) × [0, h)
+// (Liang–Barsky), its ends rounded to dots; ok false when none of it is in the rectangle.
+func clipLine(x0, y0, x1, y1, w, h int) (int, int, int, int, bool) {
+	fx0, fy0 := float64(x0), float64(y0)
+	dx, dy := float64(x1-x0), float64(y1-y0)
+	t0, t1 := 0.0, 1.0
+	for _, c := range [4][2]float64{{-dx, fx0}, {dx, float64(w-1) - fx0}, {-dy, fy0}, {dy, float64(h-1) - fy0}} {
+		p, q := c[0], c[1]
+		switch {
+		case p == 0:
+			if q < 0 {
+				return 0, 0, 0, 0, false // parallel to this edge, and outside it
+			}
+		case p < 0:
+			if r := q / p; r > t1 {
+				return 0, 0, 0, 0, false
+			} else if r > t0 {
+				t0 = r
+			}
+		default:
+			if r := q / p; r < t0 {
+				return 0, 0, 0, 0, false
+			} else if r < t1 {
+				t1 = r
+			}
+		}
+	}
+	round := func(v float64) int { return int(math.Round(v)) }
+	return round(fx0 + t0*dx), round(fy0 + t0*dy), round(fx0 + t1*dx), round(fy0 + t1*dy), true
+}
 
 // cellGlobe is one build: one graph.map answer placed as the simulation settled it, made off the
 // loop and never changed once installed.
@@ -158,6 +218,7 @@ func (g *cellGlobeMap) openSettings() {
 	if g.cur != nil && g.cur.ws == ws {
 		types = g.cur.m.Types
 	}
+	g.editor.loadingFor(ws) // not the last workspace's groups while ws's are read
 	g.readGroups(ws, types)
 }
 
@@ -170,8 +231,12 @@ func (g *cellGlobeMap) groupsEdited(list []relGroup) {
 
 func (g *cellGlobeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
 
-// Entered: another workspace's map, when it shows.
-func (g *cellGlobeMap) Entered(string) {
+// Entered: another workspace's map, when it shows; its settings' groups are that workspace's, read
+// with its map or as the settings open, and nothing is edited meanwhile.
+func (g *cellGlobeMap) Entered(ws string) {
+	if ws != g.editor.ws {
+		g.editor.loadingFor(ws)
+	}
 	if g.open {
 		g.load()
 	}
@@ -496,10 +561,15 @@ func (v *cellGlobeView) Render(s tuicore.Surface) {
 	}
 	g.ground = themeGround(s.Theme())
 	cv := tuibraille.New(v.cells.W, v.cells.H)
+	dw, dh := 2*v.cells.W, 4*v.cells.H
 	for _, e := range g.cur.m.Edges {
 		x0, y0 := g.dot(e.Src)
 		x1, y1 := g.dot(e.Dst)
-		cv.Line(x0, y0, x1, y1, edgeClass(e.Kind))
+		// clipped to the view's dots first: zoomed in, most links run far off the view, and a
+		// line walks every dot of its length (golib's Line clipping itself: a follow-up)
+		if cx0, cy0, cx1, cy1, ok := clipLine(x0, y0, x1, y1, dw, dh); ok {
+			cv.Line(cx0, cy0, cx1, cy1, edgeClass(e.Kind))
+		}
 	}
 	inView := 0
 	for i := range g.cur.at { // a dot of two by two over the lines: a document owns its cell
@@ -529,22 +599,23 @@ func (v *cellGlobeView) Render(s tuicore.Surface) {
 	taken := map[[2]int]bool{} // the cells a name holds: no two names overlap
 	name := func(i int, st style.Style) {
 		x, y := g.cellOf(i)
-		label := []rune(" " + g.cur.m.label(i) + " ")
-		if len(label) > 26 {
-			label = append(label[:24], '…', ' ')
-		}
+		label, w := cellLabel(s, " "+g.cur.m.label(i)+" ", cellGlobeNameWidth)
 		at := x + 1
-		if at+len(label) > v.cells.W {
-			at = x - len(label)
+		if at+w > v.cells.W {
+			at = x - w
 		}
-		for k := range label {
+		for k := range w {
 			if taken[[2]int{at + k, y}] {
 				return
 			}
 		}
-		for k, r := range label {
+		for k := range w {
 			taken[[2]int{at + k, y}] = true
-			s.SetCell(at+k, y, string(r), st)
+		}
+		cx := at
+		for _, c := range label { // each cluster at its own width: a wide one takes two cells
+			s.SetCell(cx, y, c.text, st)
+			cx += c.width
 		}
 	}
 	if g.selected >= 0 && g.inView(g.selected) {

@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"image/color"
+	"math/rand/v2"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -235,4 +238,80 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	r.s.WaitFor(t, "only the selected document named", func(s string) bool {
 		return strings.Contains(s, " "+sel+" ") && !strings.Contains(s, " "+other+" ")
 	})
+}
+
+// TestTheGlobeMapsNamesTakeTheirWidth: a name is drawn a grapheme cluster at a time, each at its
+// own width: a CJK name's characters two cells apart, never one over another's second half, and a
+// letter with a combining accent one cell.
+func TestTheGlobeMapsNamesTakeTheirWidth(t *testing.T) {
+	gl := &cellGlobe{ws: "kb", m: relMap{Nodes: []mapNode{{Path: "a.md", Title: "日本語の文書"}, {Path: "b.md", Title: "Café"}}},
+		at: []graphlayout.Point{{X: 0, Y: 0}, {X: 100, Y: 40}}, bounds: graphlayout.Rect{W: 100, H: 40}}
+	_, v := builtGlobe(t, gl, 80, 16)
+	s := newCellMindSurface(80, 16)
+	v.Render(s)
+	found := 0
+	for y := range s.h {
+		for x := range s.w {
+			switch s.text[y][x] {
+			case "日":
+				found++
+				if s.text[y][x+1] != " " || s.text[y][x+2] != "本" || s.text[y][x+4] != "語" {
+					t.Errorf("the CJK name's cells: %q; want each character two cells on", strings.Join(s.text[y][x:x+6], "|"))
+				}
+			case "é":
+				found++
+				if s.text[y][x-1] != "f" || s.text[y][x+1] != " " {
+					t.Errorf("the accented letter's neighbours: %q; want it one cell, between f and the margin", strings.Join(s.text[y][x-1:x+2], "|"))
+				}
+			}
+		}
+	}
+	if found != 2 {
+		t.Fatalf("found %d of the 2 names' marks:\n%v", found, s.text)
+	}
+}
+
+// TestALinkIsClippedToTheView: a link's segment is cut to the view's dots, a link wholly outside it
+// is none, and one inside is itself.
+func TestALinkIsClippedToTheView(t *testing.T) {
+	for _, c := range []struct {
+		x0, y0, x1, y1 int
+		want           [4]int
+		ok             bool
+	}{
+		{-1000, 5, 1000, 5, [4]int{0, 5, 19, 5}, true},
+		{5, -1000, 5, 1000, [4]int{5, 0, 5, 9}, true},
+		{2, 2, 8, 6, [4]int{2, 2, 8, 6}, true},
+		{-100, -100, -10, -50, [4]int{}, false},
+		{30, 0, 40, 9, [4]int{}, false},
+	} {
+		x0, y0, x1, y1, ok := clipLine(c.x0, c.y0, c.x1, c.y1, 20, 10)
+		if ok != c.ok || (ok && [4]int{x0, y0, x1, y1} != c.want) {
+			t.Errorf("%v: %v %v; want %v %v", c, [4]int{x0, y0, x1, y1}, ok, c.want, c.ok)
+		}
+	}
+}
+
+// TestAZoomedInGlobeMapDrawsQuickly: zoomed in 64 times on a map of fifty thousand long links, nearly
+// all running far off the view, a paint takes well under a second's work: the links are clipped to
+// the view before they are drawn.
+func TestAZoomedInGlobeMapDrawsQuickly(t *testing.T) {
+	const nodes, links = 2000, 50000
+	gl := &cellGlobe{ws: "kb", bounds: graphlayout.Rect{X: -1000, Y: -1000, W: 2000, H: 2000}}
+	rnd := rand.New(rand.NewPCG(7, 11))
+	for i := range nodes {
+		gl.m.Nodes = append(gl.m.Nodes, mapNode{Path: fmt.Sprintf("n%d.md", i)})
+		gl.at = append(gl.at, graphlayout.Point{X: float32(rnd.IntN(2000) - 1000), Y: float32(rnd.IntN(2000) - 1000)})
+	}
+	for range links {
+		gl.m.Edges = append(gl.m.Edges, mapEdge{Src: rnd.IntN(nodes), Dst: rnd.IntN(nodes), Kind: "related"})
+	}
+	g, v := builtGlobe(t, gl, 120, 40)
+	g.zoom = 64
+	s := newCellMindSurface(120, 40)
+	start := time.Now()
+	v.Render(s)
+	if d := time.Since(start); d > 2*time.Second*raceFactor {
+		t.Fatalf("a paint at 64x of %d links took %v; want well under a second's work", links, d)
+	}
 }
