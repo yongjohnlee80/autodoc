@@ -1,18 +1,39 @@
 # AutoDoc のインストール
 
-AutoDoc は `autodoc` というひとつのプログラムです。お使いのマシンに合った方法を選んでください。
+AutoDoc は `autodoc` という 1 つのプログラムです。
 
-| 対象 | インストール方法 |
-| --- | --- |
-| Linux、macOS (Go あり) | ウィンドウ版: `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| Go があればどこでも | ターミナル版: `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| macOS、Linux | mise: `mise use -g github:yongjohnlee80/autodoc` (ウィンドウ版) |
-| Linux (サーバーやコンテナ) | mise でターミナル版: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (arm64 では `linux-arm64-tui`) |
-| macOS、Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` (Linux ではターミナル版) |
-| Linux、macOS | プロジェクトの Releases ページにあるリリースアーカイブ (`amd64` または `arm64`) |
-| Windows | WSL2 を入れてから、Linux のいずれかの方法で |
+## インストールスクリプト (おすすめ)
 
-**実行方法は 2 つあります。** `autodoc --ui` はターミナルの中で動きます。`autodoc --gui` は専用のウィンドウを開き、図を描画し、お好みのフォントで表示します。`--gui` は実行するときのフラグ、`-tags gui` は Go がウィンドウ版をビルドするためのビルドタグです。Linux では、mise と接尾辞なしのリリースアーカイブがウィンドウ版で、`--ui` で使うときでもデスクトップのグラフィックライブラリ (EGL、Wayland、X11) が必要です。サーバーやコンテナでは `-tui` アーカイブを使ってください。Linux の Homebrew はターミナル版だけを入れます。
+Linux と macOS では、次の 1 行でウィンドウ版の AutoDoc がインストールされます。
+
+```sh
+curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
+```
+
+このスクリプトは次のことを行います。
+
+- お使いのシステム向けの最新リリースをダウンロードし、リリースのチェックサムで検証します。
+- `~/.local/bin/autodoc` として、あなたのユーザーだけにインストールします。`sudo` は一切求めません。
+- ランチャーを追加し、AutoDoc をアプリケーション一覧に表示します (macOS では AutoDoc.app、Linux ではデスクトップエントリ)。
+- AutoDoc を最新に保つ `update.sh` を一緒にインストールします。
+
+`~/.local/bin` が `PATH` に入っていない場合は、シェルの起動ファイルに追加する行を表示します。そのファイルを自分で書き換えることはありません。お使いのシステムに合うビルド済みのものがない場合は、リリースのソースからビルドしてよいか先に確認します。
+
+いつ実行し直しても構いません。インストールを更新または修復し、ランチャーを二重に追加することはありません。`sh install-autodoc.sh --help` でオプションの一覧が出ます (特定のリリースを入れる `--version`、`--no-launcher` など)。
+
+**アップデート。** スクリプトでインストールした AutoDoc は自分で更新できます。**ヘルプ › AutoDoc について** を開き、**更新** を押します。更新は AutoDoc のターミナルパネルで実行され、新しいバージョンの準備ができると **今すぐ再起動** を提案します。シェルからは `~/.local/state/autodoc/update.sh` で同じことができます。
+
+## ほかの方法
+
+- Homebrew: `brew install yongjohnlee80/tap/autodoc` (Linux ではターミナル版のみ)
+- mise: `mise use -g github:yongjohnlee80/autodoc`
+- Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (`-tags gui` なしではターミナル版のみ)
+- プロジェクトの Releases ページのリリースアーカイブ
+- Windows: WSL2 を入れてから、インストールスクリプト
+
+これらはインストールしたときと同じ方法で更新します (`brew upgrade`、`mise upgrade`、もう一度 `go install`)。そのため **ヘルプ › AutoDoc について** に更新ボタンは出ません。サーバー、コンテナ、ソースからのビルドについては [リファレンス 第 2 章](../../reference/02-quickstart-and-workspaces.md) を参照してください。
+
+**実行方法は 2 つあります。** `autodoc --ui` はターミナルの中で動きます。`autodoc --gui` は専用のウィンドウを開き、図を描画し、お好みのフォントで表示します。
 
 ```mermaid
 flowchart LR

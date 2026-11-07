@@ -15,6 +15,7 @@ New to AutoDoc? The [tutorials](../tutorials/README.md) start here, a few minute
 
 | Platform | Install |
 | --- | --- |
+| **Linux, macOS (recommended)** | **The install script**: `curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh \| sh` (the GUI build; see [The Install Script](#the-install-script-recommended)) |
 | Linux, macOS, with Go 1.26.10+, the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | Any, with Go 1.26.10+, the TUI | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | macOS, Linux | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` (the GUI build) |
@@ -32,6 +33,39 @@ GUI into the binary. On Linux, mise and the plain release archive are the GUI bu
 The enterprise search server (`autodoc --server`, [docs/enterprise](../enterprise/README.md)) is
 in its own build: a `linux-<arch>-server` release archive, `make build-server`, or `-tags server`.
 The other builds leave it out, and say so when asked for `--server`.
+
+### The Install Script (recommended)
+
+```sh
+curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
+```
+
+`install-autodoc.sh` is attached to every release. It finds the newest release (or the one
+`--version vX.Y.Z` names), downloads the GUI build for this system, checks it against the release's
+SHA-256, and installs it as `~/.local/bin/autodoc` (`--prefix DIR` moves it to `DIR/bin`). It never
+uses `sudo` and never edits a shell's startup file: when `~/.local/bin` isn't on `PATH`, it prints the
+line to add.
+
+It also:
+
+- adds a launcher that runs `autodoc --gui`: `~/Applications/AutoDoc.app` on macOS, a desktop entry
+  with AutoDoc's icon in `~/.local/share/applications` on Linux (`--no-launcher` skips it);
+- writes the install record, `~/.local/state/autodoc/install.toml` (under `$XDG_STATE_HOME` when set),
+  and installs `update.sh` beside it;
+- where no prebuilt build fits the system, asks before building from the release's checksummed
+  source; it needs Go and, on Linux, the window system's libraries, which it lists with your distro's
+  install line and never installs itself (`--build` builds without asking, `--yes` asks nothing and
+  answers no).
+
+Rerunning it upgrades or repairs the install; nothing is duplicated, and a failed download or check
+leaves the old install as it was. On Windows it installs nothing and says so: use WSL2.
+
+**Updates.** An AutoDoc the script installed has **Help › About › Update**: it runs `update.sh` in
+the terminal panel, then offers **Restart Now** into the new version (the daemon restarts with it).
+From a shell, run `~/.local/state/autodoc/update.sh`. AutoDoc installed any other way has no install
+record, so it offers no Update: update it the way it was installed.
+
+The script's decisions are in [Install decisions](../decisions/install.md).
 
 ### Package Managers (`brew` and `mise`)
 

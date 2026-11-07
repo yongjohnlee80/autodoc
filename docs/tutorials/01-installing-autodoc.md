@@ -1,18 +1,39 @@
 # Installing AutoDoc
 
-AutoDoc is one program, `autodoc`. Pick the way that suits your machine:
+AutoDoc is one program, `autodoc`.
 
-| On | Install with |
-| --- | --- |
-| Linux, macOS, with Go | the window: `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| Any, with Go | the terminal UI: `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| macOS, Linux | mise: `mise use -g github:yongjohnlee80/autodoc` (with the window) |
-| Linux, a server or container | mise, the terminal UI: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (on arm64, `linux-arm64-tui`) |
-| macOS, Linux | Homebrew: `brew install yongjohnlee80/tap/autodoc` (on Linux, the terminal UI) |
-| Linux, macOS | a release archive from the project's Releases page, `amd64` or `arm64` |
-| Windows | WSL2, then any Linux way |
+## The install script (recommended)
 
-**Two ways to run it.** `autodoc --ui` runs in your terminal. `autodoc --gui` opens a window of its own, with diagrams drawn and fonts you choose. `--gui` is how you run it; `-tags gui` is how Go builds the window in. On Linux, mise and the plain release archive have the window, and need a desktop's graphics libraries (EGL, Wayland, X11) even for `--ui`: on a server or in a container, take the `-tui` archive. Homebrew on Linux installs the terminal UI alone.
+On Linux and macOS, one line installs AutoDoc with its window:
+
+```sh
+curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
+```
+
+The script:
+
+- downloads the newest release for your system and checks it against the release's checksum;
+- installs it as `~/.local/bin/autodoc`, for you alone: it never asks for `sudo`;
+- adds a launcher, so AutoDoc is in your applications (AutoDoc.app on macOS, a desktop entry on Linux);
+- installs `update.sh` beside it, which keeps AutoDoc up to date.
+
+If `~/.local/bin` isn't on your `PATH`, the script prints the line to add to your shell's startup file; it never edits that file itself. Where no ready-made build fits your system, it asks before building one from the release's source.
+
+Run it again at any time: it upgrades or repairs the install and never adds a second launcher. `sh install-autodoc.sh --help` lists its options, such as `--version` for one release and `--no-launcher`.
+
+**Updating.** Installed by the script, AutoDoc can update itself: **Help › About**, then **Update**. The update runs in AutoDoc's terminal panel, and when the new version is in place AutoDoc offers **Restart Now**. From a shell, `~/.local/state/autodoc/update.sh` does the same.
+
+## Other ways
+
+- Homebrew: `brew install yongjohnlee80/tap/autodoc` (on Linux, the terminal UI only)
+- mise: `mise use -g github:yongjohnlee80/autodoc`
+- Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (without `-tags gui`, the terminal UI only)
+- A release archive from the project's Releases page
+- Windows: WSL2, then the install script
+
+These are updated the way they were installed (`brew upgrade`, `mise upgrade`, `go install` again), so **Help › About** offers no Update for them. Servers, containers and building from source: [Reference, Chapter 2](../reference/02-quickstart-and-workspaces.md).
+
+**Two ways to run it.** `autodoc --ui` runs in your terminal. `autodoc --gui` opens a window of its own, with diagrams drawn and fonts you choose.
 
 ```mermaid
 flowchart LR
