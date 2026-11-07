@@ -940,8 +940,9 @@ Window {
 
     // ---- the panels over the page, outside the tile manager: each a drawer from the edge its
     // preference names, in the one dock style (golib's tui.panels Panel) ----
-    // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
-    // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
+    // the HTML preview (File › Preview HTML): the note's page beside the editor, live as it is
+    // edited and following the cursor (htmlpane.go); drawn natively in a window, in cells in a
+    // terminal (htmlpane_cells.go)
     Panel {
         id: htmlPane
         heading: qsTrId("autodoc.main.preview")
@@ -1047,7 +1048,6 @@ Window {
     Preferences { id: preferences }
     Fonts { id: fonts }
     Diagram { id: diagram }
-    HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     RankerEdit { id: rankerEdit }

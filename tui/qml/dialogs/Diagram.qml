@@ -2,7 +2,7 @@
 // image, where the terminal draws one and View › Image previews is on, else its source; the help
 // line says which, and why (preview.go). In a GUI window it is drawn natively, by golib's Mermaid,
 // in the HTML view, where File › Preview option chooses the native engine or no browser is found.
-// The image scrolls as the HTML preview's does, and Zoom in and Zoom out draw it larger or smaller
+// The image scrolls (the arrows, j k h l, Page Up/Down, [ ], Home/End, the wheel), and Zoom in and Zoom out draw it larger or smaller
 // in the same dialog; a native drawing has them disabled.
 Dialog {
     closeOnQ: true

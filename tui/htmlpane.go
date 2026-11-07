@@ -13,11 +13,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-// THE NATIVE HTML PREVIEW — File › Preview HTML under --gui
-// (docs/decisions/editor.md#the-native-html-preview): the note exported in-process and shown in
-// golib's HTMLView, in a pane beside the editor, drawn natively, selectable and live. In a terminal
-// Preview HTML is what it was (the page as an image, or the browser): one menu item, the widget
-// chosen by the backend that runs.
+// THE HTML PREVIEW PANE — File › Preview HTML (docs/decisions/editor.md#the-html-preview-pane):
+// the note exported in-process and shown in golib's HTMLView, in a pane beside the editor, live.
+// In a window it is drawn natively and selectable; in a terminal in cells, the note page's view
+// (htmlpane_cells.go): one menu item, the view chosen by the backend that runs.
 //
 // The pane follows the editor one way: an edit exports the note again after a moment of quiet,
 // and the cursor's block comes to the pane's top. A link clicked in it opens a note, a file or
@@ -72,7 +71,6 @@ func (h *Host) openPaneInBrowser() {
 			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.err)
 			return
 		}
-		h.htmlPreviewPath = a.v
 		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.v)))
 	})
 }
@@ -90,6 +88,7 @@ func (h *Host) openHTMLPane() {
 	if v, ok := h.htmlView(); ok {
 		h.paneDiagrams(v) // its diagrams drawn by mermaid.js, where a browser is (mermaidjs_gui.go)
 	}
+	h.paneLooks() // on a terminal, the page's highlighting and notice (htmlpane_cells.go)
 	h.renderHTMLPane()
 }
 

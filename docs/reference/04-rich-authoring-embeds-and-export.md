@@ -191,9 +191,14 @@ draws it.
 
 ### The HTML Preview Pane (`File › Preview HTML`)
 
-**`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
-It shows the note's export drawn natively, with proportional text and the export's own styles, so
-it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).
+**`File › Preview HTML` opens a pane beside the editor**, in the GUI and in a terminal alike.
+
+- **In the GUI** it shows the note's export drawn natively, with proportional text and the
+  export's own styles, so it matches `autodoc --export html`. The text in it can be selected and
+  copied (`Ctrl+C`).
+- **In a terminal** it is drawn in cells, as the Rendered view is: Mermaid diagrams and Vega-Lite
+  charts in cells, code in the theme's syntax colours. It needs no graphics protocol and no
+  browser, so it works over ssh.
 
 - **Live:** it follows edits after a moment of quiet, unsaved ones included.
 - **Follows the cursor:** the block under the editor's cursor comes to the pane's top.
@@ -202,7 +207,8 @@ it matches `autodoc --export html`. The text in it can be selected and copied (`
   - a note or a file, in the editor;
   - a web or mail address, in the browser.
 
-In a terminal, `File › Preview HTML` is an image or the browser instead (§4.11).
+Under the page, **Open in browser** (`b`) writes the page to the cache and opens it in the system
+browser, and **Close** (`q`) closes the pane.
 
 ### An HTML File Opened Raw
 
@@ -309,21 +315,18 @@ The cell key is a hash of the fence's language and its code, so a cell's outputs
 
 ---
 
-## 4.11 Previews in the Terminal (`File › Preview HTML`, `Preview Mermaid diagram`)
+## 4.11 Diagram Previews in the Terminal (`Preview Mermaid diagram`)
 
-`File › Preview HTML` (in a terminal; the GUI opens [a pane](#the-html-preview-pane-file--preview-html) instead) renders the current Markdown editor buffer (including unsaved
-edits) into an offline, light/dark themed cache file and opens it with the system browser. A
-browser-launch error is reported in the TUI.
+`File › Preview HTML` is [the pane](#the-html-preview-pane-file--preview-html) in a terminal too.
 
-**Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
-they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
-(inside tmux, `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline.
-The whole page (or the whole diagram) is rendered and **scrolls** in its dialog: the arrows,
-`j` `k` `h` `l`, `Page Up`/`Page Down`, `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in**
-and **Zoom out** draw it again larger or smaller (50 % to 200 %, as a browser zooms), in the same
-dialog. Elsewhere a diagram shows its source and HTML opens in the default browser, and the
-preview says which was missing; turning `Image previews` off compares the two on the same file.
-Both follow the active theme's colours (light, dark, sepia, retro, mono), as
+**`File › Preview Mermaid diagram`** is an image in the terminal where it can be: `View › Image
+previews` on, a terminal that confirms kitty's graphics protocol (inside tmux,
+`set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline. The whole diagram
+is rendered and **scrolls** in its dialog: the arrows, `j` `k` `h` `l`, `Page Up`/`Page Down`,
+`[` `]`, `Home`/`End` and the mouse wheel. **Zoom in** and **Zoom out** draw it again larger or
+smaller (50 % to 200 %, as a browser zooms), in the same dialog. Elsewhere the dialog shows the
+diagram's source and says which was missing; turning `Image previews` off compares the two on the
+same file. The image follows the active theme's colours (light, dark, sepia, retro, mono), as
 `autodoc --export html --theme …` does.
 
 ---

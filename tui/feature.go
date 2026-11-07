@@ -344,6 +344,7 @@ func (h *Host) features() []Feature {
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
 	fs = append(fs, newCardPage(h))                                                                                            // a card's Rendered view on a terminal (cardpage.go)
+	fs = append(fs, &htmlPaneCells{h: h})                                                                                      // the HTML preview pane on a terminal (htmlpane_cells.go)
 	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
 	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
 	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)

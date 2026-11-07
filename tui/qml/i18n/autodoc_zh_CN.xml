@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>转到</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>关闭(&amp;Q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>在浏览器中打开(&amp;B)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>放大(&amp;I)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>缩小(&amp;O)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — 来自 %2</translation>
@@ -3117,15 +3101,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3232,15 +3216,15 @@ WHAT A KEY NEEDS
   Ollama Cloud，或兼容 OpenAI 的端点。没有提供方时按
   词语搜索，结果中会显示“semantic off”。状态栏的标记显示正在搜索的模型，
   更换模型会清除搜索(其词语和结果)，重新开始。
-  “文件 › 预览 Mermaid 图表”和“预览 HTML”只有同时满足以下条件时才在终端中显示图像：
+  “文件 › 预览 Mermaid 图表”只有同时满足以下条件时才在终端中显示图像：
   “视图 › 图片预览”已开启；终端已确认支持 kitty 图形协议(在 tmux 中需 set -g
   allow-passthrough on)；并有无头 Chromium 或 Chrome。图像可滚动(方向键、j k h l、
   PgUp/PgDn、[ ]、Home/End、滚轮)，放大 / 缩小会重新绘制。否则图表
-  显示其源码，HTML 在浏览器中打开，预览会说明缺少哪一项。
-  关闭“视图 › 图片预览”可在同一文件上对比两者。
-  在 --gui 下，“预览 HTML”改为在编辑器旁打开一个窗格：原生绘制笔记页面，
-  随输入实时更新并跟随光标，文本可选择，链接可打开
-  笔记、文件和浏览器。
+  显示其源码，预览会说明缺少哪一项。关闭“视图 › 图片预览”可对比两者。
+  “文件 › 预览 HTML”在编辑器旁打开一个窗格：笔记页面随输入实时更新并跟随光标，
+  链接可打开笔记、文件和浏览器。在 --gui 下原生绘制，文本可选择；
+  在终端中以字符单元格绘制，图表和统计图也一样，
+  主机上无需任何额外软件(通过 ssh 也可使用)。
   在 --gui 下，“文件 › 预览选项”选择由什么绘制 Mermaid 图表(用于“预览 Mermaid
   图表”和该窗格)：Mermaid.js(默认；使用无头浏览器，每个图表需几秒，支持
   缩放)或原生 Mermaid 引擎(golib 的，即时绘制，不支持缩放；它不支持的图表类型仍由
@@ -4455,14 +4439,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>图谱分组(%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML 预览目前仅支持 Markdown 文件</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>已在浏览器中打开 HTML 预览 · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>没有打开的文件：先打开一个，“文件 › 用默认应用打开”才能打开它</translation>
@@ -4470,10 +4446,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>已用默认应用打开 %1</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>正在打开 HTML 预览…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4911,14 +4883,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>原生绘制(不支持缩放)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>已在浏览器中打开 HTML 预览：%1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML 预览：%1；正在浏览器中打开</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>图片预览 %1</translation>
@@ -4935,17 +4899,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>没有 Mermaid 引擎 %1(native 或 mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>已关闭：改用图表源码和浏览器</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>已关闭：改用图表源码</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>已开启</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>浏览器未能打开</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -6701,10 +6661,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>原生绘制(文件 › 预览选项)，不支持缩放 · 滚动：方向键、j k、PgUp/PgDn、滚轮</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML 预览 · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>图片，%1 · 由 mermaid %2 以 %3 主题离线绘制 · 滚动：方向键、j k h l、PgUp/PgDn、滚轮</translation>
@@ -6717,10 +6673,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>图片预览已关闭(视图 › 图片预览)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>图片 · 由无头浏览器以 %1 主题离线渲染 · 滚动：方向键、j k h l、PgUp/PgDn、滚轮 · 链接和选择：在浏览器中打开</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>没有可用于渲染的无头 Chromium 或 Chrome</translation>
@@ -6728,10 +6680,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>未原生绘制(%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>正在渲染页面…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>

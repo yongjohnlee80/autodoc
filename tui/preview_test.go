@@ -132,24 +132,27 @@ func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
 	}
 }
 
-// The HTML preview renders the whole page and scrolls it: the image is the page's full height at
-// the dialog's width, j and Page Down move the part shown without sending the image again, and
-// Zoom in draws the page again larger in the same dialog, at the same place in it.
-func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
-	skipWithoutUsableBrowser(t)
+// The diagram preview renders the whole page and scrolls it: the image is the page's full height
+// at the dialog's width, j and Page Down move the part shown without sending the image again, and
+// Zoom in draws the page again larger in the same dialog, at the same place in it. The browser is a
+// fake rendering a page three dialogs tall at the scale asked: the scroll and the zoom are
+// AutoDoc's, whatever renders the page.
+func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	long := "# Long page\n\n" + strings.Repeat("A paragraph of the long page, to scroll through.\n\n", 80)
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
-	r.h.p.Post(func() {
+	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.browser = func(context.Context, string) error { return nil }
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, p.Width, int(float64(3*p.MinHeight)*p.Scale)), nil
+		}
+		return true
 	})
-	r.h.p.Post(func() { r.h.openPath("n.md") })
-	r.waitFile(t, "n.md")
-	r.h.p.Post(func() { r.h.previewHTML() })
-	r.s.WaitForText(t, "HTML preview · n.md")
+	r.h.p.Post(func() { r.h.openPath("f.md") })
+	r.waitFile(t, "f.md")
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitForText(t, "drawn offline by mermaid")
 	first := r.placedImage(t)
 	placed := func() tuicore.ImagePlacement {
 		for _, p := range r.s.Backend.Images() {
@@ -196,14 +199,15 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 	})
 }
 
-// A page longer than a terminal takes an image (widget.MaxImagePixels; Ghostty's and kitty's
-// limit, a refusal the placement keeps quiet) is placed as strips: no image placed is taller than
-// that, at the top or at the bottom, and the bottom is reached. Sent whole, the long page showed
-// nothing. The browser is a fake rendering a page 12000 px tall: the strips are AutoDoc's to place,
-// whatever renders the page, and a CI runner's Chrome has no sandbox to run in.
-func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
+// A diagram's page longer than a terminal takes an image (widget.MaxImagePixels; Ghostty's and
+// kitty's limit, a refusal the placement keeps quiet), a tall one zoomed in, is placed as strips:
+// no image placed is taller than that, at the top or at the bottom, and the bottom is reached. Sent
+// whole, the long page showed nothing. The browser is a fake rendering a page past that limit: the
+// strips are AutoDoc's to place, whatever renders the page, and a CI runner's Chrome has no sandbox
+// to run in.
+func TestATallDiagramIsPlacedInStrips(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A long page\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
 	onLoop(r, func() bool {
@@ -214,10 +218,10 @@ func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
 		}
 		return true
 	})
-	r.h.p.Post(func() { r.h.openPath("n.md") })
-	r.waitFile(t, "n.md")
-	r.h.p.Post(func() { r.h.previewHTML() })
-	r.s.WaitForText(t, "HTML preview · n.md")
+	r.h.p.Post(func() { r.h.openPath("f.md") })
+	r.waitFile(t, "f.md")
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitForText(t, "drawn offline by mermaid")
 	r.placedImage(t)
 	placed := func() tuicore.ImagePlacement {
 		for _, p := range r.s.Backend.Images() {
@@ -227,7 +231,7 @@ func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
 	}
 	whole := func() int { // the page's height, as the Image holds it
 		return onLoop(r, func() int {
-			img, _ := imageUnder(r.h.p, "htmlPreview")
+			img, _ := imageUnder(r.h.p, "diagram")
 			_, _, h := img.Scroll()
 			return h
 		})
@@ -251,7 +255,7 @@ func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
 	r.waitPlaced(t, "the bottom's strip", func(p tuicore.ImagePlacement) bool { return p.Version != top.Version })
 	fits("the bottom", placed())
 	if shown := onLoop(r, func() tuicore.Rect {
-		img, _ := imageUnder(r.h.p, "htmlPreview")
+		img, _ := imageUnder(r.h.p, "diagram")
 		s, _, _ := img.Scroll()
 		return s
 	}); shown.Y+shown.H != whole() {
@@ -266,45 +270,6 @@ func pngSize(t *testing.T, b []byte) (int, int) {
 		t.Fatal(err)
 	}
 	return cfg.Width, cfg.Height
-}
-
-// With graphics and a headless browser, HTML preview is an image of the exported page; Open in
-// browser opens the very file it was made from.
-func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
-	skipWithoutUsableBrowser(t)
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Light page\n\ntext\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.waitAttached(t, "kb")
-	opened := make(chan string, 1)
-	r.h.p.Post(func() {
-		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil }
-		r.h.switchTheme("light")
-	})
-	r.s.WaitFor(t, "light", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "light" })
-	r.h.p.Post(func() { r.h.openPath("n.md") })
-	r.waitFile(t, "n.md")
-	r.h.p.Post(func() { r.h.previewHTML() })
-	r.s.WaitForText(t, "HTML preview · n.md")
-	img := r.placedImage(t)
-	if got := pixel(t, img, 2, 2); got != "#f6f2e7" {
-		t.Fatalf("the page's corner is %s, want light's paper #f6f2e7", got)
-	}
-	select {
-	case p := <-opened:
-		t.Fatalf("the browser opened (%s) while the image showed", p)
-	default:
-	}
-	r.h.p.Post(func() { r.h.openPreviewInBrowser() })
-	select {
-	case p := <-opened:
-		if p != onLoop(r, func() string { return r.h.htmlPreviewPath }) || !strings.HasSuffix(p, ".html") {
-			t.Fatalf("opened %q", p)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("Open in browser opened nothing")
-	}
 }
 
 // A recovery restart whose installed backend does not come up stays in its dialog, saying why, and
@@ -385,26 +350,6 @@ func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
 	help := onLoop(r, func() string { return r.h.diagramHelpText })
 	if !strings.HasPrefix(help, "Diagram source · ") || !(strings.Contains(help, "too small") || strings.Contains(help, "never laid out")) {
 		t.Fatalf("help = %q", help)
-	}
-	if len(r.s.Backend.Images()) != 0 {
-		t.Fatal("an image was placed on a screen too small for one")
-	}
-}
-
-// On a screen too small for an image the HTML preview opens the browser instead.
-func TestATinyScreenHTMLFallsBackToTheBrowser(t *testing.T) {
-	if _, ok := widget.HTMLRasterizer(); !ok {
-		t.Skip("no headless browser: image mode is never entered")
-	}
-	r, opened := tinyPreview(t, 12, 3)
-	r.h.p.Post(func() { r.h.previewHTML() })
-	select {
-	case p := <-opened:
-		if !strings.HasSuffix(p, ".html") {
-			t.Fatalf("opened %q", p)
-		}
-	case <-time.After(imageWait + 3*time.Second):
-		t.Fatal("the HTML preview neither showed an image nor opened the browser")
 	}
 	if len(r.s.Backend.Images()) != 0 {
 		t.Fatal("an image was placed on a screen too small for one")
@@ -520,11 +465,11 @@ func tallPage(t *testing.T, w, h int) []byte {
 	return b.Bytes()
 }
 
-// While the page renders, the preview's Image says so with a spinner and "rendering the page…";
-// the picture, when it comes, ends it.
-func TestThePreviewSpinsWhileThePageRenders(t *testing.T) {
+// While the diagram renders, the preview's Image says so with a spinner and "drawing the
+// diagram…"; the picture, when it comes, ends it.
+func TestThePreviewSpinsWhileTheDiagramRenders(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A page\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
 	release := make(chan struct{})
@@ -537,17 +482,17 @@ func TestThePreviewSpinsWhileThePageRenders(t *testing.T) {
 		}
 		return true
 	})
-	r.h.p.Post(func() { r.h.openPath("n.md") })
-	r.waitFile(t, "n.md")
-	r.h.p.Post(func() { r.h.previewHTML() })
-	r.s.WaitForText(t, "rendering the page…")
+	r.h.p.Post(func() { r.h.openPath("f.md") })
+	r.waitFile(t, "f.md")
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitForText(t, "drawing the diagram…")
 	loading := func() bool {
-		return onLoop(r, func() bool { img, ok := imageUnder(r.h.p, "htmlPreview"); return ok && img.Loading() })
+		return onLoop(r, func() bool { img, ok := imageUnder(r.h.p, "diagram"); return ok && img.Loading() })
 	}
 	if !loading() {
 		t.Fatal("the Image is not loading while the page renders")
 	}
 	close(release)
 	r.placedImage(t)
-	r.s.WaitFor(t, "the spinner gone", func(sc string) bool { return !loading() && !strings.Contains(sc, "rendering the page…") })
+	r.s.WaitFor(t, "the spinner gone", func(sc string) bool { return !loading() && !strings.Contains(sc, "drawing the diagram…") })
 }

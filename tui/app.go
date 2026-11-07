@@ -198,11 +198,10 @@ type Host struct {
 	// the event log's cursor (events.go), and whether the next workspace entered keeps the draft
 	// a peer's removal of this one left
 	evCursor int64
-	// the image previews (preview.go): previewGen numbers them, the latest wins; htmlPreviewPath is
-	// the file the HTML preview's image was made from; graphicsOverride replaces the terminal's
-	// kitty graphics answer in tests, and rasterizeOverride the headless browser
+	// the image previews (preview.go): previewGen numbers them, the latest wins; graphicsOverride
+	// replaces the terminal's kitty graphics answer in tests, and rasterizeOverride the headless
+	// browser
 	previewGen        uint64
-	htmlPreviewPath   string
 	diagramImage      bool          // the Mermaid preview is an image, not its fallback
 	diagramHelpText   string        // what the Mermaid preview's help line says
 	imagePreview      previewing    // the image preview open, to zoom it (preview.go)
