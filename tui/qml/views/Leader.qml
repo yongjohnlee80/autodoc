@@ -22,6 +22,7 @@ Dialog {
     Shortcut { sequence: keyId("autodoc.leader.openOutline"); onActivated: { leader.close(); App.openOutline() } }
     Shortcut { sequence: keyId("autodoc.leader.previewDiagram"); onActivated: { leader.close(); App.previewDiagram() } }
     Shortcut { sequence: keyId("autodoc.leader.previewHTML"); onActivated: { leader.close(); App.previewHTML() } }
+    Shortcut { sequence: keyId("autodoc.leader.toggleMindmap"); onActivated: { leader.close(); App.toggleMindmap() } }
     Shortcut { sequence: keyId("autodoc.leader.toggleExplorer"); onActivated: { leader.close(); App.toggleExplorer() } }
     Shortcut { sequence: keyId("autodoc.leader.toggleRelations"); onActivated: { leader.close(); App.toggleRelations() } }
     Shortcut { sequence: keyId("autodoc.leader.toggleTerminal"); onActivated: { leader.close(); App.toggleTerminal() } }

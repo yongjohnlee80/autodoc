@@ -134,7 +134,7 @@ In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing ever
 
 - **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` the buffer card (§3.3), where `SPC b b` goes back.
 - **File:** `SPC n` a new file; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
-- **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC M` maximizes a panel; `SPC h` the notifications.
+- **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC z` maximizes a panel; `SPC h` the notifications. `SPC M` opens the Mindmap of the document shown.
 - **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles; `SPC a` the agents' card, where `SPC a b` sends the page to an agent and `SPC a f` the selection or the clipboard.
 - **Manage:** `SPC w` switches workspace; `SPC W` manages workspaces; `SPC s` the search models; `SPC ,` the editor preferences; `SPC k` the editor mode (Vim, Text).
 - **Window:** `SPC m` shows, focuses or hides the menu; `SPC .` the right-click menu; `SPC t` the status line; `SPC L` arranges a panel; `SPC p` a plugin's commands; `SPC u` your Lua keys; and `SPC Tab`, below.
@@ -185,7 +185,7 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
     percentages of the window; its side in the preferences says only where it first appears.
   - `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
     one. A terminal may keep `Alt`+click for itself; the keys always work.
-- **Maximizing:** `SPC M` or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
+- **Maximizing:** `SPC z` (zoom) or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
 
 ### Tiled or floating: the layout
 
