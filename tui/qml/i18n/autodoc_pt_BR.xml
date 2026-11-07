@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>ir para</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>Fechar (&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>Abrir no navegador (&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>Ampl&amp;iar</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>Reduzir (&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — de %2</translation>
@@ -3123,15 +3107,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3245,15 +3229,15 @@ O QUE UMA TECLA PRECISA
   um modelo de embedding, Ollama Cloud, ou um endpoint compatível com OpenAI. Sem um, a busca é por
   palavras, e os resultados dizem "semantic off". A marca da linha de status nomeia o modelo que busca, e
   uma troca de modelo limpa a busca, as palavras e os resultados, para recomeçar.
-  Arquivo › Pré-visualizar diagrama Mermaid e Pré-visualizar HTML mostram uma imagem no terminal só com tudo isto:
-  Ver › Pré-visualização de imagens ligada; um terminal que confirmou kitty graphics (dentro do tmux, set -g
+  Arquivo › Pré-visualizar diagrama Mermaid mostra uma imagem no terminal só com tudo isto: Ver ›
+  Pré-visualização de imagens ligada; um terminal que confirmou kitty graphics (dentro do tmux, set -g
   allow-passthrough on); e um Chromium ou Chrome headless. A imagem rola (setas, j k h l,
-  PgUp/PgDn, [ ], Home/End, a roda) e Ampliar / Reduzir a redesenham. Do contrário um diagrama
-  mostra o código-fonte e o HTML abre no navegador, e a pré-visualização diz o que faltou.
-  Ver › Pré-visualização de imagens desligada compara os dois no mesmo arquivo.
-  Com --gui, Pré-visualizar HTML abre um painel ao lado do editor: a página da nota desenhada
-  nativamente, ao vivo enquanto você digita, seguindo o cursor, com texto selecionável e links que abrem
-  notas, arquivos e o navegador.
+  PgUp/PgDn, [ ], Home/End, a roda) e Ampliar / Reduzir a redesenham. Do contrário o diagrama
+  mostra o código-fonte, e a pré-visualização diz o que faltou. Ver › Pré-visualização de imagens desligada compara os dois.
+  Arquivo › Pré-visualizar HTML abre um painel ao lado do editor: a página da nota, ao vivo enquanto você digita,
+  seguindo o cursor, com links que abrem notas, arquivos e o navegador. Com --gui ela é desenhada
+  nativamente e o texto é selecionável; num terminal é desenhada em células, inclusive diagramas e
+  gráficos, sem precisar de nada no host (funciona por ssh).
   Com --gui, Arquivo › Opção de pré-visualização escolhe o que desenha diagramas Mermaid, em Pré-visualizar diagrama
   Mermaid e no painel: Mermaid.js (o padrão; um navegador headless, alguns segundos por diagrama, com
   zoom) ou o Motor Mermaid nativo (o do golib, na hora, sem zoom; um tipo que ele não desenha continua
@@ -4464,14 +4448,6 @@ O QUE UMA TECLA PRECISA
         <source>the graph groups (%1)</source>
         <translation>os grupos do grafo (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>a pré-visualização HTML aceita por enquanto arquivos Markdown</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>pré-visualização HTML aberta no navegador · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>nenhum arquivo aberto: abra um, e Arquivo › Abrir com o aplicativo padrão o abre</translation>
@@ -4479,10 +4455,6 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1 aberto com o aplicativo padrão</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>abrindo a pré-visualização HTML…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4920,14 +4892,6 @@ O QUE UMA TECLA PRECISA
         <source>drawn natively (no zoom)</source>
         <translation>desenhados nativamente (sem zoom)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>pré-visualização HTML aberta no navegador: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>pré-visualização HTML: %1; abrindo no navegador</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>pré-visualização de imagens %1</translation>
@@ -4944,17 +4908,13 @@ O QUE UMA TECLA PRECISA
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>motor Mermaid %1 inexistente (native ou mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>desligada: código-fonte dos diagramas e o navegador</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>desligada: código-fonte dos diagramas</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>ligada</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>o navegador não abriu</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -6678,10 +6638,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>Desenhado nativamente (Arquivo › Opção de pré-visualização), sem zoom · rolar: setas, j k, PgUp/PgDn, roda</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>pré-visualização HTML · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>Imagem, %1 · desenhada offline pelo mermaid %2 no tema %3 · rolar: setas, j k h l, PgUp/PgDn, roda</translation>
@@ -6694,10 +6650,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>image previews are off (View › Image previews)</source>
         <translation>a pré-visualização de imagens está desligada (Ver › Pré-visualização de imagens)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>Imagem · renderizada offline por um navegador headless no tema %1 · rolar: setas, j k h l, PgUp/PgDn, roda · links e seleção: Abrir no navegador</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>nenhum Chromium ou Chrome headless para renderizar</translation>
@@ -6705,10 +6657,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>não desenhado nativamente (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>renderizando a página…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>

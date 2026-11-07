@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>이동</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>닫기(&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>브라우저에서 열기(&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>확대(&amp;i)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>축소(&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — %2 보냄</translation>
@@ -3118,15 +3102,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3238,15 +3222,15 @@ WHAT A KEY NEEDS
   로컬 Ollama, Ollama Cloud, 또는 OpenAI 호환 엔드포인트. 없으면 검색은
   단어로 하며, 결과에 "semantic off"가 표시됩니다. 상태 줄의 표시는 검색 중인 모델 이름이며,
   모델을 바꾸면 검색(단어와 결과)을 지우고 새로 시작합니다.
-  파일 › Mermaid 다이어그램 미리 보기와 HTML 미리 보기는 다음을 모두 갖춰야 터미널에 이미지를 표시합니다:
-  보기 › 이미지 미리 보기 켬, kitty 그래픽을 확인한 터미널 (tmux 안에서는 set -g
+  파일 › Mermaid 다이어그램 미리 보기는 다음을 모두 갖춰야 터미널에 이미지를 표시합니다: 보기 ›
+  이미지 미리 보기 켬, kitty 그래픽을 확인한 터미널 (tmux 안에서는 set -g
   allow-passthrough on), 그리고 헤드리스 Chromium 또는 Chrome. 이미지는 스크롤되고 (화살표, j k h l,
   PgUp/PgDn, [ ], Home/End, 휠) 확대 / 축소로 다시 그립니다. 그렇지 않으면 다이어그램은
-  소스를 표시하고 HTML은 브라우저에서 열리며, 미리 보기에 무엇이 빠졌는지 표시됩니다.
-  보기 › 이미지 미리 보기 끔으로 같은 파일에서 둘을 비교할 수 있습니다.
-  --gui에서는 HTML 미리 보기가 대신 편집기 옆에 창을 엽니다: 노트의 페이지를
-  네이티브로 그리며, 입력하는 대로 갱신하고 커서를 따라가며, 텍스트를 선택할 수 있고, 링크는
-  노트, 파일, 브라우저로 열립니다.
+  소스를 표시하고, 미리 보기에 무엇이 빠졌는지 표시됩니다. 보기 › 이미지 미리 보기 끔으로 둘을 비교할 수 있습니다.
+  파일 › HTML 미리 보기는 편집기 옆에 창을 엽니다: 노트의 페이지를 입력하는 대로 갱신하고
+  커서를 따라가며 보여 주고, 링크는 노트, 파일, 브라우저로 열립니다. --gui에서는 네이티브로 그려지고
+  텍스트를 선택할 수 있습니다. 터미널에서는 셀로 그려지며 다이어그램과 차트도 셀로 그려지고, 호스트에
+  아무것도 필요하지 않습니다 (ssh로도 동작합니다).
   --gui에서는 파일 › 미리 보기 옵션으로 Mermaid 다이어그램을 그리는 방식을 고릅니다 (Mermaid 다이어그램
   미리 보기와 창 모두): Mermaid.js (기본값. 헤드리스 브라우저, 다이어그램당 몇 초,
   확대/축소 가능) 또는 네이티브 Mermaid 엔진 (golib의 엔진, 즉시, 확대/축소 없음. 그리지 못하는 유형은
@@ -4457,14 +4441,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>그래프 그룹 (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML 미리 보기는 현재 Markdown 파일만 지원합니다</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>브라우저에서 HTML 미리 보기를 열었습니다 · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>열린 파일이 없습니다: 파일을 연 다음 파일 › 기본 앱으로 열기를 사용하세요</translation>
@@ -4472,10 +4448,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1을(를) 기본 앱으로 열었습니다</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>HTML 미리 보기 여는 중…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4913,14 +4885,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>네이티브로 그림 (확대/축소 없음)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>브라우저에서 HTML 미리 보기를 열었습니다: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML 미리 보기: %1. 브라우저에서 엽니다</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>이미지 미리 보기 %1</translation>
@@ -4937,17 +4901,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>%1 Mermaid 엔진이 없습니다 (native 또는 mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>끔: 다이어그램 소스와 브라우저</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>끔: 다이어그램 소스</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>켬</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>브라우저가 열리지 않았습니다</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -6671,10 +6631,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>네이티브로 그림 (파일 › 미리 보기 옵션), 확대/축소 없음 · 스크롤: 화살표, j k, PgUp/PgDn, 휠</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML 미리 보기 · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>이미지, %1 · mermaid %2이(가) %3 테마로 오프라인에서 그림 · 스크롤: 화살표, j k h l, PgUp/PgDn, 휠</translation>
@@ -6687,10 +6643,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>이미지 미리 보기가 꺼져 있습니다 (보기 › 이미지 미리 보기)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>이미지 · %1 테마로 헤드리스 브라우저가 오프라인 렌더링 · 스크롤: 화살표, j k h l, PgUp/PgDn, 휠 · 링크와 선택: 브라우저에서 열기</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>렌더링할 헤드리스 Chromium 또는 Chrome이 없습니다</translation>
@@ -6698,10 +6650,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>네이티브로 그리지 못함 (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>페이지 렌더링 중…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>

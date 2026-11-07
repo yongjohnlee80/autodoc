@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>移動先</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>閉じる(&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>ブラウザーで開く(&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>拡大(&amp;i)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>縮小(&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — %2 から</translation>
@@ -3122,15 +3106,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3242,15 +3226,15 @@ WHAT A KEY NEEDS
   入れたローカルの Ollama、Ollama Cloud、または OpenAI 互換エンドポイント。なければ検索は
   単語のみで、ヒットに "semantic off" と表示されます。ステータスラインのマークは検索中のモデル名を示し、
   モデルを変えると検索 (語句とヒット) がクリアされ、最初からやり直します。
-  ファイル › Mermaid 図をプレビュー と HTML をプレビュー がターミナルに画像を表示するには、次のすべてが必要です:
-  表示 › 画像プレビュー がオン、kitty グラフィックスを確認済みのターミナル (tmux 内では set -g
+  ファイル › Mermaid 図をプレビュー がターミナルに画像を表示するには、次のすべてが必要です: 表示 ›
+  画像プレビュー がオン、kitty グラフィックスを確認済みのターミナル (tmux 内では set -g
   allow-passthrough on)、ヘッドレスの Chromium または Chrome。画像はスクロールでき (矢印キー、j k h l、
   PgUp/PgDn、[ ]、Home/End、ホイール)、拡大 / 縮小 で再描画します。それ以外の場合、図は
-  ソースを表示し、HTML はブラウザーで開き、何が不足しているかをプレビューに表示します。
-  表示 › 画像プレビュー をオフにすると、同じファイルで両者を比較できます。
-  --gui では、HTML をプレビュー は代わりにエディターの横にペインを開きます: ノートのページを
-  ネイティブに描画し、入力に合わせてライブ更新、カーソルに追従、テキストは選択可能、リンクは
-  ノート、ファイル、ブラウザーで開きます。
+  ソースを表示し、何が不足しているかをプレビューに表示します。表示 › 画像プレビュー をオフにすると両者を比較できます。
+  ファイル › HTML をプレビュー はエディターの横にペインを開きます: ノートのページを、入力に合わせてライブ更新し、
+  カーソルに追従して表示し、リンクはノート、ファイル、ブラウザーで開きます。--gui ではネイティブに描画され、
+  テキストを選択できます。ターミナルではセルで描画され、図やグラフもセルで描かれ、ホスト側に何も
+  必要ありません (ssh 越しでも使えます)。
   --gui では、ファイル › プレビューオプション で、Mermaid 図をプレビュー とペインで Mermaid 図を
   描画するものを選びます: Mermaid.js (既定。ヘッドレスブラウザーで、図 1 つに数秒、
   ズームあり) またはネイティブ Mermaid エンジン (golib のもの。即時、ズームなし。描画できない種類は
@@ -4461,14 +4445,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>グラフグループ (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML プレビューは現在 Markdown ファイルのみ対応しています</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>HTML プレビューをブラウザーで開きました · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>ファイルが開かれていません: ファイルを開いてから、ファイル › 既定のアプリで開く を使ってください</translation>
@@ -4476,10 +4452,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1 を既定のアプリで開きました</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>HTML プレビューを開いています…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4917,14 +4889,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>ネイティブに描画 (ズームなし)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>HTML プレビューをブラウザーで開きました: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML プレビュー: %1。ブラウザーで開いています</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>画像プレビュー %1</translation>
@@ -4941,17 +4905,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>Mermaid エンジン %1 はありません (native または mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>オフ: 図のソースとブラウザー</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>オフ: 図のソース</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>オン</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>ブラウザーが開きませんでした</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -6675,10 +6635,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>ネイティブに描画 (ファイル › プレビューオプション)、ズームなし · スクロール: 矢印キー、j k、PgUp/PgDn、ホイール</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML プレビュー · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>画像、%1 · mermaid %2 で %3 テーマでオフライン描画 · スクロール: 矢印キー、j k h l、PgUp/PgDn、ホイール</translation>
@@ -6691,10 +6647,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>画像プレビューはオフです (表示 › 画像プレビュー)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>画像 · ヘッドレスブラウザーで %1 テーマでオフライン描画 · スクロール: 矢印キー、j k h l、PgUp/PgDn、ホイール · リンクと選択: ブラウザーで開く</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>描画に使うヘッドレスの Chromium または Chrome がありません</translation>
@@ -6702,10 +6654,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>ネイティブに描画できませんでした (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>ページを描画中…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>

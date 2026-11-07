@@ -300,15 +300,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still

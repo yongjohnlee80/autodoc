@@ -211,16 +211,22 @@ as the preview's do, and it is never edited. In a terminal, Raw is the plain edi
 
 In the code: `tui/files.go`, `tui/htmldoc.go`, `rpc/server.go`
 
-## The native HTML preview
+## The HTML preview pane
 
-Under `--gui`, File › Preview HTML exports the note in-process and shows it in a pane beside the
-editor, drawn natively by the UI library's HTML view: selectable, live, and with no JavaScript. An
-edit exports the note again after a moment of quiet, and the cursor's block scrolls to the pane's
-top. A link clicked in it opens a note, a file or the browser. In a terminal, Preview HTML does
-what it did before (an image of the page, or the browser): one menu item, with the widget chosen
-by the backend that runs.
+File › Preview HTML exports the note in-process and shows it in a pane beside the editor, in the
+UI library's HTML view, with no JavaScript. Under `--gui` the view is drawn natively and its text
+is selectable. In a terminal it is drawn in cells, as the note's Rendered page is: Mermaid diagrams
+and Vega-Lite charts in cells, code in the theme's syntax colours. It needs no graphics protocol
+and no browser on the host, so it works over ssh. An edit exports the note again after a moment of
+quiet, and the cursor's block scrolls to the pane's top. A link clicked in it opens a note, a file
+or the browser. One menu item, with the view chosen by the backend that runs.
 
-In the code: `tui/htmlpane.go`
+The terminal once showed the page as an image, rendered by a headless browser, and opened the
+browser where it couldn't. That needed kitty graphics and Chromium on the host, which an ssh
+session rarely has, and the image had no links. The pane replaced it; View › Image previews now
+governs only View › Diagram.
+
+In the code: `tui/htmlpane.go`, `tui/htmlpane_cells.go`
 
 ## Where a page's stylesheets and images come from
 
