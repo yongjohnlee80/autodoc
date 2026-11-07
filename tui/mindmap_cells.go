@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"image/color"
 
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -17,9 +18,25 @@ import (
 // --ui too; relationViewFeatures chooses it at run time, a window keeping its own, mindmap_gui.go): the page's document and the documents
 // one link from it (d: two links, and back), as the window's mind map (mindmap_gui.go) drawn in
 // box-drawing cells (golib tui/mermaid). The keys move a selection from box to box: h j k l and the
-// arrows go to the nearest box that way, Enter opens its document, Ctrl+d and Ctrl+u scroll. Every
-// document is a rounded box and the root a bang, until a terminal has a graph store for the
-// window's groups and their shapes (docs/decisions/relations.md).
+// arrows go to the nearest box that way, Enter opens its document, Ctrl+d and Ctrl+u scroll. A
+// document wears its group's outline and colour, the window's groups (groups.go), kept in the
+// workspace's graph file (graphstore.go); a document in no group is a rounded box, the root a bang.
+// Each colour is made legible on the page it is painted on (onGround), whatever the theme. The map
+// opens at the depth its settings choose (tui.mindmap.depth), as the window's does.
+
+// The Mindmap's settings, in either build: the window's choose its theme too (mindsettings_gui.go).
+const (
+	prefMindTheme = "tui.mindmap.theme"
+	prefMindDepth = "tui.mindmap.depth"
+)
+
+// mindDepth is the depth the Mindmap's settings open it at: 1, or 2.
+func mindDepth(c Core) int {
+	if c.Prefs().Value(prefMindDepth) == "2" {
+		return 2
+	}
+	return 1
+}
 
 // cellMind is one build: everything derived from one graph.map answer, made off the loop and
 // never changed once installed.
@@ -27,6 +44,9 @@ type cellMind struct {
 	root fileRef
 	m    relMap
 	grid *tuimermaid.Grid // laid out from mindmapModel(m, root, …): Boxes[i].ID names m's documents
+	// tints are the boxes' groups' colours, by Box.ID, as the graph file has them: a box in no group
+	// has none
+	tints map[string]color.NRGBA
 }
 
 // cellMindmap is the Mindmap feature in cells: its builds, fenced (load), the selection and the
@@ -44,10 +64,14 @@ type cellMindmap struct {
 	selected  int                   // a Boxes index: the root once a build is installed
 	x0, y0    int                   // the scroll: the grid's cell at the view's top left
 	opens     func(ws, path string) // Enter's: the panel hidden, the document opened
+	store     *graphStore           // the workspaces' graph files: the groups; nil for none
+	groups    *relGroups            // groupsWS's groups: each document's outline and colour
+	groupsWS  string
+	ground    color.NRGBA // the page's background, as last painted: what new groups are legible on
 }
 
-func newCellMindmap(c Core) *cellMindmap {
-	m := &cellMindmap{c: c, depth: 1}
+func newCellMindmap(c Core, store *graphStore) *cellMindmap {
+	m := &cellMindmap{c: c, depth: 1, store: store, ground: themeGround(nil)}
 	m.opens = func(ws, path string) {
 		m.c.HidePanel(mindmapPanelID) // hidden, not closed, as the window's: the dock shows it again
 		m.c.OpenRef(ws, path)
@@ -61,7 +85,7 @@ func (m *cellMindmap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
 		Edge: func(prefs) string { return "center" },
 		Opened: func(PanelHost) {
-			m.open, m.depth = true, 1
+			m.open, m.depth = true, mindDepth(m.c) // it opens at the depth its settings choose
 			m.load()
 		},
 		Closed: func(c PanelHost) {
@@ -69,6 +93,10 @@ func (m *cellMindmap) Panels() []PanelSpec {
 			m.seq++ // a build under way is dropped
 			c.Keep(c.RestoreKeyboardHome())
 		}}}
+}
+
+func (*cellMindmap) Prefs() []PrefSpec {
+	return []PrefSpec{ValuePref(prefMindDepth, "1", []string{"1", "2"})}
 }
 
 func (m *cellMindmap) State() map[string]any { return map[string]any{"App.mindmapTitle": "Mindmap"} }
@@ -121,6 +149,50 @@ func cellMindShape(root string) func(mapNode) pm.MindShape {
 	}
 }
 
+// cellMindShapeIn is a document's outline in gs: its group's, where its group names one; else
+// cellMindShape's.
+func cellMindShapeIn(root string, gs *relGroups) func(mapNode) pm.MindShape {
+	plain := cellMindShape(root)
+	return func(n mapNode) pm.MindShape {
+		if i := gs.ofOr(n); i >= 0 && gs.list[i].Shape != pm.MindDefault {
+			return gs.list[i].Shape
+		}
+		return plain(n)
+	}
+}
+
+// cellMindTints are grid's boxes' colours in gs, by Box.ID: each its document's group's.
+func cellMindTints(rm relMap, grid *tuimermaid.Grid, gs *relGroups) map[string]color.NRGBA {
+	out := map[string]color.NRGBA{}
+	for _, b := range grid.Boxes {
+		if i, ok := rm.mindIndex(b.ID); ok {
+			if k := gs.ofOr(rm.Nodes[i]); k >= 0 {
+				out[b.ID] = gs.list[k].Colour
+			}
+		}
+	}
+	return out
+}
+
+// readGroups takes ws's groups from the store: its graph file's, or its first, made of the
+// schema's types and the workspace's folders, legible on the page last painted. The map is laid
+// out again in them.
+func (m *cellMindmap) readGroups(ws string, types []string) {
+	if m.store == nil {
+		return
+	}
+	m.store.groups(ws, viewMindmap, types, m.ground, func(list []relGroup) {
+		if ws != m.c.Workspace() {
+			return
+		}
+		gs := newRelGroups(list)
+		m.groups, m.groupsWS = &gs, ws
+		if m.open {
+			m.load()
+		}
+	})
+}
+
 // load reads the page's document's neighbourhood and lays it out off the loop; on the loop it
 // installs the build whole, the root selected and the scroll at the top, or drops it when a newer
 // load, another page or the panel's closing came first.
@@ -133,6 +205,10 @@ func (m *cellMindmap) load() {
 		return
 	}
 	depth := m.depth
+	var gs *relGroups
+	if m.groupsWS == ref.ws {
+		gs = m.groups
+	}
 	m.status, m.statusArg = "autodoc.text.mindmap_gui.reading", ref.path
 	m.title()
 	m.c.Go(func(ctx context.Context) any {
@@ -141,7 +217,7 @@ func (m *cellMindmap) load() {
 			return err
 		}
 		rm := decodeMap(res)
-		model := mindmapModel(rm, ref.path, cellMindShape(ref.path))
+		model := mindmapModel(rm, ref.path, cellMindShapeIn(ref.path, gs))
 		if model == nil {
 			return fmt.Errorf("%s is not in its own map", ref.path)
 		}
@@ -149,7 +225,7 @@ func (m *cellMindmap) load() {
 		if err != nil {
 			return err
 		}
-		return &cellMind{root: ref, m: rm, grid: grid}
+		return &cellMind{root: ref, m: rm, grid: grid, tints: cellMindTints(rm, grid, gs)}
 	}, func(v any) {
 		if !tk.Current() || !m.open {
 			return
@@ -159,6 +235,9 @@ func (m *cellMindmap) load() {
 		case *cellMind:
 			m.cur, m.selected, m.x0, m.y0 = v, 0, 0, 0 // Boxes[0] is the root: mindmapModel places it first
 			m.reveal()
+			if m.groupsWS != v.root.ws {
+				m.readGroups(v.root.ws, v.m.Types) // laid out again in them once read
+			}
 		case error:
 			if code(v) == rpc.CodeNotFound {
 				m.cur, m.status, m.statusArg = nil, "autodoc.text.mindmap_gui.is_not_indexed_yet", ref.path
@@ -272,6 +351,11 @@ type cellMindView struct {
 	m     *cellMindmap
 	ctx   *tuicore.Context
 	cells tuicore.Size
+	// tinted is the build whose tints were made legible on ground, as tints: made again when the
+	// build or the page's background changes
+	tinted *cellMind
+	ground color.NRGBA
+	tints  map[string]style.ColorSpec
 }
 
 func (m *cellMindmap) newView() tuicore.Component {
@@ -327,7 +411,42 @@ func (v *cellMindView) Render(s tuicore.Surface) {
 		}
 		return
 	}
-	m.cur.grid.Paint(s, v.left()-m.x0, -m.y0, m.selected, cellMindTheme)
+	m.ground = themeGround(s.Theme())
+	th := cellMindTheme
+	if len(m.cur.tints) > 0 {
+		tints := v.legible(m.cur, m.ground)
+		th.Tint = func(id string) (style.ColorSpec, bool) { c, ok := tints[id]; return c, ok }
+	}
+	m.cur.grid.Paint(s, v.left()-m.x0, -m.y0, m.selected, th)
+}
+
+// legible is cur's tints made legible on ground (onGround), kept until either changes.
+func (v *cellMindView) legible(cur *cellMind, ground color.NRGBA) map[string]style.ColorSpec {
+	if v.tinted != cur || v.ground != ground || v.tints == nil {
+		v.tints = make(map[string]style.ColorSpec, len(cur.tints))
+		for id, c := range cur.tints {
+			c = onGround(c, ground)
+			v.tints[id] = style.RGB(c.R, c.G, c.B)
+		}
+		v.tinted, v.ground = cur, ground
+	}
+	return v.tints
+}
+
+// themeGround is th's page background as a colour: black on a dark theme whose background is the
+// terminal's own, white on any other; the default theme's for none.
+func themeGround(th *style.Theme) color.NRGBA {
+	if th == nil {
+		d := style.DefaultTheme()
+		th = &d
+	}
+	if r, g, b, ok := th.Color(style.TokenBackground).RGBValues(); ok {
+		return color.NRGBA{R: r, G: g, B: b, A: 0xff}
+	}
+	if dark, _ := th.Dark(); dark {
+		return color.NRGBA{A: 0xff}
+	}
+	return color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
 }
 
 // statusText is what a load says, in the UI's language; "" none.
