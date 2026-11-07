@@ -213,11 +213,30 @@ func TestAnOldPaintAcknowledgesNoNewerPicture(t *testing.T) {
 	pics.publish([]byte("first"))
 	pics.paintedNow() // the first painted: its signal waits unread
 	v2 := pics.publish([]byte("second"))
-	if pics.waitPainted(v2) {
+	if pics.waitPainted(v2, nil) {
 		t.Fatal("the first picture's paint acknowledged the second")
 	}
 	pics.paintedNow()
-	if !pics.waitPainted(v2) {
+	if !pics.waitPainted(v2, nil) {
 		t.Fatal("the second picture's paint did not acknowledge it")
+	}
+}
+
+// TestAFrameClosedBeforeItsPaintIsClosed: a frame published, then the card's surface closed before
+// the card paints it, is answered "closed", never "drawn" by the close's own paint (which shows no
+// picture) nor "not_shown".
+func TestAFrameClosedBeforeItsPaintIsClosed(t *testing.T) {
+	var released atomic.Int32
+	pics := newCellPictures(func(fn func()) { fn() }) // the card paints only when the test says
+	s := newCellSink(pics)
+	published := make(chan struct{})
+	s.publishing = func() { close(published) }
+	r := s.Push(memFrame(t, 2, 2, extimage.FormatRGBA8, [4]byte{5, 5, 5, 255}, &released))
+	<-published
+	time.Sleep(20 * time.Millisecond) // the frame waits for its paint
+	s.Close()
+	pics.paintedNow() // the close's paint: no picture
+	if o, _ := waitResult(t, r); o != "closed" {
+		t.Fatalf("a frame closed before its paint: %q; want closed", o)
 	}
 }

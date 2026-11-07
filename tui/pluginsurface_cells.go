@@ -86,10 +86,11 @@ func (p *cellPictures) publish(b []byte) uint64 {
 	return ver
 }
 
-// waitPainted reports whether the card painted version ver, or a later one, within
+// waitPainted reports whether the card painted version ver, or a later picture, within
 // cellSurfaceShown: a hidden card isn't painted. A paint of an earlier version, its signal still
-// waiting, acknowledges nothing.
-func (p *cellPictures) waitPainted(ver uint64) bool {
+// waiting, acknowledges nothing; nor does a paint with no picture (the close's), which can't be
+// later than any. A stop (the sink's close) ends the wait unacknowledged.
+func (p *cellPictures) waitPainted(ver uint64, stop <-chan struct{}) bool {
 	deadline := time.NewTimer(cellSurfaceShown)
 	defer deadline.Stop()
 	for {
@@ -101,16 +102,21 @@ func (p *cellPictures) waitPainted(ver uint64) bool {
 		}
 		select {
 		case <-p.painted:
+		case <-stop:
+			return false
 		case <-deadline.C:
 			return false
 		}
 	}
 }
 
-// paintedNow is the view's paint of the picture as it is now: what waitPainted waits for.
+// paintedNow is the view's paint of the picture as it is now: what waitPainted waits for. A paint
+// with no picture (cleared by a close) acknowledges none.
 func (p *cellPictures) paintedNow() {
 	p.mu.Lock()
-	p.paintedVer = p.version
+	if p.png != nil {
+		p.paintedVer = p.version
+	}
 	p.mu.Unlock()
 	select {
 	case p.painted <- struct{}{}:
@@ -213,15 +219,19 @@ func (s *cellSink) run(c cellFrame) {
 			ver = s.pics.publish(b)
 		}
 		s.mu.Unlock()
+		painted := !closed && err == nil && s.pics.waitPainted(ver, s.stop)
+		s.mu.Lock()
+		closed = s.closed // a close while it waited for its paint: the frame is answered closed
+		if painted && !closed {
+			s.turn = time.Now().Add(max(time.Second/cellSurfaceFPS, time.Duration(len(b))*time.Second/cellSurfaceBudget))
+		}
+		s.mu.Unlock()
 		switch {
 		case closed:
 			c.r.settle("closed")
 		case err != nil:
 			c.r.settle("unsupported")
-		case s.pics.waitPainted(ver):
-			s.mu.Lock()
-			s.turn = time.Now().Add(max(time.Second/cellSurfaceFPS, time.Duration(len(b))*time.Second/cellSurfaceBudget))
-			s.mu.Unlock()
+		case painted:
 			c.r.settle("drawn")
 		default:
 			c.r.settle("not_shown")
