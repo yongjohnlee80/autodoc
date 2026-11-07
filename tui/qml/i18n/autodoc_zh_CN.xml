@@ -5535,6 +5535,22 @@ WHAT A KEY NEEDS
         <source>todos: $%1 set (%2)</source>
         <translation>待办：已设置 $%1(%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>更新：AutoDoc 已是最新版本（%1）</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>更新：此 AutoDoc 不是由 install-autodoc.sh 安装的，请用安装它的方式更新</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>更新：update.sh 以 %1 退出，原因见终端面板中的标签页</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>更新</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>取消切换</translation>
@@ -5892,6 +5908,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.todos_vars.clear_the_variable">
         <source>clear the variable?</source>
         <translation>清除变量？</translation>
+    </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>稍后(&amp;L)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>重启 AutoDoc？</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>立即重启(&amp;R)</translation>
     </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
@@ -7407,6 +7435,10 @@ The last connect failed:
         <source>Rerank (%1)</source>
         <translation>重排(%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>关于 › 更新</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 已发布(当前为 %2)：%3</translation>
@@ -7585,6 +7617,10 @@ changes nothing</source>
         <source>%1 of %2 · %3</source>
         <translation>%1 / %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1 已安装（当前为 %2）。现在重启吗？后端先重启，然后 AutoDoc 以 %1 重新打开。</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3(%4 字节，%5 个估算 token；重试 %6)</translation>
@@ -7709,6 +7745,10 @@ changes nothing</source>
         <source>AUTHOR: </source>
         <translation>作者：  </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>关闭(&amp;Q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>配置：  </translation>
@@ -7724,6 +7764,10 @@ changes nothing</source>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>更新：  </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>更新(&amp;U)</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

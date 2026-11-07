@@ -40,7 +40,7 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		// code that runs: the run's owners close here (the recording, with the TUI's
 		// trace stopped, and the profile monitor), Launch having returned. gui.Main
 		// prints a returned error and exits 1.
-		if err := finishRun(tui.Launch(ctx, o), owned...); err != nil && !errors.Is(err, context.Canceled) {
+		if err := afterRun(finishRun(tui.Launch(ctx, o), owned...)); err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil

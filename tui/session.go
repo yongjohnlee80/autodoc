@@ -58,6 +58,9 @@ func (h *Host) start() {
 		}
 		h.session.RemoveHandoff() // a restart this TUI asked for has its daemon: the others may spawn again
 		h.setConnected(true)
+		if h.relaunchAfterRestart { // an update's restart: the new backend answers, the UI follows (update.go)
+			h.relaunch()
+		}
 		h.checkRegistrations()
 		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadPrefs()
