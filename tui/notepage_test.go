@@ -504,3 +504,56 @@ func TestAFindOnlyTheSourceHasGoesToTheText(t *testing.T) {
 		return shownView(r) == widget.ViewRaw && r.cursor()[0] == 2 && onLoop(r, func() int { return r.h.find.total }) == 1
 	})
 }
+
+// chartNote is a note of three vega-lite fences: bars, a spec outside golib's subset, and a line.
+const chartNote = "# Charts\n\n```vega-lite\n" +
+	`{"mark":"bar","data":{"values":[{"c":"north","v":12.5},{"c":"south","v":7.9}]},` +
+	`"encoding":{"y":{"field":"c","type":"nominal"},"x":{"field":"v","type":"quantitative"}}}` +
+	"\n```\n\n```vega-lite\n" +
+	`{"mark":"geoshape","data":{"values":[{"region":"west"}]}}` +
+	"\n```\n\n```vega-lite\n" +
+	`{"mark":"line","data":{"values":[{"t":1,"v":2},{"t":2,"v":5},{"t":3,"v":3},{"t":4,"v":6}]},` +
+	`"encoding":{"x":{"field":"t","type":"quantitative"},"y":{"field":"v","type":"quantitative"}}}` +
+	"\n```\n"
+
+// braille reports whether s holds a Braille cell with a dot: a plot drawn in cells.
+func braille(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return r > 0x2800 && r <= 0x28ff })
+}
+
+// TestATerminalNoteDrawsItsCharts (docs/decisions/editor.md#a-terminal-notes-rendered-view): a note's vega-lite fences on a
+// terminal's page are charts in cells, bars in eighths with their categories and values and a line
+// in Braille, and a spec outside golib's subset is the notice, in the UI's language (English, then
+// Korean); never a spec's JSON.
+func TestATerminalNoteDrawsItsCharts(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "charts.md", chartNote)}, tableInclude)
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 60)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("charts.md"); return true })
+	r.waitFile(t, "charts.md")
+	r.s.WaitForText(t, "vega-lite chart: not drawn in the terminal (Raw shows its source)")
+	r.s.WaitFor(t, "the bars and the line drawn", func(sc string) bool {
+		return strings.Contains(sc, "north") && strings.Contains(sc, "12.5") && strings.Contains(sc, "█") && braille(sc)
+	})
+	json := func(sc string) bool { return strings.Contains(sc, `"mark"`) || strings.Contains(sc, `"values"`) }
+	if sc := r.s.String(); json(sc) {
+		t.Fatalf("the page shows a spec's JSON:\n%s", sc)
+	}
+	onLoop(r, func() bool { r.h.setLanguage("ko_KR"); return true })
+	r.s.WaitForText(t, "vega-lite 차트: 터미널에서는 그리지 않습니다")
+	if sc := r.s.String(); json(sc) || !braille(sc) {
+		t.Fatalf("in Korean, the page lost its charts or shows JSON:\n%s", sc)
+	}
+}
+
+// TestThePagesChartNoticeIsTheCatalogs: a vega-lite chart the terminal doesn't draw says so in the
+// catalog's words, its own sentence (a chart, not "a vega-lite diagram"); a Mermaid kind keeps its own.
+func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	if got := h.pageNotice("vega-lite"); got != "vega-lite chart: not drawn in the terminal (Raw shows its source)" {
+		t.Errorf("the chart's notice: %q", got)
+	}
+	if got := h.pageNotice("gitGraph"); got != "gitGraph diagram: not drawn in the terminal (Raw shows its source)" {
+		t.Errorf("a diagram's notice: %q", got)
+	}
+}

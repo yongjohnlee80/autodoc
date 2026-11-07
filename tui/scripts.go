@@ -194,6 +194,13 @@ func (l luaHostOf) appVersion() string               { return l.h.aboutInfo.Vers
 func (l luaHostOf) native() bool                     { return l.h.native() }
 func (l luaHostOf) widgets() []widgetTarget          { return l.h.widgets() }
 
+// cardText hears the card's text set: a terminal's card page draws it (cardpage.go).
+func (l luaHostOf) cardText(text string) {
+	if p := l.h.cardPage(); p != nil {
+		p.textSet(text)
+	}
+}
+
 // runOwnPlugin is autodoc.plugin.run's host side: script must be a plugin package this engine
 // loaded (pluginPackages, the host's own record, never a name the script gives), id one of that
 // plugin's [[commands]]; args need protocol 7.

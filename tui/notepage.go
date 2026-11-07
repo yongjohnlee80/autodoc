@@ -155,7 +155,7 @@ func (*cellNotePage) State() map[string]any        { return map[string]any{} }
 func (*cellNotePage) Commands() map[string]Command { return map[string]Command{} }
 func (*cellNotePage) Reread(Page)                  {}
 func (*cellNotePage) Closed()                      {}
-func (p *cellNotePage) notice(kind string) string  { return p.h.trf(diagramNoticeID, kind) }
+func (p *cellNotePage) notice(kind string) string  { return p.h.pageNotice(kind) }
 func (p *cellNotePage) isShown() bool              { return p.view != nil && p.view.Visible() }
 
 // onScreen is the source bytes the shown page has on screen, from its top block's start to the
@@ -294,8 +294,22 @@ func (p *cellNotePage) giveSyntax() {
 }
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
-// the terminal (Raw shows its source)".
-const diagramNoticeID = "autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal"
+// the terminal (Raw shows its source)"; chartNoticeID a vega-lite chart's, one golib's subset leaves
+// out: "vega-lite chart: not drawn in the terminal (Raw shows its source)".
+const (
+	diagramNoticeID = "autodoc.text.rendered_tui.kind_diagram_not_drawn_in_the_terminal"
+	chartNoticeID   = "autodoc.text.rendered_tui.vega_lite_chart_not_drawn_in_the_terminal"
+)
+
+// pageNotice is what a terminal's page shows for a diagram or chart it doesn't draw, of kind (a
+// Mermaid kind, or golib's "vega-lite"), in the UI's language: a note's page and a card's say the
+// same.
+func (h *Host) pageNotice(kind string) string {
+	if kind == "vega-lite" {
+		return h.tr(chartNoticeID)
+	}
+	return h.trf(diagramNoticeID, kind)
+}
 
 // viewOf is the page view, made on first use: its links open as the pane's do, and a diagram it
 // doesn't draw is said in the UI's language.

@@ -129,9 +129,9 @@ closes the shell.
 - **`:lua <chunk>`** runs one chunk without a shell and shows its values as a notification.
 
 **A script can show a card** beside the page: `autodoc.ui.card{title, text, every, tick}` puts
-Markdown in the card panel, and `tick(card)` refreshes it every `every` ms while it is open. In
-the window (`--gui`) a ```` ```vega-lite ```` fence in the card is drawn as a chart
-(`autodoc.ui.charts()` says whether it is); a terminal shows the Markdown. AutoDoc's own **`:usage`**
+Markdown in the card panel, drawn Rendered, and `tick(card)` refreshes it every `every` ms while it
+is open. A ```` ```vega-lite ```` fence in the card is drawn as a chart, in the window (`--gui`) and
+in a terminal, in cells (`autodoc.ui.charts()` says whether it is). AutoDoc's own **`:usage`**
 is one: the daemon's and the app's memory and CPU, and the workspace's index.
 
 **`:go <name>` puts the keyboard on a widget** (`:go explorer`, `:go card`, `:go terminal/lua`),
