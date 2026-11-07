@@ -3026,7 +3026,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3153,7 +3154,7 @@ WHAT A KEY NEEDS
   编辑和保存不可用。“文件 › 用默认应用打开”可打开原文件。较长的文件只显示单次读取
   所能承载的内容，并注明截断位置。
   HTML 文件会先询问：简化(如上，派生文本只读)或原始(直接
-  编辑并保存 HTML)。在 GUI 中，原始文件的渲染视图(Ctrl+T)即其页面：j k 或
+  编辑并保存 HTML)。原始文件的渲染视图(Ctrl+T)即其页面，在 GUI 和终端中皆然：j k 或
   方向键滚动，Ctrl+D Ctrl+U 滚动半页，g G 到首尾，其链接可作为笔记、
   文件或在浏览器中打开。其样式表和图片从所在工作区加载(不属于任何工作区
   的文件：仅限其所在文件夹；若站点共享 ../assets，请将该文件夹添加为工作区)。

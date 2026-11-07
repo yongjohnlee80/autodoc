@@ -210,7 +210,8 @@ const helpRest = `THE PAGE
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
