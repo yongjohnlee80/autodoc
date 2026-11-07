@@ -47,5 +47,7 @@ func (h *Host) paneLooks() {
 		return
 	}
 	widget.WithSyntax(h.p.SourceLanguages(), h.p.SyntaxStyles())(v)
-	widget.WithDiagramNotice(func(kind string) string { return h.trf(diagramNoticeID, kind) })(v)
+	// the page's own words, a chart's and a diagram's (pageNotice): a note's page, a card's and the
+	// pane say the same
+	widget.WithDiagramNotice(h.pageNotice)(v)
 }
