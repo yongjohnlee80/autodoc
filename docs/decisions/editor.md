@@ -394,6 +394,9 @@ has cells, not pixels:
 - **Keys.** The window's `l` (legend) is a direction here, so **`g`** (groups) shows or hides the
   legend. `H` `J` `K` `L` and `Shift` with the arrows pan; `+` `-` zoom and `0` fits it again, as in
   a window; the wheel zooms.
+- **Clipped links.** Each link is cut to the view's dots before it is drawn, so a map zoomed in
+  far, its links running off the view, paints as fast as one fitted. To follow: golib's
+  `tui/braille` Line clipping its own segments, so every caller has it.
 
 In the code: `tui/globemap.go`, `tui/globemap_cells.go`, `tui/relationviews_cells.go`
 
