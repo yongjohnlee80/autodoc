@@ -67,7 +67,7 @@ func TestPreviewHTMLOpensThePane(t *testing.T) {
 	r.s.WaitFor(t, "the pane open on the page", func(string) bool {
 		return onLoop(r, r.h.htmlPaneShown) && strings.Contains(r.paneSource(), `<h1 id="heading" data-src="0-9">Heading</h1>`)
 	})
-	r.s.WaitForText(t, "┌ preview")
+	r.s.WaitForText(t, r.paneCorner())
 
 	r.typeInEditor(t, "fresh ")
 	r.s.WaitFor(t, "the edit in the pane", func(string) bool { return strings.Contains(r.paneSource(), "fresh ") })
@@ -188,11 +188,18 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 	}
 }
 
+// paneCorner is the pane's frame's top-left corner and heading as drawn in the UI's language now
+// ("┌ preview" in English): where every pane helper finds the pane, so they find it after a
+// language switch too.
+func (r *running) paneCorner() string {
+	return "┌ " + onLoop(r, func() string { return r.h.tr("autodoc.main.preview") })
+}
+
 // paneHas reports whether the pane's cells show each of texts inside a box: a row holding the text
 // has a box's side (│) before it, within the pane.
 func (r *running) paneHas(texts ...string) bool {
 	snap := r.s.Backend.Snapshot()
-	left, _, ok := find(snap, "┌ preview")
+	left, _, ok := find(snap, r.paneCorner())
 	if !ok {
 		return false
 	}
@@ -215,7 +222,7 @@ func (r *running) paneHas(texts ...string) bool {
 // paneText is the pane's cells as text, a line per row, right of its border's corner.
 func (r *running) paneText() string {
 	snap := r.s.Backend.Snapshot()
-	left, _, ok := find(snap, "┌ preview")
+	left, _, ok := find(snap, r.paneCorner())
 	if !ok {
 		return ""
 	}
@@ -232,7 +239,7 @@ func (r *running) paneText() string {
 // leftOfPane finds text in the cells left of the pane's border: the editor's.
 func (r *running) leftOfPane(text string) (int, int, bool) {
 	snap := r.s.Backend.Snapshot()
-	left, _, ok := find(snap, "┌ preview")
+	left, _, ok := find(snap, r.paneCorner())
 	if !ok {
 		return 0, 0, false
 	}
@@ -247,7 +254,7 @@ func (r *running) leftOfPane(text string) (int, int, bool) {
 // show the same page), answering the screen cell it starts at.
 func (r *running) inPane(text string) (int, int, bool) {
 	snap := r.s.Backend.Snapshot()
-	left, _, ok := find(snap, "┌ preview")
+	left, _, ok := find(snap, r.paneCorner())
 	if !ok {
 		return 0, 0, false
 	}
@@ -472,5 +479,7 @@ func TestThePanesUndrawnChartSaysItIsAChart(t *testing.T) {
 	if _, _, ok := r.inPane(head(onLoop(r, func() string { return r.h.trf(diagramNoticeID, "vega-lite") }))); ok {
 		t.Fatalf("in Korean, the pane says the chart is a diagram:\n%s", r.paneText())
 	}
+	x, y, _ := r.inPane(head(ko))
+	t.Logf("KOREAN-CHART-NOTICE found in the pane at %d,%d: %q", x, y, head(ko))
 	t.Logf("the pane, in Korean:\n%s", r.paneText())
 }
