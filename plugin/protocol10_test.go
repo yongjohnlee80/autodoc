@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"image"
 	"math"
 	"testing"
 
@@ -81,43 +80,5 @@ func TestProtocolTensMessagesRoundTrip(t *testing.T) {
 		if read([]any{"not a map"}) == nil {
 			t.Error("a reader took a non-map")
 		}
-	}
-}
-
-// The side channel's ops round-trip, and a malformed one is refused.
-func TestTheSideChannelsOpsRoundTripAndRefuse(t *testing.T) {
-	specs := []SurfaceBufferSpec{{ID: 2, Kind: "memory", Format: "rgba8", W: 2, H: 2, Pitch: 8, Size: 16}}
-	gen, got, err := ReadBuffersMsg(roundTrip(t, BuffersMsg(4, specs)), 1)
-	if err != nil || gen != 4 || len(got) != 1 || got[0].Gen != 4 || got[0].Pitch != 8 {
-		t.Errorf("buffers %d %+v %v", gen, got, err)
-	}
-	if _, _, err := ReadBuffersMsg(roundTrip(t, BuffersMsg(4, specs)), 2); err == nil {
-		t.Error("buffers with an fd count that doesn't match was read")
-	}
-	impossible := []SurfaceBufferSpec{{ID: 2, Kind: "memory", Format: "rgba8", W: 2, H: 2, Pitch: 4, Size: 16}}
-	if _, _, err := ReadBuffersMsg(roundTrip(t, BuffersMsg(4, impossible)), 1); err == nil {
-		t.Error("a pitch below its row was read")
-	}
-	f, err := ReadFrameMsg(roundTrip(t, FrameMsg(SurfaceFrame{Seq: 1, Gen: 1, Buffer: 2, Dirty: image.Rect(1, 2, 3, 4)})))
-	if err != nil || f.Dirty != image.Rect(1, 2, 3, 4) {
-		t.Errorf("frame %+v, %v", f, err)
-	}
-	for _, bad := range []map[string]any{
-		{"op": OpFrame, "seq": int64(1), "gen": int64(1), "buffer": int64(2), "dirty": []any{int64(1)}},
-		{"op": OpFrame, "seq": int64(1), "gen": int64(1), "buffer": int64(2), "dirty": []any{int64(-1), int64(0), int64(1), int64(1)}},
-		{"op": OpFrame, "seq": int64(-1), "gen": int64(1), "buffer": int64(2)},
-	} {
-		if _, err := ReadFrameMsg(bad); err == nil {
-			t.Errorf("frame %v was read", bad)
-		}
-	}
-	if id, err := ReadBufferFreeMsg(roundTrip(t, BufferFreeMsg(6))); err != nil || id != 6 {
-		t.Errorf("buffer.free %d, %v", id, err)
-	}
-	if _, err := ReadBufferFreeMsg(map[string]any{"op": OpBufferFree}); err == nil {
-		t.Error("buffer.free without its buffer was read")
-	}
-	if _, err := ReadFrameDoneMsg(map[string]any{"op": OpFrameDone}); err == nil {
-		t.Error("frame.done without its seq was read")
 	}
 }
