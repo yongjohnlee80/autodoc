@@ -44,8 +44,8 @@ func outcomeName(o gui.Outcome) string {
 // draws.
 func (pl *plugins) newSurfaceSink() (surfaceSink, any, bool) {
 	b, ok := pl.c.SurfaceBackend().(*gui.Backend)
-	if !ok {
-		return nil, nil, false
+	if !ok { // a GUI build run as a terminal (--ui): its pictures, where it shows them
+		return pl.newCellSurfaceSink()
 	}
 	st := b.NewStream()
 	return streamSink{st}, st, true
