@@ -1,6 +1,7 @@
 // MindmapSettings.qml — Relations › Mindmap settings…, as the GlobeMap's: the Mindmap's theme and the
-// depth it opens at, and its groups, each a query, a colour and an outline (mindsettings_gui.go).
-// The GUI's alone: written into main.qml whole (relationviews_gui.go), not an autodoc.dialogs
+// depth it opens at, and its groups, each a query, a colour and an outline (mindsettings_gui.go; a
+// terminal's, mindmap_cells.go, which draws in the page's theme and so has no theme row). Written
+// into main.qml whole (relationviews_gui.go, relationviews_cells.go), not an autodoc.dialogs
 // component. Each applies at once; the groups are kept in the workspace's .autodoc/graph.toml.
 Dialog {
     closeOnQ: true
@@ -23,6 +24,7 @@ Dialog {
                     Layout.fillWidth: true
                     Flex {
                         direction: Tui.Horizontal
+                        visible: App.gui // a terminal's map is drawn in the page's theme
                         Text { text: qsTrId("autodoc.gui.mindmapSettings.theme"); Layout.preferredWidth: 14; toolTipText: "the page's (the default), the terminals', or one of its own" }
                         ComboBox { model: App.mindThemes; textRole: "label"; currentIndex: App.mindThemeIndex; onActivated: App.setMindTheme(index) }
                     }
