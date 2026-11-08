@@ -45,7 +45,7 @@ func usedIDs(t *testing.T) map[string]string {
 			used[string(m[1])] = path
 		}
 	}
-	for _, root := range []string{"qml", "qmlgui"} {
+	for _, root := range []string{"qml", "qmlrelations"} {
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || filepath.Ext(p) != ".qml" {
 				return err

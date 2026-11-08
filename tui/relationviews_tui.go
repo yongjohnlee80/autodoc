@@ -20,8 +20,9 @@ func (h *Host) relationViewFeatures() []Feature {
 	return h.relationViews
 }
 
-// relationViewChoices: a terminal has no GlobeMap or Mindmap choosers (language.go's choiceLabels).
-func relationViewChoices() map[string][]string { return nil }
+// relationViewChoices are the Mindmap's settings' choosers (language.go's choiceLabels): a terminal
+// has no GlobeMap.
+func relationViewChoices() map[string][]string { return mindChoices() }
 
 // openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build.
 func (h *Host) openGlobeSettings() { h.notify(h.globeSettingsElsewhereNotice()) }
