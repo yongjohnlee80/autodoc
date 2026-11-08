@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,4 +85,112 @@ func TestAFindOnlyARawHTMLFilesSourceHasGoesToTheText(t *testing.T) {
 	r.s.WaitFor(t, "the find in the text, on its match", func(string) bool {
 		return shownView(r) == widget.ViewRaw && r.cursor()[0] == 1 && onLoop(r, func() int { return r.h.find.total }) == 1
 	})
+}
+
+// paragraphs is n lines of <p>, each "word NN of the page.".
+func paragraphs(word string, n int) string {
+	var b strings.Builder
+	for i := range n {
+		fmt.Fprintf(&b, "<p>%s %02d of the page.</p>\n", word, i)
+	}
+	return b.String()
+}
+
+// pageScroll is how far the page is scrolled, in rows.
+func pageScroll(r *running) float32 {
+	p := htmlPage(r)
+	return onLoop(r, func() float32 { return p.view.ScrollY() })
+}
+
+// TestARawHTMLPagesReadingKeysKeepItRendered: the keys that read the page (the arrows, j/k,
+// PgUp/PgDn, g/G, ] [ and } {, h/l, y and Ctrl+C) leave it Rendered and the file as it was, and the
+// page's scroll is theirs: PgDn moves it on, PgUp back, G to the end, g to the start, ] to the next
+// block and [ back.
+func TestARawHTMLPagesReadingKeysKeepItRendered(t *testing.T) {
+	r, _ := openHTMLPage(t, "<h1>Long</h1>\n"+paragraphs("Line", 40), "Long")
+	before := r.editorText()
+	var down, bottom float32
+	for _, k := range []struct {
+		ev     tuicore.Event
+		scroll func() bool // the scroll the key makes, nil: none to wait for
+	}{
+		{key('j'), nil}, {key('k'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown}, func() bool { down = pageScroll(r); return down > 0 }},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp}, func() bool { return pageScroll(r) < down }},
+		{key('G'), func() bool { bottom = pageScroll(r); return bottom > down }},
+		{key('g'), func() bool { return pageScroll(r) == 0 }},
+		{key(']'), func() bool { return pageScroll(r) > 0 }},
+		{key('['), func() bool { return pageScroll(r) == 0 }},
+		{key('}'), nil}, {key('{'), nil},
+		{key('h'), nil}, {key('l'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyLeft}, nil},
+		{tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyRight}, nil},
+		{key('y'), nil}, {tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'c', Mods: tuicore.ModCtrl}, nil},
+	} {
+		r.keys(t, k.ev)
+		if k.scroll != nil {
+			r.s.WaitFor(t, fmt.Sprintf("%+v scrolls the page", k.ev), func(string) bool { return k.scroll() })
+		}
+		if v := shownView(r); v != widget.ViewRendered {
+			t.Fatalf("%+v left the page (view %v)", k.ev, v)
+		}
+	}
+	if got := r.editorText(); got != before {
+		t.Fatalf("reading the page changed the file:\n%q\nwant\n%q", got, before)
+	}
+}
+
+// TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage: under Text (modeless) every printing key
+// types, so the keys Vim reads the page by open the text and type there; the page travels by Alt and
+// an arrow instead.
+func TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage(t *testing.T) {
+	r, _ := openHTMLPage(t, "<h1>Long</h1>\n"+paragraphs("Line", 20), "Long")
+	r.leader(t, 'k') // Vim to Text
+	r.s.WaitForText(t, "editor mode: Text (modeless)")
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("after the keymap switch the file shows view %v, want its page", v)
+	}
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown, Mods: tuicore.ModAlt})
+	r.s.WaitFor(t, "Alt+Down travels to the next block", func(string) bool { return pageScroll(r) > 0 })
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyUp, Mods: tuicore.ModAlt})
+	r.s.WaitFor(t, "Alt+Up travels back", func(string) bool { return pageScroll(r) == 0 })
+	const typed = " hjkl[]{}gGy"
+	r.keys(t, decltest.Type(typed)...)
+	r.s.WaitFor(t, "the keys typed into the file", func(string) bool { return strings.HasPrefix(r.editorText(), typed+"<h1>Long") })
+	if v := shownView(r); v != widget.ViewRaw {
+		t.Fatalf("after typing the file shows view %v, want its text", v)
+	}
+}
+
+// TestAFindOnARawHTMLPageCountsWhatItShows: the page's find counts and marks what the page shows:
+// two of "kestrel", the third being a link's target only the source has; n and N step through the
+// page's marks; Ctrl+T to the text counts its source, three.
+func TestAFindOnARawHTMLPageCountsWhatItShows(t *testing.T) {
+	r, _ := openHTMLPage(t, birdsPage, "Birds")
+	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
+	at := func() [2]int { return onLoop(r, func() [2]int { return [2]int{r.h.find.at, r.h.find.total} }) }
+	r.s.WaitFor(t, "found on the page", func(string) bool { return at()[1] == 2 })
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("the find left the page: view %v", v)
+	}
+	first := at()[0]
+	r.h.p.Post(r.h.findNext)
+	r.s.WaitFor(t, "n to the other mark", func(string) bool { return at()[0] != first && at()[1] == 2 })
+	r.h.p.Post(r.h.findPrevious)
+	r.s.WaitFor(t, "N back", func(string) bool { return at()[0] == first && at()[1] == 2 })
+	r.keys(t, decltest.Ctrl('t'))
+	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && at()[1] == 3 })
+}
+
+// TestARightPressOnARawHTMLPageOpensTheEditorsMenu: a right press on the page opens the editor's
+// menu there, as over the text, and Esc closes it with the page still shown.
+func TestARightPressOnARawHTMLPageOpensTheEditorsMenu(t *testing.T) {
+	r, _ := openHTMLPage(t, "<h1>Pantry</h1>\n<p>shelf</p>\n", "Pantry")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: 20, Y: 6})
+	r.s.WaitForText(t, "Undo")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
+	r.s.WaitFor(t, "the menu closed", func(sc string) bool { return !strings.Contains(sc, "Undo") })
+	if v := shownView(r); v != widget.ViewRendered {
+		t.Fatalf("the menu left the page: view %v", v)
+	}
 }
