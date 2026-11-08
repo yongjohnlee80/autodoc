@@ -47,8 +47,8 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 
 // followLink is SPC j: the link under the editor's cursor, followed as the right-click menu's Go to
 // link follows it, in Raw and in a note's Rendered view alike. Off a link it says so, and where the
-// page's links are listed. On an HTML file's page, which has no cursor, it is the first link at or
-// after the page's top, among what is on screen (docs/decisions/editor.md). In a draft (no file
+// page's links are listed. On an HTML file's page, which has no cursor, it is the first link in the
+// file's source (docs/decisions/editor.md#html-files-open-raw-or-simplified). In a draft (no file
 // open) it does what Go to link does there: a link goes as written, a web address to the browser,
 // since there is no workspace to resolve it in.
 func (h *Host) followLink() {
@@ -57,16 +57,14 @@ func (h *Host) followLink() {
 	if h.file.open {
 		name = h.file.path
 	}
-	if p := h.notePage(); p != nil {
-		if from, to, shown := p.onScreen(len(source)); shown {
-			l, ok := firstLinkIn(source, from, to)
-			if !ok {
-				h.notify(h.trf("autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links", name))
-				return
-			}
-			h.goToLink(l)
+	if p := h.notePage(); p != nil && p.shownHere() {
+		l, ok := firstLink(source)
+		if !ok {
+			h.notify(h.trf("autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links", name))
 			return
 		}
+		h.goToLink(l)
+		return
 	}
 	l, ok := linkAt(source, h.cursorBytes())
 	if !ok {
@@ -76,22 +74,17 @@ func (h *Host) followLink() {
 	h.goToLink(l)
 }
 
-// firstLinkIn is the first link that starts in source bytes from..to, as linkAt reads one there.
-func firstLinkIn(source []byte, from, to int) (cursorLink, bool) {
+// firstLink is the first link in source, as linkAt reads one there.
+func firstLink(source []byte) (cursorLink, bool) {
 	doc := kind.ParseMarkdown(source)
 	at := -1
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
 		for c := n.FirstChild; c != nil && at < 0; c = c.Next {
-			if c.Span.End <= from || c.Span.Start >= to {
-				continue
-			}
 			switch c.Kind {
 			case markdown.KindLink, markdown.KindAutolink, markdown.KindWikilink:
-				if c.Span.Start >= from {
-					if _, ok := linkAt(source, c.Span.Start); ok {
-						at = c.Span.Start
-					}
+				if _, ok := linkAt(source, c.Span.Start); ok {
+					at = c.Span.Start
 				}
 			default:
 				walk(c)
