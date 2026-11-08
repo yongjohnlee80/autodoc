@@ -194,3 +194,19 @@ func TestARightPressOnARawHTMLPageOpensTheEditorsMenu(t *testing.T) {
 		t.Fatalf("the menu left the page: view %v", v)
 	}
 }
+
+// TestSPCjOnARawHTMLPageFollowsItsLink: the page has no cursor, so SPC j follows the first link in
+// the file's source from the page's top, read as a note's links are: here the file beside it. The
+// page is closed for the file it opens.
+func TestSPCjOnARawHTMLPageFollowsItsLink(t *testing.T) {
+	r, dir := openHTMLPage(t, "<h1>Links</h1>\n\nfirst [b](b.md)\n", "Links", "b.md", "# B\n")
+	r.leader(t, 'j')
+	r.waitOpen(t, "", filepath.Join(dir, "b.md")) // beside the page, as a relative link from it reads
+}
+
+// TestSPCjOnARawHTMLPageWithNoLinkSaysSo: a page with no link says so, in the page's words.
+func TestSPCjOnARawHTMLPageWithNoLinkSaysSo(t *testing.T) {
+	r, dir := openHTMLPage(t, "<h1>Plain</h1>\n<p>no link here</p>\n", "Plain")
+	r.leader(t, 'j')
+	r.waitKeptNotice(t, "no link on the page here: SPC l shows what "+filepath.Join(dir, "p.html")+" links with")
+}
