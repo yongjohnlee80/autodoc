@@ -51,7 +51,7 @@ func (h *Host) openPaneInBrowser() {
 		return
 	}
 	source, theme := []byte(h.pageNow().Text), h.exportTheme()
-	var options export.Options
+	options := export.Options{Chart: h.chart}
 	if full := h.diskPath(); full != "" {
 		options.Base, options.Document = filepath.Dir(full), full
 	}

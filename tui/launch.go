@@ -72,6 +72,9 @@ type LaunchOptions struct {
 	DefaultCellFont string
 	// Profiler is the window's memory monitor, --profile's, for System › Profiling; nil: none.
 	Profiler *profiling.Profiler
+	// Chart draws a Vega-Lite spec as inline SVG for a page the browser opens (Options.Chart). nil:
+	// the spec stays as it is written.
+	Chart func(spec []byte, theme string) (svg string, err error)
 	// DebugRecorder, when set, records the TUI's own trace into it as stage "tui"
 	// records — the same recording a window build's backend writes its input path
 	// into, so one file reads platform → IME → tui in order. A window build also
@@ -182,6 +185,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Fonts:           o.Fonts,
 		FontFamilies:    o.FontFamilies,
 		DefaultCellFont: o.DefaultCellFont,
+		Chart:           o.Chart,
 	})
 	if err != nil {
 		return err
