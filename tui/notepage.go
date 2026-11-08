@@ -392,7 +392,9 @@ func (p *cellNotePage) renderNote(pg Page) {
 		p.embeds = &termEmbeds{note: note, trf: p.h.trf}
 	}
 	p.md.Embeds = p.embeds.resolve
-	e.RelayRendered() // shown again: an embedded file may have changed since, which no edit says
+	// a safeguard for a show that reuses the layout, with no switch: a switch to the note already
+	// lays it again (SetImages, SetRenderer), so an embedded file written since is read anew there
+	e.RelayRendered()
 	root, base := p.h.resourcesFor(pg.Ref.ws, pg.Ref.path)
 	if key := root + "\x00" + base; !p.imgSet || key != p.imgKey {
 		p.imgKey, p.imgSet = key, true
