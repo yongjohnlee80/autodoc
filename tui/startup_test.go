@@ -54,15 +54,12 @@ func TestLatestReleaseReadsGitHubsAnswer(t *testing.T) {
 		w.Write([]byte(`{"tag_name":"v9.9.9","html_url":"https://example/r","body":"notes"}`))
 	}))
 	defer srv.Close()
-	defer func(u string) { latestURL = u }(latestURL)
-	latestURL = srv.URL
-	r, err := latestRelease(context.Background())
+	r, err := latestRelease(context.Background(), srv.URL)
 	if err != nil || r.Tag != "v9.9.9" || r.URL != "https://example/r" {
 		t.Fatalf("release %+v, %v", r, err)
 	}
-	latestURL = srv.URL + "/missing"
 	srv.Config.Handler = http.NotFoundHandler()
-	if _, err := latestRelease(context.Background()); err == nil {
+	if _, err := latestRelease(context.Background(), srv.URL+"/missing"); err == nil {
 		t.Error("a 404 was taken as a release")
 	}
 }

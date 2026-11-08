@@ -392,8 +392,9 @@ func TestAGatedSaveHeldAcrossASwitchIsDropped(t *testing.T) {
 	held, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	free := func() { once.Do(func() { close(release) }) }
-	beforeSend = func() { close(held); <-release }
-	t.Cleanup(func() { free(); beforeSend = func() {} }) // a failing cell never leaves the worker held
+	// the program's own seam, set on the loop, which sends the call to its worker after this
+	onLoop(g.running, func() bool { g.h.seams.beforeSend = func() { close(held); <-release }; return true })
+	t.Cleanup(free) // a failing cell never leaves the worker held
 	g.mustRun(t, "saveit")
 	select {
 	case <-held:
@@ -427,8 +428,8 @@ func TestAGatedScriptsOwnCallHeldAcrossASwitchIsRefused(t *testing.T) {
 	held, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	free := func() { once.Do(func() { close(release) }) }
-	beforeSend = func() { close(held); <-release }
-	t.Cleanup(func() { free(); beforeSend = func() {} })
+	onLoop(g.running, func() bool { g.h.seams.beforeSend = func() { close(held); <-release }; return true })
+	t.Cleanup(free)
 	g.mustRun(t, "direct")
 	select {
 	case <-held:

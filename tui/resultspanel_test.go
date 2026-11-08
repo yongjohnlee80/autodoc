@@ -532,9 +532,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 		t.Errorf("Insert as Markdown: %q", r.editorText())
 	}
 
-	limit := resultsCopyCap
-	resultsCopyCap = 64
-	t.Cleanup(func() { resultsCopyCap = limit })
+	onLoop(r, func() bool { r.h.seams.resultsCopyCap = 64; return true }) // read as a copy is made, on the loop
 	before := string(r.s.Backend.Clipboard())
 	for _, format := range []copyFormat{formatTSV, formatCSV, formatJSON, formatMarkdown} {
 		onLoop(r, func() bool { r.h.plugins.copyResults(format); return true })

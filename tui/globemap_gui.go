@@ -453,6 +453,7 @@ var closedChan = func() chan struct{} { c := make(chan struct{}); close(c); retu
 // and the viewer's pan and zoom.
 type globeMap struct {
 	c         Core
+	page      int                   // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	present   func() globePublisher // the publisher, made when the panel first opens
 	pres      *globeStream
 	seq       uint64
@@ -489,8 +490,8 @@ type globeDrag struct {
 	moved     bool
 }
 
-func newGlobeMap(c Core, present func() globePublisher) *globeMap {
-	g := &globeMap{c: c, present: present, hover: -1}
+func newGlobeMap(c Core, present func() globePublisher, page int) *globeMap {
+	g := &globeMap{c: c, page: page, present: present, hover: -1}
 	g.editor = &groupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.currentLook().pal.background }}
 	return g
@@ -651,8 +652,8 @@ func (g *globeMap) load() {
 		if k := globeFilters[filter].kinds; k != nil {
 			opts["kinds"] = k
 		}
-		if globeMapPage > 0 {
-			opts["limit"] = int64(globeMapPage)
+		if g.page > 0 {
+			opts["limit"] = int64(g.page)
 		}
 		// every page of the map (docs/decisions/search.md#clients-read-every-page), the documents
 		// read so far in the title

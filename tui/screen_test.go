@@ -39,6 +39,9 @@ import (
 // runTUISized is runTUI on a w×h screen.
 func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 	t.Helper()
+	if opt.seams == nil {
+		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
+	}
 	host := newHost(sess, opt)
 	s := decltest.RunWith(t, w, h, host.attach, host.options(opt)...)
 	t.Cleanup(host.cancel)

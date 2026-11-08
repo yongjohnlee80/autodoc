@@ -12,16 +12,12 @@ import (
 // THE DOCUMENT FEED (docs/decisions/plugins.md#the-document-feed) — a plugin whose manifest
 // declares [feed] document = true is sent the note in the editor as it stands, saved or not: its
 // text, the cursor and the selection. It is sent when the plugin starts, and after each pause in
-// editing, moving or opening (pluginFeedDelay). Version rises with every edit, and with every note
+// editing, moving or opening (the seams' pluginFeed). Version rises with every edit, and with every note
 // opened or closed, so a plugin can drop an answer it computed for an older one. A note too large
 // for the link is sent too large, without its text (plugin.FitDocument); only the newest waits to
 // be sent (outQueue).
 //
 // A service that starts on use (start = "use") starts on its first feed event.
-
-// pluginFeedDelay is the pause the feed waits for after an edit or a move (a variable, so a test can
-// shorten it).
-var pluginFeedDelay = 300 * time.Millisecond
 
 // feeds reports whether a plugin found declares the feed.
 func (pl *plugins) feeds() bool {
@@ -34,10 +30,10 @@ func (pl *plugins) feeds() bool {
 }
 
 // feedSoon sends the document once editing and moving have rested; a later call supersedes it.
-func (pl *plugins) feedSoon() { pl.feedSoonAfter(pluginFeedDelay) }
+func (pl *plugins) feedSoon() { pl.feedSoonAfter(pl.seams.pluginFeed) }
 
-// feedSoonAfter sends the document after wait: a typing pause waits the rest of pluginFeedDelay,
-// so the document goes pluginFeedDelay after the last keystroke, as a move's does after the move.
+// feedSoonAfter sends the document after wait: a typing pause waits the rest of the seams' pluginFeed,
+// so the document goes the seams' pluginFeed after the last keystroke, as a move's does after the move.
 func (pl *plugins) feedSoonAfter(wait time.Duration) {
 	if !pl.feeds() {
 		return

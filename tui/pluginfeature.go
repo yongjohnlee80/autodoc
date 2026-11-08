@@ -24,6 +24,7 @@ import (
 // commands.
 type plugins struct {
 	c         pluginHost
+	seams     *seams // its host's (seams.go)
 	pluginOpt Plugins
 	// the folder's plugins, as found, and the Plugins menu's rows
 	pluginList []pluginEntry
@@ -72,12 +73,12 @@ type plugins struct {
 	cardOrder []*cardPanel
 }
 
-func newPlugins(c pluginHost, opt Plugins) *plugins {
-	pl := &plugins{c: c, pluginOpt: opt,
+func newPlugins(c pluginHost, s *seams, opt Plugins) *plugins {
+	pl := &plugins{c: c, seams: s, pluginOpt: opt,
 		pluginRows: tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
 		running:    map[string]*pluginRun{}}
 	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
-	pl.results = &resultsTable{}
+	pl.results = &resultsTable{resident: s.resultsResident}
 	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
 	pl.results.shown = pl.results.model
 	pl.exportFormat = formatCSV
@@ -262,7 +263,7 @@ func (pl *plugins) LanguageChanged() {
 	}
 }
 
-// Stopped stops every running plugin, all at once, each within pluginGrace of being asked to close
+// Stopped stops every running plugin, all at once, each within the seams' pluginGrace of being asked to close
 // and pluginTermGrace of SIGTERM before SIGKILL (pluginRun.shutdown, whose waits carry their NOTE:):
 // quitting waits at most those two for a plugin that hangs, never on it.
 // An export not finished is cancelled first, its .part removed.
@@ -275,7 +276,7 @@ func (pl *plugins) Stopped() {
 // each send the document once things rest (feedSoon). Its Version is the page's own (Page.Version),
 // so a shown page and an edit raise it and a move does not.
 func (pl *plugins) Shown(Page)  { pl.feedSoon() }
-func (pl *plugins) Edited(Page) { pl.feedSoonAfter(max(pluginFeedDelay-editPause, 0)) }
+func (pl *plugins) Edited(Page) { pl.feedSoonAfter(max(pl.seams.pluginFeed-editPause, 0)) }
 func (pl *plugins) Moved(int, int) {
 	pl.feedSoon()
 }

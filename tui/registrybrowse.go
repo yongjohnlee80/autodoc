@@ -63,7 +63,8 @@ func (b *registryBrowse) Picks() map[string]picker { return map[string]picker{"r
 func (b *registryBrowse) browse() {
 	h := b.h
 	h.notifyOngoing("registry", h.tr("autodoc.notice.registrybrowse.reading_the_registry"))
-	do(h, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, func(l registryList) {
+	src := h.seams.registry
+	do(h, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, func(l registryList) {
 		l = l.usable()
 		h.registryLoaded(l)
 		var entries []regindex.IndexEntry

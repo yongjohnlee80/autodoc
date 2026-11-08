@@ -87,10 +87,6 @@ func edgeClass(kind string) int {
 	return edgeRelation
 }
 
-// globeMapPage is the documents a page of the GlobeMap's map asks for; 0 is the daemon's default.
-// A test makes it small, to read a map of a few documents over several pages.
-var globeMapPage = 0
-
 // globeForceInput is the simulation of m: seeded, so one map settles the same way each time.
 func globeForceInput(m relMap) graphlayout.ForceInput {
 	in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1, Steps: globeSteps, Reach: globeReach, LinkPull: globeLinkPull}

@@ -176,14 +176,15 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 
 	// with the arm kept, through the verb: Run pressed twice runs the first line, and the second's
 	// card, opened by that answer, is refused as answered too soon, said to the user, no tab started
-	terminalCardArm = 400 * time.Millisecond
+	const arm = 400 * time.Millisecond
+	onLoop(r, func() bool { r.h.seams.terminalCardArm = arm; return true }) // read as a card is asked, on the loop
 	one := run("echo armed-one")
 	r.s.WaitForText(t, "echo armed-one")
 	two := run("echo armed-two")
 	r.s.WaitFor(t, "the second armed card queued", func(string) bool {
 		return onLoop(r, func() bool { return len(r.h.asker.waiting) == 1 })
 	})
-	time.Sleep(terminalCardArm + 100*time.Millisecond) // the first card read
+	time.Sleep(arm + 100*time.Millisecond) // the first card read
 	armedBefore := len(tabs())
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
 	if a := wait("the first armed line", one); a.re != nil || a.res["started"] != true {
@@ -205,7 +206,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 			return false
 		})
 	})
-	terminalCardArm = 0
+	onLoop(r, func() bool { r.h.seams.terminalCardArm = 0; return true })
 
 	// a card another question displaces comes back after it, unanswered: nothing ran meanwhile, and
 	// only its own Run runs it (here Don't run)
@@ -257,7 +258,7 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 // AutoDoc runs in (80x20), in every shipped language: what the user approves is what they could read.
 func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunWith(t, 80, 20, h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
@@ -319,9 +320,7 @@ func TestALongFolderIsCutInTheMiddle(t *testing.T) {
 // show (TestARunTypedAheadNeverRunsTheNextLine keeps the arm).
 func disarm(t *testing.T) {
 	t.Helper()
-	was := terminalCardArm
-	terminalCardArm = 0
-	t.Cleanup(func() { terminalCardArm = was })
+	tune(t).terminalCardArm = 0
 }
 
 // TestARunTypedAheadNeverRunsTheNextLine: a terminal card queued behind another opens the moment
@@ -334,10 +333,11 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
 	r.connected(t)
+	arm := defaultSeams.terminalCardArm
 	var outcomes []string
 	ask := func(line string) {
 		onLoop(r, func() bool {
-			r.h.asker.askWhenFree(Question{Title: "run " + line, Text: line, Arm: terminalCardArm,
+			r.h.asker.askWhenFree(Question{Title: "run " + line, Text: line, Arm: arm,
 				OnTooSoon: func() { outcomes = append(outcomes, line+": too soon") },
 				OnYes:     func() { outcomes = append(outcomes, line+": run") },
 				OnCancel:  func() { outcomes = append(outcomes, line+": not run") }})
@@ -347,7 +347,7 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	ask("first")
 	ask("second")
 	r.s.WaitForText(t, "run first")
-	time.Sleep(terminalCardArm + 100*time.Millisecond) // the first card read and armed
+	time.Sleep(arm + 100*time.Millisecond) // the first card read and armed
 	// the user presses Run twice, the second time before the next card has been on screen
 	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
 	got := onLoop(r, func() []string { return append([]string(nil), outcomes...) })
@@ -357,7 +357,7 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	// armed, a Run counts
 	ask("third")
 	r.s.WaitForText(t, "run third")
-	time.Sleep(terminalCardArm + 100*time.Millisecond)
+	time.Sleep(arm + 100*time.Millisecond)
 	onLoop(r, func() bool { r.h.asker.accepted(); return true })
 	if got := onLoop(r, func() []string { return append([]string(nil), outcomes...) }); got[len(got)-1] != "third: run" {
 		t.Fatalf("an armed Run: %q, want third run", got)

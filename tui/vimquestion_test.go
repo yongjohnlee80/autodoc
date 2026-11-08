@@ -7,12 +7,11 @@ import (
 	"testing"
 )
 
-// offeringVimQuestion turns the first run's Vim question on for one test (TestMain turns it off for
-// the rest).
+// offeringVimQuestion turns the first run's Vim question on for one test's programs (TestMain turns
+// it off for the rest).
 func offeringVimQuestion(t *testing.T) {
 	t.Helper()
-	offerVimQuestion = true
-	t.Cleanup(func() { offerVimQuestion = false })
+	tune(t).offerVimQuestion = true
 }
 
 // A true first run (no keymap and no agent setup ever stored, no profile) asks "Do you use Vim?"
@@ -24,8 +23,9 @@ func TestTheVimQuestionIsATrueFirstRunsFirstCard(t *testing.T) {
 	fakeClaude(t)
 	// the setup's card looks for the agent CLIs as it opens (openAgentSetup): counted, it says
 	// whether the card opened beneath the question, which the question's own card would hide
-	looked, look := 0, lookAgentCLI
-	lookAgentCLI = func(c string) (string, error) { looked++; return look(c) }
+	seams := tune(t)
+	looked, look := 0, seams.lookAgentCLI
+	seams.lookAgentCLI = func(c string) (string, error) { looked++; return look(c) }
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{prefAboutAt: "true"}, Options{})
 	r.s.WaitForText(t, "Do you use Vim?")
 	if sc := r.s.String(); strings.Contains(sc, "Set up an AI agent?") || strings.Contains(sc, "about autodoc") {
@@ -87,7 +87,7 @@ func TestTheVimQuestionReadsTheStoredKeymap(t *testing.T) {
 		if stored != "" {
 			m[prefKeymap] = stored
 		}
-		if got := vimQuestionPending(prefsForPanels(m, false, nil)); got != want {
+		if got := vimQuestionPending(tune(t), prefsForPanels(m, false, nil)); got != want {
 			t.Errorf("keymap %q stored: pending %v, want %v", stored, got, want)
 		}
 	}

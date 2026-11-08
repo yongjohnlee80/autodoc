@@ -47,7 +47,7 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 	f := &findableFake{fake: fake{name: "zz", state: map[string]any{
 		"App.zzRows": tuidecl.NewListModel("key", "label"), "App.zzOther": tuidecl.NewListModel("key", "label")}},
 		pane: "birds", view: "zzList", rows: []string{"robin", "blue jay", "wren", "jaybird"}}
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	h.moreFeatures = []Feature{f}
 	main, err := keyCatalog(h.features()).withGenerated(string(layout))
 	if err != nil {

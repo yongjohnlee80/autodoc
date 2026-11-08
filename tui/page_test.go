@@ -104,8 +104,8 @@ func TestTheFrontmatterCheckWaitsFromTheLastKeystroke(t *testing.T) {
 	r.waitFile(t, "guide.md")
 	got := onLoop(r, func() []time.Duration {
 		var waits []time.Duration
-		scheduled = func(d time.Duration) { waits = append(waits, d) }
-		defer func() { scheduled = nil }()
+		r.h.seams.scheduled = func(d time.Duration) { waits = append(waits, d) }
+		defer func() { r.h.seams.scheduled = nil }()
 		r.h.pageSoon()
 		r.h.pagePaused()
 		return waits

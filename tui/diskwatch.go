@@ -58,10 +58,6 @@ const (
 	diskPolling  = "poll"
 )
 
-// diskPollEvery is vfs.Poll's interval where the folder has no native watcher.
-// NOTE: deadline: a poll is a listing per interval, the only way to see a change without a watcher.
-var diskPollEvery = 2 * time.Second
-
 // diskWait collapses a burst of events for one buffer (an agent writing in steps, an editor's
 // atomic save as remove+create) into one check.
 // NOTE: debounce: no event says a burst is over.
@@ -180,7 +176,7 @@ func (h *Host) startWatch(w *diskWatch) {
 	gen, dir := w.gen, w.dir
 	ctx, cancel := context.WithCancel(h.ctx)
 	w.cancel = cancel
-	events, mode, closeFS, err := openWatch(ctx, h.diskFS, w.at, w.rel)
+	events, mode, closeFS, err := openWatch(ctx, h.diskFS, w.at, w.rel, h.seams.diskPoll)
 	if err != nil {
 		cancel()
 		if w.err == nil { // said once, not at every retry
@@ -204,7 +200,7 @@ func (h *Host) startWatch(w *diskWatch) {
 // where the driver has none (or its watch would not start). Events name paths under at. closeFS
 // releases the driver (its os.Root on the folder): the caller runs it once the events end; a run
 // that does not start has released it already.
-func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
+func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string, poll time.Duration) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
 	fsys, err := open(at)
 	if err != nil {
 		return nil, "", nil, err
@@ -219,7 +215,7 @@ func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel s
 			return events, diskWatching, closeFS, nil
 		}
 	}
-	events, err = vfs.Poll(ctx, fsys, rel, diskPollEvery)
+	events, err = vfs.Poll(ctx, fsys, rel, poll)
 	if err != nil {
 		closeFS()
 		return nil, "", nil, err

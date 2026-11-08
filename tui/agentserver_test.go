@@ -135,7 +135,7 @@ func serverDir(t *testing.T) (dir, socket string) {
 // the pid file not written).
 func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 func TestStoppingAServerEndsItsWholeGroup(t *testing.T) {
 	dir, socket := serverDir(t)
 	child := `sh -c 'trap "" TERM; touch "$1"; while :; do sleep 1; done' child "$1" & exec sleep 300`
-	s, err := startAgentServer([]string{"sh", "-c", child, "sh", socket}, socket, dir, os.Environ())
+	s, err := startAgentServer([]string{"sh", "-c", child, "sh", socket}, socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,13 +175,10 @@ func TestStoppingAServerEndsItsWholeGroup(t *testing.T) {
 }
 
 // TestAServerThatNeverListensIsStoppedAndRefused: a server whose socket doesn't appear within
-// serverReadyWait is stopped, its pid file removed, and the start refused (the mutant: left running).
+// its ready wait is stopped, its pid file removed, and the start refused (the mutant: left running).
 func TestAServerThatNeverListensIsStoppedAndRefused(t *testing.T) {
-	saved := serverReadyWait
-	serverReadyWait = 300 * time.Millisecond
-	t.Cleanup(func() { serverReadyWait = saved })
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(t, socket, false), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, false), socket, dir, os.Environ(), 300*time.Millisecond)
 	if err == nil || s != nil || !strings.Contains(err.Error(), "didn't listen") {
 		t.Fatalf("a server that never listens: %v %v, want refused", s, err)
 	}
@@ -218,7 +215,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(stale.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +233,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(other.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s2, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s2, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +268,7 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +447,7 @@ func (f *fakeTerminal) Resize(_, _ int) error { return nil }
 // dead --remote, and no server outlives its CLI (the mutants: either side's end not passed on).
 func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +460,7 @@ func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	}
 
 	dir, socket = serverDir(t)
-	s, err = startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
+	s, err = startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +525,7 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		dir, socket := serverDir(t)
 		endsWithTheTest(t, socket)
 		childFile := filepath.Join(dir, "child.pid")
-		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ())
+		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ(), defaultSeams.serverReady)
 		if err != nil {
 			t.Fatal(err)
 		}

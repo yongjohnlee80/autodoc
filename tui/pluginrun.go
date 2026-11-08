@@ -22,13 +22,6 @@ import (
 // A RUNNING PLUGIN — one started plugin's process: its dialog or service, the protocol both ways,
 // and its closing (plugins.go).
 
-// The deadlines of a plugin's life (variables, so a test can shorten them before it starts one).
-var (
-	pluginHandshake = 5 * time.Second // plugin.open to host.ready
-	pluginGrace     = 2 * time.Second // plugin.close to its exit, before SIGTERM
-	pluginTermGrace = 1 * time.Second // SIGTERM to its exit, before SIGKILL
-)
-
 // pluginRun is one plugin's process, its link and its dialog. Loop-owned unless marked.
 type pluginRun struct {
 	pl    *plugins
@@ -150,7 +143,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 
 	r := &pluginRun{pl: pl, e: e, cmd: cmd, log: log, out: newOutQueue(),
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
-		handshake: pluginHandshake, grace: pluginGrace, termGrace: pluginTermGrace}
+		handshake: pl.seams.pluginHandshake, grace: pl.seams.pluginGrace, termGrace: pl.seams.pluginTermGrace}
 	r.ctx, r.stop = context.WithCancel(pl.c.Context())
 	if attachSurface != nil {
 		attachSurface(r)
@@ -458,7 +451,7 @@ func (r *pluginRun) exitedUnasked() {
 }
 
 // close closes the dialog at once and stops the plugin behind it: plugin.close, then SIGTERM after
-// pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
+// the seams' pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
 // failure (CloseFailure), a sentence naming the plugin in the UI's language: a toast says it, with
 // the last line the plugin wrote to its log; without one, it is a close as a dialog's (CloseClosed:
 // a modal Esc, its own host.close).

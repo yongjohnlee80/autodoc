@@ -593,7 +593,7 @@ func TestTheGlobeMapShowsOnlyItsNewestLoad(t *testing.T) {
 		sizes = sizes[1:]
 		return mapAnswer(nodesOf(n), nil), nil
 	}
-	g := newGlobeMap(a, func() globePublisher { return &paintPresenter{} })
+	g := newGlobeMap(a, func() globePublisher { return &paintPresenter{} }, 0)
 	spec := g.Panels()[0]
 	spec.Opened(nil) // the load of 20
 	g.sendView(globeView800.size, true)
@@ -907,9 +907,7 @@ func (c *closeHost) RestoreKeyboardHome() error {
 // ones) lay out with every document and every link, the counts the one-reply map has, in the
 // panel's title.
 func TestTheGlobeMapReadsEveryPage(t *testing.T) {
-	was := globeMapPage
-	globeMapPage = 2
-	t.Cleanup(func() { globeMapPage = was })
+	tune(t).globeMapPage = 2
 	rel := func(to string) string { return "---\nrelated: [" + to + "]\n---\nx\n" }
 	d := startDaemon(t, map[string][]string{"kb": {
 		"a.md", rel("g.md"), "b.md", rel("c.md"), "c.md", rel("f.md"), "d.md", "plain\n",

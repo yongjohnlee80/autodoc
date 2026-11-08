@@ -13,16 +13,16 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// offeringSetup turns the first-run card on for one test (TestMain turns it off for the rest).
+// offeringSetup turns the first-run card on for one test's programs (TestMain turns it off for the
+// rest).
 func offeringSetup(t *testing.T) {
 	t.Helper()
-	offerAgentSetup = true
-	t.Cleanup(func() { offerAgentSetup = false })
+	tune(t).offerAgentSetup = true
 }
 
 // fakeClaude is a claude that writes every line typed to it into heard, a line only once its Enter
 // arrives: a prompt submitted is a whole line there, a prompt pasted without Enter none. The card
-// finds it (lookAgentCLI); onPath puts it on PATH for the agent's start, after runAgentTUIWith,
+// finds it (the seams' lookAgentCLI); onPath puts it on PATH for the agent's start, after runAgentTUIWith,
 // which sets a PATH of its own.
 func fakeClaude(t *testing.T) (heard string, onPath func()) {
 	t.Helper()
@@ -32,14 +32,12 @@ func fakeClaude(t *testing.T) (heard string, onPath func()) {
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	look := lookAgentCLI
-	lookAgentCLI = func(c string) (string, error) {
+	tune(t).lookAgentCLI = func(c string) (string, error) {
 		if c == "claude" {
 			return filepath.Join(bin, c), nil
 		}
 		return "", errors.New("not found")
 	}
-	t.Cleanup(func() { lookAgentCLI = look })
 	return heard, func() { t.Setenv("PATH", bin+":/usr/bin:/bin") }
 }
 
@@ -213,9 +211,7 @@ func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 // nothing: the next start asks again.
 func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	offeringSetup(t)
-	look := lookAgentCLI
-	lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
-	t.Cleanup(func() { lookAgentCLI = look })
+	tune(t).lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "No agent CLI was found on your PATH")
 	if n := onLoop(r, func() int { return len(r.h.agents.setupFound) }); n != 0 {

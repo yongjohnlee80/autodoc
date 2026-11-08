@@ -364,6 +364,9 @@ type running struct {
 
 func runTUI(t *testing.T, sess *Session, opt Options) *running {
 	t.Helper()
+	if opt.seams == nil {
+		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
+	}
 	h := newHost(sess, opt)
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)

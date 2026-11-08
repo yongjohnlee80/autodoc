@@ -30,8 +30,9 @@ import (
 // since a fetch for the old one may still be on its way and its rows would join the new. Rows are
 // taken only as the answer to the fetch that waits.
 //
-// The panel holds at most resultsResident rows: a query of millions is read a page at a time, never
-// whole. At the cap the table stops asking for more and its heading says more remain.
+// The panel holds at most its resident rows (seams.go: resultsResident): a query of millions is
+// read a page at a time, never whole. At the cap the table stops asking for more and its heading
+// says more remain.
 //
 // THE PANEL ACTS ON THE TABLE IN THE VIEW. Its sort, its copies, results.markdown and its exports
 // take the rows loaded, in the order shown, and none of them fetches a row: what the query returns
@@ -48,21 +49,14 @@ const (
 // a page by its encoded bytes, to stay under the link's limit.
 const resultsPage = 500
 
-// resultsResident is the most rows the panel holds (a variable, so a test can lower it). Rows past
-// it are not loaded, and the table says the result has more.
-var resultsResident = 100_000
-
-// resultsCopyCap is the most text a copy puts on the clipboard (a variable, so a test can lower it):
-// past it nothing is copied, and the notice says to export instead.
-var resultsCopyCap = 16 << 20
-
 // resultsTable is the table shown: whose it is, its id there, and the plugin's paging. Loop-owned.
 type resultsTable struct {
-	model *resultsModel
-	shown tuidecl.ItemModel // what App.resultsRows holds: the model, or kindedResults over it
-	owner *pluginRun        // nil when no plugin serves it: none shown, or its plugin closed
-	id    string            // the plugin's id for it; "" when none is shown
-	title string
+	resident int // the most rows it holds (seams.go: resultsResident)
+	model    *resultsModel
+	shown    tuidecl.ItemModel // what App.resultsRows holds: the model, or kindedResults over it
+	owner    *pluginRun        // nil when no plugin serves it: none shown, or its plugin closed
+	id       string            // the plugin's id for it; "" when none is shown
+	title    string
 	// more is the last message's: rows remain to fetch. pending is a fetch sent and not yet
 	// answered: another is not sent until host.rows or host.table_end answers it. cut is rows that
 	// remained when the table's rows ended early (host.table_end, its plugin closed, or a page
@@ -75,7 +69,7 @@ type resultsTable struct {
 }
 
 // full reports whether the panel holds all the rows it may.
-func (res *resultsTable) full() bool { return len(res.model.rows) >= resultsResident }
+func (res *resultsTable) full() bool { return len(res.model.rows) >= res.resident }
 
 // partial reports whether the result has rows the view does not: rows still to fetch, rows past the
 // cap, or rows that never came.
@@ -215,7 +209,7 @@ func (m *resultsModel) Subscribe(fn func(tuidecl.Change)) (cancel func()) {
 }
 
 // CanFetchMore is the last message's more, at the root, while the panel is under its cap: it stays
-// true while a fetch is answered, and is false once the panel holds resultsResident rows, so the
+// true while a fetch is answered, and is false once the panel holds resident rows, so the
 // view stops asking.
 func (m *resultsModel) CanFetchMore(ix tuidecl.Index) bool {
 	return ix.Parent == nil && m.t.more && !m.t.full()
@@ -305,7 +299,7 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 	}
 	pl.closeTable()
 	res.owner, res.id, res.title, res.more, res.pending, res.cut = r, t.ID, cmp.Or(t.Title, r.e.m.Table.Title), t.More, false, false
-	keep := min(len(t.Rows), resultsResident)
+	keep := min(len(t.Rows), pl.results.resident)
 	res.capped = keep < len(t.Rows)
 	var kinds []string
 	if t.Kinds != nil {
@@ -355,7 +349,7 @@ func (pl *plugins) tableRows(r *pluginRun, page plugin.TableRows) {
 		return
 	}
 	res.pending, res.more = false, page.More
-	keep := min(max(resultsResident-len(res.model.rows), 0), len(page.Rows))
+	keep := min(max(res.resident-len(res.model.rows), 0), len(page.Rows))
 	res.capped = res.capped || keep < len(page.Rows)
 	var kinds []string
 	if page.Kinds != nil {
@@ -389,7 +383,7 @@ func (pl *plugins) fetchRows() {
 	if res.owner == nil || res.owner.closing || !res.more || res.pending || res.tidying {
 		return
 	}
-	n := min(resultsPage, resultsResident-len(res.model.rows))
+	n := min(resultsPage, res.resident-len(res.model.rows))
 	if n <= 0 {
 		return
 	}
@@ -839,11 +833,11 @@ const (
 	formatMarkdown copyFormat = "markdown"
 )
 
-// errPastCopyCap is a copy's text grown past resultsCopyCap.
+// errPastCopyCap is a copy's text grown past the seams' resultsCopyCap.
 var errPastCopyCap = errors.New("past the copy's cap")
 
 // copyResults is results.copy and its siblings: the selected cells (or the cursor's), from the
-// loaded rows as the table shows them, in format. Past resultsCopyCap of text nothing is copied.
+// loaded rows as the table shows them, in format. Past the seams' resultsCopyCap of text nothing is copied.
 func (pl *plugins) copyResults(format copyFormat) {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || core.Len() == 0 {
@@ -851,8 +845,8 @@ func (pl *plugins) copyResults(format copyFormat) {
 		return
 	}
 	text, err := pl.selectionText(core, format)
-	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > resultsCopyCap {
-		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.nothing_copied_the_selection_is_more_than_the_a", sizeOf(resultsCopyCap)))
+	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > pl.seams.resultsCopyCap {
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.nothing_copied_the_selection_is_more_than_the_a", sizeOf(pl.seams.resultsCopyCap)))
 		return
 	}
 	if err != nil {
@@ -935,7 +929,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		return markdownTable(names, table), nil
 	case formatCSV:
 		var b strings.Builder
-		w := newCSVRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+		w := newCSVRows(&cappedWriter{w: &b, cap: pl.seams.resultsCopyCap}, names)
 		for _, d := range rows {
 			cells, _ := pick(core.SourceRow(d))
 			for i, c := range cols {
@@ -953,7 +947,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		return b.String(), nil
 	}
 	var b strings.Builder
-	w := newJSONRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+	w := newJSONRows(&cappedWriter{w: &b, cap: pl.seams.resultsCopyCap}, names)
 	for _, d := range rows {
 		cells, kinds := pick(core.SourceRow(d))
 		var keep []int

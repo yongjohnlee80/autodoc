@@ -155,14 +155,10 @@ func (h *Host) poll() {
 	})
 }
 
-// scheduled, when set (tests only), hears each delay h.after is given, on the loop: the seam that
-// shows a consumer's wait without timing it. Set it before the host runs anything that schedules.
-var scheduled func(time.Duration)
-
 // after runs fn on the loop once d has passed, unless the program stopped.
 func (h *Host) after(d time.Duration, fn func()) {
-	if scheduled != nil {
-		scheduled(d)
+	if h.seams.scheduled != nil {
+		h.seams.scheduled(d)
 	}
 	ctx := h.ctx
 	go func() {

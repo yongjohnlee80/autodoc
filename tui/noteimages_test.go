@@ -21,7 +21,7 @@ func noteImageTUI(t *testing.T, caps tuicore.Capabilities) *running {
 		t.Fatal(err)
 	}
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "n.md", "# Shelf\n\n![a gull](gull.png)\n\nafter the picture\n", "gull.png", pic.String())}, tableInclude)
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 30, tuicore.WithTestCapabilities(caps)), h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
