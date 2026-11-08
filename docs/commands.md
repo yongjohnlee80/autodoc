@@ -74,6 +74,8 @@ configuration. `editor.commands` lists them with the rest.
 | `find.open` |  |  | find in the page |
 | `find.previous` |  |  | find previous |
 | `find.term` | `:find` | `<term>` | find term in the page; n and N go to the next and previous |
+| `globemap.settings` |  |  | the GlobeMap's settings |
+| `globemap.toggle` |  |  | the GlobeMap |
 | `help.about` |  |  | about |
 | `help.keys` |  |  | help |
 | `help.tutorial` |  |  | the tutorial |
