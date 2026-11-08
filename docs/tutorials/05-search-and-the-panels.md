@@ -21,6 +21,6 @@ flowchart LR
 
 **Ctrl+h j k l** (Normal mode) go from the page to a panel and back.
 
-**Every panel moves and resizes.** Alt (Option on a Mac) with the left button drags it anywhere; with the right button it resizes. **SPC L** (Go › Arrange panel…) does both by keys: `h j k l` move it, `H J K L` resize it, Enter keeps it, Esc puts it back. It opens where you left it; **Go › Reset panel layout** docks them all again.
+**Every panel moves and resizes.** Drag its title row to move it, its side or bottom border to resize it. Alt (Option on a Mac) with the left button drags it from anywhere in it; with the right button it resizes. **SPC L** (Go › Arrange panel…) does both by keys: `h j k l` move it, `H J K L` resize it, Enter keeps it, Esc puts it back. It opens where you left it; **Go › Reset panel layout** docks them all again.
 
 More: [Reference, Chapter 3: Modal Editor and Panels](../reference/03-modal-editor-and-panels.md), and [Reference, Chapter 5: The Hybrid Search Pipeline](../reference/05-hybrid-search-pipeline.md).
