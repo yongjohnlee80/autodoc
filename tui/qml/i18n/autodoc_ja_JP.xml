@@ -3085,12 +3085,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3205,12 +3206,13 @@ WHAT A KEY NEEDS
   ノーマルモードで Escape、または再度 SPC ` で隠し、キーボードはまだ開いている最前面のウィンドウに移ります。
   シェルが終了すると (exit、Ctrl+D) タブが閉じ、異常終了は通知に残ります。最後のシェルが
   終了するとペインが閉じ、次の SPC ` で新しく起動します。
-  どのパネルも移動とサイズ変更ができます。Alt (Mac では Option) + 左ボタンでドラッグして移動、
+  どのパネルも移動とサイズ変更ができます。タイトル行をドラッグすると移動、左右や下の枠をドラッグすると
+  サイズ変更します。Alt (Mac では Option) + 左ボタンでドラッグするとパネルのどこからでも移動、
   右ボタンでサイズ変更。SPC L (移動 › パネルを配置…) はキーで両方を行います: h j k l または
   矢印キーで移動、H J K L または Shift+矢印キーでサイズ変更、Enter で確定、Esc で元に戻す。
   以降はその位置で開きます。移動 › パネルレイアウトをリセット で全パネルを再び端に
   ドッキングします (設定で端を変えた場合も、そのパネルは同様)。ターミナルによっては Alt+クリックを自身で使いますが、
-  キー操作は常に使えます。
+  枠のドラッグとキー操作は常に使えます。
 
 キーに必要なもの
   ここにある機能はすべてデーモン (autodoc --serve) が必要です。応答がなければ --ui が起動します。

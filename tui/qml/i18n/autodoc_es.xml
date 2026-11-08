@@ -3086,12 +3086,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3210,12 +3211,13 @@ LOS PANELES
   Escape en modo Normal, o SPC ` otra vez, lo oculta; el teclado va a la ventana superior que sigue abierta. Cuando
   un shell termina (exit, Ctrl+D) su pestaña se cierra, y una salida con error queda como aviso; la salida del último
   cierra el panel, y el siguiente SPC ` inicia otro.
-  Todo panel se mueve y se redimensiona. Alt (Option en un Mac) con el botón izquierdo lo arrastra a cualquier lugar,
+  Todo panel se mueve y se redimensiona. Arrastrar su fila de título lo mueve, y su borde lateral o inferior
+  lo redimensiona; Alt (Option en un Mac) con el botón izquierdo lo arrastra desde cualquier punto,
   con el botón derecho lo redimensiona; SPC L (Ir › Organizar panel…) hace ambas cosas con teclas: h j k l o las
   flechas lo mueven, H J K L o Shift con ellas lo redimensionan, Enter lo conserva, Esc lo devuelve a su sitio. Desde
   entonces se abre donde se dejó. Ir › Restablecer disposición de paneles vuelve a acoplar cada panel en su borde,
   como hace un nuevo borde en Preferencias para uno. Un terminal puede quedarse Alt+clic para sí;
-  las teclas siempre funcionan.
+  los arrastres del marco y las teclas siempre funcionan.
 
 LO QUE NECESITA UNA TECLA
   Todo aquí necesita el daemon (autodoc --serve). --ui lo inicia cuando nada responde; si
