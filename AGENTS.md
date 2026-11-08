@@ -27,20 +27,11 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
   absolute path.
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
-A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
-`autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
-when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": N, "name": "<your client>"}`, where `N` is the protocol your client was
-written for. The daemon serves every protocol from its `min_protocol` to its own; another is
-refused, and so is every verb until the hello succeeds. To learn the range first, send `sys.hello`
-with no protocol: that probe admits nothing and answers `min_protocol` and `server_protocol`. A verb may be written right behind the
-hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
-verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
-and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
-`verbs` the session may call. The name `autodoc-tui` is admitted at the daemon's own protocol only.
-`autodoc --call` says hello as `autodoc-cli`, so what it changes is attributed to it in
-`sys.events`; refused by an older daemon it still serves, it says hello again at that daemon's
-protocol, on a new connection (a refused hello ends its session).
+A program that speaks msgpack-rpc itself can dial the socket directly. Find it with
+`autodoc --print-endpoint` (`--ensure` starts the daemon first), never by rules of your own. Its first
+call must be `sys.hello` with `{"protocol": N, "name": "<your client>"}`. The handshake, the protocol
+range and what a session keeps are in
+[docs/reference/12-ai-agent-integration-and-cli-rpc.md](docs/reference/12-ai-agent-integration-and-cli-rpc.md).
 
 ## What you can do for the user
 
@@ -126,7 +117,8 @@ The stages:
 - Without `rerank`, the hits are never ranked, even with a ranker in use: compare a search with and
   without it to see what the ranker changed.
 - A build may answer ranked or not at all: then a search that asks for `rerank` (or auto) and cannot
-  be ranked is refused with -32070. One that leaves `rerank` out is answered, unranked.
+  be ranked is refused with -32070, and no hits. Retry later, or leave `rerank` out: that one is
+  answered, unranked.
 
 The answer:
 
@@ -172,17 +164,11 @@ The answer:
     why;
   - `off`: no ranker is in use, `rerank` was not asked for, or the query had no words to rank by
     (filters alone).
-
-  A build may answer ranked or not at all: then a search that asked for `rerank` (or auto) and the
-  ranker cannot rank is refused with code -32070, and no hits. Retry later, or leave `rerank` out.
 - `stages` says how the answer was made: `requested` is the stages asked for (auto lists all
   three), `performed` the stages that shaped these hits, and `skipped` why each other one did not
-  run, a constant sentence:
-  - `semantic`: "no embedding model is in use", "the workspace's embedding policy pauses semantic
-    search", "a new embedding model is filling" or "the query could not be embedded";
-  - `rerank`: "no ranker is in use" or "the ranker could not rank this search";
-  - any stage: "the query has no words". A query of filters alone runs only the scan that lists
-    their files, which `performed` names `lexical`.
+  run, in a constant sentence (the
+  [search pipeline reference](docs/reference/05-hybrid-search-pipeline.md) lists them). A query of
+  filters alone runs only the scan that lists their files, which `performed` names `lexical`.
 
 ### Complex queries
 
