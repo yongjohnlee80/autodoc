@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,11 +42,12 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	rec := record.NewJSONLRecorder(&buf)
+	keyed := &keyRecordSeen{to: rec, seen: make(chan struct{})}
 	backend := tuicore.NewTestBackend(100, 30)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Launch(ctx, LaunchOptions{ConfigPath: conf, Version: "v-client", Spawn: spawn, Backend: backend, DebugRecorder: rec,
+		done <- Launch(ctx, LaunchOptions{ConfigPath: conf, Version: "v-client", Spawn: spawn, Backend: backend, DebugRecorder: keyed,
 			Installed: func() (string, error) { return "v-client", nil }})
 	}()
 	deadline := time.Now().Add(10 * time.Second)
@@ -60,7 +62,14 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 	if err := backend.Inject(tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'x'}); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond) // the trace fires on the UI loop, promptly
+	// the trace fires on the UI loop: wait for the key's own record, not a guess at how long that takes
+	select {
+	case <-keyed.seen:
+	case <-time.After(10 * time.Second):
+		cancel()
+		<-done
+		t.Fatal("the recording holds no key record; the typed key never traced")
+	}
 	cancel()
 	if err := <-done; err != nil && err != context.Canceled {
 		t.Fatalf("Launch: %v", err)
@@ -96,5 +105,20 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 	}
 	if keyRecords == 0 {
 		t.Fatal("the recording holds no key record; the typed key never traced")
+	}
+}
+
+// keyRecordSeen passes every record on to the recorder it wraps, and closes seen at
+// the first tui record of kind "key": the typed key has traced.
+type keyRecordSeen struct {
+	to   record.Recorder
+	seen chan struct{}
+	once sync.Once
+}
+
+func (k *keyRecordSeen) Record(r record.Record) {
+	k.to.Record(r)
+	if r.Stage == record.StageTui && r.Kind == "key" {
+		k.once.Do(func() { close(k.seen) })
 	}
 }
