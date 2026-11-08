@@ -3,6 +3,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -137,5 +138,70 @@ func TestTheViewerDrawsEveryKindTheParserReads(t *testing.T) {
 	}
 	if err := layDiagram("mermaid", "flowchart LR\n  A --> B[<job id>]\n"); err == nil {
 		t.Error("the viewer drew a <job id> label, which doc.validate diagnoses")
+	}
+}
+
+// --check-diagram checks a note's embedded diagrams as it checks its fences: each line holding
+// only an image of a .mmd or .chart.json file (export.EmbedLines, the page's rule), its file read
+// where the page reads it (beside the note, in a subfolder, or in the note's resources folder),
+// reported at the note's line with the embed named: ok, not drawn with golib's reason (at the
+// line of the embedded file), a missing file, or a file outside the note's folder. An image (.png)
+// and a table (.csv) are no diagram: nothing is said of them. Any embed not drawn exits 1; a note
+// whose embeds are all drawn exits 0, and one with only images says it has no diagrams (the
+// mutants: the embeds not looked for; a missing file not said so; the error's line not the embedded
+// file's).
+func TestCheckDiagramChecksTheNotesEmbeds(t *testing.T) {
+	bar := `{"data":{"values":[{"k":"a","v":1}]},"mark":"bar","encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}`
+	note := "# Note\n\n![flow](flow.mmd)\n\n![sales](assets/sales.chart.json)\n\n![levels](levels.chart.json)\n\n" +
+		"![gone](gone.mmd)\n\n![photo](photo.png)\n\n![table](t.csv)\n\n![up](../up.mmd)\n\n![kept](kept.mmd)\n\n![broken](broken.mmd)\n"
+	dir := writeFiles(t, map[string]string{
+		"note.md": note, "flow.mmd": "flowchart LR\n  A --> B\n", "levels.chart.json": ruleByField,
+		"photo.png": "not a picture", "t.csv": "a,b\n1,2\n", "broken.mmd": "flowchart TB\n  A[unclosed --> B\n",
+		"good.md": "![flow](flow.mmd)\n\nText.\n\n![sales](assets/sales.chart.json)\n", "pictures.md": "![photo](photo.png)\n",
+	})
+	for name, text := range map[string]string{"assets/sales.chart.json": bar, "note/kept.mmd": "flowchart LR\n  C --> D\n"} {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := filepath.Join(dir, "note.md")
+
+	code, out := runMain(t, nil, "--check-diagram", at)
+	if code != diagramsNotDrawn {
+		t.Errorf("a note with embeds not drawn: exit %d, want %d\n%s", code, diagramsNotDrawn, out)
+	}
+	want := []string{
+		at + ":3: flow.mmd: ok (mermaid)",
+		at + ":5: assets/sales.chart.json: ok (vega-lite)",
+		at + ":7: levels.chart.json: not drawn: ",
+		at + ":9: gone.mmd: missing file",
+		at + ":15: ../up.mmd: not read: not in the note's folder",
+		at + ":17: kept.mmd: ok (mermaid)",
+		at + ":19: broken.mmd:2: not drawn: mermaid: line 2",
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != len(want) {
+		t.Fatalf("%d lines, want %d, one per diagram embed in the note's order:\n%s", len(lines), len(want), out)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(lines[i], w) {
+			t.Errorf("line %d: %q, want it to begin %q", i+1, lines[i], w)
+		}
+	}
+	if !strings.Contains(lines[2], "a rule coloured by a field") || strings.Contains(out, "photo.png") || strings.Contains(out, "t.csv") {
+		t.Errorf("golib's reason for the chart, and nothing of the image or the table:\n%s", out)
+	}
+
+	if code, out := runMain(t, nil, "--check-diagram", filepath.Join(dir, "good.md")); code != diagramsDrawn ||
+		!strings.Contains(out, "good.md:1: flow.mmd: ok (mermaid)") || !strings.Contains(out, "good.md:5: assets/sales.chart.json: ok (vega-lite)") {
+		t.Errorf("a note whose embeds all draw: exit %d, want %d\n%s", code, diagramsDrawn, out)
+	}
+	if code, out := runMain(t, nil, "--check-diagram", filepath.Join(dir, "pictures.md")); code != diagramsDrawn ||
+		!strings.Contains(out, "pictures.md: no mermaid or vega-lite diagrams") {
+		t.Errorf("a note with only an image: exit %d, want %d, saying it has no diagrams\n%s", code, diagramsDrawn, out)
 	}
 }

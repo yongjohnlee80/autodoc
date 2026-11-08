@@ -564,7 +564,10 @@ Mermaid kinds and the Vega-Lite subset AutoDoc's GUI draws, read from golib's ow
 show the user one, check that AutoDoc's GUI draws it:
 `autodoc --check-diagram notes/flow.mmd notes/sales.chart.json notes/report.md`. It lays each one
 out with golib's renderer, as the Rendered view does, and prints `file:line: ok` or `file:line: not
-drawn: <golib's error>`; a `.md` is checked fence by fence. Exit 0 means every diagram is drawn, 1
+drawn: <golib's error>`. A `.md` is checked fence by fence, and so is each `.mmd` or `.chart.json`
+file it embeds (`![title](flow.mmd)` alone on its line), read where the page reads it: beside the
+note, or in its resources folder. Such an embed's line names it, and says `missing file` when it is
+not there (images and `.csv` tables are no diagram, and are passed over). Exit 0 means every diagram is drawn, 1
 that one is not, 2 that no file was given, 3 that this build has no GUI. A Mermaid diagram golib
 does not draw still draws in an export (mermaid.js), so say which the user will see. Both commands
 need the GUI build, and exit 3 without it.

@@ -78,7 +78,7 @@ So a diagram can draw in an export and not in the GUI. In the GUI:
 - a diagram outside golib's subset shows a notice in its place, saying why in golib's words: `diagram not drawn: <golib's error>`. Its source is in the Raw view, or in its `.mmd` file;
 - a diagram with a syntax error is drawn as the error and its line, in place.
 
-To draw the same in both, stay inside golib's subset. `autodoc --check-diagram <file>…` checks a diagram against the GUI's renderer with no UI: it prints `file:line: ok`, or golib's error, for each `.mmd` or `.mermaid`, and each `mermaid` fence of a `.md` (§4.4 has the details).
+To draw the same in both, stay inside golib's subset. `autodoc --check-diagram <file>…` checks a diagram against the GUI's renderer with no UI: it prints `file:line: ok`, or golib's error, for each `.mmd` or `.mermaid`, each `mermaid` fence of a `.md`, and each `.mmd` a `.md` embeds (§4.4 has the details).
 
 ### Mermaid Itself, Vendored
 
@@ -116,7 +116,7 @@ chart not drawn: unsupported: vegalite: a spec outside the subset drawn: a rule 
 
 A build without the GUI (the terminal's, a headless server's) draws an exported chart too, with golib's `chart/vegalite`, which needs no window system. It measures the labels without the window's fonts, by an approximation, so the chart's layout (its margins, tick spacing, a legend's place) can differ from the GUI build's.
 
-To check a chart before you show it, run `autodoc --check-diagram <file>…`. It lays out each `.chart.json` or `.vl.json`, each `.mmd` or `.mermaid`, and each `vega-lite` or `mermaid` fence of a `.md` with golib's renderer, as the GUI does, with no UI or daemon. It prints `file:line: ok (vega-lite)` or `file:line: not drawn: <golib's error>` for each, and exits:
+To check a chart before you show it, run `autodoc --check-diagram <file>…`. It lays out each `.chart.json` or `.vl.json`, each `.mmd` or `.mermaid`, and each `vega-lite` or `mermaid` fence of a `.md` with golib's renderer, as the GUI does, with no UI or daemon. A `.md`'s embedded charts and diagrams are checked too: each line holding only an image of a `.chart.json` or `.mmd` file, read where the Rendered view reads it (beside the note, or in its resources folder). It prints `file:line: ok (vega-lite)` or `file:line: not drawn: <golib's error>` for each. An embed's line names the embed after the note's line, `note.md:7: sales.chart.json: ok (vega-lite)`, and says `missing file` when the file is in neither place, or `not read: …` when it is outside the note's folder. An image or a `.csv` table is no diagram, and is passed over. It exits:
 
 | Code | Meaning |
 |---|---|

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	stdhtml "html"
 	"io"
 	"io/fs"
@@ -252,16 +253,24 @@ func embedPath(dest string) (string, bool) {
 // read is p's bytes, beside the document or else in its resources folder, when it is a file of
 // at most limit bytes.
 func (e *embedder) read(p string, limit int64) ([]byte, bool) {
+	data, err := e.readErr(p, limit)
+	return data, err == nil
+}
+
+// readErr is read, saying why a file was not read: fs.ErrNotExist when it is in neither place.
+func (e *embedder) readErr(p string, limit int64) ([]byte, error) {
+	var missing error
 	for _, candidate := range []string{p, path.Join(e.resources, p)} {
 		data, err := e.readAt(candidate, limit)
 		if err == nil {
-			return data, true
+			return data, nil
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, false // there, but refused or too large: not looked for elsewhere
+			return nil, err // there, but refused or too large: not looked for elsewhere
 		}
+		missing = err
 	}
-	return nil, false
+	return nil, missing
 }
 
 // locate is where p is, beside the document or else in its resources folder, when it is a file
@@ -458,6 +467,41 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 		return fenced("vega-lite", string(data)), true
 	}
 	return CSVMarkdown(data, rows)
+}
+
+// ErrEmbedOutside is an embed's file the page does not read: a URL, an absolute path, or one out of
+// the document's folder.
+var ErrEmbedOutside = errors.New("not in the note's folder: the page draws only the files beside it")
+
+// EmbedDiagramSource is the diagram an embed of dest names in the document at doc, of either
+// language (EmbedDiagram's is Mermaid alone), read where EmbedMarkdown reads it (beside the document, then in its resources folder, never out of its
+// folder): its language, mermaid for a .mmd and vega-lite for an x.chart.json, and its source. ok
+// is false for an embed of anything else (a table, an image). err says why its file was not read:
+// fs.ErrNotExist when it is in neither place, ErrEmbedOutside when it is not in the folder at all.
+func EmbedDiagramSource(doc, dest string) (lang, src string, ok bool, err error) {
+	name := strings.ToLower(strings.TrimSpace(dest))
+	if i := strings.IndexAny(name, "?#"); i >= 0 {
+		name = name[:i]
+	}
+	switch {
+	case strings.HasSuffix(name, ".mmd"):
+		lang = "mermaid"
+	case isChart(name):
+		lang = "vega-lite"
+	default:
+		return "", "", false, nil // a table, an image: no diagram
+	}
+	p, inFolder := embedPath(dest)
+	if !inFolder {
+		return lang, "", true, ErrEmbedOutside
+	}
+	e := newEmbedder(doc, tableFit{})
+	if e == nil {
+		return lang, "", true, fmt.Errorf("the folder of %s is not readable", doc)
+	}
+	defer e.close()
+	data, err := e.readErr(p, maxEmbedText)
+	return lang, string(data), true, err
 }
 
 // IsMarkdownEmbed reports whether dest names a file EmbedMarkdown draws: a Mermaid diagram (.mmd), a
