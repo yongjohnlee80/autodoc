@@ -46,6 +46,9 @@ type cellNotePage struct {
 	md     *widget.MarkdownCellRenderer
 	imgKey string
 	imgSet bool
+	// embeds answers md for the note's embedded diagrams, charts and tables (noteembeds.go), the
+	// note's file on disk its own
+	embeds *termEmbeds
 }
 
 // notePageView is the page as the editor's document view: shown, it renders the note's text,
@@ -385,6 +388,10 @@ func (p *cellNotePage) renderNote(pg Page) {
 	if e.Renderer() != p.md {
 		e.SetRenderer(p.md)
 	}
+	if note := p.h.diskPath(); p.embeds == nil || p.embeds.note != note {
+		p.embeds = &termEmbeds{note: note, trf: p.h.trf}
+	}
+	p.md.Embeds = p.embeds.resolve
 	root, base := p.h.resourcesFor(pg.Ref.ws, pg.Ref.path)
 	if key := root + "\x00" + base; !p.imgSet || key != p.imgKey {
 		p.imgKey, p.imgSet = key, true

@@ -4188,6 +4188,10 @@ O QUE UMA TECLA PRECISA
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>Não foi possível enviar por e-mail ao agente %1 o código de saída do comando: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 é grande demais para ser desenhado aqui (mais de 1 MiB)</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>removido: %1 %2</translation>

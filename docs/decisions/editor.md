@@ -280,7 +280,12 @@ Vega-Lite charts are drawn in cells: bars in eighths of a cell, line, point and 
 Braille, and a table for the rest of golib's subset. A diagram or chart golib doesn't draw shows
 its source, as code. A picture wider than the view pans with `zh` and `zl`, or Shift with the wheel.
 An image alone in its paragraph is drawn in place where the terminal draws kitty's graphics, loaded
-from the note's folder, and is its alt text elsewhere.
+from the note's folder, and is its alt text elsewhere. A line holding only an image of a diagram
+(`.mmd`), a chart (`.chart.json`) or a table (`.csv`) file is drawn as that file would be in a fence,
+read from the note's folder as the HTML preview reads it: the diagram or chart as a picture, the
+table boxed, its first rows only. A file over 1 MiB is a notice in its place, and a file that isn't
+there is the image's alt text. Any line that is only such an image is drawn, even inside a longer
+paragraph; the window draws one only when it is alone in its paragraph.
 
 A note opens Rendered, as a table file does. Ctrl+T flips between the two views of the same text,
 the cursor kept, and the choice holds across files. It is the terminal's, in either build (a GUI

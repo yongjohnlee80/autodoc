@@ -4180,6 +4180,10 @@ WHAT A KEY NEEDS
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>명령의 종료 코드를 에이전트 %1에게 메일로 보내지 못했습니다: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 은(는) 너무 커서 여기에 그릴 수 없습니다 (1 MiB 초과)</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 제거함</translation>
