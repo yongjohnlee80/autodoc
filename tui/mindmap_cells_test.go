@@ -27,7 +27,15 @@ func smallMind() relMap {
 func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*cellMindmap, *cellMindView) {
 	t.Helper()
 	host := newHost(NewSession("unused", nil), Options{})
-	m := host.relationViewFeatures()[0].(*cellMindmap)
+	var m *cellMindmap
+	for _, f := range host.relationViewFeatures() { // the GlobeMap's and the Mindmap's, in cells
+		if c, ok := f.(*cellMindmap); ok {
+			m = c
+		}
+	}
+	if m == nil {
+		t.Fatal("a terminal host has no cell Mindmap")
+	}
 	v := m.newView().(*cellMindView)
 	v.cells = tuicore.Size{W: w, H: h}
 	grid, err := tuimermaid.LayMindmap(context.Background(), mindmapModel(rm, root, cellMindShape(root)), cellMeasure{})
@@ -162,7 +170,8 @@ var _ tuicore.Surface = (*cellMindSurface)(nil)
 
 // TestTheCellMindmapGolden (§5 case 4): a small map as the terminal draws it, testdata/mindmap_tui
 // (-update rewrites it): the root a bang in the middle, its documents in rounded boxes either side,
-// joined by box-drawing lines; the selected box (here the root's first child, by l) marked.
+// joined by box-drawing lines; the selected box (here the root's first child, by l) marked; the
+// legend along the bottom (in no groups: the row saying so, then any other document's box).
 func TestTheCellMindmapGolden(t *testing.T) {
 	m, v := builtMindmap(t, smallMind(), "a.md", 72, 20)
 	v.HandleEvent(press('l', "l"))
@@ -229,6 +238,36 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	})
 }
 
+// TestSPCMOpensTheMindmap: SPC M (the leader's M, on SPC's card under THIS FILE) opens the Mindmap
+// of the document shown, and again closes it. Maximize is SPC z, never SPC M.
+func TestSPCMOpensTheMindmap(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	m := onLoop(r, func() *cellMindmap {
+		for _, f := range r.h.reg.features {
+			if m, ok := f.(*cellMindmap); ok {
+				return m
+			}
+		}
+		return nil
+	})
+	if m == nil {
+		t.Fatal("a terminal host has no cell Mindmap registered")
+	}
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M opened the Mindmap", func(string) bool {
+		return onLoop(r, func() bool { return m.open && m.view != nil })
+	})
+	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
+		t.Error("SPC M maximized a panel")
+	}
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M closed it", func(string) bool { return !onLoop(r, func() bool { return m.open }) })
+}
+
 // TestTheCellMindmapTakesTheKeyboard: Relations › Mindmap opened over a note's page (Rendered) or
 // over its text (Raw), from the menu (Alt+L, m, as a reader opens it) or by its command, takes the
 // keyboard, as the window's Mindmap does: its next key (d: two links out) is the map's, and the note
@@ -241,7 +280,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 		{"its command, from the page", false, false}, {"its command, from the text", true, false}} {
 		raw := c.raw
 		t.Run(c.name, func(t *testing.T) {
-			r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+			r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 			if raw {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
 				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })

@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>ir para</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>Fechar (&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>Abrir no navegador (&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>Ampl&amp;iar</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>Reduzir (&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — de %2</translation>
@@ -1970,6 +1954,10 @@
     <message id="autodoc.dialog.preferences.page_width_40_400">
         <source>page width (40–400)</source>
         <translation>largura da página (40–400)</translation>
+    </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>pixels de plugins</translation>
     </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
@@ -2891,10 +2879,10 @@
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F11, SPC M  maximize or restore the terminal or the agents (the one with the keyboard, in a
+  F11, SPC z  maximize or restore the terminal or the agents (the one with the keyboard, in a
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
-              screen) keeps it: SPC M always works
+              screen) keeps it: SPC z always works
   Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
@@ -2964,10 +2952,10 @@
   SPC k       o modo do editor: Vim (modal) ou Texto (sem modos, as teclas de um editor de texto comum)
   ?           o cartão de teclas do Vim, no canto inferior direito (modo Normal); ? de novo o fecha
   SPC h       o histórico de notificações (Ir › Notificações…)
-  F11, SPC M  maximizar ou restaurar o terminal ou os agentes (o que tem o teclado, mesmo num
+  F11, SPC z  maximizar ou restaurar o terminal ou os agentes (o que tem o teclado, mesmo num
               shell, senão o aberto mais recente), como o Maximizar do menu da aba: um programa num painel
               nunca recebe F11; um emulador de terminal que usa F11 para si (tela cheia do
-              GNOME Terminal) o mantém: SPC M sempre funciona
+              GNOME Terminal) o mantém: SPC z sempre funciona
   Ctrl+Tab and Ctrl+Shift+Tab  a aba seguinte ou anterior do terminal ou dos agentes (o que tem
               o teclado), em círculo; o programa nunca as recebe (Ctrl+\ antes envia uma).
               Num terminal, só onde ele distingue Ctrl+Tab de Tab (o protocolo de teclado do kitty)
@@ -3033,7 +3021,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3101,12 +3090,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3123,15 +3113,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3160,7 +3150,8 @@ WHAT A KEY NEEDS
   edições e salvamentos não. Arquivo › Abrir com o aplicativo padrão abre o original. Um longo mostra o quanto uma leitura
   comporta, e diz onde foi cortado.
   Um arquivo HTML pergunta antes: Simplificado, o texto derivado somente leitura como acima, ou Bruto, o próprio
-  HTML para editar e salvar. Na GUI, a vista Renderizada (Ctrl+T) de um arquivo bruto é sua página: j k ou
+  HTML para editar e salvar. A vista Renderizada (Ctrl+T) de um arquivo bruto é sua página, na GUI e no
+  terminal: j k ou
   as setas rolam, Ctrl+D Ctrl+U meia página, g G as pontas, e os links abrem como notas,
   arquivos ou no navegador. Folhas de estilo e imagens carregam do espaço de trabalho (um arquivo fora de todo
   espaço de trabalho: só da própria pasta; adicione a pasta como espaço de trabalho para um site que use ../assets).
@@ -3223,12 +3214,13 @@ OS PAINÉIS
   Escape no modo Normal, ou SPC ` de novo, o oculta; o teclado vai para a janela de cima ainda aberta. Quando
   um shell sai (exit, Ctrl+D) a aba fecha, uma saída com falha fica como aviso; a saída do último
   fecha o painel, e o próximo SPC ` inicia outro.
-  Todo painel se move e redimensiona. Alt (Option no Mac) com o botão esquerdo o arrasta para qualquer lugar,
+  Todo painel se move e redimensiona. Arrastar a linha do título o move, e a borda lateral ou inferior o
+  redimensiona; Alt (Option no Mac) com o botão esquerdo o arrasta a partir de qualquer ponto dele,
   com o botão direito o redimensiona; SPC L (Ir › Organizar painel…) faz os dois pelo teclado: h j k l ou as
   setas o movem, H J K L ou Shift com elas o redimensionam, Enter o mantém, Esc o devolve. Dali em diante
   ele abre onde foi deixado. Ir › Redefinir layout dos painéis encaixa todo painel na borda
   de novo, como uma nova borda nas Preferências faz para um. Um terminal pode reservar Alt+clique para si;
-  as teclas sempre funcionam.
+  os arrastos da moldura e as teclas sempre funcionam.
 
 O QUE UMA TECLA PRECISA
   Tudo aqui precisa do daemon (autodoc --serve). --ui o inicia quando nada responde; se ele
@@ -3245,15 +3237,15 @@ O QUE UMA TECLA PRECISA
   um modelo de embedding, Ollama Cloud, ou um endpoint compatível com OpenAI. Sem um, a busca é por
   palavras, e os resultados dizem "semantic off". A marca da linha de status nomeia o modelo que busca, e
   uma troca de modelo limpa a busca, as palavras e os resultados, para recomeçar.
-  Arquivo › Pré-visualizar diagrama Mermaid e Pré-visualizar HTML mostram uma imagem no terminal só com tudo isto:
-  Ver › Pré-visualização de imagens ligada; um terminal que confirmou kitty graphics (dentro do tmux, set -g
+  Arquivo › Pré-visualizar diagrama Mermaid mostra uma imagem no terminal só com tudo isto: Ver ›
+  Pré-visualização de imagens ligada; um terminal que confirmou kitty graphics (dentro do tmux, set -g
   allow-passthrough on); e um Chromium ou Chrome headless. A imagem rola (setas, j k h l,
-  PgUp/PgDn, [ ], Home/End, a roda) e Ampliar / Reduzir a redesenham. Do contrário um diagrama
-  mostra o código-fonte e o HTML abre no navegador, e a pré-visualização diz o que faltou.
-  Ver › Pré-visualização de imagens desligada compara os dois no mesmo arquivo.
-  Com --gui, Pré-visualizar HTML abre um painel ao lado do editor: a página da nota desenhada
-  nativamente, ao vivo enquanto você digita, seguindo o cursor, com texto selecionável e links que abrem
-  notas, arquivos e o navegador.
+  PgUp/PgDn, [ ], Home/End, a roda) e Ampliar / Reduzir a redesenham. Do contrário o diagrama
+  mostra o código-fonte, e a pré-visualização diz o que faltou. Ver › Pré-visualização de imagens desligada compara os dois.
+  Arquivo › Pré-visualizar HTML abre um painel ao lado do editor: a página da nota, ao vivo enquanto você digita,
+  seguindo o cursor, com links que abrem notas, arquivos e o navegador. Com --gui ela é desenhada
+  nativamente e o texto é selecionável; num terminal é desenhada em células, inclusive diagramas e
+  gráficos, sem precisar de nada no host (funciona por ssh).
   Com --gui, Arquivo › Opção de pré-visualização escolhe o que desenha diagramas Mermaid, em Pré-visualizar diagrama
   Mermaid e no painel: Mermaid.js (o padrão; um navegador headless, alguns segundos por diagrama, com
   zoom) ou o Motor Mermaid nativo (o do golib, na hora, sem zoom; um tipo que ele não desenha continua
@@ -3535,6 +3527,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.key.the_links">
         <source>the links</source>
         <translation>os links</translation>
+    </message>
+    <message id="autodoc.key.the_mindmap">
+        <source>the Mindmap</source>
+        <translation>o Mindmap</translation>
     </message>
     <message id="autodoc.key.the_months_archived">
         <source>the months (Archived)</source>
@@ -4192,6 +4188,10 @@ O QUE UMA TECLA PRECISA
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>Não foi possível enviar por e-mail ao agente %1 o código de saída do comando: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 é grande demais para ser desenhado aqui (mais de 1 MiB)</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>removido: %1 %2</translation>
@@ -4464,14 +4464,6 @@ O QUE UMA TECLA PRECISA
         <source>the graph groups (%1)</source>
         <translation>os grupos do grafo (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>a pré-visualização HTML aceita por enquanto arquivos Markdown</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>pré-visualização HTML aberta no navegador · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>nenhum arquivo aberto: abra um, e Arquivo › Abrir com o aplicativo padrão o abre</translation>
@@ -4479,10 +4471,6 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1 aberto com o aplicativo padrão</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>abrindo a pré-visualização HTML…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4920,14 +4908,6 @@ O QUE UMA TECLA PRECISA
         <source>drawn natively (no zoom)</source>
         <translation>desenhados nativamente (sem zoom)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>pré-visualização HTML aberta no navegador: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>pré-visualização HTML: %1; abrindo no navegador</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>pré-visualização de imagens %1</translation>
@@ -4944,17 +4924,13 @@ O QUE UMA TECLA PRECISA
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>motor Mermaid %1 inexistente (native ou mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>desligada: código-fonte dos diagramas e o navegador</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>desligada: código-fonte dos diagramas</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>ligada</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>o navegador não abriu</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -5548,6 +5524,22 @@ O QUE UMA TECLA PRECISA
         <source>todos: $%1 set (%2)</source>
         <translation>tarefas: $%1 definida (%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>Atualizar: o AutoDoc está atualizado (%1)</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>Atualizar: o install-autodoc.sh não instalou este AutoDoc; atualize-o do jeito que foi instalado</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>Atualizar: o update.sh terminou com %1; a aba dele no painel do terminal diz por quê</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>Atualizar</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>cancelar a troca</translation>
@@ -5906,6 +5898,18 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>clear the variable?</source>
         <translation>limpar a variável?</translation>
     </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>Mais tarde (&amp;l)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>reiniciar o AutoDoc?</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>&amp;Reiniciar agora</translation>
+    </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
         <translation>Expurgar os %2 vetores de %1 (%3) de %4? Voltar a ele faria o embedding de todas as seções de novo; o repositório devolve o espaço.</translation>
@@ -6225,6 +6229,14 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     <message id="autodoc.text.globemap_gui.supersedes">
         <source>supersedes</source>
         <translation>substitui</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l seleciona, H J K L desloca, + - zoom, 0 enquadrar, f filtro, g legenda, Enter abre</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>mais %1 grupos</translation>
     </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
@@ -6682,10 +6694,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>Desenhado nativamente (Arquivo › Opção de pré-visualização), sem zoom · rolar: setas, j k, PgUp/PgDn, roda</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>pré-visualização HTML · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>Imagem, %1 · desenhada offline pelo mermaid %2 no tema %3 · rolar: setas, j k h l, PgUp/PgDn, roda</translation>
@@ -6698,10 +6706,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>image previews are off (View › Image previews)</source>
         <translation>a pré-visualização de imagens está desligada (Ver › Pré-visualização de imagens)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>Imagem · renderizada offline por um navegador headless no tema %1 · rolar: setas, j k h l, PgUp/PgDn, roda · links e seleção: Abrir no navegador</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>nenhum Chromium ou Chrome headless para renderizar</translation>
@@ -6709,10 +6713,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>não desenhado nativamente (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>renderizando a página…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>
@@ -7420,6 +7420,10 @@ A última conexão falhou:
         <source>Rerank (%1)</source>
         <translation>Reordenar (%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>Sobre › Atualizar</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 foi lançado (esta é a %2): %3</translation>
@@ -7598,6 +7602,10 @@ não muda nada</translation>
         <source>%1 of %2 · %3</source>
         <translation>%1 de %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>O AutoDoc %1 está instalado (este é o %2). Reiniciar agora? Primeiro o backend reinicia, depois o AutoDoc abre de novo como %1.</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3 (%4 bytes, %5 tokens estimados; tentativa %6)</translation>
@@ -7722,6 +7730,10 @@ não muda nada</translation>
         <source>AUTHOR: </source>
         <translation>AUTOR: </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>Fechar (&amp;q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>CONFIGURAÇÃO: </translation>
@@ -7737,6 +7749,10 @@ não muda nada</translation>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>ATUALIZAÇÃO: </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>At&amp;ualizar</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

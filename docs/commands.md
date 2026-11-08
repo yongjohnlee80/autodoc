@@ -74,11 +74,14 @@ configuration. `editor.commands` lists them with the rest.
 | `find.open` |  |  | find in the page |
 | `find.previous` |  |  | find previous |
 | `find.term` | `:find` | `<term>` | find term in the page; n and N go to the next and previous |
+| `globemap.settings` |  |  | the GlobeMap's settings |
+| `globemap.toggle` |  |  | the GlobeMap |
 | `help.about` |  |  | about |
 | `help.keys` |  |  | help |
 | `help.tutorial` |  |  | the tutorial |
 | `kbtype.apply` |  | `<name or git URL>` | create a KB type's folders and files in the open workspace, keeping every file already there: autovim.kb, zettelkasten.kb, para.kb, slipbox.kb, or a type's git URL |
 | `links.toggle` |  |  | the links |
+| `mindmap.settings` |  |  | the Mindmap's settings |
 | `mindmap.toggle` |  |  | the Mindmap |
 | `notices.open` |  |  | notifications |
 | `panel.arrange` |  |  | arrange a panel |

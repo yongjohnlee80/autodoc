@@ -1,5 +1,3 @@
-//go:build gui
-
 package tui
 
 import (
@@ -13,11 +11,11 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE VIEWS' GRAPH FILES — one graphStore for the GlobeMap and the Mindmap: each workspace's graph
-// file (graphconf.go) read once through the daemon (its root is on the daemon's disk), the user's
-// beside the config; a view's groups initialised the first time it asks for them and the file
-// written; the views' settings writing their edits. All on the loop: its reads and writes run off
-// it, and hand back on it.
+// THE VIEWS' GRAPH FILES — one graphStore for a window's GlobeMap and Mindmap, or for a terminal's
+// Mindmap in cells (mindmap_cells.go): each workspace's graph file (graphconf.go) read once through
+// the daemon (its root is on the daemon's disk), the user's beside the config; a view's groups
+// initialised the first time it asks for them and the file written; the views' settings writing
+// their edits. All on the loop: its reads and writes run off it, and hand back on it.
 
 type graphStore struct {
 	c        Core
@@ -111,16 +109,27 @@ func (s *graphStore) with(ws string, fn func(*graphWS)) {
 	})
 }
 
+// pathsOf is ws's files as the host lists them, taken as a request is made: the workspace in use's,
+// and none for another. A request's reply comes after the file is read, when another workspace
+// may be in use, whose files must never become ws's folder groups.
+func (s *graphStore) pathsOf(ws string) []string {
+	if ws != s.c.Workspace() {
+		return nil
+	}
+	return slices.Clone(s.c.Files().Paths)
+}
+
 // groups hands done view's groups in ws: the file's, or, with none, its first groups (the user's,
-// then one a type of types and one a folder of the workspace's files), each a colour legible on
-// ground, written into the file.
+// then one a type of types and one a folder of the workspace's files, as they were when it was
+// asked), each a colour legible on ground, written into the file.
 func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA, done func([]relGroup)) {
+	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
 		if list := g.conf.groups(view); list != nil {
 			done(list)
 			return
 		}
-		list := initialGroups(view, g.conf, g.user, groupQueries(types, s.c.Files().Paths), ground, s.rnd)
+		list := initialGroups(view, g.conf, g.user, groupQueries(types, paths), ground, s.rnd)
 		if len(list) == 0 {
 			done(nil) // no schema types and no folders: nothing to write
 			return
@@ -131,15 +140,16 @@ func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA,
 }
 
 // addMissing hands done view's groups in ws with a group added for each type of types and each
-// folder no group of them queries, written into the file.
+// folder no group of them queries (its files as they were when it was asked), written into the file.
 func (s *graphStore) addMissing(ws, view string, current []relGroup, types []string, ground color.NRGBA, done func([]relGroup)) {
+	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
 		have := map[string]bool{}
 		for _, x := range current {
 			have[x.Query] = true
 		}
 		var missing []string
-		for _, q := range groupQueries(types, s.c.Files().Paths) {
+		for _, q := range groupQueries(types, paths) {
 			if !have[q] {
 				missing = append(missing, q)
 			}

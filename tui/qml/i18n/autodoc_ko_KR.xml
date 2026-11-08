@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>이동</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>닫기(&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>브라우저에서 열기(&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>확대(&amp;i)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>축소(&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — %2 보냄</translation>
@@ -1970,6 +1954,10 @@
     <message id="autodoc.dialog.preferences.page_width_40_400">
         <source>page width (40–400)</source>
         <translation>페이지 너비 (40–400)</translation>
+    </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>플러그인 픽셀</translation>
     </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
@@ -2891,10 +2879,10 @@
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F11, SPC M  maximize or restore the terminal or the agents (the one with the keyboard, in a
+  F11, SPC z  maximize or restore the terminal or the agents (the one with the keyboard, in a
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
-              screen) keeps it: SPC M always works
+              screen) keeps it: SPC z always works
   Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
@@ -2962,10 +2950,10 @@
   SPC k       편집기 모드: Vim (모달) 또는 Text (모드 없음, 일반 텍스트 편집기의 키)
   ?           Vim 키 카드, 오른쪽 아래 (Normal 모드). ?를 다시 누르면 닫힘
   SPC h       알림 기록 (이동 › 알림…)
-  F11, SPC M  터미널 또는 에이전트 최대화/복원 (키보드 포커스가 있는 쪽, 셸 안에서도.
+  F11, SPC z  터미널 또는 에이전트 최대화/복원 (키보드 포커스가 있는 쪽, 셸 안에서도.
               없으면 가장 최근에 연 쪽), 탭 메뉴의 최대화와 같음: 패널 안의 프로그램은
               F11을 받지 않습니다. F11을 직접 쓰는 터미널 에뮬레이터(GNOME Terminal의 전체
-              화면)는 F11을 가져갑니다: SPC M은 항상 동작합니다
+              화면)는 F11을 가져갑니다: SPC z은 항상 동작합니다
   Ctrl+Tab and Ctrl+Shift+Tab  터미널 또는 에이전트(키보드가 있는 쪽)의 다음/이전 탭, 끝에서
               처음으로 돌아갑니다. 프로그램은 받지 않습니다 (Ctrl+\ 뒤에 누르면 보냅니다).
               터미널에서는 Ctrl+Tab과 Tab을 구분하는 곳에서만 (kitty 키보드 프로토콜)
@@ -3028,7 +3016,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3096,12 +3085,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3118,15 +3108,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3155,7 +3145,7 @@ WHAT A KEY NEEDS
   편집과 저장은 안 됩니다. 파일 › 기본 앱으로 열기로 원본을 엽니다. 긴 파일은 한 번 읽을 수 있는
   만큼만 표시되며, 잘린 위치를 알려 줍니다.
   HTML 파일은 먼저 묻습니다: 간략(위와 같이 읽기 전용 추출 텍스트) 또는 원본(편집하고
-  저장할 HTML 그대로). GUI에서 원본 파일의 렌더링 보기(Ctrl+T)는 그 페이지입니다: j k 또는
+  저장할 HTML 그대로). 원본 파일의 렌더링 보기(Ctrl+T)는 GUI와 터미널 모두에서 그 페이지입니다: j k 또는
   화살표로 스크롤, Ctrl+D Ctrl+U로 반 페이지, g G로 처음과 끝, 링크는 노트,
   파일 또는 브라우저로 열립니다. 스타일시트와 이미지는 워크스페이스에서 불러옵니다 (어느 워크스페이스에도
   없는 파일은 자기 폴더에서만. ../assets를 공유하는 사이트라면 그 폴더를 워크스페이스로 추가하세요).
@@ -3216,12 +3206,13 @@ WHAT A KEY NEEDS
   Normal 모드에서 Escape를 누르거나 SPC `를 다시 누르면 숨겨지고, 키보드 포커스는 아직 열려 있는 맨 위 창으로 갑니다.
   셸이 종료되면(exit, Ctrl+D) 탭이 닫히며, 실패한 종료는 알림으로 남습니다. 마지막 셸이
   종료되면 창이 닫히고, 다음 SPC `가 새 셸을 시작합니다.
-  모든 패널은 이동하고 크기를 바꿀 수 있습니다. Alt (Mac에서는 Option)와 왼쪽 버튼으로 아무 곳으로 끌고,
+  모든 패널은 이동하고 크기를 바꿀 수 있습니다. 제목 줄을 끌면 옮겨지고, 옆이나 아래 테두리를 끌면
+  크기가 바뀝니다. Alt (Mac에서는 Option)와 왼쪽 버튼으로는 패널 어디서든 끌어 옮기고,
   오른쪽 버튼으로 크기를 바꿉니다. SPC L (이동 › 패널 배치…)은 키로 둘 다 합니다: h j k l 또는
   화살표로 이동, H J K L 또는 Shift+화살표로 크기 조절, Enter로 유지, Esc로 되돌리기. 이후로는
   남겨 둔 위치에서 열립니다. 이동 › 패널 레이아웃 초기화는 모든 패널을 다시 가장자리에
   도킹합니다. 환경설정에서 새 가장자리를 정하면 그 패널만 그렇게 됩니다. 터미널이 Alt+클릭을 직접 쓸 수 있지만,
-  키는 항상 동작합니다.
+  테두리 끌기와 키는 항상 동작합니다.
 
 키에 필요한 것
   여기의 모든 기능에는 데몬(autodoc --serve)이 필요합니다. 응답하는 데몬이 없으면 --ui가 시작하며,
@@ -3238,15 +3229,15 @@ WHAT A KEY NEEDS
   로컬 Ollama, Ollama Cloud, 또는 OpenAI 호환 엔드포인트. 없으면 검색은
   단어로 하며, 결과에 "semantic off"가 표시됩니다. 상태 줄의 표시는 검색 중인 모델 이름이며,
   모델을 바꾸면 검색(단어와 결과)을 지우고 새로 시작합니다.
-  파일 › Mermaid 다이어그램 미리 보기와 HTML 미리 보기는 다음을 모두 갖춰야 터미널에 이미지를 표시합니다:
-  보기 › 이미지 미리 보기 켬, kitty 그래픽을 확인한 터미널 (tmux 안에서는 set -g
+  파일 › Mermaid 다이어그램 미리 보기는 다음을 모두 갖춰야 터미널에 이미지를 표시합니다: 보기 ›
+  이미지 미리 보기 켬, kitty 그래픽을 확인한 터미널 (tmux 안에서는 set -g
   allow-passthrough on), 그리고 헤드리스 Chromium 또는 Chrome. 이미지는 스크롤되고 (화살표, j k h l,
   PgUp/PgDn, [ ], Home/End, 휠) 확대 / 축소로 다시 그립니다. 그렇지 않으면 다이어그램은
-  소스를 표시하고 HTML은 브라우저에서 열리며, 미리 보기에 무엇이 빠졌는지 표시됩니다.
-  보기 › 이미지 미리 보기 끔으로 같은 파일에서 둘을 비교할 수 있습니다.
-  --gui에서는 HTML 미리 보기가 대신 편집기 옆에 창을 엽니다: 노트의 페이지를
-  네이티브로 그리며, 입력하는 대로 갱신하고 커서를 따라가며, 텍스트를 선택할 수 있고, 링크는
-  노트, 파일, 브라우저로 열립니다.
+  소스를 표시하고, 미리 보기에 무엇이 빠졌는지 표시됩니다. 보기 › 이미지 미리 보기 끔으로 둘을 비교할 수 있습니다.
+  파일 › HTML 미리 보기는 편집기 옆에 창을 엽니다: 노트의 페이지를 입력하는 대로 갱신하고
+  커서를 따라가며 보여 주고, 링크는 노트, 파일, 브라우저로 열립니다. --gui에서는 네이티브로 그려지고
+  텍스트를 선택할 수 있습니다. 터미널에서는 셀로 그려지며 다이어그램과 차트도 셀로 그려지고, 호스트에
+  아무것도 필요하지 않습니다 (ssh로도 동작합니다).
   --gui에서는 파일 › 미리 보기 옵션으로 Mermaid 다이어그램을 그리는 방식을 고릅니다 (Mermaid 다이어그램
   미리 보기와 창 모두): Mermaid.js (기본값. 헤드리스 브라우저, 다이어그램당 몇 초,
   확대/축소 가능) 또는 네이티브 Mermaid 엔진 (golib의 엔진, 즉시, 확대/축소 없음. 그리지 못하는 유형은
@@ -3528,6 +3519,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.the_links">
         <source>the links</source>
         <translation>링크</translation>
+    </message>
+    <message id="autodoc.key.the_mindmap">
+        <source>the Mindmap</source>
+        <translation>Mindmap</translation>
     </message>
     <message id="autodoc.key.the_months_archived">
         <source>the months (Archived)</source>
@@ -4185,6 +4180,10 @@ WHAT A KEY NEEDS
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>명령의 종료 코드를 에이전트 %1에게 메일로 보내지 못했습니다: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 은(는) 너무 커서 여기에 그릴 수 없습니다 (1 MiB 초과)</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 제거함</translation>
@@ -4457,14 +4456,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>그래프 그룹 (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML 미리 보기는 현재 Markdown 파일만 지원합니다</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>브라우저에서 HTML 미리 보기를 열었습니다 · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>열린 파일이 없습니다: 파일을 연 다음 파일 › 기본 앱으로 열기를 사용하세요</translation>
@@ -4472,10 +4463,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1을(를) 기본 앱으로 열었습니다</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>HTML 미리 보기 여는 중…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4913,14 +4900,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>네이티브로 그림 (확대/축소 없음)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>브라우저에서 HTML 미리 보기를 열었습니다: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML 미리 보기: %1. 브라우저에서 엽니다</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>이미지 미리 보기 %1</translation>
@@ -4937,17 +4916,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>%1 Mermaid 엔진이 없습니다 (native 또는 mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>끔: 다이어그램 소스와 브라우저</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>끔: 다이어그램 소스</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>켬</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>브라우저가 열리지 않았습니다</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -5541,6 +5516,22 @@ WHAT A KEY NEEDS
         <source>todos: $%1 set (%2)</source>
         <translation>할 일: $%1 설정함 (%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>업데이트: AutoDoc이 최신입니다 (%1)</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>업데이트: 이 AutoDoc은 install-autodoc.sh로 설치되지 않았습니다. 설치한 방법으로 업데이트하세요</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>업데이트: update.sh가 %1(으)로 종료되었습니다. 이유는 터미널 패널의 탭에 있습니다</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>업데이트</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>전환 취소</translation>
@@ -5899,6 +5890,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>clear the variable?</source>
         <translation>변수를 지울까요?</translation>
     </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>나중에(&amp;l)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>AutoDoc을 다시 시작할까요?</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>지금 다시 시작(&amp;r)</translation>
+    </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
         <translation>%4에서 %1의 %2 벡터(%3)를 삭제할까요? 이 모델로 다시 전환하면 모든 섹션을 다시 임베딩합니다. 저장소 공간은 반환됩니다.</translation>
@@ -6218,6 +6221,14 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.globemap_gui.supersedes">
         <source>supersedes</source>
         <translation>대체함</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l 선택, H J K L 이동, + - 확대/축소, 0 맞춤, f 필터, g 범례, Enter 열기</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>그룹 %1개 더</translation>
     </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
@@ -6675,10 +6686,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>네이티브로 그림 (파일 › 미리 보기 옵션), 확대/축소 없음 · 스크롤: 화살표, j k, PgUp/PgDn, 휠</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML 미리 보기 · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>이미지, %1 · mermaid %2이(가) %3 테마로 오프라인에서 그림 · 스크롤: 화살표, j k h l, PgUp/PgDn, 휠</translation>
@@ -6691,10 +6698,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>이미지 미리 보기가 꺼져 있습니다 (보기 › 이미지 미리 보기)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>이미지 · %1 테마로 헤드리스 브라우저가 오프라인 렌더링 · 스크롤: 화살표, j k h l, PgUp/PgDn, 휠 · 링크와 선택: 브라우저에서 열기</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>렌더링할 헤드리스 Chromium 또는 Chrome이 없습니다</translation>
@@ -6702,10 +6705,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>네이티브로 그리지 못함 (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>페이지 렌더링 중…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>
@@ -7413,6 +7412,10 @@ The last connect failed:
         <source>Rerank (%1)</source>
         <translation>재순위 (%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>AutoDoc 정보 › 업데이트</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1이(가) 나왔습니다 (현재 %2): %3</translation>
@@ -7591,6 +7594,10 @@ changes nothing</source>
         <source>%1 of %2 · %3</source>
         <translation>%1 / %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1이(가) 설치되었습니다 (현재 %2). 지금 다시 시작할까요? 백엔드가 먼저 다시 시작되고, AutoDoc이 %1(으)로 다시 열립니다.</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3 (%4바이트, 예상 토큰 %5개. %6에 재시도)</translation>
@@ -7715,6 +7722,10 @@ changes nothing</source>
         <source>AUTHOR: </source>
         <translation>만든 이: </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>닫기(&amp;q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>설정: </translation>
@@ -7730,6 +7741,10 @@ changes nothing</source>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>업데이트: </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>업데이트(&amp;u)</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>移動先</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>閉じる(&amp;q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>ブラウザーで開く(&amp;b)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>拡大(&amp;i)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>縮小(&amp;o)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — %2 から</translation>
@@ -1970,6 +1954,10 @@
     <message id="autodoc.dialog.preferences.page_width_40_400">
         <source>page width (40–400)</source>
         <translation>ページ幅 (40–400)</translation>
+    </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>プラグインのピクセル</translation>
     </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
@@ -2891,10 +2879,10 @@
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F11, SPC M  maximize or restore the terminal or the agents (the one with the keyboard, in a
+  F11, SPC z  maximize or restore the terminal or the agents (the one with the keyboard, in a
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
-              screen) keeps it: SPC M always works
+              screen) keeps it: SPC z always works
   Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
@@ -2963,10 +2951,10 @@
   SPC k       エディターモード: Vim (モーダル) または Text (モードレス、一般的なテキストエディターのキー)
   ?           Vim キーのカードを右下に表示 (ノーマルモード)。もう一度 ? で閉じる
   SPC h       通知の履歴 (移動 › 通知…)
-  F11, SPC M  ターミナルまたはエージェントを最大化/元に戻す (キーボードのある方、シェル内でも。
+  F11, SPC z  ターミナルまたはエージェントを最大化/元に戻す (キーボードのある方、シェル内でも。
               なければ最後に開いた方)。タブメニューの 最大化 と同じ: パネル内のプログラムに F11
               は届きません。F11 を自分で使うターミナルエミュレーター (GNOME Terminal の全画面)
-              ではそちらが優先: SPC M は常に使えます
+              ではそちらが優先: SPC z は常に使えます
   Ctrl+Tab and Ctrl+Shift+Tab  ターミナルまたはエージェント (キーボードのある方) の次/前のタブ。
               端で一周します。プログラムには届きません (Ctrl+\ の後なら送ります)。ターミナル
               では Ctrl+Tab と Tab を区別できる場合のみ (kitty キーボードプロトコル)
@@ -3032,7 +3020,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3100,12 +3089,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3122,15 +3112,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3159,7 +3149,7 @@ WHAT A KEY NEEDS
   編集と保存はできません。ファイル › 既定のアプリで開く で元のファイルを開きます。長いものは 1 回の読み込み分だけ
   表示し、どこで切れたかを示します。
   HTML ファイルは先に確認します: 簡略化 (上記と同じく生成テキストを読み取り専用) か、そのまま (HTML
-  自体を編集・保存)。GUI ではそのまま開いたファイルのレンダリング表示 (Ctrl+T) がページになります: j k
+  自体を編集・保存)。そのまま開いたファイルのレンダリング表示 (Ctrl+T) は、GUI でも端末でもページになります: j k
   または矢印キーでスクロール、Ctrl+D Ctrl+U で半ページ、g G で先頭/末尾、リンクはノート、
   ファイル、ブラウザーで開きます。スタイルシートと画像はワークスペースから読み込みます (どの
   ワークスペースにも属さないファイルは自身のフォルダーのみ。../assets を共有するサイトはフォルダーをワークスペースとして追加)。
@@ -3220,12 +3210,13 @@ WHAT A KEY NEEDS
   ノーマルモードで Escape、または再度 SPC ` で隠し、キーボードはまだ開いている最前面のウィンドウに移ります。
   シェルが終了すると (exit、Ctrl+D) タブが閉じ、異常終了は通知に残ります。最後のシェルが
   終了するとペインが閉じ、次の SPC ` で新しく起動します。
-  どのパネルも移動とサイズ変更ができます。Alt (Mac では Option) + 左ボタンでドラッグして移動、
+  どのパネルも移動とサイズ変更ができます。タイトル行をドラッグすると移動、左右や下の枠をドラッグすると
+  サイズ変更します。Alt (Mac では Option) + 左ボタンでドラッグするとパネルのどこからでも移動、
   右ボタンでサイズ変更。SPC L (移動 › パネルを配置…) はキーで両方を行います: h j k l または
   矢印キーで移動、H J K L または Shift+矢印キーでサイズ変更、Enter で確定、Esc で元に戻す。
   以降はその位置で開きます。移動 › パネルレイアウトをリセット で全パネルを再び端に
   ドッキングします (設定で端を変えた場合も、そのパネルは同様)。ターミナルによっては Alt+クリックを自身で使いますが、
-  キー操作は常に使えます。
+  枠のドラッグとキー操作は常に使えます。
 
 キーに必要なもの
   ここにある機能はすべてデーモン (autodoc --serve) が必要です。応答がなければ --ui が起動します。
@@ -3242,15 +3233,15 @@ WHAT A KEY NEEDS
   入れたローカルの Ollama、Ollama Cloud、または OpenAI 互換エンドポイント。なければ検索は
   単語のみで、ヒットに "semantic off" と表示されます。ステータスラインのマークは検索中のモデル名を示し、
   モデルを変えると検索 (語句とヒット) がクリアされ、最初からやり直します。
-  ファイル › Mermaid 図をプレビュー と HTML をプレビュー がターミナルに画像を表示するには、次のすべてが必要です:
-  表示 › 画像プレビュー がオン、kitty グラフィックスを確認済みのターミナル (tmux 内では set -g
+  ファイル › Mermaid 図をプレビュー がターミナルに画像を表示するには、次のすべてが必要です: 表示 ›
+  画像プレビュー がオン、kitty グラフィックスを確認済みのターミナル (tmux 内では set -g
   allow-passthrough on)、ヘッドレスの Chromium または Chrome。画像はスクロールでき (矢印キー、j k h l、
   PgUp/PgDn、[ ]、Home/End、ホイール)、拡大 / 縮小 で再描画します。それ以外の場合、図は
-  ソースを表示し、HTML はブラウザーで開き、何が不足しているかをプレビューに表示します。
-  表示 › 画像プレビュー をオフにすると、同じファイルで両者を比較できます。
-  --gui では、HTML をプレビュー は代わりにエディターの横にペインを開きます: ノートのページを
-  ネイティブに描画し、入力に合わせてライブ更新、カーソルに追従、テキストは選択可能、リンクは
-  ノート、ファイル、ブラウザーで開きます。
+  ソースを表示し、何が不足しているかをプレビューに表示します。表示 › 画像プレビュー をオフにすると両者を比較できます。
+  ファイル › HTML をプレビュー はエディターの横にペインを開きます: ノートのページを、入力に合わせてライブ更新し、
+  カーソルに追従して表示し、リンクはノート、ファイル、ブラウザーで開きます。--gui ではネイティブに描画され、
+  テキストを選択できます。ターミナルではセルで描画され、図やグラフもセルで描かれ、ホスト側に何も
+  必要ありません (ssh 越しでも使えます)。
   --gui では、ファイル › プレビューオプション で、Mermaid 図をプレビュー とペインで Mermaid 図を
   描画するものを選びます: Mermaid.js (既定。ヘッドレスブラウザーで、図 1 つに数秒、
   ズームあり) またはネイティブ Mermaid エンジン (golib のもの。即時、ズームなし。描画できない種類は
@@ -3532,6 +3523,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.the_links">
         <source>the links</source>
         <translation>リンク</translation>
+    </message>
+    <message id="autodoc.key.the_mindmap">
+        <source>the Mindmap</source>
+        <translation>Mindmap</translation>
     </message>
     <message id="autodoc.key.the_months_archived">
         <source>the months (Archived)</source>
@@ -4189,6 +4184,10 @@ WHAT A KEY NEEDS
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>コマンドの終了コードをエージェント %1 にメールで送れませんでした: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 は大きすぎてここに描画できません（1 MiB 超）</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 を削除しました</translation>
@@ -4461,14 +4460,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>グラフグループ (%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML プレビューは現在 Markdown ファイルのみ対応しています</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>HTML プレビューをブラウザーで開きました · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>ファイルが開かれていません: ファイルを開いてから、ファイル › 既定のアプリで開く を使ってください</translation>
@@ -4476,10 +4467,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>%1 を既定のアプリで開きました</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>HTML プレビューを開いています…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4917,14 +4904,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>ネイティブに描画 (ズームなし)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>HTML プレビューをブラウザーで開きました: %1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML プレビュー: %1。ブラウザーで開いています</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>画像プレビュー %1</translation>
@@ -4941,17 +4920,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>Mermaid エンジン %1 はありません (native または mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>オフ: 図のソースとブラウザー</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>オフ: 図のソース</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>オン</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>ブラウザーが開きませんでした</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -5545,6 +5520,22 @@ WHAT A KEY NEEDS
         <source>todos: $%1 set (%2)</source>
         <translation>ToDo: $%1 を設定しました (%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>アップデート: AutoDoc は最新です (%1)</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>アップデート: この AutoDoc は install-autodoc.sh でインストールされていません。インストールした方法でアップデートしてください</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>アップデート: update.sh が %1 で終了しました。理由はターミナルパネルのタブに表示されています</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>アップデート</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>切り替えをキャンセル</translation>
@@ -5903,6 +5894,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>clear the variable?</source>
         <translation>変数を消去しますか?</translation>
     </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>後で(&amp;l)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>AutoDoc を再起動しますか?</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>今すぐ再起動(&amp;r)</translation>
+    </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
         <translation>%4 から %1 の %2 件のベクトル (%3) を消去しますか? このモデルに戻すと全セクションを再度埋め込みます。ストアは領域を解放します。</translation>
@@ -6222,6 +6225,14 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.globemap_gui.supersedes">
         <source>supersedes</source>
         <translation>置き換え</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l で選択、H J K L で移動、+ - でズーム、0 で全体表示、f で絞り込み、g で凡例、Enter で開く</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>ほか %1 グループ</translation>
     </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
@@ -6679,10 +6690,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>ネイティブに描画 (ファイル › プレビューオプション)、ズームなし · スクロール: 矢印キー、j k、PgUp/PgDn、ホイール</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML プレビュー · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>画像、%1 · mermaid %2 で %3 テーマでオフライン描画 · スクロール: 矢印キー、j k h l、PgUp/PgDn、ホイール</translation>
@@ -6695,10 +6702,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>画像プレビューはオフです (表示 › 画像プレビュー)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>画像 · ヘッドレスブラウザーで %1 テーマでオフライン描画 · スクロール: 矢印キー、j k h l、PgUp/PgDn、ホイール · リンクと選択: ブラウザーで開く</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>描画に使うヘッドレスの Chromium または Chrome がありません</translation>
@@ -6706,10 +6709,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>ネイティブに描画できませんでした (%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>ページを描画中…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>
@@ -7417,6 +7416,10 @@ The last connect failed:
         <source>Rerank (%1)</source>
         <translation>再ランキング (%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>AutoDoc について › 更新</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 がリリースされました (現在は %2): %3</translation>
@@ -7595,6 +7598,10 @@ changes nothing</source>
         <source>%1 of %2 · %3</source>
         <translation>%1 / %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1 がインストールされました (現在 %2)。今すぐ再起動しますか? 先にバックエンドが再起動し、その後 AutoDoc が %1 として開き直します。</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3 (%4 バイト、推定 %5 トークン。再試行 %6)</translation>
@@ -7719,6 +7726,10 @@ changes nothing</source>
         <source>AUTHOR: </source>
         <translation>作者: </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>閉じる(&amp;q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>設定: </translation>
@@ -7734,6 +7745,10 @@ changes nothing</source>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>アップデート: </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>更新(&amp;u)</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

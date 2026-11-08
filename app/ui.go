@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/yongjohnlee80/autodoc/tui"
+	"github.com/yongjohnlee80/golib/tui/term"
 )
 
 // runUI is --ui: AutoDoc's TUI (tui.Launch), attached to the local daemon, which it starts (once)
@@ -19,7 +20,7 @@ import (
 // beside the UI, closed with the recording.
 func runUI(ctx context.Context, configPath, dev, workspace string, window bool, b build, debug *debugFlag, profile *profileFlag) error {
 	o := tui.LaunchOptions{ConfigPath: configPath, Dev: dev, Workspace: workspace, Version: b.version, BuildDate: b.buildDate, Registrations: b.reg.Tables(),
-		TermOptions: termOptions()}
+		TermOptions: terminalOptions()}
 	mode := "ui"
 	if window {
 		mode = "gui"
@@ -46,5 +47,14 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 	if window {
 		return runGUI(ctx, o, owned)
 	}
-	return finishRun(tui.Launch(ctx, o), owned...)
+	return afterRun(finishRun(tui.Launch(ctx, o), owned...))
+}
+
+// terminalOptions open AutoDoc's terminal: the platform's (termOptions); the clipboard read
+// through the terminal, OSC 52's, on by default (docs/decisions/editor.md#reading-the-clipboard-in-a-terminal):
+// a terminal that ignores it costs one wait a session; and a panel moved by a plain drag of its
+// title row and resized by one of its border, as a window's are
+// (docs/decisions/editor.md#fonts-zoom-and-floating-panels).
+func terminalOptions() []term.Option {
+	return append(termOptions(), term.WithClipboardRead(), term.WithFrameDrag())
 }

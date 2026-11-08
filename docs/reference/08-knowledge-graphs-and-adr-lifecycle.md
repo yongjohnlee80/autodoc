@@ -120,7 +120,15 @@ superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again,
 every link, body links and relations, and a click opens the document. **Relations › GlobeMap
 settings…** and **Mindmap settings…** choose how each draws. **Mindmap**: the page's
 document and those one link from it (`d` shows two), as a mind map shaped by type; a click opens that
-document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
+document and the map follows it, the keyboard staying on the map. A terminal has the Mindmap too
+(`SPC M`), drawn in characters: `h j k l` or the arrows move from document to document, `Enter`
+opens one, and each document wears its group's outline and colour, made legible on the page's
+theme; a legend along the view's bottom names each group by its outline and colour, then any other
+document's, and the map scrolls in the rows above it. Its **Mindmap settings…** edit the groups and the depth it opens at. A terminal has the
+GlobeMap too, drawn once settled in Braille dots, each in its group's colour: `h j k l` or the
+arrows move a selection from document to document (its name shown), `Enter` opens it, `H J K L`
+pan, `+` `-` zoom, `0` fits, `f` cycles the links, and `g` shows the legend (`l` is a direction
+there).
 
 ---
 

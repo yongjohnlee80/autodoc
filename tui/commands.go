@@ -121,6 +121,7 @@ func (h *Host) commands() map[string]Command {
 
 		// the backend
 		"App.startRestart":            none(h.startRestart),
+		"App.updateAutoDoc":           none(h.updateAutoDoc),
 		"App.restartMismatch":         none(h.restartMismatch),
 		"App.quitMismatch":            none(h.quitMismatch),
 		"App.restartForRegistrations": none(h.restartForRegistrations),
@@ -142,7 +143,6 @@ func (h *Host) commands() map[string]Command {
 		"App.toggleWrap":              none(h.toggleWrap),
 		"App.toggleLineNumbers":       none(h.toggleLineNumbers),
 		"App.toggleImagePreviews":     none(h.toggleImagePreviews),
-		"App.openPreviewInBrowser":    none(h.openPreviewInBrowser),
 		"App.openPaneInBrowser":       none(h.openPaneInBrowser),
 		"App.closeHTMLPane":           none(h.closeHTMLPane),
 		"App.previewClosed":           none(h.previewClosed),

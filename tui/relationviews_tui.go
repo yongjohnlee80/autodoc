@@ -4,10 +4,14 @@ package tui
 
 import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
-// A terminal build's relation views: Relations › Mindmap, drawn in cells (mindmap_cells.go,
-// relationviews_cells.go), beside Relations › Links (relationmap.go). A terminal draws no GlobeMap.
+// A terminal build's relation views: Relations › GlobeMap and Relations › Mindmap, drawn in cells
+// (globemap_cells.go, mindmap_cells.go, relationviews_cells.go), beside Relations › Links
+// (relationmap.go).
 
-const mindmapPanelID, mindmapViewID = "mindmap", "mindmapView"
+const (
+	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
+	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
+)
 
 // relationMenuQML and relationViewsQML are the window's: a build without the GUI has none, and
 // writes the terminal's (relationviews_cells.go).
@@ -15,23 +19,40 @@ const relationMenuQML, relationViewsQML = "", ""
 
 func (h *Host) relationViewFeatures() []Feature {
 	if h.relationViews == nil {
-		h.relationViews = []Feature{newCellMindmap(core{h})}
+		h.relationViews = cellRelationViews(h)
 	}
 	return h.relationViews
 }
 
-// relationViewChoices: a terminal has no GlobeMap or Mindmap choosers (language.go's choiceLabels).
-func relationViewChoices() map[string][]string { return nil }
+// relationViewChoices are the GlobeMap's and the Mindmap's settings' choosers (language.go's
+// choiceLabels).
+func relationViewChoices() map[string][]string {
+	out := mindChoices()
+	out["App.globeFilters"] = globeFilterNames()
+	return out
+}
 
-// openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build.
-func (h *Host) openGlobeSettings() { h.notify(h.globeSettingsElsewhereNotice()) }
+// openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build: the
+// GlobeMap's settings, the terminal's.
+func (h *Host) openGlobeSettings() {
+	for _, f := range h.relationViewFeatures() {
+		if g, ok := f.(*cellGlobeMap); ok {
+			g.openSettings()
+			return
+		}
+	}
+	h.notify(h.globeSettingsElsewhereNotice())
+}
 
 // relationViewTypes are their views' QML types: the Mindmap's view joins its feature.
 func (h *Host) relationViewTypes() []tuidecl.Type {
 	var out []tuidecl.Type
 	for _, f := range h.relationViewFeatures() {
-		if m, ok := f.(*cellMindmap); ok {
-			out = append(out, m.viewType())
+		switch f := f.(type) {
+		case *cellGlobeMap:
+			out = append(out, f.viewType())
+		case *cellMindmap:
+			out = append(out, f.viewType())
 		}
 	}
 	return out

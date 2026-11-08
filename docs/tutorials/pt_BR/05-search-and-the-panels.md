@@ -21,6 +21,6 @@ flowchart LR
 
 **Ctrl+h j k l** (modo Normal) vão da página para um painel e voltam.
 
-**Todo painel se move e redimensiona.** Alt (Option no Mac) com o botão esquerdo o arrasta para qualquer lugar; com o botão direito, o redimensiona. **SPC L** (Ir › Organizar painel…) faz os dois pelo teclado: `h j k l` o movem, `H J K L` o redimensionam, Enter o mantém, Esc o devolve. Ele abre onde você o deixou; **Ir › Redefinir layout dos painéis** encaixa todos de novo.
+**Todo painel se move e redimensiona.** Arraste a linha do título para movê-lo, e a borda lateral ou inferior para redimensioná-lo. Alt (Option no Mac) com o botão esquerdo o arrasta a partir de qualquer ponto; com o botão direito, o redimensiona. **SPC L** (Ir › Organizar painel…) faz os dois pelo teclado: `h j k l` o movem, `H J K L` o redimensionam, Enter o mantém, Esc o devolve. Ele abre onde você o deixou; **Ir › Redefinir layout dos painéis** encaixa todos de novo.
 
 Mais: [Referência, Capítulo 3: Editor modal e painéis](../../reference/03-modal-editor-and-panels.md) e [Referência, Capítulo 5: O pipeline de busca híbrida](../../reference/05-hybrid-search-pipeline.md).

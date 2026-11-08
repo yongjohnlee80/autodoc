@@ -139,8 +139,8 @@ func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
 // opens nothing and says so.
 func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r := attached(t, startDaemon(t, linksKB))
-	r.leader(t, 'j') // the draft, empty: no link. The draft is a note, so its page answers
-	r.waitKeptNotice(t, "no link on the page here: SPC l shows what untitled links with")
+	r.leader(t, 'j') // the draft, empty: no link under the cursor, Rendered as in the text
+	r.waitKeptNotice(t, "no link under the cursor: SPC l shows what untitled links with")
 
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
@@ -153,7 +153,7 @@ func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r.bufferKey(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
-	r.asText(t) // the link under the cursor is the text's: on the page SPC j takes the first on screen
+	r.asText(t) // the link under the cursor in the text, as in the Rendered view
 	r.putCursor(2, strings.Index(line, "the c"))
 	r.leader(t, 'j')
 	r.waitFile(t, "c.md")
@@ -272,7 +272,12 @@ func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
 		t.Errorf("d.md, a diagram: View diagram found %v, enabled %v; want found, enabled", found, on)
 	}
 	r.menuRow(t, "View diagram")
-	r.s.WaitForText(t, "Diagram source")
+	// a terminal with no images draws it in characters (preview.go): its nodes boxed in the dialog
+	r.s.WaitFor(t, "the diagram drawn", func(s string) bool {
+		inside := dialogInside(s, "Mermaid preview")
+		return strings.HasPrefix(onLoop(r, func() string { return r.h.diagramHelpText }), "Drawn natively") &&
+			strings.ContainsAny(inside, "┌┐└┘╭╮╰╯") && strings.Contains(inside, "A") && strings.Contains(inside, "B")
+	})
 }
 
 // linkAt finds the link the cursor is on, of each kind, and nothing elsewhere.

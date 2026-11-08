@@ -46,7 +46,6 @@ func (h *Host) state() map[string]any {
 		"App.diagramImageShown":  false,
 		"App.diagramNativeShown": false,
 		"App.diagramDrawn":       false, // an image or a native drawing: the Zoom buttons show
-		"App.htmlPreviewHelp":    "",
 		"App.diagramText":        "",
 		"App.diagramHelp":        "",
 		"App.wsProviders":        h.wsProviders,
@@ -183,7 +182,7 @@ func (h *Host) state() map[string]any {
 	for k, v := range h.languageState() {
 		st[k] = v
 	}
-	for _, k := range []string{"App.htmlPreviewTitle", "App.settingsTitle", "App.arrangeTitle", "App.managerHelp", "App.fileNameError"} {
+	for _, k := range []string{"App.settingsTitle", "App.arrangeTitle", "App.managerHelp", "App.fileNameError"} {
 		st[k] = "" // each dialog's opener composes it (languageState)
 	}
 	for k, v := range h.aboutState() {

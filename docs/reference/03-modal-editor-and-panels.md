@@ -29,7 +29,7 @@ names and saves it as a file. Everything else comes when it is asked for:
 - **The outline** (`SPC O`, `Go › Outline…`) lists a Markdown file's headings, as the
   editor's text has them, saved or not; Enter jumps to the one under the cursor.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
-  has a schema (`Manage… › Edit…`); they never block a save. In the GUI's Rendered View, a note's frontmatter is hidden.
+  has a schema (`Manage… › Edit…`); they never block a save. In the Rendered View, a note's frontmatter is hidden, in the GUI and in the terminal.
 
 **The page** wraps long lines at its width, and can number its lines in a dimmed gutter: View ›
 Wrap long lines and Line numbers, or Preferences. Preferences sets the page's width too. `?` in Normal mode shows the Vim keys in a card
@@ -57,7 +57,7 @@ The page edits in the **Vim** mode (modal, the default) or the **Text** mode (mo
    - `H` and `L` show the buffer before or after the shown one;
    - `Ctrl+O` and `Ctrl+I` step back and forward along the jumps, across documents too;
    - `?` shows the Vim keys' card.
-2. **Insert**: entered with `i`, `a`, `I`, `A`, `o` or `O`; `Esc` goes back to Normal. In the GUI's Rendered View, `Enter` on a Markdown list item continues the list, and `Tab` / `Shift+Tab` nest the item or bring it out.
+2. **Insert**: entered with `i`, `a`, `I`, `A`, `o` or `O`; `Esc` goes back to Normal. In the Rendered View, in the GUI and in the terminal, `Enter` on a Markdown list item continues the list, and `Tab` / `Shift+Tab` nest the item or bring it out.
 3. **Visual**: character-wise `v`, line-wise `V`, or a block with `Ctrl+v`. `>` and `<` shift the lines selected.
 4. **The command line**: `:` opens it in Normal mode, and `Ctrl+;` opens it in either editor mode. Its commands are in §3.8.
 
@@ -70,7 +70,7 @@ Typing types. The keys are an ordinary text editor's:
 - `Ctrl+X` / `Ctrl+C` / `Ctrl+V` cut, copy and paste;
 - `Ctrl+A` selects all;
 - `Ctrl+G` searches the workspace;
-- `Ctrl+T` toggles the Rendered View (a Markdown note's page in `--gui` and in the terminal, drawn there in cells; an HTML file's page in `--gui` only; a CSV or TSV file's table in both, §3.3);
+- `Ctrl+T` toggles the Rendered View, the cursor kept (a Markdown note drawn and edited in place, a raw HTML file's page and a CSV or TSV file's table, in `--gui` and in the terminal, where they are drawn in cells, §3.3);
 - `Ctrl+Space` opens SPC's card;
 - `Ctrl+;` opens the command line.
 
@@ -90,7 +90,7 @@ Every file opened is a buffer, and the GUI shows them as tabs. The status line (
   - `s` (or `:b`) switches buffer from a picker, each buffer previewed with its unsaved text. `:b <number>` or `:b <name>` goes straight to one.
   - `b` goes back to the previous document.
 
-AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the GUI's HTML preview pane (`SPC H`) sit beside or over it.
+AutoDoc shows one page at a time: there are no window splits, and no folding. The panels (§3.5) and the HTML preview pane (`SPC H`) sit beside or over it.
 
 ### Files anywhere
 
@@ -134,7 +134,7 @@ In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing ever
 
 - **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` the buffer card (§3.3), where `SPC b b` goes back.
 - **File:** `SPC n` a new file; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.
-- **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC M` maximizes a panel; `SPC h` the notifications.
+- **Panels:** `SPC e` the explorer; `SPC l` the links (Relations); `` SPC ` `` the terminal; `SPC x` the todos; `SPC z` maximizes a panel; `SPC h` the notifications. `SPC M` opens the Mindmap of the document shown.
 - **Agents:** `SPC g` the AI agent; `SPC G` the agent profiles; `SPC a` the agents' card, where `SPC a b` sends the page to an agent and `SPC a f` the selection or the clipboard.
 - **Manage:** `SPC w` switches workspace; `SPC W` manages workspaces; `SPC s` the search models; `SPC ,` the editor preferences; `SPC k` the editor mode (Vim, Text).
 - **Window:** `SPC m` shows, focuses or hides the menu; `SPC .` the right-click menu; `SPC t` the status line; `SPC L` arranges a panel; `SPC p` a plugin's commands; `SPC u` your Lua keys; and `SPC Tab`, below.
@@ -174,10 +174,10 @@ Some keys work wherever the keyboard is: `Ctrl+h/j/k/l` move between the page an
 The explorer, the links, the todos, the terminal and the AI agent each open over the page from an edge. Preferences sets the edge each first appears at, and `Escape` or the panel's key again closes it.
 
 - **Every panel moves and resizes**: the explorer, the terminal, the agent, the HTML
-  preview, and in the GUI the GlobeMap and the Mindmap.
+  preview, the GlobeMap and the Mindmap.
   - `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
     with the right button it resizes.
-  - In the GUI (`--gui`), a plain drag does it too: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it.
+  - A plain drag does it too, in a terminal as in the GUI: the panel's title row moves it, and a side, the bottom or a bottom corner resizes it. A tab or a button on the frame keeps its click.
   - `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
     `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
     keeps it and `Esc` puts it back.
@@ -185,7 +185,7 @@ The explorer, the links, the todos, the terminal and the AI agent each open over
     percentages of the window; its side in the preferences says only where it first appears.
   - `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
     one. A terminal may keep `Alt`+click for itself; the keys always work.
-- **Maximizing:** `SPC M` or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
+- **Maximizing:** `SPC z` (zoom) or `F11` maximizes or restores the terminal or the agents: the one with the keyboard, else the newest open. The other panels don't maximize.
 
 ### Tiled or floating: the layout
 
@@ -222,7 +222,7 @@ The page is a window of its own, and the explorer, the terminal, the agent, the 
 6. **The notifications (`SPC h`, Go › Notifications…)**: a dialog listing what happened (a save, the connection, indexing). It is a dialog, not a panel: it has no edge and doesn't move.
 7. **The results (Go › Results)**: a table of rows a plugin returns, such as a query's.
 8. **Plugin cards (`SPC p`)**: a plugin's card, beside the page.
-9. **The HTML preview (`SPC H`)**: under `--gui`, a pane beside the editor, the note's page drawn live as you type. In the terminal, a dialog shows the page as an image when View › Image previews is on, the terminal confirmed kitty graphics, and a headless Chromium or Chrome is there; otherwise the page opens in the browser.
+9. **The HTML preview (`SPC H`)**: a pane beside the editor, the note's page drawn live as you type and following the cursor. Under `--gui` it is drawn natively; in the terminal it is drawn in cells, its diagrams and charts included, with nothing needed on the host (it works over ssh).
 
 The outline (`SPC O`) is a list over the page, not a panel.
 

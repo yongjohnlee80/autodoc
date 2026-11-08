@@ -1,6 +1,6 @@
 # The Rendered view: Ctrl+T
 
-Under `autodoc --gui`, **Ctrl+T** switches the page between its **Raw** view, the Markdown as written, and its **Rendered** view: the headings at their sizes, the marks hidden, tables, code and Mermaid diagrams drawn.
+In the window and in a terminal, **Ctrl+T** switches the page between its **Raw** view, the Markdown as written, and its **Rendered** view: the headings at their sizes, the marks hidden, tables, code and Mermaid diagrams drawn.
 
 ```mermaid
 flowchart LR
@@ -10,12 +10,12 @@ flowchart LR
 
 The Rendered view is still the editor. Every line is editable: the line under the cursor shows its Markdown, the rest show what they make. Ctrl+T again goes back to Raw.
 
-**HTML files** ask how to open: **Simplified**, their text read-only, or **Raw**, the HTML itself to edit and save. A raw HTML file's Rendered view is its page, drawn natively with its own stylesheets and images: `j k` scroll, its links open notes, files and the browser.
+**HTML files** ask how to open: **Simplified**, their text read-only, or **Raw**, the HTML itself to edit and save. A raw HTML file's Rendered view is its page: in the window drawn natively with its own stylesheets and images, in a terminal drawn in cells. `j k` scroll, and its links open notes, files and the browser.
 
 **File › Preview HTML** (SPC H) opens the note's page beside the editor, live as you type.
 
 **The right-click menu**: Undo, Redo, Copy, Cut and Paste, View diagram, Go to link, Back, and in the GUI the Zoom. From the keyboard: **Shift+F10**, the **Menu** key where your keyboard has one, or **SPC .**.
 
-In a terminal, a note's Rendered view is its page drawn in cells: headings, boxed tables, code blocks, its Mermaid diagrams and its Vega-Lite charts. It reads like the window's page; to edit, Ctrl+T goes back to Raw.
+In a terminal, the Rendered view is the same editor drawn in cells: headings, boxed tables, code blocks, its Mermaid diagrams and its Vega-Lite charts, edited in place as in the window. A diagram wider than the view pans with `zh` and `zl`. On a terminal that draws kitty's graphics (kitty or Ghostty, for example), an image alone in its paragraph is drawn in place; elsewhere its alt text shows.
 
 More: [Reference, Chapter 4: Rich Authoring, Embeds, and Export](../reference/04-rich-authoring-embeds-and-export.md).

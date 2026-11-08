@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
@@ -93,52 +92,7 @@ func htmlPreviewFile(content []byte) (string, error) {
 	return path, nil
 }
 
-func (h *Host) previewHTML() {
-	if h.native() {
-		h.openHTMLPane() // a GUI window shows the page natively, beside the editor (htmlpane.go)
-		return
-	}
-	if h.file.open && filepath.Ext(h.file.path) != ".md" {
-		h.notify(h.tr("autodoc.notice.html.html_preview_currently_accepts_markdown_files"))
-		return
-	}
-	source, theme := []byte(h.core.Value()), h.exportTheme()
-	// the page is written to the cache: its relative links are read from the file's own folder, so
-	// they reach the files beside it. An untitled draft's are written as it has them
-	var options export.Options
-	if full := h.diskPath(); full != "" {
-		options.Base, options.Document = filepath.Dir(full), full
-	}
-	image, why := h.imageMode()
-	h.say(h.tr("autodoc.notice.html.opening_html_preview"))
-	type answer struct {
-		content []byte
-		path    string
-		err     error
-	}
-	do(h, func(ctx context.Context) answer {
-		content, err := export.RenderWith(source, export.HTML, theme, options)
-		if err != nil {
-			return answer{err: err}
-		}
-		path, err := htmlPreviewFile(content)
-		if err != nil {
-			return answer{err: err}
-		}
-		if !image {
-			err = h.browser(ctx, path)
-		}
-		return answer{content: content, path: path, err: err}
-	}, func(a answer) {
-		if a.err != nil {
-			h.failed("HTML preview", a.err)
-			return
-		}
-		if image {
-			h.previewHTMLImage(a.content, a.path) // in the terminal (preview.go)
-			return
-		}
-		h.htmlPreviewPath = a.path
-		h.say(h.trf("autodoc.notice.html.html_preview_opened_in_browser", why))
-	})
-}
+// previewHTML is File › Preview HTML: the note's page in the pane beside the editor (htmlpane.go),
+// drawn natively in a window and in cells in a terminal, where it needs neither a graphics protocol
+// nor a browser on the host (an ssh session's).
+func (h *Host) previewHTML() { h.openHTMLPane() }

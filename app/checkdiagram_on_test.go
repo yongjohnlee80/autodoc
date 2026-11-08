@@ -18,10 +18,10 @@ import (
 // for a chart, a syntax error at its line in the file, and a .md's fences each at its line. Every
 // file drawn exits 0; any not drawn exits 1.
 func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
-	git := "gitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n"
+	git := "kanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n"
 	_, gitWhy := pm.Parse(git)
 	if gitWhy == nil {
-		t.Fatal("golib's parser takes a gitGraph: the cell needs a kind outside its subset")
+		t.Fatal("golib's parser takes a kanban board: the cell needs a kind outside its subset")
 	}
 	bar := `{"data":{"values":[{"k":"a","v":1}]},"mark":"bar","encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}`
 	md := "# Report\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```vega-lite\n" + ruleByField + "\n```\n"
@@ -53,7 +53,7 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 	}
 
 	// the fences are the Markdown parser's: a fence shown inside a longer one is no diagram, a
-	// gitGraph in a block quote is one, and a closing fence with trailing spaces ends the flowchart it closes
+	// kanban board in a block quote is one, and a closing fence with trailing spaces ends the flowchart it closes
 	example := strings.SplitAfter(diagramShapes, "````\n")[0]
 	spaced := "```mermaid\nflowchart LR\n  A --> B\n```   \nAfter the fence, prose.\n"
 	dir = writeFiles(t, map[string]string{"example.md": example, "spaced.md": spaced, "shapes.md": diagramShapes,
@@ -70,7 +70,7 @@ func TestCheckDiagramSaysWhatGolibDraws(t *testing.T) {
 	code, out = runMain(t, nil, "--check-diagram", at("shapes.md"))
 	if code != diagramsNotDrawn || !strings.Contains(out, at("shapes.md")+":11: not drawn: "+gitWhy.Error()) ||
 		!strings.Contains(out, at("shapes.md")+":16: ok (mermaid)") || strings.Contains(out, at("shapes.md")+":4:") {
-		t.Errorf("a quoted gitGraph, a text example and a flowchart: %d\n%s", code, out)
+		t.Errorf("a quoted kanban board, a text example and a flowchart: %d\n%s", code, out)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestTheDiagramReferenceIsGolibs(t *testing.T) {
 			undrawn = append(undrawn, k.Kind.String())
 		}
 	}
-	want = append(want, "A diagram of any other kind ("+code1(append(undrawn, "gitGraph", "kanban"))+", …) is not drawn")
+	want = append(want, "A diagram of any other kind ("+code1(append(undrawn, "kanban"))+", …) is not drawn")
 	for _, w := range want {
 		if !strings.Contains(out, w) {
 			t.Errorf("the reference lacks %q:\n%s", w, out)

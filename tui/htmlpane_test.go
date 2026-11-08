@@ -15,9 +15,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// htmlpane_test.go: File › Preview HTML under --gui (htmlpane.go) — the note's page in the pane
-// beside the editor, live and following the cursor, its links opening notes, files and the
-// browser; in a terminal Preview HTML is what it was.
+// htmlpane_test.go: File › Preview HTML (htmlpane.go, htmlpane_cells.go) — the note's page in the
+// pane beside the editor, live and following the cursor, its links opening notes, files and the
+// browser: in a terminal, golib's cell HTMLView, the note page's, its diagrams drawn in cells.
 
 // longNote is a note of n paragraphs after a heading, linking to b.
 func longNote(n int) string {
@@ -29,8 +29,8 @@ func longNote(n int) string {
 	return sb.String()
 }
 
-// runPane is the TUI on a managed daemon whose kb holds a.md (a long note) and b.md, standing in
-// for a GUI window, with a.md open; it answers the TUI and the kb's root.
+// runPane is the TUI on a managed daemon whose kb holds a.md (a long note) and b.md, in a terminal,
+// with a.md open; it answers the TUI and the kb's root.
 func runPane(t *testing.T) (*running, string) {
 	t.Helper()
 	r, kb, _, _ := runOutside(t)
@@ -40,7 +40,6 @@ func runPane(t *testing.T) (*running, string) {
 	if err := os.WriteFile(filepath.Join(kb, "b.md"), []byte("# B\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r.h.p.Post(func() { r.h.nativeViews = func() bool { return true } })
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
 	r.waitOpen(t, "kb", "a.md")
 	return r, kb
@@ -56,16 +55,19 @@ func (r *running) paneSource() string {
 	})
 }
 
-// TestPreviewHTMLUnderAGUIOpensThePane: Preview HTML opens the pane on the note's page, its blocks
-// carrying their source bytes; an edit reaches it after the quiet; the cursor's block comes to its
-// top.
-func TestPreviewHTMLUnderAGUIOpensThePane(t *testing.T) {
+// TestPreviewHTMLOpensThePane: in a terminal, Preview HTML opens the pane on the note's page, its
+// blocks carrying their source bytes; an edit reaches it after the quiet; the cursor's block comes
+// to its top.
+func TestPreviewHTMLOpensThePane(t *testing.T) {
 	r, _ := runPane(t)
+	if onLoop(r, r.h.native) {
+		t.Fatal("the test backend draws native views")
+	}
 	r.h.p.Post(r.h.previewHTML)
 	r.s.WaitFor(t, "the pane open on the page", func(string) bool {
 		return onLoop(r, r.h.htmlPaneShown) && strings.Contains(r.paneSource(), `<h1 id="heading" data-src="0-9">Heading</h1>`)
 	})
-	r.s.WaitForText(t, "┌ preview")
+	r.s.WaitForText(t, r.paneCorner())
 
 	r.typeInEditor(t, "fresh ")
 	r.s.WaitFor(t, "the edit in the pane", func(string) bool { return strings.Contains(r.paneSource(), "fresh ") })
@@ -81,26 +83,200 @@ func TestPreviewHTMLUnderAGUIOpensThePane(t *testing.T) {
 	})
 }
 
-// TestPreviewHTMLInATerminalKeepsItsPath: with no GUI, Preview HTML never opens the pane.
-func TestPreviewHTMLInATerminalKeepsItsPath(t *testing.T) {
+// TestImagePreviewsLeavePreviewHTMLThePane: where the terminal could show an image (graphics
+// confirmed, a browser to render with, View › Image previews on) and where it couldn't (off),
+// Preview HTML opens the pane: no image is placed and no browser opened. Image previews govern
+// View › Diagram alone.
+func TestImagePreviewsLeavePreviewHTMLThePane(t *testing.T) {
 	r, _ := runPane(t)
 	opened := make(chan string, 1)
-	r.h.p.Post(func() {
-		r.h.nativeViews = nil
+	onLoop(r, func() bool {
+		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, p.Width, p.MinHeight), nil
+		}
 		r.h.browser = func(_ context.Context, p string) error { opened <- p; return nil }
+		return true
 	})
-	if onLoop(r, r.h.native) {
-		t.Fatal("the test backend draws native views")
+	for _, images := range []bool{true, false} {
+		if ok := onLoop(r, func() bool { ok, _ := r.h.imageMode(); return ok }); ok != images {
+			t.Fatalf("image mode %v, want %v", ok, images)
+		}
+		r.h.p.Post(r.h.previewHTML)
+		r.s.WaitFor(t, "the pane open", func(string) bool { return onLoop(r, r.h.htmlPaneShown) && r.paneSource() != "" })
+		time.Sleep(200 * time.Millisecond) // an image or a browser would be under way by now
+		if n := len(r.s.Backend.Images()); n != 0 {
+			t.Fatalf("image previews %v: %d image(s) placed", images, n)
+		}
+		select {
+		case p := <-opened:
+			t.Fatalf("image previews %v: the browser was given %q", images, p)
+		default:
+		}
+		r.h.p.Post(func() { r.h.closeHTMLPane(); r.h.toggleImagePreviews() })
+		r.s.WaitFor(t, "the pane closed", func(string) bool { return !onLoop(r, r.h.htmlPaneShown) })
 	}
+}
+
+// TestALinkClickedInThePaneOpens: a click on the page's web link, in the pane's cells, hands it to
+// the browser; a click on its wikilink opens the note it names.
+func TestALinkClickedInThePaneOpens(t *testing.T) {
+	r, _ := runPane(t)
+	browsed := make(chan string, 1)
+	r.h.p.Post(func() { r.h.browser = func(_ context.Context, p string) error { browsed <- p; return nil } })
 	r.h.p.Post(r.h.previewHTML)
-	// today's path: the page written to the cache and handed to the browser (the test terminal
-	// draws no images)
-	if got := <-opened; !strings.HasSuffix(got, ".html") {
-		t.Errorf("the browser was given %q, want the exported page", got)
+	r.s.WaitFor(t, "the links in the pane", func(string) bool { _, _, ok := r.inPane("see b and the web"); return ok })
+	r.clickInPane(t, "the web")
+	select {
+	case p := <-browsed:
+		if p != "https://example.com" {
+			t.Fatalf("the browser was given %q", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the web link's click opened nothing")
 	}
-	if onLoop(r, r.h.htmlPaneShown) {
-		t.Error("a terminal's Preview HTML opened the native pane")
+	r.clickInPane(t, "b and the web")
+	r.waitOpen(t, "kb", "b.md")
+}
+
+// TestThePaneReadsInSepiaAndDark: in sepia, then in dark switched to with the pane open, the pane
+// draws the note's Mermaid diagram in cells (its boxes and labels, not the notice) and its code in
+// the theme's syntax colours: its go keyword in the colour the editor's page gives its own, a
+// colour apart from the function after it and from the pane's paper. The pane's rows are logged,
+// each theme's, for review.
+func TestThePaneReadsInSepiaAndDark(t *testing.T) {
+	note := "# Title\n\n```go\nfunc main() {}\n```\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
+	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.h.p.Post(r.h.previewHTML)
+	var kws []tuicore.CellColor
+	for _, theme := range []string{"sepia", "dark"} {
+		if theme != "sepia" {
+			onLoop(r, func() bool { r.h.switchTheme(theme); return true })
+			r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
+		}
+		// the pane drawn in this theme: its keyword in the editor's page's colour for one
+		var kw tuicore.CellColor
+		r.s.WaitFor(t, theme+": the pane's code and diagram", func(string) bool {
+			snap := r.s.Backend.Snapshot()
+			px, py, ok := r.inPane("func main()")
+			ex, ey, eok := r.leftOfPane("func main()") // the editor's page: the pane may draw it a row higher
+			if !ok || !eok || !r.paneHas("Start", "Finish") {
+				return false
+			}
+			kw = snap[py][px].Attrs.FG
+			return kw == snap[ey][ex].Attrs.FG && (len(kws) == 0 || kw != kws[0])
+		})
+		snap := r.s.Backend.Snapshot()
+		px, py, _ := r.inPane("func main()")
+		if fn := snap[py][px+5].Attrs.FG; fn == kw {
+			t.Fatalf("%s: the pane's keyword and the function after it share one colour %v", theme, kw)
+		}
+		if bg := snap[py][px].Attrs.BG; bg == kw {
+			t.Fatalf("%s: the pane's keyword is its paper's colour %v", theme, kw)
+		}
+		if _, _, ok := r.inPane("not drawn in the terminal"); ok {
+			t.Fatalf("%s: the pane says its diagram is not drawn:\n%s", theme, r.s)
+		}
+		kws = append(kws, kw)
+		t.Logf("%s: the pane:\n%s", theme, r.paneText())
 	}
+}
+
+// paneCorner is the pane's frame's top-left corner and heading as drawn in the UI's language now
+// ("┌ preview" in English): where every pane helper finds the pane, so they find it after a
+// language switch too.
+func (r *running) paneCorner() string {
+	return "┌ " + onLoop(r, func() string { return r.h.tr("autodoc.main.preview") })
+}
+
+// paneHas reports whether the pane's cells show each of texts inside a box: a row holding the text
+// has a box's side (│) before it, within the pane.
+func (r *running) paneHas(texts ...string) bool {
+	snap := r.s.Backend.Snapshot()
+	left, _, ok := find(snap, r.paneCorner())
+	if !ok {
+		return false
+	}
+	for _, text := range texts {
+		x, y, ok := r.inPane(text)
+		if !ok {
+			return false
+		}
+		side := false
+		for _, c := range snap[y][left+1 : x] {
+			side = side || c.Content == "│"
+		}
+		if !side {
+			return false
+		}
+	}
+	return true
+}
+
+// paneText is the pane's cells as text, a line per row, right of its border's corner.
+func (r *running) paneText() string {
+	snap := r.s.Backend.Snapshot()
+	left, _, ok := find(snap, r.paneCorner())
+	if !ok {
+		return ""
+	}
+	var sb strings.Builder
+	for _, row := range snap {
+		for _, c := range row[min(left, len(row)):] {
+			sb.WriteString(c.Content)
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// leftOfPane finds text in the cells left of the pane's border: the editor's.
+func (r *running) leftOfPane(text string) (int, int, bool) {
+	snap := r.s.Backend.Snapshot()
+	left, _, ok := find(snap, r.paneCorner())
+	if !ok {
+		return 0, 0, false
+	}
+	beside := make([][]tuicore.Cell, len(snap))
+	for y, row := range snap {
+		beside[y] = row[:min(left, len(row))]
+	}
+	return find(beside, text)
+}
+
+// inPane finds text in the pane's cells (right of its border's corner: the editor beside it may
+// show the same page), answering the screen cell it starts at.
+func (r *running) inPane(text string) (int, int, bool) {
+	snap := r.s.Backend.Snapshot()
+	left, _, ok := find(snap, r.paneCorner())
+	if !ok {
+		return 0, 0, false
+	}
+	pane := make([][]tuicore.Cell, len(snap))
+	for y, row := range snap {
+		if left+1 < len(row) {
+			pane[y] = row[left+1:]
+		}
+	}
+	x, y, ok := find(pane, text)
+	return x + left + 1, y, ok
+}
+
+// clickInPane clicks the pane's cells where text begins.
+func (r *running) clickInPane(t *testing.T, text string) {
+	t.Helper()
+	x, y, ok := r.inPane(text)
+	if !ok {
+		t.Fatalf("%q is not in the pane:\n%s", text, r.s)
+	}
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
 
 // TestThePanesLinks: a page's link opens the note it names (a wikilink's page), a file: URL opens
@@ -267,4 +443,43 @@ func TestThePanesKeysPressItsButtons(t *testing.T) {
 	focus()
 	r.keys(t, key('q'))
 	r.s.WaitFor(t, "q closed the pane", func(string) bool { return onLoop(r, func() bool { return !r.h.panelOpen["htmlPane"] }) })
+}
+
+// A chart the pane doesn't draw (a geoshape, outside golib's subset) says so in the page's words
+// for a chart, not a diagram's: the notice a note's page and a card's show (pageNotice). After a
+// language switch, with the pane open, it says it in the new language.
+func TestThePanesUndrawnChartSaysItIsAChart(t *testing.T) {
+	note := "# Map\n\n```vega-lite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"geoshape\"}\n```\n"
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.h.p.Post(r.h.previewHTML)
+	chart := onLoop(r, func() string { return r.h.pageNotice("vega-lite") })
+	diagram := onLoop(r, func() string { return r.h.trf(diagramNoticeID, "vega-lite") })
+	head := func(s string) string { // the sentence's start: a narrow pane wraps the rest
+		rs := []rune(s)
+		return string(rs[:min(len(rs), 16)])
+	}
+	r.s.WaitFor(t, "the pane's chart notice", func(string) bool { _, _, ok := r.inPane(head(chart)); return ok })
+	if _, _, ok := r.inPane(head(diagram)); ok {
+		t.Fatalf("the pane says the chart is a diagram:\n%s", r.paneText())
+	}
+	onLoop(r, func() bool { r.h.setLanguage("ko_KR"); return true })
+	ko := ""
+	r.s.WaitFor(t, "the chart notice in Korean", func(string) bool {
+		ko = onLoop(r, func() string { return r.h.pageNotice("vega-lite") })
+		if ko == chart {
+			return false // the switch hasn't landed
+		}
+		_, _, ok := r.inPane(head(ko))
+		return ok
+	})
+	if _, _, ok := r.inPane(head(onLoop(r, func() string { return r.h.trf(diagramNoticeID, "vega-lite") }))); ok {
+		t.Fatalf("in Korean, the pane says the chart is a diagram:\n%s", r.paneText())
+	}
+	x, y, _ := r.inPane(head(ko))
+	t.Logf("KOREAN-CHART-NOTICE found in the pane at %d,%d: %q", x, y, head(ko))
+	t.Logf("the pane, in Korean:\n%s", r.paneText())
 }

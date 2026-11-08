@@ -1,10 +1,6 @@
 package tui
 
-import (
-	"path/filepath"
-
-	"github.com/yongjohnlee80/autodoc/core/crew"
-)
+import "github.com/yongjohnlee80/autodoc/core/crew"
 
 // What a crew Claude agent's Claude Code knows (docs/decisions/crew.md#wake-acceptance-not-tool-approvals):
 // its settings name only the hook events it knows, read from its binary (crew.ClaudeKnows). Finding
@@ -41,13 +37,9 @@ func (a *agents) warmClaude(p agentProfile) *claudeAnswer {
 	dir := a.agentDir
 	go func() {
 		defer close(f.done)
-		f.path, _, f.err = crew.ClaudeOf(program, path, dir, "") // read now, so the spawn finds it kept
-		if f.err != nil && filepath.Base(program) != crew.KindClaude {
-			// a profile set to Claude Code under another name (a wrapper, a script): the claude it runs
-			if bin, _, err := crew.ClaudeOf(crew.KindClaude, path, dir, ""); err == nil {
-				f.path, f.err = bin, nil
-			}
-		}
+		// read now, so the spawn finds it kept; a program of another name (a wrapper, a script) is the
+		// claude it runs when it reads as none itself (crew.ClaudeOf)
+		f.path, _, f.err = crew.ClaudeOf(program, path, dir, "")
 	}()
 	return f
 }

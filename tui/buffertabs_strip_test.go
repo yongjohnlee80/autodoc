@@ -8,8 +8,8 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// buffertabs_strip_test.go: feedBufferTabs, which the GUI calls with its editor's strip, on a strip
-// of the TUI's own (the TUI's editor has none): what the strip is given and what its presses do.
+// buffertabs_strip_test.go: feedBufferTabs, which each build calls with its editor's strip, on a
+// strip of the cell's own: what the strip is given and what its presses do.
 
 // TestTheStripIsFedTheBuffers: a tab per buffer, by its number, labelled as bufferTabLabel cuts it,
 // the shown buffer's active; a press on a tab shows its buffer, on its × closes it, and + makes a
@@ -52,15 +52,15 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 	want := onLoop(r, func() []widget.StripTab {
 		var out []widget.StripTab
 		for _, b := range r.h.buffers {
-			out = append(out, widget.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, bufferTabWidth-2)})
+			out = append(out, widget.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, r.h.tabWidth()-2)})
 		}
 		return out
 	})
 	if !slices.Equal(got.tabs, want) || got.active != want[2].ID {
 		t.Fatalf("fed tabs %q, active %q: want %q, the last opened active", got.tabs, got.active, want)
 	}
-	if l := got.tabs[2].Label; l == long || len([]rune(l)) > bufferTabWidth-2 {
-		t.Fatalf("the long name's tab is %q: want it cut to %d cells", l, bufferTabWidth-2)
+	if l := got.tabs[2].Label; l == long || len([]rune(l)) > r.h.tabWidth()-2 {
+		t.Fatalf("the long name's tab is %q: want it cut to %d cells", l, r.h.tabWidth()-2)
 	}
 	// the strip's row: a.md, b.md, the long one, then + and ≡; a tab's × is its first cells
 	if len(got.spans) != 5 {
@@ -92,9 +92,15 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 		return onLoop(r, func() bool { return len(r.h.buffers) == 3 && !r.h.file.open })
 	})
 
-	// fed again, the strip is not wired again: a host's own handler stays
+	// fed again, the strip is not wired again: a host's own handler stays. Fed, given the handler
+	// and fed again in one turn of the loop: the editor's own strip (the terminal's too, on its title
+	// row) is fed on every change of the buffers, and a feed between would make this strip a new one
 	var chosen []string
-	onLoop(r, func() bool { strip.SetOnSelect(func(id string) { chosen = append(chosen, id) }); return true })
+	onLoop(r, func() bool {
+		r.h.feedBufferTabs(strip)
+		strip.SetOnSelect(func(id string) { chosen = append(chosen, id) })
+		return true
+	})
 	got = feed(strip)
 	press(strip, got.spans[0].X+got.spans[0].W-1)
 	if len(chosen) != 1 || chosen[0] != want[0].ID || shown() == "a.md" {
@@ -103,10 +109,10 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 
 	// a new strip, a new editor's after a reload, is wired
 	fresh := widget.NewTabStrip()
-	got = feed(fresh)
-	if onLoop(r, func() bool { return r.h.tabStrip != fresh }) {
+	if onLoop(r, func() bool { r.h.feedBufferTabs(fresh); return r.h.tabStrip != fresh }) {
 		t.Fatal("a new strip was not taken as the editor's")
 	}
+	got = feed(fresh)
 	press(fresh, got.spans[0].X+got.spans[0].W-1)
 	waitShown("a.md")
 }

@@ -22,11 +22,13 @@ import (
 
 // Run as a window, the GUI writes its relation views into main.qml once each: the Relations menu's
 // items, a panel each whose view is its own type, and the GlobeMap's settings dialog. Run in a
-// terminal, the same build writes the terminal's: its Mindmap in cells, and no GlobeMap.
+// terminal, the same build writes the terminal's: its GlobeMap and Mindmap in cells, never the
+// window's views.
 func TestTheGUIWritesTheRelationViews(t *testing.T) {
 	term := withRelationViews(layout, false)
-	if !bytes.Contains(term, []byte("CellMindmap {")) || bytes.Contains(term, []byte("GlobeMap")) || bytes.Contains(term, []byte("        Mindmap {\n")) {
-		t.Fatal("a terminal run of the GUI build did not write the terminal's Mindmap alone")
+	if !bytes.Contains(term, []byte("CellGlobeMap {")) || !bytes.Contains(term, []byte("CellMindmap {")) ||
+		bytes.Contains(term, []byte("        GlobeMap {\n")) || bytes.Contains(term, []byte("        Mindmap {\n")) {
+		t.Fatal("a terminal run of the GUI build did not write the terminal's cell views alone")
 	}
 	doc := string(withRelationViews(layout, true))
 	for _, want := range []string{
@@ -761,12 +763,12 @@ func windowed(t *testing.T, d *daemon) *running {
 }
 
 // The GUI build run in a terminal (no --gui) is a terminal: its document names neither window view
-// (GlobeMap, the window's Mindmap), and its one relation view is the terminal's Mindmap in cells,
-// with its command beside Relations › Links (docs/decisions/editor.md); Preferences' GlobeMap… says
-// the settings are a window's. Run as a window, the same build has the window's two views, their
-// three commands, and the dialog.
-func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
-	windowMindmap := regexp.MustCompile(`(^|[^A-Za-z])Mindmap \{`) // the window's, not CellMindmap
+// (the window's GlobeMap and Mindmap), and its relation views are the terminal's GlobeMap and
+// Mindmap in cells, with their commands beside Relations › Links (docs/decisions/editor.md). Run as
+// a window, the same build has the window's two views and their three commands. Preferences'
+// GlobeMap… opens each one's settings.
+func TestEachRunWritesItsOwnRelationViews(t *testing.T) {
+	windowView := regexp.MustCompile(`(^|[^A-Za-z])(GlobeMap|Mindmap) \{`) // the window's, not the cells'
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	for _, gui := range []bool{false, true} {
 		r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui})
@@ -781,27 +783,22 @@ func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 				}
 				return out
 			})
-		views := strings.Contains(doc, `qsTrId("autodoc.gui.relations.globemap")`) || strings.Contains(doc, "GlobeMap {") ||
-			windowMindmap.MatchString(doc)
-		cells := strings.Contains(doc, "CellMindmap {")
+		views := windowView.MatchString(doc)
+		cells := strings.Contains(doc, "CellGlobeMap {") && strings.Contains(doc, "CellMindmap {")
 		switch {
 		case !strings.Contains(doc, `MenuItem { text: qsTrId("autodoc.main.links_spc_l")`):
 			t.Errorf("gui %v: Relations › Links is gone", gui)
 		case gui != views:
 			t.Errorf("gui %v: the document has the window's relation views: %v", gui, views)
 		case gui == cells:
-			t.Errorf("gui %v: the document has the terminal's Mindmap: %v", gui, cells)
-		case gui && (feats != 2 || len(cmds) != 3), !gui && (feats != 1 || !slices.Equal(cmds, []string{"App.toggleMindmap", "App.toggleRelations"})):
+			t.Errorf("gui %v: the document has the terminal's cell views: %v", gui, cells)
+		case feats != 2 || len(cmds) != 3:
 			t.Errorf("gui %v: %d relation view features, commands %v", gui, feats, cmds)
 		}
-		// Preferences › GlobeMap… names its command in every build: the dialog in a window, a word
-		// of why not in a terminal
+		// Preferences › GlobeMap… opens the GlobeMap's settings in every build: the window's dialog,
+		// or the terminal's
 		onLoop(r, func() bool { r.h.openGlobeSettings(); return true })
-		if gui {
-			r.s.WaitForText(t, "GlobeMap settings")
-		} else if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); said != globeSettingsElsewhere {
-			t.Errorf("a terminal's GlobeMap settings: %q", said)
-		}
+		r.s.WaitForText(t, "GlobeMap settings")
 	}
 }
 

@@ -35,7 +35,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 		s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
 		if err == nil && len(s.Server) > 0 {
-			s.Server = fakeServer(s.ServerSocket, true)
+			s.Server = fakeServer(t, s.ServerSocket, true)
 		}
 		return s, err
 	}
@@ -50,12 +50,13 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 
 // startingCrewAgents is crewAgents whose tabs' starts run their starter (runAgent), as the terminal
 // does, on a spawn that starts nothing: a start its starter refuses (a refused registration shown in
-// its tab) leaves the tab stopped, as the terminal leaves it.
+// its tab) leaves the tab stopped, as the terminal leaves it. The process it starts is a fake
+// terminal, never nil: a Codex agent's server is bound to it, and closes it when it ends.
 func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWindow) {
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
 	c.panel = &modelPanel{owner: c, starts: true}
-	a.spawn = func(pty.Cmd) (widget.TerminalProcess, error) { return nil, nil }
+	a.spawn = func(pty.Cmd) (widget.TerminalProcess, error) { return newFakeTerminal(), nil }
 	return a, c, w
 }
 
@@ -114,12 +115,17 @@ func startedEnv(a *agents, c *identityHost, instance *agentInstance) (env []stri
 	return cmd.Env, spawned, err
 }
 
-// startedCmd is the command instance's tab starts its program with, as startedEnv.
+// startedCmd is the command instance's tab starts its program with, as startedEnv. Its process
+// is a fake terminal, never nil: a Codex agent's server is bound to it, and closes it when it
+// ends (as the cell's cleanup ends it).
 func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
 	cfg := c.panel.configs[instance.tab]
 	spawn := a.spawn
 	defer func() { a.spawn = spawn }()
-	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) { started, spawned = cmd, true; return nil, nil }
+	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) {
+		started, spawned = cmd, true
+		return newFakeTerminal(), nil
+	}
 	_, err = cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	return started, spawned, err
 }

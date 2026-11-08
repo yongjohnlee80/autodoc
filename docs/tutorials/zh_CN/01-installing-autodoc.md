@@ -1,18 +1,39 @@
 # 安装 AutoDoc
 
-AutoDoc 只有一个程序：`autodoc`。选一种适合你机器的安装方式：
+AutoDoc 是一个程序：`autodoc`。
 
-| 系统 | 安装方式 |
-| --- | --- |
-| Linux、macOS（需要 Go） | 窗口版：`GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| 任意系统（需要 Go） | 终端版：`go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| macOS、Linux | mise：`mise use -g github:yongjohnlee80/autodoc`（窗口版） |
-| Linux（服务器或容器） | 用 mise 装终端版：`mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'`（arm64 上用 `linux-arm64-tui`） |
-| macOS、Linux | Homebrew：`brew install yongjohnlee80/tap/autodoc`（在 Linux 上是终端版） |
-| Linux、macOS | 从项目的 Releases 页面下载发布包，`amd64` 或 `arm64` |
-| Windows | 先装 WSL2，再按任一 Linux 方式安装 |
+## 安装脚本（推荐）
 
-**两种运行方式。** `autodoc --ui` 在终端中运行。`autodoc --gui` 打开一个独立窗口，能绘制图表，也能使用你选的字体。`--gui` 是运行时的参数，`-tags gui` 是让 Go 把窗口版编译进去的构建标签。在 Linux 上，mise 和不带后缀的发布包是窗口版，即使用 `--ui` 运行也需要桌面的图形库（EGL、Wayland、X11）；在服务器或容器中，请用 `-tui` 发布包。Linux 上的 Homebrew 只安装终端版。
+在 Linux 和 macOS 上，一行命令即可安装带窗口的 AutoDoc：
+
+```sh
+curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
+```
+
+这个脚本会：
+
+- 下载适合你系统的最新版本，并用该版本的校验和进行校验；
+- 安装为 `~/.local/bin/autodoc`，只为你自己安装，从不需要 `sudo`；
+- 添加启动器，让 AutoDoc 出现在你的应用程序中（macOS 上是 AutoDoc.app，Linux 上是桌面条目）；
+- 在 `~/.local/state/autodoc` 中安装 `update.sh`，用来让 AutoDoc 保持最新。
+
+如果 `~/.local/bin` 不在你的 `PATH` 中，脚本会打印需要加到 shell 启动文件里的那一行；它从不自己修改这个文件。如果没有适合你系统的预编译版本，它会先询问，再从该版本的源码构建。
+
+随时可以重新运行：它会升级或修复安装，不会重复添加启动器。`sh install-autodoc.sh --help` 会列出选项，例如安装指定版本的 `--version` 和 `--no-launcher`。
+
+**更新。** 用脚本安装的 AutoDoc 可以自行更新：打开 **帮助 › 关于**，然后点 **更新**。更新在 AutoDoc 的终端面板中运行，新版本就绪后，AutoDoc 会提供 **立即重启**。在 shell 中运行 `~/.local/state/autodoc/update.sh` 效果相同。
+
+## 其他方式
+
+- Homebrew：`brew install yongjohnlee80/tap/autodoc`（在 Linux 上只有终端界面）
+- mise：`mise use -g github:yongjohnlee80/autodoc`
+- Go：`go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`（不带 `-tags gui` 时只有终端界面）
+- 项目 Releases 页面上的发布包
+- Windows：先安装 WSL2，再用安装脚本
+
+这些方式按安装时的方式更新（`brew upgrade`、`mise upgrade`、再次 `go install`），所以 **帮助 › 关于** 不会为它们提供更新。服务器、容器以及从源码构建：见 [参考手册，第 2 章](../../reference/02-quickstart-and-workspaces.md)。
+
+**两种运行方式。** `autodoc --ui` 在终端中运行。`autodoc --gui` 打开一个独立窗口，能绘制图表，也能使用你选的字体。
 
 ```mermaid
 flowchart LR

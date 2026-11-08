@@ -1695,22 +1695,6 @@
         <source>go to</source>
         <translation>转到</translation>
     </message>
-    <message id="autodoc.dialog.htmlPreview.close_q">
-        <source>Close (&amp;q)</source>
-        <translation>关闭(&amp;Q)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.open_in_browser">
-        <source>Open in &amp;browser</source>
-        <translation>在浏览器中打开(&amp;B)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_in">
-        <source>Zoom &amp;in</source>
-        <translation>放大(&amp;I)</translation>
-    </message>
-    <message id="autodoc.dialog.htmlPreview.zoom_out">
-        <source>Zoom &amp;out</source>
-        <translation>缩小(&amp;O)</translation>
-    </message>
     <message id="autodoc.dialog.inbox.message_title">
         <source>%1 — from %2</source>
         <translation>%1 — 来自 %2</translation>
@@ -1970,6 +1954,10 @@
     <message id="autodoc.dialog.preferences.page_width_40_400">
         <source>page width (40–400)</source>
         <translation>页面宽度(40–400)</translation>
+    </message>
+    <message id="autodoc.dialog.preferences.plugin_pixels">
+        <source>plugin pixels</source>
+        <translation>插件像素</translation>
     </message>
     <message id="autodoc.dialog.preferences.screen">
         <source>screen</source>
@@ -2891,10 +2879,10 @@
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F11, SPC M  maximize or restore the terminal or the agents (the one with the keyboard, in a
+  F11, SPC z  maximize or restore the terminal or the agents (the one with the keyboard, in a
               shell too, else the newest open), as their tab menu's Maximize: a program in a panel
               never gets F11; a terminal emulator that takes F11 itself (GNOME Terminal's full
-              screen) keeps it: SPC M always works
+              screen) keeps it: SPC z always works
   Ctrl+Tab and Ctrl+Shift+Tab  the next or the previous tab of the terminal or the agents (the
               one with the keyboard), round; its program never gets them (Ctrl+\ first sends
               one). In a terminal, only where it tells Ctrl+Tab from Tab (kitty's keyboard protocol)
@@ -2962,10 +2950,10 @@
   SPC k       编辑器模式：Vim(模式化)或 Text(无模式，普通文本编辑器的按键)
   ?           Vim 按键卡片，显示在右下角(Normal 模式)；再按 ? 关闭
   SPC h       通知历史(转到 › 通知…)
-  F11, SPC M  最大化或还原终端或智能体(键盘所在的那个，在 shell 中也可用，
+  F11, SPC z  最大化或还原终端或智能体(键盘所在的那个，在 shell 中也可用，
               否则为最新打开的)，与其标签页菜单中的“最大化”相同：面板中的程序
               收不到 F11；自身占用 F11 的终端模拟器(如 GNOME Terminal 的全屏)
-              会保留它：SPC M 始终可用
+              会保留它：SPC z 始终可用
   Ctrl+Tab and Ctrl+Shift+Tab  终端或智能体(键盘所在的那个)的下一个/上一个标签页，
               首尾循环；程序收不到它们(先按 Ctrl+\ 则发送给程序)。在终端中，仅当终端能
               区分 Ctrl+Tab 与 Tab 时有效(kitty 键盘协议)
@@ -3026,7 +3014,8 @@
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
-  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  itself to edit and save. A raw file's Rendered view (Ctrl+T) is its page, in the GUI and in
+  the terminal: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
   files or the browser. Its stylesheets and images load from its workspace (a file outside every
   workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
@@ -3094,12 +3083,13 @@ THE PANELS
   Escape in Normal mode, or SPC ` again, hides it; the keyboard goes to the topmost window still open. When
   a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
   exit closes the pane, and the next SPC ` starts another.
-  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  Every panel moves and resizes. A drag of its title row moves it, and of its side or bottom
+  border resizes it; Alt (Option on a Mac) with the left button drags it from anywhere in it,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
   opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
   again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
-  the keys always work.
+  the frame's drags and the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -3116,15 +3106,15 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
-  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
-  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
-  shows its source and HTML opens in the browser, and the preview says which was missing.
-  View › Image previews off compares the two on the same file.
-  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
-  natively, live as you type, following the cursor, its text selectable, its links opening
-  notes, files and the browser.
+  File › Preview Mermaid diagram shows an image in the terminal only with all of: View › Image
+  previews on; a terminal that confirmed kitty graphics (inside tmux, set -g allow-passthrough
+  on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l, PgUp/PgDn, [ ],
+  Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise the diagram shows its source,
+  and the preview says which was missing. View › Image previews off compares the two.
+  File › Preview HTML opens a pane beside the editor: the note's page, live as you type,
+  following the cursor, its links opening notes, files and the browser. Under --gui it is drawn
+  natively and its text is selectable; in a terminal it is drawn in cells, its diagrams and
+  charts too, with nothing needed on the host (it works over ssh).
   Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
   diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
   zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
@@ -3153,7 +3143,7 @@ WHAT A KEY NEEDS
   编辑和保存不可用。“文件 › 用默认应用打开”可打开原文件。较长的文件只显示单次读取
   所能承载的内容，并注明截断位置。
   HTML 文件会先询问：简化(如上，派生文本只读)或原始(直接
-  编辑并保存 HTML)。在 GUI 中，原始文件的渲染视图(Ctrl+T)即其页面：j k 或
+  编辑并保存 HTML)。原始文件的渲染视图(Ctrl+T)即其页面，在 GUI 和终端中皆然：j k 或
   方向键滚动，Ctrl+D Ctrl+U 滚动半页，g G 到首尾，其链接可作为笔记、
   文件或在浏览器中打开。其样式表和图片从所在工作区加载(不属于任何工作区
   的文件：仅限其所在文件夹；若站点共享 ../assets，请将该文件夹添加为工作区)。
@@ -3209,12 +3199,13 @@ WHAT A KEY NEEDS
   在 Normal 模式下按 Escape，或再按 SPC `，即可隐藏它；键盘焦点移到仍打开的最上层窗口。
   shell 退出时(exit、Ctrl+D)其标签页关闭，异常退出会保留为通知；最后一个 shell
   退出时关闭窗格，下次按 SPC ` 会启动新的 shell。
-  所有面板均可移动和调整大小。按住 Alt(Mac 上为 Option)用左键可拖到任意位置，
+  所有面板均可移动和调整大小。拖动标题行可移动面板，拖动左右或底部边框可调整大小；
+  按住 Alt(Mac 上为 Option)用左键可从面板任意处拖动，
   用右键可调整大小；SPC L(转到 › 排列面板…)用按键完成两者：h j k l 或
   方向键移动，H J K L 或 Shift+方向键调整大小，Enter 保留，Esc 还原。之后它
   会在上次的位置打开。“转到 › 重置面板布局”会将所有面板重新停靠到各自
   边缘，就像在首选项中为某个面板设置新边缘一样。终端可能会自己占用 Alt+单击；
-  按键方式始终可用。
+  拖动边框和按键方式始终可用。
 
 按键的前提条件
   这里的一切都需要守护进程(autodoc --serve)。没有响应时 --ui 会启动它；若
@@ -3231,15 +3222,15 @@ WHAT A KEY NEEDS
   Ollama Cloud，或兼容 OpenAI 的端点。没有提供方时按
   词语搜索，结果中会显示“semantic off”。状态栏的标记显示正在搜索的模型，
   更换模型会清除搜索(其词语和结果)，重新开始。
-  “文件 › 预览 Mermaid 图表”和“预览 HTML”只有同时满足以下条件时才在终端中显示图像：
+  “文件 › 预览 Mermaid 图表”只有同时满足以下条件时才在终端中显示图像：
   “视图 › 图片预览”已开启；终端已确认支持 kitty 图形协议(在 tmux 中需 set -g
   allow-passthrough on)；并有无头 Chromium 或 Chrome。图像可滚动(方向键、j k h l、
   PgUp/PgDn、[ ]、Home/End、滚轮)，放大 / 缩小会重新绘制。否则图表
-  显示其源码，HTML 在浏览器中打开，预览会说明缺少哪一项。
-  关闭“视图 › 图片预览”可在同一文件上对比两者。
-  在 --gui 下，“预览 HTML”改为在编辑器旁打开一个窗格：原生绘制笔记页面，
-  随输入实时更新并跟随光标，文本可选择，链接可打开
-  笔记、文件和浏览器。
+  显示其源码，预览会说明缺少哪一项。关闭“视图 › 图片预览”可对比两者。
+  “文件 › 预览 HTML”在编辑器旁打开一个窗格：笔记页面随输入实时更新并跟随光标，
+  链接可打开笔记、文件和浏览器。在 --gui 下原生绘制，文本可选择；
+  在终端中以字符单元格绘制，图表和统计图也一样，
+  主机上无需任何额外软件(通过 ssh 也可使用)。
   在 --gui 下，“文件 › 预览选项”选择由什么绘制 Mermaid 图表(用于“预览 Mermaid
   图表”和该窗格)：Mermaid.js(默认；使用无头浏览器，每个图表需几秒，支持
   缩放)或原生 Mermaid 引擎(golib 的，即时绘制，不支持缩放；它不支持的图表类型仍由
@@ -3521,6 +3512,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.key.the_links">
         <source>the links</source>
         <translation>链接</translation>
+    </message>
+    <message id="autodoc.key.the_mindmap">
+        <source>the Mindmap</source>
+        <translation>Mindmap</translation>
     </message>
     <message id="autodoc.key.the_months_archived">
         <source>the months (Archived)</source>
@@ -4178,6 +4173,10 @@ WHAT A KEY NEEDS
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>无法将命令的退出码通过邮件发送给代理 %1：%2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 太大，无法在此绘制（超过 1 MiB）</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>已移除 %1 %2</translation>
@@ -4450,14 +4449,6 @@ WHAT A KEY NEEDS
         <source>the graph groups (%1)</source>
         <translation>图谱分组(%1)</translation>
     </message>
-    <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
-        <source>HTML preview currently accepts Markdown files</source>
-        <translation>HTML 预览目前仅支持 Markdown 文件</translation>
-    </message>
-    <message id="autodoc.notice.html.html_preview_opened_in_browser">
-        <source>HTML preview opened in browser · %1</source>
-        <translation>已在浏览器中打开 HTML 预览 · %1</translation>
-    </message>
     <message id="autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def">
         <source>no file is open: open one, then File › Open with Default App opens it</source>
         <translation>没有打开的文件：先打开一个，“文件 › 用默认应用打开”才能打开它</translation>
@@ -4465,10 +4456,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.html.opened_with_its_default_app">
         <source>opened %1 with its default app</source>
         <translation>已用默认应用打开 %1</translation>
-    </message>
-    <message id="autodoc.notice.html.opening_html_preview">
-        <source>opening HTML preview…</source>
-        <translation>正在打开 HTML 预览…</translation>
     </message>
     <message id="autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai">
         <source>the workspace's folder is not known yet: try again once it is listed</source>
@@ -4906,14 +4893,6 @@ WHAT A KEY NEEDS
         <source>drawn natively (no zoom)</source>
         <translation>原生绘制(不支持缩放)</translation>
     </message>
-    <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
-        <source>HTML preview opened in the browser: %1</source>
-        <translation>已在浏览器中打开 HTML 预览：%1</translation>
-    </message>
-    <message id="autodoc.notice.preview.html_preview_opening_it_in_the_browser">
-        <source>HTML preview: %1; opening it in the browser</source>
-        <translation>HTML 预览：%1；正在浏览器中打开</translation>
-    </message>
     <message id="autodoc.notice.preview.image_previews">
         <source>image previews %1</source>
         <translation>图片预览 %1</translation>
@@ -4930,17 +4909,13 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>没有 Mermaid 引擎 %1(native 或 mermaidjs)</translation>
     </message>
-    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
-        <source>off: diagram sources and the browser</source>
-        <translation>已关闭：改用图表源码和浏览器</translation>
+    <message id="autodoc.notice.preview.off_diagram_sources">
+        <source>off: diagram sources</source>
+        <translation>已关闭：改用图表源码</translation>
     </message>
     <message id="autodoc.notice.preview.on">
         <source>on</source>
         <translation>已开启</translation>
-    </message>
-    <message id="autodoc.notice.preview.the_browser_did_not_open">
-        <source>the browser did not open</source>
-        <translation>浏览器未能打开</translation>
     </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
@@ -5534,6 +5509,22 @@ WHAT A KEY NEEDS
         <source>todos: $%1 set (%2)</source>
         <translation>待办：已设置 $%1(%2)</translation>
     </message>
+    <message id="autodoc.notice.update.autodoc_is_up_to_date">
+        <source>Update: AutoDoc is up to date (%1)</source>
+        <translation>更新：AutoDoc 已是最新版本（%1）</translation>
+    </message>
+    <message id="autodoc.notice.update.not_a_script_install">
+        <source>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</source>
+        <translation>更新：此 AutoDoc 不是由 install-autodoc.sh 安装的，请用安装它的方式更新</translation>
+    </message>
+    <message id="autodoc.notice.update.the_update_exited">
+        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
+        <translation>更新：update.sh 以 %1 退出，原因见终端面板中的标签页</translation>
+    </message>
+    <message id="autodoc.notice.update.update">
+        <source>Update</source>
+        <translation>更新</translation>
+    </message>
     <message id="autodoc.notice.vectors.cancel_the_switch">
         <source>cancel the switch</source>
         <translation>取消切换</translation>
@@ -5892,6 +5883,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>clear the variable?</source>
         <translation>清除变量？</translation>
     </message>
+    <message id="autodoc.question.update.later">
+        <source>&amp;Later</source>
+        <translation>稍后(&amp;L)</translation>
+    </message>
+    <message id="autodoc.question.update.restart_autodoc">
+        <source>restart AutoDoc?</source>
+        <translation>重启 AutoDoc？</translation>
+    </message>
+    <message id="autodoc.question.update.restart_now">
+        <source>&amp;Restart Now</source>
+        <translation>立即重启(&amp;R)</translation>
+    </message>
     <message id="autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would">
         <source>Purge %1's %2 vectors (%3) from %4? Switching back to it would embed every section again; the store gives its room back.</source>
         <translation>从 %4 中清除 %1 的 %2 个向量(%3)？切换回该模型将重新嵌入所有段落；存储会释放占用的空间。</translation>
@@ -6211,6 +6214,14 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.globemap_gui.supersedes">
         <source>supersedes</source>
         <translation>取代</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.keys">
+        <source>h j k l select, H J K L pan, + - zoom, 0 fit, f filter, g legend, Enter opens</source>
+        <translation>h j k l 选择，H J K L 平移，+ - 缩放，0 适应，f 筛选，g 图例，Enter 打开</translation>
+    </message>
+    <message id="autodoc.text.globemap_tui.more_groups">
+        <source>%1 more groups</source>
+        <translation>另有 %1 个分组</translation>
     </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
@@ -6668,10 +6679,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
         <translation>原生绘制(文件 › 预览选项)，不支持缩放 · 滚动：方向键、j k、PgUp/PgDn、滚轮</translation>
     </message>
-    <message id="autodoc.text.preview.html_preview">
-        <source>HTML preview · %1</source>
-        <translation>HTML 预览 · %1</translation>
-    </message>
     <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
         <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
         <translation>图片，%1 · 由 mermaid %2 以 %3 主题离线绘制 · 滚动：方向键、j k h l、PgUp/PgDn、滚轮</translation>
@@ -6684,10 +6691,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>image previews are off (View › Image previews)</source>
         <translation>图片预览已关闭(视图 › 图片预览)</translation>
     </message>
-    <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
-        <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
-        <translation>图片 · 由无头浏览器以 %1 主题离线渲染 · 滚动：方向键、j k h l、PgUp/PgDn、滚轮 · 链接和选择：在浏览器中打开</translation>
-    </message>
     <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
         <source>no headless Chromium or Chrome to render with</source>
         <translation>没有可用于渲染的无头 Chromium 或 Chrome</translation>
@@ -6695,10 +6698,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.preview.not_drawn_natively">
         <source>not drawn natively (%1)</source>
         <translation>未原生绘制(%1)</translation>
-    </message>
-    <message id="autodoc.text.preview.rendering_the_page">
-        <source>rendering the page…</source>
-        <translation>正在渲染页面…</translation>
     </message>
     <message id="autodoc.text.preview.the_image_failed">
         <source>the image failed: %1</source>
@@ -7406,6 +7405,10 @@ The last connect failed:
         <source>Rerank (%1)</source>
         <translation>重排(%1)</translation>
     </message>
+    <message id="autodoc.text.startup.about_update">
+        <source>About › Update</source>
+        <translation>关于 › 更新</translation>
+    </message>
     <message id="autodoc.text.startup.is_out_this_is">
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 已发布(当前为 %2)：%3</translation>
@@ -7584,6 +7587,10 @@ changes nothing</source>
         <source>%1 of %2 · %3</source>
         <translation>%1 / %2 · %3</translation>
     </message>
+    <message id="autodoc.text.update.autodoc_is_installed_restart_now">
+        <source>AutoDoc %1 is installed (this is %2). Restart now? The backend restarts first, then AutoDoc opens again as %1.</source>
+        <translation>AutoDoc %1 已安装（当前为 %2）。现在重启吗？后端先重启，然后 AutoDoc 以 %1 重新打开。</translation>
+    </message>
     <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
         <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
         <translation>%1 › %2 · %3(%4 字节，%5 个估算 token；重试 %6)</translation>
@@ -7708,6 +7715,10 @@ changes nothing</source>
         <source>AUTHOR: </source>
         <translation>作者：  </translation>
     </message>
+    <message id="autodoc.view.about.close">
+        <source>Close (&amp;q)</source>
+        <translation>关闭(&amp;Q)</translation>
+    </message>
     <message id="autodoc.view.about.config">
         <source>CONFIG: </source>
         <translation>配置：  </translation>
@@ -7723,6 +7734,10 @@ changes nothing</source>
     <message id="autodoc.view.about.update">
         <source>UPDATE: </source>
         <translation>更新：  </translation>
+    </message>
+    <message id="autodoc.view.about.update_now">
+        <source>&amp;Update</source>
+        <translation>更新(&amp;U)</translation>
     </message>
     <message id="autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back">
         <source>Enter keeps · q or Esc puts it back</source>

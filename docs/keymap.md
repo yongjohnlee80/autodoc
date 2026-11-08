@@ -132,11 +132,12 @@ opens the card (SPC, then the card's key).
 | `autodoc.leader.openOutline` | `autodoc.leader` | Shift+O |
 | `autodoc.leader.previewDiagram` | `autodoc.leader` | D |
 | `autodoc.leader.previewHTML` | `autodoc.leader` | Shift+H |
+| `autodoc.leader.toggleMindmap` | `autodoc.leader` | Shift+M |
 | `autodoc.leader.toggleExplorer` | `autodoc.leader` | E |
 | `autodoc.leader.toggleRelations` | `autodoc.leader` | L |
 | `autodoc.leader.toggleTerminal` | `autodoc.leader` | ` |
 | `autodoc.leader.openTodos` | `autodoc.leader` | X |
-| `autodoc.leader.maximizePanel` | `autodoc.leader` | Shift+M |
+| `autodoc.leader.maximizePanel` | `autodoc.leader` | Z |
 | `autodoc.leader.openNotices` | `autodoc.leader` | H |
 | `autodoc.leader.toggleAgent` | `autodoc.leader` | G |
 | `autodoc.leader.openAgentProfiles` | `autodoc.leader` | Shift+G |

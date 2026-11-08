@@ -27,7 +27,6 @@ import (
 // The bounds. surfaceRetiredGens and surfaceMaxBytes:
 // docs/decisions/plugins.md#surface-buffers-and-generations.
 const (
-	surfaceMaxPixels   = 4096        // a frame's side in device pixels: protocol 10's, below the window's MaxSize
 	surfaceMaxDMABufs  = 3           // plugin-added, per generation
 	surfaceMaxRetiring = 2           // generations still held by a frame; no new one starts past it
 	surfaceRetiredGens = 8           // retired generations whose ids are recorded

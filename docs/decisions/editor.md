@@ -88,8 +88,18 @@ In the code: `script/buffers.go`, `tui/luabuffers.go`, `tui/luaevents.go`, `tui/
 Each surface switches its own way. The terminal has `:b <n|name>`, with Tab completion, and a
 Buffers picker that lists each buffer by number and name, `[+]` on a modified one, and previews its
 text as it is, unsaved edits included. The GUI shows the buffers as tabs in the editor's title bar.
+The terminal shows the same tabs, the same model, on the page's frame's bottom border, across its
+whole width (decided 2026-11-07). A press shows a buffer, its `×` closes it (asking first over
+unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the window.
+They are not on the title row, as the window's are: in a terminal that row holds the file's title,
+its badges, the breadcrumb that follows the cursor and `[ Raw | Rendered ]`, and tabs there would
+squeeze them. The terminal shows them from the second buffer on: one buffer's name is the title
+row's already, and a page with one reads as it did before there were tabs (the window shows its one
+tab). A terminal tab is at most 20
+cells wide (the window's, 32), so a page holds several; more scroll between the arrows. `H` and `L`
+move between them in both.
 
-In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/qml/main.qml`
+In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/buffertabs.go`, `tui/qml/main.qml`
 
 ## A Lua shell in the terminal panel
 
@@ -205,22 +215,30 @@ way it was opened. The daemon reads and writes the bytes with `doc.read_raw`, `d
 `file.read_raw` and `file.write_raw`; they reach only formats whose source is text, never a DOCX
 or PDF, and versions and conflicts work as for any write.
 
-Under `--gui` a raw HTML file's Rendered view is the drawn page itself, in place of the text body.
-Ctrl+T flips between the source and the page; the page scrolls with the usual keys, its links open
-as the preview's do, and it is never edited. In a terminal, Raw is the plain editor on the source.
+A raw HTML file's Rendered view is the drawn page itself, in place of the text body: under `--gui`
+the UI library's HTML view, in a terminal golib's HTMLView laid out in cells, the file's own bytes
+in either, its images from where a page's come from. Ctrl+T flips between the source and the page;
+the page scrolls with the usual keys, its links open as the preview's do, and it is never edited:
+in a terminal its first editing key opens the source there.
 
-In the code: `tui/files.go`, `tui/htmldoc.go`, `rpc/server.go`
+In the code: `tui/files.go`, `tui/htmldoc.go`, `tui/notepage.go`, `rpc/server.go`
 
-## The native HTML preview
+## The HTML preview pane
 
-Under `--gui`, File › Preview HTML exports the note in-process and shows it in a pane beside the
-editor, drawn natively by the UI library's HTML view: selectable, live, and with no JavaScript. An
-edit exports the note again after a moment of quiet, and the cursor's block scrolls to the pane's
-top. A link clicked in it opens a note, a file or the browser. In a terminal, Preview HTML does
-what it did before (an image of the page, or the browser): one menu item, with the widget chosen
-by the backend that runs.
+File › Preview HTML exports the note in-process and shows it in a pane beside the editor, in the
+UI library's HTML view, with no JavaScript. Under `--gui` the view is drawn natively and its text
+is selectable. In a terminal it is drawn in cells by golib's HTMLView: Mermaid diagrams
+and Vega-Lite charts in cells, code in the theme's syntax colours. It needs no graphics protocol
+and no browser on the host, so it works over ssh. An edit exports the note again after a moment of
+quiet, and the cursor's block scrolls to the pane's top. A link clicked in it opens a note, a file
+or the browser. One menu item, with the view chosen by the backend that runs.
 
-In the code: `tui/htmlpane.go`
+The terminal once showed the page as an image, rendered by a headless browser, and opened the
+browser where it couldn't. That needed kitty graphics and Chromium on the host, which an ssh
+session rarely has, and the image had no links. The pane replaced it; View › Image previews now
+governs only View › Diagram.
+
+In the code: `tui/htmlpane.go`, `tui/htmlpane_cells.go`
 
 ## Where a page's stylesheets and images come from
 
@@ -253,45 +271,49 @@ In the code: `tui/tabledoc.go`, `tui/htmldoc.go`, `tui/files.go`
 
 ## A terminal note's Rendered view
 
-In a terminal, a note's Rendered view is its page, as in the window: Raw is the text, Rendered the
-note exported in process (as the HTML pane exports it) and laid out in cells by golib's HTMLView.
-Tables are boxed, headings told apart by level, code set off, every Mermaid kind golib's parser
-reads drawn in box-drawing cells, and its Vega-Lite charts drawn in cells: bars in eighths of a cell,
-line, point and area charts in Braille, and a table for the rest of golib's subset. A diagram of a
-kind it doesn't read, or a chart outside that subset, is a line saying it isn't drawn in the
-terminal and that Raw shows its source, in the UI's language; never its source. A note opens Rendered, as a table file does. Ctrl+T flips between the
-two, and the choice holds across files. Shown, the page brings the cursor's block to its top, and Raw
-again puts the cursor at the block the reader scrolled the page to; when the
-note changes under it, it is exported again once typing rests and keeps the reader's place. Its
-links open as the pane's do, and its images load from the note's folder. It is the terminal's, in
-either build (a GUI build run with `--ui` too); a window keeps its own Rendered view.
+In a terminal, a note's Rendered view is the editor drawing the note itself and editing it in place,
+as the window's does. golib's Markdown cell renderer hides the markup and draws the rest in cells:
+headings told apart by level, emphasis and links, list bullets and quote bars, tables boxed (a
+table too wide for the view pans sideways), code highlighted in its fence's language, frontmatter
+and comments hidden. Every Mermaid kind golib draws is drawn as a picture in box-drawing cells, and
+Vega-Lite charts are drawn in cells: bars in eighths of a cell, line, point and area charts in
+Braille, and a table for the rest of golib's subset. A diagram or chart golib doesn't draw shows
+its source, as code. A picture wider than the view pans with `zh` and `zl`, or Shift with the wheel.
+An image alone in its paragraph is drawn in place where the terminal draws kitty's graphics, loaded
+from the note's folder, and is its alt text elsewhere. A line holding only an image of a diagram
+(`.mmd`), a chart (`.chart.json`) or a table (`.csv`) file is drawn as that file would be in a fence,
+read from the note's folder as the HTML preview reads it: the diagram or chart as a picture, the
+table boxed, its first rows only. A file over 1 MiB is a notice in its place, and a file that isn't
+there is the image's alt text. Any line that is only such an image is drawn, even inside a longer
+paragraph; the window draws one only when it is alone in its paragraph.
 
-The window's Rendered Markdown is edited in place, and the page is not, so the page reads by its own
-keys (the arrows, j/k, PgUp/PgDn, g/G, y, Ctrl+C), the mouse and its links. Any other key that types,
-or Esc, opens the text at the reader's place and goes on to the editor as that same key, so `i` lands
-in Insert mode. Space stays the leader, and chords stay the app's.
+A note opens Rendered, as a table file does. Ctrl+T flips between the two views of the same text,
+the cursor kept, and the choice holds across files. It is the terminal's, in either build (a GUI
+build run with `--ui` too); a window keeps its own Rendered view.
 
-The rest answers as over the text:
+In Normal and Visual every block stays rendered: the cursor moves, selects and operates through the
+text as drawn, cluster by cluster, and a block drawn with no text of its own (a picture, hidden
+frontmatter) is one fold that `j` steps over and an operator takes whole. While text is typed
+(Insert or Replace), the block holding the cursor shows its source. Enter continues a list item and
+Tab nests it, outside code and tables.
 
-- A right press opens the editor's menu.
-- Ctrl+O and Ctrl+I walk the jump list. A jump's place in the note comes to the page's top.
-- The breadcrumb follows the reader's place, the block at the page's top.
+The rest answers as over the text, with no page between:
 
-The page has no cursor, which changes two things:
+- **Find** runs over the note's text, as in Raw: its count is the source's, every match is marked,
+  and a term only the source has, a link's target say, is found in place.
+- **SPC j** follows the link under the cursor.
+- The breadcrumb follows the cursor; a right press opens the editor's menu; Ctrl+O and Ctrl+I walk
+  the jump list; yank and paste are the editor's.
 
-- **SPC j** follows the first link at or after the page's top, among what is on screen. With none
-  on screen, it says so.
-- **Find** counts and marks what the page shows, while the text's find counts its source. Ctrl+T
-  runs the find again in the new view's terms, so "k of N" can change. The reader stays put, and the
-  current match is the first at or after their place.
-  - A hit on the page puts the editor's cursor at its block, so Raw opens there, and gives the page
-    the keyboard.
-  - A term the page doesn't show but the source has (a link's target, Markdown's own syntax such as
-    `- [ ]`) opens Raw at the reader's place, says so, and is found there. The same command means
-    the same thing whether a user or a script runs it.
-  - A term in neither view is not found, and the view stays as it is.
+An HTML file opened Raw keeps its page (see [HTML files open raw or simplified](#html-files-open-raw-or-simplified)).
 
-In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`, `tui/outline.go`
+Until golib's renderer drew everything the page drew, the terminal showed a note's Rendered view as
+a read-only page, the note exported and laid out by golib's HTMLView. Its first editing key opened
+the text, and its find and links worked on what the page showed. The editor replaced it once, when
+the renderer drew tables, Mermaid, Vega-Lite and images, so no reader lost a table or a chart in
+between.
+
+In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`
 
 ## The table's clipboard, menu and row numbers
 
@@ -304,6 +326,19 @@ table's edge.
 
 In the code: `tui/tabledoc.go`
 
+## Reading the clipboard in a terminal
+
+The terminal reads the system clipboard as it writes it: through the terminal, by OSC 52, so it
+works over ssh and inside tmux (with `set-clipboard on`) where the terminal allows it. A read is
+`autodoc.clipboard.read` and the editor's `"+p` and `"*p`. It is on by default (decided 2026-11-07),
+as Neovim's OSC 52 paste is. A terminal decides for itself: foot, WezTerm and an iTerm2 that allows
+it answer; kitty asks the user each time; GNOME Terminal and a default xterm ignore the query. The
+first read such a terminal ignores waits two seconds, then fails (`"timeout"` to a script, the
+register's own text to `"+p`), and every read after it that session fails at once, as
+`"unsupported"`, with no wait.
+
+In the code: `app/ui.go` (golib's `term.WithClipboardRead`), `tui/scripts.go`
+
 ## Fonts, zoom and floating panels
 
 GUI follow-ups that a terminal does not need:
@@ -315,8 +350,11 @@ GUI follow-ups that a terminal does not need:
   this shows there.
 - **The menu key.** Shift+F10, and `SPC .` from Normal mode, open the page's right-click menu at
   the cursor.
-- **Floating panels.** The drawers move and resize anywhere over the page: Alt-drag moves one,
-  Alt-right-drag resizes it, and Go › Arrange panel does both by keys. Where one ends is kept as
+- **Floating panels.** The drawers move and resize anywhere over the page: a plain drag of a
+  drawer's title row moves it and of its side or bottom border resizes it, in a terminal as in a
+  window (the terminal reports golib's frame drags, term.WithFrameDrag; a control on the frame, a
+  tab or a button, keeps its click); Alt-drag moves one from anywhere in it, Alt-right-drag resizes
+  it, and Go › Arrange panel does both by keys. Where one ends is kept as
   percentages of the window (`tui.<panel>.float`), and it opens there from then on; its edge
   preference only says where it first appears. Go › Reset panel layout, or a new edge in
   Preferences, docks it at its edge again. No corner grip is drawn.
@@ -365,6 +403,32 @@ Neovim client's drawer groups relations the same way (`autodoc.relations`).
 
 In the code: `tui/relations.go`, `lua/autodoc/relations.lua`
 
+## The GlobeMap in a terminal
+
+A terminal has Relations › GlobeMap too, as a window does. It draws the same map: every document of
+the workspace and the links among them, read the same way and placed by the same seeded force
+simulation (`f` cycles the links it follows), with each document wearing its group's colour (the
+workspace's graph file, as the window's and the Mindmap's). Drawing it differs, because a terminal
+has cells, not pixels:
+
+- **Settled, then drawn.** The simulation runs to its end off the loop and the map is drawn once,
+  in Braille dots (golib `tui/braille`): two dots a cell across and four down. A window draws it as
+  it settles.
+- **Colours made legible.** A group's colour is made legible on the page's own background
+  (`onGround`), so a colour chosen on a dark window still reads on sepia. Links are muted, a
+  supersession is in the theme's warning colour, and any other relation in its accent.
+- **A selection, not a pointer.** `h` `j` `k` `l` and the arrows move a selection to the nearest
+  document that way, and its name is always shown; the others' names show once few enough are in
+  view. `Enter` opens it, as a press on a document does, and hides the panel.
+- **Keys.** The window's `l` (legend) is a direction here, so **`g`** (groups) shows or hides the
+  legend. `H` `J` `K` `L` and `Shift` with the arrows pan; `+` `-` zoom and `0` fits it again, as in
+  a window; the wheel zooms.
+- **Clipped links.** Each link is cut to the view's dots before it is drawn, so a map zoomed in
+  far, its links running off the view, paints as fast as one fitted. To follow: golib's
+  `tui/braille` Line clipping its own segments, so every caller has it.
+
+In the code: `tui/globemap.go`, `tui/globemap_cells.go`, `tui/relationviews_cells.go`
+
 ## Process stats
 
 AutoDoc reports what its own processes use. One package reads a process: resident and peak memory,
@@ -380,7 +444,7 @@ In the code: `core/procstat/procstat.go`, `rpc/sys.go`
 `autodoc.ui.card{title, text, every, tick}` shows a script's Markdown in one docked card panel and
 returns a handle: `card:set(text)` replaces it, `card:close()` ends it. The card is drawn Rendered,
 so a `vega-lite` fence draws as a chart: in the GUI natively, in a terminal on the card's page, in
-cells, as a note's page draws one. `autodoc.ui.charts()` says whether a card draws charts. `tick` runs every `every` ms (never faster than 250 ms) while the
+cells, as a note's Rendered view draws one. `autodoc.ui.charts()` says whether a card draws charts. `tick` runs every `every` ms (never faster than 250 ms) while the
 panel is open, and a close and reopen never leave two tick chains. One panel shows one card: a new
 card replaces the old, whose handle then does nothing, and `:lua-reload` ends it.
 
@@ -424,11 +488,16 @@ In the code: `core/export/site.go`, `app/export.go`, `docs/site.toml`, `.github/
 
 ## Charts drawn as SVG
 
-The site draws Vega-Lite charts as the app does: the GUI build passes the export a chart hook that
-lays the chart out with the UI library's chart code and writes it as inline SVG in the export's
-palette. A chart outside the supported subset is captioned with the reason. The export package
-never imports the GUI; the terminal build passes no hook and leaves the spec as it is. The site
-workflow therefore builds with `-tags gui`, which needs the window system's libraries but no
-display.
+The site and `--export=html` draw Vega-Lite charts as the app does, in either build. Each build
+passes the export a chart hook that lays the chart out with golib's chart code and writes it as
+inline SVG in the export's palette. A chart outside the supported subset is captioned with the
+reason. The export package never imports the GUI. The GUI build lays the chart out with the
+window's chart code and measures its labels with the window's fonts. A build without the GUI (the
+terminal's, a headless server's) uses golib's `chart/vegalite`, which needs no window system, and
+measures its labels by Helvetica's advances, since it has no fonts loaded. The browser draws the
+labels in its own sans-serif either way. Measured widths are an approximation in both builds, and
+what is laid out from them (margins, tick spacing, a legend's place) can differ between the two;
+neither build promises the browser's exact layout. The site workflow still builds with `-tags gui`, for the measured labels; it needs
+the window system's libraries but no display.
 
-In the code: `app/exportchart_on.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`
+In the code: `app/exportchart.go`, `app/exportchart_on.go`, `app/exportchart_off.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`

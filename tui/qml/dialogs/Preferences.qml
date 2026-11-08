@@ -173,6 +173,12 @@ Dialog {
                         Text { text: qsTrId("autodoc.dialog.preferences.look_for_updates"); Layout.preferredWidth: 21 }
                         ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.updateCheckIndex; onActivated: App.setUpdateCheckIndex(index) }
                     }
+                    // a surface plugin's pixels in a terminal that shows pictures (pluginsurface_cells.go)
+                    Flex {
+                        direction: Tui.Horizontal
+                        Text { text: qsTrId("autodoc.dialog.preferences.plugin_pixels"); Layout.preferredWidth: 21; toolTipText: "a surface plugin's pixels shown in a terminal that draws pictures (kitty's graphics, image previews on); off, it draws cells. A window always draws them" }
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.pluginPixelsIndex; onActivated: App.setPluginPixelsIndex(index) }
+                    }
                 }
                 Text { text: " " }
             }
@@ -180,8 +186,8 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: qsTrId("autodoc.dialog.preferences.file_types"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openActiveSettings() }
-        // the GUI's alone: a terminal draws no GlobeMap (globesettings_gui.go)
-        Button { text: qsTrId("autodoc.dialog.preferences.globemap"); visible: App.gui; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openGlobeSettings() }
+        // the GlobeMap's settings: a window's (globesettings_gui.go) or a terminal's (globemap_cells.go)
+        Button { text: qsTrId("autodoc.dialog.preferences.globemap"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openGlobeSettings() }
         Button { text: qsTrId("autodoc.dialog.preferences.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

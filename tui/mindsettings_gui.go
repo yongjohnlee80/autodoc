@@ -12,11 +12,6 @@ import (
 // its groups (groups.go), each a query, a colour and an outline, kept in the workspace's graph file
 // and edited in the same dialog (groupeditor_gui.go).
 
-const (
-	prefMindTheme = "tui.mindmap.theme"
-	prefMindDepth = "tui.mindmap.depth"
-)
-
 func (m *mindmap) Prefs() []PrefSpec {
 	names, _ := viewThemeChoices(m.c)
 	return []PrefSpec{
@@ -35,12 +30,7 @@ func (m *mindmap) relayout() {
 }
 
 // prefDepth is the depth the settings open the map at.
-func (m *mindmap) prefDepth() int {
-	if m.c.Prefs().Value(prefMindDepth) == "2" {
-		return 2
-	}
-	return 1
-}
+func (m *mindmap) prefDepth() int { return mindDepth(m.c) }
 
 // readGroups takes ws's groups from the store: its graph file's, or its first, made of types and
 // the workspace's folders. The map is laid out again in them.
@@ -69,14 +59,15 @@ func (m *mindmap) groupsEdited(list []relGroup) {
 func (m *mindmap) openSettings() {
 	ws := m.c.Workspace()
 	m.c.Open("mindmapSettings")
-	if ws == "" || m.groupsWS == ws {
-		m.editor.show("")
+	if ws == "" || (m.groupsWS == ws && m.editor.ws == ws && !m.editor.loading) {
+		m.editor.show("") // its groups listed already: as they are
 		return
 	}
 	var types []string
 	if m.cur != nil && m.cur.root.ws == ws {
 		types = m.cur.m.Types
 	}
+	m.editor.loadingFor(ws) // not the last workspace's groups while ws's are read
 	m.readGroups(ws, types)
 }
 

@@ -3,10 +3,8 @@
 package tui
 
 import (
-	"embed"
 	"fmt"
 	"image/color"
-	"strings"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
@@ -50,40 +48,10 @@ var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, gl
 	relationPanelQML(mindmapPanelID, mindmapViewID, "Mindmap",
 		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map", relationColours)
 
-// relationDialogs are the views' dialogs, the GUI's alone: not autodoc.dialogs components, which
-// every build's document may use and so may name only what every build's App has. Each is written
-// into main.qml whole, under its id (relationDialogsQML).
-//
-//go:embed qmlgui/*.qml
-var relationDialogs embed.FS
-
 // relationDialogsQML is the views' dialogs as main.qml holds them: their settings
-// (globesettings_gui.go, mindsettings_gui.go).
+// (globesettings_gui.go, mindsettings_gui.go; relationviews_cells.go's inlineDialog).
 var relationDialogsQML = inlineDialog("GlobeMapSettings.qml", "globeMapSettings") +
 	inlineDialog("MindmapSettings.qml", "mindmapSettings")
-
-// inlineDialog is the dialog of qmlgui/file, its root given the id: the file's text from its root
-// Dialog on, indented as main.qml's children are.
-func inlineDialog(file, id string) string {
-	b, err := relationDialogs.ReadFile("qmlgui/" + file)
-	if err != nil {
-		panic("tui: embedded " + file + ": " + err.Error())
-	}
-	src := string(b)
-	at := strings.Index(src, "Dialog {")
-	if at < 0 {
-		panic("tui: " + file + " has no root Dialog")
-	}
-	src = "Dialog {\n    id: " + id + src[at+len("Dialog {"):]
-	var out strings.Builder
-	for line := range strings.Lines(src) {
-		if strings.TrimSpace(line) != "" {
-			out.WriteString("    ")
-		}
-		out.WriteString(line)
-	}
-	return out.String()
-}
 
 func relationPanelQML(id, view, typ, what, colours string) string {
 	return fmt.Sprintf(`    // %[4]s
@@ -218,15 +186,15 @@ func relationViewChoices() map[string][]string {
 		"App.globeFilters":     names(len(globeFilters), func(i int) string { return globeFilters[i].name }),
 		"App.globeDotSizes":    names(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name }),
 		"App.globeSpeeds":      names(len(globeSpeeds), func(i int) string { return globeSpeeds[i].label }),
-		"App.mindDepths":       {"one link out", "two links out"},
-		"App.mindShapeChoices": names(len(mindShapes), func(i int) string { return mindShapes[i].name }),
+		"App.mindDepths":       mindChoices()["App.mindDepths"],
+		"App.mindShapeChoices": mindChoices()["App.mindShapeChoices"],
 	}
 }
 
 func (h *Host) relationViewFeatures() []Feature {
 	if !h.gui { // run as a terminal (--ui): the terminal's Mindmap, in cells (mindmap_cells.go)
 		if h.relationViews == nil {
-			h.relationViews = []Feature{newCellMindmap(core{h})}
+			h.relationViews = cellRelationViews(h)
 		}
 		return h.relationViews
 	}
@@ -259,6 +227,8 @@ func (h *Host) relationViewTypes() []tuidecl.Type {
 					f.view, f.drag = nil, nil // its gesture goes with it
 				}
 			}))
+		case *cellGlobeMap:
+			out = append(out, f.viewType())
 		case *cellMindmap:
 			out = append(out, f.viewType())
 		case *mindmap:
@@ -380,22 +350,10 @@ func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, g
 	if gs == nil || len(gs.list) == 0 {
 		return []legendRow{legendMsg(none, "autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")}
 	}
-	worn := make([]bool, len(gs.list))
-	for _, n := range m.Nodes {
-		if i := gs.of(n); i >= 0 {
-			worn[i] = true
-		}
-	}
+	shown, more := legendGroups(gs, m)
 	var rows []legendRow
-	more := 0
-	for i, g := range gs.list {
-		switch {
-		case !worn[i]:
-		case len(rows) < groupLegendRows:
-			rows = append(rows, legendRow{mark: mark(g), text: groupLabel(g.Query)})
-		default:
-			more++
-		}
+	for _, g := range shown {
+		rows = append(rows, legendRow{mark: mark(g), text: groupLabel(g.Query)})
 	}
 	if more > 0 {
 		rows = append(rows, legendMsg(none, "autodoc.text.relationviews_gui.more_groups", more))

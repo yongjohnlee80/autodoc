@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"time"
@@ -16,30 +15,29 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 )
 
-// IMAGE PREVIEWS — a Mermaid diagram and a file's HTML, as images in the terminal
-// (docs/decisions/search.md#outline-breadcrumbs-and-previews).
+// IMAGE PREVIEWS — a Mermaid diagram as an image in the terminal
+// (docs/decisions/search.md#outline-breadcrumbs-and-previews). A file's HTML is the pane beside the
+// editor instead, in cells (htmlpane.go).
 //
 // With View › Image previews on, a terminal that confirmed kitty's graphics protocol, and a
-// headless Chromium or Chrome, the preview is an image: the exported HTML, or a page of the one
-// diagram drawn by the vendored mermaid (core/export/mermaid), rendered offline in the active
-// theme's colours. The whole page is rendered, at the preview's width (a diagram at its own), and
-// the image scrolls in its dialog: the arrows, j k h l, Page Up/Down, [ ], Home/End and the wheel
-// (golib's scrollable Image). Zoom in and Zoom out render it again at another scale, as a
-// browser's zoom does; the dialog keeps its size. Otherwise the HTML opens in the default browser
-// and the diagram's dialog shows its source, and the preview says why. Turning the preference off
-// is how both can be compared on the same document.
+// headless Chromium or Chrome, View › Diagram is an image: a page of the one diagram drawn by the
+// vendored mermaid (core/export/mermaid), rendered offline in the active theme's colours, at its
+// own width. The image scrolls in its dialog: the arrows, j k h l, Page Up/Down, [ ], Home/End and
+// the wheel (golib's scrollable Image). Zoom in and Zoom out render it again at another scale, as a
+// browser's zoom does; the dialog keeps its size. Otherwise the dialog shows the diagram's source,
+// and says why. Turning the preference off is how both can be compared on the same diagram.
 
 // zooms are the previews' zoom steps; zoomDefault is 100%.
 var zooms = []float64{0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2}
 
 const zoomDefault = 4
 
-// imageWait is how long a preview's image cells may take to be laid out, and to become usable after
-// a resize, once its dialog opens; then it falls back.
+// imageWait is how long the preview's image cells may take to be laid out, and to become usable
+// after a resize, once its dialog opens; then it falls back.
 const imageWait = 2 * time.Second
 
 // minImageCols and minImageRows are the smallest image area worth rendering into: on a smaller one
-// a diagram or a page is unreadable, and the fallback serves better.
+// a diagram is unreadable, and its source serves better.
 const (
 	minImageCols = 16
 	minImageRows = 4
@@ -62,7 +60,7 @@ func (h *Host) imageMode() (bool, string) {
 	return true, ""
 }
 
-// browserFound reports whether a headless browser draws mermaid.js and pages here: golib's
+// browserFound reports whether a headless browser draws mermaid.js here: golib's
 // HTMLRasterizer (a browser on the PATH, or installed as a macOS application), or a test's.
 func (h *Host) browserFound() bool {
 	if h.browserOverride != nil {
@@ -80,7 +78,8 @@ func (h *Host) graphics() tuicore.Tri {
 	return h.p.App().Capabilities().KittyGraphics
 }
 
-// rasterizer renders a page as an image: golib's headless browser, or rasterizeOverride in tests.
+// rasterizer renders a diagram's page as an image: golib's headless browser, or rasterizeOverride
+// in tests.
 // Taken on the loop, it is called off it.
 func (h *Host) rasterizer() func(context.Context, []byte, widget.Page) ([]byte, error) {
 	if h.rasterizeOverride != nil {
@@ -107,20 +106,35 @@ func (h *Host) toggleImagePreviews() {
 			return
 		}
 	}
-	state := h.tr("autodoc.notice.preview.off_diagram_sources_and_the_browser")
+	state := h.tr("autodoc.notice.preview.off_diagram_sources")
 	if v {
 		state = h.tr("autodoc.notice.preview.on")
 	}
 	h.say(h.trf("autodoc.notice.preview.image_previews", state))
 }
 
-// mermaidEngines are what can draw a Mermaid diagram in a GUI window (File › Preview option):
-// mermaid.js in a headless browser, as the terminal does and a browser would, or golib's Mermaid,
-// natively, at once but for the types golib draws. The terminal always uses mermaid.js.
+// mermaidEngines are what can draw a Mermaid diagram (File › Preview option): mermaid.js in a
+// headless browser, as an image, as a browser would draw it, or golib's Mermaid, natively, at once
+// but for the types golib draws: in a window's pixels (golib gui/mermaid), in a terminal's
+// characters (golib tui/mermaid, cellDiagram).
 var mermaidEngines = []string{"mermaidjs", "native"}
 
-// mermaidNative reports whether golib's Mermaid draws a GUI window's diagrams: the window's choice.
-func (h *Host) mermaidNative() bool { return h.native() && h.prefs.mermaid == "native" }
+// mermaidNative reports whether golib's Mermaid draws the preview's diagrams: the user's choice.
+func (h *Host) mermaidNative() bool { return h.prefs.mermaid == "native" }
+
+// sourceAsked reports whether a terminal's previews are to show a diagram's source: image previews
+// turned off (View › Image previews), whatever engine File › Preview option chooses. A window draws
+// natively all the same.
+func (h *Host) sourceAsked() bool { return !h.native() && !h.prefs.images }
+
+// drawsNatively is what learns, off the loop, whether golib's Mermaid draws a diagram here: a
+// window's engine, or a terminal's.
+func (h *Host) drawsNatively() func(string) error {
+	if h.native() {
+		return nativeDiagram
+	}
+	return cellDiagram
+}
 
 // setMermaidEngine is File › Preview option: "native" or "mermaidjs".
 func (h *Host) setMermaidEngine(name string) {
@@ -150,14 +164,11 @@ func (h *Host) mermaidEngineChanged() {
 	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", h.tr(drawn)))
 }
 
-// previewing is the image preview open: its dialog, the page it renders, whether that page is as
-// wide as its content (a diagram) and how tall it may be, and its zoom step.
+// previewing is the image preview open (View › Diagram's): the page it renders, as wide as its
+// diagram and at most diagramMaxHeight tall, and its zoom step.
 type previewing struct {
-	dialog    string
-	page      []byte
-	wide      bool
-	maxHeight int
-	zoom      int
+	page []byte
+	zoom int
 	// background is the page's colour, what the render cuts below and beside it
 	background string
 }
@@ -168,16 +179,25 @@ const diagramMaxHeight = 4096
 
 // showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
 func (h *Host) showDiagram(source string) {
-	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. A window without a
-	// browser, or one whose File › Preview option is the native engine, draws it natively, by
-	// golib's Mermaid, where golib draws its type; else mermaid.js, else its source. Whether golib
-	// draws it is learned off the loop: a newer preview, or the dialog closed, meanwhile withdraws
-	// this one (its ticket), and an engine changed meanwhile is the one it is drawn by
+	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. Where File › Preview
+	// option is the native engine, or where no image can be shown, golib's Mermaid draws it
+	// natively (in a window's pixels, a terminal's characters) where golib draws its type; else
+	// mermaid.js, else its source. A terminal whose image previews are off shows the source, as
+	// asked, whichever engine is chosen (sourceAsked). Whether golib draws it is learned off the
+	// loop: a newer preview, or the dialog closed, meanwhile withdraws this one (its ticket), and an
+	// engine or a preference changed meanwhile is the one it is drawn by
 	tk := h.ticket(&h.previewGen, TicketLocal)
+	if h.sourceAsked() {
+		h.showDiagramImage(source, "") // no image: the source, saying image previews are off
+		return
+	}
+	draws := h.drawsNatively()
 	if h.mermaidNative() {
-		do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+		do(h, func(context.Context) error { return draws(source) }, func(err error) {
 			switch {
 			case !tk.Current():
+			case h.sourceAsked():
+				h.showDiagramImage(source, "")
 			case !h.mermaidNative():
 				h.showDiagramImage(source, "")
 			case err == nil:
@@ -189,13 +209,15 @@ func (h *Host) showDiagram(source string) {
 		return
 	}
 	ok, why := h.imageMode()
-	if ok || !h.native() {
+	if ok {
 		h.showDiagramImage(source, "")
 		return
 	}
-	do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+	do(h, func(context.Context) error { return draws(source) }, func(err error) {
 		switch {
 		case !tk.Current():
+		case h.sourceAsked():
+			h.showDiagramImage(source, "")
 		case err == nil:
 			h.showDiagramNative(source, why)
 		default:
@@ -232,8 +254,7 @@ func (h *Host) showDiagramImage(source, declined string) {
 	h.set("App.diagramDrawn", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
-	h.imagePreview = previewing{dialog: "diagram", page: page, wide: true, maxHeight: diagramMaxHeight, zoom: zoomDefault,
-		background: export.Background(theme)}
+	h.imagePreview = previewing{page: page, zoom: zoomDefault, background: export.Background(theme)}
 	h.renderPreview(true, func(why string) {
 		if declined != "" {
 			why = declined + "; " + why
@@ -242,9 +263,9 @@ func (h *Host) showDiagramImage(source, declined string) {
 	})
 }
 
-// showDiagramNative shows source in a GUI window drawn natively, by golib's Mermaid in the
-// dialog's HTML view, where golib draws its type: chosen (why is ""), or where no browser draws
-// mermaid.js (why).
+// showDiagramNative shows source drawn natively, by golib's Mermaid in the dialog's HTML view (a
+// window's pixels, a terminal's characters), where golib draws its type: chosen (why is ""), or
+// where mermaid.js's image can't be shown (why).
 func (h *Host) showDiagramNative(source, why string) {
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
@@ -283,11 +304,11 @@ func (h *Host) showDiagramText(text, help string) {
 
 // renderPreview renders the open preview's page into its Image at its zoom, once the Image has its
 // cells; fallback is the preview's, for an image that cannot be had. A fresh page drops the picture
-// the Image has, another diagram's or page's, so the spinner shows until it is drawn; a zoom of the
-// same page keeps it until the new one comes, and keeps the part of it shown where it was.
+// the Image has, another diagram's, so the spinner shows until it is drawn; a zoom of the same page
+// keeps it until the new one comes, and keeps the part of it shown where it was.
 func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 	pv := h.imagePreview
-	h.withImageCells(pv.dialog, fallback, func(tk Ticket, img *widget.Image, cols, rows int) {
+	h.withImageCells("diagram", fallback, func(tk Ticket, img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
 		if fresh {
 			img.Clear()
@@ -296,17 +317,13 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 		rasterize := h.rasterizer()
 		// a spinner while the page renders (a headless browser takes a moment), where the Image has
 		// no picture
-		loading := h.tr("autodoc.text.preview.rendering_the_page")
-		if pv.dialog == "diagram" {
-			loading = h.tr("autodoc.text.preview.drawing_the_diagram")
-		}
-		img.SetLoadingText(loading)
+		img.SetLoadingText(h.tr("autodoc.text.preview.drawing_the_diagram"))
 		img.SetLoading(true)
-		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
-		// here, off the loop: a long file's page, whole, shows nothing at all
+		// a page taller than a terminal shows an image (widget.MaxImagePixels), a tall diagram zoomed
+		// in, is cut into strips here, off the loop: whole, it shows nothing at all
 		do(h, func(ctx context.Context) answerOf[widget.Strips] {
 			png, err := rasterize(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
-				MinHeight: rows * widget.CellPixelsH, MaxHeight: pv.maxHeight, Scale: zooms[pv.zoom], Wide: pv.wide, Background: pv.background})
+				MinHeight: rows * widget.CellPixelsH, MaxHeight: diagramMaxHeight, Scale: zooms[pv.zoom], Wide: true, Background: pv.background})
 			if err != nil {
 				return answerOf[widget.Strips]{err: err}
 			}
@@ -330,11 +347,11 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 	})
 }
 
-// zoomPreview is Zoom in (step 1) and Zoom out (-1) in an image preview: the page rendered again
-// at the next scale, the dialog as it was.
+// zoomPreview is Zoom in (step 1) and Zoom out (-1) in the image preview: the diagram rendered
+// again at the next scale, the dialog as it was.
 func (h *Host) zoomPreview(step int) {
 	pv := &h.imagePreview
-	if pv.page == nil || (pv.dialog == "diagram" && !h.diagramImage) {
+	if pv.page == nil || !h.diagramImage {
 		return
 	}
 	z := min(max(pv.zoom+step, 0), len(zooms)-1)
@@ -417,33 +434,3 @@ func (h *Host) lastDiagramImage() bool { return h.diagramImage }
 
 // previewClosed is a preview dialog closing: what it was waiting on is dropped.
 func (h *Host) previewClosed() { h.previewGen++ }
-
-// previewHTMLImage renders the exported HTML into the HTML preview's image; Open in browser has the
-// file the image was made from.
-func (h *Host) previewHTMLImage(content []byte, path string) {
-	h.htmlPreviewPath = path
-	h.set("App.htmlPreviewTitle", h.trf("autodoc.text.preview.html_preview", h.file.name()))
-	h.set("App.htmlPreviewHelp", h.trf("autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in", h.exportTheme()))
-	h.open("htmlPreview")
-	h.imagePreview = previewing{dialog: "htmlPreview", page: content, zoom: zoomDefault, background: export.Background(h.exportTheme())}
-	h.renderPreview(true, func(why string) {
-		h.closeDialog("htmlPreview")
-		h.notify(h.trf("autodoc.notice.preview.html_preview_opening_it_in_the_browser", why))
-		h.openPreviewInBrowser()
-	})
-}
-
-// openPreviewInBrowser opens the HTML the preview was made from in the default browser.
-func (h *Host) openPreviewInBrowser() {
-	path := h.htmlPreviewPath
-	if path == "" {
-		return
-	}
-	do(h, func(ctx context.Context) error { return h.browser(ctx, path) }, func(err error) {
-		if err != nil {
-			h.failed(h.tr("autodoc.notice.preview.the_browser_did_not_open"), err)
-			return
-		}
-		h.say(h.trf("autodoc.notice.preview.html_preview_opened_in_the_browser", filepath.Base(path)))
-	})
-}

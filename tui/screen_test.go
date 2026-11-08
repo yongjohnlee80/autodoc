@@ -1322,7 +1322,7 @@ var prefLabels = [][]string{
 		"image previews", "two-view documents", "terminal opens from", "terminal size", "terminal length", "terminal theme"},
 	{"hide the menu bar", "show the status line", "explorer opens from", "todos open from",
 		"agent opens from", "agent size", "agent length", "notifications in the", "a notification stays",
-		"About at startup", "look for updates"},
+		"About at startup", "look for updates", "plugin pixels"},
 }
 
 // TestEachPreferenceHasItsChooserOnItsRow: in the editor preferences every label is whole, on a row
@@ -2048,7 +2048,37 @@ func TestFindInThePanes(t *testing.T) {
 // is blank: a page's words there would come between the toast's rows.
 func (r *running) waitNoticed(t *testing.T, text string) {
 	t.Helper()
-	r.s.WaitFor(t, "the notification "+text, func(sc string) bool { return strings.Contains(noticeText(sc), text) })
+	r.s.WaitFor(t, "the notification "+text, func(sc string) bool {
+		return strings.Contains(noticeText(sc), text) || strings.Contains(toastText(sc), text)
+	})
+}
+
+// toastText is the text inside each toast's frame (╭ … ╯) on one line: the words of a toast that
+// wraps over rows whose other cells hold text of their own (the page's tabs on its bottom border),
+// which noticeText's whole rows would put between them.
+func toastText(sc string) string {
+	rows := strings.Split(sc, "\n")
+	var words []string
+	for y, row := range rows {
+		rs := []rune(row)
+		for x0, c := range rs {
+			if c != '╭' {
+				continue
+			}
+			x1 := x0 + 1
+			for x1 < len(rs) && rs[x1] != '╮' {
+				x1++
+			}
+			for _, inner := range rows[y+1:] {
+				ir := []rune(inner)
+				if x0 >= len(ir) || ir[x0] == '╰' || ir[x0] != '│' {
+					break
+				}
+				words = append(words, strings.Fields(string(ir[x0+1:min(x1, len(ir))]))...)
+			}
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // noticeText is the screen's text on one line, without a toast's frame or the page frame's corners

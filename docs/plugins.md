@@ -595,14 +595,17 @@ command    = "import"     # one of its [[commands]]: run with the file's absolut
 ### Pixel surfaces (`[surface]`, protocol 10)
 
 A card or dialog can draw pixels instead of cells: a picture of its own, a canvas, a web page
-([pixel surfaces](decisions/plugins.md#pixel-surfaces)). In AutoDoc's GUI the surface fills the card's area; in the terminal the plugin
+([pixel surfaces](decisions/plugins.md#pixel-surfaces)). In AutoDoc's GUI the surface fills the card's area. In a terminal
+that confirmed kitty's graphics protocol, with image previews and Preferences › Plugin pixels on (the default), each frame is
+shown as a picture over the card's cells, at most 15 frames and about 4 MiB a second, the newest winning
+([pixel surfaces in a terminal](decisions/plugins.md#pixel-surfaces-in-a-terminal)). In any other terminal the plugin
 draws cells, as any plugin does.
 
 ```text
 protocol = 10
 
 [surface]
-required     = false     # true: a host without pixels (the terminal) doesn't open the plugin
+required     = false     # true: a host without pixels (a terminal that shows no pictures) doesn't open the plugin
 context_menu = "host"    # "host": a right press opens the card's menu; "plugin": it is the plugin's press
 text_input   = true      # the surface takes keys and IME text, and reports a caret
 ```
@@ -655,8 +658,9 @@ func (s *spike) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
 func (s *spike) SurfacePointer(p plugin.SurfacePointer) { /* p.X, p.Y in dp */ }
 ```
 
-[`examples/surface-go`](../examples/surface-go) is a complete example: an animated test pattern
-with every input event drawn over it, and its frame rate and latency in its log.
+[`examples/surface-go`](../examples/surface-go) is a complete example (Linux only, as surfaces are
+today): an animated test pattern with every input event drawn over it, and its frame rate and
+latency in its log.
 
 ### Calls (`calls = [...]`, protocol 3)
 

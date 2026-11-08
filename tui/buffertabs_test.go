@@ -345,3 +345,24 @@ func TestACancelledHTMLQuestionTakesTheNewBufferRequestWithIt(t *testing.T) {
 		t.Fatalf("after the cancelled question, an ordinary open made %d buffers (want %d), filled the empty one %v", n, count, in)
 	}
 }
+
+// TestATabsActionOnABufferClosedMeanwhileDoesNothing: a tab's menu acts on the buffer it was opened
+// for; that buffer closed meanwhile, Show, Save, Close others and Close beside do nothing. A tab
+// label given no width is the name and its marks, uncut.
+func TestATabsActionOnABufferClosedMeanwhileDoesNothing(t *testing.T) {
+	if got := cutTabName("notes.md", " [+]", 0); got != "notes.md [+]" {
+		t.Errorf("a label with no width: %q, want the name and its marks", got)
+	}
+	h := newHost(NewSession("unused", nil), Options{})
+	gone := &openBuffer{n: 99}
+	before := len(h.buffers)
+	h.active = gone // shown, then closed: no longer among the buffers
+	h.showBuffer(gone)
+	h.saveBuffer(gone)
+	h.closeOtherBuffers(gone)
+	h.closeBeside(1)
+	h.closeBeside(-1)
+	if len(h.buffers) != before || h.active != gone {
+		t.Fatalf("an action on a closed buffer changed the buffers (%d, want %d) or what is shown", len(h.buffers), before)
+	}
+}

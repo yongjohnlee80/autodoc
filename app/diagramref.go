@@ -64,8 +64,8 @@ func writeDiagramReference(out io.Writer, s drawnSubset) {
 	for _, k := range s.kinds {
 		w("- %s: %s\n", k.name, code(k.keywords))
 	}
-	// examples of a kind not drawn: any golib reads and the GUI doesn't, then kinds its parser doesn't read
-	w("\nA diagram of any other kind (%s, …) is not drawn: the Rendered view shows golib's reason in its place. ", code(append(s.undrawn, "gitGraph", "kanban")))
+	// examples of a kind not drawn: any golib reads and the GUI doesn't, then a kind its parser doesn't read
+	w("\nA diagram of any other kind (%s, …) is not drawn: the Rendered view shows golib's reason in its place. ", code(append(s.undrawn, "kanban")))
 	w("Within a kind, golib draws a subset of Mermaid's syntax, and `--check-diagram` names what it refuses.\n\n")
 
 	w("## Vega-Lite\n\n")

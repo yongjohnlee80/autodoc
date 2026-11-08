@@ -33,10 +33,6 @@ import (
 // paragraph of more lines makes the paragraph one block. An edit that changes which it is changes
 // the blocks there, and the editor lays the line out again.
 
-// embedTableRows is how many rows the Rendered view shows of a table a note embeds; a last row says
-// how many more there are. The whole table is the HTML preview's.
-const embedTableRows = 16
-
 // NoteEmbeds is the open note's file, which the host tells it as each document opens
 // (Options.NoteFile), and the note editor's renderer reads.
 type NoteEmbeds struct {
@@ -237,7 +233,7 @@ func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, boo
 	if !ok {
 		return "", false
 	}
-	md, ok := export.EmbedMarkdown(note, dest, embedTableRows)
+	md, _, ok := noteEmbed(note, dest) // a file too large: its link, as ever (noteembeds.go)
 	if ok {
 		r.retries.read(note, dest)
 	}

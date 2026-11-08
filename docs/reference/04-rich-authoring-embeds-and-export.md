@@ -90,11 +90,12 @@ policy allows that script and the one that starts it, by digest, and no other, a
 a diagram has no script at all.
 
 `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
-terminal, as §4.11 describes; where it cannot, it shows the block's source and why. The GUI's
+terminal, as §4.11 describes: mermaid.js's image where the terminal shows images, else golib's
+Mermaid in characters, else the block's source, saying why. The GUI's
 `Preview Mermaid diagram…` draws it the same way, by mermaid.js, and so does its HTML pane each
 diagram of the page; with **File › Preview option** set to native, or in a window with no browser,
-they are drawn natively, by golib's Mermaid, where golib draws their type. The terminal always uses
-mermaid.js. A line embedding a `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a
+they are drawn natively, by golib's Mermaid, where golib draws their type. A terminal's **File ›
+Preview option** is the same choice, native drawing in characters. A line embedding a `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a
 fence is, read as the preview reads it.
 
 ---
@@ -113,7 +114,7 @@ A chart outside the subset is not drawn, and AutoDoc says why in golib's words. 
 chart not drawn: unsupported: vegalite: a spec outside the subset drawn: a rule coloured by a field
 ```
 
-A build without the GUI draws no chart in an export, so its charts are their specs, with no caption.
+A build without the GUI (the terminal's, a headless server's) draws an exported chart too, with golib's `chart/vegalite`, which needs no window system. It measures the labels without the window's fonts, by an approximation, so the chart's layout (its margins, tick spacing, a legend's place) can differ from the GUI build's.
 
 To check a chart before you show it, run `autodoc --check-diagram <file>…`. It lays out each `.chart.json` or `.vl.json`, each `.mmd` or `.mermaid`, and each `vega-lite` or `mermaid` fence of a `.md` with golib's renderer, as the GUI does, with no UI or daemon. It prints `file:line: ok (vega-lite)` or `file:line: not drawn: <golib's error>` for each, and exits:
 
@@ -191,9 +192,14 @@ draws it.
 
 ### The HTML Preview Pane (`File › Preview HTML`)
 
-**`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
-It shows the note's export drawn natively, with proportional text and the export's own styles, so
-it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).
+**`File › Preview HTML` opens a pane beside the editor**, in the GUI and in a terminal alike.
+
+- **In the GUI** it shows the note's export drawn natively, with proportional text and the
+  export's own styles, so it matches `autodoc --export html`. The text in it can be selected and
+  copied (`Ctrl+C`).
+- **In a terminal** it is drawn in cells, as the Rendered view is: Mermaid diagrams and Vega-Lite
+  charts in cells, code in the theme's syntax colours. It needs no graphics protocol and no
+  browser, so it works over ssh.
 
 - **Live:** it follows edits after a moment of quiet, unsaved ones included.
 - **Follows the cursor:** the block under the editor's cursor comes to the pane's top.
@@ -202,7 +208,8 @@ it matches `autodoc --export html`. The text in it can be selected and copied (`
   - a note or a file, in the editor;
   - a web or mail address, in the browser.
 
-In a terminal, `File › Preview HTML` is an image or the browser instead (§4.11).
+Under the page, **Open in browser** (`b`) writes the page to the cache and opens it in the system
+browser, and **Close** (`q`) closes the pane.
 
 ### An HTML File Opened Raw
 
@@ -309,22 +316,23 @@ The cell key is a hash of the fence's language and its code, so a cell's outputs
 
 ---
 
-## 4.11 Previews in the Terminal (`File › Preview HTML`, `Preview Mermaid diagram`)
+## 4.11 Diagram Previews in the Terminal (`Preview Mermaid diagram`)
 
-`File › Preview HTML` (in a terminal; the GUI opens [a pane](#the-html-preview-pane-file--preview-html) instead) renders the current Markdown editor buffer (including unsaved
-edits) into an offline, light/dark themed cache file and opens it with the system browser. A
-browser-launch error is reported in the TUI.
+`File › Preview HTML` is [the pane](#the-html-preview-pane-file--preview-html) in a terminal too.
 
-**Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
-they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
-(inside tmux, `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline.
-The whole page (or the whole diagram) is rendered and **scrolls** in its dialog: the arrows,
-`j` `k` `h` `l`, `Page Up`/`Page Down`, `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in**
-and **Zoom out** draw it again larger or smaller (50 % to 200 %, as a browser zooms), in the same
-dialog. Elsewhere a diagram shows its source and HTML opens in the default browser, and the
-preview says which was missing; turning `Image previews` off compares the two on the same file.
-Both follow the active theme's colours (light, dark, sepia, retro, mono), as
-`autodoc --export html --theme …` does.
+**`File › Preview Mermaid diagram`** is an image in the terminal where it can be: `View › Image
+previews` on, a terminal that confirms kitty's graphics protocol (inside tmux,
+`set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline. The whole diagram
+is rendered and **scrolls** in its dialog: the arrows, `j` `k` `h` `l`, `Page Up`/`Page Down`,
+`[` `]`, `Home`/`End` and the mouse wheel. **Zoom in** and **Zoom out** draw it again larger or
+smaller (50 % to 200 %, as a browser zooms), in the same dialog. Elsewhere (no kitty graphics,
+over ssh say, or no browser) the dialog draws the diagram in characters, by golib's Mermaid
+(`golib/tui/mermaid`), where golib draws its type, and says which was missing; else it shows the
+diagram's source. Turning `Image previews` off shows the source, as asked, and compares the two on
+the same file. **`File › Preview option`** chooses the engine, as in the GUI: **native** draws in
+characters at once, with no browser, and falls back to the image for a diagram golib does not
+draw. The image follows the active theme's colours (light, dark, sepia, retro, mono), as
+`autodoc --export html --theme …` does; the characters, the page's.
 
 ---
 

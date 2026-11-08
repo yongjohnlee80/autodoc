@@ -106,10 +106,10 @@ Window {
             MenuItem { text: qsTrId("autodoc.main.close_buffer"); onTriggered: App.closeBuffer() }
             MenuSeparator {}
             MenuItem { text: qsTrId("autodoc.main.preview_html"); onTriggered: App.previewHTML() }
-            // what draws a window's Mermaid diagrams (preview.go); the terminal's are mermaid.js's
+            // what draws a Mermaid diagram (preview.go): mermaid.js's image, or golib's Mermaid,
+            // natively (a window's pixels, a terminal's characters)
             Menu {
                 title: qsTrId("autodoc.main.preview_option")
-                visible: App.gui
                 MenuItem { text: qsTrId("autodoc.main.native_mermaid_engine"); group: "mermaidEngine"; checked: App.mermaidNative; onTriggered: App.setMermaidEngine("native") }
                 MenuItem { text: qsTrId("autodoc.main.mermaid_js");            group: "mermaidEngine"; checked: App.mermaidJS;     onTriggered: App.setMermaidEngine("mermaidjs") }
             }
@@ -350,6 +350,8 @@ Window {
                         // [ Raw | Rendered ] on the page's frame's title row, at its right, while the file
                         // has a Rendered view (a note's page, a table), as the window has it on its title bar
                         modeSwitch: "title"
+                        // the buffers' tabs go on the page frame's bottom border while two or more
+                        // are open: the host shows them (buffertabs.go showTerminalTabs)
                         focus: true
                         palette.highlight: Theme.document.selection
                         palette.highlightedText: Theme.document.selectedText
@@ -940,8 +942,9 @@ Window {
 
     // ---- the panels over the page, outside the tile manager: each a drawer from the edge its
     // preference names, in the one dock style (golib's tui.panels Panel) ----
-    // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
-    // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
+    // the HTML preview (File › Preview HTML): the note's page beside the editor, live as it is
+    // edited and following the cursor (htmlpane.go); drawn natively in a window, in cells in a
+    // terminal (htmlpane_cells.go)
     Panel {
         id: htmlPane
         heading: qsTrId("autodoc.main.preview")
@@ -1047,7 +1050,6 @@ Window {
     Preferences { id: preferences }
     Fonts { id: fonts }
     Diagram { id: diagram }
-    HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     RankerEdit { id: rankerEdit }
