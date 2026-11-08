@@ -284,7 +284,9 @@ from the note's folder, and is its alt text elsewhere. A line holding only an im
 (`.mmd`), a chart (`.chart.json`) or a table (`.csv`) file is drawn as that file would be in a fence,
 read from the note's folder as the HTML preview reads it: the diagram or chart as a picture, the
 table boxed, its first rows only. A file over 1 MiB is a notice in its place, and a file that isn't
-there is the image's alt text. Any line that is only such an image is drawn, even inside a longer
+there is the image's alt text. While the note is shown, the folders of its embedded files are
+followed as an open file's folder is, so a file rewritten on disk, or written where an embed names
+one that wasn't there, is drawn anew with no switch. Any line that is only such an image is drawn, even inside a longer
 paragraph; the window draws one only when it is alone in its paragraph.
 
 A note opens Rendered, as a table file does. Ctrl+T flips between the two views of the same text,
