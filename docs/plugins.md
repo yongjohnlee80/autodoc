@@ -658,8 +658,9 @@ func (s *spike) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
 func (s *spike) SurfacePointer(p plugin.SurfacePointer) { /* p.X, p.Y in dp */ }
 ```
 
-[`examples/surface-go`](../examples/surface-go) is a complete example: an animated test pattern
-with every input event drawn over it, and its frame rate and latency in its log.
+[`examples/surface-go`](../examples/surface-go) is a complete example (Linux only, as surfaces are
+today): an animated test pattern with every input event drawn over it, and its frame rate and
+latency in its log.
 
 ### Calls (`calls = [...]`, protocol 3)
 
