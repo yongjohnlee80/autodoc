@@ -604,7 +604,7 @@ func TestTheChartNoticeIsInTheUIsLanguage(t *testing.T) {
 	}
 }
 
-// A Mermaid diagram golib's engine declines (a kind outside its subset: a gitGraph) is a notice of golib's
+// A Mermaid diagram golib's engine declines (a kind outside its subset: a kanban board) is a notice of golib's
 // reason, the parser's own words, as a chart is; a malformed one is still golib's picture of the
 // syntax error, never the notice.
 func TestADeclinedMermaidDiagramSaysWhy(t *testing.T) {
@@ -626,14 +626,14 @@ func TestADeclinedMermaidDiagramSaysWhy(t *testing.T) {
 		}
 		return a
 	}
-	git := "gitGraph\n  commit\n  branch dev\n  checkout dev\n  commit"
+	git := "kanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]"
 	_, why := mermaid.Parse(git)
 	if why == nil {
-		t.Fatal("golib's parser takes a gitGraph: the cell needs a kind outside its subset")
+		t.Fatal("golib's parser takes a kanban board: the cell needs a kind outside its subset")
 	}
 	a := ask(git)
 	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || !strings.HasPrefix(n.text, "diagram not drawn: ") || !strings.Contains(n.text, why.Error()) {
-		t.Errorf("a gitGraph: %+v; want the notice of golib's %q", a, why)
+		t.Errorf("a kanban board: %+v; want the notice of golib's %q", a, why)
 	}
 	a = ask("flowchart TB\n  A[unclosed --> B")
 	if _, notice := a.Pic.(noticeView); a.State != guiwidget.Ready || a.Pic == nil || notice {
