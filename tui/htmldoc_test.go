@@ -120,10 +120,10 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r.h.p.Post(func() { r.h.nativeViews = func() bool { return false } })
 	r.h.p.Post(r.h.closeFile)
 	r.s.WaitFor(t, "closed", func(string) bool { return !r.file().open })
-	// the draft left is a note, which a terminal shows as its own page (notepage.go): its switch on
-	// is the note page's, so the HTML file's are counted after it
-	r.s.WaitFor(t, "the draft's page on", func(string) bool {
-		return onLoop(r, func() bool { return len(seen) > 0 && seen[len(seen)-1] })
+	// the draft left is a note, which a terminal draws through the editor's own renderer with the
+	// page off (notepage.go): the HTML file's switches are counted after it
+	r.s.WaitFor(t, "the draft Rendered by the editor, the page off", func(string) bool {
+		return renderedByTheEditor(r) && onLoop(r, func() bool { return len(seen) > 0 && !seen[len(seen)-1] })
 	})
 	r.h.p.Post(func() { seen = nil })
 	r.openHTMLAnswer(t, page, "raw")

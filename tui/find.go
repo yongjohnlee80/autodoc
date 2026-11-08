@@ -170,7 +170,7 @@ func (h *Host) showFind() {
 		h.core.InvalidateHighlightPaint()
 	}
 	if p := h.notePage(); len(terms) == 0 && p != nil && p.view != nil {
-		p.view.SetMarks(nil) // the find ended: a note's page marks nothing either
+		p.view.SetMarks(nil) // the find ended: an HTML file's page marks nothing either
 	}
 	if h.findCard == nil {
 		return
@@ -387,8 +387,8 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), sel+1, len(all), f.target))
 }
 
-// notePageFind is the page's find on a note's page, when one is shown (notepage.go): what the page
-// shows is marked (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back,
+// notePageFind is the page's find on an HTML file's page, when one is shown (notepage.go; a note's
+// Rendered view is the editor's, its find the text's): what the page shows is marked (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back,
 // from the one it is on, or for the first from the first at or after the page's top. It is brought
 // into view, the editor's cursor put at its block (Raw opens there) and the page given the
 // keyboard. A term the page doesn't show but the source has (a link's target, Markdown's own
@@ -431,9 +431,9 @@ func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 }
 
 // findRecount runs the page's find again in the view now drawn, the reader staying where they are:
-// its count, and the current match the first at or after the reader's place (a note's page: its
-// top; the text: its cursor). Ctrl+T can change "k of N": the page counts what it shows, the text
-// its source.
+// its count, and the current match the first at or after the reader's place (an HTML file's page:
+// its top; the text, Raw or a note's Rendered view: its cursor). Ctrl+T can change "k of N" on an
+// HTML file: its page counts what it shows, the text its source.
 func (h *Host) findRecount() {
 	f := &h.find
 	if f.query == "" || f.target != findPage {

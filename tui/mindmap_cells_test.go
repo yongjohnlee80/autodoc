@@ -279,7 +279,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 		{"its command, from the page", false, false}, {"its command, from the text", true, false}} {
 		raw := c.raw
 		t.Run(c.name, func(t *testing.T) {
-			r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+			r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 			if raw {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
 				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })

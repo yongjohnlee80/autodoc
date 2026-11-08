@@ -19,7 +19,8 @@ func notePageOf(t *testing.T, r *running) *cellNotePage {
 
 // TestAWindowNeverMakesTheTerminalsNotePage (docs/decisions/editor.md#a-terminal-notes-rendered-view):
 // in a window (the GUI build on its native backend) a note keeps the window's own Rendered view: the
-// terminal's note page is registered, as in every host, and never made or installed.
+// terminal's note page is registered, as in every host, and never made or installed, and the
+// window's editor is never given the terminal's Markdown cell renderer.
 func TestAWindowNeverMakesTheTerminalsNotePage(t *testing.T) {
 	r := runGUINote(t, notePageNote, func(*Host) {})
 	// the note was shown to the features: the page's Shown ran, and must have done nothing
@@ -30,5 +31,8 @@ func TestAWindowNeverMakesTheTerminalsNotePage(t *testing.T) {
 	}
 	if made := onLoop(r, func() bool { return p.view != nil || p.shown.path != "" }); made {
 		t.Fatal("a window made the terminal's note page")
+	}
+	if given := onLoop(r, func() bool { return p.md != nil }); given {
+		t.Fatal("a window made the terminal's Markdown cell renderer")
 	}
 }
