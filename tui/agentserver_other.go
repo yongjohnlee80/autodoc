@@ -4,6 +4,7 @@ package tui
 
 import (
 	"errors"
+	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -12,7 +13,7 @@ import (
 // started, so a setup that needs one refuses the agent's start (agentserver.go).
 type agentServer struct{}
 
-func startAgentServer(argv []string, socket, dir string, environ []string) (*agentServer, error) {
+func startAgentServer(argv []string, socket, dir string, environ []string, ready time.Duration) (*agentServer, error) {
 	return nil, errors.New("a crew agent's server needs process groups, which this platform lacks")
 }
 

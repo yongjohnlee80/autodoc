@@ -111,7 +111,7 @@ func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
 		h.notify(h.trf("autodoc.notice.luapackages.looking_up_in_the_registry", url))
-		resolveRegistry(core{h}, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
+		resolveRegistry(core{h}, h.seams.registry, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
 			if err != nil {
 				h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 				return
@@ -131,9 +131,9 @@ func (h *Host) installPackage(url string) error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return errors.New("lua-install needs git")
 	}
-	dir, own := h.luaDir, h.cands.allocs
+	dir, own, src := h.luaDir, h.cands.allocs, h.seams.registry
 	h.notify(h.trf("autodoc.notice.luapackages.cloning", url))
-	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url, own)) }, func(r answerOf[*candidate]) {
+	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, src, dir, url, own)) }, func(r answerOf[*candidate]) {
 		if r.err == nil {
 			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
 		}
@@ -148,7 +148,7 @@ func (h *Host) installPackage(url string) error {
 
 // stagePackage stages url as a Lua package candidate in dir, refused when that package is
 // installed already.
-func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate, error) {
+func stagePackage(ctx context.Context, src registrySource, dir, url string, own *allocs) (*candidate, error) {
 	stage, commit, err := cloneStage(ctx, dir, url, own)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate
 		return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
 	}
 	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage,
-		entry: cachedEntry(regindex.KindLua, url), pkg: m}, nil
+		entry: src.entry(regindex.KindLua, url), pkg: m}, nil
 }
 
 // packageRisk is the sentence every package card carries, in English (the card's is in the UI's

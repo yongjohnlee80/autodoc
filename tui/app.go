@@ -60,6 +60,7 @@ import (
 type Host struct {
 	p        *tuidecl.Program
 	session  *Session
+	seams    seams              // its own copy of Options.seams, or defaultSeams; its features hold a pointer to it
 	reg      *registry          // the features, merged (feature.go)
 	cat      *catalog           // the user commands, every source's (catalog.go): the registry's
 	asker    *asker             // the one yes-or-no question (ask.go)
@@ -451,6 +452,10 @@ type Options struct {
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
 	DefaultCellFont string
+
+	// seams are the program's waits, addresses and test hooks (seams.go); nil is defaultSeams. The
+	// host copies them as it is made.
+	seams *seams
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -468,7 +473,7 @@ func New(session *Session, opt Options) (*Host, error) {
 
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
+	h := &Host{session: session, seams: defaultSeams, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, installRecord: opt.InstallRecord, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
@@ -492,6 +497,9 @@ func newHost(session *Session, opt Options) *Host {
 		panelOpen:       map[string]bool{},
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
+	}
+	if opt.seams != nil {
+		h.seams = *opt.seams // a copy: nothing the caller changes later reaches this program
 	}
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
 	if opt.NoteTranslator != nil {
@@ -518,7 +526,7 @@ func newHost(session *Session, opt Options) *Host {
 	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
-	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
+	h.agents = newAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
 	h.crew = newCrewHost(core{h}, opt.AgentDir)
 	h.agents.crew = h.crew
 	h.crew.deliverJob = h.agents.deliverFallback
@@ -540,7 +548,7 @@ func newHost(session *Session, opt Options) *Host {
 	}
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.cands = newCandidates(core{h})
-	h.plugins = newPlugins(core{h}, opt.Plugins)
+	h.plugins = newPlugins(core{h}, &h.seams, opt.Plugins)
 	h.plugins.cands = h.cands
 	h.plugins.scriptsChanged = func() {
 		if err := h.reloadScripts(); err != nil {

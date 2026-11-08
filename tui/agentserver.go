@@ -36,10 +36,6 @@ const serverPidFile = ".autodoc-server.pid"
 // wrote reads its one context again.
 const legacyServerPidFile = ".autodoc-crew/server.pid"
 
-// serverReadyWait bounds the wait for a started server's socket; a server not listening by then is
-// stopped, and the CLI isn't started. A cell gives its own.
-var serverReadyWait = 10 * time.Second
-
 const (
 	// serverStopWait is how long a stopped server's group has to end after SIGTERM before SIGKILL.
 	serverStopWait = 3 * time.Second
@@ -57,7 +53,7 @@ type agentServer struct {
 
 // startAgentServer starts argv in dir with environ, a stale server of the folder stopped first, and
 // waits for socket; on any failure nothing is left running.
-func startAgentServer(argv []string, socket, dir string, environ []string) (*agentServer, error) {
+func startAgentServer(argv []string, socket, dir string, environ []string, ready time.Duration) (*agentServer, error) {
 	if len(argv) == 0 || socket == "" {
 		return nil, errors.New("crew setup gave a server with no command or no socket")
 	}
@@ -76,7 +72,7 @@ func startAgentServer(argv []string, socket, dir string, environ []string) (*age
 		s.stop()
 		return nil, fmt.Errorf("the agent's server's pid file: %w", err)
 	}
-	deadline := time.Now().Add(serverReadyWait)
+	deadline := time.Now().Add(ready)
 	for {
 		if _, err := os.Stat(socket); err == nil {
 			return s, nil
@@ -86,12 +82,12 @@ func startAgentServer(argv []string, socket, dir string, environ []string) (*age
 			s.stop()
 			return nil, fmt.Errorf("the agent's server (%s) ended before it listened on %s", argv[0], socket)
 		// NOTE: can't announce: a server says nothing when it listens, so its socket is looked for
-		// every serverPoll, until serverReadyWait (a named deadline).
+		// every serverPoll, until ready (the seams' serverReady, a named deadline).
 		case <-time.After(serverPoll):
 		}
 		if time.Now().After(deadline) {
 			s.stop()
-			return nil, fmt.Errorf("the agent's server (%s) didn't listen on %s within %s", argv[0], socket, serverReadyWait)
+			return nil, fmt.Errorf("the agent's server (%s) didn't listen on %s within %s", argv[0], socket, ready)
 		}
 	}
 }

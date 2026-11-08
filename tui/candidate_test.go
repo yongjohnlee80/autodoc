@@ -326,7 +326,6 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 			t.Errorf("%s is gone", path)
 		}
 	}
-	defer func(r func(string, string) error, d func(string) error) { pluginRename, pluginRemoveAll = r, d }(pluginRename, pluginRemoveAll)
 	failing := func(n int) func(string, string) error { // the nth rename fails
 		i := 0
 		return func(a, b string) error {
@@ -339,24 +338,24 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 
 	t.Run("the older copy can't be removed", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = os.Rename, func(string) error { return errors.New("busy") }
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: os.Rename, removeAll: func(string) error { return errors.New("busy") }}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
 	})
 	t.Run("the first rename fails", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = failing(1), os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: failing(1), removeAll: os.RemoveAll}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
 	})
 	t.Run("the second rename fails, and the old folder goes back", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = failing(2), os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: failing(2), removeAll: os.RemoveAll}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
@@ -364,22 +363,21 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 	t.Run("the second rename fails, and so does the restore", func(t *testing.T) {
 		dir, stage := setup(t)
 		calls := 0
-		pluginRename, pluginRemoveAll = func(a, b string) error {
+		fsys := installFS{rename: func(a, b string) error {
 			if calls++; calls >= 2 {
 				return errors.New("rename refused")
 			}
 			return os.Rename(a, b)
-		}, os.RemoveAll
+		}, removeAll: os.RemoveAll}
 		prev := filepath.Join(dir, previousDir, "p")
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "its old folder is "+prev) {
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "its old folder is "+prev) {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(prev, "old.txt"))
 	})
 	t.Run("both renames succeed", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = os.Rename, os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err != nil {
+		if err := swapIn(defaultSeams.installFS, dir, stage, "p"); err != nil {
 			t.Fatal(err)
 		}
 		has(t, filepath.Join(dir, "p", "new.txt"))

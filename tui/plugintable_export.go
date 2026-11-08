@@ -37,12 +37,9 @@ const exportChunk = 1000
 // exportFormats are the export's formats, as its dialog's Format choice lists them.
 var exportFormats = []copyFormat{formatCSV, formatJSON}
 
-// exportWritten is told each chunk the writer has written, as it is written (a test holds the
-// writer here, so an export is still writing when AutoDoc quits); nil in AutoDoc.
-var exportWritten func(rows int)
-
 // resultsExport is an export at work.
 type resultsExport struct {
+	onWrite    func(rows int) // the seams' exportWritten: told each chunk written; nil in AutoDoc
 	path, part string
 	format     copyFormat
 	fields     []string
@@ -213,7 +210,7 @@ func (pl *plugins) beginExport(path string) {
 		pl.c.Notify(pl.nothingIn("export"))
 		return
 	}
-	x := &resultsExport{path: path, part: path + ".part", format: pl.exportFormat, fields: fields, rows: rows, kinds: kinds,
+	x := &resultsExport{onWrite: pl.seams.exportWritten, path: path, part: path + ".part", format: pl.exportFormat, fields: fields, rows: rows, kinds: kinds,
 		partial: pl.results.partial(), steps: make(chan exportStep, 2), done: make(chan struct{})}
 	if _, loaded, on := pl.filtered(); on {
 		x.from = loaded
@@ -367,8 +364,8 @@ func (x *resultsExport) write(post func(func()), wrote func(*resultsExport, int)
 		}
 		rows += len(step.rows)
 		n := len(step.rows)
-		if exportWritten != nil {
-			exportWritten(rows)
+		if x.onWrite != nil {
+			x.onWrite(rows)
 		}
 		post(func() { wrote(x, n) })
 	}

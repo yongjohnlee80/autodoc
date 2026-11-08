@@ -68,7 +68,7 @@ func (pl *plugins) addPlugin(url string) {
 	if isRegistryName(url) {
 		pl.c.Close("pluginAdd")
 		pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.looking_up_in_the_registry", url))
-		resolveRegistry(pl.c, regindex.KindPlugin, url, nil, func(repo string, err error) {
+		resolveRegistry(pl.c, pl.seams.registry, regindex.KindPlugin, url, nil, func(repo string, err error) {
 			if err != nil {
 				pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_added", err.Error()))
 				return
@@ -84,9 +84,9 @@ func (pl *plugins) addPlugin(url string) {
 	}
 	pl.c.Close("pluginAdd")
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloning", url))
-	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
+	dir, own, src := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry
 	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
-		return answered(stagePlugin(ctx, dir, url, nil, own))
+		return answered(stagePlugin(ctx, src, dir, url, nil, own))
 	}, func(r answerOf[*candidate]) {
 		if r.err == nil {
 			r.err = pl.cands.begin(r.v, pl.askPlugin, pl.hidePlugin)
@@ -131,7 +131,7 @@ func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, co
 // stagePlugin stages url as a plugin candidate: an add (installed nil), refused when that plugin is
 // installed already, or an update of installed, refused when the staged plugin is another. A stage
 // that is not a runnable plugin is thrown away.
-func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry, own *allocs) (*candidate, error) {
+func stagePlugin(ctx context.Context, src registrySource, dir, url string, installed *pluginEntry, own *allocs) (*candidate, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, errors.New("adding a plugin needs git")
 	}
@@ -153,7 +153,7 @@ func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry, o
 		return fail(fmt.Errorf("%s is installed already: Manage plugins… updates it", e.m.Name))
 	}
 	return &candidate{kind: regindex.KindPlugin, name: e.m.Name, repo: url, commit: commit, stage: stage,
-		update: installed != nil, entry: cachedEntry(regindex.KindPlugin, url), m: e.m}, nil
+		update: installed != nil, entry: src.entry(regindex.KindPlugin, url), m: e.m}, nil
 }
 
 // askPlugin is a plugin candidate's card: PluginConfirm, about c, which is the card's alone.
@@ -251,7 +251,7 @@ func (pl *plugins) pluginAudit() {
 // running.
 func (pl *plugins) installCandidate(c *candidate) {
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.building", c.name))
-	dir, logs := pl.pluginOpt.Dir, pl.pluginOpt.LogDir
+	dir, logs, fsys := pl.pluginOpt.Dir, pl.pluginOpt.LogDir, pl.seams.installFS
 	coreDo(pl.c, func(ctx context.Context) error {
 		if err := pristine(ctx, c); err != nil {
 			return err
@@ -262,7 +262,7 @@ func (pl *plugins) installCandidate(c *candidate) {
 		if c.update {
 			return nil
 		}
-		return pluginRename(c.stage, filepath.Join(dir, c.name))
+		return fsys.rename(c.stage, filepath.Join(dir, c.name))
 	}, func(err error) {
 		if err != nil || !c.update {
 			pl.installed(c, err)
@@ -271,7 +271,7 @@ func (pl *plugins) installCandidate(c *candidate) {
 		if r := pl.running[c.name]; r != nil {
 			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
-		coreDo(pl.c, func(context.Context) error { return swapIn(dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
+		coreDo(pl.c, func(context.Context) error { return swapIn(fsys, dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
 	})
 }
 
@@ -306,28 +306,22 @@ func (pl *plugins) installed(c *candidate, err error) {
 // it, as it does every name starting with ".".
 const previousDir = ".previous"
 
-// pluginRename and pluginRemoveAll are swapIn's renames and removal; a test makes each fail in turn.
-var (
-	pluginRename    = os.Rename
-	pluginRemoveAll = os.RemoveAll
-)
-
 // swapIn puts the built stage in place of the installed plugin name, in two renames within dir (one
 // filesystem): the installed folder to .previous/<name>, then the stage to its name. Each failure
 // leaves the plugin as it was, or, when the old folder can't be put back, says where it is.
-func swapIn(dir, stage, name string) error {
+func swapIn(fsys installFS, dir, stage, name string) error {
 	installed, prev := filepath.Join(dir, name), filepath.Join(dir, previousDir, name)
-	if err := pluginRemoveAll(prev); err != nil {
+	if err := fsys.removeAll(prev); err != nil {
 		return fmt.Errorf("the plugin was left as it was: the older %s could not be removed: %w", prev, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(prev), 0o755); err != nil {
 		return fmt.Errorf("the plugin was left as it was: %w", err)
 	}
-	if err := pluginRename(installed, prev); err != nil {
+	if err := fsys.rename(installed, prev); err != nil {
 		return fmt.Errorf("the plugin was left as it was: %w", err)
 	}
-	if err := pluginRename(stage, installed); err != nil {
-		if rerr := pluginRename(prev, installed); rerr != nil {
+	if err := fsys.rename(stage, installed); err != nil {
+		if rerr := fsys.rename(prev, installed); rerr != nil {
 			return fmt.Errorf("the new build could not replace it (%v), and the old folder could not be put back (%v): "+
 				"the plugin is stopped, and its old folder is %s", err, rerr, prev)
 		}
@@ -481,7 +475,7 @@ func (pl *plugins) updatePlugin(name string) error {
 // folder is only read: nothing is fetched into it.
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.fetching", m.e.m.Name))
-	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
+	dir, own, reg := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry
 	type staged struct {
 		c    *candidate
 		head string
@@ -502,7 +496,7 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 		if err != nil {
 			return staged{err: err}
 		}
-		c, err := stagePlugin(ctx, dir, m.source, &m.e, own)
+		c, err := stagePlugin(ctx, reg, dir, m.source, &m.e, own)
 		if err == nil && c.commit == head {
 			own.remove(c.stage)
 		}

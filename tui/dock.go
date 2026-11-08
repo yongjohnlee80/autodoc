@@ -85,10 +85,6 @@ const (
 // dockFlash is one hide's flash of a panel's icon: the step it is at.
 type dockFlash struct{ step int }
 
-// flashed, when a test sets it, hears each step of a flash on the loop: the panel, and its icon lit
-// or not.
-var flashed func(id string, lit bool)
-
 // flashDock starts panel id's flash, over any under way: the older one's steps find it replaced.
 func (h *Host) flashDock(id string) {
 	if h.dockFlash == nil {
@@ -97,8 +93,8 @@ func (h *Host) flashDock(id string) {
 	f := &dockFlash{}
 	h.dockFlash[id] = f
 	h.refreshDock()
-	if flashed != nil {
-		flashed(id, h.dockFlashLit(id))
+	if h.seams.flashed != nil {
+		h.seams.flashed(id, h.dockFlashLit(id))
 	}
 	h.after(dockFlashStep, func() { h.flashNext(id, f) })
 }
@@ -116,8 +112,8 @@ func (h *Host) flashNext(id string, f *dockFlash) {
 		h.after(dockFlashStep, func() { h.flashNext(id, f) })
 	}
 	h.refreshDock()
-	if flashed != nil {
-		flashed(id, h.dockFlashLit(id))
+	if h.seams.flashed != nil {
+		h.seams.flashed(id, h.dockFlashLit(id))
 	}
 }
 

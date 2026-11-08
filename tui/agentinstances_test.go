@@ -49,7 +49,8 @@ type modelPanel struct {
 // testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
 // their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it.
 func testAgents(c agentHost, dir, config string) *agents {
-	a := newAgents(c, dir, config)
+	s := defaultSeams
+	a := newAgents(c, &s, dir, config)
 	a.commandCheck = nil
 	return a
 }

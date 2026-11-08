@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os/exec"
 	"slices"
 	"strings"
 
@@ -39,18 +38,11 @@ func detectAgentCLIs(look func(string) (string, error)) []agentCLI {
 // Only the first-run card reads it; System › Set up an agent… opens the card whatever it says.
 const prefAgentSetup = "tui.agent.setup"
 
-// offerAgentSetup is whether a first run offers the setup at all; a test of something else turns
-// it off, as its first card would otherwise be this one.
-var offerAgentSetup = true
-
 // agentSetupPending is the first-run card's condition, read in one place: the setup never answered,
 // and no profile. A user with a profile is never asked.
-func agentSetupPending(p prefs) bool {
-	return offerAgentSetup && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
+func agentSetupPending(s *seams, p prefs) bool {
+	return s.offerAgentSetup && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
 }
-
-// lookAgentCLI is how the card finds the CLIs; a test sets its own.
-var lookAgentCLI = exec.LookPath
 
 // Started warms what each Claude profile's Claude Code knows (warmClaude), and offers the setup on a first run (startup's About waits for it, startup.go), once the
 // Vim question before it is answered (vimquestion.go opens it then).
@@ -60,14 +52,14 @@ func (a *agents) Started() {
 			a.warmClaude(p) // and a Claude agent's on what its Claude Code knows
 		}
 	}
-	if p := a.c.Prefs(); agentSetupPending(p) && !vimQuestionPending(p) {
+	if p := a.c.Prefs(); agentSetupPending(a.seams, p) && !vimQuestionPending(a.seams, p) {
 		a.openAgentSetup()
 	}
 }
 
 // openAgentSetup fills and opens the card.
 func (a *agents) openAgentSetup() {
-	found := detectAgentCLIs(lookAgentCLI)
+	found := detectAgentCLIs(a.seams.lookAgentCLI)
 	a.setupFound = found
 	rows := make([]rowOf, len(found))
 	for i, c := range found {

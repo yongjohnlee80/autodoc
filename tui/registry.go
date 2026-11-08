@@ -23,15 +23,6 @@ import (
 // KB types; :lua-install and Add from a git URL take a name as well as a URL. An install card says
 // whether the commit it would install was audited.
 
-// registryURL is the index; a test points it elsewhere, as latestURL.
-var registryURL = regindex.PagesURL + "index.json"
-
-// registryCacheDir is where the index is kept between runs; a test points it elsewhere.
-var registryCacheDir = func() (string, error) {
-	d, err := os.UserCacheDir()
-	return filepath.Join(d, "autodoc", "registry"), err
-}
-
 // registryMaxAge is how long a fetched index is used before it is asked for again.
 const registryMaxAge = 24 * time.Hour
 
@@ -59,11 +50,11 @@ func (l registryList) usable() registryList {
 	return l
 }
 
-// fetchRegistry is the index as a list opens: the cache while it is younger than registryMaxAge;
+// fetch is the index as a list opens: the cache while it is younger than registryMaxAge;
 // else a GET, conditional on the cache's ETag, a 304 keeping the cache and a 200 replacing it once
 // it validates. Anything failing falls back to the cache, then to the built-in KB types. Off the loop.
-func fetchRegistry(ctx context.Context, now time.Time) registryList {
-	cache, cacheOK := readRegistryCache()
+func (src registrySource) fetch(ctx context.Context, now time.Time) registryList {
+	cache, cacheOK := src.read()
 	if cacheOK && now.Sub(cache.fetched) < registryMaxAge {
 		return registryList{ix: cache.ix}
 	}
@@ -71,12 +62,12 @@ func fetchRegistry(ctx context.Context, now time.Time) registryList {
 	if cacheOK {
 		etag = cache.etag
 	}
-	g, err := httpGet(ctx, registryURL, "application/json", etag)
+	g, err := httpGet(ctx, src.url, "application/json", etag)
 	switch {
 	case err != nil:
 		return registryFallback(cache, cacheOK, err)
 	case g.status == http.StatusNotModified && cacheOK:
-		_ = writeRegistryCache(cache.etag, now, cache.raw) // fresh for another day
+		_ = src.write(cache.etag, now, cache.raw) // fresh for another day
 		return registryList{ix: cache.ix}
 	case g.status != http.StatusOK: // a 304 with no cache too: the request was unconditional
 		return registryFallback(cache, cacheOK, fmt.Errorf("the registry answered %d %s", g.status, http.StatusText(g.status)))
@@ -85,7 +76,7 @@ func fetchRegistry(ctx context.Context, now time.Time) registryList {
 	if err != nil {
 		return registryFallback(cache, cacheOK, err)
 	}
-	_ = writeRegistryCache(g.etag, now, g.body) // a cache that can't be written is only slower
+	_ = src.write(g.etag, now, g.body) // a cache that can't be written is only slower
 	return registryList{ix: ix}
 }
 
@@ -115,9 +106,9 @@ type registryCache struct {
 	fetched time.Time
 }
 
-// readRegistryCache is the cached index; false when there is none, or it does not validate.
-func readRegistryCache() (registryCache, bool) {
-	dir, err := registryCacheDir()
+// read is the cached index; false when there is none, or it does not validate.
+func (src registrySource) read() (registryCache, bool) {
+	dir, err := src.cacheDir()
 	if err != nil {
 		return registryCache{}, false
 	}
@@ -136,9 +127,9 @@ func readRegistryCache() (registryCache, bool) {
 	return registryCache{ix: ix, raw: c.Index, etag: c.ETag, fetched: c.Fetched}, true
 }
 
-// writeRegistryCache writes the cache's file whole: a temp file renamed over it.
-func writeRegistryCache(etag string, fetched time.Time, index []byte) error {
-	dir, err := registryCacheDir()
+// write writes the cache's file whole: a temp file renamed over it.
+func (src registrySource) write(etag string, fetched time.Time, index []byte) error {
+	dir, err := src.cacheDir()
 	if err != nil {
 		return err
 	}
@@ -165,10 +156,10 @@ func writeRegistryCache(etag string, fetched time.Time, index []byte) error {
 	return os.Rename(tmp.Name(), filepath.Join(dir, "index.json"))
 }
 
-// cachedEntry is the cached index's entry of kind for repo, read off the loop for an install card;
+// entry is the cached index's entry of kind for repo, read off the loop for an install card;
 // nil with no cache or no entry. A card never fetches.
-func cachedEntry(kind, repo string) *regindex.IndexEntry {
-	c, ok := readRegistryCache()
+func (src registrySource) entry(kind, repo string) *regindex.IndexEntry {
+	c, ok := src.read()
 	if !ok {
 		return nil
 	}
@@ -202,9 +193,9 @@ func isRegistryName(arg string) bool {
 // resolveRegistry calls then, on the loop, with the repo of the registry's entry of kind named name,
 // the index fetched as a list's is; or why there is none. loaded, when set, takes the list too (the
 // host's KB type field).
-func resolveRegistry(c Core, kind, name string, loaded func(registryList), then func(repo string, err error)) {
+func resolveRegistry(c Core, src registrySource, kind, name string, loaded func(registryList), then func(repo string, err error)) {
 	name = strings.TrimSpace(name)
-	coreDo(c, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, func(l registryList) {
+	coreDo(c, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, func(l registryList) {
 		l = l.usable()
 		if loaded != nil {
 			loaded(l)
@@ -270,5 +261,6 @@ func (h *Host) kbTypeChoices() []kbTypeChoice {
 
 // loadKBTypes fetches the registry as the add dialog's KB type list opens.
 func (h *Host) loadKBTypes() {
-	do(h, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, h.registryLoaded)
+	src := h.seams.registry
+	do(h, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, h.registryLoaded)
 }

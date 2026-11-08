@@ -511,7 +511,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 	// not the CLI, so `autodoc --editor` there needs it.
 	var server *agentServer
 	if instance.crewed && len(instance.setup.Server) > 0 {
-		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env)
+		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env, a.seams.serverReady)
 		if err != nil {
 			return nil, err
 		}

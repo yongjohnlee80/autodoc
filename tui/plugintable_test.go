@@ -215,9 +215,7 @@ func (r *running) waitResults(t *testing.T, id string, rows int) {
 // slowFeed keeps the feed from sending a document during a test: what a plugin is sent of the note
 // is then only what a command carries.
 func slowFeed(t *testing.T) {
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Minute
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	tune(t).pluginFeed = time.Minute
 }
 
 // TestATableNeedsProtocolFour: [table] needs protocol = 4, so an AutoDoc that speaks 3 refuses the
@@ -780,9 +778,7 @@ func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
 // more; the panel never holds more than 250 (every change the model announces is measured). The
 // export writes those 250, fetching nothing past the cap, and says the result has more.
 func TestThePanelHoldsAtMostItsCap(t *testing.T) {
-	cap := resultsResident
-	resultsResident = 250
-	t.Cleanup(func() { resultsResident = cap })
+	tune(t).resultsResident = 250
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table1000", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -947,11 +943,10 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 func TestQuittingStopsAnExport(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	exportWritten = func(int) {
+	tune(t).exportWritten = func(int) {
 		once.Do(func() { close(entered) })
 		<-release
 	}
-	t.Cleanup(func() { exportWritten = nil })
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{})

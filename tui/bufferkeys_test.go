@@ -383,9 +383,8 @@ func TestTheBufferCardFollowsTheBuffers(t *testing.T) {
 // its tab and its row on SPC b's card, one pass over the buffers' labels (bufferTabLabels); the
 // edits after it change neither and resolve nothing.
 func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
-	// the hook is set before the loop starts and reset after it stops: cleanups run last first, so
-	// one registered before the host's runs after its shutdown
-	passes := countLabelPasses(t)
+	// the hook is the program's own, set before it starts
+	passes := countLabelPasses(tune(t))
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -416,7 +415,7 @@ func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
 // square: eight times the buffers take well under the 64 times a pass over every pair would.
 func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
 	h := bufferCardHostN(1600)
-	passes := countLabelPasses(t)
+	passes := countLabelPasses(&h.seams) // no loop runs: the host is the test's alone
 	h.bufferCardText()
 	if got := passes(); got != 1 {
 		t.Errorf("the card made %d passes over 1600 buffers' labels, want 1", got)
@@ -442,13 +441,11 @@ func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
 	}
 }
 
-// countLabelPasses counts bufferTabLabels' passes from now until the test ends (labelsResolved).
-// A cell with a running host calls it before the host starts, so the loop never reads the hook
-// while the test writes it.
-func countLabelPasses(t *testing.T) func() int64 {
+// countLabelPasses counts bufferTabLabels' passes in s's programs (the seams' labelsResolved): a
+// cell's tune(t), called before its program starts, or a host with no loop running.
+func countLabelPasses(s *seams) func() int64 {
 	var n atomic.Int64
-	labelsResolved = func() { n.Add(1) }
-	t.Cleanup(func() { labelsResolved = nil })
+	s.labelsResolved = func() { n.Add(1) }
 	return n.Load
 }
 

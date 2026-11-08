@@ -31,6 +31,7 @@ type servedReg struct {
 	etag   string
 	status int
 	seen   []string // each request's If-None-Match
+	src    registrySource
 }
 
 func serveRegistry(t *testing.T, body []byte) *servedReg {
@@ -51,11 +52,9 @@ func serveRegistry(t *testing.T, body []byte) *servedReg {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	url, dir := registryURL, registryCacheDir
-	t.Cleanup(func() { registryURL, registryCacheDir = url, dir })
 	cache := t.TempDir()
-	registryURL = srv.URL + "/index.json"
-	registryCacheDir = func() (string, error) { return cache, nil }
+	s.src = registrySource{url: srv.URL + "/index.json", cacheDir: func() (string, error) { return cache, nil }}
+	tune(t).registry = s.src // the test's programs read it too
 	return s
 }
 
@@ -100,30 +99,30 @@ var regNow = time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 func TestTheRegistryIsReadAtMostDailyOnItsETag(t *testing.T) {
 	ctx := context.Background()
 	s := serveRegistry(t, testIndex(t, testEntry("plugin", "echo", "https://github.com/example/echo", regC1)))
-	l := fetchRegistry(ctx, regNow)
+	l := s.src.fetch(ctx, regNow)
 	if l.note != "" || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("the first fetch: %+v", l)
 	}
-	if l := fetchRegistry(ctx, regNow.Add(time.Hour)); len(s.requests()) != 1 || l.ix.Entry("plugin", "echo") == nil {
+	if l := s.src.fetch(ctx, regNow.Add(time.Hour)); len(s.requests()) != 1 || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("an hour on: %d requests, %+v", len(s.requests()), l)
 	}
-	l = fetchRegistry(ctx, regNow.Add(25*time.Hour))
+	l = s.src.fetch(ctx, regNow.Add(25*time.Hour))
 	if got := s.requests(); len(got) != 2 || got[1] != `"v1"` {
 		t.Fatalf("a day on, the requests' ETags: %q", got)
 	}
 	if l.note != "" || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("after the 304: %+v", l)
 	}
-	if fetchRegistry(ctx, regNow.Add(26*time.Hour)); len(s.requests()) != 2 {
+	if s.src.fetch(ctx, regNow.Add(26*time.Hour)); len(s.requests()) != 2 {
 		t.Fatal("a 304 did not keep the list for another day")
 	}
 	s.set(testIndex(t, testEntry("plugin", "echo", "https://github.com/example/echo", regC1),
 		testEntry("lua", "hello", "https://codeberg.org/example/hello")), `"v2"`, 0)
-	l = fetchRegistry(ctx, regNow.Add(50*time.Hour))
+	l = s.src.fetch(ctx, regNow.Add(50*time.Hour))
 	if l.note != "" || l.ix.Entry("lua", "hello") == nil {
 		t.Fatalf("the new index: %+v", l)
 	}
-	if c, ok := readRegistryCache(); !ok || c.etag != `"v2"` || c.ix.Entry("lua", "hello") == nil {
+	if c, ok := s.src.read(); !ok || c.etag != `"v2"` || c.ix.Entry("lua", "hello") == nil {
 		t.Fatalf("the cache: %+v %v", c, ok)
 	}
 }
@@ -147,13 +146,13 @@ func TestABadIndexKeepsTheListAlreadyRead(t *testing.T) {
 		"over a MiB": testIndex(t, big),
 	} {
 		s := serveRegistry(t, whole)
-		fetchRegistry(context.Background(), regNow)
+		s.src.fetch(context.Background(), regNow)
 		s.set(bad, `"bad"`, 0)
-		l := fetchRegistry(context.Background(), regNow.Add(25*time.Hour))
+		l := s.src.fetch(context.Background(), regNow.Add(25*time.Hour))
 		if !strings.HasPrefix(l.note, "offline: the list as of 2026-10-19 (") || l.ix.Entry("plugin", "echo") == nil {
 			t.Errorf("%s: %q, %d entries", name, l.note, len(l.ix.Entries))
 		}
-		if c, ok := readRegistryCache(); !ok || c.etag != `"v1"` {
+		if c, ok := s.src.read(); !ok || c.etag != `"v1"` {
 			t.Errorf("%s: the cache was replaced: %q %v", name, c.etag, ok)
 		}
 	}
@@ -165,7 +164,7 @@ func TestNoRegistryIsTheBuiltinKBTypes(t *testing.T) {
 	s := serveRegistry(t, nil)
 	for status, why := range map[int]string{500: "500 Internal Server Error", 304: "304 Not Modified"} {
 		s.set(nil, `"v1"`, status)
-		l := fetchRegistry(context.Background(), regNow)
+		l := s.src.fetch(context.Background(), regNow)
 		if l.note != "offline: the built-in KB types only (the registry answered "+why+")" {
 			t.Errorf("%d: %q", status, l.note)
 		}

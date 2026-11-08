@@ -121,7 +121,9 @@ func (h *Host) call(ctx context.Context, method string, params ...any) (any, err
 			if params, err = h.boundedParams(a, method, params); err != nil {
 				return nil, err
 			}
-			beforeSend()
+			if before := h.seams.beforeSend; before != nil {
+				before()
+			}
 			if err := a.stillIn(); err != nil { // checked as it is sent: the TUI may have left since
 				return nil, err
 			}
@@ -134,7 +136,3 @@ func (h *Host) call(ctx context.Context, method string, params ...any) (any, err
 func (h *Host) failed(what string, err error) {
 	h.notify(h.trf("autodoc.notice.session.text", what, wireMessage(err)))
 }
-
-// beforeSend runs in a worker as a gated call is about to be sent: a cell holds the call there,
-// while the workspace changes under it. Nothing in the program sets it.
-var beforeSend = func() {}

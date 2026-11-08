@@ -160,7 +160,7 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	r.s.WaitFor(t, "the panel gone", func(string) bool { return onLoop(r, func() bool { return r.h.panelSpec(id) == nil }) })
 	select {
 	case <-run.exited:
-	case <-time.After(pluginGrace + pluginTermGrace + 5*time.Second):
+	case <-time.After(defaultSeams.pluginGrace + defaultSeams.pluginTermGrace + 5*time.Second):
 		t.Fatal("the removed card's plugin did not exit")
 	}
 	if r.listsPanel(id) {
