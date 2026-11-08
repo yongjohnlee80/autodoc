@@ -23,7 +23,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/core/pluginproto"
 )
 
 // A plugin's dialog when its manifest names no size, and the bounds on one it names.
@@ -193,8 +193,8 @@ func ParsePlugin(src []byte) (*Plugin, error) {
 		reason = fmt.Sprintf("name %q: want lower-case letters, digits and -", m.Name)
 	case m.Kind != "dialog" && m.Kind != "service":
 		reason = fmt.Sprintf("kind %q: want dialog or service", m.Kind)
-	case m.Protocol < plugin.MinProtocol || m.Protocol > plugin.Protocol:
-		reason = fmt.Sprintf("protocol %d; this AutoDoc speaks %d to %d", m.Protocol, plugin.MinProtocol, plugin.Protocol)
+	case m.Protocol < pluginproto.Min || m.Protocol > pluginproto.Current:
+		reason = fmt.Sprintf("protocol %d; this AutoDoc speaks %d to %d", m.Protocol, pluginproto.Min, pluginproto.Current)
 	case len(md.Undecoded()) > 0:
 		// strictly: a key this AutoDoc does not know is one it would ignore, and run the plugin
 		// without (docs/decisions/plugins.md#protocol-versions-and-strict-manifests)

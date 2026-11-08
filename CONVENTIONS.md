@@ -149,9 +149,10 @@ AutoDoc ships in six languages: `en`, `es`, `ja_JP`, `ko_KR`, `pt_BR` and `zh_CN
 
 ## 7. Plugins and Lua
 
-- **The plugin protocol** (`plugin.Protocol`, `plugin.MinProtocol`) rises only for something a
-  manifest can declare that an older host must not run without, a changed meaning, or something a
-  plugin must handle. Each version has its own `plugin/protocolN_test.go`.
+- **The plugin protocol** (`core/pluginproto`, which the SDK gives as `plugin.Protocol` and
+  `plugin.MinProtocol`) rises only for something a manifest can declare that an older host must not
+  run without, a changed meaning, or something a plugin must handle. Each version has its own
+  `plugin/protocolN_test.go`.
 - `docs/plugins.md` documents every plugin method, and every manifest sample in it decodes
   (`TestThePluginReferenceKeepsUp`).
 - **Lua:** a capability a script may use is gated by its contract's effect (`tui/luagate.go`,
@@ -206,7 +207,7 @@ when a generated file falls behind; the rest is held in review.
 | any user-facing text | all six catalogs |
 | a verb, its params, results or errors | the contract, `Protocol`, `contracts.json` and the wire goldens, AGENTS.md and `contracts.lua` |
 | the Lua surface | `docs/lua/reference.md` (generated blocks and hand-written rows) |
-| the plugin protocol | `plugin.Protocol` when §7 says so, `docs/plugins.md`, a `protocolN_test.go` |
+| the plugin protocol | `pluginproto.Current` when §7 says so, `docs/plugins.md`, a `protocolN_test.go` |
 | the schema | a new migration pair, `docs/ops/schema-scripts.md` |
 | a user-visible behaviour | the relevant `docs/reference` chapter, and the tutorials it changes, in every language |
 | a package's role | its `doc.go`/`README.md`, and [architecture §2](docs/architecture.md#2-packages) |
