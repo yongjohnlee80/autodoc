@@ -340,7 +340,11 @@ func (h *Host) loadPrefs() {
 			return
 		}
 		if a.err != nil {
+			// the store's are not to be had: the run starts all the same, on the defaults and what
+			// was set meanwhile (h.prefs), the error said, rather than stay half started with no word
+			// why; a later list that answers applies the store's as a change, starting nothing again
 			h.failed("preferences", a.err)
+			h.startOnce()
 			return
 		}
 		if a.v == nil {
@@ -387,7 +391,8 @@ func (h *Host) applyPrefs(p prefs) {
 }
 
 // startOnce is the program's start, once a run: the store's preferences are in (loadPrefs's
-// answer), so what starts reads them, never the defaults. A preference set before they answer
+// answer), so what starts reads them, never the defaults; when the store can't answer, on the
+// defaults, the error said. A preference set before they answer
 // (setPref, a theme chosen in the first moments) applies at once, but starts nothing: started
 // from it, About opened on the defaults though the store said not to, and the update check and
 // every Starter read defaults too.

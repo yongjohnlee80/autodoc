@@ -13,6 +13,10 @@ func (s *Session) SetBeforeCall(f func(method string, params []any)) { s.beforeC
 // answer already read while the caller moves on.
 func (s *Session) SetAfterCall(f func(method string)) { s.afterCall = f }
 
+// SetCallError answers each call f gives an error for with that error, without sending it: the
+// seam for a daemon that refuses one verb.
+func (s *Session) SetCallError(f func(method string) error) { s.failCall = f }
+
 // SetProbeWindow is how long Connect keeps dialing after the first refusal (spawnProbeWindow).
 func (s *Session) SetProbeWindow(d time.Duration) { s.window = d }
 
