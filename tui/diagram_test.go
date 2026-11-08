@@ -52,7 +52,8 @@ func TestAnEmbeddedDiagramIsADiagramAtItsLine(t *testing.T) {
 
 // The diagram view shows the .mmd file a note embeds when the cursor is on the embed's line, read
 // beside the note on disk, as File › Preview Mermaid diagram and the editor's View diagram do;
-// that menu item is enabled there.
+// that menu item is enabled there. It shows as its source, an image, or, on a terminal that shows
+// no image, drawn in characters: its nodes boxed inside the dialog.
 func TestTheDiagramViewShowsTheEmbedUnderTheCursor(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	dir := filepath.Dir(abs)
@@ -78,7 +79,55 @@ func TestTheDiagramViewShowsTheEmbedUnderTheCursor(t *testing.T) {
 	r.s.WaitFor(t, "the embedded diagram shown", func(string) bool {
 		return onLoop(r, func() bool {
 			text, _ := r.h.p.Tree().Source("App.diagramText")
-			return strings.Contains(text.Raw, "embedded --> shown") || r.h.lastDiagramImage()
+			if strings.Contains(text.Raw, "embedded --> shown") || r.h.lastDiagramImage() {
+				return true
+			}
+			if !strings.HasPrefix(r.h.diagramHelpText, "Drawn natively") {
+				return false
+			}
+			inside := dialogInside(r.s.String(), "Mermaid preview") // drawn: its nodes boxed, inside the dialog
+			return strings.Contains(inside, "embedded") && strings.Contains(inside, "shown") && strings.ContainsAny(inside, "┌┐└┘╭╮╰╯")
 		})
 	})
+}
+
+// dialogInside is the dialog titled title as the screen shows it: the text between its frame's
+// sides, each of its rows, its frame excluded; "" when it is not on the screen.
+func dialogInside(screen, title string) string {
+	rows := strings.Split(screen, "\n")
+	for y, row := range rows {
+		rs := []rune(row)
+		at := strings.Index(row, title)
+		if at < 0 {
+			continue
+		}
+		t := len([]rune(row[:at]))
+		left, right := -1, -1
+		for x := t - 1; x >= 0; x-- {
+			if strings.ContainsRune("┌╭", rs[x]) {
+				left = x
+				break
+			}
+		}
+		for x := t; x < len(rs); x++ {
+			if strings.ContainsRune("┐╮", rs[x]) {
+				right = x
+			}
+		}
+		if left < 0 || right < 0 {
+			continue
+		}
+		var b strings.Builder
+		for _, in := range rows[y+1:] {
+			rr := []rune(in)
+			if left < len(rr) && strings.ContainsRune("└╰", rr[left]) {
+				break
+			}
+			if right < len(rr) {
+				b.WriteString(string(rr[left+1:right]) + "\n")
+			}
+		}
+		return b.String()
+	}
+	return ""
 }
