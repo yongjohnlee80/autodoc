@@ -12,18 +12,20 @@ import (
 )
 
 // A NOTE'S RENDERED VIEW IN A TERMINAL (docs/decisions/editor.md#a-terminal-notes-rendered-view):
-// on a terminal backend, in either build (a GUI build run with --ui too), Raw is the note's text,
-// Rendered the page, as in the window. A window keeps its own (native) path: this does nothing there.
+// on a terminal backend, in either build (a GUI build run with --ui too), a Markdown note's Rendered
+// view is the editor itself drawing the note through golib's Markdown cell renderer, edited in place
+// as in the window: markup hidden, tables boxed, code highlighted in its language, Mermaid and
+// Vega-Lite fences drawn, images where the terminal draws them, frontmatter and comments hidden. The
+// block typed in shows its source. A window keeps its own (native) path: this does nothing there.
 // The view is the window's rule (rendered_gui.go): Rendered at every start, one choice for notes and
-// tables, Ctrl+T switching it. The window's Rendered Markdown stays editable; the page is read-only,
-// so its first editing key opens the text and edits (HandleEvent). The page is the note exported in
-// process, as the HTML pane's is, and laid out in cells by golib's HTMLView: tables boxed, headings
-// by level, code set off, a mind map drawn, any other diagram a line saying it isn't drawn here, in
-// the UI's language. Ctrl+T flips between the two, as the window's does; the page shows the
-// cursor's block when it is shown, and keeps the reader's place when the note changes under it.
-// Its links open as the pane's do.
+// tables, Ctrl+T switching it with the cursor kept.
+//
+// AN HTML FILE OPENED RAW keeps a page: its own bytes laid out in cells by golib's HTMLView, the
+// editor's document view, read-only (its first editing key opens the text and edits, HandleEvent),
+// its links opening as the pane's do (docs/decisions/editor.md#html-files-open-raw-or-simplified).
 
-// cellNotePage is the feature: one page view, the editor's document view while a note is shown.
+// cellNotePage is the feature: a note's renderer on the terminal's editor, and one page view, the
+// editor's document view while an HTML file is shown.
 type cellNotePage struct {
 	h      *Host
 	view   *notePageView
@@ -39,6 +41,14 @@ type cellNotePage struct {
 	// toCursor is set while the page scrolls itself to the cursor (toCursorBlock): the breadcrumb
 	// is the cursor's then, and only a reader's scroll moves it to the page's top
 	toCursor bool
+	// md draws a note's Rendered view in the editor (renderNote); imgKey is the folder its images
+	// load from, as last given to the editor
+	md     *widget.MarkdownCellRenderer
+	imgKey string
+	imgSet bool
+	// embeds answers md for the note's embedded diagrams, charts and tables (noteembeds.go), the
+	// note's file on disk its own
+	embeds *termEmbeds
 }
 
 // notePageView is the page as the editor's document view: shown, it renders the note's text,
@@ -332,13 +342,25 @@ func (p *cellNotePage) viewOf() *notePageView {
 	return p.view
 }
 
-// Shown makes the page the editor's Rendered view for a note, a Markdown page, or for an HTML file
-// opened Raw, its own page (docs/decisions/editor.md#html-files-open-raw-or-simplified), on a
-// terminal. Any other page keeps what documentFor gave it (a table file its table, the rest their
-// text), and a window's editor its own. A page shown while the page view is drawn renders at once.
+// Shown draws a note, a Markdown page, through the editor's own renderer on a terminal, and makes
+// the page the editor's Rendered view for an HTML file opened Raw, its own page
+// (docs/decisions/editor.md#html-files-open-raw-or-simplified). Any other page keeps what
+// documentFor gave it (a table file its table, the rest their text), with no renderer, and a
+// window's editor its own. A page shown while the page view is drawn renders at once.
 func (p *cellNotePage) Shown(pg Page) {
 	html := p.h.file.open && p.h.file.raw && pg.Ref.path != ""
-	if pg.Kind != kind.Markdown && !html || !p.onATerminal() {
+	if !p.onATerminal() {
+		p.shown, p.html = fileRef{}, false
+		p.noRenderer() // a terminal's editor turned native (a test's flip) keeps no note's renderer
+		return
+	}
+	if pg.Kind == kind.Markdown && !html {
+		p.shown, p.html = fileRef{}, false
+		p.renderNote(pg)
+		return
+	}
+	p.noRenderer()
+	if !html {
 		p.shown, p.html = fileRef{}, false
 		return
 	}
@@ -347,27 +369,61 @@ func (p *cellNotePage) Shown(pg Page) {
 	p.giveSyntax() // the page may have been made before the program attached
 	p.images(pg)
 	setDocumentView(p.h.editor, v)
-	switch h := p.h; {
-	case h.docSwitch != nil:
-		h.docSwitch(true)
-	default:
-		if ds, ok := h.editor.(documentSwitch); ok {
-			ds.SetRenderedDocument(true)
-		}
-	}
+	p.h.setRenderedDocument(true)
 	if p.isShown() {
 		p.render(pg.Text, true)
 	}
 }
 
-// Edited renders the note again once typing rests (pagePaused), keeping the reader's place.
+// renderNote draws note pg's Rendered view in the editor: its Markdown cell renderer, highlighting
+// code in the program's languages, its images loading from the note's folder, and no page over it.
+func (p *cellNotePage) renderNote(pg Page) {
+	e := p.h.editor.(*widget.Editor) // on a terminal (onATerminal)
+	if p.md == nil {
+		p.md = &widget.MarkdownCellRenderer{MarkdownBlocks: widget.MarkdownBlocks{HideMetadata: true}}
+	}
+	if p.h.p != nil {
+		p.md.Languages = p.h.p.SourceLanguages() // the program may have attached since
+	}
+	if e.Renderer() != p.md {
+		e.SetRenderer(p.md)
+	}
+	if note := p.h.diskPath(); p.embeds == nil || p.embeds.note != note {
+		p.embeds = &termEmbeds{note: note, trf: p.h.trf}
+	}
+	p.md.Embeds = p.embeds.resolve
+	// a safeguard for a show that reuses the layout, with no switch: a switch to the note already
+	// lays it again (SetImages, SetRenderer), so an embedded file written since is read anew there
+	e.RelayRendered()
+	root, base := p.h.resourcesFor(pg.Ref.ws, pg.Ref.path)
+	if key := root + "\x00" + base; !p.imgSet || key != p.imgKey {
+		p.imgKey, p.imgSet = key, true
+		if p.h.diskPath() != "" {
+			e.SetImages(widget.DirResources(root, base))
+		} else {
+			e.SetImages(nil)
+		}
+	}
+	p.h.setRenderedDocument(false)
+}
+
+// noRenderer takes a note's renderer off the editor: another page is shown, its text, a table or
+// an HTML file's page.
+func (p *cellNotePage) noRenderer() {
+	if e, ok := p.h.editor.(*widget.Editor); ok && p.md != nil && e.Renderer() == p.md {
+		e.SetRenderer(nil)
+	}
+}
+
+// Edited lays an HTML file's page out again once typing rests (pagePaused), keeping the
+// reader's place.
 func (p *cellNotePage) Edited(pg Page) {
 	if pg.Ref == p.shown && p.shown.path != "" && p.isShown() {
 		p.render(pg.Text, false)
 	}
 }
 
-// hidden maps the page's place back to the text: when the reader scrolled the page of the note
+// hidden maps the page's place back to the text: when the reader scrolled the page of the file
 // still shown to another block, the cursor goes to that block's first byte, so Raw opens where they
 // were reading. Unscrolled, the cursor stays where it was.
 func (p *cellNotePage) hidden() {
