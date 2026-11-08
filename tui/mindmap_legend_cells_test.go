@@ -35,7 +35,7 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(kb, "c.md"), []byte("# Gamma\n\nccc\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r, _ := openCellMindmap(t, kb, func(r *running) {
+	r, _ := openCellMindmapOf(t, kb, 3, func(r *running) { // Alpha, Beta and Gamma
 		onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
 		r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
 	})
