@@ -90,10 +90,18 @@ func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	}
 	r.keys(t, key('z'))
 	waitSaid(t, logs, "card", "key z") // and keys
-	// the card's redraw for that key drawn before the choice: the plugin logs a line before it sends
-	// the frame that shows it, and a frame that came after the choice would paint the card, and its
-	// picture, whatever the choice does
+	// the choice is made with no other frame due: any frame paints every card and asks for its
+	// picture, so one that came after the choice for another reason would bring the picture back
+	// whatever the choice does. The card's redraw for that key is drawn first (the plugin logs a line
+	// before it sends the frame that shows it), and every toast is gone (a test's lasts a second, and
+	// its expiry is a frame)
 	r.waitShown(t, "key z ctrl=false")
+	for deadline := time.Now().Add(20 * time.Second); !onLoop(r, func() bool { s, w := r.h.toasts.Len(); return s == 0 && w == 0 }); {
+		if time.Now().After(deadline) {
+			t.Fatalf("a toast never went before the choice:\n%s", r.s)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "true"); return true })
 	waitImages(t, r, "Plugin pixels on again", 1)
 
