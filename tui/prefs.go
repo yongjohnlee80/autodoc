@@ -354,6 +354,7 @@ func (h *Host) loadPrefs() {
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
+		h.startOnce()
 		h.luaPrefsRead = true
 		h.askLuaGrants()   // a gated script's question waits for the answers already given
 		h.decideLaunches() // so does a plugin's start with AutoDoc (pluginlaunch.go)
@@ -383,11 +384,20 @@ func (h *Host) applyPrefs(p prefs) {
 		h.switchTheme(p.theme)
 	}
 	h.useLanguage(p.language) // at the start, and after a choice: nothing when it is the one shown
-	if !h.started {
-		h.started = true // the first preferences of the run: the program has started
-		h.reg.started()
-		h.refreshDock() // the editor, and whatever opened before the start
+}
+
+// startOnce is the program's start, once a run: the store's preferences are in (loadPrefs's
+// answer), so what starts reads them, never the defaults. A preference set before they answer
+// (setPref, a theme chosen in the first moments) applies at once, but starts nothing: started
+// from it, About opened on the defaults though the store said not to, and the update check and
+// every Starter read defaults too.
+func (h *Host) startOnce() {
+	if h.started {
+		return
 	}
+	h.started = true
+	h.reg.started()
+	h.refreshDock() // the editor, and whatever opened before the start
 }
 
 // syncPageWidth sizes the page to hold the ruler's columns of text: its border, and the line
