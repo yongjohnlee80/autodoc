@@ -84,8 +84,15 @@ type pluginView struct {
 // ok false otherwise, and the cells are painted (docs/decisions/plugins.md#pixel-surfaces).
 func (v *pluginView) NativeView() (any, bool) { return v.surfaceNative() }
 
-// surfaceMode: the run has a pixel surface, so the pointer goes to it in dp.
-func (v *pluginView) surfaceMode() bool { return v.run != nil && v.run.surface != nil }
+// surfaceMode: the run has a pixel surface shown, so the pointer goes to it in dp. A terminal's
+// surface whose pictures are off (pluginsurface_cells.go) shows the card's cells, and the pointer
+// goes to them as any card's does.
+func (v *pluginView) surfaceMode() bool {
+	if v.run == nil || v.run.surface == nil {
+		return false
+	}
+	return v.cellPicturesOf() == nil || v.cellSurfaceLive()
+}
 
 // PreciseScroll: a surface takes every precise scroll, the part a wheel step can't tell included
 // (tuicore.PreciseScroller).
@@ -98,7 +105,7 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 	if ctx == nil {
 		return plugin.SurfacePointer{}, false
 	}
-	cp := ctx.CellPixels()
+	cp := surfaceCellPixels(ctx)
 	p := plugin.SurfacePointer{
 		X: (float32(m.X) + m.SubX) * cp.W, Y: (float32(m.Y) + m.SubY) * cp.H, Count: m.Count,
 		Ctrl: m.Mods&tuicore.ModCtrl != 0, Alt: m.Mods&tuicore.ModAlt != 0, Shift: m.Mods&tuicore.ModShift != 0,
@@ -214,6 +221,10 @@ func (v *pluginView) Render(s tuicore.Surface) {
 	base := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
 	s.Fill(tuicore.Rect{W: sz.W, H: sz.H}, " ", base)
 	if v.run == nil {
+		return
+	}
+	if v.cellSurfaceLive() { // a terminal's surface: its picture covers the card (Image)
+		v.paintCellSurface(sz)
 		return
 	}
 	v.run.mu.Lock()

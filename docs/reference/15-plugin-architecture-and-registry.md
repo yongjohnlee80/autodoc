@@ -99,7 +99,7 @@ Protocol 9 lets a plugin open a kind of file AutoDoc does not read itself. Its m
 
 ### Protocol 10: Pixel Surfaces
 
-Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI its area is a native view drawing a golib gui stream, and in the terminal the plugin draws cells. Frames cross a side channel, a Unix socket inherited as fd 3, never stdout:
+Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI its area is a native view drawing a golib gui stream. In a terminal that confirmed kitty's graphics protocol, with View › Image previews and Preferences › Plugin pixels on (the default), each frame is shown as a picture over the card's cells: a PNG, at most 15 frames and about 4 MiB a second, the newest frame winning. In any other terminal the plugin draws cells. Frames cross a side channel, a Unix socket inherited as fd 3, never stdout:
 - The host allocates each generation's shared-memory buffers, sealed so they can't shrink, and maps them read-only.
 - The plugin presents a buffer it holds credit for.
 - The host answers each frame's outcome, then the buffer's credit, so every buffer has at most one frame in flight.

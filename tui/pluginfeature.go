@@ -222,10 +222,22 @@ func (*plugins) Keys() []Key {
 }
 func (*plugins) Cards() []Card { return nil }
 
+// repaintCards paints each running card again: its picture or its cells, as Plugin pixels and image
+// previews now say. A picture is consulted at a paint (tuicore.ImageReporter), so a choice no paint
+// follows would leave the card as it was.
+func (pl *plugins) repaintCards() {
+	for _, r := range pl.running {
+		if r.view != nil {
+			r.view.MarkDirty()
+		}
+	}
+}
+
 // PreferencesChanged lays the SPC p letters out again, the plugins' and their commands': the user's
 // choices are preferences; and the
 // results panel takes the size the user left it at.
 func (pl *plugins) PreferencesChanged() {
+	pl.repaintCards()
 	pl.refreshPlugins()
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
@@ -309,6 +321,10 @@ type pluginHost interface {
 	// SurfaceBackend is the backend the App runs on: under --gui the window's, whose streams a
 	// plugin's pixel surface draws through (pluginsurface_gui.go); nil in a test of its own
 	SurfaceBackend() tuicore.Backend
+	// TerminalPictures reports whether a plugin's pixel surface shows in this terminal: kitty's
+	// graphics confirmed, View › Image previews on and Preferences › Plugin pixels in a terminal on
+	// (pluginsurface_cells.go); false in a window
+	TerminalPictures() bool
 	// PageSize is the page's size in cells, as last laid out; 0 before its first layout. A card's
 	// panel is sized from it until the user sizes it
 	PageSize() (w, h int)
@@ -344,6 +360,7 @@ var (
 func (c core) Attached() bool                          { return c.h.p != nil }
 func (c core) Overlay() (*widget.OverlayHost, bool)    { return c.h.p.Overlay() }
 func (c core) SurfaceBackend() tuicore.Backend         { return c.h.backend }
+func (c core) TerminalPictures() bool                  { return c.h.terminalPictures() }
 func (c core) HasCatalog() bool                        { return c.h.cat != nil }
 func (c core) CardPanelsChanged(undo func())           { c.h.cardPanelsChanged(undo) }
 func (c core) CommandsChanged()                        { c.h.commandsChanged() }
