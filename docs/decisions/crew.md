@@ -954,6 +954,11 @@ the session doesn't start until someone answers it.
   run the same CLI as mise's tool for the name, or a later file on PATH, which are tried next. The
   TUI does this off the loop when the window starts and after each spawn; a spawn asks the binary it
   found again, which costs a stat when nothing changed.
+- A program of another name run as Claude Code (a wrapper whose name says nothing, such as a
+  `claude_tui.sh` that sets an account's `CLAUDE_CONFIG_DIR` and runs `claude`) is, when no file of
+  its own name reads as a Claude Code, the `claude` found the same way on the same `PATH`: the CLI
+  the wrapper runs. Neovim's crew setup, the window and `autodoc crew claude-settings` all look it
+  up this way, so such an agent's prompts are reported.
 - mise can be held up while other agents start: a wrapper that runs `mise use` on each launch takes
   mise's lock, or checks its remote. So `mise which` is bounded at 5 s, and asked once more, bounded
   at 15 s, when that runs out. When mise still can't answer, nothing is taken in its place, not even
