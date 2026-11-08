@@ -29,7 +29,8 @@ type Feature interface {
 type (
 	// Connecter hears each new connection, after the host has loaded what every connection loads.
 	Connecter interface{ Connected() }
-	// Starter hears once that the program has started: its first preferences are applied.
+	// Starter hears once that the program has started: the store's preferences are in and applied
+	// (startOnce), never the defaults a preference set before them was applied to.
 	Starter interface{ Started() }
 	// Stopping completes pending UI work synchronously before the program unmounts.
 	// It runs in the loop's Update phase; it must not block or post and wait.
