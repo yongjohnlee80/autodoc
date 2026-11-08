@@ -19,8 +19,7 @@ import (
 // written whole fails the command. profile (--profile, or AUTODOC_PROFILE) runs a memory monitor
 // beside the UI, closed with the recording.
 func runUI(ctx context.Context, configPath, dev, workspace string, window bool, b build, debug *debugFlag, profile *profileFlag) error {
-	o := tui.LaunchOptions{ConfigPath: configPath, Dev: dev, Workspace: workspace, Version: b.version, BuildDate: b.buildDate, Registrations: b.reg.Tables(),
-		TermOptions: terminalOptions()}
+	o := launchOptions(configPath, dev, workspace, b)
 	mode := "ui"
 	if window {
 		mode = "gui"
@@ -48,6 +47,13 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 		return runGUI(ctx, o, owned)
 	}
 	return afterRun(finishRun(tui.Launch(ctx, o), owned...))
+}
+
+// launchOptions are the UI's, either build's: a page Open in browser writes draws its Vega-Lite
+// charts as --export does (chartSVG, exportchart_on.go and exportchart_off.go).
+func launchOptions(configPath, dev, workspace string, b build) tui.LaunchOptions {
+	return tui.LaunchOptions{ConfigPath: configPath, Dev: dev, Workspace: workspace, Version: b.version, BuildDate: b.buildDate, Registrations: b.reg.Tables(),
+		TermOptions: terminalOptions(), Chart: chartSVG}
 }
 
 // terminalOptions open AutoDoc's terminal: the platform's (termOptions); the clipboard read

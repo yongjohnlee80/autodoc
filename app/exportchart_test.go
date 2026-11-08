@@ -101,3 +101,18 @@ func TestTheCommandLineExportDrawsCharts(t *testing.T) {
 	}
 	drawn("--export site", index)
 }
+
+// The UI is launched with the export's chart drawing, so a page the pane opens in the browser draws
+// its Vega-Lite charts as --export does, in either build.
+func TestTheUIDrawsChartsInTheBrowsersPage(t *testing.T) {
+	o := launchOptions("", "", "", build{})
+	if o.Chart == nil {
+		t.Fatal("the UI's launch options carry no chart drawing: a page opened in the browser keeps its Vega-Lite spec")
+	}
+	spec := `{"mark":"bar","data":{"values":[{"k":"Apples","v":3}]},` +
+		`"encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}`
+	svg, err := o.Chart([]byte(spec), "light")
+	if err != nil || !strings.Contains(svg, "<svg") || !strings.Contains(svg, "Apples") {
+		t.Fatalf("the UI's chart drawing gave %.80q, %v; want the chart's SVG, its label written", svg, err)
+	}
+}

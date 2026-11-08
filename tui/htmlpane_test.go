@@ -384,6 +384,58 @@ func TestThePaneOpensItsPageInTheBrowser(t *testing.T) {
 	}
 }
 
+// TestThePagesChartsAreDrawnInTheBrowserAndKeptInThePane: a note's vega-lite block stays its spec in
+// the pane, whose HTMLView draws it as a chart in cells, while Open in browser writes the page with
+// the chart drawn as SVG by the host's Chart, as --export does. With no Chart, the browser's page
+// keeps the spec.
+func TestThePagesChartsAreDrawnInTheBrowserAndKeptInThePane(t *testing.T) {
+	const note = "# Fruit\n\n```vega-lite\n" + `{"mark":"bar","data":{"values":[{"k":"Apples","v":3}]},` +
+		`"encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}` + "\n```\n"
+	const drawn = `<svg data-sample="drawn chart"></svg>`
+	for _, tc := range []struct {
+		name  string
+		chart func([]byte, string) (string, error)
+		want  string
+	}{
+		{"with a Chart", func([]byte, string) (string, error) { return drawn, nil }, drawn},
+		{"without one", nil, `<pre class="vega-lite"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, kb, _, _ := runOutside(t)
+			if err := os.WriteFile(filepath.Join(kb, "chart.md"), []byte(note), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			opened := make(chan string, 1)
+			r.h.p.Post(func() {
+				r.h.chart = tc.chart
+				r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil }
+				r.h.openAbsolute(filepath.Join(kb, "chart.md"))
+			})
+			r.waitOpen(t, "kb", "chart.md")
+			r.h.p.Post(func() { r.h.previewHTML() })
+			r.s.WaitFor(t, "the pane's page", func(string) bool { return r.paneSource() != "" })
+			if src := r.paneSource(); !strings.Contains(src, `<pre class="vega-lite"`) || strings.Contains(src, drawn) {
+				t.Fatalf("the pane's page is %.300q, want the vega-lite spec its HTMLView draws, not the SVG", src)
+			}
+			if !onLoop(r, func() bool { return buttonsUnder(r.h.p, "htmlPane")[0].Activate(tuicore.OriginUser) }) {
+				t.Fatal("Open in browser did not press")
+			}
+			select {
+			case path := <-opened:
+				page, err := os.ReadFile(path)
+				if err != nil || !strings.Contains(string(page), tc.want) {
+					t.Fatalf("the browser's page (%v) lacks %q:\n%.600s", err, tc.want, page)
+				}
+				if tc.chart != nil && strings.Contains(string(page), `<pre class="vega-lite"`) {
+					t.Fatalf("the browser's page keeps the spec beside the drawn chart:\n%.600s", page)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the browser was not opened")
+			}
+		})
+	}
+}
+
 // TestThePanesCloseClosesIt: Close (q) under the pane's page closes the pane.
 func TestThePanesCloseClosesIt(t *testing.T) {
 	r, _ := runPane(t)

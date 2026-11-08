@@ -141,6 +141,7 @@ type Host struct {
 	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
+	chart                                  func(spec []byte, theme string) (string, error) // Options.Chart
 	fontsApplied                           appliedFonts
 	panelText                              panelText               // the agent and terminal panels' text size (paneltext_gui.go)
 	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
@@ -451,6 +452,10 @@ type Options struct {
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
 	DefaultCellFont string
+	// Chart draws a Vega-Lite spec as inline SVG in the page Open in browser writes, as --export does
+	// (core/export Options.Chart). The pane itself keeps the spec: its HTMLView draws a vega-lite
+	// block as a chart in cells. nil: the browser's page keeps the spec too.
+	Chart func(spec []byte, theme string) (svg string, err error)
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -483,6 +488,7 @@ func newHost(session *Session, opt Options) *Host {
 		fonts:           opt.Fonts,
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
+		chart:           opt.Chart,
 		noteFile:        opt.NoteFile,
 		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
 		jumps:           widget.NewJumpList(0),
