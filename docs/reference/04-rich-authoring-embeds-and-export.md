@@ -113,7 +113,7 @@ A chart outside the subset is not drawn, and AutoDoc says why in golib's words. 
 chart not drawn: unsupported: vegalite: a spec outside the subset drawn: a rule coloured by a field
 ```
 
-A build without the GUI (the terminal's, a headless server's) draws an exported chart too, with golib's `chart/vegalite`, which needs no window system. It measures the labels without the window's fonts, so a label may sit a pixel or two from where the GUI build puts it.
+A build without the GUI (the terminal's, a headless server's) draws an exported chart too, with golib's `chart/vegalite`, which needs no window system. It measures the labels without the window's fonts, by an approximation, so the chart's layout (its margins, tick spacing, a legend's place) can differ from the GUI build's.
 
 To check a chart before you show it, run `autodoc --check-diagram <file>…`. It lays out each `.chart.json` or `.vl.json`, each `.mmd` or `.mermaid`, and each `vega-lite` or `mermaid` fence of a `.md` with golib's renderer, as the GUI does, with no UI or daemon. It prints `file:line: ok (vega-lite)` or `file:line: not drawn: <golib's error>` for each, and exits:
 
