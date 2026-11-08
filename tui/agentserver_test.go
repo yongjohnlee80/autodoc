@@ -536,17 +536,17 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		if !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(pgid)) {
 			t.Fatalf("fixture: the server %d doesn't name %s", pgid, socket)
 		}
-		// the child is forked and in the server's group before the subtest ends: its pid is written
-		// once it is
+		// the child is live in the server's group, exec'd (its command line names no socket, so only
+		// the group kill reaches it) before the subtest ends: its pid is published once it is forked
+		var g int
 		if !eventually(t, func() bool {
 			b, _ := os.ReadFile(childFile)
 			child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
-			return child > 1
+			var err error
+			g, err = syscall.Getpgid(child)
+			return child > 1 && err == nil && g == pgid && !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(child))
 		}) {
-			t.Fatal("fixture: the server's child never started")
-		}
-		if g, err := syscall.Getpgid(child); err != nil || g != pgid || slices.Contains(liveProcessesNaming(socket), strconv.Itoa(child)) {
-			t.Fatalf("fixture: the child %d is in group %d (%v), want the server's %d, its command line naming no socket", child, g, err, pgid)
+			t.Fatalf("fixture: the server's child %d (group %d) isn't live in the server's group %d, its command line naming no socket", child, g, pgid)
 		}
 	})
 	groupEnded("a server never stopped", pgid)
