@@ -13,7 +13,8 @@ import (
 // views. Preferences' GlobeMap… opens the terminal's settings.
 func TestATerminalsRelationViewsAreItsCellViews(t *testing.T) {
 	windowView := regexp.MustCompile(`(^|[^A-Za-z])(GlobeMap|Mindmap) \{`) // the window's, not the cells'
-	for _, gui := range []bool{false} { // a terminal: the build without the GUI never runs as a window
+	// a terminal: the build without the GUI never runs as a window
+	for _, gui := range []bool{false} {
 		got := withRelationViews(layout, gui)
 		for _, want := range []string{`App.toggleGlobeMap()`, `CellGlobeMap {`, `id: globeMap`, `App.toggleMindmap()`,
 			`CellMindmap {`, `id: mindmap`, `onTriggered: App.openGlobeSettings()`} {
