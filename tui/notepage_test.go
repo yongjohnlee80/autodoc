@@ -12,7 +12,7 @@ import (
 )
 
 const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- | ---: |\n| apple | 3 |\n\n" +
-	"```mermaid\nmindmap\n  root((Larder))\n    Shelf\n    Bin\n```\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n"
+	"```mermaid\nmindmap\n  root((Larder))\n    Shelf\n    Bin\n```\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n"
 
 // TestATerminalNoteIsItsPage (docs/decisions/editor.md#a-terminal-notes-rendered-view): on a
 // terminal backend, in either build (go test -tags gui runs it as a GUI build's --ui), a note
@@ -157,7 +157,7 @@ const koNotice = "mermaid 다이어그램: 터미널에서는 그리지 않습�
 // stopped the preferences' read); the first note shown says a diagram it doesn't draw in Korean, and
 // a switch to English with the page shown says it in English.
 func TestAStoredLanguageReachesTheTerminalNotePage(t *testing.T) {
-	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "history.md", "# History\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n")}, tableInclude)
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "history.md", "# History\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n")}, tableInclude)
 	first := runTUI(t, NewSession(d.sock, nil), Options{})
 	first.connected(t)
 	onLoop(first, func() bool { first.h.setLanguage("ko_KR"); return true }) // Options › Language
