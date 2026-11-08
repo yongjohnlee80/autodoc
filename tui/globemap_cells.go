@@ -242,8 +242,12 @@ func (g *cellGlobeMap) Entered(ws string) {
 	}
 }
 
-// LanguageChanged composes the heading again in the UI's language.
-func (g *cellGlobeMap) LanguageChanged() { g.title() }
+// LanguageChanged composes again, in the UI's language, the heading and the settings' filter
+// chooser's rows.
+func (g *cellGlobeMap) LanguageChanged() {
+	g.c.Set("App.globeFilters", choiceModel(g.c, "App.globeFilters"))
+	g.title()
+}
 
 // load reads the workspace's map and settles it off the loop; on the loop it installs the build
 // whole, fitted, its most linked document selected, or drops it when a newer load or the panel's
