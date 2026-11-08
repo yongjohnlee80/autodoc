@@ -36,7 +36,8 @@ func launchHolder(name string) string { return "plugin:" + name }
 // whether a plugin's pixel surface shows in a terminal (pluginsurface_cells.go): on by default.
 func (pl *plugins) Prefs() []PrefSpec {
 	return []PrefSpec{ValuePref(prefPluginLaunchDeclined, "[]", nil),
-		ValuePref(prefPluginPixels, "true", []string{"true", "false"}).chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex")}
+		ValuePref(prefPluginPixels, "true", []string{"true", "false"}).chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex").
+			then(func(prefs) { pl.repaintCards() })}
 }
 
 // LaunchConsent is launchConsent, for the plugins (pluginHost).

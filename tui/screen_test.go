@@ -1322,7 +1322,7 @@ var prefLabels = [][]string{
 		"image previews", "two-view documents", "terminal opens from", "terminal size", "terminal length", "terminal theme"},
 	{"hide the menu bar", "show the status line", "explorer opens from", "todos open from",
 		"agent opens from", "agent size", "agent length", "notifications in the", "a notification stays",
-		"About at startup", "look for updates"},
+		"About at startup", "look for updates", "plugin pixels"},
 }
 
 // TestEachPreferenceHasItsChooserOnItsRow: in the editor preferences every label is whole, on a row

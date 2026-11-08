@@ -222,15 +222,22 @@ func (*plugins) Keys() []Key {
 }
 func (*plugins) Cards() []Card { return nil }
 
-// PreferencesChanged lays the SPC p letters out again, the plugins' and their commands': the user's
-// choices are preferences; and the
-// results panel takes the size the user left it at.
-func (pl *plugins) PreferencesChanged() {
-	for _, r := range pl.running { // a card's picture or its cells, as Plugin pixels and image previews now say
+// repaintCards paints each running card again: its picture or its cells, as Plugin pixels and image
+// previews now say. A picture is consulted at a paint (tuicore.ImageReporter), so a choice no paint
+// follows would leave the card as it was.
+func (pl *plugins) repaintCards() {
+	for _, r := range pl.running {
 		if r.view != nil {
 			r.view.MarkDirty()
 		}
 	}
+}
+
+// PreferencesChanged lays the SPC p letters out again, the plugins' and their commands': the user's
+// choices are preferences; and the
+// results panel takes the size the user left it at.
+func (pl *plugins) PreferencesChanged() {
+	pl.repaintCards()
 	pl.refreshPlugins()
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
