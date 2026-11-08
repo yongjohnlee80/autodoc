@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // THE PAGE'S ACCENT IS THE DOCUMENT'S, and the menu's stays the menu's: the root Window binds
@@ -15,7 +18,8 @@ import (
 // sits under the 3:1 floor, an open menu's access keys keep the menu's, and sepia, which writes no
 // document.accent, reads its menu's own: nothing moves on the nine. A note's Rendered view is the
 // editor's: its diagrams' box outlines wear the document accent, and its inline code reads the Raw
-// view's syntax colour, no longer the document accent (an HTML file's page keeps that, golib's).
+// view's syntax colour, no longer the document accent (an HTML file's page keeps that:
+// TestARawHTMLFilesPageWearsTheDocumentAccent).
 
 // accentSource is a note with the page's accent-bearing cells: inline code, and a flowchart's boxes.
 const accentSource = "### Three\n\nplain with `zq` inline\n\n```mermaid\nflowchart LR\n  A[Gull] --> B[Tern]\n```\n"
@@ -93,6 +97,39 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 				snap := r.s.Backend.Snapshot()
 				x, y, ok := find(snap, "Sepia")
 				return ok && snap[y][x].Attrs.Mask&tuicore.AttrUnderline != 0 && fgIs(snap[y][x].Attrs) == menuAccent
+			})
+		})
+	}
+}
+
+// TestARawHTMLFilesPageWearsTheDocumentAccent: an HTML file opened raw is its page, Rendered, and its
+// inline code wears the document accent, retro's own red apart from its menu's, sepia's its menu's.
+func TestARawHTMLFilesPageWearsTheDocumentAccent(t *testing.T) {
+	for _, theme := range []string{"retro", "sepia"} {
+		t.Run(theme, func(t *testing.T) {
+			r, _ := runHTML(t)
+			storeTheme(t, r, theme)
+			page := filepath.Join(t.TempDir(), "page.html")
+			if err := os.WriteFile(page, []byte("<h3>Three</h3>\n<p>plain with <code>zq</code> inline</p>\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			r.openHTMLAnswer(t, page, "raw")
+			r.waitOpen(t, "", page)
+			r.s.WaitFor(t, "the file's page, Rendered", func(sc string) bool {
+				shown := onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+				return shown == widget.ViewRendered && strings.Contains(sc, "plain with zq inline") && !strings.Contains(sc, "<code>")
+			})
+			pageAccent := themeValue(t, r, theme, "document.accent")
+			menuAccent := themeValue(t, r, theme, "menu.accent")
+			if theme == "retro" && pageAccent == menuAccent {
+				t.Fatalf("retro's document accent %q is its menu's %q", pageAccent, menuAccent)
+			}
+			if theme == "sepia" && pageAccent != menuAccent {
+				t.Fatalf("sepia's page accent %q is not its menu's %q", pageAccent, menuAccent)
+			}
+			r.s.WaitFor(t, "the page's inline code in "+theme+"'s document accent", func(string) bool {
+				fg, ok := codeFG(r)
+				return ok && fg == pageAccent
 			})
 		})
 	}
