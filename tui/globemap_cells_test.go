@@ -293,9 +293,11 @@ func TestALinkIsClippedToTheView(t *testing.T) {
 	}
 }
 
-// TestAZoomedInGlobeMapDrawsQuickly: zoomed in 64 times on a map of fifty thousand long links, nearly
-// all running far off the view, a paint takes well under a second's work: the links are clipped to
-// the view before they are drawn.
+// TestAZoomedInGlobeMapDrawsQuickly: zoomed in 4096 times on a map of fifty thousand long links,
+// nearly all running far off the view, a paint takes well under a second's work: the links are
+// clipped to the view before they are drawn. Unclipped, a link walks every dot of its length,
+// hundreds of thousands at this zoom, and the paint takes many seconds (at 64 times it still fitted
+// the budget).
 func TestAZoomedInGlobeMapDrawsQuickly(t *testing.T) {
 	const nodes, links = 2000, 50000
 	gl := &cellGlobe{ws: "kb", bounds: graphlayout.Rect{X: -1000, Y: -1000, W: 2000, H: 2000}}
@@ -308,12 +310,12 @@ func TestAZoomedInGlobeMapDrawsQuickly(t *testing.T) {
 		gl.m.Edges = append(gl.m.Edges, mapEdge{Src: rnd.IntN(nodes), Dst: rnd.IntN(nodes), Kind: "related"})
 	}
 	g, v := builtGlobe(t, gl, 120, 40)
-	g.zoom = 64
+	g.zoom = 4096
 	s := newCellMindSurface(120, 40)
 	start := time.Now()
 	v.Render(s)
 	if d := time.Since(start); d > 2*time.Second*raceFactor {
-		t.Fatalf("a paint at 64x of %d links took %v; want well under a second's work", links, d)
+		t.Fatalf("a paint at 4096x of %d links took %v; want well under a second's work", links, d)
 	}
 }
 
