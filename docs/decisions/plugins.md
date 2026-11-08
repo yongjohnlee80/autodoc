@@ -47,7 +47,7 @@ The manifest is decoded strictly. An unknown key at any level disables the plugi
 named, because a key the host ignored would be a feature it silently ran without. A manifest that
 uses a key of a later protocol than it says is disabled the same way.
 
-In the code: `core/manifests/manifests.go`, `plugin/protocol.go`
+In the code: `core/manifests/manifests.go`, `core/pluginproto/pluginproto.go` (the versions, which `plugin/protocol.go` gives the SDK)
 
 ## Declared contributions
 

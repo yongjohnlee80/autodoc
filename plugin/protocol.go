@@ -78,17 +78,21 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/pluginproto"
 )
 
 // The plugin protocol's versions this SDK speaks. A host speaks to each plugin the one its manifest
 // says, and Serve answers any from MinProtocol to Protocol with that same one. The protocol rises
 // when a manifest can declare something an older host must not run without, for a changed meaning,
 // or for something a plugin must handle (docs/decisions/plugins.md#protocol-versions-and-strict-manifests).
+// The values are core/pluginproto's, which the host's manifest check reads too, so the SDK and the
+// host it ships with accept the same range; what each version added is listed there.
 const (
-	MinProtocol = 1
-	// 11: [[menu]] and host.menu (docs/decisions/plugins.md#editor-menu-rows);
-	// 10: [surface] (docs/decisions/plugins.md#pixel-surfaces)
-	Protocol = 11
+	// MinProtocol is the oldest version this SDK answers, and a host runs.
+	MinProtocol = pluginproto.Min
+	// Protocol is the newest version, the one a new plugin's manifest declares.
+	Protocol = pluginproto.Current
 )
 
 // The notifications the host sends.
