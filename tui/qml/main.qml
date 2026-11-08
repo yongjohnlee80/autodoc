@@ -106,10 +106,10 @@ Window {
             MenuItem { text: qsTrId("autodoc.main.close_buffer"); onTriggered: App.closeBuffer() }
             MenuSeparator {}
             MenuItem { text: qsTrId("autodoc.main.preview_html"); onTriggered: App.previewHTML() }
-            // what draws a window's Mermaid diagrams (preview.go); the terminal's are mermaid.js's
+            // what draws a Mermaid diagram (preview.go): mermaid.js's image, or golib's Mermaid,
+            // natively (a window's pixels, a terminal's characters)
             Menu {
                 title: qsTrId("autodoc.main.preview_option")
-                visible: App.gui
                 MenuItem { text: qsTrId("autodoc.main.native_mermaid_engine"); group: "mermaidEngine"; checked: App.mermaidNative; onTriggered: App.setMermaidEngine("native") }
                 MenuItem { text: qsTrId("autodoc.main.mermaid_js");            group: "mermaidEngine"; checked: App.mermaidJS;     onTriggered: App.setMermaidEngine("mermaidjs") }
             }
