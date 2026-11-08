@@ -13,7 +13,8 @@ import (
 // chartSVG draws a Vega-Lite spec in a build without the GUI, as the GUI build does
 // (exportchart_on.go): golib's chart/vegalite lays it out and writes it as inline SVG in the
 // export's palette (docs/decisions/editor.md#charts-drawn-as-svg). With no fonts loaded here, its
-// labels are measured by Helvetica's advances; the browser draws them in its own sans-serif. A
+// labels are measured by Helvetica's advances, an approximation of the browser's sans-serif, so the
+// layout laid out from them can differ from the GUI build's. A
 // chart chart/vegalite cannot lay out answers its error, in its words: the export captions the
 // spec with it.
 var chartSVG = func(spec []byte, theme string) (string, error) {

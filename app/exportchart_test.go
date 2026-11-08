@@ -55,3 +55,49 @@ func TestAnExportedChartGolibCannotDrawSaysWhy(t *testing.T) {
 			n, strings.Contains(string(page), "a rule coloured by a field"), page)
 	}
 }
+
+// The command line's exports draw their charts: autodoc --export html, and --export site, write a
+// note's vega-lite fence as SVG with its labels, in this build, the hook wired into each.
+func TestTheCommandLineExportDrawsCharts(t *testing.T) {
+	note := "# Fruit\n\n```vega-lite\n" + `{"mark":"bar","data":{"values":[{"k":"Apples","v":3},{"k":"Pears","v":5}]},` +
+		`"encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}` + "\n```\n"
+	drawn := func(what string, page []byte) {
+		t.Helper()
+		if s := string(page); !strings.Contains(s, "<svg") || !strings.Contains(s, ">Apples</text>") || !strings.Contains(s, ">Pears</text>") {
+			t.Errorf("%s: the chart is not drawn as SVG with its labels:\n%.600s", what, s)
+		}
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "note.md")
+	if err := os.WriteFile(src, []byte(note), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "note.html")
+	if code, msg := runMain(t, nil, "--export", "html", "--output", out, "--theme", "light", src); code != 0 {
+		t.Fatalf("--export html: exit %d: %s", code, msg)
+	}
+	page, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn("--export html", page)
+
+	docs := filepath.Join(dir, "docs")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{"site.toml": "[[section]]\npath = \"README.md\"\nurl = \"\"\n", "README.md": note} {
+		if err := os.WriteFile(filepath.Join(docs, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	site := filepath.Join(dir, "_site")
+	if code, msg := runMain(t, nil, "--export", "site", "--output", site, docs); code != 0 {
+		t.Fatalf("--export site: exit %d: %s", code, msg)
+	}
+	index, err := os.ReadFile(filepath.Join(site, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn("--export site", index)
+}

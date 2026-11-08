@@ -440,8 +440,9 @@ reason. The export package never imports the GUI. The GUI build lays the chart o
 window's chart code and measures its labels with the window's fonts. A build without the GUI (the
 terminal's, a headless server's) uses golib's `chart/vegalite`, which needs no window system, and
 measures its labels by Helvetica's advances, since it has no fonts loaded. The browser draws the
-labels in its own sans-serif either way, so the two builds' charts differ only by a label's width
-here and there. The site workflow still builds with `-tags gui`, for the measured labels; it needs
+labels in its own sans-serif either way. Measured widths are an approximation in both builds, and
+what is laid out from them (margins, tick spacing, a legend's place) can differ between the two;
+neither build promises the browser's exact layout. The site workflow still builds with `-tags gui`, for the measured labels; it needs
 the window system's libraries but no display.
 
 In the code: `app/exportchart.go`, `app/exportchart_on.go`, `app/exportchart_off.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`
