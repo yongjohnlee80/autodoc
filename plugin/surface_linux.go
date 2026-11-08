@@ -172,7 +172,9 @@ func (s *Surface) poke() {
 }
 
 // Buffer is a free buffer of the current generation, waiting for one; an error once ctx ends or
-// the surface is gone.
+// the surface is gone. Once a plugin.surface has told the plugin of a generation, Buffer waits for
+// that generation's buffers: the side channel brings them apart from it, and an older
+// generation's buffer, granted meanwhile, would draw a frame the host answers "retired".
 func (s *Surface) Buffer(ctx context.Context) (*SurfaceBuffer, error) {
 	for {
 		s.mu.Lock()
@@ -181,7 +183,7 @@ func (s *Surface) Buffer(ctx context.Context) (*SurfaceBuffer, error) {
 			return nil, ErrSurfaceClosed
 		}
 		for id, b := range s.free {
-			if b.Gen == s.cur {
+			if b.Gen == s.cur && s.cur >= s.info.Gen {
 				delete(s.free, id)
 				b.drawing = true
 				s.mu.Unlock()

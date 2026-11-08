@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -352,4 +353,34 @@ func TestAGenerationInstallsWhicheverHalfComesSecond(t *testing.T) {
 		t.Fatalf("buffers after their plugin.surface: current %d, %d pending; want 2, none", cur, pending)
 	}
 	s.Present(drawn, image.Rectangle{}, 0) // its generation ended while drawn: its mapping goes here
+}
+
+// A plugin told of a generation is granted only its buffers. The host sends a generation's buffers
+// on the side channel before its plugin.surface, but the two travel apart: a plugin.surface read
+// first leaves its generation pending, and the plugin, told the new size, must wait for its
+// buffers, not be handed an older generation's free one (which the host answers "retired").
+func TestAPluginToldOfAGenerationIsGrantedOnlyItsBuffers(t *testing.T) {
+	host, plug := pair(t)
+	s := surfaceOn(t, plug)
+	installed(t, host, s, 1, 2) // generation 1 current, its two buffers free
+
+	s.setInfo(SurfaceInfo{Gen: 2, W: 2, H: 2, Scale: 1}) // its plugin.surface, its buffers not here yet
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	b, err := s.Buffer(ctx)
+	cancel()
+	if err == nil {
+		t.Fatalf("told of generation 2 before its buffers came, Buffer granted generation %d's buffer %d; want it to wait", b.Gen, b.ID)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Buffer: %v; want it to wait until its deadline", err)
+	}
+
+	sendBuffers(t, host, s, 2, 1) // (the waiting Buffer took setInfo's own poke)
+	// NOTE: a bound on a failing run alone: generation 2's buffer is free now, so Buffer answers at once.
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	b, err = s.Buffer(ctx)
+	if err != nil || b.Gen != 2 || b.ID != 202 {
+		t.Fatalf("Buffer once generation 2's buffers came: %+v, %v; want its buffer 202", b, err)
+	}
 }
