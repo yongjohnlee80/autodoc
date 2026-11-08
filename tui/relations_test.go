@@ -272,7 +272,12 @@ func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
 		t.Errorf("d.md, a diagram: View diagram found %v, enabled %v; want found, enabled", found, on)
 	}
 	r.menuRow(t, "View diagram")
-	r.s.WaitForText(t, "Diagram source")
+	// a terminal with no images draws it in characters (preview.go): its nodes boxed in the dialog
+	r.s.WaitFor(t, "the diagram drawn", func(s string) bool {
+		inside := dialogInside(s, "Mermaid preview")
+		return strings.HasPrefix(onLoop(r, func() string { return r.h.diagramHelpText }), "Drawn natively") &&
+			strings.ContainsAny(inside, "┌┐└┘╭╮╰╯") && strings.Contains(inside, "A") && strings.Contains(inside, "B")
+	})
 }
 
 // linkAt finds the link the cursor is on, of each kind, and nothing elsewhere.

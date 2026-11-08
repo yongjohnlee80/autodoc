@@ -113,13 +113,28 @@ func (h *Host) toggleImagePreviews() {
 	h.say(h.trf("autodoc.notice.preview.image_previews", state))
 }
 
-// mermaidEngines are what can draw a Mermaid diagram in a GUI window (File › Preview option):
-// mermaid.js in a headless browser, as the terminal does and a browser would, or golib's Mermaid,
-// natively, at once but for the types golib draws. The terminal always uses mermaid.js.
+// mermaidEngines are what can draw a Mermaid diagram (File › Preview option): mermaid.js in a
+// headless browser, as an image, as a browser would draw it, or golib's Mermaid, natively, at once
+// but for the types golib draws: in a window's pixels (golib gui/mermaid), in a terminal's
+// characters (golib tui/mermaid, cellDiagram).
 var mermaidEngines = []string{"mermaidjs", "native"}
 
-// mermaidNative reports whether golib's Mermaid draws a GUI window's diagrams: the window's choice.
-func (h *Host) mermaidNative() bool { return h.native() && h.prefs.mermaid == "native" }
+// mermaidNative reports whether golib's Mermaid draws the preview's diagrams: the user's choice.
+func (h *Host) mermaidNative() bool { return h.prefs.mermaid == "native" }
+
+// sourceAsked reports whether a terminal's previews are to show a diagram's source: image previews
+// turned off (View › Image previews), whatever engine File › Preview option chooses. A window draws
+// natively all the same.
+func (h *Host) sourceAsked() bool { return !h.native() && !h.prefs.images }
+
+// drawsNatively is what learns, off the loop, whether golib's Mermaid draws a diagram here: a
+// window's engine, or a terminal's.
+func (h *Host) drawsNatively() func(string) error {
+	if h.native() {
+		return nativeDiagram
+	}
+	return cellDiagram
+}
 
 // setMermaidEngine is File › Preview option: "native" or "mermaidjs".
 func (h *Host) setMermaidEngine(name string) {
@@ -164,16 +179,25 @@ const diagramMaxHeight = 4096
 
 // showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
 func (h *Host) showDiagram(source string) {
-	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. A window without a
-	// browser, or one whose File › Preview option is the native engine, draws it natively, by
-	// golib's Mermaid, where golib draws its type; else mermaid.js, else its source. Whether golib
-	// draws it is learned off the loop: a newer preview, or the dialog closed, meanwhile withdraws
-	// this one (its ticket), and an engine changed meanwhile is the one it is drawn by
+	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. Where File › Preview
+	// option is the native engine, or where no image can be shown, golib's Mermaid draws it
+	// natively (in a window's pixels, a terminal's characters) where golib draws its type; else
+	// mermaid.js, else its source. A terminal whose image previews are off shows the source, as
+	// asked, whichever engine is chosen (sourceAsked). Whether golib draws it is learned off the
+	// loop: a newer preview, or the dialog closed, meanwhile withdraws this one (its ticket), and an
+	// engine or a preference changed meanwhile is the one it is drawn by
 	tk := h.ticket(&h.previewGen, TicketLocal)
+	if h.sourceAsked() {
+		h.showDiagramImage(source, "") // no image: the source, saying image previews are off
+		return
+	}
+	draws := h.drawsNatively()
 	if h.mermaidNative() {
-		do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+		do(h, func(context.Context) error { return draws(source) }, func(err error) {
 			switch {
 			case !tk.Current():
+			case h.sourceAsked():
+				h.showDiagramImage(source, "")
 			case !h.mermaidNative():
 				h.showDiagramImage(source, "")
 			case err == nil:
@@ -185,13 +209,15 @@ func (h *Host) showDiagram(source string) {
 		return
 	}
 	ok, why := h.imageMode()
-	if ok || !h.native() {
+	if ok {
 		h.showDiagramImage(source, "")
 		return
 	}
-	do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+	do(h, func(context.Context) error { return draws(source) }, func(err error) {
 		switch {
 		case !tk.Current():
+		case h.sourceAsked():
+			h.showDiagramImage(source, "")
 		case err == nil:
 			h.showDiagramNative(source, why)
 		default:
@@ -237,9 +263,9 @@ func (h *Host) showDiagramImage(source, declined string) {
 	})
 }
 
-// showDiagramNative shows source in a GUI window drawn natively, by golib's Mermaid in the
-// dialog's HTML view, where golib draws its type: chosen (why is ""), or where no browser draws
-// mermaid.js (why).
+// showDiagramNative shows source drawn natively, by golib's Mermaid in the dialog's HTML view (a
+// window's pixels, a terminal's characters), where golib draws its type: chosen (why is ""), or
+// where mermaid.js's image can't be shown (why).
 func (h *Host) showDiagramNative(source, why string) {
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
