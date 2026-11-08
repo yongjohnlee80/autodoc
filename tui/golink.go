@@ -48,8 +48,9 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 // followLink is SPC j: the link under the editor's cursor, followed as the right-click menu's Go to
 // link follows it, in Raw and in a note's Rendered view alike. Off a link it says so, and where the
 // page's links are listed. On an HTML file's page, which has no cursor, it is the first link at or
-// after the page's top, among what is on screen (docs/decisions/editor.md). In a draft (no file open) it does what Go to link does there: a link
-// goes as written, a web address to the browser, since there is no workspace to resolve it in.
+// after the page's top, among what is on screen (docs/decisions/editor.md). In a draft (no file
+// open) it does what Go to link does there: a link goes as written, a web address to the browser,
+// since there is no workspace to resolve it in.
 func (h *Host) followLink() {
 	source := []byte(h.core.Value())
 	name := untitled

@@ -388,12 +388,13 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 }
 
 // notePageFind is the page's find on an HTML file's page, when one is shown (notepage.go; a note's
-// Rendered view is the editor's, its find the text's): what the page shows is marked (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back,
-// from the one it is on, or for the first from the first at or after the page's top. It is brought
-// into view, the editor's cursor put at its block (Raw opens there) and the page given the
-// keyboard. A term the page doesn't show but the source has (a link's target, Markdown's own
-// syntax) is the text's: the page opens Raw at the reader's place, says so, and reports false, and
-// the text's find goes on, as with no page shown. A term in neither is not found, on the page.
+// Rendered view is the editor's, its find the text's): what the page shows is marked
+// (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back, from the one it
+// is on, or for the first from the first at or after the page's top. It is brought into view, the
+// editor's cursor put at its block (Raw opens there) and the page given the keyboard. A term the
+// page doesn't show but the source has (a link's target, Markdown's own syntax) is the text's: the
+// page opens Raw at the reader's place, says so, and reports false, and the text's find goes on, as
+// with no page shown. A term in neither is not found, on the page.
 func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 	p := h.notePage()
 	if p == nil || !p.shownHere() {

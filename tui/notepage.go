@@ -366,14 +366,7 @@ func (p *cellNotePage) Shown(pg Page) {
 	p.giveSyntax() // the page may have been made before the program attached
 	p.images(pg)
 	setDocumentView(p.h.editor, v)
-	switch h := p.h; {
-	case h.docSwitch != nil:
-		h.docSwitch(true)
-	default:
-		if ds, ok := h.editor.(documentSwitch); ok {
-			ds.SetRenderedDocument(true)
-		}
-	}
+	p.h.setRenderedDocument(true)
 	if p.isShown() {
 		p.render(pg.Text, true)
 	}
@@ -401,12 +394,7 @@ func (p *cellNotePage) renderNote(pg Page) {
 			e.SetImages(nil)
 		}
 	}
-	switch h := p.h; {
-	case h.docSwitch != nil:
-		h.docSwitch(false)
-	default:
-		e.SetRenderedDocument(false)
-	}
+	p.h.setRenderedDocument(false)
 }
 
 // noRenderer takes a note's renderer off the editor: another page is shown, its text, a table or
@@ -417,7 +405,8 @@ func (p *cellNotePage) noRenderer() {
 	}
 }
 
-// Edited lays an HTML file's page out again once typing rests (pagePaused), keeping the reader's place.
+// Edited lays an HTML file's page out again once typing rests (pagePaused), keeping the
+// reader's place.
 func (p *cellNotePage) Edited(pg Page) {
 	if pg.Ref == p.shown && p.shown.path != "" && p.isShown() {
 		p.render(pg.Text, false)
