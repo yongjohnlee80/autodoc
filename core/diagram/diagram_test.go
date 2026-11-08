@@ -32,7 +32,7 @@ func TestADiagramTheViewerCantDrawIsDiagnosedAtItsLine(t *testing.T) {
 		"```",
 		"",
 		"> ```mermaid", // 17: a fence in a block quote is a fence
-		"> gitGraph",   // 18: a kind the parser doesn't read
+		"> kanban",     // 18: a kind the parser doesn't read
 		">   commit",
 		"> ```",
 		"",
@@ -67,7 +67,7 @@ func TestADiagramTheViewerCantDrawIsDiagnosedAtItsLine(t *testing.T) {
 	}
 	want := []got{
 		{9, "HTML in a label, diagram not drawn natively"},
-		{18, `"gitGraph" diagrams, diagram not drawn natively`},
+		{18, `"kanban" diagrams, diagram not drawn natively`},
 	}
 	if len(have) != 3 || !slices.Equal(have[:2], want) || have[2].line != 24 || !strings.HasSuffix(have[2].msg, ", diagram malformed") {
 		t.Errorf("diagnostics %+v, want %+v and a malformed one at line 24", have, want)

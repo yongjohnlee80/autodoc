@@ -147,9 +147,9 @@ func TestViewDiagramInTheGUIWithoutABrowser(t *testing.T) {
 		t.Errorf("help = %q, want it drawn natively for want of a browser", help)
 	}
 
-	git := runGUINote(t, "# P\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n", noBrowser)
+	git := runGUINote(t, "# P\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n", noBrowser)
 	git.h.p.Post(func() { git.h.previewDiagram() })
-	git.s.WaitFor(t, "the gitGraph's source, saying why", func(string) bool {
+	git.s.WaitFor(t, "the kanban board's source, saying why", func(string) bool {
 		return onLoop(git, func() bool {
 			text, _ := git.h.p.Tree().Source("App.diagramTextShown")
 			return text.Raw == "true" && strings.Contains(git.h.diagramHelpText, "no headless") && strings.Contains(git.h.diagramHelpText, "not drawn natively")
@@ -203,7 +203,7 @@ func TestTheNativeEngineDrawsViewDiagram(t *testing.T) {
 
 // Under the native engine a type golib does not draw is drawn by mermaid.js, saying why.
 func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
-	r := runGUINote(t, "# P\n\n```mermaid\ngitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n```\n", func(h *Host) {
+	r := runGUINote(t, "# P\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n", func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
@@ -212,7 +212,7 @@ func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
 		h.setMermaidEngine("native")
 	})
 	r.h.p.Post(func() { r.h.previewDiagram() })
-	r.s.WaitFor(t, "the gitGraph as mermaid.js's image, saying why", func(string) bool {
+	r.s.WaitFor(t, "the kanban board as mermaid.js's image, saying why", func(string) bool {
 		return onLoop(r, func() bool {
 			img, _ := r.h.p.Tree().Source("App.diagramImageShown")
 			return img.Raw == "true" && r.h.lastDiagramImage() && strings.Contains(r.h.diagramHelpText, "not drawn natively")

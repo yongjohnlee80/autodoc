@@ -49,10 +49,10 @@ func TestDiagramsAreFoundInFiles(t *testing.T) {
 	}
 	got, err = diagramsIn(at("shapes.md"))
 	if err != nil || len(got) != 2 {
-		t.Fatalf("shapes.md: %+v, %v; want the quoted gitGraph and the flowchart, not the text example", got, err)
+		t.Fatalf("shapes.md: %+v, %v; want the quoted kanban board and the flowchart, not the text example", got, err)
 	}
-	if got[0].line != 11 || got[0].src != "gitGraph\n  commit\n" {
-		t.Errorf("the quoted gitGraph: %+v", got[0])
+	if got[0].line != 11 || got[0].src != "kanban\n  Todo\n" {
+		t.Errorf("the quoted kanban board: %+v", got[0])
 	}
 	if got[1].line != 16 || got[1].src != "flowchart LR\n  A --> B\n" {
 		t.Errorf("the flowchart closed by a fence with trailing spaces: %+v", got[1])
@@ -75,10 +75,10 @@ func TestDiagramsAreFoundInFiles(t *testing.T) {
 }
 
 // diagramShapes are the fences a line scan misreads: a mermaid fence shown inside a longer one, as
-// text (lines 4 to 7); a gitGraph in a block quote, its source from line 11; and a flowchart from line
+// text (lines 4 to 7); a kanban board in a block quote, its source from line 11; and a flowchart from line
 // 16, whose closing fence has trailing spaces, then prose.
-const diagramShapes = "Text example:\n\n````text\n```mermaid\ngitGraph\n  commit\n```\n````\n\n" +
-	"> ```mermaid\n> gitGraph\n>   commit\n> ```\n\n" +
+const diagramShapes = "Text example:\n\n````text\n```mermaid\nkanban\n  Todo\n```\n````\n\n" +
+	"> ```mermaid\n> kanban\n>   Todo\n> ```\n\n" +
 	"```mermaid\nflowchart LR\n  A --> B\n```   \nAfter the fence, prose.\n"
 
 // checkDiagrams reports each file's diagrams, a line each, at the file line of what was refused:
