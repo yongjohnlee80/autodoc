@@ -400,6 +400,32 @@ Neovim client's drawer groups relations the same way (`autodoc.relations`).
 
 In the code: `tui/relations.go`, `lua/autodoc/relations.lua`
 
+## The GlobeMap in a terminal
+
+A terminal has Relations › GlobeMap too, as a window does. It draws the same map: every document of
+the workspace and the links among them, read the same way and placed by the same seeded force
+simulation (`f` cycles the links it follows), with each document wearing its group's colour (the
+workspace's graph file, as the window's and the Mindmap's). Drawing it differs, because a terminal
+has cells, not pixels:
+
+- **Settled, then drawn.** The simulation runs to its end off the loop and the map is drawn once,
+  in Braille dots (golib `tui/braille`): two dots a cell across and four down. A window draws it as
+  it settles.
+- **Colours made legible.** A group's colour is made legible on the page's own background
+  (`onGround`), so a colour chosen on a dark window still reads on sepia. Links are muted, a
+  supersession is in the theme's warning colour, and any other relation in its accent.
+- **A selection, not a pointer.** `h` `j` `k` `l` and the arrows move a selection to the nearest
+  document that way, and its name is always shown; the others' names show once few enough are in
+  view. `Enter` opens it, as a press on a document does, and hides the panel.
+- **Keys.** The window's `l` (legend) is a direction here, so **`g`** (groups) shows or hides the
+  legend. `H` `J` `K` `L` and `Shift` with the arrows pan; `+` `-` zoom and `0` fits it again, as in
+  a window; the wheel zooms.
+- **Clipped links.** Each link is cut to the view's dots before it is drawn, so a map zoomed in
+  far, its links running off the view, paints as fast as one fitted. To follow: golib's
+  `tui/braille` Line clipping its own segments, so every caller has it.
+
+In the code: `tui/globemap.go`, `tui/globemap_cells.go`, `tui/relationviews_cells.go`
+
 ## Process stats
 
 AutoDoc reports what its own processes use. One package reads a process: resident and peak memory,
