@@ -1,8 +1,13 @@
+//go:build linux
+
 // surface-go is the pixel-surface spike's reference plugin
 // (docs/decisions/plugins.md#pixel-surfaces): it streams an animated, CPU-rendered test pattern
 // into its card and draws every input event it receives over it, IME commits included. Its log (the
 // plugin's stderr) says, each second, the frames drawn and the latency from the host dispatching a
 // pointer event to the frame showing it being drawn.
+//
+// It builds on Linux only: pixel surfaces are Linux's alone today (shared memory), and the SDK's
+// SurfaceBuffer.RGBA is plugin/surface_linux.go's.
 package main
 
 import (
