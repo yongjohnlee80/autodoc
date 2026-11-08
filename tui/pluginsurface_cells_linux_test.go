@@ -90,6 +90,10 @@ func TestATerminalShowsASurfaceCardsPixels(t *testing.T) {
 	}
 	r.keys(t, key('z'))
 	waitSaid(t, logs, "card", "key z") // and keys
+	// the card's redraw for that key drawn before the choice: the plugin logs a line before it sends
+	// the frame that shows it, and a frame that came after the choice would paint the card, and its
+	// picture, whatever the choice does
+	r.waitShown(t, "key z ctrl=false")
 	onLoop(r, func() bool { core{r.h}.SetPref(prefPluginPixels, "true"); return true })
 	waitImages(t, r, "Plugin pixels on again", 1)
 
