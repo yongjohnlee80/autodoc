@@ -71,6 +71,9 @@ type Session struct {
 	// afterCall, when set (tests only), runs on the worker after each call, before its answer is
 	// handed back: the seam that holds an answer already read while the page moves on
 	afterCall func(method string)
+	// failCall, when set (tests only), answers a call with its error instead of sending it: the
+	// seam for a daemon that refuses one verb
+	failCall func(method string) error
 
 	mu      sync.Mutex
 	client  *golibrpc.Client
@@ -422,6 +425,11 @@ func (s *Session) Call(ctx context.Context, method string, params ...any) (any, 
 	}
 	if s.beforeCall != nil {
 		s.beforeCall(method, params)
+	}
+	if s.failCall != nil {
+		if err := s.failCall(method); err != nil {
+			return nil, err
+		}
 	}
 	res, err := cli.Call(ctx, method, params...)
 	if s.afterCall != nil {

@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -66,5 +68,53 @@ func TestStartingWaitsForTheStoresPreferences(t *testing.T) {
 	r.prefsIn(t)
 	if n := onLoop(r, func() int { return starts.n }); n != 1 {
 		t.Fatalf("%d starts after the store's preferences were read again; want 1", n)
+	}
+}
+
+// TestAStoreThatCantListStartsOnTheDefaults: when preference.list fails, the run starts all the
+// same, once, on the defaults: About opens, as its default says, and the error is said. A later
+// list that answers applies the store's preferences as a change (About's start off again, as the
+// store says), and starts nothing again (the mutants: no start on the failed list; the once lost).
+func TestAStoreThatCantListStartsOnTheDefaults(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	sess := NewSession(d.sock, nil)
+	held, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	var fail atomic.Bool
+	fail.Store(true)
+	sess.SetBeforeCall(func(method string, _ []any) {
+		if method == "preference.list" {
+			once.Do(func() { held <- struct{}{}; <-release }) // the counter joins before the start
+		}
+	})
+	sess.SetCallError(func(method string) error {
+		if method == "preference.list" && fail.Load() {
+			return errors.New("the store is unreadable")
+		}
+		return nil
+	})
+	r := runTUI(t, sess, Options{})
+	starts := &startCounter{}
+	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, starts); return true })
+	select {
+	case <-held:
+	case <-time.After(daemonWait):
+		close(release)
+		t.Fatal("the store's preferences were never asked for")
+	}
+	close(release)
+	r.waitWithin(t, "the program started on the defaults", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.started }) })
+	r.s.WaitForText(t, "the store is unreadable")
+	r.s.WaitForText(t, "about autodoc")
+	if n := onLoop(r, func() int { return starts.n }); n != 1 {
+		t.Fatalf("%d starts on a failed list; want 1", n)
+	}
+
+	// the store answers now: its preferences apply, and nothing starts again
+	fail.Store(false)
+	onLoop(r, func() bool { r.h.luaPrefsRead = false; r.h.loadPrefs(); return true })
+	r.prefsIn(t)
+	if n, about := onLoop(r, func() int { return starts.n }), onLoop(r, func() bool { return r.h.prefs.aboutAtStart }); n != 1 || about {
+		t.Fatalf("the list answering later: %d starts, About at the start %v; want 1, and the store's false", n, about)
 	}
 }
