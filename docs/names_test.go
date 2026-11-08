@@ -21,6 +21,13 @@ var teamNames = regexp.MustCompile(`\b(Johno|Jarvis|Lector|Zen|Bartz|Juliet|Kimm
 // $KB_ROOT itself is AutoDoc's product prefix for a task's references, and stays.
 var teamPaths = regexp.MustCompile(`(?i)reviews/(lector|zen|jarvis|bartz|juliet|gold-man|kimmy-vision)/`)
 
+// publishedCommitsExempt are commits already published on canary whose messages name the team,
+// which only a force-push could reword. Each is listed by its full hash with the reason it stays.
+// A release merges into main by a merge commit while one is listed, so the hash survives there.
+var publishedCommitsExempt = map[string]string{
+	"db4e20af2efd1360e034083039cb07d88a355b25": "the buffer tabs' placement commit (2026-11-07): its subject credits the decision to its owner by name; rewording it would rewrite every later canary commit",
+}
+
 // namesExempt are the files that may name the team: this guard, whose patterns spell the names out.
 var namesExempt = map[string]bool{"docs/names_test.go": true}
 
@@ -63,13 +70,18 @@ func TestNoCommitMessageNamesTheTeam(t *testing.T) {
 	if err := exec.Command("git", "-C", "..", "cat-file", "-e", from+"^{commit}").Run(); err != nil {
 		t.Skipf("the clone holds no commit %q (a branch's first push, or a reset): nothing of its own to read", from)
 	}
-	out, err := exec.Command("git", "-C", "..", "log", "--format=%h%x00%B%x1e", commits).Output()
+	out, err := exec.Command("git", "-C", "..", "log", "--format=%H%x00%B%x1e", commits).Output()
 	if err != nil {
 		t.Fatalf("git log %s: %v", commits, err)
 	}
 	for _, entry := range strings.Split(string(out), "\x1e") {
-		sha, msg, ok := strings.Cut(strings.TrimSpace(entry), "\x00")
+		full, msg, ok := strings.Cut(strings.TrimSpace(entry), "\x00")
 		if !ok {
+			continue
+		}
+		sha := full[:min(len(full), 8)]
+		if why, ok := publishedCommitsExempt[full]; ok {
+			t.Logf("commit %s is exempt: %s", sha, why)
 			continue
 		}
 		for i, line := range strings.Split(msg, "\n") {
@@ -79,6 +91,20 @@ func TestNoCommitMessageNamesTheTeam(t *testing.T) {
 			for _, m := range teamPaths.FindAllString(line, -1) {
 				t.Errorf("commit %s, line %d: %q points into the team's reviews", sha, i+1, m)
 			}
+		}
+	}
+}
+
+// TestPublishedCommitsExemptAreWholeHashes: an exemption names one commit by its full hash, so no
+// abbreviation can come to cover another commit that shares its prefix.
+func TestPublishedCommitsExemptAreWholeHashes(t *testing.T) {
+	whole := regexp.MustCompile(`^[0-9a-f]{40}$`)
+	for hash, why := range publishedCommitsExempt {
+		if !whole.MatchString(hash) {
+			t.Errorf("exemption %q is not a full commit hash", hash)
+		}
+		if strings.TrimSpace(why) == "" {
+			t.Errorf("exemption %s gives no reason", hash)
 		}
 	}
 }
