@@ -3,10 +3,8 @@
 package tui
 
 import (
-	"embed"
 	"fmt"
 	"image/color"
-	"strings"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
@@ -50,40 +48,10 @@ var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, gl
 	relationPanelQML(mindmapPanelID, mindmapViewID, "Mindmap",
 		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map", relationColours)
 
-// relationDialogs are the views' dialogs, the GUI's alone: not autodoc.dialogs components, which
-// every build's document may use and so may name only what every build's App has. Each is written
-// into main.qml whole, under its id (relationDialogsQML).
-//
-//go:embed qmlgui/*.qml
-var relationDialogs embed.FS
-
 // relationDialogsQML is the views' dialogs as main.qml holds them: their settings
-// (globesettings_gui.go, mindsettings_gui.go).
+// (globesettings_gui.go, mindsettings_gui.go; relationviews_cells.go's inlineDialog).
 var relationDialogsQML = inlineDialog("GlobeMapSettings.qml", "globeMapSettings") +
 	inlineDialog("MindmapSettings.qml", "mindmapSettings")
-
-// inlineDialog is the dialog of qmlgui/file, its root given the id: the file's text from its root
-// Dialog on, indented as main.qml's children are.
-func inlineDialog(file, id string) string {
-	b, err := relationDialogs.ReadFile("qmlgui/" + file)
-	if err != nil {
-		panic("tui: embedded " + file + ": " + err.Error())
-	}
-	src := string(b)
-	at := strings.Index(src, "Dialog {")
-	if at < 0 {
-		panic("tui: " + file + " has no root Dialog")
-	}
-	src = "Dialog {\n    id: " + id + src[at+len("Dialog {"):]
-	var out strings.Builder
-	for line := range strings.Lines(src) {
-		if strings.TrimSpace(line) != "" {
-			out.WriteString("    ")
-		}
-		out.WriteString(line)
-	}
-	return out.String()
-}
 
 func relationPanelQML(id, view, typ, what, colours string) string {
 	return fmt.Sprintf(`    // %[4]s
@@ -218,8 +186,8 @@ func relationViewChoices() map[string][]string {
 		"App.globeFilters":     names(len(globeFilters), func(i int) string { return globeFilters[i].name }),
 		"App.globeDotSizes":    names(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name }),
 		"App.globeSpeeds":      names(len(globeSpeeds), func(i int) string { return globeSpeeds[i].label }),
-		"App.mindDepths":       {"one link out", "two links out"},
-		"App.mindShapeChoices": names(len(mindShapes), func(i int) string { return mindShapes[i].name }),
+		"App.mindDepths":       mindChoices()["App.mindDepths"],
+		"App.mindShapeChoices": mindChoices()["App.mindShapeChoices"],
 	}
 }
 

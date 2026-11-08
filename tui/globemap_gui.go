@@ -622,8 +622,12 @@ func (g *globeMap) Catalog() []Entry {
 
 func (g *globeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
 
-// Entered: another workspace's map, when it shows.
-func (g *globeMap) Entered(string) {
+// Entered: another workspace's map, when it shows; its settings' groups are that workspace's, read
+// with its map, and nothing is edited meanwhile.
+func (g *globeMap) Entered(ws string) {
+	if ws != g.editor.ws {
+		g.editor.loadingFor(ws)
+	}
 	if g.open {
 		g.load()
 	}

@@ -167,6 +167,67 @@ func TestATerminalsMindmapWritesItsFirstGroups(t *testing.T) {
 	}
 }
 
+// screenRows is the screen's rows as text.
+func screenRows(r *running) []string {
+	var out []string
+	for _, row := range r.s.Backend.Snapshot() {
+		var b strings.Builder
+		for _, c := range row {
+			b.WriteString(c.Content)
+		}
+		out = append(out, strings.TrimRight(b.String(), " "))
+	}
+	return out
+}
+
+// TestATerminalsMindmapSettingsEditItsGroups: Relations › Mindmap settings… opens in a terminal, as
+// the window's dialog less its theme row (the map is drawn in the page's): its groups listed, each a
+// query, a colour and an outline, and the depth it opens at. An edit there is written to the graph
+// file and drawn at once; the menu has the item. The dialog's rows are logged in sepia and dark.
+func TestATerminalsMindmapSettingsEditItsGroups(t *testing.T) {
+	kb := groupsKB(t, "[[mindmap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\nshape = \"hexagon\"\n")
+	r, m := openCellMindmap(t, kb, nil)
+	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.openMindmapSettings()`) {
+		t.Fatal("a terminal's Relations menu has no Mindmap settings… item")
+	}
+	for _, theme := range []string{"sepia", "dark"} {
+		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
+		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
+		onLoop(r, func() bool { m.openSettings(); return true })
+		r.s.WaitFor(t, theme+": the settings, the group listed", func(s string) bool {
+			return strings.Contains(s, "Mindmap settings") && strings.Contains(s, "path:notes/  #edc948  hexagon") && strings.Contains(s, "opens at")
+		})
+		rows := screenRows(r)
+		for y, row := range rows {
+			if strings.Contains(row, "opens at") && y > 0 && strings.Contains(rows[y-1], "theme") {
+				t.Fatalf("%s: a terminal's Mindmap settings show a theme row:\n%s", theme, strings.Join(rows, "\n"))
+			}
+		}
+		var dialog []string
+		for _, row := range rows {
+			if strings.Contains(row, "│") {
+				dialog = append(dialog, row)
+			}
+		}
+		t.Logf("%s: the settings:\n%s", theme, strings.Join(dialog, "\n"))
+		r.keys(t, key('q'))
+		r.s.WaitFor(t, theme+": the settings closed", func(s string) bool { return !strings.Contains(s, "Mindmap settings") })
+	}
+	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
+	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
+	r.s.WaitFor(t, "the map drawn in the edit", func(string) bool {
+		return onLoop(r, func() bool {
+			for _, c := range m.cur.tints {
+				if c == hexColour(0x123456) {
+					return true
+				}
+			}
+			return false
+		})
+	})
+}
+
 // gatedFiles reads a file only once open is closed: a daemon slow to answer.
 type gatedFiles struct {
 	absoluteFiles
@@ -253,5 +314,77 @@ func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 	}
 	if f := file(c); strings.Contains(f, "beta") {
 		t.Fatalf("c's graph file holds b's folder:\n%s", f)
+	}
+}
+
+// TestTheMindmapSettingsEditOnlyTheirWorkspace: the settings opened in b while b's groups are still
+// being read show none and refuse every edit, so nothing lands in a's graph file (the editor's last
+// workspace) nor over b's before b's are read; once b's are listed, an edit is b's alone.
+func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
+	kb := func(folder, colour string) string {
+		root := t.TempDir()
+		for _, p := range []string{folder, ".autodoc"} {
+			if err := os.MkdirAll(filepath.Join(root, p), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(root, folder, "x.md"), []byte("# x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		graph := "[[mindmap.groups]]\nquery = \"path:" + folder + "/\"\ncolour = \"" + colour + "\"\nshape = \"hexagon\"\n"
+		if err := os.WriteFile(graphFile(root), []byte(graph), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	a, b := kb("alpha", "#4e79a7"), kb("beta", "#e15759")
+	d := startManaged(t, map[string]string{"a": a, "b": b})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.waitAttached(t, "a")
+	r.h.p.Post(func() { r.h.enter("a") })
+	r.waitWithin(t, "a in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "a" }) })
+	var m *cellMindmap
+	onLoop(r, func() bool {
+		for _, f := range r.h.reg.features {
+			if c, ok := f.(*cellMindmap); ok {
+				m = c
+			}
+		}
+		m.openSettings()
+		return true
+	})
+	r.waitWithin(t, "a's groups listed", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "a" && !m.editor.loading && len(m.editor.list) == 1 })
+	})
+	r.keys(t, key('q'))
+	open := make(chan struct{})
+	onLoop(r, func() bool {
+		s := newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") // b's file read only once open closes
+		m.store, m.editor.store = s, s
+		return true
+	})
+	r.h.p.Post(func() { r.h.enter("b") })
+	r.waitWithin(t, "b in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "b" }) })
+	onLoop(r, func() bool { m.openSettings(); return true })
+	r.waitWithin(t, "the settings bound to b, reading", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "b" && m.editor.loading && len(m.editor.list) == 0 })
+	})
+	file := func(root string) string { b, _ := os.ReadFile(graphFile(root)); return string(b) }
+	beforeA, beforeB := file(a), file(b)
+	onLoop(r, func() bool { m.editor.setColour("#123456"); m.editor.add(); m.editor.addMissing(); return true })
+	if file(a) != beforeA || strings.Contains(file(a), "#123456") {
+		t.Fatalf("an edit while b's groups were read changed a's graph file:\n%s", file(a))
+	}
+	close(open)
+	r.waitWithin(t, "b's groups listed", daemonWait, func() bool {
+		return onLoop(r, func() bool { return m.editor.ws == "b" && !m.editor.loading && len(m.editor.list) == 1 })
+	})
+	if file(b) != beforeB {
+		t.Fatalf("an edit while b's groups were read was written over b's:\n%s", file(b))
+	}
+	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(b), `colour = "#123456"`) })
+	if strings.Contains(file(a), "#123456") {
+		t.Fatalf("b's edit reached a's graph file:\n%s", file(a))
 	}
 }
