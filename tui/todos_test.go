@@ -2,6 +2,9 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -63,7 +66,11 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 }
 
 // tabRead waits for tab's tasks (for Archived, its months) to have been read.
-func tabRead(t *testing.T, r *running, tab int) {
+//
+// The store must be shown as well: the tabs count as read (not stale) before any store is, so
+// without it a cell went on as the panel opened, its store list (three calls to the daemon) still
+// coming, and a key of the store's (a) did nothing, under load (TestTabReadWaitsForTheStore).
+func tabRead(t testing.TB, r *running, tab int) {
 	t.Helper()
 	if tab == varsTab {
 		r.s.WaitFor(t, "Variables read", func(string) bool {
@@ -72,7 +79,7 @@ func tabRead(t *testing.T, r *running, tab int) {
 		return
 	}
 	r.s.WaitFor(t, todoBuckets[tab].title+" read", func(string) bool {
-		return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && !v.stale[tab] })
+		return onLoop(r, func() bool { v := todosOf(r); return v.cur != nil && v.tab == tab && !v.stale[tab] })
 	})
 }
 
@@ -518,7 +525,142 @@ func TestTodosQuestionMarkOpensTheKeysCard(t *testing.T) {
 	r.keys(t, key('?'))
 	r.s.WaitFor(t, "the card open", shown)
 	r.keys(t, key('a'))
-	r.s.WaitForText(t, "new task")
+	// what add() reads, said with the screen if its dialog never shows: it failed once in a whole
+	// ./tui run, the card closed and no dialog, as add() does with no store shown yet; tabRead now
+	// waits for the store (TestTabReadWaitsForTheStore)
+	waitSaying(t, r, "new task")
+}
+
+// waitSaying is decltest's WaitForText, failing with what the todos panel is at its deadline
+// (todosState) as well as the screen, so a red says which way add() went.
+func waitSaying(t testing.TB, r *running, text string) {
+	t.Helper()
+	for end := time.Now().Add(decltest.WaitTimeout); !strings.Contains(r.s.String(), text); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatalf("text %q never appeared; %s:\n%s", text, todosState(r), r.s.String())
+		}
+	}
+}
+
+// todosState is the todos panel as its keys read it: the tab shown, the store and whether it was
+// released (add() does nothing then), the top dialog and whether the keyboard is in it, and which
+// of the panel's views (or the editor) holds the keyboard.
+func todosState(r *running) string {
+	return onLoop(r, func() string {
+		v := todosOf(r)
+		store := "no store"
+		if v.cur != nil {
+			store = fmt.Sprintf("store %q released %v", v.cur.name, v.cur.released)
+		}
+		dialog := "no dialog open"
+		if host, ok := r.h.p.Overlay(); ok {
+			if m := host.TopModal(); m != nil && m.IsOpen() {
+				dialog = fmt.Sprintf("a dialog open, the keyboard in it %v", r.h.p.App().FocusWithin(m))
+			}
+		}
+		ids := []string{"editor", "todoStore", "todoDetails", "todoMonths", "todoVarsTable"} // the tab view holds the tables: not it
+		for _, tab := range todoTabs {
+			ids = append(ids, tab.table)
+		}
+		var in []string
+		for _, id := range ids {
+			if c, ok := r.h.p.Find(id); ok && r.h.p.App().FocusWithin(c) {
+				in = append(in, id)
+			}
+		}
+		keyboard := "the keyboard in none of the panel's views nor the editor"
+		if len(in) > 0 {
+			keyboard = "the keyboard in " + strings.Join(in, ", ")
+		}
+		return fmt.Sprintf("tab %d; %s; %s; %s", v.tab, store, dialog, keyboard)
+	})
+}
+
+// TestTodosStateSaysWhatTheKeysRead: the state a todos cell fails with names the tab, the store
+// and whether it is released, the open dialog, and the view the keyboard is in, as they are (the
+// mutants: a field left out, or read from the wrong place).
+func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true)
+	r := attached(t, d)
+	openTodos(t, r, "kb", '2')
+	if got, want := todosState(r), `^tab 1; store "[^"]+" released false; no dialog open; the keyboard in todoInProgressTable$`; !regexp.MustCompile(want).MatchString(got) {
+		t.Fatalf("the panel on In progress: %q, want %s", got, want)
+	}
+	r.keys(t, key('?'))
+	r.s.WaitFor(t, "the card open", func(sc string) bool { return strings.Contains(sc, "todos — keys") })
+	if got, want := todosState(r), `^tab 1; store "[^"]+" released false; a dialog open, the keyboard in it true; `; !regexp.MustCompile(want).MatchString(got) {
+		t.Fatalf("the card open: %q, want %s", got, want)
+	}
+	onLoop(r, func() bool { todosOf(r).cur.released = true; return true }) // as todos.release leaves it
+	if got := todosState(r); !regexp.MustCompile(`; store "[^"]+" released true; `).MatchString(got) {
+		t.Fatalf("a released store: %q, want it said", got)
+	}
+
+	// waitSaying, on a text that never shows, fails once its wait is over, saying the state and
+	// the screen; on one that shows, it returns
+	rec := &fatalRecorder{TB: t, msg: make(chan string, 1)}
+	returned := make(chan struct{})
+	start := time.Now()
+	go func() { waitSaying(rec, r, "a text no screen here shows"); close(returned) }()
+	select {
+	case msg := <-rec.msg:
+		if time.Since(start) < decltest.WaitTimeout || !strings.Contains(msg, `"a text no screen here shows" never appeared; tab 1; store `) ||
+			!strings.Contains(msg, "a dialog open") || !strings.Contains(msg, "todos — keys") {
+			t.Fatalf("its failure after %v: %q; want it after %v, saying the state and the screen", time.Since(start), msg, decltest.WaitTimeout)
+		}
+	case <-returned:
+		t.Fatal("it returned, the text never shown")
+	}
+	waitSaying(t, r, "todos — keys")
+}
+
+// TestTabReadWaitsForTheStore: tabRead, which openTodos and the cells after a tab change wait with,
+// waits for the store to be shown, not only for the tab to be unread no longer: before the store
+// list answers, every tab counts as read, and a key the panel's store needs (a, s, d) does nothing
+// then (the keys card cell's one red, in a loaded whole ./tui run). Put back in that state, the
+// panel holds tabRead until its store is shown again (the mutant: the store not waited for).
+func TestTabReadWaitsForTheStore(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true)
+	r := attached(t, d)
+	openTodos(t, r, "kb", '1')
+	var cur *todoStore
+	onLoop(r, func() bool { v := todosOf(r); cur, v.cur = v.cur, nil; return true }) // as the panel is before its store list answers
+	if onLoop(r, func() bool { return todosOf(r).stale[0] }) || cur == nil {
+		t.Fatal("fixture: the Open tab outdated, or no store was shown")
+	}
+	rec := &fatalRecorder{TB: t, msg: make(chan string, 1)}
+	returned := make(chan struct{})
+	go func() { tabRead(rec, r, 0); close(returned) }()
+	select {
+	case <-returned:
+		t.Fatal("tabRead returned with no store shown")
+	case msg := <-rec.msg:
+		t.Fatalf("tabRead failed before its wait was over: %s", msg)
+	case <-time.After(300 * time.Millisecond):
+	}
+	onLoop(r, func() bool { todosOf(r).cur = cur; return true }) // the store list's answer
+	select {
+	case <-returned:
+	case msg := <-rec.msg:
+		t.Fatalf("tabRead failed, the store shown: %s", msg)
+	case <-time.After(decltest.WaitTimeout + time.Second):
+		t.Fatal("tabRead never returned, the store shown")
+	}
+}
+
+// fatalRecorder is a testing.TB whose Fatalf is recorded, the goroutine that called it ended, as
+// testing's own ends the test's.
+type fatalRecorder struct {
+	testing.TB
+	msg chan string
+}
+
+func (f *fatalRecorder) Helper() {}
+func (f *fatalRecorder) Fatalf(format string, args ...any) {
+	f.msg <- fmt.Sprintf(format, args...)
+	runtime.Goexit()
 }
 
 // TestTodosKeysAreTheListsNotTheDetails: with the keyboard in the details pane, the panel's keys do
