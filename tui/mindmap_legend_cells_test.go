@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
 // findLast is find from the screen's bottom: the legend's row, under any text of the map's.
@@ -46,7 +48,7 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 			r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
 		}
 		var why string
-		r.s.WaitFor(t, theme+": the legend under the map, in the boxes' colours", func(string) bool {
+		legendDrawn := func() bool {
 			snap := r.s.Backend.Snapshot()
 			gx, gy, gok := findLast(snap, "╱─╲ notes/")
 			ox, oy, ook := findLast(snap, "╭─╮ any other document")
@@ -79,9 +81,12 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 				return true
 			}
 			return false
-		})
-		if why != "" && len(grounds) == 0 {
-			t.Fatalf("%s: %s", theme, why)
+		}
+		// waited for as decltest's WaitFor waits, failing with which check missed
+		for end := time.Now().Add(decltest.WaitTimeout); !legendDrawn(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(end) {
+				t.Fatalf("%s: the legend under the map, in the boxes' colours: %s:\n%s", theme, why, strings.Join(screenRows(r), "\n"))
+			}
 		}
 		var rows strings.Builder
 		for _, row := range screenRows(r) {
