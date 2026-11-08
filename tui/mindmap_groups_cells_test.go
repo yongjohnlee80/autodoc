@@ -241,7 +241,8 @@ func (f gatedFiles) ReadAbsolute(ctx context.Context, path string) ([]byte, stri
 
 // TestAGroupsRequestKeepsToItsWorkspace: a request for workspace a's first groups whose graph file is
 // read only after b has become the workspace in use makes a's groups of a's folders, never b's, and
-// writes them into a's graph file alone.
+// writes them into a's graph file alone; a request for c, a workspace not in use, takes no files, so
+// none of b's folders either.
 func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 	dir := func(folder, name string) string {
 		root := t.TempDir()
@@ -253,8 +254,8 @@ func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 		}
 		return root
 	}
-	a, b := dir("alpha", "x.md"), dir("beta", "y.md")
-	d := startManaged(t, map[string]string{"a": a, "b": b})
+	a, b, c := dir("alpha", "x.md"), dir("beta", "y.md"), dir("gamma", "z.md")
+	d := startManaged(t, map[string]string{"a": a, "b": b, "c": c})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
 	r.waitAttached(t, "a")
 	r.h.p.Post(func() { r.h.enter("a") })
@@ -294,6 +295,25 @@ func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 	}
 	if f := file(b); f != "" {
 		t.Fatalf("b's graph file was written by a's request:\n%s", f)
+	}
+
+	// c, not in use: its request has no files of its own to hand, and never b's
+	onLoop(r, func() bool {
+		store.groups("c", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []relGroup) { got <- l })
+		return true
+	})
+	select {
+	case list = <-got:
+	case <-time.After(daemonWait):
+		t.Fatal("c's groups never came")
+	}
+	for _, g := range list {
+		if g.Query == "path:beta/" {
+			t.Fatalf("c's groups %+v hold b's folder, the workspace in use's", list)
+		}
+	}
+	if f := file(c); strings.Contains(f, "beta") {
+		t.Fatalf("c's graph file holds b's folder:\n%s", f)
 	}
 }
 
