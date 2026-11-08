@@ -26,12 +26,56 @@ import (
 // --listen unix://<socket>`); "never" listens never makes it. The shell stays: an `exec sleep`
 // would put sleep's command line in its place, which names no socket, so the server would be taken
 // for another process by whatever looked after the exec (a flake, 1 in 5 under -race, 2026-11-01).
-func fakeServer(socket string, listens bool) []string {
+// It ends with t (endsWithTheTest).
+func fakeServer(t *testing.T, socket string, listens bool) []string {
+	endsWithTheTest(t, socket)
 	script := "while :; do sleep 1; done"
 	if listens {
 		script = `touch "$1"; while :; do sleep 1; done`
 	}
 	return []string{"sh", "-c", script, "sh", socket}
+}
+
+// endsWithTheTest kills, at t's cleanup, the process group of every live process whose command
+// line names socket, and fails t if one is left. A cell's server started through runAgent is bound
+// to a CLI that never ends there (a spawn that starts nothing, or a fake terminal never ended), so
+// nothing else stops it: fake servers ran on for as long as the machine did. Only a process naming
+// socket, which is in the cell's own temporary folder, is touched, so a reused pid never is; and
+// never the test's own group.
+func endsWithTheTest(t *testing.T, socket string) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, p := range liveProcessesNaming(socket) {
+			pid, _ := strconv.Atoi(p)
+			if pgid, err := syscall.Getpgid(pid); err == nil && pgid > 1 && pgid != syscall.Getpgrp() {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+		if !eventually(t, func() bool { return len(liveProcessesNaming(socket)) == 0 }) {
+			t.Errorf("processes naming %s outlive the test: %v", socket, liveProcessesNaming(socket))
+		}
+	})
+}
+
+// liveProcessesNaming is processesNaming where there is a /proc, and ps's answer where there is
+// none (macOS), so a cell's servers end with it there too.
+func liveProcessesNaming(s string) []string {
+	if _, err := os.Stat("/proc/self/cmdline"); err == nil {
+		return processesNaming(s)
+	}
+	b, err := exec.Command("ps", "-A", "-o", "pid=,stat=,command=").Output()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && !strings.HasPrefix(f[1], "Z") && strings.Contains(strings.Join(f[2:], " "), s) {
+			out = append(out, f[0])
+		}
+	}
+	return out
 }
 
 // namesItsSocket fails the cell unless pid's command line still names socket a while after its
@@ -91,7 +135,7 @@ func serverDir(t *testing.T) (dir, socket string) {
 // the pid file not written).
 func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +181,7 @@ func TestAServerThatNeverListensIsStoppedAndRefused(t *testing.T) {
 	serverReadyWait = 300 * time.Millisecond
 	t.Cleanup(func() { serverReadyWait = saved })
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(socket, false), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, false), socket, dir, os.Environ())
 	if err == nil || s != nil || !strings.Contains(err.Error(), "didn't listen") {
 		t.Fatalf("a server that never listens: %v %v, want refused", s, err)
 	}
@@ -165,7 +209,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 		t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); _, _ = cmd.Process.Wait() })
 		return cmd
 	}
-	stale := start(fakeServer(socket, false))
+	stale := start(fakeServer(t, socket, false))
 	namesItsSocket(t, stale.Process.Pid, socket)
 	var reaped sync.WaitGroup
 	reaped.Add(1)
@@ -174,7 +218,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(stale.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +236,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(other.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s2, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s2, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +271,7 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,6 +314,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	var socket, envFile string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
+		endsWithTheTest(t, socket)
 		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
 		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP, Env: map[string]string{"SVC_TOKEN": secret}}, nil
 	}
@@ -405,7 +450,7 @@ func (f *fakeTerminal) Resize(_, _ int) error { return nil }
 // dead --remote, and no server outlives its CLI (the mutants: either side's end not passed on).
 func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +463,7 @@ func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	}
 
 	dir, socket = serverDir(t)
-	s, err = startAgentServer(fakeServer(socket, true), socket, dir, os.Environ())
+	s, err = startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +487,7 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	var socket string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket = filepath.Join(dir, crew.CodexServerSocket)
-		return crew.Setup{Server: fakeServer(socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
+		return crew.Setup{Server: fakeServer(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
 	}
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -459,5 +504,59 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFile)); !os.IsNotExist(err) {
 		t.Fatalf("its pid file: %v, want it gone", err)
+	}
+}
+
+// TestACellsServersEndWithIt: a server a cell starts and never stops, as a cell through runAgent
+// leaves one (its CLI never ends), is gone once the cell is, with its whole process group: a child
+// that doesn't name the socket too (the mutants: endsWithTheTest's kill removed; the leader killed
+// alone, its group left).
+func TestACellsServersEndWithIt(t *testing.T) {
+	groupEnded := func(name string, pgid int) {
+		t.Helper()
+		if pgid <= 1 || pgid == syscall.Getpgrp() {
+			t.Fatalf("%s: no server's group (%d) to look for", name, pgid)
+		}
+		if !eventually(t, func() bool { return syscall.Kill(-pgid, 0) != nil }) {
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			t.Fatalf("%s: the server's group %d outlives its cell", name, pgid)
+		}
+	}
+
+	var pgid int
+	t.Run("a server never stopped, its child naming no socket", func(t *testing.T) {
+		dir, socket := serverDir(t)
+		endsWithTheTest(t, socket)
+		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & while :; do sleep 1; done`, "sh", socket}, socket, dir, os.Environ())
+		if err != nil {
+			t.Fatal(err)
+		}
+		pgid = s.cmd.Process.Pid
+		namesItsSocket(t, pgid, socket)
+	})
+	groupEnded("a server never stopped", pgid)
+
+	var socket string
+	t.Run("a crew Codex agent's server, its CLI never ending", func(t *testing.T) {
+		a, c, _ := crewAgents(t, crewKinds)
+		p, _ := a.profile("codex-one")
+		instance, err := a.startInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitStart(t, c, instance)
+		if _, _, err := startedEnv(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
+			t.Fatal(err)
+		}
+		socket = instance.setup.ServerSocket
+		pids := processesNaming(socket)
+		if len(pids) != 1 {
+			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)
+		}
+		pgid, _ = strconv.Atoi(pids[0])
+	})
+	groupEnded("a crew Codex agent's server", pgid)
+	if pids := processesNaming(socket); len(pids) > 0 {
+		t.Fatalf("the agent's server outlives its cell: %v", pids)
 	}
 }
