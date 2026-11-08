@@ -319,7 +319,24 @@ var (
 	claudeFindRetry   = 15 * time.Second
 )
 
-// ClaudeOf is the Claude Code binary program runs, and what it knows (ClaudeKnowsIn, cache), found
+// ClaudeOf is the Claude Code binary program runs, and what it knows (claudeOf): for a program of
+// another name than claude (a wrapper script a profile or a roster runs as Claude Code, such as
+// claude_tui.sh, which sets an account's CLAUDE_CONFIG_DIR and runs claude), when nothing of its own
+// name reads as a Claude Code, the claude found the same way on the same PATH: the CLI the wrapper
+// runs. The error, when neither is found, is the program's, then claude's.
+func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
+	bin, k, err := claudeOf(program, path, dir, cache)
+	if err == nil || filepath.Base(program) == KindClaude {
+		return bin, k, err
+	}
+	cbin, ck, cerr := claudeOf(KindClaude, path, dir, cache)
+	if cerr == nil {
+		return cbin, ck, nil
+	}
+	return "", nil, fmt.Errorf("%w; nor %v", err, strings.TrimPrefix(cerr.Error(), "crew: "))
+}
+
+// claudeOf is the Claude Code binary program runs, and what it knows (ClaudeKnowsIn, cache), found
 // as a shell in dir with PATH path finds it: a path (relative to dir) is that file; a name is the
 // first file on path that reads as a Claude Code. A mise shim (a link to mise) is the tool mise runs
 // for it there (`mise which`). A file that doesn't read as one (a wrapper script) is taken to run the
@@ -328,7 +345,7 @@ var (
 // agents start), nothing is taken in its place: a binary an earlier lookup resolved to may no longer
 // be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
 // The error says first why mise didn't answer, if it didn't, then names every file tried.
-func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
+func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	if strings.Contains(program, "/") {
 		bin := program
 		if !filepath.IsAbs(bin) {

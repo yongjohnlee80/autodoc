@@ -385,3 +385,40 @@ func TestWhatAClaudeKnowsIsKeptForTheNextRun(t *testing.T) {
 		t.Fatalf("a binary the cache answers: %v, %v; want the cache's answer, not a read", k, err)
 	}
 }
+
+// TestClaudeOfFindsTheClaudeAWrapperOfAnotherNameRuns: a program of another name run as Claude Code
+// (claude_tui.sh, which sets an account's CLAUDE_CONFIG_DIR and runs claude) reads as no Claude Code,
+// and mise has no tool of its name, so the claude on the same PATH is the CLI it runs: a wrapper
+// claude there followed to mise's tool, or a later claude that reads as one. With no claude at all,
+// the error is the program's, then claude's.
+func TestClaudeOfFindsTheClaudeAWrapperOfAnotherNameRuns(t *testing.T) {
+	bin, tools, later, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	wrapper := filepath.Join(bin, "claude_tui.sh")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/bash\nexport CLAUDE_CONFIG_DIR=\"$HOME/.claude-work\"\nexec claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
+	stalledMise(t, tools, tool) // answers `which claude` alone: `which claude_tui.sh` exits 2, as mise does for no tool
+	sep := string(os.PathListSeparator)
+	got, k, err := crew.ClaudeOf("claude_tui.sh", bin+sep+tools, work, "")
+	if err != nil || got != tool || !k.Reports() {
+		t.Fatalf("claude_tui.sh, a claude wrapper beside it and mise's tool: %q, %v, %v; want mise's claude %q, with its prompt hooks", got, k, err, tool)
+	}
+	// no mise: the later claude on PATH that reads as one
+	alone := t.TempDir()
+	if err := os.WriteFile(filepath.Join(alone, "claude_tui.sh"), []byte("#!/bin/bash\nexec claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := fakeClaude(t, later, "claude", everyClaudeEvent...)
+	if got, _, err := crew.ClaudeOf("claude_tui.sh", alone+sep+later, work, ""); err != nil || got != real {
+		t.Fatalf("claude_tui.sh, then a claude on PATH: %q, %v; want %q", got, err, real)
+	}
+	// no claude anywhere: the program's error, then claude's
+	_, _, err = crew.ClaudeOf("claude_tui.sh", alone, work, "")
+	if err == nil || !strings.Contains(err.Error(), filepath.Join(alone, "claude_tui.sh")) || !strings.Contains(err.Error(), "nor claude is not on the agent's PATH") {
+		t.Fatalf("claude_tui.sh with no claude: %v; want the files tried, then that no claude is on PATH", err)
+	}
+}
