@@ -93,7 +93,8 @@ func TestMermaidInsertsATemplateAndNamesTheTypes(t *testing.T) {
 }
 
 // In the running program: the user's lua folder adds commands, :table makes a table in the draft,
-// and Tab in Insert mode walks its cells.
+// and Tab in Insert mode walks its cells. The draft is a note, Rendered by the editor: the table is
+// drawn as one, its source edited in place.
 func TestTheUsersLuaCommandsAndTheTableInTheProgram(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "hello.lua"), []byte(
@@ -108,11 +109,17 @@ func TestTheUsersLuaCommandsAndTheTableInTheProgram(t *testing.T) {
 	r.command(t, "hello")
 	r.s.WaitForText(t, "hello from lua")
 	r.command(t, "table 2 1")
-	r.s.WaitForText(t, "| Item1.1 | Item2.1 |")
+	r.s.WaitForText(t, "│ Item1.1 │ Item2.1 │")
+	if src := r.editorText(); !strings.Contains(src, "| Item1.1 | Item2.1 |") {
+		t.Fatalf("the draft's source after :table: %q", src)
+	}
 	r.keys(t, key('i'))
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab})
 	r.keys(t, key('Z'))
-	r.s.WaitForText(t, "| Column1 | Z |")
+	r.s.WaitForText(t, "│ Column1 │ Z ")
+	if src := r.editorText(); !strings.Contains(src, "| Column1 | Z |") {
+		t.Fatalf("the draft's source after Tab and Z: %q", src)
+	}
 }
 
 // luaTUI runs the TUI with the Lua files given, by name, in its lua folder, over a workspace whose
