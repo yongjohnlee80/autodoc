@@ -59,6 +59,8 @@ type cellMind struct {
 	// tints are the boxes' groups' colours, by Box.ID, as the graph file has them: a box in no group
 	// has none
 	tints map[string]color.NRGBA
+	// groups are the groups it was laid out in, which its legend lists: nil when they were not read
+	groups *relGroups
 }
 
 // cellMindmap is the Mindmap feature in cells: its builds, fenced (load), the selection and the
@@ -284,7 +286,7 @@ func (m *cellMindmap) load() {
 		if err != nil {
 			return err
 		}
-		return &cellMind{root: ref, m: rm, grid: grid, tints: cellMindTints(rm, grid, gs)}
+		return &cellMind{root: ref, m: rm, grid: grid, tints: cellMindTints(rm, grid, gs), groups: gs}
 	}, func(v any) {
 		if !tk.Current() || !m.open {
 			return
@@ -366,7 +368,7 @@ func (m *cellMindmap) reveal() {
 	if m.cur == nil || m.view == nil || m.selected >= len(m.cur.grid.Boxes) {
 		return
 	}
-	w, h := m.view.cells.W, m.view.cells.H
+	w, h := m.view.cells.W, m.view.mapRows()
 	r := m.cur.grid.Boxes[m.selected].Rect
 	at := m.view.left()
 	switch {
@@ -389,7 +391,7 @@ func (m *cellMindmap) scroll(dy int) {
 	if m.cur == nil || m.view == nil {
 		return
 	}
-	m.y0 = min(max(m.y0+dy, 0), max(m.cur.grid.Size.H-m.view.cells.H, 0))
+	m.y0 = min(max(m.y0+dy, 0), max(m.cur.grid.Size.H-m.view.mapRows(), 0))
 	m.dirty()
 }
 
@@ -477,6 +479,7 @@ func (v *cellMindView) Render(s tuicore.Surface) {
 		th.Tint = func(id string) (style.ColorSpec, bool) { c, ok := tints[id]; return c, ok }
 	}
 	m.cur.grid.Paint(s, v.left()-m.x0, -m.y0, m.selected, th)
+	v.paintLegend(s, m.ground)
 }
 
 // legible is cur's tints made legible on ground (onGround), kept until either changes.
@@ -522,7 +525,7 @@ func (v *cellMindView) HandleEvent(ev tuicore.Event) bool {
 	if !ok || k.Kind != tuicore.KeyPress {
 		return false
 	}
-	half, ctrl := max(v.cells.H/2, 1), k.Mods&tuicore.ModCtrl != 0
+	half, ctrl := max(v.mapRows()/2, 1), k.Mods&tuicore.ModCtrl != 0
 	switch {
 	case ctrl && k.Code == 'd':
 		m.scroll(half)
@@ -546,4 +549,153 @@ func (v *cellMindView) HandleEvent(ev tuicore.Event) bool {
 		return false
 	}
 	return true
+}
+
+// THE LEGEND — what the boxes' outlines and colours stand for, as the window's Mindmap says it
+// (mindmap_gui.go's mindLegend): each group the map shows, its outline in its colour made legible
+// on the page as its boxes' are (onGround), and its words; at most groupLegendRows of them and a
+// row saying how many more; then any other document's box, in the outline's own colour. It is a
+// strip along the view's bottom, its entries side by side and wrapped, a blank row above it: the
+// map is drawn and scrolled in the rows above, so the legend never covers a box, however full the
+// map. A view too short to give it a third of its rows draws none.
+
+// cellLegendEntry is one of the legend's entries: a mark (an outline's corners, "" none) in its
+// style, and its words.
+type cellLegendEntry struct {
+	mark string
+	st   style.Style
+	text string
+}
+
+// cellLegendMark is a group's outline as the legend draws it: the corners of its boxes' top edge,
+// golib's cell outline for the shape (tuimermaid.FormOf), the plain box's for a shape it leaves to
+// the map (cellMindShapeIn draws a group without one as a rounded box).
+func cellLegendMark(s pm.MindShape) string {
+	switch tuimermaid.FormOf(s) {
+	case tuimermaid.FormSquare:
+		return "┌─┐"
+	case tuimermaid.FormHexagon:
+		return "╱─╲"
+	case tuimermaid.FormBang:
+		return "┏━┓"
+	}
+	return "╭─╮"
+}
+
+// legendEntries are the legend of cur, laid out in its groups, its colours made legible on
+// ground, its words in the UI's language: the window's (mindLegend), in cells.
+func (m *cellMindmap) legendEntries(cur *cellMind, ground color.NRGBA) []cellLegendEntry {
+	var out []cellLegendEntry
+	if cur.groups == nil || len(cur.groups.list) == 0 {
+		out = append(out, cellLegendEntry{text: m.c.Trf("autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")})
+	} else {
+		shown, more := legendGroups(cur.groups, cur.m)
+		for _, g := range shown {
+			c := onGround(g.Colour, ground)
+			out = append(out, cellLegendEntry{cellLegendMark(g.Shape), style.PageText().Foreground(style.RGB(c.R, c.G, c.B)), groupLabel(g.Query)})
+		}
+		if more > 0 {
+			out = append(out, cellLegendEntry{text: m.c.Trf("autodoc.text.relationviews_gui.more_groups", more)})
+		}
+	}
+	return append(out, cellLegendEntry{cellLegendMark(pm.MindDefault), cellMindTheme.Box, m.c.Trf("autodoc.text.mindmap_gui.any_other_document")})
+}
+
+// cellLegendGap is the room between two of the legend's entries on a row.
+const cellLegendGap = 3
+
+// legendRows are entries laid out in rows w cells wide, a cell's margin each side: an entry too
+// wide for a row alone has its words cut with an ellipsis.
+func legendRows(entries []cellLegendEntry, w int) [][]cellLegendEntry {
+	room := w - 2
+	if room < 8 {
+		return nil
+	}
+	var rows [][]cellLegendEntry
+	used := 0
+	for _, e := range entries {
+		ew := entryWidth(e)
+		if ew > room {
+			e.text = cutTo(e.text, room-(ew-tuicore.StringWidth(e.text)))
+			ew = entryWidth(e)
+		}
+		if len(rows) == 0 || used+cellLegendGap+ew > room {
+			rows = append(rows, nil)
+			used = -cellLegendGap
+		}
+		rows[len(rows)-1] = append(rows[len(rows)-1], e)
+		used += cellLegendGap + ew
+	}
+	return rows
+}
+
+// entryWidth is e's cells: its mark and a space, then its words.
+func entryWidth(e cellLegendEntry) int {
+	if e.mark == "" {
+		return tuicore.StringWidth(e.text)
+	}
+	return tuicore.StringWidth(e.mark) + 1 + tuicore.StringWidth(e.text)
+}
+
+// cutTo is s in at most w cells, an ellipsis ending it when it is cut.
+func cutTo(s string, w int) string {
+	if tuicore.StringWidth(s) <= w {
+		return s
+	}
+	var b []byte
+	used := 0
+	for g := range tuicore.Graphemes(s) {
+		gw := tuicore.StringWidth(g)
+		if used+gw > w-1 {
+			break
+		}
+		b = append(b, g...)
+		used += gw
+	}
+	return string(b) + "…"
+}
+
+// legend is the legend's rows for the view as it is: none for no build, or a view too short.
+func (v *cellMindView) legend(ground color.NRGBA) [][]cellLegendEntry {
+	m := v.m
+	if m.cur == nil {
+		return nil
+	}
+	rows := legendRows(m.legendEntries(m.cur, ground), v.cells.W)
+	if (len(rows)+1)*3 > v.cells.H {
+		return nil
+	}
+	return rows
+}
+
+// mapRows are the view's rows the map is drawn and scrolled in: those above the legend and the
+// blank row over it.
+func (v *cellMindView) mapRows() int {
+	if rows := v.legend(v.m.ground); len(rows) > 0 {
+		return v.cells.H - len(rows) - 1
+	}
+	return v.cells.H
+}
+
+// paintLegend draws the legend along the view's bottom, its strip (and the blank row over it)
+// cleared of the map first.
+func (v *cellMindView) paintLegend(s tuicore.Surface, ground color.NRGBA) {
+	rows := v.legend(ground)
+	if len(rows) == 0 {
+		return
+	}
+	page := style.PageText()
+	top := v.cells.H - len(rows) - 1
+	s.Fill(tuicore.Rect{X: 0, Y: top, W: v.cells.W, H: len(rows) + 1}, " ", page)
+	for i, row := range rows {
+		x, y := 1, top+1+i
+		for _, e := range row {
+			if e.mark != "" {
+				tuicore.DrawText(s, x, y, e.mark, e.st)
+				x += tuicore.StringWidth(e.mark) + 1
+			}
+			tuicore.DrawText(s, x, y, e.text, page)
+			x += tuicore.StringWidth(e.text) + cellLegendGap
+		}
+	}
 }
