@@ -116,6 +116,9 @@ func (t *termEmbeds) resolve(dest string) (string, bool) {
 	p, found := export.EmbedPath(t.note, dest)
 	if !found {
 		delete(t.files, dest)
+		// not on disk (EmbedPath finds only a file that is): followed where it would be written,
+		// the note's own folder, so its writing draws it
+		t.awaited(filepath.Join(filepath.Dir(t.note), filepath.FromSlash(dest)))
 		return "", false
 	}
 	st, err := os.Stat(p)
