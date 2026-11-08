@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
@@ -87,11 +86,6 @@ func terminalLine(line string) error {
 // Unicode's overlays (ccc=1 has a few more in rare scripts); the stacked-marks rule bounds the rest.
 func overlay(r rune) bool { return (r >= 0x0334 && r <= 0x0338) || (r >= 0x20D0 && r <= 0x20F0) }
 
-// terminalCardArm is how long a terminal card shows before its Run counts: a card queued behind
-// another opens the moment that one is answered, Run in the same place on the same key, so a key
-// typed ahead or a double click could run a line unread. A Run sooner is a Don't run, and said.
-var terminalCardArm = 400 * time.Millisecond
-
 // maxCardFolderRunes bounds the folder the card names, so a long one never pushes the line off it.
 const maxCardFolderRunes = 48
 
@@ -162,7 +156,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
 			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, cutMiddle(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
-			Arm: terminalCardArm,
+			Arm: h.seams.terminalCardArm,
 			OnTooSoon: func() {
 				early = true
 				h.notify(h.trf("autodoc.notice.editorterminal.not_run_answered_before_it_showed", agent))

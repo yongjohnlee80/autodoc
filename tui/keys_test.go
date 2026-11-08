@@ -318,7 +318,7 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	ran := make(chan *widget.EditorCore, 1)
 	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"}, keys: []Key{{Seq: "F12", Show: "F12", Cmd: "zz.mark"}}},
 		entries: []Entry{{ID: "zz.mark", Title: "mark", Run: func(inv Invocation) error { ran <- inv.Core; return nil }}}}
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	h.moreFeatures = []Feature{f}
 	main, err := keyCatalog(h.features()).withGenerated(string(layout))
 	if err != nil {

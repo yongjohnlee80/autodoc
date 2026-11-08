@@ -21,9 +21,7 @@ const surfaceCard = rightCard + "[surface]\ntext_input = true\n"
 func withFakeSurfaces(t *testing.T) *fakeSink {
 	t.Helper()
 	sink := &fakeSink{auto: "drawn"}
-	was := surfaceSinkOf
-	surfaceSinkOf = func(*plugins) (surfaceSink, any, bool) { return sink, nil, true }
-	t.Cleanup(func() { surfaceSinkOf = was })
+	tune(t).surfaceSinkOf = func(*plugins) (surfaceSink, any, bool) { return sink, nil, true }
 	return sink
 }
 

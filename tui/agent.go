@@ -25,6 +25,7 @@ import (
 // remains one contribution even when the later agents model gains more tabs.
 type agents struct {
 	c                      agentHost
+	seams                  *seams // its host's (seams.go)
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
@@ -71,8 +72,8 @@ type agents struct {
 	stopping       bool
 }
 
-func newAgents(c agentHost, dir, config string) *agents {
-	return &agents{c: c, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
+func newAgents(c agentHost, s *seams, dir, config string) *agents {
+	return &agents{c: c, seams: s, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
 		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
 }

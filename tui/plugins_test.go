@@ -54,10 +54,11 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	registryCacheDir = func() (string, error) { return cache, nil }
-	offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
-	offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
-	registryURL = "http://127.0.0.1:1/index.json"
+	// The package's own defaults, set once before any test runs: each test tunes its own from them
+	// (seams_test.go).
+	defaultSeams.registry = registrySource{url: "http://127.0.0.1:1/index.json", cacheDir: func() (string, error) { return cache, nil }}
+	defaultSeams.offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
+	defaultSeams.offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
 	code := m.Run()
 	_ = os.RemoveAll(cache)
 	os.Exit(code)
@@ -501,12 +502,10 @@ func installPluginAt(t *testing.T, dir, name, kind, mode, extra string, p int) {
 	}
 }
 
-// shorten sets the plugin deadlines for a test and puts them back after it — registered before the
-// TUI runs, so it is undone after the TUI's own cleanups.
+// shorten sets the plugin deadlines for a test's programs, before they start.
 func shorten(t *testing.T, handshake, grace, term time.Duration) {
-	a, b, c := pluginHandshake, pluginGrace, pluginTermGrace
-	pluginHandshake, pluginGrace, pluginTermGrace = handshake, grace, term
-	t.Cleanup(func() { pluginHandshake, pluginGrace, pluginTermGrace = a, b, c })
+	s := tune(t)
+	s.pluginHandshake, s.pluginGrace, s.pluginTermGrace = handshake, grace, term
 }
 
 // pluginTUI runs the TUI with the plugins in dir, and stops what it started when the test ends.
@@ -720,10 +719,10 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	r.keys(t, key('x'))
 	r.waitNotice(t, "crash exited (exit status 3): boom: the test plugin crashed")
 
-	onLoop(r, func() bool { pluginHandshake = 4 * time.Second; return true }) // read as a plugin opens, on the loop
+	onLoop(r, func() bool { r.h.seams.pluginHandshake = 4 * time.Second; return true }) // read as a plugin opens, on the loop
 	r.openPlugin("silent")
 	r.waitNotice(t, "silent did not answer in 4s")
-	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
+	onLoop(r, func() bool { r.h.seams.pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
 	r.waitNotice(t, fmt.Sprintf("future speaks protocol %d; its manifest says 1", plugin.Protocol+1))
@@ -1628,12 +1627,11 @@ func TestTheDocumentFeed(t *testing.T) {
 	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
 	// a pause longer than a slow (-race) runner takes between two keys of one burst, so the burst is
 	// one document whatever the runner; the debounce is the same code at any length
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Second
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	const delay = time.Second
+	tune(t).pluginFeed = delay
 	r, logs := pluginTUI(t, dir)
 	// any feed the start scheduled has fired, to nobody: the one sent now is the plugin's start's
-	time.Sleep(3 * pluginFeedDelay)
+	time.Sleep(3 * delay)
 	onLoop(r, func() bool { r.h.plugins.openPlugin("stats"); r.h.plugins.openPlugin("quiet"); return true })
 	first := docsIn(waitSaid(t, logs, "stats", "doc "))
 	if len(first) != 1 || !strings.HasPrefix(first[0], `doc "" v`) || !strings.Contains(first[0], `"" at 1:1 large=false`) {
@@ -1647,7 +1645,7 @@ func TestTheDocumentFeed(t *testing.T) {
 		return onLoop(r, func() bool { return r.h.core.Value() == "héllo" && r.h.core.Mode().String() == "NORMAL" })
 	})
 	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.pageVersion })))
-	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
+	time.Sleep(2 * delay) // nothing more comes of that burst
 	got := docsIn(said(t, logs, "stats"))
 	if len(got) != 2 || !strings.Contains(got[1], `"héllo" at 1:5 large=false`) {
 		t.Fatalf("one document for the burst, the text typed and the cursor on o (column 5): %q", got)
@@ -1685,14 +1683,12 @@ func version(t *testing.T, doc string) int {
 // event of its feed; one that starts at launch runs with the TUI. Each is opened with no size.
 //
 // The page shown at start is the feed's first event (docs/decisions/plugins.md#the-document-feed:
-// sent when a note opens), so onfeed starts pluginFeedDelay after it. The cell holds that send (the
+// sent when a note opens), so onfeed starts the seams' pluginFeed after it. The cell holds that send (the
 // delay an hour) while it looks for onfeed not running, then puts the delay back and types: the
 // edit's send replaces the held one, and onfeed starts with it. Asserting "not running" against the
 // real 300 ms raced the debounce, and a slow (-race, GUI) runner lost.
 func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Hour                   // before the TUI starts: its loop reads it from then on
-	t.Cleanup(func() { pluginFeedDelay = delay }) // after the TUI's own cleanup has stopped it
+	tune(t).pluginFeed = time.Hour // before the TUI starts: its loop reads its own copy from then on
 	dir := t.TempDir()
 	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
 	installPlugin2(t, dir, "onfeed", "service", "echo", "[feed]\ndocument = true\n")
@@ -1717,7 +1713,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	if onLoop(r, func() bool { return r.h.plugins.running["onfeed"] != nil }) {
 		t.Fatal("onfeed runs before its feed's first event")
 	}
-	onLoop(r, func() bool { pluginFeedDelay = delay; return true }) // on the loop, which reads it
+	onLoop(r, func() bool { r.h.seams.pluginFeed = defaultSeams.pluginFeed; return true }) // on the loop, which reads it
 	r.keys(t, key('i'), key('k'), esc())
 	waitSaid(t, logs, "onfeed", `doc "" v`)
 }

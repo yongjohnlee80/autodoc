@@ -14,7 +14,7 @@ import (
 // the Mindmap, in cells.
 func cellRelationViews(h *Host) []Feature {
 	store := newGraphStore(core{h}, core{h}, h.graphUserFile)
-	return []Feature{newCellGlobeMap(core{h}, store), newCellMindmap(core{h}, store)}
+	return []Feature{newCellGlobeMap(core{h}, store, h.seams.globeMapPage), newCellMindmap(core{h}, store)}
 }
 
 // cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.

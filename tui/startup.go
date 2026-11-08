@@ -16,9 +16,6 @@ import (
 // and how to get it; when install-autodoc.sh installed it, how is About's Update (update.go), which
 // the user starts.
 
-// latestURL is the latest release of AutoDoc, as GitHub answers it; tests point it elsewhere.
-var latestURL = "https://api.github.com/repos/yongjohnlee80/autodoc/releases/latest"
-
 // release is a published release: its tag and its page.
 type release struct {
 	Tag string `json:"tag_name"`
@@ -28,14 +25,17 @@ type release struct {
 // startup is the feature that runs once the program has started.
 type startup struct {
 	c        Core
+	seams    *seams // its host's (seams.go)
 	version  string
 	latest   func(ctx context.Context) (release, error) // the latest release; tests answer it
 	exe      func() (string, error)                     // this program's path, for how to update
 	scripted func() bool                                // install-autodoc.sh installed it: About's Update updates it
 }
 
-func newStartup(c Core, version string, scripted func() bool) *startup {
-	return &startup{c: c, version: version, latest: latestRelease, exe: os.Executable, scripted: scripted}
+func newStartup(c Core, s *seams, version string, scripted func() bool) *startup {
+	url := s.latestURL
+	latest := func(ctx context.Context) (release, error) { return latestRelease(ctx, url) }
+	return &startup{c: c, seams: s, version: version, latest: latest, exe: os.Executable, scripted: scripted}
 }
 
 func (*startup) Name() string { return "startup" }
@@ -49,9 +49,9 @@ func (*startup) Commands() map[string]Command { return nil }
 func (s *startup) Started() {
 	p := s.c.Prefs()
 	switch {
-	case vimQuestionPending(p): // a true first run's first card, the agent setup's after it (vimquestion.go)
+	case vimQuestionPending(s.seams, p): // a true first run's first card, the agent setup's after it (vimquestion.go)
 		s.c.Open("vimQuestion")
-	case p.aboutAtStart && !agentSetupPending(p): // the setup card is that run's first card (agentsetup.go)
+	case p.aboutAtStart && !agentSetupPending(s.seams, p): // the setup card is that run's first card (agentsetup.go)
 		s.c.Open("about")
 	}
 	cur, ok := releaseVersion(s.version)
@@ -98,7 +98,7 @@ func (s *startup) how(r release) string {
 }
 
 // latestRelease asks GitHub for AutoDoc's latest release.
-func latestRelease(ctx context.Context) (release, error) {
+func latestRelease(ctx context.Context, latestURL string) (release, error) {
 	g, err := httpGet(ctx, latestURL, "application/vnd.github+json", "")
 	if err != nil {
 		return release{}, err

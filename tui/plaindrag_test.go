@@ -66,7 +66,7 @@ func shellTUIOn(t *testing.T, caps tuicore.Capabilities) (*daemon, *running) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PS1", "$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{})
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 30, tuicore.WithTestCapabilities(caps)), h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}

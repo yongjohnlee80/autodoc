@@ -68,9 +68,7 @@ func TestACleanFileFollowsTheDisk(t *testing.T) {
 	for _, poll := range []bool{false, true} {
 		t.Run(map[bool]string{false: "watch", true: "poll"}[poll], func(t *testing.T) {
 			if poll {
-				old := diskPollEvery
-				diskPollEvery = 100 * time.Millisecond
-				t.Cleanup(func() { diskPollEvery = old })
+				tune(t).diskPoll = 100 * time.Millisecond
 			}
 			r, root := onDisk(t, Options{})
 			if poll {
@@ -245,9 +243,7 @@ func TestAFolderThatGoesAndComesBack(t *testing.T) {
 	for _, poll := range []bool{false, true} {
 		t.Run(map[bool]string{false: "watch", true: "poll"}[poll], func(t *testing.T) {
 			if poll {
-				old := diskPollEvery
-				diskPollEvery = 100 * time.Millisecond
-				t.Cleanup(func() { diskPollEvery = old })
+				tune(t).diskPoll = 100 * time.Millisecond
 			}
 			folderGoesAndComesBack(t, poll)
 		})

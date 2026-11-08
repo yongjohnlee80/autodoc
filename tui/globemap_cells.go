@@ -104,6 +104,7 @@ type cellGlobe struct {
 // view's place and zoom over the layout.
 type cellGlobeMap struct {
 	c         Core
+	page      int // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	seq       uint64
 	open      bool
 	filter    int // globeFilters' index
@@ -124,8 +125,8 @@ type cellGlobeMap struct {
 	opens     func(ws, path string) // Enter's and a press's: the panel hidden, the document opened
 }
 
-func newCellGlobeMap(c Core, store *graphStore) *cellGlobeMap {
-	g := &cellGlobeMap{c: c, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
+func newCellGlobeMap(c Core, store *graphStore, page int) *cellGlobeMap {
+	g := &cellGlobeMap{c: c, page: page, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
 	g.editor = &groupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.ground }}
 	g.opens = func(ws, path string) {
@@ -267,8 +268,8 @@ func (g *cellGlobeMap) load() {
 		if k := globeFilters[filter].kinds; k != nil {
 			opts["kinds"] = k
 		}
-		if globeMapPage > 0 {
-			opts["limit"] = int64(globeMapPage)
+		if g.page > 0 {
+			opts["limit"] = int64(g.page)
 		}
 		m, err := readMap(func(o map[string]any) (any, error) { return g.c.Call(ctx, "graph.map", ws, o) }, opts,
 			func(docs int) {

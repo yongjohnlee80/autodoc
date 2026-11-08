@@ -30,7 +30,7 @@ func embedsTUI(t *testing.T, theme string) (r *running, dir string) {
 		"sales.chart.json", embedsChart("Fruit sold", "Apples", "Pears"), "stock.csv", "Item,Qty\napple,3\npear,5\n", "big.csv", big,
 		"other.md", "# Other\n\nanother note\n")
 	d := startManagedIncluding(t, map[string]string{"kb": dir}, tableInclude)
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 70), h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r = &running{h: h, s: s}

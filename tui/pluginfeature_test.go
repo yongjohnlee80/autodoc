@@ -15,11 +15,10 @@ import (
 func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Second // a slow (-race) runner's pause between two steps stays inside it
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	const delay = time.Second
+	tune(t).pluginFeed = delay // a slow (-race) runner's pause between two steps stays inside it
 	r, logs := pluginTUI(t, dir)
-	time.Sleep(3 * pluginFeedDelay) // any feed the start scheduled has fired, to nobody
+	time.Sleep(3 * delay) // any feed the start scheduled has fired, to nobody
 	onLoop(r, func() bool { r.h.plugins.openPlugin("stats"); return true })
 	last := version(t, docsIn(waitSaid(t, logs, "stats", "doc "))[0])
 
@@ -28,7 +27,7 @@ func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 		n := len(docsIn(said(t, logs, "stats")))
 		onLoop(r, func() bool { do(); return true })
 		r.s.WaitFor(t, what+"'s document", func(string) bool { return len(docsIn(said(t, logs, "stats"))) > n })
-		time.Sleep(2 * pluginFeedDelay) // nothing more comes of it
+		time.Sleep(2 * delay) // nothing more comes of it
 		docs := docsIn(said(t, logs, "stats"))
 		if len(docs) != n+1 {
 			t.Fatalf("%s: %d documents, want one: %q", what, len(docs)-n, docs[n:])

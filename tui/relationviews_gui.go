@@ -200,7 +200,7 @@ func (h *Host) relationViewFeatures() []Feature {
 	}
 	if h.relationViews == nil {
 		store := newGraphStore(core{h}, core{h}, h.graphUserFile) // the views' groups, one store for both
-		g, m := newGlobeMap(core{h}, h.globePresenter), newMindmap(core{h})
+		g, m := newGlobeMap(core{h}, h.globePresenter, h.seams.globeMapPage), newMindmap(core{h})
 		g.store, g.editor.store, m.store = store, store, store
 		h.relationViews = []Feature{g, m}
 	}
