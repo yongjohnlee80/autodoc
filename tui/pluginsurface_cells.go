@@ -91,6 +91,8 @@ func (p *cellPictures) publish(b []byte) uint64 {
 // waiting, acknowledges nothing; nor does a paint with no picture (the close's), which can't be
 // later than any. A stop (the sink's close) ends the wait unacknowledged.
 func (p *cellPictures) waitPainted(ver uint64, stop <-chan struct{}) bool {
+	// NOTE: a hidden card is never painted, so no event ends its wait: cellSurfaceShown bounds it,
+	// and its frame is answered "not_shown"
 	deadline := time.NewTimer(cellSurfaceShown)
 	defer deadline.Stop()
 	for {
@@ -201,6 +203,8 @@ func (s *cellSink) run(c cellFrame) {
 		s.mu.Unlock()
 		if wait > 0 {
 			select {
+			// NOTE: the pacing itself: a frame waits for its turn (cellSurfaceFPS, cellSurfaceBudget),
+			// a time and not an event; the sink's stop ends the wait early
 			case <-time.After(wait):
 			case <-s.stop:
 			}
