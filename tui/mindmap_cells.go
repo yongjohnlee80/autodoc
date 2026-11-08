@@ -179,8 +179,14 @@ func (*cellMindmap) Moved(int, int) {}
 func (*cellMindmap) Reread(Page)    {}
 func (*cellMindmap) Closed()        {}
 
-// LanguageChanged composes the heading again in the UI's language.
-func (m *cellMindmap) LanguageChanged() { m.title() }
+// LanguageChanged composes again, in the UI's language, the heading and the settings' choosers'
+// rows.
+func (m *cellMindmap) LanguageChanged() {
+	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
+		m.c.Set(src, choiceModel(m.c, src))
+	}
+	m.title()
+}
 
 // toggleDepth is d: two links out, or one again, read afresh at the page shown.
 func (m *cellMindmap) toggleDepth() {
