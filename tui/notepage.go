@@ -307,7 +307,8 @@ func (p *cellNotePage) renderNote(pg Page) {
 		e.SetRenderer(p.md)
 	}
 	if note := p.h.diskPath(); p.embeds == nil || p.embeds.note != note {
-		p.embeds = &termEmbeds{note: note, trf: p.h.trf}
+		p.closeEmbeds()
+		p.embeds = &termEmbeds{note: note, trf: p.h.trf, follow: p.h.followDir, changed: p.embedsChanged}
 	}
 	p.md.Embeds = p.embeds.resolve
 	// a safeguard for a show that reuses the layout, with no switch: a switch to the note already
@@ -328,8 +329,26 @@ func (p *cellNotePage) renderNote(pg Page) {
 // noRenderer takes a note's renderer off the editor: another page is shown, its text, a table or
 // an HTML file's page.
 func (p *cellNotePage) noRenderer() {
+	p.closeEmbeds()
 	if e, ok := p.h.editor.(*widget.Editor); ok && p.md != nil && e.Renderer() == p.md {
 		e.SetRenderer(nil)
+	}
+}
+
+// closeEmbeds ends the shown note's follows of its embedded files (noteembeds.go): it is shown no
+// more, and a note shown again reads its embeds afresh.
+func (p *cellNotePage) closeEmbeds() {
+	if p.embeds != nil {
+		p.embeds.close()
+		p.embeds = nil
+	}
+}
+
+// embedsChanged lays the note's Rendered view out again when an embedded file changed on disk,
+// while the note's renderer is the editor's.
+func (p *cellNotePage) embedsChanged() {
+	if e, ok := p.h.editor.(*widget.Editor); ok && p.md != nil && e.Renderer() == p.md {
+		e.RelayRendered()
 	}
 }
 

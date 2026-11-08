@@ -38,7 +38,7 @@ type diskWatch struct {
 	dir    string             // absolute
 	gen    uint64             // this run of the watch: events and its end from an older run are dropped
 	cancel context.CancelFunc // a child of h.ctx: the TUI's stop ends every watch
-	refs   int                // the open buffers in dir
+	refs   int                // the open buffers in dir, and the follows (followDir)
 	mode   string             // diskWatching or diskPolling; "" while no run is up
 	// at and rel are where the driver is opened and dir within it: dir's parent and its name, so the
 	// driver holds the parent open, not dir, and dir's own removal ends the watch (a directory held
@@ -46,6 +46,10 @@ type diskWatch struct {
 	at, rel string
 	err     error         // why the last start failed; nil while a run is up
 	wait    time.Duration // the next restart's backoff
+	// follows are told of changes in dir by followDir's callers (a note's embedded files): the name
+	// of each file that changed, "" when anything may have (an overflow, a start)
+	follows    map[uint64]func(name string)
+	nextFollow uint64
 }
 
 // the TUI's own names for how a folder is followed (the daemon's core/follow uses the same words)
@@ -98,6 +102,11 @@ func (h *Host) watchFile(b *openBuffer) {
 		return // the same file: its watch already counts it
 	}
 	h.unwatchFile(b)
+	b.watch, b.watchName = h.holdWatch(dir), filepath.Base(abs)
+}
+
+// holdWatch counts one more holder of dir's watch, starting the watch with the first.
+func (h *Host) holdWatch(dir string) *diskWatch {
 	w := h.watches[dir]
 	if w == nil {
 		w = &diskWatch{dir: dir, wait: diskRetryMin, at: filepath.Dir(dir), rel: filepath.Base(dir)}
@@ -108,16 +117,11 @@ func (h *Host) watchFile(b *openBuffer) {
 		h.startWatch(w)
 	}
 	w.refs++
-	b.watch, b.watchName = w, filepath.Base(abs)
+	return w
 }
 
-// unwatchFile drops b from its folder's watch; the last buffer in a folder ends the watch.
-func (h *Host) unwatchFile(b *openBuffer) {
-	w := b.watch
-	if w == nil {
-		return
-	}
-	b.watch, b.watchName = nil, ""
+// releaseWatch drops one holder of w; the last ends the watch.
+func (h *Host) releaseWatch(w *diskWatch) {
 	if w.refs--; w.refs > 0 {
 		return
 	}
@@ -128,6 +132,44 @@ func (h *Host) unwatchFile(b *openBuffer) {
 	if h.watches[w.dir] == w {
 		delete(h.watches, w.dir)
 	}
+}
+
+// followDir watches dir, as an open buffer's folder is watched, for a caller that isn't a buffer
+// (a note's embedded files, noteembeds.go): onChange is told, on the loop, the name of each file in
+// dir that changes, or "" when anything in it may have. release ends the follow; it is safe to call
+// twice.
+func (h *Host) followDir(dir string, onChange func(name string)) (release func()) {
+	w := h.holdWatch(dir)
+	if w.follows == nil {
+		w.follows = map[uint64]func(string){}
+	}
+	w.nextFollow++
+	id := w.nextFollow
+	w.follows[id] = onChange
+	return func() {
+		if _, ok := w.follows[id]; !ok {
+			return
+		}
+		delete(w.follows, id)
+		h.releaseWatch(w)
+	}
+}
+
+// tellFollows passes a change in w's folder to its follows: name is the file's, "" anything.
+func (w *diskWatch) tellFollows(name string) {
+	for _, f := range w.follows {
+		f(name)
+	}
+}
+
+// unwatchFile drops b from its folder's watch; the last buffer in a folder ends the watch.
+func (h *Host) unwatchFile(b *openBuffer) {
+	w := b.watch
+	if w == nil {
+		return
+	}
+	b.watch, b.watchName = nil, ""
+	h.releaseWatch(w)
 }
 
 // startWatch starts a run of w: native if the driver watches, Poll otherwise. Each event is posted
@@ -230,6 +272,7 @@ func (h *Host) checkFolder(w *diskWatch) {
 			h.diskSoon(b)
 		}
 	}
+	w.tellFollows("")
 }
 
 // diskEvent: an event for a file asks for a check of the buffers whose file it is; an overflow, of
@@ -255,6 +298,14 @@ func (h *Host) diskEvent(dir string, gen uint64, ev vfs.Event) {
 	for _, b := range h.buffers {
 		if b.watch == w && vfs.Join(w.rel, b.watchName) == ev.Path {
 			h.diskSoon(b)
+		}
+	}
+	if name, ok := strings.CutPrefix(ev.Path, w.rel+"/"); ok || w.rel == "." {
+		if w.rel == "." {
+			name = ev.Path
+		}
+		if !strings.Contains(name, "/") { // a file in the folder, not deeper
+			w.tellFollows(name)
 		}
 	}
 }
