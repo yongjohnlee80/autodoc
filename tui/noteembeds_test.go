@@ -27,7 +27,8 @@ func embedsTUI(t *testing.T, theme string) (r *running, dir string) {
 	t.Helper()
 	big := strings.Repeat("a,b\n", (1<<20)/4+1) // over the 1 MiB an embed reads
 	dir = fileDir(t, "n.md", embedsNote, "flow.mmd", "flowchart LR\n  Gull --> Tern\n",
-		"sales.chart.json", embedsChart("Fruit sold", "Apples", "Pears"), "stock.csv", "Item,Qty\napple,3\npear,5\n", "big.csv", big)
+		"sales.chart.json", embedsChart("Fruit sold", "Apples", "Pears"), "stock.csv", "Item,Qty\napple,3\npear,5\n", "big.csv", big,
+		"other.md", "# Other\n\nanother note\n")
 	d := startManagedIncluding(t, map[string]string{"kb": dir}, tableInclude)
 	h := newHost(NewSession(d.sock, nil), Options{})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 70), h.attach, h.options(Options{})...)
@@ -104,8 +105,11 @@ func TestANotesEmbedsAreDrawnInTheRenderedView(t *testing.T) {
 			if err := os.Chtimes(chart, later, later); err != nil {
 				t.Fatal(err)
 			}
-			onLoop(r, func() bool { r.h.openPath("stock.csv"); return true })
-			r.waitFile(t, "stock.csv")
+			// another note, then this one again: the same renderer, and this note's layout kept from
+			// before, which only the note being shown again (RelayRendered) has laid anew
+			onLoop(r, func() bool { r.h.openPath("other.md"); return true })
+			r.waitFile(t, "other.md")
+			r.s.WaitForText(t, "another note")
 			onLoop(r, func() bool { r.h.openPath("n.md"); return true })
 			r.waitFile(t, "n.md")
 			r.s.WaitFor(t, "the written chart drawn once the note is shown again", func(sc string) bool {
