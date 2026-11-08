@@ -523,18 +523,36 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		}
 	}
 
-	var pgid int
+	var pgid, child int
 	t.Run("a server never stopped, its child naming no socket", func(t *testing.T) {
 		dir, socket := serverDir(t)
 		endsWithTheTest(t, socket)
-		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & while :; do sleep 1; done`, "sh", socket}, socket, dir, os.Environ())
+		childFile := filepath.Join(dir, "child.pid")
+		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ())
 		if err != nil {
 			t.Fatal(err)
 		}
 		pgid = s.cmd.Process.Pid
-		namesItsSocket(t, pgid, socket)
+		if !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(pgid)) {
+			t.Fatalf("fixture: the server %d doesn't name %s", pgid, socket)
+		}
+		// the child is forked and in the server's group before the subtest ends: its pid is written
+		// once it is
+		if !eventually(t, func() bool {
+			b, _ := os.ReadFile(childFile)
+			child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+			return child > 1
+		}) {
+			t.Fatal("fixture: the server's child never started")
+		}
+		if g, err := syscall.Getpgid(child); err != nil || g != pgid || slices.Contains(liveProcessesNaming(socket), strconv.Itoa(child)) {
+			t.Fatalf("fixture: the child %d is in group %d (%v), want the server's %d, its command line naming no socket", child, g, err, pgid)
+		}
 	})
 	groupEnded("a server never stopped", pgid)
+	if !eventually(t, func() bool { return !alive(child) }) {
+		t.Fatalf("the server's child %d outlives its cell", child)
+	}
 
 	var socket string
 	t.Run("a crew Codex agent's server, its CLI never ending", func(t *testing.T) {
@@ -549,14 +567,14 @@ func TestACellsServersEndWithIt(t *testing.T) {
 			t.Fatal(err)
 		}
 		socket = instance.setup.ServerSocket
-		pids := processesNaming(socket)
+		pids := liveProcessesNaming(socket)
 		if len(pids) != 1 {
 			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)
 		}
 		pgid, _ = strconv.Atoi(pids[0])
 	})
 	groupEnded("a crew Codex agent's server", pgid)
-	if pids := processesNaming(socket); len(pids) > 0 {
+	if pids := liveProcessesNaming(socket); len(pids) > 0 {
 		t.Fatalf("the agent's server outlives its cell: %v", pids)
 	}
 }
