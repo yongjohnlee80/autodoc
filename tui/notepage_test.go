@@ -382,3 +382,25 @@ func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
 		t.Errorf("a diagram's notice: %q", got)
 	}
 }
+
+// TestAnotherFileTakesTheNotesRendererOff: the note's Markdown renderer is the note's alone. Open a
+// text file after a note and the editor no longer draws through it, so the text file is never laid
+// out as Markdown.
+func TestAnotherFileTakesTheNotesRendererOff(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\n**bold** words\n", "b.txt", "**plain** text\n")},
+		[]string{"**/*.md", "**/*.txt"})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "a.md Rendered by the editor", func(string) bool { return renderedByTheEditor(r) })
+	onLoop(r, func() bool { r.h.openPath("b.txt"); return true })
+	r.waitFile(t, "b.txt")
+	r.s.WaitFor(t, "b.txt drawn with no Markdown renderer", func(sc string) bool {
+		md := onLoop(r, func() bool {
+			_, md := r.h.editor.(*widget.Editor).Renderer().(*widget.MarkdownCellRenderer)
+			return md
+		})
+		return !md && strings.Contains(sc, "**plain** text")
+	})
+}
