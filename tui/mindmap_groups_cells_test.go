@@ -40,10 +40,16 @@ func groupsKB(t *testing.T, graph string) string {
 // the workspace's groups.
 func openCellMindmap(t *testing.T, kb string, before func(*running)) (*running, *cellMindmap) {
 	t.Helper()
+	return openCellMindmapOf(t, kb, 2, before)
+}
+
+// openCellMindmapOf is openCellMindmap on a workspace of listed documents.
+func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running)) (*running, *cellMindmap) {
+	t.Helper()
 	d := startManaged(t, map[string]string{"kb": kb})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
 	r.waitAttached(t, "kb")
-	r.waitListed(t, 2)
+	r.waitListed(t, listed)
 	if before != nil {
 		before(r)
 	}

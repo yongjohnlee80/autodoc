@@ -257,20 +257,21 @@ func (e *embedder) read(p string, limit int64) ([]byte, bool) {
 	return data, err == nil
 }
 
-// readErr is read, saying why a file was not read: fs.ErrNotExist when it is in neither place.
+// readErr is read, saying why not: fs.ErrNotExist when p is in neither place, errTooLarge when it
+// is over limit.
 func (e *embedder) readErr(p string, limit int64) ([]byte, error) {
-	var missing error
+	err := error(fs.ErrNotExist)
 	for _, candidate := range []string{p, path.Join(e.resources, p)} {
-		data, err := e.readAt(candidate, limit)
-		if err == nil {
+		data, rerr := e.readAt(candidate, limit)
+		if rerr == nil {
 			return data, nil
 		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, err // there, but refused or too large: not looked for elsewhere
+		if !errors.Is(rerr, fs.ErrNotExist) {
+			return nil, rerr // there, but refused or too large: not looked for elsewhere
 		}
-		missing = err
+		err = rerr
 	}
-	return nil, missing
+	return nil, err
 }
 
 // locate is where p is, beside the document or else in its resources folder, when it is a file
@@ -447,26 +448,53 @@ func csvRows(data []byte, fit tableFit) (csvShown, bool) {
 // most rows rows (0: maxTableRows). ok is false for any other embed, and for a file that is
 // missing, refused, too large or not CSV: the line stays as written.
 func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
+	md, _, ok := EmbedMarkdownSized(doc, dest, rows)
+	return md, ok
+}
+
+// EmbedMarkdownSized is EmbedMarkdown, telling a file refused for its size apart: tooLarge is true,
+// and ok false, when the file is over what an embed reads (1 MiB), read no further.
+func EmbedMarkdownSized(doc, dest string, rows int) (md string, tooLarge, ok bool) {
 	p, ext, ok := markdownEmbed(dest)
+	if !ok {
+		return "", false, false
+	}
+	e := newEmbedder(doc, tableFit{rows: rows})
+	if e == nil {
+		return "", false, false
+	}
+	defer e.close()
+	data, err := e.readErr(p, maxEmbedText)
+	if err != nil {
+		return "", errors.Is(err, errTooLarge), false
+	}
+	switch {
+	case ext == ".mmd":
+		return fenced("mermaid", string(data)), false, true
+	case isChart(p):
+		return fenced("vega-lite", string(data)), false, true
+	}
+	md, ok = CSVMarkdown(data, rows)
+	return md, false, ok
+}
+
+// EmbedPath is the file on disk dest names in doc, where EmbedMarkdown reads it: beside doc, or else
+// in its resources folder. ok is false when there is no such file it would read.
+func EmbedPath(doc, dest string) (string, bool) {
+	p, _, ok := markdownEmbed(dest)
 	if !ok {
 		return "", false
 	}
-	e := newEmbedder(doc, tableFit{rows: rows})
+	e := newEmbedder(doc, tableFit{})
 	if e == nil {
 		return "", false
 	}
 	defer e.close()
-	data, ok := e.read(p, maxEmbedText)
+	at, ok := e.locate(p)
 	if !ok {
 		return "", false
 	}
-	switch {
-	case ext == ".mmd":
-		return fenced("mermaid", string(data)), true
-	case isChart(p):
-		return fenced("vega-lite", string(data)), true
-	}
-	return CSVMarkdown(data, rows)
+	return filepath.Join(e.dir, filepath.FromSlash(at)), true
 }
 
 // ErrEmbedOutside is an embed's file the page does not read: a URL, an absolute path, or one out of

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -37,7 +36,7 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 	r.s.WaitFor(t, "the crumb under Linux", func(string) bool {
 		return strings.Contains(r.frameTitle(), "guide.md › Guide › Setup › Linux")
 	})
-	r.asText(t)         // G on a note's page scrolls it, and this one fits: in the text G moves the cursor
+	r.asText(t)         // in the text as in the Rendered view
 	r.keys(t, key('G')) // a key moves it too: the last line, under Usage
 	r.s.WaitFor(t, "the crumb under Usage", func(string) bool {
 		t := r.frameTitle()
@@ -45,9 +44,9 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 	})
 }
 
-// On a note's page, which has no cursor, the breadcrumb follows the reader's place: the heading of
-// the block at the page's top, as PgDn takes it past a heading (docs/decisions/editor.md).
-func TestTheBreadcrumbFollowsThePagesTop(t *testing.T) {
+// In a note's Rendered view the breadcrumb follows the cursor a key moves, as in the text: G takes
+// it to the note's end, under a later heading, and the view goes with it (docs/decisions/editor.md).
+func TestTheBreadcrumbFollowsTheCursorInTheRenderedView(t *testing.T) {
 	var note strings.Builder
 	note.WriteString("# Guide\n\n")
 	for i := range 40 {
@@ -57,22 +56,16 @@ func TestTheBreadcrumbFollowsThePagesTop(t *testing.T) {
 	for i := range 40 {
 		fmt.Fprintf(&note, "Later %02d of the guide.\n\n", i)
 	}
-	r := openNotePage(t, note.String(), "Intro 00")
+	r := openRenderedNote(t, note.String(), "Intro 00")
 	r.s.WaitFor(t, "the crumb at the first heading", func(string) bool {
 		return strings.Contains(r.frameTitle(), "n.md › Guide") && !strings.Contains(r.frameTitle(), "Later")
 	})
-	page := notePage(r)
-	top := func() int { return onLoop(r, func() int { return page.top }) }
-	for i := 0; !strings.Contains(r.frameTitle(), "› Later"); i++ {
-		if i > 20 {
-			t.Fatalf("paged %d times and the crumb never reached Later: %q", i, r.frameTitle())
-		}
-		was := top()
-		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
-		r.s.WaitFor(t, "a page on", func(string) bool { return top() > was })
-	}
+	r.keys(t, key('G'))
+	r.s.WaitFor(t, "the crumb under Later, its end shown", func(sc string) bool {
+		return strings.Contains(r.frameTitle(), "n.md › Guide › Later") && strings.Contains(sc, "Later 39")
+	})
 	if v := shownView(r); v != widget.ViewRendered {
-		t.Fatalf("paging left the page: view %v", v)
+		t.Fatalf("G left the Rendered view: view %v", v)
 	}
 }
 

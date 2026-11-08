@@ -29,7 +29,7 @@ names and saves it as a file. Everything else comes when it is asked for:
 - **The outline** (`SPC O`, `Go › Outline…`) lists a Markdown file's headings, as the
   editor's text has them, saved or not; Enter jumps to the one under the cursor.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
-  has a schema (`Manage… › Edit…`); they never block a save. In the GUI's Rendered View, a note's frontmatter is hidden.
+  has a schema (`Manage… › Edit…`); they never block a save. In the Rendered View, a note's frontmatter is hidden, in the GUI and in the terminal.
 
 **The page** wraps long lines at its width, and can number its lines in a dimmed gutter: View ›
 Wrap long lines and Line numbers, or Preferences. Preferences sets the page's width too. `?` in Normal mode shows the Vim keys in a card
@@ -57,7 +57,7 @@ The page edits in the **Vim** mode (modal, the default) or the **Text** mode (mo
    - `H` and `L` show the buffer before or after the shown one;
    - `Ctrl+O` and `Ctrl+I` step back and forward along the jumps, across documents too;
    - `?` shows the Vim keys' card.
-2. **Insert**: entered with `i`, `a`, `I`, `A`, `o` or `O`; `Esc` goes back to Normal. In the GUI's Rendered View, `Enter` on a Markdown list item continues the list, and `Tab` / `Shift+Tab` nest the item or bring it out.
+2. **Insert**: entered with `i`, `a`, `I`, `A`, `o` or `O`; `Esc` goes back to Normal. In the Rendered View, in the GUI and in the terminal, `Enter` on a Markdown list item continues the list, and `Tab` / `Shift+Tab` nest the item or bring it out.
 3. **Visual**: character-wise `v`, line-wise `V`, or a block with `Ctrl+v`. `>` and `<` shift the lines selected.
 4. **The command line**: `:` opens it in Normal mode, and `Ctrl+;` opens it in either editor mode. Its commands are in §3.8.
 
@@ -70,7 +70,7 @@ Typing types. The keys are an ordinary text editor's:
 - `Ctrl+X` / `Ctrl+C` / `Ctrl+V` cut, copy and paste;
 - `Ctrl+A` selects all;
 - `Ctrl+G` searches the workspace;
-- `Ctrl+T` toggles the Rendered View (a Markdown note's page, a raw HTML file's page and a CSV or TSV file's table, in `--gui` and in the terminal, where the pages are drawn in cells, §3.3);
+- `Ctrl+T` toggles the Rendered View, the cursor kept (a Markdown note drawn and edited in place, a raw HTML file's page and a CSV or TSV file's table, in `--gui` and in the terminal, where they are drawn in cells, §3.3);
 - `Ctrl+Space` opens SPC's card;
 - `Ctrl+;` opens the command line.
 

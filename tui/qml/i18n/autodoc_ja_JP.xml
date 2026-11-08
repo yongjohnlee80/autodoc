@@ -4184,6 +4184,10 @@ WHAT A KEY NEEDS
         <source>The command's exit code could not be mailed to the agent %1: %2</source>
         <translation>コマンドの終了コードをエージェント %1 にメールで送れませんでした: %2</translation>
     </message>
+    <message id="autodoc.notice.embeds.is_too_large_to_draw_here">
+        <source>%1 is too large to draw here (over 1 MiB)</source>
+        <translation>%1 は大きすぎてここに描画できません（1 MiB 超）</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>%1 %2 を削除しました</translation>

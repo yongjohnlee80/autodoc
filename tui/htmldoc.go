@@ -22,6 +22,18 @@ import (
 // documentSwitch is an editor whose Rendered view can be its document view: golib's gui Editor.
 type documentSwitch interface{ SetRenderedDocument(on bool) }
 
+// setRenderedDocument turns the editor's document view on or off for its Rendered view: a page or
+// a table drawn over the text (on), or the text itself (off). A test's docSwitch stands in for it.
+func (h *Host) setRenderedDocument(on bool) {
+	if h.docSwitch != nil {
+		h.docSwitch(on)
+		return
+	}
+	if ds, ok := h.editor.(documentSwitch); ok {
+		ds.SetRenderedDocument(on)
+	}
+}
+
 // documentComponent is an editor with a document view, reached as a component: the gui Editor's
 // HTMLView, named without a gui type.
 type documentComponent interface{ DocumentComponent() tuicore.Component }
@@ -69,15 +81,7 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 	case page && hasPage:
 		setDocumentView(h.editor, v)
 	}
-	on := table != nil || page
-	switch {
-	case h.docSwitch != nil:
-		h.docSwitch(on)
-	default:
-		if ds, ok := h.editor.(documentSwitch); ok {
-			ds.SetRenderedDocument(on)
-		}
-	}
+	h.setRenderedDocument(table != nil || page)
 	if !page || !hasPage {
 		return
 	}

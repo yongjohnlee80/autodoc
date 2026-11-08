@@ -170,7 +170,8 @@ var _ tuicore.Surface = (*cellMindSurface)(nil)
 
 // TestTheCellMindmapGolden (§5 case 4): a small map as the terminal draws it, testdata/mindmap_tui
 // (-update rewrites it): the root a bang in the middle, its documents in rounded boxes either side,
-// joined by box-drawing lines; the selected box (here the root's first child, by l) marked.
+// joined by box-drawing lines; the selected box (here the root's first child, by l) marked; the
+// legend along the bottom (in no groups: the row saying so, then any other document's box).
 func TestTheCellMindmapGolden(t *testing.T) {
 	m, v := builtMindmap(t, smallMind(), "a.md", 72, 20)
 	v.HandleEvent(press('l', "l"))
@@ -279,7 +280,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 		{"its command, from the page", false, false}, {"its command, from the text", true, false}} {
 		raw := c.raw
 		t.Run(c.name, func(t *testing.T) {
-			r := openNotePage(t, "# Pantry\n\nshelf\n", "Pantry")
+			r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 			if raw {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
 				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })

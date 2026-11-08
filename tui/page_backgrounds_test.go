@@ -56,6 +56,13 @@ func themeBase(t *testing.T, r *running, name string) string {
 // theme's syntax roles carry — the durable signal the posted reload landed.
 func storeTheme(t *testing.T, r *running, name string) string {
 	t.Helper()
+	// the daemon's preferences first: a theme stored before they are read would start the program
+	// on the defaults (About over the page among them), not on the store's
+	for deadline := time.Now().Add(20 * time.Second); !onLoop(r, func() bool { return r.h.luaPrefsRead }); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the preferences were never read")
+		}
+	}
 	want := themeValue(t, r, name, "syntax.keyword")           // the theme's own keyword colour: deterministic
 	onLoop(r, func() bool { r.h.useTheme(name); return true }) // the View › Theme path: switches AND stores
 	for deadline := time.Now().Add(20 * time.Second); ; {      // the posted reload: wait the palette carry it

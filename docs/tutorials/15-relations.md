@@ -11,7 +11,7 @@ flowchart LR
 
 **Links (SPC l).** A panel of the open note's connections: what it links to, its backlinks, and its frontmatter relations, each under its own heading. Links that name no document are listed too. **Enter** opens a note, and the panel closes; **d** also lists the notes two links away. Every terminal and window has it.
 
-**The Mindmap** (SPC M). Your note at the centre, the notes one link away around it; **d** reaches two. Click a note to open it, and the map centres on it. In a terminal it is drawn in characters: **h j k l** or the arrows move from note to note, and **Enter** opens one.
+**The Mindmap** (SPC M). Your note at the centre, the notes one link away around it; **d** reaches two. Click a note to open it, and the map centres on it. In a terminal it is drawn in characters: **h j k l** or the arrows move from note to note, and **Enter** opens one. A legend along the bottom says what each outline and colour stands for.
 
 **The GlobeMap**. The whole workspace at once: every note and every link, settling into place as you watch. In a terminal it is drawn once settled, in Braille dots: **h j k l** or the arrows move from note to note, **Enter** opens one, **H J K L** pan, and **g** shows the legend.
 
