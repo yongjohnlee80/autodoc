@@ -35,7 +35,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 		s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
 		if err == nil && len(s.Server) > 0 {
-			s.Server = fakeServer(s.ServerSocket, true)
+			s.Server = fakeServer(t, s.ServerSocket, true)
 		}
 		return s, err
 	}
