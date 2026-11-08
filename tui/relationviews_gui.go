@@ -226,7 +226,7 @@ func relationViewChoices() map[string][]string {
 func (h *Host) relationViewFeatures() []Feature {
 	if !h.gui { // run as a terminal (--ui): the terminal's Mindmap, in cells (mindmap_cells.go)
 		if h.relationViews == nil {
-			h.relationViews = []Feature{newCellMindmap(core{h})}
+			h.relationViews = []Feature{newCellMindmap(core{h}, newGraphStore(core{h}, core{h}, h.graphUserFile))}
 		}
 		return h.relationViews
 	}
