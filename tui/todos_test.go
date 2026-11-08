@@ -66,7 +66,11 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 }
 
 // tabRead waits for tab's tasks (for Archived, its months) to have been read.
-func tabRead(t *testing.T, r *running, tab int) {
+//
+// The store must be shown as well: the tabs count as read (not stale) before any store is, so
+// without it a cell went on as the panel opened, its store list (three calls to the daemon) still
+// coming, and a key of the store's (a) did nothing, under load (TestTabReadWaitsForTheStore).
+func tabRead(t testing.TB, r *running, tab int) {
 	t.Helper()
 	if tab == varsTab {
 		r.s.WaitFor(t, "Variables read", func(string) bool {
@@ -75,7 +79,7 @@ func tabRead(t *testing.T, r *running, tab int) {
 		return
 	}
 	r.s.WaitFor(t, todoBuckets[tab].title+" read", func(string) bool {
-		return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && !v.stale[tab] })
+		return onLoop(r, func() bool { v := todosOf(r); return v.cur != nil && v.tab == tab && !v.stale[tab] })
 	})
 }
 
@@ -522,7 +526,8 @@ func TestTodosQuestionMarkOpensTheKeysCard(t *testing.T) {
 	r.s.WaitFor(t, "the card open", shown)
 	r.keys(t, key('a'))
 	// what add() reads, said with the screen if its dialog never shows: it failed once in a whole
-	// ./tui run, the card closed and no dialog, and never again in 180 runs of it alone
+	// ./tui run, the card closed and no dialog, as add() does with no store shown yet; tabRead now
+	// waits for the store (TestTabReadWaitsForTheStore)
 	waitSaying(t, r, "new task")
 }
 
@@ -608,6 +613,41 @@ func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
 		t.Fatal("it returned, the text never shown")
 	}
 	waitSaying(t, r, "todos — keys")
+}
+
+// TestTabReadWaitsForTheStore: tabRead, which openTodos and the cells after a tab change wait with,
+// waits for the store to be shown, not only for the tab to be unread no longer: before the store
+// list answers, every tab counts as read, and a key the panel's store needs (a, s, d) does nothing
+// then (the keys card cell's one red, in a loaded whole ./tui run). Put back in that state, the
+// panel holds tabRead until its store is shown again (the mutant: the store not waited for).
+func TestTabReadWaitsForTheStore(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true)
+	r := attached(t, d)
+	openTodos(t, r, "kb", '1')
+	var cur *todoStore
+	onLoop(r, func() bool { v := todosOf(r); cur, v.cur = v.cur, nil; return true }) // as the panel is before its store list answers
+	if onLoop(r, func() bool { return todosOf(r).stale[0] }) || cur == nil {
+		t.Fatal("fixture: the Open tab outdated, or no store was shown")
+	}
+	rec := &fatalRecorder{TB: t, msg: make(chan string, 1)}
+	returned := make(chan struct{})
+	go func() { tabRead(rec, r, 0); close(returned) }()
+	select {
+	case <-returned:
+		t.Fatal("tabRead returned with no store shown")
+	case msg := <-rec.msg:
+		t.Fatalf("tabRead failed before its wait was over: %s", msg)
+	case <-time.After(300 * time.Millisecond):
+	}
+	onLoop(r, func() bool { todosOf(r).cur = cur; return true }) // the store list's answer
+	select {
+	case <-returned:
+	case msg := <-rec.msg:
+		t.Fatalf("tabRead failed, the store shown: %s", msg)
+	case <-time.After(decltest.WaitTimeout + time.Second):
+		t.Fatal("tabRead never returned, the store shown")
+	}
 }
 
 // fatalRecorder is a testing.TB whose Fatalf is recorded, the goroutine that called it ended, as
