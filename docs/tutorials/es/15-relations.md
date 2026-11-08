@@ -11,7 +11,7 @@ flowchart LR
 
 **Enlaces (SPC l).** Un panel con las conexiones de la nota abierta: a qué enlaza, sus retroenlaces y sus relaciones de frontmatter, cada una bajo su propio encabezado. También se listan los enlaces que no apuntan a ningún documento. **Enter** abre una nota y cierra el panel; **d** lista además las notas a dos enlaces de distancia. Todos los terminales y ventanas lo tienen.
 
-**El Mindmap** (SPC M). Tu nota en el centro y, a su alrededor, las notas a un enlace de distancia; **d** llega hasta dos. Haz clic en una nota para abrirla, y el mapa se centra en ella. En una terminal se dibuja con caracteres: **h j k l** o las flechas pasan de una nota a otra, y **Enter** abre una.
+**El Mindmap** (SPC M). Tu nota en el centro y, a su alrededor, las notas a un enlace de distancia; **d** llega hasta dos. Haz clic en una nota para abrirla, y el mapa se centra en ella. En una terminal se dibuja con caracteres: **h j k l** o las flechas pasan de una nota a otra, y **Enter** abre una. Una leyenda en la parte de abajo dice qué significa cada contorno y cada color.
 
 **El GlobeMap**. Todo el espacio de trabajo a la vez: cada nota y cada enlace, colocándose en su sitio mientras miras. En una terminal se dibuja ya asentado, con puntos Braille: **h j k l** o las flechas pasan de una nota a otra, **Enter** abre una, **H J K L** desplazan y **g** muestra la leyenda.
 

@@ -350,22 +350,10 @@ func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, g
 	if gs == nil || len(gs.list) == 0 {
 		return []legendRow{legendMsg(none, "autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")}
 	}
-	worn := make([]bool, len(gs.list))
-	for _, n := range m.Nodes {
-		if i := gs.of(n); i >= 0 {
-			worn[i] = true
-		}
-	}
+	shown, more := legendGroups(gs, m)
 	var rows []legendRow
-	more := 0
-	for i, g := range gs.list {
-		switch {
-		case !worn[i]:
-		case len(rows) < groupLegendRows:
-			rows = append(rows, legendRow{mark: mark(g), text: groupLabel(g.Query)})
-		default:
-			more++
-		}
+	for _, g := range shown {
+		rows = append(rows, legendRow{mark: mark(g), text: groupLabel(g.Query)})
 	}
 	if more > 0 {
 		rows = append(rows, legendMsg(none, "autodoc.text.relationviews_gui.more_groups", more))

@@ -220,6 +220,30 @@ func parseHex(s string) (color.NRGBA, bool) {
 // groupLegendRows is the most groups a view's legend lists; a row then says how many more.
 const groupLegendRows = 12
 
+// legendGroups are the groups of gs that documents of m wear, in the groups' order: at most
+// groupLegendRows of them, and how many more there are. Both builds' Mindmap legends list them.
+func legendGroups(gs *relGroups, m relMap) (shown []relGroup, more int) {
+	if gs == nil {
+		return nil, 0
+	}
+	worn := make([]bool, len(gs.list))
+	for _, n := range m.Nodes {
+		if i := gs.of(n); i >= 0 {
+			worn[i] = true
+		}
+	}
+	for i, g := range gs.list {
+		switch {
+		case !worn[i]:
+		case len(shown) < groupLegendRows:
+			shown = append(shown, g)
+		default:
+			more++
+		}
+	}
+	return shown, more
+}
+
 // groupLabel is a group's words in a legend: its type, #tag or folder/.
 func groupLabel(q string) string {
 	gq, err := parseGroupQuery(q)
