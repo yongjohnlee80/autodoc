@@ -1,6 +1,6 @@
 # A vista Renderizada: Ctrl+T
 
-Com `autodoc --gui`, **Ctrl+T** alterna a página entre a vista **Bruta**, o Markdown como foi escrito, e a vista **Renderizada**: os títulos nos seus tamanhos, as marcações escondidas, tabelas, código e diagramas Mermaid desenhados.
+Na janela e num terminal, **Ctrl+T** alterna a página entre a vista **Bruta**, o Markdown como foi escrito, e a vista **Renderizada**: os títulos nos seus tamanhos, as marcações escondidas, tabelas, código e diagramas Mermaid desenhados.
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,6 @@ A vista Renderizada continua sendo o editor. Toda linha é editável: a linha so
 
 **O menu do botão direito**: Desfazer, Refazer, Copiar, Recortar e Colar, Ver diagrama, Ir para o link, Voltar e, na GUI, o Zoom. Pelo teclado: **Shift+F10**, a tecla **Menu** se o seu teclado tiver uma, ou **SPC .**.
 
-Num terminal, a vista Renderizada de uma nota é a sua página desenhada em células: títulos, tabelas com borda, blocos de código, os seus diagramas Mermaid e os seus gráficos Vega-Lite. Num terminal que mostra os gráficos do kitty (kitty ou Ghostty, por exemplo), uma imagem sozinha no seu parágrafo é desenhada no lugar; nos outros aparece o seu texto alternativo. Lê-se como a página da janela; para editar, Ctrl+T volta à Bruta.
+Num terminal, a vista Renderizada é o mesmo editor desenhado em células: títulos, tabelas com borda, blocos de código, os seus diagramas Mermaid e os seus gráficos Vega-Lite, e edita-se no lugar como na janela. Um diagrama mais largo que a vista desloca-se com `zh` e `zl`. Num terminal que mostra os gráficos do kitty (kitty ou Ghostty, por exemplo), uma imagem sozinha no seu parágrafo é desenhada no lugar; nos outros aparece o seu texto alternativo.
 
 Mais: [Referência, Capítulo 4: Autoria rica, incorporações e exportação](../../reference/04-rich-authoring-embeds-and-export.md).
