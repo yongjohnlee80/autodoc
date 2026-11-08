@@ -219,7 +219,12 @@ A raw HTML file's Rendered view is the drawn page itself, in place of the text b
 the UI library's HTML view, in a terminal golib's HTMLView laid out in cells, the file's own bytes
 in either, its images from where a page's come from. Ctrl+T flips between the source and the page;
 the page scrolls with the usual keys, its links open as the preview's do, and it is never edited:
-in a terminal its first editing key opens the source there.
+in a terminal its first editing key opens the source there, at the source's own cursor.
+
+A terminal's page has no cursor, and its bytes carry no source spans, so nothing on it maps to a
+place in the source. A find on it counts and marks what the page shows; a term only the source has,
+a link's target say, opens the source and is found there. Ctrl+T counts again in the view it shows,
+both ways. SPC j follows the first link in the file's source.
 
 In the code: `tui/files.go`, `tui/htmldoc.go`, `tui/notepage.go`, `rpc/server.go`
 

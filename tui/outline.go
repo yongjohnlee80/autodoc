@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"path"
@@ -111,27 +110,6 @@ func (o *outliner) Closed() {
 	o.pick.setAll(nil)
 	o.pick.list.Reset(nil)
 	o.c.Crumbs(nil)
-}
-
-// placeAt puts the breadcrumb at source byte b, the reader's place on a note's page (notepage.go),
-// which reads without moving the cursor. The cursor's next move puts it back at the cursor.
-func (o *outliner) placeAt(b int) {
-	if o.doc == nil {
-		return
-	}
-	b = min(max(b, 0), len(o.page.Text))
-	o.line, o.at = bytes.Count(o.page.Text[:b], []byte("\n")), b
-	o.crumb()
-}
-
-// pagePlace is the reader's place on a note's page, source byte b: the breadcrumb follows it there
-// as it follows the cursor over the text.
-func (h *Host) pagePlace(b int) {
-	for _, f := range h.reg.features {
-		if o, ok := f.(*outliner); ok {
-			o.placeAt(b)
-		}
-	}
 }
 
 // read outlines page p and puts the breadcrumb at the cursor. The cursor is Moved's, not p's: a

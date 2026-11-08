@@ -164,7 +164,8 @@ func TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage(t *testing.T) {
 
 // TestAFindOnARawHTMLPageCountsWhatItShows: the page's find counts and marks what the page shows:
 // two of "kestrel", the third being a link's target only the source has; n and N step through the
-// page's marks; Ctrl+T to the text counts its source, three.
+// page's marks; Ctrl+T to the text counts its source, three, and Ctrl+T back to the page counts
+// the page's two again, at once, with no n or N.
 func TestAFindOnARawHTMLPageCountsWhatItShows(t *testing.T) {
 	r, _ := openHTMLPage(t, birdsPage, "Birds")
 	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
@@ -180,6 +181,10 @@ func TestAFindOnARawHTMLPageCountsWhatItShows(t *testing.T) {
 	r.s.WaitFor(t, "N back", func(string) bool { return at()[0] == first && at()[1] == 2 })
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && at()[1] == 3 })
+	r.keys(t, decltest.Ctrl('t'))
+	r.s.WaitFor(t, "counted on the page again", func(string) bool {
+		return shownView(r) == widget.ViewRendered && at() == [2]int{1, 2}
+	})
 }
 
 // TestARightPressOnARawHTMLPageOpensTheEditorsMenu: a right press on the page opens the editor's
@@ -196,7 +201,7 @@ func TestARightPressOnARawHTMLPageOpensTheEditorsMenu(t *testing.T) {
 }
 
 // TestSPCjOnARawHTMLPageFollowsItsLink: the page has no cursor, so SPC j follows the first link in
-// the file's source from the page's top, read as a note's links are: here the file beside it. The
+// the file's source, read as a note's links are: here the file beside it. The
 // page is closed for the file it opens.
 func TestSPCjOnARawHTMLPageFollowsItsLink(t *testing.T) {
 	r, dir := openHTMLPage(t, "<h1>Links</h1>\n\nfirst [b](b.md)\n", "Links", "b.md", "# B\n")
