@@ -197,7 +197,9 @@ func (s *scopedPanelHost) RestoreKeyboardHome() error {
 	return s.core.View(s.core.h.keyboardHome(), "forceActiveFocus")
 }
 
-func (r *panelRegistry) bind(c core) error {
+// bindPanels gives each feature that contributed panels its own host, scoped to its panels, and
+// binds the features that hold one.
+func bindPanels(r *panelRegistry, c core) error {
 	r.hosts = map[string]PanelHost{}
 	for _, contribution := range r.contributions {
 		s := newScopedPanelHost(c, contribution.feature, contribution.specs)
@@ -232,7 +234,7 @@ func (s *scopedPanelHost) Terminals(id string) (TerminalPanel, error) {
 	if !ok {
 		return nil, fmt.Errorf("view %q is not TerminalTabs: %w", id, errs.ErrPrecondition)
 	}
-	return terminalPanel{tabs: tabs}, nil
+	return newTerminalPanel(tabs, resumeTab), nil
 }
 
 func (s *scopedPanelHost) Post(fn func()) { s.core.Post(fn) }
@@ -247,12 +249,12 @@ func (s *scopedPanelHost) Ticket(seq *uint64, scope TicketScope) Ticket {
 	return s.core.Ticket(seq, scope)
 }
 
-// stage checks f's panels replaced by own, under the same checks as at build, and changes nothing:
+// stagePanels checks f's panels replaced by own, under the same checks as at build, and changes nothing:
 // specs is the program's panel set as it would be, and commit makes it so (it cannot fail). Only
 // for a feature that contributes panels and is not PanelBound: a PanelBound feature holds its host,
 // and a rebuilt one would leave it holding the old
 // (docs/decisions/plugins.md#card-panels-made-at-runtime).
-func (r *panelRegistry) stage(c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
+func stagePanels(r *panelRegistry, c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
 	i := slices.IndexFunc(r.contributions, func(p panelContribution) bool { return p.feature == f })
 	if i < 0 {
 		return nil, nil, fmt.Errorf("tui: %s contributes no panels", f.Name())
