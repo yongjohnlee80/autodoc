@@ -29,7 +29,7 @@ const crewBellSound = "/usr/share/sounds/freedesktop/stereo/message-new-instant.
 const crewBellWait = 5 * time.Second
 
 func (x *crewInbox) Prefs() []PrefSpec {
-	return []PrefSpec{boolPref(prefAgentBell, false, func(p *prefs) *bool { return &p.agentBell })}
+	return agentBellRows()
 }
 
 func (x *crewInbox) Catalog() []Entry {
@@ -103,4 +103,9 @@ func bellPlayer(look func(string) (string, error), exists func(string) bool) (pa
 		}
 	}
 	return "", nil, false
+}
+
+// agentBellRows are the bell's preference, bound to the host's field (hostRows reads it by name).
+func agentBellRows() []PrefSpec {
+	return []PrefSpec{boolPref(prefAgentBell, false, func(p *prefs) *bool { return &p.agentBell })}
 }

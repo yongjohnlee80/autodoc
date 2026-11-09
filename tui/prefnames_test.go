@@ -88,11 +88,15 @@ func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 	if len(reads) < 20 {
 		t.Fatalf("found %d reads by name: the scan is not looking at the package", len(reads))
 	}
-	h := newHost(NewSession("unused", nil), Options{GUI: guiBuild(), seams: seamsFor(t)})
-	var declared []string
-	for _, s := range h.prefRows {
-		declared = append(declared, s.Name)
-	}
+	// the rows of a running program: its features' are assembled as it starts
+	r := runTUI(t, NewSession("unused", nil), Options{GUI: guiBuild()})
+	declared := onLoop(r, func() []string {
+		var names []string
+		for _, s := range r.h.prefRows {
+			names = append(names, s.Name)
+		}
+		return names
+	})
 	sort.Strings(declared)
 	for _, r := range reads {
 		ok := slices.Contains(declared, r.name)
