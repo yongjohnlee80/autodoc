@@ -5,7 +5,7 @@
 Dialog {
     id: arrange
     closeOnQ: true
-    keyScope: "autodoc.arrange" // its keys' commands (tui/keys.go: dialogCommands)
+    keyScope: "autodoc.arrange" // its keys' commands (tui/feature/keys.go: dialogCommands)
     title: App.arrangeTitle
     dim: false
     helpText: qsTrId("autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back")

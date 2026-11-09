@@ -55,8 +55,8 @@ Window {
     syntax.import: Theme.syntax.import
     syntax.operator: Theme.syntax.operator
 
-    // the Window's keys fire whichever widget has focus, when it leaves them (tui/keys.go)
-    // ---- the Window's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+    // the Window's keys fire whichever widget has focus, when it leaves them (tui/feature/keys.go)
+    // ---- the Window's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Shortcut { sequence: keyId("autodoc.window.open.leader"); onActivated: leader.open() }
     Shortcut { sequence: keyId("autodoc.window.movePane.h"); onActivated: App.movePane("h") }
     Shortcut { sequence: keyId("autodoc.window.movePane.j"); onActivated: App.movePane("j") }
@@ -334,11 +334,11 @@ Window {
                 // the open file's frontmatter, checked against its workspace's schema as it is typed:
                 // shown only while something is wrong, and never in the way of a save
                 Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
-                // the page's keys, live while the keyboard is in the Editor (tui/keys.go's page scope)
+                // the page's keys, live while the keyboard is in the Editor (tui/feature/keys.go's page scope)
                 FocusScope {
                     Layout.fillHeight: true
-                    keyScope: "autodoc.page" // its keys' commands (tui/keys.go)
-                    // ---- the page's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    keyScope: "autodoc.page" // its keys' commands (tui/feature/keys.go)
+                    // ---- the page's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                     Shortcut { sequence: keyId("autodoc.page.openFind"); onActivated: App.openFind() }
                     Shortcut { sequence: keyId("autodoc.page.findNext"); onActivated: App.findNext() }
                     Shortcut { sequence: keyId("autodoc.page.findPrevious"); onActivated: App.findPrevious() }
@@ -419,10 +419,10 @@ Window {
                 onCloseRequested: App.closeExplorer()
                 Tab {
                     title: "Explorer"
-                    // its keys' commands (tui/keys.go): the scope of its FocusScope
+                    // its keys' commands (tui/feature/keys.go): the scope of its FocusScope
                     FocusScope {
                         keyScope: "autodoc.explorer"
-                        // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                        // ---- the explorer's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                         Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
                         Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
                         Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
@@ -442,7 +442,7 @@ Window {
                     title: "Links"
                     FocusScope {
                         keyScope: "autodoc.links"
-                        // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                        // ---- the links's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                         Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
                         Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
                         Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
@@ -677,8 +677,8 @@ Window {
                 // bubble, and a key read there must never change or remove the task being read
                 FocusScope {
                     Layout.fillHeight: true
-                    keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
-                    // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    keyScope: "autodoc.todos" // its keys' commands (tui/feature/keys.go)
+                    // ---- the todos's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                     Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
                     Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
                     Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
@@ -874,8 +874,8 @@ Window {
                 // note. Which apply follows the cursor (todos.go: syncActions), never a button's own click.
                 // the panel's keys again, live on these buttons too (the details pane above has none)
                 FocusScope {
-                    keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
-                    // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                    keyScope: "autodoc.todos" // its keys' commands (tui/feature/keys.go)
+                    // ---- the todos task buttons' keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                     Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
                     Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
                     Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
@@ -957,8 +957,8 @@ Window {
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
-        paneKeys: "autodoc.htmlPane" // its keys' commands (tui/keys.go): the scope of its FocusScope
-        // ---- the HTML preview's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+        paneKeys: "autodoc.htmlPane" // its keys' commands (tui/feature/keys.go): the scope of its FocusScope
+        // ---- the HTML preview's keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
         Shortcut { sequence: keyId("autodoc.htmlPane.openPaneInBrowser"); onActivated: App.openPaneInBrowser() }
         Shortcut { sequence: keyId("autodoc.htmlPane.closeHTMLPane"); onActivated: App.closeHTMLPane() }
         // ---- end of the HTML preview's keys ----
@@ -1068,7 +1068,7 @@ Window {
     Inbox { id: inbox }
     InboxMessage { id: inboxMessage }
     Grants { id: grants }
-    // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+    // ---- the cards of keys: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
     BufferCard { id: buffer }
     AgentsCard { id: agentsCard }
