@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -533,7 +535,7 @@ func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
-		"PATH=" + h.agentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(),
+		"PATH=" + h.agentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(h.seams.env),
 	}
 	// the page in this TUI's editor, for `autodoc --editor`
 	// (docs/decisions/crew.md#the-editor-socket)
@@ -592,7 +594,7 @@ func writeEditorCredential(dir, token string) (string, error) {
 // user's installed one, not this build on this config.
 func (h *agents) agentPathDir(dir string) string {
 	sum := sha256.Sum256([]byte(dir))
-	return filepath.Join(agentBase(h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
+	return filepath.Join(agentBase(h.seams.env, h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
 }
 
 // linkAgentPath makes link a symbolic link to target (the agent folder's bin), replacing one that
@@ -669,7 +671,7 @@ func agentWrapper(bin, config string) string {
 // the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
 // sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
 func (h *agents) agentFolder(ws wsInfo, codename string) string {
-	dir := filepath.Join(agentBase(h.agentDir), safeName(ws.name))
+	dir := filepath.Join(agentBase(h.seams.env, h.agentDir), safeName(ws.name))
 	if h.crew == nil {
 		return dir
 	}
@@ -679,10 +681,11 @@ func (h *agents) agentFolder(ws wsInfo, codename string) string {
 	return dir
 }
 
-// agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir.
-func agentBase(dir string) string {
+// agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir
+// (env's, nil for AutoDoc's own).
+func agentBase(env procenv.Env, dir string) string {
 	if dir == "" {
-		return filepath.Join(os.TempDir(), "autodoc-agent")
+		return filepath.Join(userdirs.Temp(env), "autodoc-agent")
 	}
 	return dir
 }

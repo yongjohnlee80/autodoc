@@ -66,7 +66,7 @@ func TestATerminalWithoutImagesDrawsTheDiagramInCharacters(t *testing.T) {
 // Mermaid in characters with the native engine chosen, and mermaid.js's image again, saying why,
 // for a block golib does not draw. The menu is a terminal's too.
 func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	if strings.Contains(string(layout), "qsTrId(\"autodoc.main.preview_option\")\n                visible: App.gui") {
 		t.Fatal("File › Preview option is a window's alone")
 	}

@@ -106,9 +106,7 @@ func pageCtrlT(t *testing.T, r *running) {
 // page's Rendered view; with the keyboard on the page it is the page's, and the terminal, hidden,
 // keeps its mode: Esc, shown again, is still its program's (cat -v shows the 0x1b as ^[).
 func TestCtrlTIsTheTerminalsInItAndThePagesOnThePage(t *testing.T) {
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# Alpha\n\nsome text\n"}}, daemonOpts{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.connected(t)

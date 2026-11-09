@@ -29,7 +29,7 @@ func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(agentBase(a.agentDir), safeName(c.ws.name), safeName("autodoc:0123456789abcdef"), safeName("one"))
+	want := filepath.Join(agentBase(nil, a.agentDir), safeName(c.ws.name), safeName("autodoc:0123456789abcdef"), safeName("one"))
 	if got := c.panel.configs[instance.tab].Dir; got != want {
 		t.Fatalf("the agent's folder: %s, want its own under the scope %s", got, want)
 	}

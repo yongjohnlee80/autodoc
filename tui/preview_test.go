@@ -138,7 +138,7 @@ func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
 // fake rendering a page three dialogs tall at the scale asked: the scroll and the zoom are
 // AutoDoc's, whatever renders the page.
 func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -206,7 +206,7 @@ func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 // strips are AutoDoc's to place, whatever renders the page, and a CI runner's Chrome has no sandbox
 // to run in.
 func TestATallDiagramIsPlacedInStrips(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -322,7 +322,7 @@ func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 // tinyPreview runs the TUI on a w×h screen with confirmed graphics, flowFile open.
 func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 	t.Helper()
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, w, h)
 	r.s.WaitFor(t, "the workspace", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
@@ -468,7 +468,7 @@ func tallPage(t *testing.T, w, h int) []byte {
 // While the diagram renders, the preview's Image says so with a spinner and "drawing the
 // diagram…"; the picture, when it comes, ends it.
 func TestThePreviewSpinsWhileTheDiagramRenders(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")

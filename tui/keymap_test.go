@@ -108,9 +108,7 @@ func TestTheKeymapFileIsFollowed(t *testing.T) {
 // runShellWithKeymap is runShellTUI with a key file: /bin/sh as the shell, the file as the user's.
 func runShellWithKeymap(t *testing.T, file string) *running {
 	t.Helper()
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
 	r.connected(t)

@@ -19,7 +19,7 @@ func TestAProfileSetToClaudeUnderAnotherCommandIsAClaudeAgent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "claude-work"), []byte(wrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", "/usr/bin:/bin") // the wrapper and its Claude Code are on the profile's PATH alone
+	tuneEnv(t, "PATH=/usr/bin:/bin") // the wrapper and its Claude Code are on the profile's PATH alone
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth","kind":"claude","env":{"PATH":"`+bin+`:$PATH"}}]`)
 	p, _ := a.profile("sephiroth")
 	instance, err := a.startInstance(p)

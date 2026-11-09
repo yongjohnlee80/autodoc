@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // THE CREW BELL (docs/decisions/crew.md#the-human-inbox): off unless the user turns it on
@@ -69,7 +71,7 @@ func (h *Host) ringBell() {
 		}
 		return
 	}
-	path, args, ok := bellPlayer(exec.LookPath, fileExists)
+	path, args, ok := bellPlayer(func(name string) (string, error) { return procenv.LookPath(h.seams.env, name) }, fileExists)
 	if !ok {
 		return
 	}

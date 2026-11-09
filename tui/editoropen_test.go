@@ -157,7 +157,7 @@ func TestOpenPathsResolve(t *testing.T) {
 	if got, err := h.resolveOpenPath("/x/../y/z.md"); err != nil || got != "/y/z.md" {
 		t.Errorf("an absolute path: %q %v", got, err)
 	}
-	if got, err := h.resolveOpenPath("~/notes/a b.md"); err != nil || got != filepath.Join(homeDir(), "notes", "a b.md") {
+	if got, err := h.resolveOpenPath("~/notes/a b.md"); err != nil || got != filepath.Join(homeDir(nil), "notes", "a b.md") {
 		t.Errorf("a ~/ path: %q %v", got, err)
 	}
 	if _, err := h.resolveOpenPath("notes/a.md"); err == nil || !strings.Contains(err.Error(), "absolute path") {

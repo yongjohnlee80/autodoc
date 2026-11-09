@@ -1,10 +1,11 @@
 package tui
 
 import (
-	"os"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // envValue is name's value in environ as a process reads it: the last one wins.
@@ -25,15 +26,11 @@ func envValue(environ []string, name string) (string, bool) {
 // tmux's TERM, which isn't the agent's terminal either. A profile's own env still wins.
 func TestAnAgentRunsInAutoDocsTerminalWhateverStartedAutoDoc(t *testing.T) {
 	for _, inherited := range []string{"", "tmux-256color"} {
-		if inherited == "" {
-			t.Setenv("TERM", "")
-			os.Unsetenv("TERM")
-			t.Setenv("COLORTERM", "")
-			os.Unsetenv("COLORTERM")
-		} else {
-			t.Setenv("TERM", inherited)
+		started := procenv.Env(nil).With("TERM", "COLORTERM") // AutoDoc's environment, as it was started
+		if inherited != "" {
+			started = started.With("TERM=" + inherited)
 		}
-		env := agentEnviron(&agentInstance{})
+		env := agentEnviron(started, &agentInstance{})
 		if v, _ := envValue(env, "TERM"); v != "xterm-256color" {
 			t.Errorf("AutoDoc started with TERM %q: the agent's TERM is %q, want xterm-256color", inherited, v)
 		}
@@ -42,7 +39,7 @@ func TestAnAgentRunsInAutoDocsTerminalWhateverStartedAutoDoc(t *testing.T) {
 		}
 	}
 
-	own := agentEnviron(&agentInstance{env: []string{"TERM=xterm-direct"}})
+	own := agentEnviron(nil, &agentInstance{env: []string{"TERM=xterm-direct"}})
 	if v, _ := envValue(own, "TERM"); v != "xterm-direct" {
 		t.Errorf("a profile's TERM: the agent's is %q, want the profile's xterm-direct", v)
 	}

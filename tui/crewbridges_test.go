@@ -75,7 +75,7 @@ func bridgeWire(kind string, pid int64, state, owner, why string, reclaimAt int6
 func newBridgesCell(t *testing.T, w *bridgesWindow) (*crewBridges, *crewHost) {
 	t.Helper()
 	w.state = map[string]any{}
-	host := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, t.TempDir())
+	host := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, nil, t.TempDir())
 	host.Connected()
 	if _, _, ok := host.held(); !ok {
 		t.Fatal("the window holds no scope")

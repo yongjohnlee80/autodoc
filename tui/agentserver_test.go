@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
@@ -303,7 +304,7 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 // identity (R4). None of them is on the CLI's command line or the server's, which
 // /proc/<pid>/cmdline shows every user of the machine: the CLI is /bin/sh -c <command>.
 func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
-	t.Setenv("AUTO_AGENTS_MAILBOX_ID", "agent:the-window:1") // the window's spawner identity
+	tuneEnv(t, "AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
 	a, c, _ := crewAgents(t, crewKinds)
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("codex-one")
@@ -373,10 +374,10 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 // <command> too, the window's variables (the editor socket and the agent's token there among them)
 // in its environment, none on its command line, and the spawner's identity not in it.
 func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
-	t.Setenv("AUTO_AGENTS_MAILBOX_ID", "agent:the-window:1")
 	c := newIdentityHost(crewKinds)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	a := testAgents(c, t.TempDir(), "")
+	a.seams.env = procenv.Env(nil).With("AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("claude-one")
 	instance, err := a.startInstance(p)

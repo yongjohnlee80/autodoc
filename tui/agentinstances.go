@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -291,7 +292,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := append(p.envList(), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
+	env := append(p.envList(a.seams.env), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
 	path, args := agentArgv(fillAgentCommand(p.Command, ws))
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
@@ -328,7 +329,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		// its setup first (crew setup, the agent's own build, as every host asks): how its session
 		// reads its mail is what the setup delivered, so the guide, the folder's settings and files,
 		// and the registration all follow it
-		a.askSetup(crewKind, dir, p.environ(os.Environ()), func(setup crew.Setup, err error) {
+		a.askSetup(crewKind, dir, p.environ(a.seams.env), func(setup crew.Setup, err error) {
 			if stale() {
 				instance.starting = false
 				a.listAgents()
@@ -504,7 +505,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 		}
 		c.Args = withCommandArgs(c.Args, instance.setup.Argv)
 	}
-	c.Env = agentEnviron(instance)
+	c.Env = agentEnviron(a.seams.env, instance)
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
 	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
 	// the CLI's terminal if it ends first (agentserver.go). A Codex shell runs under this server,
@@ -528,7 +529,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalPr
 	if err == nil && instance.crewed {
 		// the CLI's environment, its setup's included: a Codex agent's own app-server
 		// (crew.EnvCodexServer) is where its registration step looks
-		environ := instance.profile.environ(os.Environ())
+		environ := instance.profile.environ(a.seams.env)
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
 			environ = append(environ, k+"="+instance.setup.Env[k])
 		}
@@ -1176,8 +1177,8 @@ var agentTerminalEnv = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
 // the agent's PATH, the editor socket and the agent's token there), then a crewed start's session
 // context and its setup's. All of it is the process's environment, readable by the user alone,
 // never its command line.
-func agentEnviron(instance *agentInstance) []string {
-	environ := slices.Concat(ownEnviron(), agentTerminalEnv, instance.env)
+func agentEnviron(env procenv.Env, instance *agentInstance) []string {
+	environ := slices.Concat(ownEnviron(env), agentTerminalEnv, instance.env)
 	if instance.crewed {
 		environ = append(environ, crew.EnvContext+"="+instance.context)
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {

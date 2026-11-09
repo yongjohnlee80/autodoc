@@ -237,7 +237,7 @@ func (panickyCall) Call(context.Context, string, ...any) (any, error) { panic("d
 // never come.
 func TestABackgroundPanicEndsItsCallersWait(t *testing.T) {
 	r, _ := crashTUI(t)
-	v := newTodos(panickyCall{core{r.h}})
+	v := newTodos(panickyCall{core{r.h}}, nil)
 	r.h.p.Post(v.list)
 	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("todos.stores: it panicked: a string") })
 }

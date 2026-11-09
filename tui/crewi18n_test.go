@@ -125,7 +125,7 @@ func TestTheInboxSpeaksTheCatalogsLanguage(t *testing.T) {
 func TestTheOrphanOfferSpeaksTheCatalogsLanguage(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost(), marked: true}
 	w.d.orphans = []any{orphan("autodoc:dead1", 3, "gold")}
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected()
 	q := w.card.current
 	saysMarked(t, "the card's title", q.Title, "autodoc.crew.orphan_title")

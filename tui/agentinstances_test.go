@@ -50,7 +50,13 @@ type modelPanel struct {
 // their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it.
 func testAgents(c agentHost, dir, config string) *agents {
 	s := defaultSeams
-	a := newAgents(c, &s, dir, config)
+	return testAgentsWith(c, &s, dir, config)
+}
+
+// testAgentsWith is testAgents with the seams s (seamsFor: a test's tune, its environment's
+// included).
+func testAgentsWith(c agentHost, s *seams, dir, config string) *agents {
+	a := newAgents(c, s, dir, config)
 	a.commandCheck = nil
 	return a
 }

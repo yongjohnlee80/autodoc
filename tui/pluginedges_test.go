@@ -83,7 +83,7 @@ func TestPluginAndPackageFolderEdges(t *testing.T) {
 	if want := []string{"new not added", "old not updated"}; !slices.Equal(n.notes, want) {
 		t.Errorf("notices %q, want %q", n.notes, want)
 	}
-	if err := buildPlugin(context.Background(), t.TempDir(), &manifest{}, t.TempDir()); err != nil {
+	if err := buildPlugin(context.Background(), nil, t.TempDir(), &manifest{}, t.TempDir()); err != nil {
 		t.Fatalf("no build step: %v", err)
 	}
 }

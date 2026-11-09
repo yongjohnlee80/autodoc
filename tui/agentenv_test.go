@@ -155,12 +155,14 @@ func pollute(t *testing.T) (polluted, kept map[string]string) {
 		"MCP_TIMEOUT":             "30000",            // the user's own MCP tuning, no connection
 		"FAKE_GREETING":           "the user's shell", // any other variable
 	}
+	var set []string
 	for k, v := range polluted {
-		t.Setenv(k, v)
+		set = append(set, k+"="+v)
 	}
 	for k, v := range kept {
-		t.Setenv(k, v)
+		set = append(set, k+"="+v)
 	}
+	tuneEnv(t, set...) // the program's environment: the process's own is never polluted
 	return polluted, kept
 }
 
@@ -230,7 +232,7 @@ func TestAPluginsCloneRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	tuneEnv(t, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r, _ := pluginTUI(t, t.TempDir())
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
 	env := envReported(t, r, report)

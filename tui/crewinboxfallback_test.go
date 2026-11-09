@@ -131,7 +131,7 @@ func TestAnOlderDaemonShowsNoFallback(t *testing.T) {
 // when the scope changes hands (the mutant: the claim not told).
 func TestAClaimTellsTheInboxToReadWaitingJobsAgain(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost()}
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	told := 0
 	h.onClaim = func() { told++ }
 	h.Connected()

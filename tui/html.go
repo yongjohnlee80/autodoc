@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 )
 
 // openDefaultApp hands path to the desktop's default app for its kind (an HTML file to the
@@ -76,8 +78,9 @@ func (h *Host) openWithDefaultApp() {
 	})
 }
 
-func htmlPreviewFile(content []byte) (string, error) {
-	cache, err := os.UserCacheDir()
+// htmlPreviewFile writes content as a page in the user's cache (env's, nil for AutoDoc's own).
+func htmlPreviewFile(env procenv.Env, content []byte) (string, error) {
+	cache, err := userdirs.Cache(env)
 	if err != nil {
 		return "", err
 	}

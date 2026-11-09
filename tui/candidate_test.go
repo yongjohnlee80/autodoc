@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -554,7 +555,7 @@ func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
 func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 	s, cs, c, _ := scriptedCandidate(t)
 	root := t.TempDir()
-	t.Setenv("TMPDIR", root)
+	c.env = procenv.Env(nil).With("TMPDIR=" + root) // the environment it was staged in
 	cs.auditing = c
 	cs.auditWith(AgentEntry{})
 	cs.end(c, "cancelled")
@@ -569,8 +570,9 @@ func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 // worker itself.
 func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("TMPDIR", root)
+	env := procenv.Env(nil).With("TMPDIR=" + root)
 	_, cs, c, _ := scriptedCandidate(t)
+	c.env = env // the environment it was staged in
 	cs.auditing = c
 	cs.auditWith(AgentEntry{}) // the copy is made; its answer is held, never delivered
 	copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*"))
@@ -584,11 +586,11 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 
 	// a worker still working when the session ended: what it makes after is its own to remove
 	late := pluginRepo(t, "Echo", "true")
-	if _, _, err := auditCopy(context.Background(), &candidate{name: "late", stage: late, commit: runGit(t, late, "rev-parse", "HEAD")}, cs.allocs); !errors.Is(err, errSessionEnded) {
+	if _, _, err := auditCopy(context.Background(), &candidate{name: "late", stage: late, commit: runGit(t, late, "rev-parse", "HEAD"), env: env}, cs.allocs); !errors.Is(err, errSessionEnded) {
 		t.Errorf("a copy made after the end: %v", err)
 	}
 	plugins := t.TempDir()
-	if _, _, err := cloneStage(context.Background(), plugins, "file://"+pluginRepo(t, "Echo", "true"), cs.allocs); !errors.Is(err, errSessionEnded) {
+	if _, _, err := cloneStage(context.Background(), nil, plugins, "file://"+pluginRepo(t, "Echo", "true"), cs.allocs); !errors.Is(err, errSessionEnded) {
 		t.Errorf("a stage made after the end: %v", err)
 	}
 	if left, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(left) != 0 || len(entries(t, plugins)) != 0 {
@@ -596,9 +598,9 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	}
 }
 
-// heldGit puts a git on PATH whose clone waits, once it is running, until release is called: a
-// worker caught between holding its directory and finishing its work.
-func heldGit(t *testing.T) (running func() bool, release func()) {
+// heldGit is env with a git first on its PATH whose clone waits, once it is running, until release
+// is called: a worker caught between holding its directory and finishing its work.
+func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bool, release func()) {
 	t.Helper()
 	real, err := exec.LookPath("git")
 	if err != nil {
@@ -611,8 +613,8 @@ func heldGit(t *testing.T) (running func() bool, release func()) {
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
+	held = env.With("PATH=" + bin + string(os.PathListSeparator) + env.Get("PATH"))
+	return held, func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
 }
 
 // The session ends while a worker still writes into the directory it already holds (a clone
@@ -624,16 +626,15 @@ func TestTheSessionsEndWhileAWorkerStillWrites(t *testing.T) {
 	for _, kind := range []string{"a stage", "an audit copy"} {
 		t.Run(kind, func(t *testing.T) {
 			tmp, parent := t.TempDir(), filepath.Join(t.TempDir(), "plugins")
-			t.Setenv("TMPDIR", tmp)
-			running, release := heldGit(t)
+			env, running, release := heldGit(t, procenv.Env(nil).With("TMPDIR="+tmp))
 			own := newAllocs()
 			answer := make(chan error, 1)
 			go func() {
 				var err error
 				if kind == "a stage" {
-					_, _, err = cloneStage(context.Background(), parent, "file://"+repo, own)
+					_, _, err = cloneStage(context.Background(), env, parent, "file://"+repo, own)
 				} else {
-					_, _, err = auditCopy(context.Background(), &candidate{name: "echo", stage: repo, commit: head}, own)
+					_, _, err = auditCopy(context.Background(), &candidate{name: "echo", stage: repo, commit: head, env: env}, own)
 				}
 				answer <- err
 			}()

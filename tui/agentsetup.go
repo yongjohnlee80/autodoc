@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -59,7 +60,12 @@ func (a *agents) Started() {
 
 // openAgentSetup fills and opens the card.
 func (a *agents) openAgentSetup() {
-	found := detectAgentCLIs(a.seams.lookAgentCLI)
+	look := a.seams.lookAgentCLI
+	if look == nil {
+		env := a.seams.env
+		look = func(name string) (string, error) { return procenv.LookPath(env, name) }
+	}
+	found := detectAgentCLIs(look)
 	a.setupFound = found
 	rows := make([]rowOf, len(found))
 	for i, c := range found {
