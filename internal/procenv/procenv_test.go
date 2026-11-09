@@ -29,6 +29,12 @@ func TestAnEnvReadsItsOwnVariables(t *testing.T) {
 	if e.Get("B") != "2" {
 		t.Error("With changed the Env it was given")
 	}
+	if v, set := e.Lookup("C"); !set || v != "" {
+		t.Errorf("Lookup(C) = %q, %v; want set, empty", v, set)
+	}
+	if _, set := e.Lookup("D"); set {
+		t.Error("Lookup(D) says set; it is not")
+	}
 	env := e.Environ()
 	env[0] = "Z=9"
 	if e[0] != "A=1" {
