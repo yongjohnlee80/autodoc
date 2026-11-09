@@ -233,6 +233,10 @@ the code ever disagree, the code is right and the page is fixed.
 - [About's Update and the restart](install.md#abouts-update-and-the-restart)
 - [Windows](install.md#windows)
 
+## [Platforms](platforms.md)
+
+- [Each OS concern is one package](platforms.md#each-os-concern-is-one-package)
+
 ## [The enterprise search server](server.md)
 
 - [A headless server mode](server.md#a-headless-server-mode)
