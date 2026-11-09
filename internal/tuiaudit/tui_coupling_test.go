@@ -290,6 +290,9 @@ func TestTuiFeaturesReachOnlyDown(t *testing.T) {
 			rows = append(rows, c.row())
 		}
 		sort.Strings(rows)
+		if err := os.MkdirAll(filepath.Dir(ledger), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(ledger, []byte(tuiCouplingHeader+strings.Join(rows, "\n")+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
