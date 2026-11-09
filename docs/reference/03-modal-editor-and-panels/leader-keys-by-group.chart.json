@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
   "title": "AutoDoc's Leader Keys on SPC's Card, by Group",
-  "description": "How many leader keys each group of SPC's card holds, as tui/keys.go and AutoDoc's features bind them, 36 in all: Find (SPC / o f r j b B), Window (m Tab . t L p u), Panels (e l ` x M h), File (n C O d H), Manage (w W s , k), Agents (g G a), Help (? A Q).",
+  "description": "How many leader keys each group of SPC's card holds, as tui/feature/keys.go and AutoDoc's features bind them, 36 in all: Find (SPC / o f r j b B), Window (m Tab . t L p u), Panels (e l ` x M h), File (n C O d H), Manage (w W s , k), Agents (g G a), Help (? A Q).",
   "width": 640,
   "height": 320,
   "data": {
