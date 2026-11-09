@@ -70,6 +70,9 @@ function Run([string]$home_, [string]$file, [string[]]$argv) {
 	$env:LOCALAPPDATA = Join-Path $home_ "Local"
 	$env:APPDATA = Join-Path $home_ "Roaming"
 	New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA, $env:APPDATA | Out-Null
+	# a script's stderr is part of what a cell reads: Windows PowerShell 5.1 would make it a
+	# terminating error under Stop
+	$ErrorActionPreference = "Continue"
 	& $ps -NoProfile -ExecutionPolicy Bypass -File $file @argv *> (Join-Path $home_ "out.txt")
 	return $LASTEXITCODE
 }
