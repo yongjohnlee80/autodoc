@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/install"
 )
 
 func TestReleaseVersionsCompare(t *testing.T) {
@@ -145,5 +148,99 @@ func TestNoWordWhenUpToDateOfflineOrNotARelease(t *testing.T) {
 		if r.noticed("is out") {
 			t.Errorf("%s: said a release is out", tc.name)
 		}
+	}
+}
+
+// setWatch is a Core that also tells a test each state it sets.
+type setWatch struct {
+	Core
+	saw func(name string, v any)
+}
+
+func (w setWatch) Set(name string, v any) { w.Core.Set(name, v); w.saw(name, v) }
+
+// aboutButtons is the row of About's buttons on screen, the one holding Close.
+func aboutButtons(screen string) string {
+	for _, row := range strings.Split(screen, "\n") {
+		if strings.Contains(row, "Close") {
+			return row
+		}
+	}
+	return ""
+}
+
+// TestAboutsUpdateGoesWithTheLookForARelease: for an AutoDoc the script installed, About's Update
+// is hidden while GitHub is asked and when the answer is that this is the latest (or newer than
+// GitHub's); it shows when a newer release is out, and when no answer can say there is nothing to
+// update to (offline, the preference off). An AutoDoc installed another way never shows it.
+func TestAboutsUpdateGoesWithTheLookForARelease(t *testing.T) {
+	script, none := scriptInstall("/u.sh"), func() (install.Record, bool, error) { return install.Record{}, false, nil }
+	for _, tc := range []struct {
+		name   string
+		record func() (install.Record, bool, error)
+		check  bool
+		answer release
+		err    error
+		want   bool
+	}{
+		{"the latest", script, true, release{Tag: "v0.1.38"}, nil, false},
+		{"newer than GitHub's", script, true, release{Tag: "v0.1.37"}, nil, false},
+		{"a newer release is out", script, true, release{Tag: "v0.1.39", URL: "https://example/r"}, nil, true},
+		{"offline", script, true, release{}, errors.New("offline"), true},
+		{"the preference off", script, false, release{}, nil, true},
+		{"newer, but another way installed it", none, true, release{Tag: "v0.1.39", URL: "https://example/r"}, nil, false},
+		{"offline, and another way installed it", none, true, release{}, errors.New("offline"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+			r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: tc.record})
+			r.connected(t)
+			r.waitWithin(t, "the notes listed", daemonWait, func() bool { return len(r.listed()) > 0 })
+			s := startupOf(r)
+			answer, answered := make(chan struct{}), make(chan struct{})
+			onLoop(r, func() bool {
+				sets := 0
+				s.c = setWatch{s.c, func(name string, _ any) {
+					if name != "App.aboutCanUpdate" {
+						return
+					}
+					if sets++; sets == 2 { // the first hides it for the look, the second is the answer
+						close(answered)
+					}
+				}}
+				s.version = "v0.1.38"
+				s.exe = func() (string, error) { return "/x/bin/autodoc", nil }
+				s.latest = func(ctx context.Context) (release, error) {
+					select {
+					case <-answer:
+						return tc.answer, tc.err
+					case <-ctx.Done():
+						return release{}, ctx.Err()
+					}
+				}
+				r.h.prefs.aboutAtStart, r.h.prefs.updateCheck = true, tc.check
+				s.Started()
+				return true
+			})
+			r.s.WaitForText(t, "about autodoc")
+			r.s.WaitForText(t, "Close")
+			if tc.check && strings.Contains(aboutButtons(r.s.String()), "Update") {
+				t.Fatalf("Update shown while GitHub is asked:\n%s", r.s.String())
+			}
+			close(answer)
+			if tc.check { // the answer applied on the loop
+				select {
+				case <-answered:
+				case <-time.After(daemonWait):
+					t.Fatal("the answer was never applied")
+				}
+			}
+			// a frame drawn after it, since an Update that must stay hidden changes nothing on screen
+			onLoop(r, func() bool { r.h.set("App.aboutError", "frame-after-the-answer"); return true })
+			r.s.WaitForText(t, "frame-after-the-answer")
+			if got := strings.Contains(aboutButtons(r.s.String()), "Update"); got != tc.want {
+				t.Fatalf("Update shown %v, want %v:\n%s", got, tc.want, r.s.String())
+			}
+		})
 	}
 }

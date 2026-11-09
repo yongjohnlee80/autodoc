@@ -54,6 +54,11 @@ func (*startup) Commands() map[string]Command { return nil }
 
 // Started opens About and looks for a newer release, as the preferences say. A build that is not a
 // release (dev, a commit after a tag) looks for none: it has no release to be older than.
+//
+// About's Update (update.go, shown for an install the script made) follows the answer: hidden while
+// GitHub is asked, and when this is the latest release; shown when a newer one is out, and when no
+// answer came (offline, the preference off, not a release), since then nothing says there is
+// nothing to update to.
 func (s *startup) Started() {
 	p := s.c.Prefs()
 	switch {
@@ -66,6 +71,7 @@ func (s *startup) Started() {
 	if p.Value(prefUpdates) != "true" || !ok {
 		return
 	}
+	s.c.Set("App.aboutCanUpdate", false)
 	s.c.Go(func(ctx context.Context) any {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -76,11 +82,10 @@ func (s *startup) Started() {
 		return r
 	}, func(v any) {
 		r, ok := v.(release)
-		if !ok {
-			return
-		}
-		next, ok := releaseVersion(r.Tag)
-		if !ok || !newer(next, cur) {
+		next, known := releaseVersion(r.Tag)
+		latest := ok && known && !newer(next, cur) // the latest, or newer than GitHub's: nothing to update to
+		s.c.Set("App.aboutCanUpdate", !latest && s.scripted != nil && s.scripted())
+		if !ok || !known || latest {
 			return
 		}
 		how := s.how(r)
