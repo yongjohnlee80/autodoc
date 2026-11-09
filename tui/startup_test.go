@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 func TestReleaseVersionsCompare(t *testing.T) {
@@ -153,7 +154,7 @@ func TestNoWordWhenUpToDateOfflineOrNotARelease(t *testing.T) {
 
 // setWatch is a Core that also tells a test each state it sets.
 type setWatch struct {
-	Core
+	feature.Core
 	saw func(name string, v any)
 }
 
