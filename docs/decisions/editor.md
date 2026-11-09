@@ -508,3 +508,29 @@ neither build promises the browser's exact layout. The site workflow still build
 the window system's libraries but no display.
 
 In the code: `app/exportchart.go`, `app/exportchart_on.go`, `app/exportchart_off.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`
+
+## The tui package's feature map
+
+The `tui` package is splitting into one package per feature, under a small kit they share, with the host (the program, its buffers and its panels) left in `tui` and importing them all.
+- **The kit:** `tui/feature` holds the feature interfaces, commands, panels, pickers and notices.
+- **The features:** `tui/crew`, `tui/todos`, `tui/scripting`, `tui/plugins`, `tui/terminals`, `tui/relations`, `tui/page`, `tui/searchsetup`, `tui/system` and `tui/explorer`.
+
+Imports point down only:
+
+| Feature | May use |
+|---|---|
+| `crew`, `relations`, `searchsetup`, `explorer` | the kit |
+| `todos`, `scripting`, `system` | the kit, `crew` |
+| `plugins` | the kit, `crew`, `scripting` |
+| `terminals` | the kit, `scripting` |
+| `page` | the kit, `scripting`, `relations` |
+
+Nothing imports the host. Until the files move, each file's group is set by its name, and a guard type-checks the package in both builds.
+- It lists every name a group uses outside what it may use, in a ledger that may only shrink.
+- A new crossing fails until the code uses an allowed group, or the name moves.
+- A crossing that is gone fails until its row is removed.
+- Empty is the destination. After the split, the same guard checks the imports instead.
+
+The whole-program tests stay in `tui`: they drive the host and read its state, which an external test package can't see.
+
+In the code: `internal/tuiaudit/tui_coupling_test.go`, `internal/tuiaudit/testdata/tui_coupling.txt`, `tui/feature.go`
