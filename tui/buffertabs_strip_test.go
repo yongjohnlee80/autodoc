@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // buffertabs_strip_test.go: feedBufferTabs, which each build calls with its editor's strip, on a
@@ -23,21 +23,21 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 		r.openByPicker(t, p)
 		r.waitFile(t, p)
 	}
-	strip := widget.NewTabStrip()
+	strip := widgetcore.NewTabStrip()
 	// fed is the strip's tabs and active one after a feed, and their spans on a bar wide enough for all
 	type fed struct {
-		tabs   []widget.StripTab
+		tabs   []widgetcore.StripTab
 		active string
-		spans  []widget.TabSpan
+		spans  []widgetcore.TabSpan
 	}
-	feed := func(s *widget.TabStrip) fed {
+	feed := func(s *widgetcore.TabStrip) fed {
 		return onLoop(r, func() fed {
 			r.h.feedBufferTabs(s)
 			s.Layout(tui.Constraints{MaxW: 200, MaxH: 1})
 			return fed{s.Tabs(), s.Active(), s.TabSpans()}
 		})
 	}
-	press := func(s *widget.TabStrip, x int) {
+	press := func(s *widgetcore.TabStrip, x int) {
 		onLoop(r, func() bool {
 			return s.HandleEvent(tui.MouseEvent{Kind: tui.MousePress, Button: tui.MouseLeft, X: x, Y: 0})
 		})
@@ -49,10 +49,10 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 	}
 
 	got := feed(strip)
-	want := onLoop(r, func() []widget.StripTab {
-		var out []widget.StripTab
+	want := onLoop(r, func() []widgetcore.StripTab {
+		var out []widgetcore.StripTab
 		for _, b := range r.h.buffers {
-			out = append(out, widget.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, r.h.tabWidth()-2)})
+			out = append(out, widgetcore.StripTab{ID: tabID(b), Label: r.h.bufferTabLabel(b, r.h.tabWidth()-2)})
 		}
 		return out
 	})
@@ -108,7 +108,7 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 	}
 
 	// a new strip, a new editor's after a reload, is wired
-	fresh := widget.NewTabStrip()
+	fresh := widgetcore.NewTabStrip()
 	if onLoop(r, func() bool { r.h.feedBufferTabs(fresh); return r.h.tabStrip != fresh }) {
 		t.Fatal("a new strip was not taken as the editor's")
 	}

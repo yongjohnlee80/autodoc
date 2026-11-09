@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+)
 
 // The terminal editor's views, in either build (a GUI build run with --ui too): Raw is the text,
 // Rendered a document view, a CSV or TSV file's table. It starts Rendered, as the GUI's does, so a
@@ -9,20 +11,20 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 
 // startTermRendered chooses Rendered for a terminal editor; false for any other editor.
 func startTermRendered(e editorWidget) bool {
-	t, ok := e.(*widget.Editor)
+	t, ok := e.(*editor.Editor)
 	if ok {
-		t.SetView(widget.ViewRendered)
+		t.SetView(editor.ViewRendered)
 	}
 	return ok
 }
 
 // termView is a terminal editor's chosen view as the jump list records it; false for another editor.
 func termView(e editorWidget) (string, bool) {
-	t, ok := e.(*widget.Editor)
+	t, ok := e.(*editor.Editor)
 	if !ok {
 		return "", false
 	}
-	if t.View() == widget.ViewRendered {
+	if t.View() == editor.ViewRendered {
 		return "rendered", true
 	}
 	return "", true
@@ -30,14 +32,14 @@ func termView(e editorWidget) (string, bool) {
 
 // setTermView puts a terminal editor in the view a jump list recorded; false for another editor.
 func setTermView(e editorWidget, view string) bool {
-	t, ok := e.(*widget.Editor)
+	t, ok := e.(*editor.Editor)
 	if !ok {
 		return false
 	}
 	if view == "rendered" {
-		t.SetView(widget.ViewRendered)
+		t.SetView(editor.ViewRendered)
 	} else {
-		t.SetView(widget.ViewRaw)
+		t.SetView(editor.ViewRaw)
 	}
 	return true
 }

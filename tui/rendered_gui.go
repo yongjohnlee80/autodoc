@@ -4,7 +4,7 @@ package tui
 
 import (
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // startRendered puts the GUI's editor in its Rendered view as the window opens: a note reads as it
@@ -12,7 +12,7 @@ import (
 // shows Raw all the same (readPage withholds the view), and the user's switch holds from then on.
 func startRendered(e editorWidget) {
 	if g, ok := e.(*guiwidget.Editor); ok {
-		g.SetView(widget.ViewRendered)
+		g.SetView(editor.ViewRendered)
 		return
 	}
 	startTermRendered(e) // run with --ui: the terminal's editor (rendered_term.go)
@@ -23,7 +23,7 @@ func editorView(e editorWidget) string {
 	if v, ok := termView(e); ok {
 		return v
 	}
-	if g, ok := e.(*guiwidget.Editor); ok && g.View() == widget.ViewRendered {
+	if g, ok := e.(*guiwidget.Editor); ok && g.View() == editor.ViewRendered {
 		return "rendered"
 	}
 	return ""
@@ -39,8 +39,8 @@ func setEditorView(e editorWidget, view string) {
 		return
 	}
 	if view == "rendered" {
-		g.SetView(widget.ViewRendered)
+		g.SetView(editor.ViewRendered)
 	} else {
-		g.SetView(widget.ViewRaw)
+		g.SetView(editor.ViewRaw)
 	}
 }

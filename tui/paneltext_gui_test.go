@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // In the GUI the agent and terminal panels' terminals are views at the stored share of the cell size
@@ -18,7 +18,7 @@ func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",
 		map[string]string{"tui.agent.text.scale": "80"}, Options{GUI: true, Fonts: &fakeFonts{}})
-	tabs := onLoop(r, func() *widget.TerminalTabs {
+	tabs := onLoop(r, func() *terminal.TerminalTabs {
 		c, _ := r.h.p.Find("agentView")
 		tabs, _ := tuidecl.TerminalTabsOf(c)
 		return tabs

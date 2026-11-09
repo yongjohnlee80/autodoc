@@ -11,7 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
@@ -126,7 +126,7 @@ func (r *running) typeOnPage(t *testing.T, text string) {
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the page edited, back in Normal mode", func(string) bool {
 		return onLoop(r, func() bool {
-			return strings.Contains(r.h.core.Value(), text) && r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal
+			return strings.Contains(r.h.core.Value(), text) && r.h.file.dirty && r.h.core.Mode() == editor.ModeNormal
 		})
 	})
 }

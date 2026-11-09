@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // TestEveryLeaderKeyHasAGroupOfItsCard: a key SPC's card lists is under one of the card's own
@@ -145,11 +145,11 @@ autodoc.command{ name = "term", help = "my term", run = function(ed) ed:insert("
 		return true
 	})
 	for _, o := range owners {
-		cmd := onLoop(r, func() widget.Command { c, _ := r.h.core.Commands().Lookup(o.name); return c })
+		cmd := onLoop(r, func() editor.Command { c, _ := r.h.core.Commands().Lookup(o.name); return c })
 		if cmd.Help != o.help || !slices.Contains(append([]string{cmd.Name}, cmd.Aliases...), o.name) {
 			t.Errorf(":%s is %+v on the command line, F1 says %s's", o.name, cmd, o.id)
 		}
-		if cands := onLoop(r, func() []widget.Command { return r.h.core.Commands().Complete(o.name) }); !slices.ContainsFunc(cands, func(c widget.Command) bool { return c.Help == o.help }) {
+		if cands := onLoop(r, func() []editor.Command { return r.h.core.Commands().Complete(o.name) }); !slices.ContainsFunc(cands, func(c editor.Command) bool { return c.Help == o.help }) {
 			t.Errorf("completing :%s does not offer %s's", o.name, o.id)
 		}
 	}

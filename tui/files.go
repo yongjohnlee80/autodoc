@@ -10,7 +10,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -256,7 +256,7 @@ func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *lan
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
 func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing, newBuffer bool) {
-	open := func(prev *widget.JumpPos) {
+	open := func(prev *editor.JumpPos) {
 		if raw != nil {
 			h.loadAs(ref.ws, ref.path, prev, *raw, land)
 			return
@@ -268,7 +268,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 			proceed()
 		}
 	}
-	leaving := func() *widget.JumpPos {
+	leaving := func() *editor.JumpPos {
 		if !remember || !h.file.open {
 			return nil
 		}
@@ -326,10 +326,10 @@ func (h *Host) reload() {
 // (docs/decisions/editor.md#html-files-open-raw-or-simplified): Simplified, its derived text
 // read-only as any derived document, or Raw, its own bytes, editable. Read again (a reload, a
 // conflict's), it keeps the way it was opened.
-func (h *Host) load(ws, p string, prev *widget.JumpPos) { h.loadTo(ws, p, prev, nil) }
+func (h *Host) load(ws, p string, prev *editor.JumpPos) { h.loadTo(ws, p, prev, nil) }
 
 // loadTo is load, the cursor landing as land says once the document is shown.
-func (h *Host) loadTo(ws, p string, prev *widget.JumpPos, land *landing) {
+func (h *Host) loadTo(ws, p string, prev *editor.JumpPos, land *landing) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
 		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw, land) })
@@ -387,13 +387,13 @@ func (h *Host) openHTMLAs(how string) {
 }
 
 // loadAs is load, raw or not, into the active buffer.
-func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool, land *landing) {
+func (h *Host) loadAs(ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	h.loadInto(h.active, ws, p, prev, raw, land)
 }
 
 // loadInto reads p into b off the loop; the answer lands in b, active or not, under b's own ticket:
 // a switch of buffer or workspace meanwhile does not drop it.
-func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw bool, land *landing) {
+func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	tk := h.bufferTicket(b, true)
 	again, read := b.file.open && b.file.ws == ws && b.file.path == p, b.file.version
 	type answer struct {
@@ -744,7 +744,7 @@ type draftSave struct {
 func (h *Host) cursorBytes() int { return cursorBytesOf(h.core) }
 
 // cursorBytesOf is an editor's cursor as a byte offset of its text.
-func cursorBytesOf(ed *widget.EditorCore) int {
+func cursorBytesOf(ed *editor.EditorCore) int {
 	row, col := ed.Line()
 	lines := ed.Lines()
 	at := 0

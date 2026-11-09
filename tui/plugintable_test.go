@@ -16,7 +16,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -259,7 +260,7 @@ func TestAFetchWaitsForItsAnswer(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		for range 5 {
 			r.h.plugins.results.model.FetchMore(tuidecl.Index{})
 		}
@@ -378,7 +379,7 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 	// a reader scrolls to the end: the next page loads, and the export takes both
 	onLoop(r, func() bool {
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		return true
 	})
 	r.waitResults(t, "q1", loaded+resultsPage)
@@ -471,7 +472,7 @@ func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
 	r.waitResults(t, "q1", tablePage+resultsPage)
 	n := onLoop(r, func() int {
 		r.h.editor.SetValue("intro\nafter")
-		r.h.core.SetCursor(widget.TextPos{})
+		r.h.core.SetCursor(editor.TextPos{})
 		r.h.plugins.insertResults()
 		return len(r.h.plugins.results.model.rows)
 	})
@@ -521,17 +522,17 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 		return func() {
 			r.h.editor.SetValue(text)
 			r.h.edited()
-			r.h.core.SetCursor(widget.TextPos{Line: line, Col: col})
+			r.h.core.SetCursor(editor.TextPos{Line: line, Col: col})
 		}
 	}
 	if got := run("an edit", edited("SELECT 1;\nSELECT 2;", 1, 3)); !strings.Contains(got, `"SELECT 1;\nSELECT 2;" at 2:4 byte 13 rest "EC" sel [] large=false`) {
 		t.Errorf("an edit, then the command: %q", got)
 	}
-	if got := run("a move", func() { r.h.core.SetCursor(widget.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SE"`) {
+	if got := run("a move", func() { r.h.core.SetCursor(editor.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SE"`) {
 		t.Errorf("a move, then the command: %q", got)
 	}
 	selectLine := func() {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Line: 1}, To: widget.TextPos{Line: 1, Col: 9}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Line: 1}, To: editor.TextPos{Line: 1, Col: 9}})
 	}
 	if got := run("a selection", selectLine); !strings.Contains(got, `sel ["SELECT 2;"]`) {
 		t.Errorf("a selection, then the command: %q", got)
@@ -546,12 +547,12 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 	if want := fmt.Sprintf(`at 1:3 byte %d rest "x\n"`, len(accent+family)); !strings.Contains(got, want) {
 		t.Errorf("the cursor on x after two clusters: %q, want %s", got, want)
 	}
-	got = run("multibyte, line two", func() { r.h.core.SetCursor(widget.TextPos{Line: 1, Col: 2}) })
+	got = run("multibyte, line two", func() { r.h.core.SetCursor(editor.TextPos{Line: 1, Col: 2}) })
 	if want := fmt.Sprintf(`at 2:3 byte %d rest "어;"`, len(accent+family+"x\n한국")); !strings.Contains(got, want) {
 		t.Errorf("the cursor on the third syllable: %q, want %s", got, want)
 	}
 	got = run("a multibyte selection", func() {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Line: 0, Col: 1}, To: widget.TextPos{Line: 0, Col: 2}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Line: 0, Col: 1}, To: editor.TextPos{Line: 0, Col: 2}})
 	})
 	if want := fmt.Sprintf(`sel [%q]`, family); !strings.Contains(got, want) {
 		t.Errorf("the family selected: %q, want %s", got, want)
@@ -623,7 +624,7 @@ func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
 		for range 4 { // the version's encoding can grow a byte as the text is set again
 			r.h.editor.SetValue(lines + strings.Repeat("y", tail))
 			r.h.edited()
-			r.h.core.SetCursor(widget.TextPos{})
+			r.h.core.SetCursor(editor.TextPos{})
 			d = r.h.plugins.document()
 			n, _ := plugin.EncodedSize(plugin.MethodDocument, plugin.DocumentParamsAt(4, d))
 			if n == target {
@@ -735,14 +736,14 @@ func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
 	r.s.WaitFor(t, "two more pages scrolled in", func(string) bool {
 		return onLoop(r, func() bool {
 			tc := r.h.plugins.c.TableCore(resultsView)
-			tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+			tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 			return len(r.h.plugins.results.model.rows) >= loaded
 		})
 	})
 	// the reader back at the top: once the last fetch is answered, nothing more loads
 	r.s.WaitFor(t, "the pages settled", func(string) bool {
 		return onLoop(r, func() bool {
-			r.resultsCore().SetCursor(widget.TablePos{})
+			r.resultsCore().SetCursor(table.TablePos{})
 			return !r.h.plugins.results.pending
 		})
 	})
@@ -794,7 +795,7 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	r.s.WaitFor(t, "the panel filled to its cap", func(string) bool {
 		return onLoop(r, func() bool {
 			if tc := r.h.plugins.c.TableCore(resultsView); tc != nil && tc.Len() > 0 {
-				tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+				tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 			}
 			return r.h.plugins.results.id == "q1" && len(r.h.plugins.results.model.rows) >= 250
 		})
@@ -807,7 +808,7 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	})
 	onLoop(r, func() bool { // at the last row again: at the cap, nothing is asked
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		r.h.plugins.results.model.FetchMore(tuidecl.Index{})
 		return true
 	})
@@ -897,8 +898,8 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the refusal is golib's ErrReadOnly, its words the sentinel's own whatever its category says
-	r.waitNotice(t, "insert the results: "+widget.ErrReadOnly.Error())
-	if err := onLoop(r, func() error { return core{r.h}.InsertBlock("x") }); !errors.Is(err, widget.ErrReadOnly) {
+	r.waitNotice(t, "insert the results: "+editor.ErrReadOnly.Error())
+	if err := onLoop(r, func() error { return core{r.h}.InsertBlock("x") }); !errors.Is(err, editor.ErrReadOnly) {
 		t.Fatalf("a block inserted into the read-only page: %v, want widget.ErrReadOnly", err)
 	}
 	if r.editorText() != manualPDF {

@@ -16,7 +16,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // waitBuffer waits for p's buffer to be the one shown, modified or not (waitFile wants it clean).
@@ -208,7 +208,7 @@ func TestAForcedExitKeepsEveryModifiedBuffer(t *testing.T) {
 	dir := t.TempDir()
 	h := &Host{recoveryDir: dir}
 	mk := func(n int, ws, p, text string, dirty bool) *openBuffer {
-		b := &openBuffer{n: n, buf: widget.NewBuffer(widget.BufferText(text))}
+		b := &openBuffer{n: n, buf: editor.NewBuffer(editor.BufferText(text))}
 		b.file = openedFile{ws: ws, path: p, open: p != "", dirty: dirty}
 		return b
 	}
@@ -412,7 +412,7 @@ func TestTheBuffersPickerAndB(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.waitBuffer(t, "b.md") // a switch says nothing: "opened" is an open's
-	names := onLoop(r, func() []string { return r.h.bufferEntries()[0].Complete(widget.CompleteContext{}) })
+	names := onLoop(r, func() []string { return r.h.bufferEntries()[0].Complete(editor.CompleteContext{}) })
 	if strings.Join(names, ",") != "a.md,b.md,notes.md" {
 		t.Fatalf(":b's names: %v", names)
 	}
@@ -568,7 +568,7 @@ func TestDeletingTheWorkspaceInUseAsksAboutItsBuffers(t *testing.T) {
 // nothing fails; a directory that cannot be written fails each modified buffer, by name, all of them.
 func TestAForcedExitThatCannotKeepSaysWhichBuffers(t *testing.T) {
 	mk := func(n int, p, text string) *openBuffer {
-		b := &openBuffer{n: n, buf: widget.NewBuffer(widget.BufferText(text))}
+		b := &openBuffer{n: n, buf: editor.NewBuffer(editor.BufferText(text))}
 		b.file = openedFile{ws: "kb", path: p, open: p != "", dirty: true}
 		return b
 	}
@@ -595,7 +595,7 @@ func TestEveryDraftKeepsItsOwnCopy(t *testing.T) {
 	dir := t.TempDir()
 	h := &Host{recoveryDir: dir}
 	mk := func(n int, text string) *openBuffer {
-		b := &openBuffer{n: n, buf: widget.NewBuffer(widget.BufferText(text))}
+		b := &openBuffer{n: n, buf: editor.NewBuffer(editor.BufferText(text))}
 		b.file = openedFile{ws: "kb", dirty: true}
 		return b
 	}
@@ -672,7 +672,7 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 	r.typeInEditor(t, "more ")
 	// the draft is modified already: waitTyped would not wait for these keys; the text does
 	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
-		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == editor.ModeNormal })
 	})
 	newer := r.editorText()
 	hold.Store(false)
@@ -714,7 +714,7 @@ func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
 	r.typeInEditor(t, "more ")
 	// the draft is modified already: waitTyped would not wait for these keys; the text does
 	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
-		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == editor.ModeNormal })
 	})
 	newer := r.editorText()
 	hold.Store(false)

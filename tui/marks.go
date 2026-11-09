@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
@@ -108,13 +108,13 @@ func markedSpans(m *marks, line string, spans []highlight.Span) []highlight.Span
 func wholeAt(line string, i, end int) bool {
 	first, _ := utf8.DecodeRuneInString(line[i:])
 	last, _ := utf8.DecodeLastRuneInString(line[:end])
-	if widget.IsKeyword(string(first)) && i > 0 {
-		if prev, _ := utf8.DecodeLastRuneInString(line[:i]); widget.IsKeyword(string(prev)) {
+	if editor.IsKeyword(string(first)) && i > 0 {
+		if prev, _ := utf8.DecodeLastRuneInString(line[:i]); editor.IsKeyword(string(prev)) {
 			return false
 		}
 	}
-	if widget.IsKeyword(string(last)) && end < len(line) {
-		if next, _ := utf8.DecodeRuneInString(line[end:]); widget.IsKeyword(string(next)) {
+	if editor.IsKeyword(string(last)) && end < len(line) {
+		if next, _ := utf8.DecodeRuneInString(line[end:]); editor.IsKeyword(string(next)) {
 			return false
 		}
 	}

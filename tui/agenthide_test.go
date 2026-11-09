@@ -5,7 +5,8 @@ package tui
 import (
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // TestHideClosesTheAgentPanelAndKeepsTheAgents: Hide on an agent tab's menu closes the agent panel
@@ -17,9 +18,9 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	token := func() string { return onLoop(r, func() string { return r.h.agents.instances["heron"].token }) }
-	tab := onLoop(r, func() widget.TerminalTabID { return r.h.agents.instances["heron"].tab })
+	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.instances["heron"].tab })
 	was := token()
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows(tab) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) })
 	row, ok := menuRow(rows, "tabs.hide")
 	if !ok {
 		t.Fatalf("no Hide in %v", rowIDs(rows))
@@ -32,19 +33,19 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	if !ok || max.Label != "Maximize" {
 		t.Fatalf("no Maximize in %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { max.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+	onLoop(r, func() bool { max.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	r.s.WaitFor(t, "the agent panel maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
-	if again, _ := menuRow(onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.maximize"); again.Label != "Restore" {
+	if again, _ := menuRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.maximize"); again.Label != "Restore" {
 		t.Errorf("maximized, the row reads %q", again.Label)
 	}
-	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !shown() })
 	if !r.agentRunningNow() || token() != was {
 		t.Fatalf("Hide stopped or restarted the agent: running %v, token %s (was %s)", r.agentRunningNow(), token(), was)
 	}
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "shown again", func(string) bool { return shown() })
-	if token() != was || onLoop(r, func() widget.TerminalTabID { p, _ := r.h.agents.runtime(); return p.Active() }) != tab {
+	if token() != was || onLoop(r, func() terminal.TerminalTabID { p, _ := r.h.agents.runtime(); return p.Active() }) != tab {
 		t.Fatal("reopened on another agent or tab")
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // PLUGIN MANIFESTS — what the TUI reads of a plugin before it starts: plugin.toml, its kind and
@@ -22,10 +22,10 @@ type Plugins struct {
 }
 
 // pluginAnchors are where a dialog may sit, as a manifest names them (manifests.Placements).
-var pluginAnchors = map[string]widget.Anchor{
-	"center": widget.Center, "top": widget.Top, "bottom": widget.Bottom, "left": widget.Left,
-	"right": widget.Right, "top-left": widget.TopLeft, "top-right": widget.TopRight,
-	"bottom-left": widget.BottomLeft, "bottom-right": widget.BottomRight,
+var pluginAnchors = map[string]widgetcore.Anchor{
+	"center": widgetcore.Center, "top": widgetcore.Top, "bottom": widgetcore.Bottom, "left": widgetcore.Left,
+	"right": widgetcore.Right, "top-left": widgetcore.TopLeft, "top-right": widgetcore.TopRight,
+	"bottom-left": widgetcore.BottomLeft, "bottom-right": widgetcore.BottomRight,
 }
 
 // manifest is a plugin.toml, as core/manifests reads it.

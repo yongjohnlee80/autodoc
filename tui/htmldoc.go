@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
+	widgettable "github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
@@ -41,7 +42,7 @@ type documentComponent interface{ DocumentComponent() tuicore.Component }
 // pageView is the editor's own document view, an HTMLView; false for an editor without one (a
 // terminal's). It is kept as first read, at the editor's start: a CSV buffer's table takes the
 // document view's place while it is shown (tabledoc.go), and the page comes back for an HTML file.
-func (h *Host) pageView() (*widget.HTMLView, bool) {
+func (h *Host) pageView() (*htmlview.HTMLView, bool) {
 	if h.pageDoc != nil {
 		return h.pageDoc, true
 	}
@@ -49,7 +50,7 @@ func (h *Host) pageView() (*widget.HTMLView, bool) {
 	if !ok {
 		return nil, false
 	}
-	v, ok := dc.DocumentComponent().(*widget.HTMLView)
+	v, ok := dc.DocumentComponent().(*htmlview.HTMLView)
 	if ok {
 		h.pageDoc = v
 	}
@@ -70,7 +71,7 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 		h.noteFile(note)
 	}
 	page := raw && h.native()
-	var table *widget.TableDocument
+	var table *widgettable.TableDocument
 	if comma := tableComma(p); comma != 0 && !raw && h.active != nil && p != "" {
 		table = h.tableOf(h.active, comma)
 	}
@@ -87,7 +88,7 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 	}
 	if root, base := h.resourcesFor(ws, p); root+"\x00"+base != h.pageDir {
 		h.pageDir = root + "\x00" + base
-		v.SetImageResolver(widget.DirResources(root, base))
+		v.SetImageResolver(htmlview.DirResources(root, base))
 	}
 }
 

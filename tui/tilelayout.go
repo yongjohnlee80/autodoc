@@ -10,7 +10,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // TILED LAYOUT — the base is a TileManager (main.qml), its windows the page (a FloatWindow, the fill
@@ -152,7 +153,7 @@ func (t *tiles) tileChanged(node, operation string, size float64) {
 // rowMaker makes a row of the menu Layout › goes in, run when chosen. Each menu runs its own action
 // type (a buffer strip's, a panel's tabs', a TabView's, a table's), so Layout › is built of rows its
 // menu makes.
-type rowMaker func(id, label string, run func()) widget.MenuItemModel
+type rowMaker func(id, label string, run func()) widgetcore.MenuItemModel
 
 // layoutHost is what Layout › needs of its host: the preferences, and setting one through its row.
 type layoutHost interface {
@@ -162,14 +163,14 @@ type layoutHost interface {
 
 // layoutRows is Layout ›, layoutChoices in a submenu, for the window id. A host that sets no
 // preference has none.
-func layoutRows(c any, id string, row rowMaker) []widget.MenuItemModel {
+func layoutRows(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
 	choices := layoutChoices(c, id, row)
 	if choices == nil {
 		return nil
 	}
-	sub := widget.NewSubmenu("layout", "Layout", choices)
+	sub := widgetcore.NewSubmenu("layout", "Layout", choices)
 	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("L&ayout") // never h, j, k or l: they move in the menu
-	return []widget.MenuItemModel{withLabelMessage(sub, "L&ayout")}
+	return []widgetcore.MenuItemModel{withLabelMessage(sub, "L&ayout")}
 }
 
 // tileEdgeRows are Layout › Tiled ›'s rows: the edges a panel's tile docks at, each with its label.
@@ -180,23 +181,23 @@ var tileEdgeRows = []struct{ edge, label string }{{"left", "Le&ft"}, {"right", "
 // switches it live. A panel's Tiled is a submenu of the edges its tile docks at
 // (tui.<id>.tileEdge): its edge is checked while it is tiled, and choosing one docks it there, tiling
 // it first when it floats. The page, the fill, has no edge. nil for a host that sets no preference.
-func layoutChoices(c any, id string, row rowMaker) []widget.MenuItemModel {
+func layoutChoices(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
 	h, ok := c.(layoutHost)
 	if !ok {
 		return nil
 	}
 	tiled := h.Prefs().Value(layoutKey(id)) == layoutTiled
-	radio := func(value, label string) widget.MenuItemModel {
+	radio := func(value, label string) widgetcore.MenuItemModel {
 		r := row("layout."+value, label, func() { h.SetPref(layoutKey(id), value) })
-		r.Kind, r.Group, r.Checked = widget.ItemKindRadio, "layout", tiled == (value == layoutTiled)
+		r.Kind, r.Group, r.Checked = widgetcore.ItemKindRadio, "layout", tiled == (value == layoutTiled)
 		return r
 	}
 	float := radio(layoutFloat, "&Float")
 	if w, ok := tileWindowByID(id); !ok || w.edge == "" {
-		return []widget.MenuItemModel{radio(layoutTiled, "&Tiled"), float}
+		return []widgetcore.MenuItemModel{radio(layoutTiled, "&Tiled"), float}
 	}
 	edge := h.Prefs().Value(tileEdgeKey(id))
-	var edges []widget.MenuItemModel
+	var edges []widgetcore.MenuItemModel
 	for _, e := range tileEdgeRows {
 		r := row("layout.tiled."+e.edge, e.label, func() {
 			h.SetPref(tileEdgeKey(id), e.edge) // the edge first: a floating panel then tiles once, there
@@ -206,12 +207,12 @@ func layoutChoices(c any, id string, row rowMaker) []widget.MenuItemModel {
 				h.SetPref(layoutKey(id), layoutTiled)
 			}
 		})
-		r.Kind, r.Group, r.Checked = widget.ItemKindRadio, "layout.edge", tiled && edge == e.edge
+		r.Kind, r.Group, r.Checked = widgetcore.ItemKindRadio, "layout.edge", tiled && edge == e.edge
 		edges = append(edges, r)
 	}
-	sub := widget.NewSubmenu("layout.tiled", "Tiled", edges)
+	sub := widgetcore.NewSubmenu("layout.tiled", "Tiled", edges)
 	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("&Tiled")
-	return []widget.MenuItemModel{withLabelMessage(sub, "&Tiled"), float}
+	return []widgetcore.MenuItemModel{withLabelMessage(sub, "&Tiled"), float}
 }
 
 // tileWindowByID is the window id, or false.
@@ -224,9 +225,9 @@ func tileWindowByID(id string) (tileWindow, bool) {
 }
 
 // tabsRowOf is a row of a TabView's menu as a rowMaker: a row whatever tab it was opened for.
-func tabsRowOf(id, label string, run func()) widget.MenuItemModel {
+func tabsRowOf(id, label string, run func()) widgetcore.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
-	row := widget.NewCommand(widget.ItemID(id), text, widget.TabsMenuAction{ID: tuicore.ActionID(id), Run: func(int) { run() }})
+	row := widgetcore.NewCommand(widgetcore.ItemID(id), text, widgetcore.TabsMenuAction{ID: tuicore.ActionID(id), Run: func(int) { run() }})
 	row.Hotkey, row.HotkeyIdx = key, at
 	return withLabelMessage(row, label)
 }
@@ -241,14 +242,14 @@ func (h *Host) attachTabViewMenus() {
 	for _, m := range tabViewMenus {
 		c, _ := h.p.Find(m.view)
 		v, ok := c.(interface {
-			SetMenu(build func(i int) []widget.MenuItemModel)
+			SetMenu(build func(i int) []widgetcore.MenuItemModel)
 		})
 		if !ok {
 			h.keep(fmt.Errorf("main.qml declares no TabView with id: %s", m.view))
 			continue
 		}
 		window := m.window
-		v.SetMenu(func(int) []widget.MenuItemModel { return layoutRows(core{h}, window, tabsRowOf) })
+		v.SetMenu(func(int) []widgetcore.MenuItemModel { return layoutRows(core{h}, window, tabsRowOf) })
 	}
 }
 
@@ -267,7 +268,7 @@ func tileWindowIDs() []string {
 func (h *Host) layoutEntries() []Entry {
 	return []Entry{{ID: "window.layout", Title: "a window's layout", Verb: "layout", Args: "[window]",
 		Help:     "Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows",
-		Complete: func(widget.CompleteContext) []string { return tileWindowIDs() },
+		Complete: func(editor.CompleteContext) []string { return tileWindowIDs() },
 		Run: func(x Invocation) error {
 			id := strings.TrimSpace(x.Line)
 			if id == "" {
@@ -283,13 +284,13 @@ func (h *Host) layoutEntries() []Entry {
 
 // openLayoutMenu is :layout's menu, the window id's layoutChoices, at the page's top-left corner.
 func (h *Host) openLayoutMenu(id string) error {
-	owner, ok := h.editor.(widget.ContextOwner)
+	owner, ok := h.editor.(widgetcore.ContextOwner)
 	if !ok {
 		return errors.New("layout: the page opens no menu")
 	}
-	m := widget.NewEditorMenu(owner, nil)
+	m := editor.NewEditorMenu(owner, nil)
 	m.SetEnabled(true)
-	m.SetRows(func() []widget.MenuItemModel { return layoutChoices(core{h}, id, coreRowOf) })
+	m.SetRows(func() []widgetcore.MenuItemModel { return layoutChoices(core{h}, id, coreRowOf) })
 	if !m.OpenAt(tuicore.Point{X: 1, Y: 1}) {
 		return errors.New("layout: the menu has nowhere to open")
 	}

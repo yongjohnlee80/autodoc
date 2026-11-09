@@ -6,7 +6,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // CTRL+V IN THE RESULTS — vim's block key is the table's while it has the keys: no key of
@@ -102,7 +102,7 @@ func wantCtrlVBlock(t *testing.T, r *running) {
 		return onLoop(r, func() bool {
 			tc := r.resultsCore()
 			from, to, ok := tc.Selection()
-			return ok && tc.SelectionKind() == widget.TableSelectBlock && from == (widget.TablePos{}) && to == (widget.TablePos{Row: 1, Col: 1})
+			return ok && tc.SelectionKind() == table.TableSelectBlock && from == (table.TablePos{}) && to == (table.TablePos{Row: 1, Col: 1})
 		})
 	})
 	if r.editorText() != text {

@@ -10,7 +10,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // smallMind is a small graph.map answer: a.md links b, c and d; b links e; c links d.
@@ -283,7 +283,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 			r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 			if raw {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
-				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })
+				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == editor.ViewRaw })
 			}
 			m := onLoop(r, func() *cellMindmap {
 				for _, f := range r.h.reg.features {

@@ -5,7 +5,7 @@ import (
 	"github.com/yongjohnlee80/golib/indent"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"strings"
 	"testing"
 )
@@ -14,7 +14,7 @@ func TestActualSourceFileUsesItsLanguageBeforeAndAfterFind(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	onLoop(r, func() bool {
 		r.h.show(r.h.active, "", "/tmp/example.go", "package main\nfunc f() {\n\t", "v1", false)
-		r.h.core.SetKeyset(widget.KeysetStandard)
+		r.h.core.SetKeyset(editor.KeysetStandard)
 		return true
 	})
 	r.s.WaitForText(t, "package main")
@@ -57,7 +57,7 @@ func TestCustomProviderWorksForActualSourceAndMarkdownThroughAutoDoc(t *testing.
 	} {
 		onLoop(r, func() bool {
 			r.h.show(r.h.active, "", tc.path, tc.text, "v1", false)
-			r.h.core.SetKeyset(widget.KeysetStandard)
+			r.h.core.SetKeyset(editor.KeysetStandard)
 			return true
 		})
 		got := onLoop(r, func() highlight.Style {

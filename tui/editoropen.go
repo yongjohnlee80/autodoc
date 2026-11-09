@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // OPENING A FILE BY ITS PATH, AND THE COMMANDS AN AGENT CAN RUN: :open (:e, :edit) is
@@ -78,7 +78,7 @@ func (h *Host) editorCommands(_ string, a editorArgs) (any, error) {
 	if h.cat == nil {
 		return []any{}, nil
 	}
-	var core []widget.Command
+	var core []editor.Command
 	if h.cat.cmds != nil {
 		core = h.cat.cmds.All() // the editor's registry, the entries' names among them
 	}
@@ -90,7 +90,7 @@ func (h *Host) editorCommands(_ string, a editorArgs) (any, error) {
 // (builtin, feature, lua, plugin). names are an entry's ':' names: the ones it owns now, live (a Lua
 // command takes a name over), or the ones it declares. Then the editor's own ':' commands in core
 // that no entry declares (w, q, replace …), by name, from "editor", with no id.
-func commandRows(entries []*Entry, names func(id string) []string, core []widget.Command) []any {
+func commandRows(entries []*Entry, names func(id string) []string, core []editor.Command) []any {
 	sorted := slices.Clone(entries)
 	slices.SortFunc(sorted, func(a, b *Entry) int { return strings.Compare(a.ID, b.ID) })
 	out := make([]any, 0, len(sorted))
@@ -116,8 +116,8 @@ func commandRows(entries []*Entry, names func(id string) []string, core []widget
 			owned[n] = true
 		}
 	}
-	own := slices.DeleteFunc(slices.Clone(core), func(c widget.Command) bool { return owned[c.Name] || takenOver[c.Name] })
-	slices.SortFunc(own, func(a, b widget.Command) int { return strings.Compare(a.Name, b.Name) })
+	own := slices.DeleteFunc(slices.Clone(core), func(c editor.Command) bool { return owned[c.Name] || takenOver[c.Name] })
+	slices.SortFunc(own, func(a, b editor.Command) int { return strings.Compare(a.Name, b.Name) })
 	for _, c := range own {
 		row := map[string]any{"name": c.Name, "source": "editor"}
 		if len(c.Aliases) > 0 {
@@ -145,7 +145,7 @@ func commandsReference(entries []*Entry) string {
 	for _, e := range entries {
 		declared[e.ID] = e.declared()
 	}
-	for _, r := range commandRows(entries, func(id string) []string { return declared[id] }, widget.DefaultCommands()) {
+	for _, r := range commandRows(entries, func(id string) []string { return declared[id] }, editor.DefaultCommands()) {
 		m := r.(map[string]any)
 		name := ""
 		if v, ok := m["name"].(string); ok {
@@ -186,7 +186,7 @@ func asStrings(v any) []string {
 // commandLineRefusal is editor.run's refusal of line: a verb no ':' command has is named, with
 // where the names are, in place of the command line's own words.
 func commandLineRefusal(line string, err error) error {
-	if errors.Is(err, widget.ErrUnknownCommand) {
+	if errors.Is(err, editor.ErrUnknownCommand) {
 		verb := ""
 		if f := strings.Fields(strings.TrimPrefix(strings.TrimSpace(line), ":")); len(f) > 0 {
 			verb = strings.TrimSuffix(f[0], "!")

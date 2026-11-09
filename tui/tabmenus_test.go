@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // maximizeHost is a panel host as panelRows asks it: whether the panel is maximized, its toggle
@@ -26,13 +27,13 @@ func (m *maximizeHost) ToggleMaximize(p string) error {
 func (m *maximizeHost) Keep(err error) { m.kept = append(m.kept, err) }
 
 // runRow chooses the row id of rows, for no tab.
-func runRow(t *testing.T, rows []widget.MenuItemModel, id string) {
+func runRow(t *testing.T, rows []widgetcore.MenuItemModel, id string) {
 	t.Helper()
 	row, ok := menuRow(rows, id)
 	if !ok {
 		t.Fatalf("no %s in %v", id, rowIDs(rows))
 	}
-	row.Action.(widget.TerminalTabsMenuAction).Run("")
+	row.Action.(terminal.TerminalTabsMenuAction).Run("")
 }
 
 // TestPanelRowsOfferOnlyWhatTheHostHas: a host with no look and no maximize gets the separator,
@@ -168,8 +169,8 @@ func TestPanelRowsResumeTheirTab(t *testing.T) {
 	if !ok || row.Label != "Resume" || row.Hotkey != 'u' || !row.Enabled {
 		t.Fatalf("with a tab, the row is %q (%q), enabled %v", row.Label, row.Hotkey, row.Enabled)
 	}
-	row.Action.(widget.TerminalTabsMenuAction).Run("t2")
-	if !slices.Equal(p.resumed, []widget.TerminalTabID{"t2"}) {
+	row.Action.(terminal.TerminalTabsMenuAction).Run("t2")
+	if !slices.Equal(p.resumed, []terminal.TerminalTabID{"t2"}) {
 		t.Fatalf("Resume asked the panel for %v, want t2", p.resumed)
 	}
 	if row, _ := menuRow(panelRows(struct{}{}, "agent", p, "", func() {}), "tabs.resume"); row.Enabled {
@@ -178,7 +179,7 @@ func TestPanelRowsResumeTheirTab(t *testing.T) {
 	k := &maximizeHost{}
 	failing := &resumeRefused{}
 	r, _ := menuRow(panelRows(k, "terminal", failing, "t1", func() {}), "tabs.resume")
-	r.Action.(widget.TerminalTabsMenuAction).Run("t1")
+	r.Action.(terminal.TerminalTabsMenuAction).Run("t1")
 	if len(k.kept) != 1 || !strings.Contains(k.kept[0].Error(), "Resume a tab of the terminal panel") {
 		t.Fatalf("a refused resume kept %v", k.kept)
 	}
@@ -187,4 +188,4 @@ func TestPanelRowsResumeTheirTab(t *testing.T) {
 // resumeRefused is a panel whose Resume says no.
 type resumeRefused struct{ modelPanel }
 
-func (*resumeRefused) Resume(widget.TerminalTabID) error { return ErrResumeUnsupported }
+func (*resumeRefused) Resume(terminal.TerminalTabID) error { return ErrResumeUnsupported }

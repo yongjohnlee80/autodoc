@@ -17,7 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // A RUNNING PLUGIN — one started plugin's process: its dialog or service, the protocol both ways,
@@ -33,8 +33,8 @@ type pluginRun struct {
 	stop  context.CancelFunc
 	out   *outQueue // to the sender goroutine
 	log   *pluginLog
-	float *widget.Float // a modal dialog's; nil for a card, which is a panel, and a service
-	box   *widget.Box
+	float *widgetcore.Float // a modal dialog's; nil for a card, which is a panel, and a service
+	box   *widgetcore.Box
 	view  *pluginView // nil for a service, which has no surface
 
 	ready, closing bool
@@ -175,13 +175,13 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return r, nil
 	}
 	r.view = &pluginView{run: r, pl: pl, w: e.m.Dialog.Width, h: e.m.Dialog.Height.Rows, fill: e.m.Dialog.Height.Pct > 0}
-	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
-		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	opts := []widget.FloatOption{widget.WithModal(e.m.Modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
+	r.box = widgetcore.NewBox(r.view, widgetcore.WithTitle(r.title(e.label())), widgetcore.WithBorder(style.BorderRounded),
+		widgetcore.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
+	opts := []widgetcore.FloatOption{widgetcore.WithModal(e.m.Modal()), widgetcore.WithAnchor(pluginAnchors[pl.placement(e)])}
 	if pct := e.m.Dialog.Height.Pct; pct > 0 {
-		opts = append(opts, widget.WithSizeFraction(0, pct))
+		opts = append(opts, widgetcore.WithSizeFraction(0, pct))
 	}
-	r.float = widget.NewFloat(r.box, opts...)
+	r.float = widgetcore.NewFloat(r.box, opts...)
 	host.Attach(r.float)
 	r.float.Show()
 	return r, nil

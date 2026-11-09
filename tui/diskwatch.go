@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
@@ -567,22 +567,22 @@ func middleBlock(old, now []string) (pre, oldEnd, newEnd int) {
 // blockEdit is the edit that replaces old's lines from..to with lines. Inside the text, whole
 // lines with their line breaks; reaching its end, from the end of the line before, so the last
 // line's missing break stays missing.
-func blockEdit(old []string, from, to int, lines []string) (widget.TextRange, string) {
+func blockEdit(old []string, from, to int, lines []string) (editor.TextRange, string) {
 	if to < len(old) {
 		text := strings.Join(lines, "\n")
 		if len(lines) > 0 {
 			text += "\n"
 		}
-		return widget.TextRange{From: widget.TextPos{Line: from}, To: widget.TextPos{Line: to}}, text
+		return editor.TextRange{From: editor.TextPos{Line: from}, To: editor.TextPos{Line: to}}, text
 	}
 	const lineEnd = 1 << 30 // clamped to the line's last column
-	last := widget.TextPos{Line: len(old) - 1, Col: lineEnd}
+	last := editor.TextPos{Line: len(old) - 1, Col: lineEnd}
 	if from == 0 {
-		return widget.TextRange{To: last}, strings.Join(lines, "\n")
+		return editor.TextRange{To: last}, strings.Join(lines, "\n")
 	}
 	text := ""
 	if len(lines) > 0 {
 		text = "\n" + strings.Join(lines, "\n")
 	}
-	return widget.TextRange{From: widget.TextPos{Line: from - 1, Col: lineEnd}, To: last}, text
+	return editor.TextRange{From: editor.TextPos{Line: from - 1, Col: lineEnd}, To: last}, text
 }

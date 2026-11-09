@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // tilelayout_prefs_test.go: each window's Layout and tile, as preferences (tilelayout.go).
@@ -26,7 +26,7 @@ func tileOf(r *running, key string) (wants, governed bool) {
 func boundsOf(r *running, id string) tuicore.Rect {
 	return onLoop(r, func() tuicore.Rect {
 		c, _ := r.h.p.Find(id)
-		w, ok := c.(interface{ WindowBehavior() *widget.WindowCore })
+		w, ok := c.(interface{ WindowBehavior() *widgetcore.WindowCore })
 		if !ok || w.WindowBehavior() == nil {
 			return tuicore.Rect{}
 		}
@@ -83,7 +83,7 @@ func TestAPanelReleasedForRoomStaysTiledAndTilesAgainWhenTheRoomReturns(t *testi
 	if !wants || stored != layoutTiled {
 		t.Fatalf("released for room: wanted %v, Layout %q; want still Tiled, the user's choice", wants, stored)
 	}
-	wantLayoutChecked(t, "the todos released", onLoop(r, func() []widget.MenuItemModel { return layoutChoices(core{r.h}, "todos", tabsRowOf) }), true)
+	wantLayoutChecked(t, "the todos released", onLoop(r, func() []widgetcore.MenuItemModel { return layoutChoices(core{r.h}, "todos", tabsRowOf) }), true)
 	if now := onLoop(r, func() [2]bool { return [2]bool{r.h.tiledNow("todos"), r.h.tiledNow("explorer")} }); now != [2]bool{false, true} {
 		t.Fatalf("tiled now: the todos %v, the explorer %v; want the released todos not, the explorer still", now[0], now[1])
 	}

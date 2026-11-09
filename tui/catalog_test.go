@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // catFake is a feature with catalog entries.
@@ -104,7 +104,7 @@ func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	}
 	// what a catalog with nothing, or no entry, answers
 	var none *catalog
-	none.attach(widget.NewEditorCore())
+	none.attach(editor.NewEditorCore())
 	if none.lookup("find.term") != nil || c.owned("no.such") != nil {
 		t.Error("an absent catalog or entry answered")
 	}
@@ -141,7 +141,7 @@ func TestTheCatalogsNamespacesAreOwned(t *testing.T) {
 // that is refused keeps the one it would have replaced.
 func TestARefusedEntryLeavesNothingBehind(t *testing.T) {
 	c := newCatalog()
-	core := widget.NewEditorCore()
+	core := editor.NewEditorCore()
 	c.attach(core)
 	_ = c.add(Entry{ID: "a.one", Source: SourceFeature, Owner: "a", Verb: "one", Run: noRun})
 	if err := c.add(Entry{ID: "b.two", Source: SourceFeature, Owner: "b", Verb: "two", Aliases: []string{"one"}, Run: noRun}); err == nil {
@@ -180,7 +180,7 @@ func TestARefusedEntryLeavesNothingBehind(t *testing.T) {
 // always could.
 func TestALuaCommandTakesOneNameOnly(t *testing.T) {
 	c := newCatalog()
-	core := widget.NewEditorCore()
+	core := editor.NewEditorCore()
 	c.attach(core)
 	var got []string
 	if err := c.add(Entry{ID: "terminal.open", Source: SourceBuiltin, Verb: "terminal", Aliases: []string{"term"}, Help: "the terminal", Run: ran(&got, "terminal")}); err != nil {
@@ -216,7 +216,7 @@ func TestALuaCommandTakesOneNameOnly(t *testing.T) {
 	if err := c.run("terminal.open", []string{"two", "words"}); err != nil || !slices.Equal(got, []string{"terminal two,words |two words|"}) {
 		t.Fatalf("run: %v, %q", err, got)
 	}
-	var core2 *widget.EditorCore
+	var core2 *editor.EditorCore
 	_ = c.add(Entry{ID: "a.core", Source: SourceFeature, Owner: "a", Run: func(inv Invocation) error { core2 = inv.Core; return nil }})
 	if err := c.run("a.core", nil); err != nil || core2 != core {
 		t.Fatalf("a run outside ':' got the core %p, want the attached %p", core2, core)

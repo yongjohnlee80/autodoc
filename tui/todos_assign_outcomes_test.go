@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // TestTheHandOverSaysHowItWent (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter):
@@ -24,7 +24,7 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 		{nil, "todos: assigned to Scribe, and sent to it"},
 		{ErrAgentTypedNotSent, "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
 		{fmt.Errorf("deliver: %w", ErrAgentTypedNotSent), "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
-		{widget.ErrTerminalPasteUnbracketed, "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task"},
+		{terminal.ErrTerminalPasteUnbracketed, "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task"},
 		{ErrAgentCancelled, "todos: assigned to autodoc:scribe, but not delivered (you didn't start it): start the agent, then A on the task to deliver it again"},
 		{errors.New("the tab closed"), "todos: assigned to autodoc:scribe, but not delivered (the tab closed): start the agent, then A on the task to deliver it again"},
 		// a running agent in another workspace: its workspace named to switch to, never "stale" or "start the agent"

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
 )
@@ -323,7 +323,7 @@ func TestACheckOverlappingASaveIsStale(t *testing.T) {
 	r.s.WaitForText(t, "saved a.md")
 	r.typeInEditor(t, "Y") // modified again: a stale read taking the save for an outside change would badge it
 	r.s.WaitFor(t, "Y typed", func(string) bool {
-		return onLoop(r, func() bool { return strings.HasPrefix(r.h.core.Value(), "Y") && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return strings.HasPrefix(r.h.core.Value(), "Y") && r.h.core.Mode() == editor.ModeNormal })
 	})
 	close(release)
 	r.s.WaitFor(t, "one fresh check", func(string) bool { return reads.Load() > before })

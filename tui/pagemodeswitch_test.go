@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // The page shows the window's [ Raw | Rendered ] switch on its frame's title row, at its right, while
@@ -15,7 +15,7 @@ func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 	r := attached(t, startDaemon(t, map[string][]string{"kb": {"a.md", "# Larder\n\nbeans\n"}}))
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == editor.ViewRendered })
 	var row, col int
 	r.s.WaitFor(t, "the switch on the page's title row", func(string) bool {
 		var ok bool
@@ -27,9 +27,9 @@ func TestThePageShowsTheRawRenderedSwitch(t *testing.T) {
 		t.Fatalf("the switch is on row %d, which isn't the page's frame's title row, or it shows twice:\n%s", row, r.s)
 	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + 2, Y: row})
-	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == widget.ViewRaw })
+	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == editor.ViewRaw })
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: col + len("[ Raw ") + 3, Y: row})
-	r.s.WaitFor(t, "the page after a press on Rendered", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the page after a press on Rendered", func(string) bool { return shownView(r) == editor.ViewRendered })
 }
 
 // A right press opens the editor's menu where the pointer is, over the page as over the text: the
@@ -38,7 +38,7 @@ func TestThePagesMenuOpensWhereThePressIsUnderTheSwitch(t *testing.T) {
 	r := attached(t, startDaemon(t, map[string][]string{"kb": {"a.md", "# Larder\n\nbeans\n\nmore\n\nand more\n"}}))
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the note's page", func(string) bool { return shownView(r) == editor.ViewRendered })
 	undoRow := func() int {
 		y := -1
 		r.s.WaitFor(t, "the menu", func(sc string) bool {

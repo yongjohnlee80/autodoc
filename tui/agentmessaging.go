@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // Agent messaging: how anything the user sends reaches one of the window's agents
@@ -96,7 +96,7 @@ const submitDelay = 60 * time.Millisecond
 func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) error {
 	text := m.text()
 	check := func() error {
-		if text == "" || len(text) > widget.TerminalInputLimit {
+		if text == "" || len(text) > terminal.TerminalInputLimit {
 			return ErrAgentText
 		}
 		return nil
@@ -120,7 +120,7 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 			})
 		}
 	}
-	return a.deliver(to, check, what, o, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	return a.deliver(to, check, what, o, func(panel TerminalPanel, tab terminal.TerminalTabID) error {
 		return panel.SendBracketedPaste(tab, text)
 	}, done)
 }
@@ -131,8 +131,8 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 // (still: not finished, the same workspace, instance and tab) into an agent whose prompts are
 // reported and that shows none; otherwise the message stays typed, a notice says why, and the
 // delivery finishes ErrAgentTypedNotSent (or stale, pressing nothing).
-func (a *agents) submitter(to AgentRef, refused func() error) func(TerminalPanel, widget.TerminalTabID, func() error, func(error)) {
-	return func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error)) {
+func (a *agents) submitter(to AgentRef, refused func() error) func(TerminalPanel, terminal.TerminalTabID, func() error, func(error)) {
+	return func(panel TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error)) {
 		if err := refused(); err != nil { // typed now: the doorbell's refusal is told with it
 			a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, err.Error()))
 		}
@@ -195,13 +195,13 @@ func (a *agents) kindOf(codename string) string {
 func (a *agents) deliverFallback(codename, text string, done func(error)) {
 	to := AgentRef{Codename: codename}
 	check := func() error {
-		if text == "" || len(text) > widget.TerminalInputLimit {
+		if text == "" || len(text) > terminal.TerminalInputLimit {
 			return ErrAgentText
 		}
 		return nil
 	}
 	o := deliverOpts{submit: a.submitter(to, func() error { return nil })}
-	if err := a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), o, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	if err := a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), o, func(panel TerminalPanel, tab terminal.TerminalTabID) error {
 		return panel.SendBracketedPaste(tab, text)
 	}, done); err != nil {
 		done(err)

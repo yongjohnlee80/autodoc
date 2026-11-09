@@ -8,7 +8,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // FIND — / in the page, the explorer, the relations or any pane a feature registers (Findable), as
@@ -129,7 +130,7 @@ func (h *Host) startFind(pattern string) {
 	h.find.target, h.find.pending = h.find.pending, ""
 	h.find.query, h.find.whole = pattern, false
 	h.find.at, h.find.total = 0, 0
-	h.core.SetFind("", widget.FindOptions{}) // n and N are this find's, not a replace's leftover
+	h.core.SetFind("", editor.FindOptions{}) // n and N are this find's, not a replace's leftover
 	h.set("App.lastFind", pattern)
 	h.showFind()
 	h.p.Post(func() { h.findJump(+1, true) }) // once the question has closed
@@ -150,7 +151,7 @@ func (h *Host) clearFind() {
 	if h.find.query == "" {
 		return
 	}
-	h.core.SetCurrentMatch(widget.TextRange{})
+	h.core.SetCurrentMatch(editor.TextRange{})
 	h.find.query, h.find.target = "", ""
 	h.showFind()
 	h.say(h.tr("autodoc.notice.find.find_cleared"))
@@ -203,11 +204,11 @@ func (h *Host) attachFindChip() {
 	if h.findCard == nil {
 		// the replace card's look: the panel's colours, a frame and a title
 		look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
-		h.findLabel = widget.NewText("", widget.WithTextStyle(look))
-		clear := widget.NewButton("X", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
+		h.findLabel = widgetcore.NewText("", widgetcore.WithTextStyle(look))
+		clear := widgetcore.NewButton("X", widgetcore.WithOnActivate(h.clearFind), widgetcore.WithButtonDecoration(" ", " "))
 		row := tuicore.NewFlex(tuicore.Horizontal)
 		row.Add(h.findLabel, clear)
-		h.findCard = widget.NewBox(row, widget.WithTitle("Find"), widget.WithBorder(style.BorderNormal), widget.WithStyle(look.Padding(0, 1)))
+		h.findCard = widgetcore.NewBox(row, widgetcore.WithTitle("Find"), widgetcore.WithBorder(style.BorderNormal), widgetcore.WithStyle(look.Padding(0, 1)))
 		h.findCard.SetVisible(false)
 	}
 	w.AddAligned(h.findCard, tuicore.AlignTopRight)
@@ -298,7 +299,7 @@ func (h *Host) pageFindPane() FindPane {
 			h.core.SetLine(row, col)
 			// the match the find is on, highlighted whatever the mode, so it is plain which it is
 			n := len(slices.Collect(tuicore.Graphemes(h.find.query)))
-			h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: col}, To: widget.TextPos{Line: row, Col: col + n}})
+			h.core.SetCurrentMatch(editor.TextRange{From: editor.TextPos{Line: row, Col: col}, To: editor.TextPos{Line: row, Col: col + n}})
 			return h.p.Call("editor", "forceActiveFocus")
 		}
 	}}
@@ -344,7 +345,7 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 		return
 	}
 	f := &h.find
-	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	all := h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})
 	if len(all) == 0 {
 		f.at, f.total = 0, 0
 		h.showFind()
@@ -352,8 +353,8 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 		return
 	}
 	ln, col := h.core.Line()
-	cur := widget.TextPos{Line: ln, Col: col}
-	before := func(a, b widget.TextPos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
+	cur := editor.TextPos{Line: ln, Col: col}
+	before := func(a, b editor.TextPos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
 	sel := -1
 	if dir > 0 {
 		for i, r := range all {
@@ -404,7 +405,7 @@ func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 	f := &h.find
 	n := p.view.SetMarks(pageFindIn(f.query, f.whole))
 	if n == 0 {
-		if len(h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})) > 0 && p.toText() {
+		if len(h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})) > 0 && p.toText() {
 			h.notify(h.trf("autodoc.notice.find.not_on_the_page_found_in_the_text", strconv.Quote(f.query)))
 			return false
 		}
@@ -451,7 +452,7 @@ func (h *Host) findRecount() {
 		h.showFind()
 		return
 	}
-	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	all := h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})
 	f.at, f.total = 0, len(all)
 	ln, col := h.core.Line()
 	for i, r := range all {
@@ -483,8 +484,8 @@ func pageFindIn(query string, whole bool) func(string) [][2]int {
 				continue
 			}
 			e := s + len(needle)
-			if whole && (widget.IsKeyword(needle[0]) && s > 0 && widget.IsKeyword(hay[s-1]) ||
-				widget.IsKeyword(needle[len(needle)-1]) && e < len(hay) && widget.IsKeyword(hay[e])) {
+			if whole && (editor.IsKeyword(needle[0]) && s > 0 && editor.IsKeyword(hay[s-1]) ||
+				editor.IsKeyword(needle[len(needle)-1]) && e < len(hay) && editor.IsKeyword(hay[e])) {
 				continue
 			}
 			out = append(out, [2]int{at[s], at[e]})
@@ -497,11 +498,11 @@ func pageFindIn(query string, whole bool) func(string) [][2]int {
 // starFind is the editor's * and # (and g* g#): the word becomes the page's find, whole words or
 // not, and the cursor steps count occurrences on or back from the word's start. One find state:
 // AutoDoc's, its marks, "finding …", n and N.
-func (h *Host) starFind(r widget.FindRequest) bool {
+func (h *Host) starFind(r editor.FindRequest) bool {
 	f := &h.find
 	f.pending, f.target, f.query, f.whole = "", findPage, r.Term, r.Options.WholeWord
 	f.at, f.total = 0, 0
-	h.core.SetFind("", widget.FindOptions{})
+	h.core.SetFind("", editor.FindOptions{})
 	h.set("App.lastFind", r.Term)
 	dir := +1
 	if r.Backward {

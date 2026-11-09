@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // WHERE OVER THE LOADED ROWS — the bar's WHERE filters the rows the view holds, before its sort, and
@@ -89,7 +90,7 @@ func TestWhereFiltersTheViewThenTheSort(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.editor.SetValue("")
-		r.h.core.SetCursor(widget.TextPos{})
+		r.h.core.SetCursor(editor.TextPos{})
 		r.h.plugins.insertResults()
 		return true
 	})
@@ -105,7 +106,7 @@ func TestWhereFiltersTheViewThenTheSort(t *testing.T) {
 	r.waitColumn(t, 1, kindsNames(0, 1, 4))
 	// a WHERE that does not parse: its error, and the view as it was
 	where("nam = 'x'")
-	_, want := widget.ParseTableWhere("nam = 'x'", r.resultsCore().Fields())
+	_, want := table.ParseTableWhere("nam = 'x'", r.resultsCore().Fields())
 	if want == nil || r.source("App.resultsSortLine") != want.Error() {
 		t.Errorf("the line after WHERE nam = 'x': %q, want the parser's %v", r.source("App.resultsSortLine"), want)
 	}
@@ -174,7 +175,7 @@ func TestAWhereFetchesNothing(t *testing.T) {
 		t.Errorf("the note: %q", note)
 	}
 	// the reader moves to the last row shown: the next page loads, and its rows are filtered
-	onLoop(r, func() bool { tc := r.resultsCore(); tc.SetCursor(widget.TablePos{Row: tc.Len() - 1}); return true })
+	onLoop(r, func() bool { tc := r.resultsCore(); tc.SetCursor(table.TablePos{Row: tc.Len() - 1}); return true })
 	r.waitResults(t, "q1", tablePage+2*resultsPage)
 	r.s.WaitFor(t, "the next page filtered", func(string) bool {
 		return onLoop(r, func() int { return r.resultsCore().Len() }) == tablePage+2*resultsPage-591

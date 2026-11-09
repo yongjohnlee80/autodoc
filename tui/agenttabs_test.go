@@ -5,14 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // agenttabs_test.go: the agents' strip — tabs named by codename, + offering the profiles, a tab's
 // menu going to another tab, restarting or closing its agent (asking while it runs).
 
 // menuRow is the row id of rows (or of a submenu's), and whether it is there.
-func menuRow(rows []widget.MenuItemModel, id string) (widget.MenuItemModel, bool) {
+func menuRow(rows []widgetcore.MenuItemModel, id string) (widgetcore.MenuItemModel, bool) {
 	for _, row := range rows {
 		if string(row.ID) == id {
 			return row, true
@@ -21,24 +22,24 @@ func menuRow(rows []widget.MenuItemModel, id string) (widget.MenuItemModel, bool
 			return found, true
 		}
 	}
-	return widget.MenuItemModel{}, false
+	return widgetcore.MenuItemModel{}, false
 }
 
 // chooseRow runs the row id of rows, as the strip's menu does for tab.
-func chooseRow(t *testing.T, rows []widget.MenuItemModel, id string, tab widget.TerminalTabID) {
+func chooseRow(t *testing.T, rows []widgetcore.MenuItemModel, id string, tab terminal.TerminalTabID) {
 	t.Helper()
 	row, ok := menuRow(rows, id)
 	if !ok {
 		t.Fatalf("no row %s in %v", id, rowIDs(rows))
 	}
-	act, ok := row.Action.(widget.TerminalTabsMenuAction)
+	act, ok := row.Action.(terminal.TerminalTabsMenuAction)
 	if !ok || act.Run == nil || !row.Enabled {
 		t.Fatalf("row %s cannot be chosen (enabled %v)", id, row.Enabled)
 	}
 	act.Run(tab)
 }
 
-func rowIDs(rows []widget.MenuItemModel) []string {
+func rowIDs(rows []widgetcore.MenuItemModel) []string {
 	var ids []string
 	for _, row := range rows {
 		ids = append(ids, string(row.ID))

@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // A CSV OR TSV FILE'S TABLE (docs/decisions/editor.md#csv-and-tsv-files-as-editable-tables): its
@@ -28,12 +28,12 @@ func tableComma(p string) rune {
 
 // tableOf is b's table, made on first use: the GUI's drawn in pixels (newTableDocument). An edit
 // dropped by a change under it says so.
-func (h *Host) tableOf(b *openBuffer, comma rune) *widget.TableDocument {
+func (h *Host) tableOf(b *openBuffer, comma rune) *table.TableDocument {
 	if b.table == nil {
 		b.table = newTableDocument(h.editor, h.core, comma,
-			widget.TableRowNumbers(true), // each row's number in a gutter
-			widget.TableOnEditDropped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_table_changed_the_edit_was_dropped")) }),
-			widget.TableOnPasteClipped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_paste_was_cut_off_at_the_table_s_edge")) }))
+			table.TableRowNumbers(true), // each row's number in a gutter
+			table.TableOnEditDropped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_table_changed_the_edit_was_dropped")) }),
+			table.TableOnPasteClipped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_paste_was_cut_off_at_the_table_s_edge")) }))
 	}
 	return b.table
 }

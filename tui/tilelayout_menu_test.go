@@ -7,20 +7,21 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // tilelayout_menu_test.go: each window's Layout ›, Tiled and Float, on its menu right above Go to ›,
 // and :layout (tilelayout.go).
 
 // rowAt is where the row id is in rows, top level; -1 when it is not.
-func rowAt(rows []widget.MenuItemModel, id string) int {
-	return slices.IndexFunc(rows, func(m widget.MenuItemModel) bool { return string(m.ID) == id })
+func rowAt(rows []widgetcore.MenuItemModel, id string) int {
+	return slices.IndexFunc(rows, func(m widgetcore.MenuItemModel) bool { return string(m.ID) == id })
 }
 
 // wantLayoutAbove fails unless rows hold Layout › right above the row goTo, Tiled and Float radios
 // in it, the one checked as tiled says.
-func wantLayoutAbove(t *testing.T, menu string, rows []widget.MenuItemModel, goTo string, tiled bool) {
+func wantLayoutAbove(t *testing.T, menu string, rows []widgetcore.MenuItemModel, goTo string, tiled bool) {
 	t.Helper()
 	l, g := rowAt(rows, "layout"), rowAt(rows, goTo)
 	if l < 0 || g != l+1 {
@@ -32,21 +33,21 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widget.MenuItemModel, goT
 // wantLayoutChecked fails unless choices are Tiled and the radio Float, the one checked as tiled
 // says. The page's Tiled is a radio; a panel's is a submenu of its edges' radios, one checked while
 // it is tiled and none while it floats.
-func wantLayoutChecked(t *testing.T, menu string, choices []widget.MenuItemModel, tiled bool) {
+func wantLayoutChecked(t *testing.T, menu string, choices []widgetcore.MenuItemModel, tiled bool) {
 	t.Helper()
 	tr, okT := menuRow(choices, "layout.tiled")
 	fl, okF := menuRow(choices, "layout.float")
-	if !okT || !okF || fl.Kind != widget.ItemKindRadio {
+	if !okT || !okF || fl.Kind != widgetcore.ItemKindRadio {
 		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDs(choices))
 	}
 	isTiled := tr.Checked
-	if tr.Kind == widget.ItemKindSubmenu {
+	if tr.Kind == widgetcore.ItemKindSubmenu {
 		if ids := rowIDs(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
 			t.Fatalf("%s: Tiled holds %v; want the edges Left, Right, Top and Bottom", menu, ids)
 		}
 		checked := 0
 		for _, e := range tr.Children {
-			if e.Kind != widget.ItemKindRadio {
+			if e.Kind != widgetcore.ItemKindRadio {
 				t.Fatalf("%s: Tiled's %s is no radio", menu, e.ID)
 			}
 			if e.Checked {
@@ -57,7 +58,7 @@ func wantLayoutChecked(t *testing.T, menu string, choices []widget.MenuItemModel
 		if checked > 1 {
 			t.Fatalf("%s: %d edges checked", menu, checked)
 		}
-	} else if tr.Kind != widget.ItemKindRadio {
+	} else if tr.Kind != widgetcore.ItemKindRadio {
 		t.Fatalf("%s: Tiled is neither a radio nor a submenu", menu)
 	}
 	if isTiled != tiled || fl.Checked == tiled {
@@ -66,14 +67,14 @@ func wantLayoutChecked(t *testing.T, menu string, choices []widget.MenuItemModel
 }
 
 // edgeRow is a panel's Layout › Tiled › edge row in rows (a panel's menu), or false.
-func edgeRow(rows []widget.MenuItemModel, edge string) (widget.MenuItemModel, bool) {
+func edgeRow(rows []widgetcore.MenuItemModel, edge string) (widgetcore.MenuItemModel, bool) {
 	l := rowAt(rows, "layout")
 	if l < 0 {
-		return widget.MenuItemModel{}, false
+		return widgetcore.MenuItemModel{}, false
 	}
 	tiled, ok := menuRow(rows[l].Children, "layout.tiled")
 	if !ok {
-		return widget.MenuItemModel{}, false
+		return widgetcore.MenuItemModel{}, false
 	}
 	return menuRow(tiled.Children, "layout.tiled."+edge)
 }
@@ -83,20 +84,20 @@ func edgeRow(rows []widget.MenuItemModel, edge string) (widget.MenuItemModel, bo
 // and its menu says so.
 func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 	_, r := runShellTUI(t, nil)
-	wantLayoutAbove(t, "the buffer strip", onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }), "buffer.tabs.goto", true)
+	wantLayoutAbove(t, "the buffer strip", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows("") }), "buffer.tabs.goto", true)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 	wantLayoutAbove(t, "the terminal", rows, "tabs.goto", false)
 	bottom, ok := edgeRow(rows, "bottom")
 	if !ok {
 		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { bottom.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+	onLoop(r, func() bool { bottom.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool {
 		return onLoop(r, func() string { return r.h.prefs.Value(layoutKey("terminal")) }) == layoutTiled
 	})
-	wantLayoutAbove(t, "the terminal, Tiled", onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.goto", true)
+	wantLayoutAbove(t, "the terminal, Tiled", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.goto", true)
 }
 
 // The agent's tabs have Layout › right above Go to ›, Float as stored.
@@ -105,16 +106,16 @@ func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	tab := onLoop(r, func() widget.TerminalTabID { return r.h.agents.instances["heron"].tab })
-	wantLayoutAbove(t, "the agent", onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.goto", false)
+	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.instances["heron"].tab })
+	wantLayoutAbove(t, "the agent", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.goto", false)
 }
 
 // The results panel has no strip: its Layout › ends its table's menu, after a separator.
 func TestTheResultsLayoutEndsItsTablesMenu(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.plugins.resultsMenuRows() })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.plugins.resultsMenuRows() })
 	l := rowAt(rows, "layout")
-	if l != len(rows)-1 || l < 1 || rows[l-1].Kind != widget.ItemKindSeparator {
+	if l != len(rows)-1 || l < 1 || rows[l-1].Kind != widgetcore.ItemKindSeparator {
 		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDs(rows))
 	}
 	wantLayoutChecked(t, "the results", rows[l].Children, false)
@@ -207,8 +208,8 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	rows := func() []widget.MenuItemModel {
-		return onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	rows := func() []widgetcore.MenuItemModel {
+		return onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 	}
 	wantLayoutChecked(t, "the floating terminal", rows()[rowAt(rows(), "layout")].Children, false)
 	choose := func(edge string) {
@@ -217,7 +218,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 		if !ok {
 			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDs(rows()))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}
 	// at is whether the terminal's tile is on edge's side of the page: centres compared
 	at := func(edge string) bool {

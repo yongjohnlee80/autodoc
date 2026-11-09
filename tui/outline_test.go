@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 const guideFile = "# Guide\n\nintro\n\n## Setup\n\nsteps\n\n### Linux\n\napt\n\n## Usage\n\nrun\n"
@@ -64,7 +64,7 @@ func TestTheBreadcrumbFollowsTheCursorInTheRenderedView(t *testing.T) {
 	r.s.WaitFor(t, "the crumb under Later, its end shown", func(sc string) bool {
 		return strings.Contains(r.frameTitle(), "n.md › Guide › Later") && strings.Contains(sc, "Later 39")
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("G left the Rendered view: view %v", v)
 	}
 }

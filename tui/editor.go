@@ -2,7 +2,8 @@ package tui
 
 import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // editorWidget is the page's editor, whichever widget the program built for main.qml's Editor:
@@ -11,7 +12,7 @@ import (
 // widget also resets its view for a new document.
 type editorWidget interface {
 	tuicore.Component
-	Core() *widget.EditorCore
+	Core() *editor.EditorCore
 	SetValue(string)
 }
 
@@ -28,10 +29,10 @@ func (h *Host) gutterWidth() int {
 // related documents and back. Each editor widget takes rows its own way.
 func (h *Host) installEditorMenu() {
 	switch e := h.editor.(type) {
-	case *widget.Editor:
-		widget.WithContextMenu(func(e *widget.Editor) []widget.MenuItemModel { return h.editorMenu(e.Core()) })(e)
+	case *editor.Editor:
+		editor.WithContextMenu(func(e *editor.Editor) []widgetcore.MenuItemModel { return h.editorMenu(e.Core()) })(e)
 	case interface {
-		SetContextMenuRows(func(*widget.EditorCore) []widget.MenuItemModel)
+		SetContextMenuRows(func(*editor.EditorCore) []widgetcore.MenuItemModel)
 	}:
 		e.SetContextMenuRows(h.editorMenu)
 	}
@@ -47,23 +48,23 @@ type relayouter interface{ Relayout() }
 
 // editorMenu is the editor's right-click menu: the stock rows, then the related documents and back.
 // Its rows act on the core, so every editor widget runs them (installEditorMenu).
-func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
-	items := widget.CoreContextItems(c)
+func (h *Host) editorMenu(c *editor.EditorCore) []widgetcore.MenuItemModel {
+	items := editor.CoreContextItems(c)
 	l, onLink := linkAt([]byte(c.Value()), h.cursorBytes())
-	link := menuCommand("autodoc.link", "&Go to link", widget.CoreMenuAction{ID: "autodoc.link",
-		Run: func(*widget.EditorCore) { h.goToLink(l) }})
+	link := menuCommand("autodoc.link", "&Go to link", editor.CoreMenuAction{ID: "autodoc.link",
+		Run: func(*editor.EditorCore) { h.goToLink(l) }})
 	link.Enabled = onLink
-	back := menuCommand("autodoc.back", "&Back", widget.CoreMenuAction{ID: "autodoc.back",
-		Run: func(*widget.EditorCore) { h.goBack() }})
+	back := menuCommand("autodoc.back", "&Back", editor.CoreMenuAction{ID: "autodoc.back",
+		Run: func(*editor.EditorCore) { h.goBack() }})
 	_, back.Enabled = h.backToDocument()
 	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
-	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
-		Run: func(*widget.EditorCore) { h.previewDiagram() }})
+	diagram := menuCommand("autodoc.diagram", "View &diagram", editor.CoreMenuAction{ID: "autodoc.diagram",
+		Run: func(*editor.EditorCore) { h.previewDiagram() }})
 	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes(), h.diagramReader())
-	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
-		widget.NewSeparator("autodoc.sep.relations"), link, back)
+	items = append(items, widgetcore.NewSeparator("autodoc.sep.diagram"), diagram,
+		widgetcore.NewSeparator("autodoc.sep.relations"), link, back)
 	if h.fonts != nil { // the window's zoom; a terminal's is its own
-		items = append(items, widget.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
+		items = append(items, widgetcore.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
 	}
 	s := h.luaFeature()
 	return append(items, s.rows.editorItems(s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)

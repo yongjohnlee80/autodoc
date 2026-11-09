@@ -8,7 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // AN HTML FILE'S PAGE, opened raw: on a terminal its Rendered view is a page drawn in cells over the
@@ -25,7 +25,7 @@ func openHTMLPage(t *testing.T, page, title string, more ...string) (*running, s
 	path := filepath.Join(dir, "p.html")
 	r.openHTMLAnswer(t, path, "raw")
 	r.waitOpen(t, "", path)
-	r.s.WaitFor(t, "the file's page", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the file's page", func(string) bool { return shownView(r) == editor.ViewRendered })
 	r.s.WaitForText(t, title)
 	p := htmlPage(r)
 	r.s.WaitFor(t, "the file's text on its page", func(string) bool {
@@ -44,11 +44,11 @@ func TestAnEditingKeyFromARawHTMLPageActsOnce(t *testing.T) {
 	r, _ := openHTMLPage(t, page, "Pantry")
 	r.keys(t, key('x'))
 	r.s.WaitFor(t, "x acted once", func(string) bool { return r.editorText() == page[1:] })
-	if v := shownView(r); v != widget.ViewRaw {
+	if v := shownView(r); v != editor.ViewRaw {
 		t.Fatalf("x left the view %v, want the text", v)
 	}
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "the page again", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the page again", func(string) bool { return shownView(r) == editor.ViewRendered })
 	r.keys(t, key('o'))
 	r.keys(t, decltest.Type("z")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
@@ -77,13 +77,13 @@ func TestAFindOnlyARawHTMLFilesSourceHasGoesToTheText(t *testing.T) {
 	}
 	find("zebra")
 	r.s.WaitForText(t, `find: no "zebra" in the page`)
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("a term in neither left the page: view %v", v)
 	}
 	find("kestrel.html")
 	r.waitKeptNotice(t, `"kestrel.html" is not on the page: found in the text (Raw)`)
 	r.s.WaitFor(t, "the find in the text, on its match", func(string) bool {
-		return shownView(r) == widget.ViewRaw && r.cursor()[0] == 1 && onLoop(r, func() int { return r.h.find.total }) == 1
+		return shownView(r) == editor.ViewRaw && r.cursor()[0] == 1 && onLoop(r, func() int { return r.h.find.total }) == 1
 	})
 }
 
@@ -131,7 +131,7 @@ func TestARawHTMLPagesReadingKeysKeepItRendered(t *testing.T) {
 		if k.scroll != nil {
 			r.s.WaitFor(t, fmt.Sprintf("%+v scrolls the page", k.ev), func(string) bool { return k.scroll() })
 		}
-		if v := shownView(r); v != widget.ViewRendered {
+		if v := shownView(r); v != editor.ViewRendered {
 			t.Fatalf("%+v left the page (view %v)", k.ev, v)
 		}
 	}
@@ -147,7 +147,7 @@ func TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage(t *testing.T) {
 	r, _ := openHTMLPage(t, "<h1>Long</h1>\n"+paragraphs("Line", 20), "Long")
 	r.leader(t, 'k') // Vim to Text
 	r.s.WaitForText(t, "editor mode: Text (modeless)")
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("after the keymap switch the file shows view %v, want its page", v)
 	}
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown, Mods: tuicore.ModAlt})
@@ -157,7 +157,7 @@ func TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage(t *testing.T) {
 	const typed = " hjkl[]{}gGy"
 	r.keys(t, decltest.Type(typed)...)
 	r.s.WaitFor(t, "the keys typed into the file", func(string) bool { return strings.HasPrefix(r.editorText(), typed+"<h1>Long") })
-	if v := shownView(r); v != widget.ViewRaw {
+	if v := shownView(r); v != editor.ViewRaw {
 		t.Fatalf("after typing the file shows view %v, want its text", v)
 	}
 }
@@ -171,7 +171,7 @@ func TestAFindOnARawHTMLPageCountsWhatItShows(t *testing.T) {
 	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
 	at := func() [2]int { return onLoop(r, func() [2]int { return [2]int{r.h.find.at, r.h.find.total} }) }
 	r.s.WaitFor(t, "found on the page", func(string) bool { return at()[1] == 2 })
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("the find left the page: view %v", v)
 	}
 	first := at()[0]
@@ -180,10 +180,10 @@ func TestAFindOnARawHTMLPageCountsWhatItShows(t *testing.T) {
 	r.h.p.Post(r.h.findPrevious)
 	r.s.WaitFor(t, "N back", func(string) bool { return at()[0] == first && at()[1] == 2 })
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && at()[1] == 3 })
+	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == editor.ViewRaw && at()[1] == 3 })
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "counted on the page again", func(string) bool {
-		return shownView(r) == widget.ViewRendered && at() == [2]int{1, 2}
+		return shownView(r) == editor.ViewRendered && at() == [2]int{1, 2}
 	})
 }
 
@@ -195,7 +195,7 @@ func TestARightPressOnARawHTMLPageOpensTheEditorsMenu(t *testing.T) {
 	r.s.WaitForText(t, "Undo")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
 	r.s.WaitFor(t, "the menu closed", func(sc string) bool { return !strings.Contains(sc, "Undo") })
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("the menu left the page: view %v", v)
 	}
 }

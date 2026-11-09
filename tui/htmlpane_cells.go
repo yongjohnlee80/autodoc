@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
+)
 
 // THE HTML PREVIEW IN A TERMINAL — File › Preview HTML on a terminal opens the same pane as a
 // window's (htmlpane.go), its HTMLView golib's cell view, the note page's (notepage.go): its
@@ -46,8 +48,8 @@ func (h *Host) paneLooks() {
 	if !ok {
 		return
 	}
-	widget.WithSyntax(h.p.SourceLanguages(), h.p.SyntaxStyles())(v)
+	htmlview.WithSyntax(h.p.SourceLanguages(), h.p.SyntaxStyles())(v)
 	// the page's own words, a chart's and a diagram's (pageNotice): a note's page, a card's and the
 	// pane say the same
-	widget.WithDiagramNotice(h.pageNotice)(v)
+	htmlview.WithDiagramNotice(h.pageNotice)(v)
 }

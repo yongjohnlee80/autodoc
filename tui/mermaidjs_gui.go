@@ -12,7 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
@@ -118,12 +118,12 @@ func (m *mermaidJS) withdraw(k mermaidKey, job *mermaidJob, id int) {
 
 // draw lays k's diagram out by mermaid.js in the browser, off the loop, keeps the picture and
 // wakes its waiters. A drawing withdrawn, or the program's end, keeps nothing.
-func (m *mermaidJS) draw(ctx context.Context, k mermaidKey, job *mermaidJob, rasterize func(context.Context, []byte, widget.Page) ([]byte, error)) {
+func (m *mermaidJS) draw(ctx context.Context, k mermaidKey, job *mermaidJob, rasterize func(context.Context, []byte, htmlview.Page) ([]byte, error)) {
 	p := mermaidPic{}
 	page, err := export.DiagramPage(k.src, k.theme)
 	if err == nil {
 		var data []byte
-		data, err = rasterize(ctx, page, widget.Page{Width: 1, MaxHeight: diagramMaxHeight,
+		data, err = rasterize(ctx, page, htmlview.Page{Width: 1, MaxHeight: diagramMaxHeight,
 			Scale: float64(k.scale), Wide: true, Background: export.Background(k.theme)})
 		if err == nil {
 			img, derr := png.Decode(bytes.NewReader(data))
@@ -234,7 +234,7 @@ func picture(p mermaidPic, width float32) gui.View {
 
 // paneDiagrams has the pane's page draw its diagrams by the engine File › Preview option chose:
 // mermaid.js (mermaidJS), or golib's Mermaid natively. A view given the other one asks it again.
-func (h *Host) paneDiagrams(v *widget.HTMLView) {
+func (h *Host) paneDiagrams(v *htmlview.HTMLView) {
 	m, ok := h.paneMermaid.(*mermaidJS)
 	if !ok {
 		m = newMermaidJS(h)
@@ -245,6 +245,6 @@ func (h *Host) paneDiagrams(v *widget.HTMLView) {
 		want = m.native
 	}
 	if d, _ := v.Diagrams().(guiwidget.Diagrammer); d != want {
-		widget.WithDiagrams(want)(v)
+		htmlview.WithDiagrams(want)(v)
 	}
 }

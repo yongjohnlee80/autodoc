@@ -4,7 +4,8 @@ import (
 	"context"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
@@ -27,14 +28,14 @@ type cardPage struct {
 // cardPageView is the page as the card editor's document view: shown, it renders the card's text,
 // which is what the editor hands it.
 type cardPageView struct {
-	*widget.HTMLView
+	*htmlview.HTMLView
 	page *cardPage
 }
 
 // ShowDocument renders text, the card's: the editor calls it as the view is shown.
 func (v *cardPageView) ShowDocument(text []byte) { v.page.render(text) }
 
-var _ widget.DocumentView = (*cardPageView)(nil)
+var _ editor.DocumentView = (*cardPageView)(nil)
 
 func newCardPage(h *Host) *cardPage { return &cardPage{h: h} }
 
@@ -58,11 +59,11 @@ func (h *Host) cardPage() *cardPage {
 }
 
 // editor is the card's terminal editor; false in a window, whose Editor draws the card itself.
-func (p *cardPage) editor() (*widget.Editor, bool) {
+func (p *cardPage) editor() (*editor.Editor, bool) {
 	if p.h.p == nil || p.h.native() {
 		return nil, false
 	}
-	return tuidecl.FindAs[*widget.Editor](p.h.p, luaCardView)
+	return tuidecl.FindAs[*editor.Editor](p.h.p, luaCardView)
 }
 
 // textSet hears the card's text set (a new card, card:set): on a terminal the card's editor gets
@@ -84,7 +85,7 @@ func (p *cardPage) textSet(text string) {
 // chart it doesn't draw is said in the UI's language.
 func (p *cardPage) viewOf() *cardPageView {
 	if p.view == nil {
-		p.view = &cardPageView{HTMLView: widget.NewHTMLView(widget.WithOnLink(p.h.htmlLink)), page: p}
+		p.view = &cardPageView{HTMLView: htmlview.NewHTMLView(htmlview.WithOnLink(p.h.htmlLink)), page: p}
 		p.give()
 	}
 	return p.view
@@ -96,9 +97,9 @@ func (p *cardPage) give() {
 	if p.view == nil {
 		return
 	}
-	widget.WithDiagramNotice(p.h.pageNotice)(p.view.HTMLView)
+	htmlview.WithDiagramNotice(p.h.pageNotice)(p.view.HTMLView)
 	if p.h.p != nil {
-		widget.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
+		htmlview.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
 	}
 }
 

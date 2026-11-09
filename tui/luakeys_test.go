@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // keysLua binds :mark to a chord, a control chord, a leader letter and both menus.
@@ -60,7 +60,7 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 		}
 		return true
 	})
-	var row widget.MenuItemModel
+	var row widgetcore.MenuItemModel
 	onLoop(r, func() bool {
 		for _, it := range r.h.editorMenu(r.h.core) {
 			if it.Label == "Mark here" {

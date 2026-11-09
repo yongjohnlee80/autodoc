@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted: switching the terminal editor between two
@@ -46,7 +46,7 @@ func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 		if got := r.syntaxShown(); !strings.Contains(got, "Markdown") {
 			t.Fatalf("%s: App.syntaxDefinition %s", how, got)
 		}
-		if v := onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() }); v != widget.ViewRaw {
+		if v := onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() }); v != editor.ViewRaw {
 			t.Fatalf("%s: the editor shows view %v, not Raw", how, v)
 		}
 		var last string

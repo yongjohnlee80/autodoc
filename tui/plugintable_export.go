@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // THE EXPORT — results.export (results.csv opens it on CSV): the rows loaded in the view, in the
@@ -490,7 +490,7 @@ func (j *jsonRows) writeSome(row []string, kinds string, keep []int) error {
 			b.WriteByte(',')
 		}
 		first = false
-		cell, kind := "", byte(widget.TableCellText)
+		cell, kind := "", byte(table.TableCellText)
 		if i < len(row) {
 			cell = row[i]
 		}
@@ -536,18 +536,18 @@ func (j *jsonRows) end() error {
 //   - JSON is the value itself when it parses, else a string;
 //   - text, and any other kind, is a string.
 func jsonValue(cell string, kind byte) string {
-	switch widget.TableCellKind(kind) {
-	case widget.TableCellNull:
+	switch table.TableCellKind(kind) {
+	case table.TableCellNull:
 		return "null"
-	case widget.TableCellNumber:
+	case table.TableCellNumber:
 		if jsonNumber(cell) {
 			return cell
 		}
-	case widget.TableCellBool:
+	case table.TableCellBool:
 		if b, err := strconv.ParseBool(cell); err == nil {
 			return strconv.FormatBool(b)
 		}
-	case widget.TableCellJSON:
+	case table.TableCellJSON:
 		var out bytes.Buffer
 		if json.Valid([]byte(cell)) && json.Compact(&out, []byte(cell)) == nil {
 			return out.String()

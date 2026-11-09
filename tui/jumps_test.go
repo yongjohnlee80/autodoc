@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 func ctrlKey(k rune) tuicore.Event {
@@ -105,7 +105,7 @@ func TestAJumpWhoseListMovedLandsNowhere(t *testing.T) {
 	hold.Store(true)
 	r.keys(t, ctrlKey('o'))
 	r.s.WaitForText(t, "opening a.md")
-	onLoop(r, func() bool { r.h.jumps.Push(widget.JumpPos{Doc: "elsewhere", Line: 1}); return true })
+	onLoop(r, func() bool { r.h.jumps.Push(editor.JumpPos{Doc: "elsewhere", Line: 1}); return true })
 	n, idx := r.jumpIndex()
 	hold.Store(false)
 	close(release)
@@ -172,7 +172,7 @@ func TestASearchHitOverUnsavedChangesOpensAtItsSection(t *testing.T) {
 	// keys and a post are not ordered: every key typed, Esc included, before the hit's open
 	r.s.WaitFor(t, "the typing done", func(string) bool {
 		return onLoop(r, func() bool {
-			return strings.Contains(r.h.core.Value(), "edit ") && r.h.core.Mode() == widget.ModeNormal
+			return strings.Contains(r.h.core.Value(), "edit ") && r.h.core.Mode() == editor.ModeNormal
 		})
 	})
 	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })

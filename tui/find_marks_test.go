@@ -9,7 +9,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE PAGE'S FIND, marked and cleared: the page marks a find's words,
@@ -96,7 +96,7 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 		t.Fatalf("the card is not framed and titled, with its X at the right end: %q", row)
 	}
 	// the match the find is on is highlighted, the other only marked
-	if m, ok := onLoop(r, func() widget.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), true; !ok || m != (widget.TextRange{From: widget.TextPos{Line: 0, Col: 4}, To: widget.TextPos{Line: 0, Col: 11}}) {
+	if m, ok := onLoop(r, func() editor.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), true; !ok || m != (editor.TextRange{From: editor.TextPos{Line: 0, Col: 4}, To: editor.TextPos{Line: 0, Col: 11}}) {
 		t.Fatalf("the current match is %v", m)
 	}
 
@@ -125,7 +125,7 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	if q := onLoop(r, func() string { return r.h.find.query }); q != "" {
 		t.Fatalf("the find after its X is %q, want none", q)
 	}
-	if _, on := onLoop(r, func() widget.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), onLoop(r, func() bool { _, ok := r.h.core.CurrentMatch(); return ok }); on {
+	if _, on := onLoop(r, func() editor.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), onLoop(r, func() bool { _, ok := r.h.core.CurrentMatch(); return ok }); on {
 		t.Fatal("the current match outlived the find")
 	}
 }

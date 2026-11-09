@@ -8,7 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -130,7 +130,7 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r.waitOpen(t, "", page)
 	r.s.WaitFor(t, "the raw file's cell page on", func(string) bool {
 		return onLoop(r, func() bool {
-			e, ok := r.h.editor.(*widget.Editor)
+			e, ok := r.h.editor.(*editor.Editor)
 			if !ok || len(seen) == 0 || !seen[len(seen)-1] {
 				return false
 			}
@@ -153,22 +153,22 @@ func TestATerminalDrawsARawHTMLFilesPage(t *testing.T) {
 	}
 	r.openHTMLAnswer(t, page, "raw")
 	r.waitOpen(t, "", page)
-	shown := func() widget.EditorView {
-		return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+	shown := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() })
 	}
 	r.s.WaitFor(t, "the file's page, Rendered", func(sc string) bool {
-		return shown() == widget.ViewRendered && strings.Contains(sc, "Harbour") && strings.Contains(sc, "Gull") && strings.Contains(sc, "┌")
+		return shown() == editor.ViewRendered && strings.Contains(sc, "Harbour") && strings.Contains(sc, "Gull") && strings.Contains(sc, "┌")
 	})
 	if sc := r.s.String(); strings.Contains(sc, "<h1>") || strings.Contains(sc, "<td>") {
 		t.Fatalf("the page shows the file's tags:\n%s", sc)
 	}
 	ctrlT := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl}
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the source after Ctrl+T", func(sc string) bool { return shown() == widget.ViewRaw && strings.Contains(sc, "<h1>Harbour</h1>") })
+	r.s.WaitFor(t, "the source after Ctrl+T", func(sc string) bool { return shown() == editor.ViewRaw && strings.Contains(sc, "<h1>Harbour</h1>") })
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the page again", func(sc string) bool { return shown() == widget.ViewRendered && !strings.Contains(sc, "<h1>") })
+	r.s.WaitFor(t, "the page again", func(sc string) bool { return shown() == editor.ViewRendered && !strings.Contains(sc, "<h1>") })
 	onLoop(r, func() bool {
-		if _, err := r.h.core.Insert(widget.TextPos{}, "<h2>Tides</h2>\n"); err != nil {
+		if _, err := r.h.core.Insert(editor.TextPos{}, "<h2>Tides</h2>\n"); err != nil {
 			t.Error(err)
 		}
 		return true

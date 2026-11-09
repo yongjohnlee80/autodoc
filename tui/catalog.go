@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE COMMAND CATALOG (docs/decisions/plugins.md#one-command-catalog) — every command a user can
@@ -76,7 +76,7 @@ type Entry struct {
 	// (docs/decisions/contract.md#path-commands-run-within-the-workspace).
 	Path bool
 	// Complete is what ':' Tab offers for its arguments (golib's Command.Complete); nil for none
-	Complete func(widget.CompleteContext) []string
+	Complete func(editor.CompleteContext) []string
 }
 
 // Invocation is how an entry was run: what ':' passes, so nothing is lost on the way.
@@ -87,7 +87,7 @@ type Invocation struct {
 	Bang bool     // the verb ended in '!'
 	// Core is the editor a Lua command's ed wraps: ':' passes its own, every other run the
 	// program's attached editor.
-	Core *widget.EditorCore
+	Core *editor.EditorCore
 }
 
 // Cataloged is a Feature with user commands. The registry sets each entry's Source and Owner.
@@ -106,7 +106,7 @@ var takenOver = map[string]bool{"find": true, "nohl": true}
 // golibVerbs are the names of golib's own verbs an entry may not take (a Lua command excepted).
 var golibVerbs = func() map[string]bool {
 	m := map[string]bool{}
-	for _, c := range widget.DefaultCommands() {
+	for _, c := range editor.DefaultCommands() {
 		for _, n := range append([]string{c.Name}, c.Aliases...) {
 			m[n] = true
 		}
@@ -122,8 +122,8 @@ type catalog struct {
 	names map[string]string // ':' name → the id of the entry owning it
 	// the editor's registry, kept in step, and the core every run outside ':' is given; nil before
 	// attach
-	cmds   *widget.Commands
-	core   *widget.EditorCore
+	cmds   *editor.Commands
+	core   *editor.EditorCore
 	synced map[string][]string // the names each entry is registered under in cmds
 	// tr is an entry's English in the UI's language (Host.trOr); nil keeps English
 	tr func(id, english string) string
@@ -160,7 +160,7 @@ func (e *Entry) who() string {
 
 // validVerb is a ':' name golib takes: letters, digits, - and _, and not a number.
 func validVerb(n string) bool {
-	_, err := widget.NewCommands(widget.Command{Name: n, Run: func(widget.CommandContext) error { return nil }})
+	_, err := editor.NewCommands(editor.Command{Name: n, Run: func(editor.CommandContext) error { return nil }})
 	return err == nil
 }
 
@@ -301,7 +301,7 @@ func (c *catalog) lookup(id string) *Entry {
 
 // attach registers the entries' names in core's command line, and gives every run outside ':'
 // core.
-func (c *catalog) attach(core *widget.EditorCore) {
+func (c *catalog) attach(core *editor.EditorCore) {
 	if c == nil {
 		return // a host built without its options (tests)
 	}
@@ -345,8 +345,8 @@ func (c *catalog) sync(affected map[string]bool) {
 			if c.tr != nil && help != "" {
 				help = c.tr("autodoc.cmd."+id+".help", help)
 			}
-			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
-				Run: func(x widget.CommandContext) error {
+			_ = c.cmds.Set(editor.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
+				Run: func(x editor.CommandContext) error {
 					if err := c.userOnly(e); err != nil {
 						return err
 					}

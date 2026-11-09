@@ -14,7 +14,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -61,7 +61,7 @@ func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHost, 
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
 	c.panel = &modelPanel{owner: c, starts: true}
-	a.spawn = func(pty.Cmd) (widget.TerminalProcess, error) { return newFakeTerminal(), nil }
+	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil }
 	return a, c, w
 }
 
@@ -127,7 +127,7 @@ func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pt
 	cfg := c.panel.configs[instance.tab]
 	spawn := a.spawn
 	defer func() { a.spawn = spawn }()
-	a.spawn = func(cmd pty.Cmd) (widget.TerminalProcess, error) {
+	a.spawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
 		started, spawned = cmd, true
 		return newFakeTerminal(), nil
 	}

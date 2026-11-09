@@ -23,7 +23,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
@@ -507,7 +507,7 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 func (r *running) waitTyped(t *testing.T) {
 	t.Helper()
 	r.s.WaitFor(t, "the typing done", func(string) bool {
-		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == editor.ModeNormal })
 	})
 }
 
@@ -976,7 +976,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	// the keys are the loop's to process: release the save only once the editor holds the edit and
 	// is back in Normal mode (its own mode: the status line repaints after it)
 	r.s.WaitFor(t, "the newer edit in the editor", func(string) bool {
-		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.core.Mode() == widget.ModeNormal })
+		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.core.Mode() == editor.ModeNormal })
 	})
 	holding.Store(false)
 	close(release)
