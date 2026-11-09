@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -76,11 +77,19 @@ func listen(path string) (net.Listener, error) {
 // NOTE: the umask is the process's, not the goroutine's: a file or folder another goroutine creates
 // during the bind is its owner's alone, which fails safe; 0077 rather than 0177 leaves a folder its
 // x bit, so one made then stays usable.
+//
+// The save, bind and restore run under umaskMu: two Listens at once would otherwise each save the
+// other's 0077 and one restore it as the process's for good.
 func bindPrivate(path string) (net.Listener, error) {
+	umaskMu.Lock()
+	defer umaskMu.Unlock()
 	old := syscall.Umask(0o077)
 	defer syscall.Umask(old)
 	return net.Listen("unix", path)
 }
+
+// umaskMu serializes bindPrivate's umask, which is the process's.
+var umaskMu sync.Mutex
 
 // ownSocket makes the bound socket 0600 (the file is the access control: no login locally), keeps
 // closing the listener from unlinking it by name, and takes its identity. The mode is a second

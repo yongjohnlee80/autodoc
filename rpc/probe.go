@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/yongjohnlee80/golib/msgpack"
@@ -36,9 +37,11 @@ type ProbeInfo struct {
 
 // Probe asks the occupant of addr who it is, with a sys.hello that declares no protocol (so it
 // admits nothing), and returns what any AutoDoc answers, whatever its protocol: the caller decides
-// whether it will do. A dial error is returned as it is: nothing answers there.
+// whether it will do. A dial error is returned as it is: nothing answers there. On ipc.Network the
+// dial is ipc's, refusing another user's daemon; on any other network (tcp, say) it is net's, the
+// connection checked as ipc.Check checks one (a connection that is not ipc's passes).
 func Probe(ctx context.Context, network, addr string) (ProbeInfo, error) {
-	conn, err := ipc.RPCDialer(ctx, network, addr)
+	conn, err := probeDial(ctx, network, addr)
 	if err != nil {
 		return ProbeInfo{}, err
 	}
@@ -99,4 +102,21 @@ func ProbeOn(ctx context.Context, network, addr string) (string, error) {
 		return "", fmt.Errorf("%w: protocol %d, want %d", ErrNotAutodoc, info.Protocol, Protocol)
 	}
 	return info.Version, nil
+}
+
+// probeDial is Probe's dial: ipc's on ipc.Network, net's on any other network it is given.
+func probeDial(ctx context.Context, network, addr string) (net.Conn, error) {
+	if network == ipc.Network {
+		return ipc.Dial(ctx, addr)
+	}
+	var d net.Dialer
+	c, err := d.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+	if err := ipc.Check(c); err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("dial %s: %w", addr, err)
+	}
+	return c, nil
 }
