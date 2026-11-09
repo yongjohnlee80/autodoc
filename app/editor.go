@@ -13,7 +13,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -37,7 +37,7 @@ func runEditor(ctx context.Context, verb, params string, env func(string) string
 	if err != nil {
 		return err
 	}
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
 	if err != nil {
 		return fmt.Errorf("--editor: the editor at %s does not answer: %w", sock, err)
 	}

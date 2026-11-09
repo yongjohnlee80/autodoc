@@ -1,4 +1,4 @@
-package peercred
+package ipc
 
 import (
 	"context"
