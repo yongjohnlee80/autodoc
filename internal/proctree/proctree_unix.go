@@ -24,3 +24,6 @@ func alive(pid int) bool {
 	}
 	return p.Signal(syscall.Signal(0)) == nil
 }
+
+// replace is exec.
+func replace(path string, args, env []string) error { return syscall.Exec(path, args, env) }

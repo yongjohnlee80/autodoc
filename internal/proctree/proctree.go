@@ -20,5 +20,11 @@ func StartDetached(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
 
+// Replace runs the program at path in this process's place, with args (args[0] its name) and env;
+// it returns only when the program could not be started. On Unix the process becomes it (exec). On
+// Windows, which has no exec, this process starts it on the same console and handles, waits for it
+// and exits with its exit code, so whoever waits on this process sees the program's.
+func Replace(path string, args, env []string) error { return replace(path, args, env) }
+
 // Alive is whether a process with pid exists now. It sends nothing to the process.
 func Alive(pid int) bool { return pid > 0 && alive(pid) }

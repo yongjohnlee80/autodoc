@@ -1,6 +1,6 @@
-// Package install reads the record install-autodoc.sh writes when it installs AutoDoc
-// (docs/decisions/install.md#the-install-record): which version, and where the binary and update.sh
-// are. AutoDoc reads it and never writes it; an AutoDoc installed another way has none, and offers
+// Package install reads the record install-autodoc.sh (install-autodoc.ps1 on Windows) writes when
+// it installs AutoDoc (docs/decisions/install.md#the-install-record): which version, and where the
+// binary and the update script are. AutoDoc reads it and never writes it; an AutoDoc installed another way has none, and offers
 // no Update.
 //
 // Concurrency: the package is functions of their arguments and the environment; any number of
@@ -13,8 +13,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 )
 
 // Record is install.toml: what the script installed, and where.
@@ -24,26 +27,43 @@ type Record struct {
 	Channel     string `toml:"channel"`      // "stable"
 	Bin         string `toml:"bin"`          // the binary it installed
 	Launcher    string `toml:"launcher"`     // the desktop entry or AutoDoc.app; "" for none
-	Update      string `toml:"update"`       // update.sh, beside the record
+	Update      string `toml:"update"`       // update.sh (update.ps1 on Windows), beside the record
 	InstalledAt string `toml:"installed_at"` // RFC 3339, UTC
 	UpdatedAt   string `toml:"updated_at"`   // RFC 3339, UTC
 }
 
-// Scripted reports whether the script installed AutoDoc and left an update.sh: an Update can run.
+// Scripted reports whether the script installed AutoDoc and left an update script: an Update can
+// run.
 func (r Record) Scripted() bool { return r.Method == "script" && r.Update != "" }
 
-// Path is the record's path: $XDG_STATE_HOME/autodoc/install.toml, else
-// ~/.local/state/autodoc/install.toml, as the scripts write it. AutoDoc's own state_dir setting
-// doesn't move it: the scripts don't read AutoDoc's config.
-func Path() (string, error) {
-	if d := os.Getenv("XDG_STATE_HOME"); d != "" && filepath.IsAbs(d) {
-		return filepath.Join(d, "autodoc", "install.toml"), nil
+// UpdateCommand is the program that runs the record's update script, and its arguments, chosen by
+// the script's own extension: PowerShell for update.ps1, else /bin/sh. ExecutionPolicy Bypass is
+// the install's own documented command: the script is unsigned, and Windows' default policy would
+// refuse it.
+func (r Record) UpdateCommand() (program string, args []string) {
+	if strings.EqualFold(windowsExt(r.Update), ".ps1") {
+		return "powershell.exe", []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", r.Update}
 	}
-	home, err := os.UserHomeDir()
+	return "/bin/sh", []string{r.Update}
+}
+
+// windowsExt is p's extension whichever separators it has: a record's path is its own OS's.
+func windowsExt(p string) string {
+	if i := strings.LastIndexAny(p, `/\.`); i >= 0 && p[i] == '.' {
+		return p[i:]
+	}
+	return ""
+}
+
+// Path is the record's path, autodoc/install.toml in the user's state folder (userdirs.State), as
+// the scripts write it. AutoDoc's own state_dir setting doesn't move it: the scripts don't read
+// AutoDoc's config.
+func Path() (string, error) {
+	dir, err := userdirs.State(nil)
 	if err != nil {
 		return "", fmt.Errorf("install: the record's path: %w", err)
 	}
-	return filepath.Join(home, ".local", "state", "autodoc", "install.toml"), nil
+	return filepath.Join(dir, "autodoc", "install.toml"), nil
 }
 
 // Read reads the record at path. ok is false, with no error, when there is none: AutoDoc was

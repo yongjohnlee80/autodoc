@@ -93,6 +93,18 @@ func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
 	}
 }
 
+// A failed update names the script that failed: update.ps1 on Windows, which this Linux cell stands
+// in for by telling the exit handler its name.
+func TestAFailedUpdateNamesItsOwnScript(t *testing.T) {
+	disarm(t)
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: scriptInstall("/u/update.ps1")})
+	r.connected(t)
+	r.h.p.Post(func() { r.h.updateExited("update.ps1", 3) })
+	r.waitNotice(t, "Update: update.ps1 exited 3; its tab in the terminal panel says why")
+}
+
 // TestAnUpdateThatChangedNothingSaysSo: update.sh ended well, but the binary at this one's path is
 // the version running: no restart is offered.
 func TestAnUpdateThatChangedNothingSaysSo(t *testing.T) {

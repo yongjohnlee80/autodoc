@@ -5529,8 +5529,8 @@ WHAT A KEY NEEDS
         <translation>アップデート: この AutoDoc は install-autodoc.sh でインストールされていません。インストールした方法でアップデートしてください</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>アップデート: update.sh が %1 で終了しました。理由はターミナルパネルのタブに表示されています</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>アップデート: %2 が %1 で終了しました。理由はターミナルパネルのタブに表示されています</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

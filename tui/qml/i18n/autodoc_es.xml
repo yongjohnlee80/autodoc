@@ -5534,8 +5534,8 @@ LO QUE NECESITA UNA TECLA
         <translation>Actualizar: install-autodoc.sh no instaló este AutoDoc; actualízalo como lo instalaste</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>Actualizar: update.sh terminó con %1; su pestaña en el panel del terminal dice por qué</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>Actualizar: %2 terminó con %1; su pestaña en el panel del terminal dice por qué</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>
