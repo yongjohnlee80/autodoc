@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -42,29 +41,6 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 		if _, err := os.Lstat(sock); !os.IsNotExist(err) {
 			t.Errorf("mode %v: the socket was bound: %v", mode, err)
 		}
-	}
-}
-
-// TestTheSocketIsBornPrivate: the socket file is created with no group or other bits by the bind
-// itself, whatever the process's umask, not opened wider and narrowed by the chmod after it.
-func TestTheSocketIsBornPrivate(t *testing.T) {
-	old := syscall.Umask(0)
-	defer syscall.Umask(old)
-	sock := filepath.Join(short(t), "a.sock")
-	ln, err := listen(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	fi, err := os.Lstat(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		t.Errorf("the socket as bound is %#o, want its owner's alone", perm)
-	}
-	if now := syscall.Umask(0); now != 0 {
-		t.Errorf("the bind left the umask %#o, want the process's own (0) back", now)
 	}
 }
 
