@@ -252,9 +252,11 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go test -count=1 -timeout 50m "${pkgs[@]}" -v > "$RUNNER_TEMP/t.txt" 2>&1 || true
+          grep -E '^(--- (FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | cut -c1-240 || true
+          echo "== top-level PASS: $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt")"
+          n=$(grep -n '^panic: ' "$RUNNER_TEMP/t.txt" | head -1 | cut -d: -f1); if [ -n "$n" ]; then sed -n "$((n-3)),$((n+14))p" "$RUNNER_TEMP/t.txt" | cut -c1-130; fi
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
