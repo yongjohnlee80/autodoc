@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -41,7 +42,7 @@ func newBoundsFixture(t *testing.T) *boundsFixture {
 	}
 	writeAt(t, filepath.Join(f.root2, "b.md"), "# B\n")
 	writeAt(t, filepath.Join(f.outside, "secret"), "s")
-	f.sock = filepath.Join(dir, "a.sock")
+	f.sock = ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, f.sock, filepath.Join(dir, "state"), "", "kb="+f.root, "kb2="+f.root2), f.sock)
 	f.cli = dial(t, f.sock)
 	eventually(t, "kb indexed", func() bool {
@@ -264,7 +265,7 @@ func TestTheDaemonsOwnPathsAreRefused(t *testing.T) {
 	root := filepath.Join(dir, "kb")
 	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
 	state := filepath.Join(root, "state")
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	made := writeConfig(t, sock, state, "", "kb="+root)
 	body, err := os.ReadFile(made)
 	if err != nil {
@@ -295,7 +296,7 @@ func TestARelativeConfigIsProtectedWhereItIs(t *testing.T) {
 	dir := short(t)
 	root := filepath.Join(dir, "kb")
 	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	made := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
 	body, err := os.ReadFile(made)
 	if err != nil {

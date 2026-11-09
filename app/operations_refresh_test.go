@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/kbtype"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // The daemon this build serves brings a KB's older KB_OPERATIONS.md up to the build's own copy,
@@ -15,7 +16,7 @@ import (
 // version is kept, never downgraded.
 func TestTheDaemonRefreshesAKBsOlderOperationsToItsOwn(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	cfg := writeConfig(t, sock, state, "")
 	start(t, cfg, sock)
 	cli := dial(t, sock)

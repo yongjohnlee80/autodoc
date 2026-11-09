@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/golib/search/rank"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -73,7 +74,7 @@ func rankedDaemon(t *testing.T, r Rank) *golibrpc.Client {
 			t.Fatal(err)
 		}
 	}
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	b := testBuild
 	b.rank = r
 	startAs(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root), sock, b)

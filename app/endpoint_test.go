@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // configSharing writes a config with its own socket and state directory over the store in data.
@@ -38,7 +39,7 @@ func printEndpoint(t *testing.T, cfg string) string {
 // config's own socket, as one line a client parses.
 func TestPrintEndpointNamesTheConfiguredSocket(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	if got := printEndpoint(t, configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))); got != "unix\t"+sock+"\n" {
 		t.Errorf("--print-endpoint = %q", got)
 	}
@@ -50,7 +51,7 @@ func TestPrintEndpointNamesTheConfiguredSocket(t *testing.T) {
 func TestASecondConfigFindsTheStoresDaemon(t *testing.T) {
 	dir := short(t)
 	data := filepath.Join(dir, "data")
-	a, b := filepath.Join(dir, "a.sock"), filepath.Join(dir, "b.sock")
+	a, b := ipc.ScratchAddr(dir, "a.sock"), ipc.ScratchAddr(dir, "b.sock")
 	cfgA := configSharing(t, a, filepath.Join(dir, "state-a"), data)
 	cfgB := configSharing(t, b, filepath.Join(dir, "state-b"), data)
 	start(t, cfgA, a)
@@ -71,7 +72,7 @@ func TestASecondConfigFindsTheStoresDaemon(t *testing.T) {
 func TestALeaseInfoNotBelievedLeavesTheConfiguredSocket(t *testing.T) {
 	dir := short(t)
 	data := filepath.Join(dir, "data")
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfg := configSharing(t, sock, filepath.Join(dir, "state"), data)
 	storePath := filepath.Join(data, "autodoc.db")
 	if err := os.MkdirAll(data, 0o700); err != nil {
@@ -85,8 +86,8 @@ func TestALeaseInfoNotBelievedLeavesTheConfiguredSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, li := range []store.LeaseInfo{
-		{StoreID: id, Addr: filepath.Join(dir, "dead.sock"), Instance: "gone"},
-		{StoreID: "another-store", Addr: filepath.Join(dir, "other.sock"), Instance: "x"},
+		{StoreID: id, Addr: ipc.ScratchAddr(dir, "dead.sock"), Instance: "gone"},
+		{StoreID: "another-store", Addr: ipc.ScratchAddr(dir, "other.sock"), Instance: "x"},
 	} {
 		if err := store.WriteLeaseInfo(storePath, li); err != nil {
 			t.Fatal(err)
@@ -101,14 +102,14 @@ func TestALeaseInfoNotBelievedLeavesTheConfiguredSocket(t *testing.T) {
 // does answer, but for another store, or as another process than the record's, is not believed.
 func TestALiveDaemonOfAnotherStoreIsNotTakenForThisOne(t *testing.T) {
 	dir := short(t)
-	a := filepath.Join(dir, "a.sock")
+	a := ipc.ScratchAddr(dir, "a.sock")
 	start(t, configSharing(t, a, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), a)
 	live, err := store.ReadLeaseInfo(filepath.Join(dir, "data-a", "autodoc.db"))
 	if err != nil {
 		t.Fatalf("the daemon wrote no lease-info: %v", err)
 	}
 	data := filepath.Join(dir, "data-b")
-	sock := filepath.Join(dir, "b.sock")
+	sock := ipc.ScratchAddr(dir, "b.sock")
 	cfg := configSharing(t, sock, filepath.Join(dir, "state-b"), data)
 	storePath := filepath.Join(data, "autodoc.db")
 	if err := os.MkdirAll(data, 0o700); err != nil {
@@ -149,7 +150,7 @@ func TestALiveDaemonOfAnotherStoreIsNotTakenForThisOne(t *testing.T) {
 // takes it for its own: each refuses with the mismatch, so nothing reads or writes the old store.
 func TestAConfigWithAnotherStoreOnTheSameSocketIsRefused(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	start(t, configSharing(t, sock, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), sock)
 	cfgB := configSharing(t, sock, filepath.Join(dir, "state-b"), filepath.Join(dir, "data-b"))
 	var mm *client.StoreMismatchError
@@ -173,7 +174,7 @@ func TestAFreshMachineServes(t *testing.T) {
 	run := short(t)
 	env := []string{"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_STATE_HOME=" + filepath.Join(home, "state"),
 		"XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_RUNTIME_DIR=" + run}
-	sock := filepath.Join(run, "autodoc.sock")
+	sock := ipc.ScratchAddr(run, "autodoc.sock")
 	code, out := runMain(t, env, "--print-endpoint", "--ensure")
 	if code != 0 || out != "unix\t"+sock+"\n" {
 		t.Fatalf("--print-endpoint --ensure: exit %d, %q", code, out)
@@ -198,7 +199,7 @@ func TestModesResolveOnlyTheirPaths(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := filepath.Join(dir, "config.toml")
 	conf := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n", sock, filepath.Join(file, "state"), filepath.Join(dir, "data"))
 	if err := os.WriteFile(cfg, []byte(conf), 0o600); err != nil {

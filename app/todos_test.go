@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -81,7 +82,7 @@ func mustEval(t *testing.T, p string) string {
 func TestTheDaemonRefreshesClaimedTodoStores(t *testing.T) {
 	ctx := context.Background()
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	kb := mustEval(t, t.TempDir())
 	cfg := writeConfig(t, sock, state, "", "kb="+kb)
 	// the store claimed and scaffolded before the daemon starts, through the same todo system: its
@@ -137,7 +138,7 @@ func TestTheDaemonRefreshesClaimedTodoStores(t *testing.T) {
 // (docs/decisions/todos.md#a-store-is-claimed-by-its-first-write).
 func TestAFreshWorkspacesStoreReadsEmpty(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	kb, other := mustEval(t, t.TempDir()), mustEval(t, t.TempDir())
 	cfg := writeConfig(t, sock, state, "", "kb="+kb)
 	start(t, cfg, sock)
@@ -190,7 +191,7 @@ func asSlice(v any) []any { s, _ := v.([]any); return s }
 // the store still has the KB schema's.
 func TestATaskIsCheckedByTheTodoFormatNotTheKBSchema(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	kb := mustEval(t, t.TempDir())
 	schemaSrc := "version: 1\nfrontmatter:\n  type: {type: string, enum: [note], required: true}\n"
 	if err := os.WriteFile(filepath.Join(kb, "schema.yaml"), []byte(schemaSrc), 0o644); err != nil {
