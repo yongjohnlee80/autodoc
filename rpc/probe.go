@@ -38,7 +38,7 @@ type ProbeInfo struct {
 // admits nothing), and returns what any AutoDoc answers, whatever its protocol: the caller decides
 // whether it will do. A dial error is returned as it is: nothing answers there.
 func Probe(ctx context.Context, network, addr string) (ProbeInfo, error) {
-	conn, err := ipc.Dial(ctx, network, addr)
+	conn, err := ipc.RPCDialer(ctx, network, addr)
 	if err != nil {
 		return ProbeInfo{}, err
 	}

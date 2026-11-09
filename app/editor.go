@@ -37,7 +37,7 @@ func runEditor(ctx context.Context, verb, params string, env func(string) string
 	if err != nil {
 		return err
 	}
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		return fmt.Errorf("--editor: the editor at %s does not answer: %w", sock, err)
 	}

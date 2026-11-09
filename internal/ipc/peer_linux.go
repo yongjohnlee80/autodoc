@@ -24,8 +24,8 @@ func peerCred(c *net.UnixConn) (*unix.Ucred, error) {
 	return cred, cerr
 }
 
-// peerUID is the user the peer of c ran as when it connected.
-func peerUID(c *net.UnixConn) (int, error) {
+// unixPeerUID is the user the peer of c ran as when it connected.
+func unixPeerUID(c *net.UnixConn) (int, error) {
 	cred, err := peerCred(c)
 	if err != nil {
 		return 0, err
@@ -33,8 +33,8 @@ func peerUID(c *net.UnixConn) (int, error) {
 	return int(cred.Uid), nil
 }
 
-// peerPID is the process at the other end of c when it connected.
-func peerPID(c *net.UnixConn) (int, error) {
+// unixPeerPID is the process at the other end of c when it connected.
+func unixPeerPID(c *net.UnixConn) (int, error) {
 	cred, err := peerCred(c)
 	if err != nil {
 		return 0, err

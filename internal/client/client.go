@@ -361,7 +361,7 @@ func (s *Session) mismatch(ctx context.Context) error {
 // dial connects to the daemon's socket, refusing one another user's process listens on
 // (ipc.ErrOtherUser): every connection of the session's is dialled here.
 func (s *Session) dial(ctx context.Context) (*golibrpc.Client, error) {
-	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
+	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 }
 
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {

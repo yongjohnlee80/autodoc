@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
@@ -68,7 +69,7 @@ func WithGuard(g *fsbounds.Guard) Option { return func(o *options) { o.guard = g
 func (s *Server) local(method string, lo, hi int, h func(context.Context, Workspace, []any) (any, error)) golibrpc.Handler {
 	inner := s.verb(lo, hi, h, false)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
-		if req.Peer == nil || req.Peer.Network() != "unix" {
+		if !ipc.IsLocal(req.Peer) {
 			return nil, &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: method + " is for local peers"}
 		}
 		return inner(ctx, req)
