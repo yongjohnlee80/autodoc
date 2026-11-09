@@ -398,7 +398,9 @@ func unwatched(r *running) {
 // TestAWatchLeavesNoHandleBehind: a folder's watch started and ended over and over leaves no file
 // descriptor behind: each run closes its driver's handle on the folder.
 func TestAWatchLeavesNoHandleBehind(t *testing.T) {
-	t.Parallel()
+	// Serial: it counts the whole process's file descriptors (/proc/self/fd), which every test
+	// running beside it moves. A watch's descriptors (its folder, its inotify, its pipe pair) can't
+	// all be told apart from another test's, so the count is the process's, taken alone.
 	if _, err := os.ReadDir("/proc/self/fd"); err != nil {
 		t.Skipf("no /proc/self/fd: %v", err)
 	}
