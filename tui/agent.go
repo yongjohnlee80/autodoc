@@ -693,7 +693,7 @@ func agentBase(env procenv.Env, dir string) string {
 // safeName is a workspace's name as a folder's.
 func safeName(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == 0 {
+		if r == '/' || r == '\\' || r == ':' || r == 0 { // scratch stand-in for the names function
 			return '_'
 		}
 		return r
