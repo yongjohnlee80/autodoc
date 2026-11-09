@@ -121,7 +121,7 @@ func TestCoreSetPrefFilesAndListings(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
-	if wrap := onLoop(r, func() bool { core{r.h}.SetPref(prefWrap, "false"); return core{r.h}.Prefs().wrap }); wrap {
+	if wrap := onLoop(r, func() bool { core{r.h}.SetPref(prefWrap, "false"); return core{r.h}.Prefs().Value(prefWrap) == "true" }); wrap {
 		t.Error("SetPref did not reach the live prefs")
 	}
 	// the chooser follows: the Settings dialog's wrap row is "false", the second of its choices
@@ -171,8 +171,8 @@ func TestSetPrefGoesThroughTheRowAlone(t *testing.T) {
 	r.waitAttached(t, "kb")
 	changed, stated := 0, ""
 	row := ValuePref("test.feature.mode", "a", nil)
-	row.State = func(p prefs) map[string]any { stated = p.Value("test.feature.mode"); return map[string]any{} }
-	row.Changed = func(prefs) { changed++ }
+	row.State = func(p PrefsView) map[string]any { stated = p.Value("test.feature.mode"); return map[string]any{} }
+	row.Changed = func(PrefsView) { changed++ }
 	onLoop(r, func() bool {
 		r.h.prefRows = append(r.h.prefRows, row)
 		core{r.h}.SetPref("test.feature.mode", "b")

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"io/fs"
 	"regexp"
 	"slices"
 	"strconv"
@@ -740,21 +739,8 @@ func identifier(s string, upper bool) bool {
 }
 
 // mainIDs are the ids main.qml declares outside its generated cards: a card may take none of them.
-var mainIDs = func() map[string]bool {
-	src, err := fs.ReadFile(qmlFiles, "main.qml")
-	if err != nil {
-		panic("tui: embedded main.qml: " + err.Error())
-	}
-	s := string(src)
-	if a, b := strings.Index(s, cardsBegin), strings.Index(s, cardsEnd); a >= 0 && b > a {
-		s = s[:a] + s[b:]
-	}
-	ids := map[string]bool{}
-	for _, m := range regexp.MustCompile(`\bid:\s*([A-Za-z_][A-Za-z0-9_]*)`).FindAllStringSubmatch(s, -1) {
-		ids[m[1]] = true
-	}
-	return ids
-}()
+// The host reads them from its embedded main.qml as the package starts (featurehost.go).
+var mainIDs map[string]bool
 
 // placeName is how a refusal names where a key is answered.
 func placeName(card string) string {

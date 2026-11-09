@@ -148,7 +148,7 @@ func TestTheRegistryRefusesAPaneFindCannotRoute(t *testing.T) {
 		{"a name twice", []Feature{pane("a", "birds", "aList"), pane("b", "birds", "bList")}, "the find pane birds is both a's and b's"},
 		{"a view twice", []Feature{pane("a", "birds", "aList"), pane("b", "fish", "aList")}, "the find view aList is both a's and b's"},
 		{"none of its panels' views", []Feature{&findablePanelFake{findableFake: *pane("a", "birds", "aList"),
-			spec: PanelSpec{ID: "aPanel", View: "aPanelView", Edge: func(prefs) string { return "left" }}}}, "a finds in aList, which is none of its panels' views"},
+			spec: PanelSpec{ID: "aPanel", View: "aPanelView", Edge: func(PrefsView) string { return "left" }}}}, "a finds in aList, which is none of its panels' views"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := newRegistry(c.fs...)
@@ -159,7 +159,7 @@ func TestTheRegistryRefusesAPaneFindCannotRoute(t *testing.T) {
 	}
 	// a panel feature finding in its own panel's view, and two distinct panes, are taken in order
 	r, err := newRegistry(pane("a", "birds", "aList"), &findablePanelFake{findableFake: *pane("b", "fish", "bView"),
-		spec: PanelSpec{ID: "bPanel", View: "bView", Edge: func(prefs) string { return "left" }}})
+		spec: PanelSpec{ID: "bPanel", View: "bView", Edge: func(PrefsView) string { return "left" }}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,8 +7,8 @@ package tui
 
 // vimQuestionPending is the question's condition, read in one place: a true first run, with no
 // keymap and no agent setup ever stored, and no agent profile.
-func vimQuestionPending(s *seams, p prefs) bool {
-	return s.offerVimQuestion && !p.keymapChosen && p.Value(prefAgentSetup) == "" &&
+func vimQuestionPending(s *seams, p PrefsView) bool {
+	return s.offerVimQuestion && !asPrefs(p).keymapChosen && p.Value(prefAgentSetup) == "" &&
 		len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
 }
 

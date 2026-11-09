@@ -91,7 +91,7 @@ func newPlugins(c pluginHost, s *seams, opt Plugins) *plugins {
 func (*plugins) Name() string { return "plugins" }
 
 func (pl *plugins) State() map[string]any {
-	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
+	size, length := pl.c.Prefs().PanelGeometry(resultsPanel, "bottom")
 	st := map[string]any{
 		"App.plugins":            pl.pluginRows,
 		"App.pluginChooserTitle": "SPC p — plugins",
@@ -213,7 +213,7 @@ func (pl *plugins) Panels() []PanelSpec {
 // until the user sizes it, its size kept as every panel's is (panelsize.go).
 func resultsPanelSpec() PanelSpec {
 	return PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70, Icon: "⌗",
-		Edge: func(prefs) string { return "bottom" }, Places: []string{"bottom"},
+		Edge: func(PrefsView) string { return "bottom" }, Places: []string{"bottom"},
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
@@ -242,7 +242,7 @@ func (pl *plugins) repaintCards() {
 func (pl *plugins) PreferencesChanged() {
 	pl.repaintCards()
 	pl.refreshPlugins()
-	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
+	size, length := pl.c.Prefs().PanelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
 	pl.c.Set("App.resultsLength", length)
 	pl.syncCards()

@@ -129,19 +129,19 @@ func agentPrefRows(a *agents) []PrefSpec {
 	identity := ValuePref(prefAgentDefaultCodename, "", nil)
 	setup := ValuePref(prefAgentSetup, "", nil) // the setup's answer (agentsetup.go)
 	if a != nil {
-		edge = edge.then(func(prefs) { a.c.DockPanel("agent") })
-		profiles = profiles.then(func(prefs) { a.listAgents() })
-		def = def.then(func(prefs) { a.listAgents() })
-		identity = identity.then(func(prefs) { a.listAgents() })
+		edge = edge.then(func(PrefsView) { a.c.DockPanel("agent") })
+		profiles = profiles.then(func(PrefsView) { a.listAgents() })
+		def = def.then(func(PrefsView) { a.listAgents() })
+		identity = identity.then(func(PrefsView) { a.listAgents() })
 	}
 	return []PrefSpec{edge, profiles, def, identity, setup}
 }
 
-func agentPreferenceState(p prefs) map[string]any {
+func agentPreferenceState(p PrefsView) map[string]any {
 	st := agentState(p)
-	size, length := p.panelGeometry("agent", p.agentEdge)
+	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	maps.Copy(st, map[string]any{
-		"App.agentEdgeIndex":   indexOf(agentEdges, p.agentEdge),
+		"App.agentEdgeIndex":   indexOf(agentEdges, p.Value(prefAgentEdge)),
 		"App.agentSizeIndex":   nearest(termSizes, size),
 		"App.agentLengthIndex": nearest(termLengths, length),
 	})
@@ -825,6 +825,6 @@ const editorGuide = "## The page the user is writing\n\n" +
 
 func agentPanelSpec() PanelSpec {
 	return PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
-		Edge: func(p prefs) string { return p.agentEdge }, Places: slices.Clone(agentEdges),
+		Edge: func(p PrefsView) string { return p.Value(prefAgentEdge) }, Places: slices.Clone(agentEdges),
 		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
 }

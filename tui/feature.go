@@ -355,7 +355,7 @@ type Core interface {
 	// Workspace is the workspace in use; "" before one is entered.
 	Workspace() string
 	// Prefs are the preferences in effect.
-	Prefs() prefs
+	Prefs() PrefsView
 	// OpenFile opens a file by its absolute path in the editor, asking first over unsaved changes.
 	OpenFile(abs string)
 	// Failed tells what failed and why, in the words a daemon error carries.

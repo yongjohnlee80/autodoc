@@ -7,9 +7,14 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"regexp"
 	"runtime/debug"
+	"strings"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/i18n"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
@@ -115,7 +120,7 @@ func (c core) AskWhenFree(q Question) { c.h.asker.askWhenFree(q) }
 
 func (c core) Workspace() string { return c.h.ws }
 
-func (c core) Prefs() prefs { return c.h.prefs }
+func (c core) Prefs() PrefsView { return c.h.prefs }
 
 func (c core) OpenFile(abs string) { c.h.openAbsolute(abs) }
 
@@ -158,9 +163,14 @@ func (c core) Files() FileList { return c.h.files }
 func (c core) Workspaces() []Workspace {
 	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {
-		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens})
+		list = append(list, workspaceOf(w))
 	}
 	return list
+}
+
+// workspaceOf is w as a feature reads it (Workspace).
+func workspaceOf(w wsInfo) Workspace {
+	return Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens}
 }
 
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
@@ -245,7 +255,11 @@ func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 	c.h.keepPanelGeo(id, dimension, percent)
 }
 
-func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
+func (c core) ActiveWorkspace() (Workspace, bool) {
+	w, ok := c.h.activeWorkspaceInfo()
+	return workspaceOf(w), ok
+}
+func (c core) ActiveWorkspaceInfo() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
 
 func (c core) SetFormText(name, value string) { c.h.setField(name, value) }
 
@@ -301,4 +315,37 @@ func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 		}
 		h.p.Post(func() { then(v) })
 	}()
+}
+
+// The kit's values that come from the host's embedded files, set once as the package starts.
+func init() {
+	mainIDs = mainQMLIDs()
+	menuMessage = englishMenuMessage
+}
+
+// mainQMLIDs are the ids the embedded main.qml declares outside its generated cards (mainIDs).
+func mainQMLIDs() map[string]bool {
+	src, err := fs.ReadFile(qmlFiles, "main.qml")
+	if err != nil {
+		panic("tui: embedded main.qml: " + err.Error())
+	}
+	s := string(src)
+	if a, b := strings.Index(s, cardsBegin), strings.Index(s, cardsEnd); a >= 0 && b > a {
+		s = s[:a] + s[b:]
+	}
+	ids := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\bid:\s*([A-Za-z_][A-Za-z0-9_]*)`).FindAllStringSubmatch(s, -1) {
+		ids[m[1]] = true
+	}
+	return ids
+}
+
+// englishMenuMessage is the catalog's message for a menu row's English label, when it has one
+// (menuMessage).
+func englishMenuMessage(label string) (tuicore.Message, bool) {
+	id := menuLabelID(label)
+	if t, ok := englishCatalog().Lookup(i18n.English, id); ok && t == label {
+		return tuicore.Msg(id), true
+	}
+	return tuicore.Message{}, false
 }

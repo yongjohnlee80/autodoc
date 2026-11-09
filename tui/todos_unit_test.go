@@ -71,7 +71,7 @@ func (s *scriptedCore) Ask(q Question) Asked {
 // yes answers the latest question Yes.
 func (s *scriptedCore) yes()                       { s.asked[len(s.asked)-1].OnYes() }
 func (s *scriptedCore) Workspace() string          { return s.ws }
-func (s *scriptedCore) Prefs() prefs               { return prefs{} }
+func (s *scriptedCore) Prefs() PrefsView           { return prefs{} }
 func (s *scriptedCore) OpenFile(abs string)        { s.files = append(s.files, abs) }
 func (s *scriptedCore) OpenRef(ws, path string)    { s.files = append(s.files, ws+":"+path) }
 func (s *scriptedCore) OpenAbsolute(abs string)    { s.files = append(s.files, ":"+abs) }

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -34,8 +32,8 @@ import (
 // words. So a log never holds the page's text, what was typed, a preference or the environment.
 
 const (
-	crashKeep       = 20  // crash logs kept; the oldest go as a new one is written
-	crashMessageMax = 500 // characters of a panic's message a log and a notice keep
+	crashKeep       = 20           // crash logs kept; the oldest go as a new one is written
+	crashMessageMax = panicTextMax // characters of a panic's message a log and a notice keep (work.go)
 	lastFatalFile   = "last-fatal"
 )
 
@@ -71,19 +69,6 @@ type crashReport struct {
 	value       any
 	stack       []byte
 	fatal       bool
-}
-
-// panicText is what a log or a notice says of a panic's value: the runtime's own message (cut to
-// crashMessageMax characters), or only its type, its message withheld (crash.go's top).
-func panicText(v any) string {
-	if re, ok := v.(runtime.Error); ok && runtimeAuthored(v) {
-		s := re.Error()
-		if r := []rune(s); len(r) > crashMessageMax {
-			s = string(r[:crashMessageMax]) + "…"
-		}
-		return s
-	}
-	return fmt.Sprintf("a %T (its message withheld: it may hold the page's text or what was typed)", v)
 }
 
 // writeCrash writes r as a new crash log in the crash folder, keeping the newest crashKeep, and is
@@ -185,18 +170,6 @@ func (h *Host) keepRecoverySafely() (err error) {
 	return h.keepRecovery()
 }
 
-// runtimeAuthored is whether the Go runtime itself raised v: its type is declared in package runtime
-// (an index out of range, a nil dereference, a failed type assertion). runtime.Error alone is an
-// open interface any type can implement, carrying whatever text it likes; no other package can
-// declare a type in runtime.
-func runtimeAuthored(v any) bool {
-	t := reflect.TypeOf(v)
-	for t != nil && t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t != nil && t.PkgPath() == "runtime"
-}
-
 // backgroundPanicked is a background job's panic, on the loop: logged, and its caller handed the
 // failure (failed), so whatever waits on the answer ends as on any failure.
 func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
@@ -207,12 +180,4 @@ func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 		return
 	}
 	h.notify(h.trf("autodoc.notice.crash.a_background_job_failed", err.Error()))
-}
-
-func (e errPanicked) Error() string {
-	s := "it panicked: " + panicText(e.value)
-	if e.path != "" {
-		s += " — details in " + e.path
-	}
-	return s
 }

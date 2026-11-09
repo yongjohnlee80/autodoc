@@ -22,7 +22,6 @@ const (
 	prefGUITheme   = "gui.theme"
 	prefMenuHide   = "tui.menu.autohide"
 	prefStatus     = "tui.status.shown"
-	prefExplorer   = "tui.explorer.edge" // the explorer's, with its Links tab (migrateLinksPanel)
 	prefTodosEdge  = "tui.todos.edge"
 	prefRuler      = "tui.ruler"
 	prefKeymap     = "tui.editor.keymap"
@@ -148,6 +147,48 @@ type prefs struct {
 	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value
 	values map[string]string
+	// rows are the declared rows by name, so Value reads any of them; nil before the store is read
+	rows map[string]PrefSpec
+}
+
+// Value is the preference name as stored: a row's value (a typed row's from its field), or a
+// feature's own (ValuePref); "" for a name no row declares. PrefsView's.
+func (p prefs) Value(name string) string {
+	if s, ok := p.rows[name]; ok && !s.byName && s.value != nil {
+		return s.value(p)
+	}
+	return p.values[name]
+}
+
+// PanelGeometry is a panel's size and length at an edge (panelGeometry). PrefsView's.
+func (p prefs) PanelGeometry(id, edge string) (size, length int) { return p.panelGeometry(id, edge) }
+
+// SetValue keeps a feature's own preference (ValuePref). PrefsWriter's. A prefs is a value: its copies never
+// share a change.
+func (p *prefs) SetValue(name, v string) {
+	p.values = maps.Clone(p.values)
+	if p.values == nil {
+		p.values = map[string]string{}
+	}
+	p.values[name] = v
+}
+
+// keepRows lets Value read every one of rows by its name.
+func (p *prefs) keepRows(rows ...[]PrefSpec) {
+	p.rows = map[string]PrefSpec{}
+	for _, rs := range rows {
+		for _, s := range rs {
+			p.rows[s.Name] = s
+		}
+	}
+}
+
+// asPrefs is the host's preferences a row's closure was given (a prefs, or the *prefs being read).
+func asPrefs(v PrefsView) prefs {
+	if p, ok := v.(*prefs); ok {
+		return *p
+	}
+	return v.(prefs)
 }
 
 func defaultPrefs() prefs { return defaultPrefsFor(false) }
@@ -159,6 +200,7 @@ func defaultPrefsFor(gui bool) prefs {
 	readRows(&p, nil, legacyPrefRows(nil, gui))
 	readRows(&p, nil, terminalPrefRows(nil))
 	readRows(&p, nil, agentPrefRows(nil))
+	p.keepRows(legacyPrefRows(nil, gui), terminalPrefRows(nil), agentPrefRows(nil))
 	return p
 }
 
@@ -188,53 +230,70 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		themeRow,
 		choicePref(prefLanguage, "en", languages, func(p *prefs) *string { return &p.language }).
 			chooser("App.languageIndex", "App.setLanguageIndex").
-			shows(func(p prefs) map[string]any { return languageChecks(p.language) }),
+			shows(func(v PrefsView) map[string]any { p := asPrefs(v); return languageChecks(p.language) }),
 		// the menu bar and the status line show for a new user (v0.3.3); a stored choice wins
 		boolPref(prefMenuHide, false, func(p *prefs) *bool { return &p.menuHidden }).
 			chooser("App.menuHiddenIndex", "App.setMenuHiddenIndex").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)} }).
-			then(func(p prefs) { h.saidMenuBar(p.menuHidden) }),
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
+				return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)}
+			}).
+			then(func(v PrefsView) { p := asPrefs(v); h.saidMenuBar(p.menuHidden) }),
 		boolPref(prefStatus, true, func(p *prefs) *bool { return &p.statusOn }).
 			chooser("App.statusShownIndex", "App.setStatusShownIndex"),
 		choicePref(prefExplorer, "left", edges, func(p *prefs) *string { return &p.explorerEdge }).
 			chooser("App.explorerEdgeIndex", "App.setExplorerEdge").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.explorerEdge": p.explorerEdge} }).
-			then(func(prefs) { h.dockPanel("explorer") }), // a new edge is seen at once
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
+				return map[string]any{"App.explorerEdge": p.explorerEdge}
+			}).
+			then(func(PrefsView) { h.dockPanel("explorer") }), // a new edge is seen at once
 		choicePref(prefTodosEdge, "left", edges, func(p *prefs) *string { return &p.todosEdge }).
 			chooser("App.todosEdgeIndex", "App.setTodosEdge").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.todosEdge": p.todosEdge} }).
-			then(func(prefs) { h.dockPanel(todosPanelSpec().ID) }),
+			shows(func(v PrefsView) map[string]any { p := asPrefs(v); return map[string]any{"App.todosEdge": p.todosEdge} }).
+			then(func(PrefsView) { h.dockPanel(todosPanelSpec().ID) }),
 		choicePref(prefKeymap, "vim", keymaps, func(p *prefs) *string { return &p.keymap }).
 			chooser("App.keymapIndex", "App.setKeymapIndex").
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				return map[string]any{"App.keyset": keysetOf[p.keymap], "App.keymapVim": p.keymap == "vim", "App.keymapText": p.keymap == "text"}
 			}).
-			then(func(p prefs) {
+			then(func(v PrefsView) {
+				p := asPrefs(v)
 				h.say(h.trf("autodoc.notice.prefs.editor_mode", keymapLabels[indexOf(keymaps, p.keymap)]))
 			}),
 		choicePref(prefRenderer, RendererAuto, renderers, func(p *prefs) *string { return &p.renderer }).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				h.mirrorRenderer(p.renderer) // the next start's window reads it before the store is read
 				return map[string]any{"App.rendererAuto": p.renderer == RendererAuto, "App.rendererOpenGL": p.renderer == RendererOpenGL}
 			}),
 		boolPref(prefWrap, true, func(p *prefs) *bool { return &p.wrap }).
 			chooser("App.wrapIndex", "App.setWrapIndex").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.editorWrap": p.wrap} }),
+			shows(func(v PrefsView) map[string]any { p := asPrefs(v); return map[string]any{"App.editorWrap": p.wrap} }),
 		boolPref(prefNumbers, false, func(p *prefs) *bool { return &p.lineNumbers }).
 			chooser("App.lineNumbersIndex", "App.setLineNumbersIndex").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.lineNumbers": p.lineNumbers} }),
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
+				return map[string]any{"App.lineNumbers": p.lineNumbers}
+			}),
 		choicePref(prefIndent, "off", indentMarks, func(p *prefs) *string { return &p.indentMarks }).
 			chooser("App.indentMarksIndex", "App.setIndentMarksIndex").
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				// View › Indentation marks' radio set too
 				return map[string]any{"App.indentMarks": p.indentMarks, "App.indentMarksOff": p.indentMarks == "off",
 					"App.indentMarksCursorLine": p.indentMarks == "cursorLine", "App.indentMarksAll": p.indentMarks == "all"}
 			}),
 		boolPref(prefImages, true, func(p *prefs) *bool { return &p.images }).
 			chooser("App.imagesIndex", "App.setImagesIndex").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.imagePreviews": p.images} }),
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
+				return map[string]any{"App.imagePreviews": p.images}
+			}),
 		choicePref(prefMermaid, "mermaidjs", mermaidEngines, func(p *prefs) *string { return &p.mermaid }).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				// File › Preview option's radio set
 				return map[string]any{"App.mermaidNative": p.mermaid == "native", "App.mermaidJS": p.mermaid != "native"}
 			}),
@@ -254,14 +313,12 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		// (vim's colorcolumn at textwidth+1); the editor's guide marks that column too, so a line
 		// scrolled past the page's edge still shows where it is
 		intPref(prefRuler, defaultRuler, minRuler, maxRuler, func(p *prefs) *int { return &p.ruler }).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				return map[string]any{"App.rulerColumn": p.ruler + 1, "App.rulerText": strconv.Itoa(p.ruler)}
 			}),
 	}
 }
-
-// edges are the four a panel opens from, in the order the Preferences dialog offers them.
-var edges = []string{"left", "right", "top", "bottom"}
 
 // prefsOf reads the store's preferences over the defaults; a value the TUI cannot use is the
 // default's.
@@ -347,6 +404,7 @@ func (h *Host) loadPrefs() {
 		values = migrateLinksPanel(values) // readRows reads the explorer's edge from it too
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
+		p.keepRows(h.prefRows)
 		h.applyPrefs(p)
 		h.startOnce()
 		h.luaPrefsRead = true
@@ -703,4 +761,29 @@ func (h *Host) choosePrefNamed(name string, i int) {
 			return
 		}
 	}
+}
+
+// boolPref is a yes-or-no preference kept as "true" or "false", yes first in its chooser.
+func boolPref(name string, def bool, field func(*prefs) *bool) PrefSpec {
+	return BoundPref(name, []string{"true", "false"}, PrefBinding{
+		Read:  func(p PrefsWriter, v string) { *field(p.(*prefs)) = v == "true" },
+		Value: func(v PrefsView) string { p := asPrefs(v); return strconv.FormatBool(*field(&p)) },
+		Reset: func(p PrefsWriter) { *field(p.(*prefs)) = def }})
+}
+
+// choicePref is one of a list of names.
+func choicePref(name, def string, choices []string, field func(*prefs) *string) PrefSpec {
+	return BoundPref(name, choices, PrefBinding{
+		Read:  func(p PrefsWriter, v string) { *field(p.(*prefs)) = v },
+		Value: func(v PrefsView) string { p := asPrefs(v); return *field(&p) },
+		Reset: func(p PrefsWriter) { *field(p.(*prefs)) = def }})
+}
+
+// intPref is a whole number from lo to hi. Its chooser, when it has one, offers each of them.
+func intPref(name string, def, lo, hi int, field func(*prefs) *int) PrefSpec {
+	return BoundPref(name, nil, PrefBinding{
+		Valid: func(v string) bool { n, err := strconv.Atoi(v); return err == nil && n >= lo && n <= hi },
+		Read:  func(p PrefsWriter, v string) { *field(p.(*prefs)), _ = strconv.Atoi(v) },
+		Value: func(v PrefsView) string { p := asPrefs(v); return strconv.Itoa(*field(&p)) },
+		Reset: func(p PrefsWriter) { *field(p.(*prefs)) = def }})
 }

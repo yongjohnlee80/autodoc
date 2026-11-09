@@ -63,7 +63,7 @@ var defaultLook = newGlobeLook(prefs{}, defaultPalette())
 
 // newGlobeLook is the look of preferences p over the theme's palette pal. A colour or a choice
 // that does not read is the default's.
-func newGlobeLook(p prefs, pal relPalette) *globeLook {
+func newGlobeLook(p PrefsView, pal relPalette) *globeLook {
 	l := &globeLook{pal: pal, names: p.Value(prefGlobeNames) != "false", dot: 1, steps: 2}
 	for _, d := range globeDotSizes {
 		if d.name == p.Value(prefGlobeDots) {
@@ -111,13 +111,13 @@ type globeThemeSource interface {
 
 // globeThemeValues are the values of the theme the GlobeMap is drawn in for p: the terminals' by
 // default (viewThemeValues).
-func globeThemeValues(p prefs, ts globeThemeSource) (map[string]string, bool) {
+func globeThemeValues(p PrefsView, ts globeThemeSource) (map[string]string, bool) {
 	return viewThemeValues(cmp.Or(p.Value(prefGlobeTheme), "terminal"), p, ts)
 }
 
 // viewThemeValues are the values of the theme a view chose: the terminals' (terminalThemeValues),
 // the page's, or one named; one that can't be read is the page's.
-func viewThemeValues(choice string, p prefs, ts globeThemeSource) (map[string]string, bool) {
+func viewThemeValues(choice string, p PrefsView, ts globeThemeSource) (map[string]string, bool) {
 	page := ts.Theme()
 	name := choice
 	switch name {
@@ -197,16 +197,16 @@ func (g *globeMap) Prefs() []PrefSpec {
 		}
 		return out
 	}
-	text := func(source, name string) func(prefs) map[string]any {
-		return func(p prefs) map[string]any { return map[string]any{source: p.Value(name)} }
+	text := func(source, name string) func(PrefsView) map[string]any {
+		return func(p PrefsView) map[string]any { return map[string]any{source: p.Value(name)} }
 	}
 	rows := []PrefSpec{
-		ValuePref(prefGlobeTheme, "terminal", nil).shows(func(p prefs) map[string]any {
+		ValuePref(prefGlobeTheme, "terminal", nil).shows(func(p PrefsView) map[string]any {
 			return map[string]any{"App.globeThemeIndex": max(slices.Index(names, p.Value(prefGlobeTheme)), 0)}
 		}),
 		ValuePref(prefGlobeNames, "true", []string{"true", "false"}).chooser("App.globeNamesIndex", "App.setGlobeNames"),
 		ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).
-			chooser("App.globeFilterIndex", "App.setGlobeFilter").then(func(prefs) { g.filterChosen() }),
+			chooser("App.globeFilterIndex", "App.setGlobeFilter").then(func(PrefsView) { g.filterChosen() }),
 		ValuePref(prefGlobeDots, "medium", keys(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name })).
 			chooser("App.globeDotsIndex", "App.setGlobeDots"),
 		ValuePref(prefGlobeSpeed, "gentle", keys(len(globeSpeeds), func(i int) string { return globeSpeeds[i].name })).

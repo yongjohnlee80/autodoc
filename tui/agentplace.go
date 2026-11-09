@@ -25,10 +25,10 @@ func agentDefault(edge string) (size, length int) {
 }
 
 // agentState is what the document reads of where the agent opens.
-func agentState(p prefs) map[string]any {
-	size, length := p.panelGeometry("agent", p.agentEdge)
+func agentState(p PrefsView) map[string]any {
+	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	return map[string]any{
-		"App.agentEdge":   p.agentEdge,
+		"App.agentEdge":   p.Value(prefAgentEdge),
 		"App.agentSize":   size,
 		"App.agentLength": length,
 	}
@@ -37,8 +37,8 @@ func agentState(p prefs) map[string]any {
 // syncAgentDialog sets the Preferences dialog's agent choosers.
 func (h *agents) syncAgentDialog() {
 	p := h.c.Prefs()
-	size, length := p.panelGeometry("agent", p.agentEdge)
-	h.c.Set("App.agentEdgeIndex", indexOf(agentEdges, p.agentEdge))
+	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
+	h.c.Set("App.agentEdgeIndex", indexOf(agentEdges, p.Value(prefAgentEdge)))
 	h.c.Set("App.agentSizeIndex", nearest(termSizes, size))
 	h.c.Set("App.agentLengthIndex", nearest(termLengths, length))
 }
