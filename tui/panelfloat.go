@@ -166,7 +166,7 @@ func (h *Host) resumePanel() {
 		h.notify(h.tr("autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty"))
 		return
 	}
-	if err := (terminalPanel{tabs: tabs}).Resume(tabs.Active()); err != nil {
+	if err := newTerminalPanel(tabs, resumeTab).Resume(tabs.Active()); err != nil {
 		h.keep(fmt.Errorf("Resume the %s panel's tab: %w", target, err))
 	}
 }

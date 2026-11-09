@@ -18,9 +18,9 @@ import (
 // name two features both claim (golib would let the later one win without a word). Today's host is
 // one feature, legacy (featurehost.go); features move out of it one at a time.
 
-// hostOwn is the host's own part of the program (featurehost.go's legacy), which the catalog lists
-// as built in, until each of its parts moves into a feature.
-type hostOwn interface{ hostOwn() }
+// HostOwned marks the host's own part of the program (the host's legacy feature), which the
+// catalog lists as built in, until each of its parts moves into a feature.
+type HostOwned interface{ HostOwned() }
 
 // Feature is one part of the program.
 type Feature interface {
@@ -122,7 +122,7 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 			continue
 		}
 		src := SourceFeature
-		if _, ok := f.(hostOwn); ok {
+		if _, ok := f.(HostOwned); ok {
 			src = SourceBuiltin // the host's own, until each moves into a feature
 		}
 		for _, e := range c.Catalog() {
@@ -524,3 +524,89 @@ type PeerAgent struct {
 
 // fileRef is a document opened: its workspace ("" outside every one) and its path.
 type fileRef struct{ ws, path string }
+
+// More optional parts of a Feature.
+type (
+	// Lister hears that the workspace's files or the daemon's workspaces were listed again; it
+	// reads Core.Files and Core.Workspaces for them.
+	Lister interface{ Listed() }
+	// DocWatcher hears the page's lifecycle, on the loop, in this order: Closed (when a page was
+	// shown), then Shown; Edited, Moved and Reread only between a Shown and the next Closed.
+	DocWatcher interface {
+		Shown(Page)         // a file read and shown, or the draft started
+		Edited(Page)        // the text after a typing pause
+		Moved(line, at int) // the cursor moved, edit or not: its line (0-based) and byte offset
+		Reread(Page)        // the same text read as another kind (the build's registrations came)
+		Closed()            // the page shown is going: another is about to be shown
+	}
+)
+
+// listed tells the features that hear listings.
+func (r *registry) listed() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if l, ok := f.(Lister); ok {
+			l.Listed()
+		}
+	}
+}
+
+// watchers are the features that hear the page.
+func (r *registry) watchers() []DocWatcher {
+	if r == nil {
+		return nil
+	}
+	var out []DocWatcher
+	for _, f := range r.features {
+		if w, ok := f.(DocWatcher); ok {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// shown tells the watchers a page is shown, the one before it closed first.
+func (r *registry) shown(p Page) {
+	if r == nil {
+		return
+	}
+	if r.pageShown {
+		for _, w := range r.watchers() {
+			w.Closed()
+		}
+	}
+	r.pageShown = true
+	for _, w := range r.watchers() {
+		w.Shown(p)
+	}
+}
+
+// edited, moved and reread tell the watchers, while a page is shown.
+func (r *registry) edited(p Page) {
+	if r == nil || !r.pageShown {
+		return
+	}
+	for _, w := range r.watchers() {
+		w.Edited(p)
+	}
+}
+
+func (r *registry) moved(line, at int) {
+	if r == nil || !r.pageShown {
+		return
+	}
+	for _, w := range r.watchers() {
+		w.Moved(line, at)
+	}
+}
+
+func (r *registry) reread(p Page) {
+	if r == nil || !r.pageShown {
+		return
+	}
+	for _, w := range r.watchers() {
+		w.Reread(p)
+	}
+}

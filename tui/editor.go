@@ -67,7 +67,7 @@ func (h *Host) editorMenu(c *editor.EditorCore) []widgetcore.MenuItemModel {
 		items = append(items, widgetcore.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
 	}
 	s := h.luaFeature()
-	return append(items, s.rows.editorItems(s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)
+	return append(items, editorMenuItems(&s.rows, s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)
 }
 
 // menuCtxOf is the open file's context for the right-click menu opening on c.
