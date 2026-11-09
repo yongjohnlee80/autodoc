@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"testing"
 )
@@ -26,7 +27,7 @@ func TestAPreferencesViewIsASnapshot(t *testing.T) {
 	}
 
 	p := defaultPrefs()
-	for name, want := range map[string]string{prefTermEdge: "bottom", prefExplorer: "left", prefWrap: "true", prefTermTheme: "page"} {
+	for name, want := range map[string]string{prefTermEdge: "bottom", feature.PrefExplorer: "left", prefWrap: "true", prefTermTheme: "page"} {
 		if v := p.Value(name); v != want {
 			t.Errorf("the default of %s read by name: %q, want %q", name, v, want)
 		}
@@ -34,7 +35,7 @@ func TestAPreferencesViewIsASnapshot(t *testing.T) {
 	if v := p.Value("no.such.preference"); v != "" {
 		t.Errorf("a name no row declares: %q, want \"\"", v)
 	}
-	var view PrefsView = p
+	var view feature.PrefsView = p
 	s1, l1 := view.PanelGeometry("terminal", "bottom")
 	s2, l2 := p.panelGeometry("terminal", "bottom")
 	if s1 != s2 || l1 != l2 {
@@ -49,12 +50,12 @@ func TestARowsChangeRunsInOrder(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
 	var steps []string
-	row := ValuePref("test.feature.order", "a", nil)
-	row.State = func(p PrefsView) map[string]any {
+	row := feature.ValuePref("test.feature.order", "a", nil)
+	row.State = func(p feature.PrefsView) map[string]any {
 		steps = append(steps, "state "+p.Value("test.feature.order"))
 		return nil
 	}
-	row.Changed = func(p PrefsView) {
+	row.Changed = func(p feature.PrefsView) {
 		queued := len(r.h.prefWrites) > 0 && slices.ContainsFunc(r.h.prefWrites, func(w [2]string) bool { return w[0] == "test.feature.order" })
 		steps = append(steps, "changed "+p.Value("test.feature.order")+map[bool]string{true: " stored", false: " unstored"}[queued])
 	}
@@ -84,10 +85,10 @@ func (f foreignView) PanelGeometry(string, string) (size, length int) { return 3
 // narrows it back to the host's preferences.
 func TestAFeaturesRowReadsThroughAnyView(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{GUI: guiBuild()})
-	rows := onLoop(r, func() []PrefSpec { return slices.Clone(r.h.prefRows) })
+	rows := onLoop(r, func() []feature.PrefSpec { return slices.Clone(r.h.prefRows) })
 	n := 0
 	for _, s := range rows {
-		if !s.byName || s.State == nil {
+		if !s.ByName || s.State == nil {
 			continue
 		}
 		n++

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // messagingRig is crewAgents with agent one started: a window holding a crew scope, one agent
@@ -66,8 +67,8 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	var got []any
 	w.inboxSend = func(p []any) (any, error) { got = p; return map[string]any{"message": "m1"}, nil }
 	var heard []error
-	task := TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}
-	if err := a.HandTask(AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
+	task := feature.TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -96,7 +97,7 @@ func TestADoorbellRefusedForCertainIsTypedAndSent(t *testing.T) {
 			a, c, w := messagingRig(t)
 			w.inboxSend = func([]any) (any, error) { return nil, refusal }
 			var heard []error
-			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+			if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 				t.Fatal(err)
 			}
 			c.drainPosts()
@@ -125,7 +126,7 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 	var keys []string
 	w.inboxSend = func(p []any) (any, error) { keys = append(keys, p[5].(string)); return nil, io.ErrUnexpectedEOF }
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -146,7 +147,7 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 		return map[string]any{"message": "m1"}, nil
 	}
 	heard = nil
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -163,7 +164,7 @@ func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 	a.promptsReported = nil // promptsSeen: one's command is no kind with an adapter
 	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -182,7 +183,7 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 	a.inbox = &crewInbox{waiting: map[string]bool{"one": true}}
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -201,7 +202,7 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 	a.promptsReported = func(string, bool) bool { return true }
 	rang := false
 	w.inboxSend = func([]any) (any, error) { rang = true; return map[string]any{"message": "m"}, nil }
-	if err := a.SendText(AgentRef{Codename: "two"}, "hi", func(error) {}); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "two"}, "hi", func(error) {}); err != nil {
 		t.Fatal(err)
 	}
 	if len(c.questions) != 1 {
@@ -245,7 +246,7 @@ func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
 			w.crewList = func() (any, error) { return c.list(scope), nil }
 			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 			var heard []error
-			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+			if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 				t.Fatal(err)
 			}
 			settleMessaging(cw, w)
@@ -290,7 +291,7 @@ func TestNoEnterIsPressedIntoADeliveryThatWentStale(t *testing.T) {
 			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 			w.crewList = func() (any, error) { c.stale(a); return []any{}, nil } // stale while the crew answers
 			var heard []error
-			if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+			if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 				t.Fatal(err)
 			}
 			settleMessaging(cw, w)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // ONE CANDIDATE PER INSTALL OR UPDATE
@@ -67,20 +68,20 @@ const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop t
 
 // candidates are the live candidates, by key, and Audit…'s picker of agents.
 type candidates struct {
-	c      Core
+	c      feature.Core
 	allocs *allocs // every stage and audit copy a worker made, until it is removed
 	ops    map[string]*candidate
 	onCard *candidate // the candidate whose card is up
-	pick   *pick[AgentEntry]
+	pick   *feature.Pick[feature.AgentEntry]
 	// auditing is the candidate whose agent picker is open
 	auditing *candidate
 }
 
-func newCandidates(c Core) *candidates {
+func newCandidates(c feature.Core) *candidates {
 	cs := &candidates{c: c, ops: map[string]*candidate{}, allocs: newAllocs()}
 	cs.pick = newAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
-	cs.pick.scope = TicketLocal
-	cs.pick.cancel = cs.auditCancelled
+	cs.pick.Scope = feature.TicketLocal
+	cs.pick.Cancel = cs.auditCancelled
 	return cs
 }
 
@@ -88,14 +89,16 @@ func (*candidates) Name() string { return "candidates" }
 
 func (cs *candidates) State() map[string]any {
 	return map[string]any{
-		"App.auditAgentRows": cs.pick.list.Model(), "App.auditAgentField": "", "App.auditAgentStatus": "agents",
+		"App.auditAgentRows": cs.pick.List.Model(), "App.auditAgentField": "", "App.auditAgentStatus": "agents",
 		"App.auditAgentPreviewTitle": "", "App.auditAgentPreviewText": "", "App.auditAgentPreviewAt": 0,
 	}
 }
 
-func (*candidates) Commands() map[string]Command { return nil }
+func (*candidates) Commands() map[string]feature.Command { return nil }
 
-func (cs *candidates) Picks() map[string]picker { return map[string]picker{"auditAgent": cs.pick} }
+func (cs *candidates) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"auditAgent": cs.pick}
+}
 
 // Stopped removes every stage, audit copy and task file a candidate's worker made, the ones whose
 // answers never reached the loop included: the session ended. The loop has ended, so nothing is
@@ -304,8 +307,8 @@ func (cs *candidates) audit(c *candidate) {
 			cs.show(c)
 			return
 		}
-		cs.pick.setAll(agents)
-		cs.pick.open()
+		cs.pick.SetAll(agents)
+		cs.pick.Open()
 	})
 }
 
@@ -325,7 +328,7 @@ func (cs *candidates) auditCancelled() {
 // While the copy is made c is opCopying, which only this sets and only its answer (or c's end)
 // leaves: an old toast, a stale card's Install or Cancel and another Audit all refuse it, and the
 // answer moves c on only if c is still copying, the attempt it was made for.
-func (cs *candidates) auditWith(a AgentEntry) {
+func (cs *candidates) auditWith(a feature.AgentEntry) {
 	c := cs.auditing
 	cs.auditing = nil
 	if c == nil || c.state != opConfirming {
@@ -362,7 +365,7 @@ func (cs *candidates) auditWith(a AgentEntry) {
 // handOver gives the audit task to a through the window's agent messaging: done(nil) means sent (rung,
 // or typed and sent; docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter),
 // never that the audit ran: the toast says so, and no more. A refusal ends the toast and reopens the card.
-func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
+func (cs *candidates) handOver(c *candidate, a feature.AgentEntry, task string) {
 	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
@@ -379,7 +382,7 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 		cs.c.NotifyDone(c.toastID(), cs.c.Trf("autodoc.notice.candidate.audit_of_not_delivered", c.name, why))
 		cs.show(c)
 	}
-	ref := TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
+	ref := feature.TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
 	done := func(err error) {
 		switch {
 		case errors.Is(err, ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
@@ -388,15 +391,15 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 			failed(err)
 		}
 	}
-	if err := cs.c.HandTask(AgentRef{Codename: a.Ref.Codename}, ref, "Audit the repository as the task file says. Read it; do not run or change it.", done); err != nil {
+	if err := cs.c.HandTask(feature.AgentRef{Codename: a.Ref.Codename}, ref, "Audit the repository as the task file says. Read it; do not run or change it.", done); err != nil {
 		failed(err)
 	}
 }
 
 // defaultFirst is agents with the default one first, the rest in their order.
-func defaultFirst(agents []AgentEntry, codename string) []AgentEntry {
-	if i := slices.IndexFunc(agents, func(e AgentEntry) bool { return e.Ref.Codename == codename }); i > 0 {
-		agents = append([]AgentEntry{agents[i]}, slices.Delete(slices.Clone(agents), i, i+1)...)
+func defaultFirst(agents []feature.AgentEntry, codename string) []feature.AgentEntry {
+	if i := slices.IndexFunc(agents, func(e feature.AgentEntry) bool { return e.Ref.Codename == codename }); i > 0 {
+		agents = append([]feature.AgentEntry{agents[i]}, slices.Delete(slices.Clone(agents), i, i+1)...)
 	}
 	return agents
 }

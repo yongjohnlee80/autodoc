@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 var kbTodos = todo.At{Workspace: "kb"}
@@ -128,7 +129,7 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 		}
 	}
 	if r.noticed("todos") || r.noticed("read-only") {
-		t.Errorf("a key on a read-only store was answered with a notice: %+v", onLoop(r, func() []notice { return r.h.noticeLog.items }))
+		t.Errorf("a key on a read-only store was answered with a notice: %+v", onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 	}
 	r.leader(t, 'x')
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "Write the view") })
@@ -145,7 +146,7 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	before := onLoop(r, func() int { return len(r.h.noticeLog.items) })
+	before := onLoop(r, func() int { return len(r.h.noticeLog.Items) })
 	r.leader(t, 'x')
 	r.s.WaitForText(t, "[ add ]")
 	if strings.Contains(r.s.String(), "read-only") {
@@ -180,11 +181,11 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	}
 	// the history is newest first: what came since are its first entries. The add's own "added" is
 	// its answer, not something on the way.
-	since := onLoop(r, func() []notice { return slices.Clone(r.h.noticeLog.items[:len(r.h.noticeLog.items)-before]) })
+	since := onLoop(r, func() []feature.Notice { return slices.Clone(r.h.noticeLog.Items[:len(r.h.noticeLog.Items)-before]) })
 	answer := onLoop(r, func() string { return r.h.trf("autodoc.notice.todos.todos_added", added) })
 	for _, n := range since {
-		if n.text != answer {
-			t.Errorf("a notice from opening the view to after the add: %q (the add's answer is %q)", n.text, answer)
+		if n.Text != answer {
+			t.Errorf("a notice from opening the view to after the add: %q (the add's answer is %q)", n.Text, answer)
 		}
 	}
 }
@@ -278,7 +279,7 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { return r.h.reg.event("todos.changed", "kb", "x") })
+	onLoop(r, func() bool { return r.h.reg.Event("todos.changed", "kb", "x") })
 	r.s.WaitForText(t, "From an agent")
 }
 
@@ -449,7 +450,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	r.s.WaitFor(t, "the cursor on the moved task", func(string) bool {
 		return onLoop(r, func() bool {
 			_, x := todosOf(r).cursor()
-			return str(x, "title") == "Ship it" && str(x, "status") == "in-progress"
+			return feature.Str(x, "title") == "Ship it" && feature.Str(x, "status") == "in-progress"
 		})
 	})
 	// the user's size, kept, wins: 40% of 80 columns, the whole height
@@ -499,7 +500,7 @@ func hoveredWithin(_ *running, c tuicore.Component) bool {
 
 // todosOf is the running TUI's todos feature.
 func todosOf(r *running) *todos {
-	for _, f := range r.h.reg.features {
+	for _, f := range r.h.reg.Features {
 		if v, ok := f.(*todos); ok {
 			return v
 		}

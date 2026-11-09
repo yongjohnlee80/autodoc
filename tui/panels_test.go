@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"testing"
 )
@@ -71,7 +72,7 @@ func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
 	}
 	// the explorer on its Links tab: the tab's list takes the keyboard back too
 	specs := defaultPanelSpecs()
-	specs[0].Focus = func() string { return relationsView }
+	specs[0].Focus = func() string { return feature.RelationsView }
 	if got, want := keyboardPanes(specs), []string{"editor", "explorerTree", "relationsList"}; !slices.Equal(got, want) {
 		t.Errorf("keyboard panes on the Links tab %v, want %v", got, want)
 	}

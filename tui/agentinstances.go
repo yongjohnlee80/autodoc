@@ -20,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 var (
@@ -66,9 +67,9 @@ type agentInstance struct {
 	running, closing bool
 	restart          bool // Restart closed it: its profile starts again, in a new tab, once it is gone
 	cleanupError     error
-	owner            TerminalPanel
+	owner            feature.TerminalPanel
 	generation       int
-	retirement       TerminalCompletion
+	retirement       feature.TerminalCompletion
 	// seen is the workspace this incarnation was last told of (takeSwitch, agentswitch.go), its own
 	// at first; seenToken the incarnation it belongs to, so a restart starts again from its own
 	seen      wsRef
@@ -77,10 +78,10 @@ type agentInstance struct {
 
 type agentRuntimeHost interface {
 	agentHost
-	Terminals(string) (TerminalPanel, error)
+	Terminals(string) (feature.TerminalPanel, error)
 	Post(func())
 	After(time.Duration, func())
-	Ticket(*uint64, TicketScope) Ticket
+	Ticket(*uint64, feature.TicketScope) feature.Ticket
 }
 
 // agentReadyWait is how long a delivery to an agent it just started waits for the agent's program
@@ -99,7 +100,7 @@ type agentDelivery struct {
 	finished bool
 }
 
-func (a *agents) runtime() (TerminalPanel, error) {
+func (a *agents) runtime() (feature.TerminalPanel, error) {
 	c, ok := a.c.(agentRuntimeHost)
 	if !ok {
 		return nil, ErrAgentUnavailable
@@ -114,13 +115,13 @@ func (a *agents) runtime() (TerminalPanel, error) {
 
 // AgentEntries lists saved profiles first and retained orphan instances after
 // them, without exposing mutable records, the Host or terminal components.
-func (a *agents) AgentEntries() []AgentEntry {
+func (a *agents) AgentEntries() []feature.AgentEntry {
 	a.syncInstances()
-	entries := []AgentEntry{}
+	entries := []feature.AgentEntry{}
 	saved := map[string]bool{}
 	for _, p := range a.profiles() {
 		saved[p.Codename] = true
-		e := AgentEntry{Ref: AgentRef{Codename: p.Codename}, Name: p.Name, Command: p.Command}
+		e := feature.AgentEntry{Ref: feature.AgentRef{Codename: p.Codename}, Name: p.Name, Command: p.Command}
 		if instance := a.instances[p.Codename]; instance != nil {
 			e.Running, e.Closing = instance.running, instance.closing
 			if instance.running {
@@ -134,11 +135,11 @@ func (a *agents) AgentEntries() []AgentEntry {
 		if instance == nil || saved[code] {
 			continue
 		}
-		ref := AgentRef{Codename: code}
+		ref := feature.AgentRef{Codename: code}
 		if instance.running {
 			ref.Instance = instance.token
 		}
-		entries = append(entries, AgentEntry{Ref: ref, Name: instance.profile.Name, Command: instance.profile.Command,
+		entries = append(entries, feature.AgentEntry{Ref: ref, Name: instance.profile.Name, Command: instance.profile.Command,
 			Running: instance.running, Closing: instance.closing, Orphan: true})
 	}
 	return entries
@@ -272,7 +273,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	path, args := agentArgv(fillAgentCommand(p.Command, ws))
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
-		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
+		id, err := panel.Add(p.Codename, feature.TerminalConfig{Command: path, Args: args, Dir: dir,
 			Exited: func(code int) { a.instanceExited(instance, code) },
 			Start:  func(c pty.Cmd) (terminal.TerminalProcess, error) { return a.runAgent(instance, c) }})
 		if err != nil {
@@ -339,7 +340,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 
 // refuse keeps why instance's start was refused and shows it in its tab: the tab's start answers it
 // (runAgent), which the terminal writes on its screen, and the tab is selected; nothing runs.
-func (a *agents) refuse(panel TerminalPanel, instance *agentInstance, why error) {
+func (a *agents) refuse(panel feature.TerminalPanel, instance *agentInstance, why error) {
 	instance.refusal, instance.starting = why, false
 	_ = panel.Start(instance.tab) // the terminal shows the refusal, and the tab stays stopped
 	a.c.Keep(a.selectInstance(instance))
@@ -394,7 +395,7 @@ func executable(path string) bool {
 // registerCrew registers instance's crew session, as its setup said it reads its mail
 // (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
 // starts its process once the session's context is written; a refused registration starts nothing.
-func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p agentProfile, ws wsInfo, dir, token string, prompts bool, stale func() bool) {
+func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstance, p agentProfile, ws wsInfo, dir, token string, prompts bool, stale func() bool) {
 	a.crew.register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.id, token, dir, func(s crewSession, err error) {
 		instance.starting = false
 		if stale() {
@@ -410,8 +411,8 @@ func (a *agents) registerCrew(panel TerminalPanel, instance *agentInstance, p ag
 			}
 		}
 		if err != nil {
-			a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, wireMessage(err)))
-			a.refuse(panel, instance, fmt.Errorf("its crew session was not registered: %s", wireMessage(err)))
+			a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, feature.WireMessage(err)))
+			a.refuse(panel, instance, fmt.Errorf("its crew session was not registered: %s", feature.WireMessage(err)))
 			return
 		}
 		if err := a.start(panel, instance); err != nil {
@@ -583,7 +584,7 @@ func agentAutodocBound(args []string) time.Duration {
 }
 
 // start starts instance's process in its tab: whether it started is this, never whether it is shown.
-func (a *agents) start(panel TerminalPanel, instance *agentInstance) error {
+func (a *agents) start(panel feature.TerminalPanel, instance *agentInstance) error {
 	if err := panel.Start(instance.tab); err != nil {
 		return err
 	}
@@ -710,7 +711,7 @@ func (a *agents) removeInstance(code string) error {
 
 // Retire through the captured owner's cleanup result, not by sending old IDs
 // to a new parent. Failed cleanup keeps the incarnation and codename reserved.
-func (a *agents) awaitInstanceRetirement(instance *agentInstance, result TerminalCompletion) {
+func (a *agents) awaitInstanceRetirement(instance *agentInstance, result feature.TerminalCompletion) {
 	instance.running, instance.closing, instance.retirement = false, true, result
 	code := instance.profile.Codename
 	ended := a.endSession(instance)
@@ -755,7 +756,7 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 // messaging (agentmessaging.go): rung through the crew when the agent's CLI has a doorbell, else
 // typed and sent. An immediate error rejects it without calling done; accepted calls complete done
 // once on the UI loop, including cancellation and orderly owner shutdown.
-func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
+func (a *agents) HandTask(to feature.AgentRef, task feature.TaskRef, instruction string, done func(error)) error {
 	if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
 		return ErrAgentTask
 	}
@@ -764,14 +765,14 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 
 // SendText sends text to one agent incarnation as a plain message through the window's agent
 // messaging, as HandTask sends a task: the same refusals, the same consent to start a stopped agent.
-func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
+func (a *agents) SendText(to feature.AgentRef, text string, done func(error)) error {
 	return a.sendMessage(to, AgentMessage{Kind: MessagePlain, Body: text}, done)
 }
 
 // SendRequest sends one agent incarnation a request, subject (one line) and body, through the
 // window's agent messaging, as HandTask sends a task: what the user hands an agent with an
 // instruction (agents.lua's :agent-buffer and :agent-forward), which it answers.
-func (a *agents) SendRequest(to AgentRef, subject, body string, done func(error)) error {
+func (a *agents) SendRequest(to feature.AgentRef, subject, body string, done func(error)) error {
 	if subject == "" || strings.ContainsAny(subject, "\r\n") || body == "" {
 		return ErrAgentText
 	}
@@ -782,7 +783,7 @@ func (a *agents) SendRequest(to AgentRef, subject, body string, done func(error)
 // (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter): the agents panel
 // open, its tab selected, the keyboard in it, in input mode. The task is typed either way: what fails here is
 // kept, never the delivery's error.
-func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
+func (a *agents) present(panel feature.TerminalPanel, instance *agentInstance) {
 	a.c.OpenDrawer("agent")
 	a.c.Keep(a.selectInstance(instance))
 	a.c.Keep(panel.SetMode(instance.tab, terminal.TerminalInput))
@@ -791,7 +792,7 @@ func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
 // Resume is autodoc.agents.resume: a SIGCONT to agent to's tab, to as SendText takes it, or with
 // no codename the agents panel's tab now. A stopped, closing or unknown agent is ErrAgentUnavailable,
 // an incarnation that is gone ErrAgentStale. A running agent is not disturbed.
-func (a *agents) Resume(to AgentRef) error {
+func (a *agents) Resume(to feature.AgentRef) error {
 	a.syncInstances()
 	panel, err := a.runtime()
 	if err != nil {
@@ -841,7 +842,7 @@ type deliverOpts struct {
 	// the messaging base's Enter decision (agentmessaging.go). still checks everything again, as an
 	// attempt does (finished, the workspace, the instance, its tab's owner): what submit waits for
 	// lets any of them change, so it presses nothing unless still answers nil.
-	submit func(panel TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error))
+	submit func(panel feature.TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error))
 	// queue, when set, mails the delivery instead, queued for the agent's first receive, when nothing
 	// may be typed into it because it hasn't started (ErrAgentNotStarted), and the delivery finishes
 	// with its answer
@@ -855,7 +856,7 @@ type deliverOpts struct {
 // until agentReadyWait. An agent running in another workspace than the window's is rung all the
 // same (its crew mail needs no tab), but never typed into: its tab works in that workspace, so a
 // doorbell that didn't ring, or none, ends the delivery agentElsewhere.
-func (a *agents) deliver(to AgentRef, check func() error, what string, o deliverOpts, send func(TerminalPanel, terminal.TerminalTabID) error, done func(error)) error {
+func (a *agents) deliver(to feature.AgentRef, check func() error, what string, o deliverOpts, send func(feature.TerminalPanel, terminal.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
 		return ErrAgentShuttingDown
@@ -889,7 +890,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 	if elsewhere && o.ring == nil { // nothing reaches it but the base, which types only in its own workspace
 		return &agentElsewhere{workspace: instance.workspace.name, why: errNoDoorbell}
 	}
-	ticket := c.Ticket(nil, TicketWorkspace)
+	ticket := c.Ticket(nil, feature.TicketWorkspace)
 	accepted := &agentDelivery{done: done}
 	a.deliveries[accepted] = true
 	finish := func(err error) {
@@ -1061,7 +1062,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
 		c.Post(deliver)
 	} else {
-		a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agentinstances.start_the_agent"), Text: a.c.Trf("autodoc.question.agentinstances.start_and_send", p.Name, what), Yes: a.c.Tr("autodoc.question.agentinstances.yes_start_and_send"),
+		a.c.Ask(feature.Question{Title: a.c.Tr("autodoc.question.agentinstances.start_the_agent"), Text: a.c.Trf("autodoc.question.agentinstances.start_and_send", p.Name, what), Yes: a.c.Tr("autodoc.question.agentinstances.yes_start_and_send"),
 			OnYes: deliver, OnCancel: func() {
 				if a.stopping {
 					finish(ErrAgentShuttingDown)
@@ -1087,7 +1088,7 @@ func (a *agents) Stopping() {
 	}
 }
 
-func (c core) AgentEntries() []AgentEntry { return c.h.agents.AgentEntries() }
+func (c core) AgentEntries() []feature.AgentEntry { return c.h.agents.AgentEntries() }
 
 // windowScope is the crew scope the window holds, "" for none (todos_assign.go).
 func (c core) windowScope() string {
@@ -1100,7 +1101,7 @@ func (c core) windowScope() string {
 
 // peerAgents are the live crew agents of every other scope, for todos' A (todos_assign.go): none
 // while the window holds no scope, since it couldn't send them anything.
-func (c core) peerAgents(then func([]AgentEntry)) {
+func (c core) peerAgents(then func([]feature.AgentEntry)) {
 	if c.h.crew == nil {
 		then(nil)
 		return
@@ -1117,10 +1118,10 @@ func (c core) sendTask(codename, scope, subject, body, key string, then func(err
 	c.h.crew.sendTask(codename, scope, subject, body, key, then)
 }
 
-func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
+func (c core) HandTask(to feature.AgentRef, task feature.TaskRef, instruction string, done func(error)) error {
 	return c.h.agents.HandTask(to, task, instruction, done)
 }
-func (c core) SendText(to AgentRef, text string, done func(error)) error {
+func (c core) SendText(to feature.AgentRef, text string, done func(error)) error {
 	return c.h.agents.SendText(to, text, done)
 }
 
@@ -1154,7 +1155,7 @@ var agentTerminalEnv = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
 // context and its setup's. All of it is the process's environment, readable by the user alone,
 // never its command line.
 func agentEnviron(env procenv.Env, instance *agentInstance) []string {
-	environ := slices.Concat(ownEnviron(env), agentTerminalEnv, instance.env)
+	environ := slices.Concat(feature.OwnEnviron(env), agentTerminalEnv, instance.env)
 	if instance.crewed {
 		environ = append(environ, crew.EnvContext+"="+instance.context)
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
@@ -1167,7 +1168,7 @@ func agentEnviron(env procenv.Env, instance *agentInstance) []string {
 // agentHost adds only the services needed to configure an agent terminal and
 // populate its profile form. Agent-specific state remains in the agents feature.
 type agentHost interface {
-	PanelHost
+	feature.PanelHost
 	// SetFormText resets edited form text even if its source value is unchanged.
 	SetFormText(name, value string)
 	ConfigureTerminal(id, command, dir string, args ...string) error

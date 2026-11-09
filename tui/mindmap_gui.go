@@ -15,6 +15,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE MINDMAP — Relations › Mindmap: the page's document and the documents one link from it (d: two
@@ -25,7 +26,7 @@ import (
 // mind is one Mindmap build: everything derived from one graph.map answer, made off the loop and
 // never changed once installed.
 type mind struct {
-	root   fileRef
+	root   feature.FileRef
 	m      relMap
 	laid   *guimermaid.Laid // laid out from mindmapModel(m, root, …): its ids "n<i>" index m.Nodes
 	groups *relGroups       // the groups it was laid out in; nil: none read yet
@@ -34,13 +35,13 @@ type mind struct {
 
 // mindmap is the Mindmap feature: its builds, fenced (load), and the view's scroll.
 type mindmap struct {
-	c         Core
+	c         feature.Core
 	seq       uint64
 	open      bool
-	page      Page   // the page shown, as Shown last said
-	cur       *mind  // the build shown; nil until one is installed
-	status    string // what a load says, a catalog id statusArg fills; "" none
-	statusArg string // fills status's %1
+	page      feature.Page // the page shown, as Shown last said
+	cur       *mind        // the build shown; nil until one is installed
+	status    string       // what a load says, a catalog id statusArg fills; "" none
+	statusArg string       // fills status's %1
 	view      *mindView
 	scroll    float32 // how far down the map the view is, in logical pixels
 	asked     float32 // the width a relayout was last asked for
@@ -53,7 +54,7 @@ type mindmap struct {
 	groupsWS string
 }
 
-func newMindmap(c Core) *mindmap {
+func newMindmap(c feature.Core) *mindmap {
 	m := &mindmap{c: c, depth: 1}
 	m.editor = &groupEditor{c: c, view: viewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
 		ground: func() color.NRGBA { return m.palette().background }}
@@ -68,14 +69,14 @@ func (m *mindmap) toggleDepth() {
 
 func (*mindmap) Name() string { return "mindmap" }
 
-func (m *mindmap) Panels() []PanelSpec {
-	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
-		Edge: func(PrefsView) string { return "center" },
-		Opened: func(PanelHost) {
+func (m *mindmap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
+		Edge: func(feature.PrefsView) string { return "center" },
+		Opened: func(feature.PanelHost) {
 			m.open, m.depth = true, m.prefDepth() // it opens at the depth its settings choose
 			m.load()
 		},
-		Closed: func(c PanelHost) {
+		Closed: func(c feature.PanelHost) {
 			m.open = false
 			m.seq++ // a build under way is dropped
 			c.Keep(c.RestoreKeyboardHome())
@@ -88,22 +89,22 @@ func (m *mindmap) State() map[string]any {
 	return st
 }
 
-func (m *mindmap) Commands() map[string]Command {
+func (m *mindmap) Commands() map[string]feature.Command {
 	c := m.settingsCommands()
-	c["App.toggleMindmap"] = none(m.toggle)
+	c["App.toggleMindmap"] = feature.None(m.toggle)
 	return c
 }
 
-func (m *mindmap) Catalog() []Entry {
-	return []Entry{builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
-		builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
+func (m *mindmap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
+		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
 }
 
 func (m *mindmap) toggle() { m.c.TogglePanel(mindmapPanelID) }
 
 // Shown roots the map at the page shown, while it is open. A click whose open is cancelled, fails
 // or is overtaken shows no page, so it roots nothing.
-func (m *mindmap) Shown(p Page) {
+func (m *mindmap) Shown(p feature.Page) {
 	m.page = p
 	if m.open {
 		m.load()
@@ -118,37 +119,37 @@ func (m *mindmap) ThemeChanged() {
 	}
 }
 
-func (*mindmap) Edited(Page)    {}
-func (*mindmap) Moved(int, int) {}
-func (*mindmap) Reread(Page)    {}
-func (*mindmap) Closed()        {}
+func (*mindmap) Edited(feature.Page) {}
+func (*mindmap) Moved(int, int)      {}
+func (*mindmap) Reread(feature.Page) {}
+func (*mindmap) Closed()             {}
 
 // load reads the page's document's neighbourhood and lays it out off the loop; on the loop it
 // installs the build whole, or drops it when a newer load, another page or the panel's closing
 // came first.
 func (m *mindmap) load() {
 	ref := m.page.Ref
-	tk := m.c.Ticket(&m.seq, TicketFile)
-	if ref.path == "" || ref.ws == "" || m.page.Outside {
+	tk := m.c.Ticket(&m.seq, feature.TicketFile)
+	if ref.Path == "" || ref.WS == "" || m.page.Outside {
 		m.cur, m.status = nil, "autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map"
 		m.title()
 		return
 	}
 	width, th, depth := m.width(), mindTheme(m.palette()), m.depth
 	var gs *relGroups
-	if m.groupsWS == ref.ws {
+	if m.groupsWS == ref.WS {
 		gs = m.groups
 	}
 	m.asked = width
-	m.status, m.statusArg = "autodoc.text.mindmap_gui.reading", ref.path
+	m.status, m.statusArg = "autodoc.text.mindmap_gui.reading", ref.Path
 	m.title()
 	m.c.Go(func(ctx context.Context) any {
-		res, err := m.c.Call(ctx, "graph.map", ref.ws, map[string]any{"root": ref.path, "depth": int64(depth)})
+		res, err := m.c.Call(ctx, "graph.map", ref.WS, map[string]any{"root": ref.Path, "depth": int64(depth)})
 		if err != nil {
 			return err
 		}
 		rm := decodeMap(res)
-		model := mindmapModel(rm, ref.path, func(n mapNode) pm.MindShape {
+		model := mindmapModel(rm, ref.Path, func(n mapNode) pm.MindShape {
 			if i := gs.ofOr(n); i >= 0 {
 				return gs.list[i].Shape
 			}
@@ -163,7 +164,7 @@ func (m *mindmap) load() {
 			return color.NRGBA{}, false
 		}
 		if model == nil {
-			return fmt.Errorf("%s is not in its own map", ref.path)
+			return fmt.Errorf("%s is not in its own map", ref.Path)
 		}
 		meas, release := gui.AcquireMeasurer(1)
 		defer release()
@@ -180,12 +181,12 @@ func (m *mindmap) load() {
 		switch v := v.(type) {
 		case *mind:
 			m.cur, m.scroll = v, 0
-			if m.groupsWS != v.root.ws {
-				m.readGroups(v.root.ws, v.m.Types) // laid out again in them once read
+			if m.groupsWS != v.root.WS {
+				m.readGroups(v.root.WS, v.m.Types) // laid out again in them once read
 			}
 		case error:
-			if code(v) == rpc.CodeNotFound {
-				m.cur, m.status, m.statusArg = nil, "autodoc.text.mindmap_gui.is_not_indexed_yet", ref.path
+			if feature.Code(v) == rpc.CodeNotFound {
+				m.cur, m.status, m.statusArg = nil, "autodoc.text.mindmap_gui.is_not_indexed_yet", ref.Path
 			} else {
 				m.c.Failed("Mindmap", v)
 			}
@@ -243,7 +244,7 @@ func (m *mindmap) title() {
 		t += " · " + m.statusText()
 	case m.cur != nil:
 		t = m.c.Trf("autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend",
-			m.cur.root.path, len(m.cur.m.Nodes), m.depth)
+			m.cur.root.Path, len(m.cur.m.Nodes), m.depth)
 	}
 	m.c.Set("App.mindmapTitle", t)
 	m.dirty()
@@ -303,7 +304,7 @@ func (m *mindmap) click(p, at gui.Point) {
 		// hidden, not closed, as the GlobeMap is: the dock shows it again
 		// (docs/decisions/editor.md#dock-clicks-hide-and-show)
 		m.c.HidePanel(mindmapPanelID)
-		m.c.OpenRef(cur.root.ws, cur.m.Nodes[i].Path)
+		m.c.OpenRef(cur.root.WS, cur.m.Nodes[i].Path)
 	}
 }
 

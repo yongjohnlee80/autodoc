@@ -2,7 +2,10 @@
 
 package tui
 
-import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+)
 
 // A terminal build's relation views: Relations › GlobeMap and Relations › Mindmap, drawn in cells
 // (globemap_cells.go, mindmap_cells.go, relationviews_cells.go), beside Relations › Links
@@ -17,7 +20,7 @@ const (
 // writes the terminal's (relationviews_cells.go).
 const relationMenuQML, relationViewsQML = "", ""
 
-func (h *Host) relationViewFeatures() []Feature {
+func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
 		h.relationViews = cellRelationViews(h)
 	}

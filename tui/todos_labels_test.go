@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -179,7 +180,7 @@ func onTask(t *testing.T, v *todos, status string) {
 
 // statusRows are the rows s's picker lists.
 func statusRows(v *todos) []string {
-	m := v.statusPick.list.Model()
+	m := v.statusPick.List.Model()
 	var out []string
 	for i := 0; i < m.Len(); i++ {
 		out = append(out, m.Data(tuidecl.Index{Row: i}, "status").Raw)
@@ -195,7 +196,7 @@ func pickStatus(t *testing.T, v *todos, status string) {
 	if i < 0 || v.statusing == nil {
 		t.Fatalf("no picker for %s: statusing %v", status, v.statusing)
 	}
-	v.statusPick.accept(i, "")
+	v.statusPick.Accept(i, "")
 }
 
 // TestTodosStatusPickerSetsEveryStatus: s opens a picker of every status, the task's own marked;
@@ -222,7 +223,7 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 				t.Fatalf("from %s, the statuses offered: %q", from, got)
 			}
 			s.views = nil
-			v.statusPick.accept(slices.Index(todoStatuses, want), "")
+			v.statusPick.Accept(slices.Index(todoStatuses, want), "")
 			if *cur != want || !s.called("todos.status[kb t1 r1 "+want+"]") || !slices.Contains(s.closed, "todoStatusPicker") {
 				t.Fatalf("%s → %s: the task is %s, calls %v, closed %v", from, want, *cur, s.calls, s.closed)
 			}
@@ -230,7 +231,7 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 			if v.tab != tab || s.set["App.todoTab"] != tab || !slices.Contains(s.views, todoTabs[tab].table+".forceActiveFocus") {
 				t.Errorf("%s → %s: tab %d (shown %v), views %v", from, want, v.tab, s.set["App.todoTab"], s.views)
 			}
-			if _, x := v.cursor(); str(x, "id") != "t1" || str(x, "status") != want {
+			if _, x := v.cursor(); feature.Str(x, "id") != "t1" || feature.Str(x, "status") != want {
 				t.Errorf("%s → %s: the cursor is on %v", from, want, x)
 			}
 			if want == "archived" && v.month != "2026/10" {
@@ -247,10 +248,10 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 		onTask(t, v, "deferred")
 		v.chooseStatus()
 		if way == "dismissed" {
-			v.statusPick.dismiss()
+			v.statusPick.Dismiss()
 			v.statusChosen(todoStatusChoice{status: "open"}) // a stray choice after the dismissal
 		} else {
-			v.statusPick.accept(2, "")
+			v.statusPick.Accept(2, "")
 		}
 		if s.called("todos.status") || v.statusing != nil {
 			t.Errorf("%s: calls %v, statusing %v", way, s.calls, v.statusing)
@@ -269,19 +270,19 @@ func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 	if got := s.set["App.todoStatusPreviewText"]; got != "## open\n\nits status now:\nchoosing it\nchanges nothing\n" || s.set["App.todoStatusPreviewTitle"] != "Ship" {
 		t.Errorf("the first row's preview: %q, titled %q", got, s.set["App.todoStatusPreviewTitle"])
 	}
-	v.statusPick.move(2)
+	v.statusPick.Move(2)
 	if got := s.set["App.todoStatusPreviewText"]; got != "## deferred\n\nfrom open\nto deferred\n" {
 		t.Errorf("deferred's preview: %q", got)
 	}
 	if got := s.set["App.todoStatusList"]; got != "statuses (5 of 5)" {
 		t.Errorf("the list's title: %q", got)
 	}
-	v.statusPick.filter("arch")
+	v.statusPick.Filter("arch")
 	if got := statusRows(v); !slices.Equal(got, []string{"  archived"}) {
 		t.Errorf("filtered: %q", got)
 	}
 	v.statusing = nil
-	if got := v.statusPane(todoStatusChoice{status: "open"}); got != (pane{}) {
+	if got := v.statusPane(todoStatusChoice{status: "open"}); got != (feature.Pane{}) {
 		t.Errorf("no task: %+v", got)
 	}
 }
@@ -353,7 +354,7 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	onTask(t, w, "in-progress")
 	w.chooseStatus()
 	s.deferred = true
-	w.statusPick.accept(slices.Index(todoStatuses, "completed"), "")
+	w.statusPick.Accept(slices.Index(todoStatuses, "completed"), "")
 	if s.set["App.todoActStatus"] != true {
 		t.Fatal("Status… changed inside its own choice")
 	}
@@ -391,7 +392,7 @@ func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 	onTask(t, v, "in-progress")
 	v.chooseStatus()
 	s.deferred = true
-	v.statusPick.accept(slices.Index(todoStatuses, "completed"), "")
+	v.statusPick.Accept(slices.Index(todoStatuses, "completed"), "")
 	s.deliver(0) // the move's answer: Completed shown, its read held
 	if v.tab != tabOf("completed") || len(s.pending) != 1 || v.follow.id != "t1" {
 		t.Fatalf("after the move: tab %d, held %d, follow %+v", v.tab, len(s.pending), v.follow)
@@ -400,7 +401,7 @@ func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 		t.Errorf("the cursor is on %v before Completed landed", x)
 	}
 	s.deliver(0)
-	if _, x := v.cursor(); str(x, "id") != "t1" || v.follow.id != "" || s.set["App.todoCompletedIndex"] != 0 {
+	if _, x := v.cursor(); feature.Str(x, "id") != "t1" || v.follow.id != "" || s.set["App.todoCompletedIndex"] != 0 {
 		t.Errorf("after Completed landed: %v, follow %+v, index %v", x, v.follow, s.set["App.todoCompletedIndex"])
 	}
 }
@@ -462,7 +463,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	x := newTodos(m)
 	x.list() // Open: empty
 	n := len(m.calls)
-	if err := x.Commands()["App.todoChooseStatus"].handler("App.todoChooseStatus")(nil); err != nil {
+	if err := x.Commands()["App.todoChooseStatus"].Handler("App.todoChooseStatus")(nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(m.calls) != n || slices.Contains(m.opened, "todoStatusPicker") {

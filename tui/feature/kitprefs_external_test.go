@@ -1,9 +1,9 @@
-package tui_test
+package feature_test
 
 import (
 	"testing"
 
-	"github.com/yongjohnlee80/autodoc/tui"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // store is a host's preferences as a package other than the kit's keeps them: it implements the
@@ -20,7 +20,7 @@ func (s *store) SetValue(name, v string) {
 	s.m[name] = v
 }
 
-var _ tui.PrefsWriter = (*store)(nil)
+var _ feature.PrefsWriter = (*store)(nil)
 
 // A row bound from outside the kit's package (BoundPref, PrefBinding) reads, keeps and resets its
 // value in the host's own store through the row machinery a host uses (ReadRows, RowState), so its
@@ -28,27 +28,27 @@ var _ tui.PrefsWriter = (*store)(nil)
 // same view.
 func TestARowIsBoundByAHostInAnotherPackage(t *testing.T) {
 	s := &store{}
-	row := tui.BoundPref("host.switch", []string{"off", "on"}, tui.PrefBinding{
-		Read:  func(p tui.PrefsWriter, v string) { p.SetValue("host.switch", v) },
-		Value: func(p tui.PrefsView) string { return p.Value("host.switch") },
-		Reset: func(p tui.PrefsWriter) { p.SetValue("host.switch", "off") },
+	row := feature.BoundPref("host.switch", []string{"off", "on"}, feature.PrefBinding{
+		Read:  func(p feature.PrefsWriter, v string) { p.SetValue("host.switch", v) },
+		Value: func(p feature.PrefsView) string { return p.Value("host.switch") },
+		Reset: func(p feature.PrefsWriter) { p.SetValue("host.switch", "off") },
 	})
 	row.Index = "App.hostSwitchIndex" // the chooser's row is read through the row's Value binding
-	feature := tui.ValuePref("feature.mode", "a", []string{"a", "b"})
-	rows := []tui.PrefSpec{row, feature}
+	own := feature.ValuePref("feature.mode", "a", []string{"a", "b"})
+	rows := []feature.PrefSpec{row, own}
 
-	tui.ReadRows(s, map[string]any{"host.switch": "on", "feature.mode": "b"}, rows)
+	feature.ReadRows(s, map[string]any{"host.switch": "on", "feature.mode": "b"}, rows)
 	if s.m["host.switch"] != "on" || s.m["feature.mode"] != "b" {
 		t.Fatalf("read through the rows: %v, want host.switch on and feature.mode b", s.m)
 	}
-	if st := tui.RowState(s, rows); st["App.hostSwitchIndex"] != 1 {
+	if st := feature.RowState(s, rows); st["App.hostSwitchIndex"] != 1 {
 		t.Errorf("the chooser's row through the binding's Value: %v, want 1 (on)", st)
 	}
-	tui.ReadRows(s, map[string]any{"host.switch": "maybe", "feature.mode": "z"}, rows) // values the rows refuse
+	feature.ReadRows(s, map[string]any{"host.switch": "maybe", "feature.mode": "z"}, rows) // values the rows refuse
 	if s.m["host.switch"] != "off" || s.m["feature.mode"] != "a" {
 		t.Errorf("refused values: %v, want each row's default through its Reset (off, a)", s.m)
 	}
-	var view tui.PrefsView = s
+	var view feature.PrefsView = s
 	if size, length := view.PanelGeometry("x", "left"); size != 30 || length != 85 {
 		t.Errorf("PanelGeometry through the view: %d %d", size, length)
 	}

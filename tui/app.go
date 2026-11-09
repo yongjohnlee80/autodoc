@@ -8,13 +8,13 @@
 //	modules.go    the QML the program ships, and the modules that offer it
 //	state.go      the App singleton's state: what the document reads
 //	commands.go   the App singleton's commands: what the document invokes
-//	work.go       background work, and bringing its result back
+//	feature/work.go       background work, and bringing its result back
 //	client.go     the session: the only path to the daemon
 //	session.go    connecting, and reconnecting when the connection ends
 //	workspace.go  the workspaces, and switching between them
 //	files.go      the file in the editor: opening, saving, conflicts, unsaved changes
-//	search.go     the workspace's files, as the pickers filter them
-//	pick.go       the one picker core, pick[T], behind Picker.qml and the App.pick* commands
+//	feature/search.go     the workspace's files, as the pickers filter them
+//	feature/pick.go       the one picker core, pick[T], behind Picker.qml and the App.pick* commands
 //	searchpick.go the search picker: the daemon's search as it is typed, and its hits
 //	filepick.go   File › Open and the draft's name: pickers over the workspace's files
 //	marks.go      words marked over Markdown's highlighting: the search's and the find's
@@ -57,6 +57,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // Host is the program behind qml/main.qml.
@@ -64,11 +65,11 @@ type Host struct {
 	p        *tuidecl.Program
 	session  *Session
 	seams    seams              // its own copy of Options.seams, or defaultSeams; its features hold a pointer to it
-	reg      *registry          // the features, merged (feature.go)
-	cat      *catalog           // the user commands, every source's (catalog.go): the registry's
-	asker    *asker             // the one yes-or-no question (ask.go)
-	prefRows []PrefSpec         // every preference declared, the host's and the features' (prefspec.go)
-	keys     keyset             // the keys and their cards, the host's and the features' (keys.go)
+	reg      *feature.Registry  // the features, merged (feature/feature.go)
+	cat      *feature.Catalog   // the user commands, every source's (feature/catalog.go): the registry's
+	asker    *feature.Asker     // the one yes-or-no question (feature/ask.go)
+	prefRows []feature.PrefSpec // every preference declared, the host's and the features' (feature/prefspec.go)
+	keys     feature.Keyset     // the keys and their cards, the host's and the features' (feature/keys.go)
 	started  bool               // the first preferences were applied: the program has started (applyPrefs)
 	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core     *editor.EditorCore // its core: the text, the cursor and the modes
@@ -95,15 +96,15 @@ type Host struct {
 	themeCatalog *usertheme.Catalog
 
 	// the models the document binds
-	workspaces, managed *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
+	workspaces, managed *feature.Rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
 	wsProviders         *tuidecl.ListModel
-	kbTypes             *tuidecl.ListModel // the add dialog's KB type field (kbtype.go)
-	vectors             *rows[vectorRow]   // the workspace's models (vectors.go)
+	kbTypes             *tuidecl.ListModel       // the add dialog's KB type field (kbtype.go)
+	vectors             *feature.Rows[vectorRow] // the workspace's models (vectors.go)
 
-	// the pickers (pick.go): the search's, File › Open's and the draft's name (the outline's is
+	// the pickers (feature/pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words
-	searchPick        *pick[hit]
-	openPick, newPick *pick[string]
+	searchPick        *feature.Pick[hit]
+	openPick, newPick *feature.Pick[string]
 	searchSeq         uint64
 	searchCancel      context.CancelFunc
 	searchQuery       string
@@ -250,12 +251,12 @@ type Host struct {
 	awaitExit func(ctx context.Context, pid int64) bool
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
 	epoch     uint64
-	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
-	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
-	files     FileList      // the workspace's files, as last listed (page.go)
-	page      Page          // the page shown, its text as last snapshotted (page.go)
-	pageGen   uint64        // numbers the typing pauses; the latest wins (page.go)
-	typing    bool          // typed since the page was last snapshotted: its pause is to come (page.go)
+	listSeq   uint64           // numbers the file list's loads; the latest wins (feature/search.go)
+	listRetry time.Duration    // the delay before the file list's next retry after a failure; 0 after a success
+	files     feature.FileList // the workspace's files, as last listed (page.go)
+	page      feature.Page     // the page shown, its text as last snapshotted (page.go)
+	pageGen   uint64           // numbers the typing pauses; the latest wins (page.go)
+	typing    bool             // typed since the page was last snapshotted: its pause is to come (page.go)
 
 	// the workspace manager: the row under its cursor, and whether the edition offers the database
 	// settings
@@ -269,10 +270,10 @@ type Host struct {
 	active     *openBuffer
 	bufRecent  []*openBuffer
 	bufN       int
-	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
+	bufferPick *feature.Pick[string] // the Buffers picker (bufferpick.go)
 	// the Go-to picker's rows and its cursor (widgets.go)
-	widgetRows *rows[widgetTarget]
-	dockRows   *rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
+	widgetRows *feature.Rows[widgetTarget]
+	dockRows   *feature.Rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
 	// minimized are the panels the dock hid (golib's window minimize: hidden, not closed), the decl
 	// program's window collector; dockHidden are those the editor's icon hid, to show again (dock.go)
 	minimized  *widgetcore.MinimizedWindows
@@ -340,7 +341,7 @@ type Host struct {
 	// and the history
 	toasts     *widgetcore.Toasts
 	early      []widgetcore.Toast
-	noticeLog  *notices          // the notifications kept (notices.go)
+	noticeLog  *feature.Notices  // the notifications kept (feature/notices.go)
 	vimKeys    *widgetcore.Float // the Vim keys' card (vimkeys.go)
 	findCard   *widgetcore.Box   // "finding …" and its ✕, at the page window's top right (find.go)
 	findCardOn tuicore.Component // the page's window the card was put in: a rebuilt one gets it again
@@ -357,10 +358,10 @@ type Host struct {
 	helpPosted bool
 	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
 	// run in the program as any feature's do
-	moreFeatures []Feature
+	moreFeatures []feature.Feature
 	backend      tuicore.Backend // Options.Backend: the window's, for the GUI's streams
 	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
-	relationViews []Feature
+	relationViews []feature.Feature
 	graphUserFile string // graph.toml beside the config: the user's groups and palette (graphconf.go)
 	cfgDir        string // the folder beside the config (lua/, plugins/, themes/): a gated call's protect (authority.go)
 	// invoking is a gated script's key or row running its line, for authorityNow; nil otherwise
@@ -498,14 +499,14 @@ func newHost(session *Session, opt Options) *Host {
 		defaultCellFont: opt.DefaultCellFont,
 		chart:           opt.Chart,
 		noteFile:        opt.NoteFile,
-		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
+		vectors:         feature.NewRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
 		jumps:           editor.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
 		backend:         opt.Backend,
 		panelOpen:       map[string]bool{},
-		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
-		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
+		workspaces:      feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
+		managed:         feature.NewRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}
 	if opt.seams != nil {
 		h.seams = *opt.seams // a copy: nothing the caller changes later reaches this program
@@ -518,7 +519,7 @@ func newHost(session *Session, opt Options) *Host {
 	first := h.newBuffer()
 	first.buf = nil
 	h.active, h.file, h.bufRecent = first, &first.file, []*openBuffer{first}
-	h.noticeLog = newNotices(core{h})
+	h.noticeLog = feature.NewNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.tiles = newTiles(core{h})
 	h.explorer = newExplorer(core{h})
@@ -586,9 +587,9 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
 	if h.cat != nil {
-		h.cat.changed = h.commandsChanged // F1 lists the commands as they come and go (help.go)
+		h.cat.Changed = h.commandsChanged // F1 lists the commands as they come and go (help.go)
 	}
-	h.cat.attach(h.core)             // the catalog's verbs on the command line: find is the page's (catalog.go)
+	h.cat.Attach(h.core)             // the catalog's verbs on the command line: find is the page's (feature/catalog.go)
 	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
 	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
 	h.startEditorSocket(h.editorDir) // the page as the agents' tools (editorsocket.go)
@@ -649,10 +650,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	if err := h.assembleFeatures(h.features()...); err != nil {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
-	h.cat = h.reg.catalog
-	h.cat.tr = h.trOr                                             // the command line's help in the UI's language (language.go)
-	h.cat.gated = func() bool { return h.authorityNow().gated() } // a user-only entry is refused to a gated script's run (authority.go)
-	cmds, err := h.keys.commands()
+	h.cat = h.reg.Catalog
+	h.cat.Tr = h.trOr                                             // the command line's help in the UI's language (language.go)
+	h.cat.Gated = func() bool { return h.authorityNow().gated() } // a user-only entry is refused to a gated script's run (authority.go)
+	cmds, err := h.keys.Commands()
 	if err != nil {
 		panic(err) // the registry's check refuses it first: a build that cannot start
 	}
@@ -664,11 +665,11 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.plugins.refreshPlugins()
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
-		tuidecl.Sources(h.reg.state),
-		tuidecl.Handlers(h.reg.handlers),
+		tuidecl.Sources(h.reg.State),
+		tuidecl.Handlers(h.reg.Handlers),
 		tuidecl.AdapterOptions(tuidecl.WithWindowCollector(h.minimized)), // the panels the dock hides (dock.go)
 		tuidecl.ErrorSink(h.keep),
-		tuidecl.Types(noteRendererType),         // the note editor's renderer (noterenderer.go)
+		tuidecl.Types(feature.NoteRendererType), // the note editor's renderer (feature/noterenderer.go)
 		tuidecl.Types(h.plugins.cardType()),     // a card plugin's view in its panel (pluginpanels.go)
 		tuidecl.Types(h.relationViewTypes()...), // the GUI's GlobeMap and Mindmap views (relationmap.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
@@ -677,7 +678,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Files(files.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
-		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping),
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.Stopping),
 			// one failing command never takes AutoDoc down; a panic golib will not contain ends Run with
 			// it, so the unsaved work is kept and a report written (crash.go)
 			tuicore.WithHandlerRecover(h.contained), tuicore.WithPanicPolicy(tuicore.PanicReturn)}, opt.App...)...),
@@ -689,7 +690,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
 	defer h.session.Close()
-	defer h.reg.stopped() // after the loop: what each feature started stopped, bounded, before the session ends
+	defer h.reg.Stopped() // after the loop: what each feature started stopped, bounded, before the session ends
 	h.sayLastCrash()
 	err := h.p.Run(ctx)
 	keepErr := h.ended(err)

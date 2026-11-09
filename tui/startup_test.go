@@ -69,7 +69,7 @@ func TestLatestReleaseReadsGitHubsAnswer(t *testing.T) {
 
 // startupOf is the running program's startup feature.
 func startupOf(r *running) *startup {
-	for _, f := range r.h.reg.features {
+	for _, f := range r.h.reg.Features {
 		if s, ok := f.(*startup); ok {
 			return s
 		}

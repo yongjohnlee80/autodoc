@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // openerManifest is a protocol-9 plugin whose [open] claims .ipynb for its import command.
@@ -72,7 +73,7 @@ func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 func TestAPluginsDocumentNamesItsWorkspacesRoot(t *testing.T) {
 	r, _ := pluginTUI(t, t.TempDir())
 	r.ready(t)
-	r.h.p.Post(func() { r.h.openRef(fileRef{"kb", "a.md"}, false, nil) })
+	r.h.p.Post(func() { r.h.openRef(feature.FileRef{WS: "kb", Path: "a.md"}, false, nil) })
 	r.waitOpen(t, "kb", "a.md")
 	root := onLoop(r, func() string { return r.h.rootOf("kb") })
 	if root == "" {

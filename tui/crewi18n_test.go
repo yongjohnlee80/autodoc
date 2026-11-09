@@ -127,12 +127,12 @@ func TestTheOrphanOfferSpeaksTheCatalogsLanguage(t *testing.T) {
 	w.d.orphans = []any{orphan("autodoc:dead1", 3, "gold")}
 	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected()
-	q := w.card.current
+	q := w.card.Current
 	saysMarked(t, "the card's title", q.Title, "autodoc.crew.orphan_title")
 	saysMarked(t, "the card's text", q.Text, "autodoc.crew.orphan_text")
 	saysMarked(t, "Adopt", q.Yes, "autodoc.crew.orphan_adopt")
 	saysMarked(t, "Keep", q.No, "autodoc.crew.orphan_keep")
 	saysMarked(t, "Discard", q.Other, "autodoc.crew.orphan_discard")
-	w.card.accepted()
+	w.card.Accepted()
 	saysMarked(t, "the adoption", w.notices[len(w.notices)-1], "autodoc.crew.adopted")
 }

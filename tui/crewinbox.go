@@ -7,6 +7,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE HUMAN'S CREW INBOX IN A WINDOW (docs/decisions/crew.md#the-human-inbox).
@@ -32,7 +33,7 @@ const (
 // changes: its params (a TUI and daemon apart), or its gate. The watch then stops until the next
 // connection, and the window says so once.
 func watchRefused(err error) bool {
-	switch code(err) {
+	switch feature.Code(err) {
 	case golibrpc.CodeInvalidParams, golibrpc.CodeAccessDenied:
 		return true
 	}
@@ -52,11 +53,11 @@ type crewInboxCore interface {
 	Set(key string, v any)
 	Open(id string)
 	Close(id string)
-	Prefs() PrefsView
+	Prefs() feature.PrefsView
 	SetPref(name, value string)
 	Bell()
 	// Ask asks the user a question: a dismiss is asked first
-	Ask(q Question) Asked
+	Ask(q feature.Question) feature.Asked
 	// SetText sets the text of the layout's text area id (the reply's, at each opening)
 	SetText(id, text string)
 }
@@ -167,7 +168,7 @@ func (x *crewInbox) watch(gen uint64, page string) {
 		}
 		r, _ := v.(watchAnswer)
 		if r.err != nil || r.m == nil {
-			if code(r.err) == golibrpc.CodeMethodNotFound {
+			if feature.Code(r.err) == golibrpc.CodeMethodNotFound {
 				return // a daemon before crew: the next connection asks again
 			}
 			if watchRefused(r.err) {
@@ -209,20 +210,20 @@ type crewAttention struct{ session, codename, kind, text string }
 
 // add cuts snap's entries to their toasts' fields and keeps them: requests and reports only.
 func (p *snapshotParts) add(snap map[string]any) {
-	for _, it := range asList(snap["items"]) {
-		m := asMap(it)
-		if k := str(m, "kind"); k == "request" || k == "message" {
-			it := crewItem{id: str(m, "message"), kind: k, from: str(m, "from"), subject: str(m, "subject"), session: str(m, "session")}
+	for _, it := range feature.AsList(snap["items"]) {
+		m := feature.AsMap(it)
+		if k := feature.Str(m, "kind"); k == "request" || k == "message" {
+			it := crewItem{id: feature.Str(m, "message"), kind: k, from: feature.Str(m, "from"), subject: feature.Str(m, "subject"), session: feature.Str(m, "session")}
 			if k == "request" {
-				it.body = str(m, "body") // the reply dialog shows it; a report's is never kept
+				it.body = feature.Str(m, "body") // the reply dialog shows it; a report's is never kept
 			}
 			p.items = append(p.items, it)
 		}
 	}
-	for _, a := range asList(snap["attention"]) {
-		m := asMap(a)
-		p.attention = append(p.attention, crewAttention{session: str(m, "session"), codename: str(m, "codename"),
-			kind: str(m, "kind"), text: str(m, "text")})
+	for _, a := range feature.AsList(snap["attention"]) {
+		m := feature.AsMap(a)
+		p.attention = append(p.attention, crewAttention{session: feature.Str(m, "session"), codename: feature.Str(m, "codename"),
+			kind: feature.Str(m, "kind"), text: feature.Str(m, "text")})
 	}
 }
 
@@ -234,10 +235,10 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 	if snap, ok := m["snapshot"].(map[string]any); ok {
 		if page == "" {
 			x.parts = snapshotParts{}
-			x.cursor = num(m, "cursor")
+			x.cursor = feature.Num(m, "cursor")
 		}
 		x.parts.add(snap)
-		if next := str(snap, "next"); next != "" {
+		if next := feature.Str(snap, "next"); next != "" {
 			x.watch(gen, next) // the snapshot's next part, at its first page's cursor
 			return
 		}
@@ -249,19 +250,19 @@ func (x *crewInbox) answered(gen uint64, asked int64, page string, m map[string]
 	if asked == 0 && page == "" {
 		x.show(snapshotParts{}) // an empty journal: what was shown, from before, is closed
 	}
-	x.cursor = num(m, "cursor")
+	x.cursor = feature.Num(m, "cursor")
 	again, mailChanged := false, false
-	for _, ch := range asList(m["changes"]) {
-		c := asMap(ch)
-		switch str(c, "kind") {
+	for _, ch := range feature.AsList(m["changes"]) {
+		c := feature.AsMap(ch)
+		switch feature.Str(c, "kind") {
 		case "request", "report", "answered", "dismissed", "read", "expired", "attention", "cleared":
 			again = true // the open set may differ: read it again
 		case mail.ChangeUndeliverable:
 			mailChanged = true // a notice nobody could receive: the inbox dialog's Undeliverable
 		case "focus":
-			x.raise(str(c, "ref")) // the human asked for this agent: raised when it is this window's
+			x.raise(feature.Str(c, "ref")) // the human asked for this agent: raised when it is this window's
 		case mail.ChangeFallback, mail.ChangeFallbackDone, mail.ChangeFallbackUnknown:
-			x.readFallback(gen, str(c, "ref"), str(c, "kind"))
+			x.readFallback(gen, feature.Str(c, "ref"), feature.Str(c, "kind"))
 		}
 	}
 	if again {

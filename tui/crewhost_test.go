@@ -19,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // crewDaemon answers a window's crew verbs with a real crew.Manager on the in-memory store, its
@@ -162,7 +163,7 @@ type crewWindow struct {
 	// fallbacks and fallbackDone, when set, answer mail.fallbacks and mail.fallback_done: unset, the
 	// daemon is one before protocol 42, which has neither (crewfallback_test.go)
 	fallbacks, fallbackDone func(p []any) (any, error)
-	card                    *asker // the question card, made at the first question
+	card                    *feature.Asker // the question card, made at the first question
 	// lost is how many of a verb's next answers are lost after the daemon committed the call, as a
 	// dropped connection loses them; down how many of its next calls fail before reaching it
 	lost, down map[string]int
@@ -230,11 +231,11 @@ func (w *crewWindow) Notify(msg string)                { w.notices = append(w.no
 
 // AskWhenFree asks on a real question card (asker), as the window's: its replacement and its
 // reentrancy are the card's own.
-func (w *crewWindow) AskWhenFree(q Question) {
+func (w *crewWindow) AskWhenFree(q feature.Question) {
 	if w.card == nil {
-		w.card = newAsker(newScripted("kb"))
+		w.card = feature.NewAsker(newScripted("kb"))
 	}
-	w.card.askWhenFree(q)
+	w.card.AskWhenFree(q)
 }
 func (w *crewWindow) DaemonAddress() string {
 	if w.socket != "" {

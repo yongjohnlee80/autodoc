@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -29,7 +30,7 @@ type mailWindow struct {
 	focused                []string
 	more                   *bool // inbox.list's more, when the daemon says it
 	refuse                 bool  // inbox.ack and inbox.dismiss answer an error
-	asked                  []Question
+	asked                  []feature.Question
 	notices                []string
 }
 
@@ -89,10 +90,13 @@ func (w *mailWindow) drain() {
 		w.release(i)
 	}
 }
-func (w *mailWindow) Set(name string, v any)            { w.state[name] = v }
-func (w *mailWindow) Open(id string)                    { w.opened = append(w.opened, id) }
-func (w *mailWindow) Focus(id string)                   { w.focused = append(w.focused, id) }
-func (w *mailWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
+func (w *mailWindow) Set(name string, v any) { w.state[name] = v }
+func (w *mailWindow) Open(id string)         { w.opened = append(w.opened, id) }
+func (w *mailWindow) Focus(id string)        { w.focused = append(w.focused, id) }
+func (w *mailWindow) Ask(q feature.Question) feature.Asked {
+	w.asked = append(w.asked, q)
+	return feature.Asked{}
+}
 func (w *mailWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
 func (w *mailWindow) Tr(id string) string               { return w.Trf(id) }
 func (w *mailWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
@@ -501,11 +505,11 @@ func TestReplyDismissAndSenderGoThroughTheCrewInbox(t *testing.T) {
 func TestSPCaiOpensTheInbox(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
 	fs := h.features()
-	if _, err := newRegistry(fs...); err != nil {
+	if _, err := feature.NewRegistry(fs...); err != nil {
 		t.Fatal(err)
 	}
-	var on []Key
-	for _, k := range keyCatalog(fs).on(agentsCard) {
+	var on []feature.Key
+	for _, k := range feature.KeyCatalog(fs).On(agentsCard) {
 		if k.Seq == "i" {
 			on = append(on, k)
 		}
@@ -515,7 +519,7 @@ func TestSPCaiOpensTheInbox(t *testing.T) {
 	}
 	var verb string
 	for _, f := range fs {
-		if c, ok := f.(interface{ Catalog() []Entry }); ok {
+		if c, ok := f.(interface{ Catalog() []feature.Entry }); ok {
 			for _, e := range c.Catalog() {
 				if e.ID == "crew.inbox" {
 					verb = e.Verb

@@ -94,7 +94,7 @@ func (r *running) cursorAt() (int, int) {
 
 func (r *running) undo() { onLoop(r, func() bool { r.h.core.Undo(); return true }) }
 
-func (r *running) clearNotices() { onLoop(r, func() bool { r.h.noticeLog.items = nil; return true }) }
+func (r *running) clearNotices() { onLoop(r, func() bool { r.h.noticeLog.Items = nil; return true }) }
 
 // mustRun runs a command line that must succeed.
 func (r *running) mustRun(t *testing.T, line string) {
@@ -285,8 +285,8 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.mustRun(t, "lastsaved a.md")
 		r.s.WaitFor(t, "a time", func(string) bool {
 			return onLoop(r, func() bool {
-				for _, n := range r.h.noticeLog.items {
-					if regexp.MustCompile(`^lastsaved: a\.md \d\d:\d\d:\d\d$`).MatchString(n.text) {
+				for _, n := range r.h.noticeLog.Items {
+					if regexp.MustCompile(`^lastsaved: a\.md \d\d:\d\d:\d\d$`).MatchString(n.Text) {
 						return true
 					}
 				}

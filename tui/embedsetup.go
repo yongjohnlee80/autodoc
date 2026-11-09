@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/embed"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -49,7 +50,7 @@ func (r setupRow) target() (provider string, setProvider bool, policy string, se
 // embedSetup is the dialog: the Ollama it asks, the cards, the workspaces, a running download, and
 // the plan's last failure.
 type embedSetup struct {
-	c        Core
+	c        feature.Core
 	after    func(time.Duration, func())
 	rows     *tuidecl.ListModel // the workspaces, as the table shows them
 	models   *tuidecl.ListModel // the cards, as the dropdown shows them
@@ -84,7 +85,7 @@ type setupPlan struct {
 	rows        []setupRow
 }
 
-func newEmbedSetup(c Core) *embedSetup {
+func newEmbedSetup(c feature.Core) *embedSetup {
 	s := &embedSetup{c: c, rows: tuidecl.NewListModel("key", "mark", "workspace", "now", "will", "texts", "room", "time"),
 		models: tuidecl.NewListModel("key", "label")}
 	if a, ok := c.(interface{ After(time.Duration, func()) }); ok {
@@ -102,17 +103,17 @@ func (s *embedSetup) State() map[string]any {
 	}
 }
 
-func (s *embedSetup) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openEmbeddingSetup":    none(s.open),
-		"App.embedSetupCheck":       oneString("the Ollama's URL", s.check),
-		"App.embedSetupModelPicked": oneNumber("a model", s.picked),
-		"App.embedSetupToggle":      oneNumber("a workspace", s.toggle),
-		"App.embedSetupPull":        none(s.pull),
-		"App.embedSetupStop":        none(s.stop),
-		"App.embedSetupUse":         none(s.use),
-		"App.embedSetupRetry":       none(s.retry),
-		"App.embedSetupClosed":      none(s.closed),
+func (s *embedSetup) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openEmbeddingSetup":    feature.None(s.open),
+		"App.embedSetupCheck":       feature.OneString("the Ollama's URL", s.check),
+		"App.embedSetupModelPicked": feature.OneNumber("a model", s.picked),
+		"App.embedSetupToggle":      feature.OneNumber("a workspace", s.toggle),
+		"App.embedSetupPull":        feature.None(s.pull),
+		"App.embedSetupStop":        feature.None(s.stop),
+		"App.embedSetupUse":         feature.None(s.use),
+		"App.embedSetupRetry":       feature.None(s.retry),
+		"App.embedSetupClosed":      feature.None(s.closed),
 	}
 }
 
@@ -160,7 +161,7 @@ func (s *embedSetup) card() map[string]any {
 
 func (s *embedSetup) installed() bool { c := s.card(); return c != nil && c["installed"] == true }
 
-func (s *embedSetup) model() string { return str(s.card(), "name") }
+func (s *embedSetup) model() string { return feature.Str(s.card(), "name") }
 
 // check reads the machine, the cards and the workspaces from the Ollama at base, and estimates the
 // recommended model.
@@ -190,20 +191,20 @@ func (s *embedSetup) check(base string) {
 			return
 		}
 		if err, ok := v.(error); ok {
-			s.c.Set("App.embedSetupHost", s.c.Trf("autodoc.text.embedsetup.could_not_check", wireMessage(err)))
+			s.c.Set("App.embedSetupHost", s.c.Trf("autodoc.text.embedsetup.could_not_check", feature.WireMessage(err)))
 			return
 		}
 		got := v.([]any)
-		host := asMap(got[0])
-		if str(host, "ollama") == "" {
+		host := feature.AsMap(got[0])
+		if feature.Str(host, "ollama") == "" {
 			s.c.Set("App.embedSetupHost", s.c.Trf("autodoc.text.embedsetup.no_ollama", base))
 			return
 		}
 		s.c.Set("App.embedSetupHost", s.machine(host))
 		s.cards = nil
-		for _, c := range asList(got[1]) {
-			card := asMap(c)
-			if s.pulled[base][str(card, "name")] > since { // finished after this Check began
+		for _, c := range feature.AsList(got[1]) {
+			card := feature.AsMap(c)
+			if s.pulled[base][feature.Str(card, "name")] > since { // finished after this Check began
 				card["installed"] = true
 			}
 			s.cards = append(s.cards, card)
@@ -211,12 +212,12 @@ func (s *embedSetup) check(base string) {
 		s.pick = max(0, slices.IndexFunc(s.cards, func(c map[string]any) bool { return c["recommended"] == true }))
 		s.listModels()
 		s.ws = s.ws[:0]
-		for _, w := range asList(got[2]) {
-			m := asMap(w)
-			if str(m, "state") == "error" {
+		for _, w := range feature.AsList(got[2]) {
+			m := feature.AsMap(w)
+			if feature.Str(m, "state") == "error" {
 				continue // not served: nothing to embed
 			}
-			r := setupRow{name: str(m, "name"), policy: str(m, "embedding_policy"), provider: str(m, "provider")}
+			r := setupRow{name: feature.Str(m, "name"), policy: feature.Str(m, "embedding_policy"), provider: feature.Str(m, "provider")}
 			r.ticked = r.provider == "" && r.policy != store.EmbeddingNever
 			s.ws = append(s.ws, r)
 		}
@@ -226,17 +227,17 @@ func (s *embedSetup) check(base string) {
 
 // machine is host.probe's answer as one line.
 func (s *embedSetup) machine(host map[string]any) string {
-	gpu := asMap(host["gpu"])
+	gpu := feature.AsMap(host["gpu"])
 	var g string
-	switch vendor, vram := str(gpu, "vendor"), num(gpu, "vram"); {
+	switch vendor, vram := feature.Str(gpu, "vendor"), feature.Num(gpu, "vram"); {
 	case vendor == "":
 		g = s.c.Tr("autodoc.text.embedsetup.no_gpu")
 	case vram > 0:
-		g = s.c.Trf("autodoc.text.embedsetup.gpu_with_memory", strings.TrimSpace(vendor+" "+str(gpu, "name")), bytesText(vram))
+		g = s.c.Trf("autodoc.text.embedsetup.gpu_with_memory", strings.TrimSpace(vendor+" "+feature.Str(gpu, "name")), bytesText(vram))
 	default:
-		g = s.c.Trf("autodoc.text.embedsetup.gpu_memory_unknown", strings.TrimSpace(vendor+" "+str(gpu, "name")))
+		g = s.c.Trf("autodoc.text.embedsetup.gpu_memory_unknown", strings.TrimSpace(vendor+" "+feature.Str(gpu, "name")))
 	}
-	return s.c.Trf("autodoc.text.embedsetup.this_machine", g, bytesText(num(host, "ram")), bytesText(num(host, "free")), str(host, "ollama"))
+	return s.c.Trf("autodoc.text.embedsetup.this_machine", g, bytesText(feature.Num(host, "ram")), bytesText(feature.Num(host, "free")), feature.Str(host, "ollama"))
 }
 
 // fitText is a card's fit as the dropdown says it.
@@ -253,13 +254,13 @@ func (s *embedSetup) fitText(fit string) string {
 }
 
 func (s *embedSetup) listModels() {
-	rows := make([]rowOf, len(s.cards))
+	rows := make([]feature.RowOf, len(s.cards))
 	for i, c := range s.cards {
-		label := s.c.Trf("autodoc.text.embedsetup.model_row", str(c, "name"), s.fitText(str(c, "fit")), bytesText(num(c, "download")))
+		label := s.c.Trf("autodoc.text.embedsetup.model_row", feature.Str(c, "name"), s.fitText(feature.Str(c, "fit")), bytesText(feature.Num(c, "download")))
 		if c["installed"] == true {
 			label += s.c.Tr("autodoc.text.embedsetup.installed")
 		}
-		rows[i] = rowOf{"key": str(c, "name"), "label": label}
+		rows[i] = feature.RowOf{"key": feature.Str(c, "name"), "label": label}
 	}
 	s.models.Reset(rows)
 	s.c.Set("App.embedSetupModelIndex", -1) // moved away first, so the same index still moves it
@@ -302,31 +303,31 @@ func (s *embedSetup) estimate() {
 	}
 	s.c.Go(func(ctx context.Context) any {
 		v, err := s.c.Call(ctx, "embedding.estimate", model, []any{}, base)
-		return answered(asMap(v), err)
+		return feature.Answered(feature.AsMap(v), err)
 	}, func(v any) {
-		a := v.(answerOf[map[string]any])
+		a := v.(feature.AnswerOf[map[string]any])
 		if session != s.session || asked != s.asked { // a model picked since, even the same again
 			return
 		}
-		if a.err != nil {
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.could_not_estimate", wireMessage(a.err)))
+		if a.Err() != nil {
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.could_not_estimate", feature.WireMessage(a.Err())))
 			s.buttons(true)
 			return
 		}
-		if s.exactFor = ""; str(a.v, "basis") == "installed" {
+		if s.exactFor = ""; feature.Str(a.Value, "basis") == "installed" {
 			s.exactFor = model
 			if c := s.card(); c != nil && c["installed"] != true {
 				c["installed"] = true // the daemon found it installed: newer than the catalog the Check read
 				s.listModels()
 			}
 		}
-		for _, w := range asList(a.v["workspaces"]) {
-			m := asMap(w)
-			i := slices.IndexFunc(s.ws, func(r setupRow) bool { return r.name == str(m, "workspace") })
+		for _, w := range feature.AsList(a.Value["workspaces"]) {
+			m := feature.AsMap(w)
+			i := slices.IndexFunc(s.ws, func(r setupRow) bool { return r.name == feature.Str(m, "workspace") })
 			if i < 0 {
 				continue
 			}
-			s.ws[i].texts, s.ws[i].room, s.ws[i].seconds = num(m, "texts"), num(m, "logical_bytes"), nil
+			s.ws[i].texts, s.ws[i].room, s.ws[i].seconds = feature.Num(m, "texts"), feature.Num(m, "logical_bytes"), nil
 			if sec, ok := m["seconds"].(float64); ok {
 				s.ws[i].seconds = &sec
 			}
@@ -334,7 +335,7 @@ func (s *embedSetup) estimate() {
 		s.listRows()
 		switch {
 		case !s.installed():
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.to_download", bytesText(num(s.card(), "download"))))
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.to_download", bytesText(feature.Num(s.card(), "download"))))
 		case s.exactFor == model:
 			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.ready_to_use", model))
 		}
@@ -344,7 +345,7 @@ func (s *embedSetup) estimate() {
 
 // listRows shows the workspaces: ticked or not, what they do now, what Use will do, and the estimate.
 func (s *embedSetup) listRows() {
-	rows := make([]rowOf, len(s.ws))
+	rows := make([]feature.RowOf, len(s.ws))
 	for i, r := range s.ws {
 		mark := "[ ]"
 		if r.ticked {
@@ -354,7 +355,7 @@ func (s *embedSetup) listRows() {
 		if r.seconds != nil {
 			t = s.c.Trf("autodoc.text.embedsetup.about", durationText(*r.seconds))
 		}
-		rows[i] = rowOf{"key": r.name, "mark": mark, "workspace": r.name, "now": s.nowText(r), "will": s.willText(r),
+		rows[i] = feature.RowOf{"key": r.name, "mark": mark, "workspace": r.name, "now": s.nowText(r), "will": s.willText(r),
 			"texts": fmt.Sprint(r.texts), "room": bytesText(r.room), "time": t}
 	}
 	s.rows.Reset(rows)
@@ -395,17 +396,17 @@ func (s *embedSetup) pull() {
 	}
 	s.c.Go(func(ctx context.Context) any {
 		v, err := s.c.Call(ctx, "embedding.pull", model, base)
-		return answered(str(asMap(v), "job"), err)
+		return feature.Answered(feature.Str(feature.AsMap(v), "job"), err)
 	}, func(v any) {
-		a := v.(answerOf[string])
-		if a.err != nil {
+		a := v.(feature.AnswerOf[string])
+		if a.Err() != nil {
 			if session == s.session {
-				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", wireMessage(a.err)))
+				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", feature.WireMessage(a.Err())))
 			}
 			return
 		}
 		// the job is the daemon's whatever the view did meanwhile: kept, so Stop and the poll reach it
-		s.job, s.jobModel, s.jobBase = a.v, model, base
+		s.job, s.jobModel, s.jobBase = a.Value, model, base
 		if s.shown {
 			s.buttons(s.ready)
 			s.follow()
@@ -424,22 +425,22 @@ func (s *embedSetup) poll(chain uint64) {
 	job := s.job
 	s.c.Go(func(ctx context.Context) any {
 		v, err := s.c.Call(ctx, "embedding.pull_status", job)
-		return answered(asMap(v), err)
+		return feature.Answered(feature.AsMap(v), err)
 	}, func(v any) {
-		a := v.(answerOf[map[string]any])
+		a := v.(feature.AnswerOf[map[string]any])
 		if chain != s.polls || job != s.job {
 			return
 		}
-		if a.err != nil {
+		if a.Err() != nil {
 			s.job = ""
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", wireMessage(a.err)))
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", feature.WireMessage(a.Err())))
 			s.buttons(s.ready)
 			return
 		}
-		switch str(a.v, "state") {
+		switch feature.Str(a.Value, "state") {
 		case "running":
-			done, total := num(a.v, "completed"), num(a.v, "total")
-			if eta, ok := a.v["eta"].(float64); ok {
+			done, total := feature.Num(a.Value, "completed"), feature.Num(a.Value, "total")
+			if eta, ok := a.Value["eta"].(float64); ok {
 				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading_eta", bytesText(done), bytesText(total), durationText(eta)))
 			} else {
 				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading", bytesText(done), bytesText(total)))
@@ -460,7 +461,7 @@ func (s *embedSetup) poll(chain uint64) {
 			s.pulled[s.jobBase][s.jobModel] = s.finished
 			// the model downloaded is the job's, on the job's Ollama: neither need be the one shown now
 			if s.jobBase == s.base {
-				if i := slices.IndexFunc(s.cards, func(c map[string]any) bool { return str(c, "name") == s.jobModel }); i >= 0 {
+				if i := slices.IndexFunc(s.cards, func(c map[string]any) bool { return feature.Str(c, "name") == s.jobModel }); i >= 0 {
 					s.cards[i]["installed"] = true
 				}
 				s.listModels()
@@ -474,7 +475,7 @@ func (s *embedSetup) poll(chain uint64) {
 			s.c.Set("App.embedSetupStatus", s.c.Tr("autodoc.text.embedsetup.stopped"))
 		default:
 			s.job = ""
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", str(a.v, "error")))
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.download_failed", feature.Str(a.Value, "error")))
 		}
 		s.buttons(s.ready)
 	})
@@ -517,9 +518,9 @@ func (s *embedSetup) workspaces(ctx context.Context) (map[string]setupRow, error
 		return nil, err
 	}
 	now := map[string]setupRow{}
-	for _, w := range asList(v) {
-		m := asMap(w)
-		now[str(m, "name")] = setupRow{name: str(m, "name"), policy: str(m, "embedding_policy"), provider: str(m, "provider")}
+	for _, w := range feature.AsList(v) {
+		m := feature.AsMap(w)
+		now[feature.Str(m, "name")] = setupRow{name: feature.Str(m, "name"), policy: feature.Str(m, "embedding_policy"), provider: feature.Str(m, "provider")}
 	}
 	return now, nil
 }
@@ -530,7 +531,7 @@ func (s *embedSetup) use() {
 		return // the button shows only then; a command sent anyway is refused here
 	}
 	tokens := int64(store.DefaultContext)
-	if n := num(s.card(), "context"); n > 0 && n < tokens {
+	if n := feature.Num(s.card(), "context"); n > 0 && n < tokens {
 		tokens = n
 	}
 	s.apply(&setupPlan{model: s.model(), base: s.base, tokens: tokens, rows: slices.Clone(s.ws)})
@@ -574,7 +575,7 @@ func (s *embedSetup) apply(plan *setupPlan) {
 		if err != nil {
 			return err
 		}
-		if str(asMap(v), "active") == name {
+		if feature.Str(feature.AsMap(v), "active") == name {
 			return nil
 		}
 		_, err = s.c.Call(ctx, "embedding.use", name)
@@ -642,7 +643,7 @@ func (s *embedSetup) apply(plan *setupPlan) {
 		}
 		s.listRows()
 		if f := run.failed; f != nil {
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.stopped_at", f.what, wireMessage(f.err)))
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.stopped_at", f.what, feature.WireMessage(f.err)))
 			s.buttons(true)
 			return
 		}
@@ -663,19 +664,19 @@ func (s *embedSetup) provider(ctx context.Context, base, model string, tokens in
 	if err != nil {
 		return "", err
 	}
-	m := asMap(v)
+	m := feature.AsMap(v)
 	var equal, names []string
-	for _, p := range asList(m["providers"]) {
-		pm := asMap(p)
-		names = append(names, str(pm, "name"))
-		if str(pm, "kind") == store.KindOllama && strings.TrimRight(str(pm, "base_url"), "/") == strings.TrimRight(base, "/") &&
-			str(pm, "model") == model && num(pm, "context") == tokens && pm["has_key"] != true {
-			equal = append(equal, str(pm, "name"))
+	for _, p := range feature.AsList(m["providers"]) {
+		pm := feature.AsMap(p)
+		names = append(names, feature.Str(pm, "name"))
+		if feature.Str(pm, "kind") == store.KindOllama && strings.TrimRight(feature.Str(pm, "base_url"), "/") == strings.TrimRight(base, "/") &&
+			feature.Str(pm, "model") == model && feature.Num(pm, "context") == tokens && pm["has_key"] != true {
+			equal = append(equal, feature.Str(pm, "name"))
 		}
 	}
 	if len(equal) > 0 {
-		if slices.Contains(equal, str(m, "active")) {
-			return str(m, "active"), nil
+		if slices.Contains(equal, feature.Str(m, "active")) {
+			return feature.Str(m, "active"), nil
 		}
 		slices.Sort(equal)
 		return equal[0], nil

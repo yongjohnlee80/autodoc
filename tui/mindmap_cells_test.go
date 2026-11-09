@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -42,7 +43,7 @@ func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*cellMindmap,
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.open, m.cur, m.selected = true, &cellMind{root: fileRef{ws: "kb", path: root}, m: rm, grid: grid}, 0
+	m.open, m.cur, m.selected = true, &cellMind{root: feature.FileRef{WS: "kb", Path: root}, m: rm, grid: grid}, 0
 	return m, v
 }
 
@@ -220,7 +221,7 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 		t.Fatal("a terminal's main.qml has no Relations › Mindmap item")
 	}
 	m := onLoop(r, func() *cellMindmap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if m, ok := f.(*cellMindmap); ok {
 				return m
 			}
@@ -245,7 +246,7 @@ func TestSPCMOpensTheMindmap(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
 	m := onLoop(r, func() *cellMindmap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if m, ok := f.(*cellMindmap); ok {
 				return m
 			}
@@ -286,7 +287,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == editor.ViewRaw })
 			}
 			m := onLoop(r, func() *cellMindmap {
-				for _, f := range r.h.reg.features {
+				for _, f := range r.h.reg.Features {
 					if m, ok := f.(*cellMindmap); ok {
 						return m
 					}

@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE RESULTS PANEL — a table a plugin sends (protocol 4: host.table), shown by AutoDoc itself in a
@@ -794,7 +795,7 @@ func (pl *plugins) resultsMenuRows() []widgetcore.MenuItemModel {
 		m := widgetcore.NewCommand(widgetcore.ItemID("results.menu."+id), label, editor.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
 			Run: func(*editor.EditorCore) { pl.runResultsEntry(entry, args) }})
 		m.Enabled = enabled
-		return withLabelMessage(m, label) // a row with a field's name is composed in the UI's language
+		return feature.WithLabelMessage(m, label) // a row with a field's name is composed in the UI's language
 	}
 	rows := []widgetcore.MenuItemModel{
 		row("copy", "Copy", "results.copy", nil, have),

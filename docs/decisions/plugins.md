@@ -142,7 +142,7 @@ the same list.
 - The catalog holds only what a person would invoke. The QML handlers stay the document's wiring;
   an entry's `Run` calls the same function as its handler twin, so there is one behaviour.
 
-In the code: `tui/catalog.go`, `tui/builtins.go`, `tui/plugincmds.go`
+In the code: `tui/feature/catalog.go`, `tui/builtins.go`, `tui/plugincmds.go`
 
 ## One owner per command name
 
@@ -153,7 +153,7 @@ any name, golib's own included, and only that name moves to it: overriding `term
 that takes golib's verbs or another entry's name stops the program at start. F1, completion and the
 editor's command registry read the same name map, so they always agree on who owns a name.
 
-In the code: `tui/catalog.go`, `tui/scripts.go`
+In the code: `tui/feature/catalog.go`, `tui/scripts.go`
 
 ## Keys and help read the catalog
 
@@ -163,7 +163,7 @@ the registry is built, while Lua and plugin entries come and go at runtime. F1's
 generated from the catalog, grouped by source, with each entry's verb and keys, and the SPC p cards
 are made from the plugin entries.
 
-In the code: `tui/catalog.go`, `tui/keys_test.go`, `tui/help_test.go`
+In the code: `tui/feature/catalog.go`, `tui/keys_test.go`, `tui/help_test.go`
 
 ## Lua runs catalog entries
 
@@ -254,7 +254,7 @@ shows it at the next open. The host never asks the plugin as the menu opens, so 
 slows a right-click. A stopped plugin's pushed titles are cleared, and its rows show as the manifest
 declares them.
 
-In the code: `tui/menurows.go`, `plugin/menu.go`, `core/manifests/manifests.go`
+In the code: `tui/feature/menurows.go`, `plugin/menu.go`, `core/manifests/manifests.go`
 
 ## Card panels made at runtime
 
@@ -271,7 +271,7 @@ restart.
   so.
 - An added card keeps its stored geometry (`tui.card_<name>.*`).
 
-In the code: `tui/pluginpanels.go`, `tui/panelregistry.go`
+In the code: `tui/pluginpanels.go`, `tui/feature/panelregistry.go`
 
 ## Shared panels and their geometry
 

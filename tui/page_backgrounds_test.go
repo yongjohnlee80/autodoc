@@ -213,7 +213,7 @@ func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
 func openMindmap(t *testing.T, r *running) *cellMindmap {
 	t.Helper()
 	m := onLoop(r, func() *cellMindmap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if m, ok := f.(*cellMindmap); ok {
 				return m
 			}

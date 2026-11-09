@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,10 +13,10 @@ import (
 // startCounter is a feature that counts the program's starts (a Starter).
 type startCounter struct{ n int }
 
-func (*startCounter) Name() string                 { return "startcounter" }
-func (*startCounter) State() map[string]any        { return nil }
-func (*startCounter) Commands() map[string]Command { return nil }
-func (c *startCounter) Started()                   { c.n++ }
+func (*startCounter) Name() string                         { return "startcounter" }
+func (*startCounter) State() map[string]any                { return nil }
+func (*startCounter) Commands() map[string]feature.Command { return nil }
+func (c *startCounter) Started()                           { c.n++ }
 
 // TestStartingWaitsForTheStoresPreferences: a preference set while the store's preferences are
 // still being read (preference.list's answer held, read but not yet handed back) applies at once but starts nothing; the program
@@ -37,7 +38,7 @@ func TestStartingWaitsForTheStoresPreferences(t *testing.T) {
 	})
 	r := runTUI(t, sess, Options{})
 	starts := &startCounter{}
-	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, starts); return true })
+	onLoop(r, func() bool { r.h.reg.Features = append(r.h.reg.Features, starts); return true })
 	select {
 	case <-held:
 	case <-time.After(daemonWait):
@@ -95,7 +96,7 @@ func TestAStoreThatCantListStartsOnTheDefaults(t *testing.T) {
 	})
 	r := runTUI(t, sess, Options{})
 	starts := &startCounter{}
-	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, starts); return true })
+	onLoop(r, func() bool { r.h.reg.Features = append(r.h.reg.Features, starts); return true })
 	select {
 	case <-held:
 	case <-time.After(daemonWait):

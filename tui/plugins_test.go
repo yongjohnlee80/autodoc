@@ -30,6 +30,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/style"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE PLUGINS (docs/decisions/plugins.md#plugins-are-separate-programs) — the Plugins menu lists
@@ -574,15 +575,15 @@ func (r *running) waitNotice(t *testing.T, text string) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for !onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, text) {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, text) {
 				return true
 			}
 		}
 		return false
 	}) {
 		if time.Now().After(deadline) {
-			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []notice { return r.h.noticeLog.items }))
+			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -1065,7 +1066,7 @@ func (r *running) question(t *testing.T) string {
 			return q
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []notice { return r.h.noticeLog.items }))
+			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -1909,9 +1910,9 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	r, _ := pluginTUI(t, dir)
 	got := onLoop(r, func() []string {
 		var out []string
-		for _, e := range r.h.cat.entries() {
-			if e.Source == SourcePlugin {
-				out = append(out, fmt.Sprintf("%s %s %q %q", e.ID, e.Owner, e.Title, r.h.cat.owned(e.ID)))
+		for _, e := range r.h.cat.Entries() {
+			if e.Source == feature.SourcePlugin {
+				out = append(out, fmt.Sprintf("%s %s %q %q", e.ID, e.Owner, e.Title, r.h.cat.Owned(e.ID)))
 			}
 		}
 		return out
@@ -1923,7 +1924,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		help := strings.Join(strings.Fields(onLoop(r, func() string { return r.h.helpNow })), " ")
 		return strings.Contains(help, "the plugins' (SPC p) plugin.alpha.hello — · SPC p › Alpha h · Alpha: Say hello")
 	})
-	if err := onLoop(r, func() error { return r.h.cat.run("plugin.alpha.hello", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("plugin.alpha.hello", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.waitShown(t, "command hello")
@@ -1932,7 +1933,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool { r.h.plugins.loadPlugins(); return true })
-	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("plugin.alpha.hello") }); e != nil {
+	if e := onLoop(r, func() *feature.Entry { return r.h.cat.Lookup("plugin.alpha.hello") }); e != nil {
 		t.Fatalf("a removed plugin's command stayed: %+v", e)
 	}
 	r.leader(t, 'p')
@@ -1959,7 +1960,7 @@ func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
 		t.Fatalf("%d plugins started from entries that start nothing", n)
 	}
 	if onLoop(r, func() bool {
-		return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "no plugin " })
+		return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return n.Text == "no plugin " })
 	}) {
 		t.Error(`the empty entry ("no plugins yet") looked for a plugin named ""`)
 	}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
@@ -10,12 +11,12 @@ import (
 // endpointCase is one of the AI models' lists, built over a scripted core.
 type endpointCase struct {
 	name string
-	make func(c Core) *endpoints
+	make func(c feature.Core) *endpoints
 }
 
 var endpointCases = []endpointCase{
-	{"providers", func(c Core) *endpoints { return newProviders(c).endpoints }},
-	{"rankers", func(c Core) *endpoints { return newRankers(c, func() {}).endpoints }},
+	{"providers", func(c feature.Core) *endpoints { return newProviders(c).endpoints }},
+	{"rankers", func(c feature.Core) *endpoints { return newRankers(c, func() {}).endpoints }},
 }
 
 // scriptedList answers e's list verb: a, of the list's second kind (one that takes a key, its key

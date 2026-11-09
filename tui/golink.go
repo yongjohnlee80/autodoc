@@ -7,6 +7,7 @@ import (
 	"github.com/yongjohnlee80/golib/parse/markdown"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // cursorLink is the link the cursor is on: its source text, as the daemon records a link's raw,
@@ -108,17 +109,17 @@ func (h *Host) goToLink(l cursorLink) {
 		h.htmlLinkAs(who, l.dest)
 		return
 	}
-	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, TicketFile)
-	do(h, func(ctx context.Context) answerOf[map[string]any] {
+	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, feature.TicketFile)
+	do(h, func(ctx context.Context) feature.AnswerOf[map[string]any] {
 		res, err := h.call(ctx, "graph.resolve", ws, from, l.raw)
-		return answerOf[map[string]any]{v: asMap(res), err: err}
-	}, func(a answerOf[map[string]any]) {
+		return feature.Answered(feature.AsMap(res), err)
+	}, func(a feature.AnswerOf[map[string]any]) {
 		if !tk.Current() {
 			return // another file opened, or another daemon, since: the link was the old file's
 		}
-		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {
-		case a.err != nil:
-			h.failed("go to link", a.err)
+		switch path, reason := feature.Str(a.Value, "path"), feature.Str(a.Value, "reason"); {
+		case a.Err() != nil:
+			h.failed("go to link", a.Err())
 		case path != "" && who.gated(): // a document, opened within the script's bounds
 			h.openAbsoluteAs(who, filepath.Join(h.rootOf(ws), filepath.FromSlash(path)))
 		case path != "":

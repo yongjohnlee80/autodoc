@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -16,7 +17,7 @@ func TestTheExplorerTakesTheHostsListings(t *testing.T) {
 		return map[string]any{"docs": []any{map[string]any{"path": "a.md"}, map[string]any{"path": "dir/b.md"}}}, nil
 	}
 	e := newExplorer(c)
-	c.spaces = []Workspace{{Name: "kb", State: "ready"}, {Name: "notes", State: "ready"}}
+	c.spaces = []feature.Workspace{{Name: "kb", State: "ready"}, {Name: "notes", State: "ready"}}
 	e.Listed()
 	if n := e.model.RowCount(nil); n != 2 {
 		t.Fatalf("top level: %d rows, want the 2 workspaces", n)
@@ -34,25 +35,25 @@ func TestTheExplorerTakesTheHostsListings(t *testing.T) {
 	}
 
 	// the host lists the same files: nothing replaced, the folder stays open
-	c.listing = FileList{Paths: []string{"a.md", "dir/b.md"}, Loaded: true, Gen: 1}
+	c.listing = feature.FileList{Paths: []string{"a.md", "dir/b.md"}, Loaded: true, Gen: 1}
 	e.Listed()
 	if !open() {
 		t.Fatal("the same files listed again closed dir/")
 	}
 	// a file added: the rows under kb are the new list
-	c.listing = FileList{Paths: []string{"a.md", "c.md", "dir/b.md"}, Loaded: true, Gen: 2}
+	c.listing = feature.FileList{Paths: []string{"a.md", "c.md", "dir/b.md"}, Loaded: true, Gen: 2}
 	e.Listed()
 	if n := e.model.RowCount(&kb); n != 3 {
 		t.Fatalf("after c.md was listed kb has %d rows, want 3", n)
 	}
 	// a workspace the explorer never opened: nothing listed under it
-	c.ws, c.listing = "notes", FileList{Paths: []string{"n.md"}, Loaded: true, Gen: 3}
+	c.ws, c.listing = "notes", feature.FileList{Paths: []string{"n.md"}, Loaded: true, Gen: 3}
 	e.Listed()
 	if _, listed := e.paths["notes"]; listed {
 		t.Fatal("a listing of notes was taken before its row opened")
 	}
 	// the workspaces changing: the top level again, nothing listed under it
-	c.spaces = []Workspace{{Name: "kb", State: "ready"}, {Name: "notes", State: "indexing"}}
+	c.spaces = []feature.Workspace{{Name: "kb", State: "ready"}, {Name: "notes", State: "indexing"}}
 	e.Listed()
 	if len(e.paths) != 0 || e.model.RowCount(&kb) != 0 {
 		t.Fatalf("the workspaces changed and the explorer kept %v", e.paths)
@@ -67,7 +68,7 @@ func TestTheExplorerOpensWhatIsActivated(t *testing.T) {
 		return map[string]any{"docs": []any{map[string]any{"path": "a.md"}}}, nil
 	}
 	e := newExplorer(c)
-	c.spaces = []Workspace{{Name: "kb", State: "ready"}}
+	c.spaces = []feature.Workspace{{Name: "kb", State: "ready"}}
 	e.Listed()
 	kb := tuidecl.Index{Row: 0}
 	e.fetch(kb)

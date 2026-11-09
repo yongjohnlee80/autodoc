@@ -141,8 +141,8 @@ func TestAGatedScriptsUserOnlyRunsAreRefused(t *testing.T) {
 	g.mustRun(t, "lua autodoc.notify('PROBE-USER')") // the control: the probe is seen when it runs
 	g.waitKept(t, "PROBE-USER")
 	if onLoop(g.running, func() bool {
-		for _, n := range g.h.noticeLog.items {
-			if strings.Contains(n.text, "PROBE-GATED") {
+		for _, n := range g.h.noticeLog.Items {
+			if strings.Contains(n.Text, "PROBE-GATED") {
 				return true
 			}
 		}
@@ -234,9 +234,9 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 	g.saved(t, func() { onLoop(g.running, func() bool { g.h.luaFeature().luaKey("z"); return true }) })
 	g.probeIs(t, "orig\n")
 	serial := onLoop(g.running, func() int {
-		for _, r := range g.h.luaFeature().rows.rows {
-			if r.owner == "pkg" {
-				return r.serial
+		for _, r := range g.h.luaFeature().rows.Rows {
+			if r.Owner == "pkg" {
+				return r.Serial
 			}
 		}
 		return -1
