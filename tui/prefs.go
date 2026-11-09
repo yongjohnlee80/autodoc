@@ -150,27 +150,38 @@ type prefs struct {
 	values map[string]string
 }
 
-// hostRows are the host's own rows, bound to prefs' fields (BoundPref), by name: every one of them,
-// whichever program asks, so Value reads a field-bound preference from any prefs, a store's or a
-// cell's own. They are built once and never change.
-var hostRows = sync.OnceValue(func() map[string]PrefSpec {
-	m := map[string]PrefSpec{}
-	for _, rows := range [][]PrefSpec{legacyPrefRows(nil, false), legacyPrefRows(nil, true), terminalPrefRows(nil),
-		{panelKeysRow()}, agentPrefRows(nil), agentBellRows()} {
-		for _, s := range rows {
-			if !s.byName {
-				m[s.Name] = s
+// hostFields are the host's own rows bound to prefs' fields (BoundPref): each one's reader, by name,
+// every one of them whichever program asks, so Value reads a field-bound preference from any prefs,
+// a store's or a cell's own. Built once, on first use, and never changed. Its zero value needs no
+// initializing: a package variable's initializer may read a preference (a GlobeMap look) before
+// the package's other variables are set, through PrefsView, which init order doesn't follow.
+var hostFields struct {
+	once  sync.Once
+	value map[string]func(PrefsView) string
+}
+
+// hostField is the reader of the host's row name, bound to a field; ok false for any other name.
+func hostField(name string) (read func(PrefsView) string, ok bool) {
+	hostFields.once.Do(func() {
+		hostFields.value = map[string]func(PrefsView) string{}
+		for _, rows := range [][]PrefSpec{legacyPrefRows(nil, false), legacyPrefRows(nil, true), terminalPrefRows(nil),
+			{panelKeysRow()}, agentPrefRows(nil), agentBellRows()} {
+			for _, s := range rows {
+				if !s.byName && s.value != nil {
+					hostFields.value[s.Name] = s.value
+				}
 			}
 		}
-	}
-	return m
-})
+	})
+	read, ok = hostFields.value[name]
+	return read, ok
+}
 
 // Value is the preference name as stored: a host's row's from its field, or a feature's own
 // (ValuePref); "" for a name no row declares. PrefsView's.
 func (p prefs) Value(name string) string {
-	if s, ok := hostRows()[name]; ok {
-		return s.value(p)
+	if read, ok := hostField(name); ok {
+		return read(p)
 	}
 	return p.values[name]
 }
