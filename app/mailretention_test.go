@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // The daemon sweeps handled mail as it starts (docs/decisions/crew.md#handled-mail-is-kept-for-a-window):
@@ -24,7 +25,7 @@ func TestTheDaemonSweepsHandledMailAsItStarts(t *testing.T) {
 	}
 	ctx := context.Background()
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	cfg := writeConfig(t, sock, state, "")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)

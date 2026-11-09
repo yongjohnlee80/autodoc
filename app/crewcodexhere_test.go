@@ -7,13 +7,14 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	golibserver "github.com/yongjohnlee80/golib/server"
 	"github.com/yongjohnlee80/golib/server/ws"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // codexThread is one thread as the stand-in app-server holds it.
@@ -208,7 +209,7 @@ func TestTheCodexServerRPCOverItsSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(sockDir)
-	sock := filepath.Join(sockDir, "s.sock")
+	sock := ipc.ScratchAddr(sockDir, "s.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)

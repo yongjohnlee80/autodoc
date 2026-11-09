@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestAGuardThatCannotBeBuiltStopsTheStart: a daemon whose guard cannot be built (a relative path
@@ -24,7 +25,7 @@ func TestAGuardThatCannotBeBuiltStopsTheStart(t *testing.T) {
 	defer func(f func(...string) (*fsbounds.Guard, error)) { newGuard = f }(newGuard)
 	newGuard = func(...string) (*fsbounds.Guard, error) { return nil, failed }
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // a daemon that serves anyway stops here
 	defer cancel()
 	err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), io.Discard, testBuild, nil, "")

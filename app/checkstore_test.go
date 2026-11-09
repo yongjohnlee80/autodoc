@@ -17,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 func checkReport(t *testing.T, out *bytes.Buffer) storeCheck {
@@ -45,7 +46,7 @@ func spoilPage(t *testing.T, path string, n int64) {
 // itself; with one serving it, the daemon checks it (sys.check) and keeps serving.
 func TestCheckStoreChecksHereOrThroughTheDaemon(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	var out, errs bytes.Buffer
 	if code := run(context.Background(), []string{"--config", cfg, "--check-store"}, Options{Version: "v-test"}, &out, &errs); code != 0 {
@@ -68,7 +69,7 @@ func TestCheckStoreChecksHereOrThroughTheDaemon(t *testing.T) {
 // check, and says how to see why; --check-store reports it, and exits as a problem.
 func TestADamagedStoreIsNotServed(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	spoilPage(t, filepath.Join(state, config.StoreName), 6)
 	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, "")
@@ -119,7 +120,7 @@ func fillStore(t *testing.T, path string, n int) {
 // store, so the next start refuses it.
 func TestDamageFoundAfterTheStartStopsTheDaemon(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	path := filepath.Join(state, config.StoreName)
 	fillStore(t, path, 300)
@@ -153,7 +154,7 @@ func TestDamageFoundAfterTheStartStopsTheDaemon(t *testing.T) {
 // serves it again.
 func TestCheckStoreClearsTheMarkOfASoundStore(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	mark := filepath.Join(state, config.StoreName) + ".damaged"
 	if err := os.WriteFile(mark, []byte(`{"quick":true,"integrity":["page 9: bad"]}`), 0o600); err != nil {
@@ -181,7 +182,7 @@ func TestCheckStoreClearsTheMarkOfASoundStore(t *testing.T) {
 // and lists that connection as sealed and the others as they are.
 func TestAStoreWhoseSecretsDoNotOpenIsServed(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir(), "kb2="+t.TempDir())
 	path := filepath.Join(state, config.StoreName)
 	ctx := context.Background()
@@ -242,7 +243,7 @@ func TestAStoreWhoseSecretsDoNotOpenIsServed(t *testing.T) {
 // the event's write is bounded, and asked only after the stop.
 func TestADamageEventThatCannotBeWrittenNeverHoldsTheStop(t *testing.T) {
 	dir := short(t)
-	sock, state := filepath.Join(dir, "a.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	path := filepath.Join(state, config.StoreName)
 	fillStore(t, path, 300)

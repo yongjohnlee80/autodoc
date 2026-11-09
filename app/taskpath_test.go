@@ -11,6 +11,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -23,7 +24,7 @@ import (
 func movedTask(t *testing.T) (kb string, cli *golibrpc.Client, stale []byte) {
 	t.Helper()
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	kb = mustEval(t, t.TempDir())
 	start(t, writeConfig(t, sock, state, "", "kb="+kb), sock)
 	cli = dial(t, sock)
