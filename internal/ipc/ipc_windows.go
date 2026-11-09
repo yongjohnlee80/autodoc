@@ -189,8 +189,9 @@ func dial(ctx context.Context, addr string) (net.Conn, error) {
 	return cc, nil
 }
 
-// checkDACL refuses the pipe c is open on unless its DACL is protected and every entry allows this
-// user alone.
+// checkDACL refuses the pipe c is open on unless its DACL is protected (nothing inherited) and each
+// of its entries is a plain allow for this user, or a deny: an allowlist, so an entry of any other
+// kind (a conditional or callback allow, an object allow) is refused rather than read past.
 func checkDACL(c *clientConn, addr string) error {
 	h, _, ok := handleOf(c)
 	if !ok {
@@ -199,6 +200,13 @@ func checkDACL(c *clientConn, addr string) error {
 	sd, err := windows.GetSecurityInfo(h, windows.SE_KERNEL_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return fmt.Errorf("ipc: reading %s's access list: %w", addr, err)
+	}
+	control, _, err := sd.Control()
+	if err != nil {
+		return fmt.Errorf("ipc: reading %s's access list: %w", addr, err)
+	}
+	if control&windows.SE_DACL_PROTECTED == 0 {
+		return &UnsafeDirError{Dir: addr, Why: "has an access list that is not protected, so it may take entries it inherits"}
 	}
 	dacl, _, err := sd.DACL()
 	if err != nil || dacl == nil {
@@ -213,9 +221,14 @@ func checkDACL(c *clientConn, addr string) error {
 		if err := windows.GetAce(dacl, i, &ace); err != nil {
 			return fmt.Errorf("ipc: reading %s's access list: %w", addr, err)
 		}
-		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		if ace.Header.AceType == windows.ACCESS_ALLOWED_ACE_TYPE && !sid.Equals(me) {
-			return &UnsafeDirError{Dir: addr, Why: "admits another user (" + sid.String() + ") in its access list"}
+		switch ace.Header.AceType {
+		case windows.ACCESS_DENIED_ACE_TYPE: // a deny only narrows who may open it
+		case windows.ACCESS_ALLOWED_ACE_TYPE:
+			if sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)); !sid.Equals(me) {
+				return &UnsafeDirError{Dir: addr, Why: "admits another user (" + sid.String() + ") in its access list"}
+			}
+		default:
+			return &UnsafeDirError{Dir: addr, Why: fmt.Sprintf("has an access-list entry of a kind this check does not admit (type %d)", ace.Header.AceType)}
 		}
 	}
 	return nil
