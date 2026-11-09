@@ -179,7 +179,7 @@ func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 			pl.pluginCards[ref.key] = card
 			taken[ref.key] = map[string]string{"q": pl.c.Tr("autodoc.text.plugincmds.closing_the_card")}
 		}
-		letter, chosen := pl.c.Prefs().(prefs).pluginKeys[ref.plugin+"."+ref.id]
+		letter, chosen := asPrefs(pl.c.Prefs()).pluginKeys[ref.plugin+"."+ref.id]
 		if !chosen {
 			letter = ref.letter
 		}
