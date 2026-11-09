@@ -319,11 +319,20 @@ func (r *related) load(ws, p string) {
 // unresolved relations and cycles.
 func (r *related) show(ws, p string, rl relations) {
 	rows, neighbours := relationRows(r.c, ws, p, rl)
+	// the same document's rows read again (SPC l reads them again while the drawer may show them
+	// already, and the cursor may have moved since): the cursor stays on its row, when it is still
+	// there. Another document's: the cursor on the first document, not a heading: Enter opens it.
+	at := -1
+	if was, ok := r.rows.At(r.at); ok && r.of == (fileRef{ws, p}) {
+		at = slices.Index(rows, was)
+	}
 	r.of = fileRef{ws, p}
 	r.rows.Reset(rows)
-	// the cursor on the first document, not a heading: Enter opens it
-	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
-		r.moveTo(first)
+	if at < 0 {
+		at = slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" })
+	}
+	if at >= 0 {
+		r.moveTo(at)
 	}
 	title := r.c.Trf("autodoc.text.relations.title_links_count", neighbours)
 	if r.deep {
