@@ -51,6 +51,9 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 	r.waitAttached(t, "kb")
 	r.waitListed(t, listed)
 	if before != nil {
+		// the store's preferences first: they carry a theme, which applyPrefs switches to as they
+		// land, so a switch made in before would be undone under the cell
+		r.prefsIn(t)
 		before(r)
 	}
 	m := onLoop(r, func() *cellMindmap {
