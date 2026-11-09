@@ -90,8 +90,9 @@ func TestACRLFFileReloadedFromDiskKeepsNoCR(t *testing.T) {
 	r.s.WaitFor(t, "the change on disk reloaded", func(string) bool {
 		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "changed on disk") })
 	})
-	if v := onLoop(r, func() string { return r.h.core.Value() }); strings.Contains(v, "\r") {
-		t.Fatalf("the reloaded text keeps a CR: %q", v)
+	// exactly the file's lines: no CR kept, and none turned into an extra line break
+	if v := onLoop(r, func() string { return r.h.core.Value() }); v != "# Notes\n\nchanged on disk\n" {
+		t.Fatalf("the reloaded text is %q, want %q", v, "# Notes\n\nchanged on disk\n")
 	}
 	got := openAndSave(t, r, kb, "windows.md", "# Notes\n\nchanged on disk, then edited\n")
 	if want := "# Notes\r\n\r\nchanged on disk, then edited\r\n"; got != want {
