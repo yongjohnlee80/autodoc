@@ -516,6 +516,8 @@ func (r *running) waitTyped(t *testing.T) {
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
+	// the picker filters the workspace's listing, the daemon's work: on daemonWait, not a frame's clock
+	r.waitWithin(t, "the notes listed", daemonWait, func() bool { return len(r.listed()) > 0 })
 	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
 	r.keys(t, decltest.Type(p)...)
