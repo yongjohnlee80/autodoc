@@ -13,6 +13,24 @@ import (
 
 type inodeHold interface{ release() }
 
+// ownership is what Listen's Remove checks: the socket this process bound (socketIdentity).
+type ownership = socketIdentity
+
+// remove is removeIfStillOurs, for Listen's Remove.
+func (id socketIdentity) remove(path string) { removeIfStillOurs(path, id) }
+
+// bind is listen with a live listener's address an ErrInUse (the bind's EADDRINUSE wrapped).
+func bind(path string) (net.Listener, error) {
+	ln, err := listen(path)
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return nil, fmt.Errorf("%w: %s: %w", ErrInUse, path, err)
+	}
+	return ln, err
+}
+
+// own is ownSocket, for Listen.
+var own = ownSocket
+
 // socketIdentity is the socket this process bound: its stat, and a hold on its inode where the
 // platform has one.
 type socketIdentity struct {

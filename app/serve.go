@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
@@ -140,9 +139,9 @@ func (d *process) bind() error {
 		return err
 	}
 	ln, err := ipc.Listen(sock, func(err error) { logger.Warning(d.log, err, "refused a connection") })
-	if errors.Is(err, syscall.EADDRINUSE) {
+	if errors.Is(err, ipc.ErrInUse) {
 		probeCtx, cancel := context.WithTimeout(d.ctx, 3*time.Second)
-		info, perr := rpc.Probe(probeCtx, "unix", sock)
+		info, perr := rpc.Probe(probeCtx, ipc.Network, sock)
 		cancel()
 		switch {
 		case perr != nil:

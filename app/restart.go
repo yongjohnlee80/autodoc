@@ -98,7 +98,7 @@ func spawnFor(e *endpoint.Endpoints) (string, error) {
 
 // stopDaemon asks the daemon at addr to shut down, over a connection declaring its own protocol.
 func stopDaemon(ctx context.Context, addr string, protocol int64) error {
-	cli, err := golibrpc.Dial(ctx, addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
+	cli, err := golibrpc.Dial(ctx, addr, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		return err
 	}

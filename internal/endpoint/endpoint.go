@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -168,7 +169,7 @@ func holder(ctx context.Context, storePath, skip string) (string, bool) {
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, probeWait)
 	defer cancel()
-	info, err := rpc.Probe(probeCtx, "unix", li.Addr)
+	info, err := rpc.Probe(probeCtx, ipc.Network, li.Addr)
 	if err != nil || info.StoreID != id || info.Instance != li.Instance {
 		return "", false
 	}
@@ -180,7 +181,7 @@ func holder(ctx context.Context, storePath, skip string) (string, bool) {
 func Probe(ctx context.Context, addr, storePath string) (rpc.ProbeInfo, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, probeWait)
 	defer cancel()
-	info, err := rpc.Probe(probeCtx, "unix", addr)
+	info, err := rpc.Probe(probeCtx, ipc.Network, addr)
 	if err != nil {
 		return info, err
 	}
