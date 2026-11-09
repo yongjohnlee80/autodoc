@@ -39,6 +39,18 @@ func socketIn(t *testing.T) (net.Listener, string) {
 	return ln, path
 }
 
+// freshAddr is a pipe name of this test's own, nothing listening at it.
+func freshAddr(*testing.T) string { return testPipe() }
+
+// rawListen listens on a pipe at path with the user-only DACL, unguarded.
+func rawListen(path string) (net.Listener, error) {
+	sddl, err := userOnlySDDL()
+	if err != nil {
+		return nil, err
+	}
+	return winio.ListenPipe(path, &winio.PipeConfig{SecurityDescriptor: sddl})
+}
+
 // rawDial connects to the pipe at path without Dial's checks, as a client of any kind can; it is a
 // client's end (its peer is the server).
 func rawDial(path string) (net.Conn, error) {
