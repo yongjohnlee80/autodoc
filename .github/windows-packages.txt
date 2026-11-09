@@ -28,3 +28,4 @@
 ./script
 ./shell/tei
 ./sql/deployments
+./internal/filelock/...
