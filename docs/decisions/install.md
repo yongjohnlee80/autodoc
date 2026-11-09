@@ -21,8 +21,7 @@ archives aren't, as their bytes can change). It needs Go of the version `go.mod`
 and lists with the distro's install line, never installing them itself. `--build` answers yes, and
 `--yes` answers every question no.
 
-On Windows it says AutoDoc doesn't run there yet and installs nothing (exit 2): AutoDoc doesn't build
-for Windows today.
+On Windows it points at `install-autodoc.ps1` and installs nothing (exit 2); see [Windows](#windows).
 
 In the code: `scripts/install/install-autodoc.sh`, `.github/workflows/release.yml`
 
@@ -94,3 +93,19 @@ Nothing is downloaded or replaced without the user's Update, and AutoDoc reads n
 update.sh: it trusts only the new binary's `--version`.
 
 In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`
+
+## Windows
+
+On Windows, AutoDoc installs with `install-autodoc.ps1` and updates with `update.ps1`, the PowerShell forms of the two shell scripts. They run in Windows PowerShell 5.1 and in PowerShell 7, need no administrator rights, and keep the shell scripts' rules: the newest release (or `-Version`), checked against its sha256 before anything moves; the same exit codes; and `-Yes` answers every question no.
+
+- **Where it goes, per user:**
+  - the binary: `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe` (`-Prefix` moves it);
+  - the install record and `update.ps1`: `%LOCALAPPDATA%\autodoc`, Windows' counterpart of `~/.local/state/autodoc`. The record has the same keys, `update` naming `update.ps1`;
+  - the launcher: a Start menu shortcut, `AutoDoc`, that runs `autodoc.exe --gui`.
+- **The swap:** a running `autodoc.exe` can't be replaced, but it can be renamed. The old binary moves aside, the new one takes its name in one move, and the old one is deleted when it no longer runs: then, or at the next install.
+- **The PATH:** changed only with `-AddToPath`; otherwise the script prints the command that would.
+- **Unsigned:** the build is unsigned, so the first run can show Windows' unknown-publisher warning.
+- **Updating:** `update.ps1` runs the newest release's `install-autodoc.ps1`, fetched and verified, so there's one install path, as on Linux and macOS.
+
+In the code: `scripts/install/install-autodoc.ps1`, `scripts/install/update.ps1`, `scripts/install/test/run.ps1`
+

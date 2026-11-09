@@ -13,6 +13,9 @@ on:
     branches: [canary, main]
   pull_request:
     branches: [main]
+  # Run by hand on a branch (gh workflow run ci.yml --ref <branch>): only the jobs that list
+  # workflow_dispatch run, so a Windows change is tested on Windows before it reaches canary.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -222,14 +225,15 @@ jobs:
 
   # The installer's scripts (docs/decisions/install.md#scripts-over-the-releases-tarballs):
   # shellcheck, then their cells against a fake release, on Linux and on a Mac (the launcher
-  # differs: a desktop entry, an app bundle).
+  # differs: a desktop entry, an app bundle), and the PowerShell scripts' cells on Windows
+  # (docs/decisions/install.md#windows), in Windows PowerShell 5.1 and in PowerShell 7.
   installer:
-    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: installer (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -238,7 +242,22 @@ jobs:
         # warnings and errors: the info notes are the scripts' deliberate `a && b || c`
         run: shellcheck -s sh -S warning scripts/install/install-autodoc.sh scripts/install/update.sh scripts/install/test/run.sh
       - name: the installer's cells
+        if: runner.os != 'Windows'
         run: sh scripts/install/test/run.sh
+      # the fake autodoc.exe is built with Go
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: runner.os == 'Windows'
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: the PowerShell installer's cells (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/run.ps1
+      - name: the PowerShell installer's cells (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/run.ps1
 
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.

@@ -217,14 +217,14 @@ out=$(inst --yes --version v2.0.0 2>&1); st=$?
 out=$(inst --build --version v2.0.0 2>&1); st=$?
 [ $st -eq 4 ] && [ ! -e "$BIN" ] && ok "--build with a source tarball that doesn't match its checksum: exit 4" || bad "--build with a source tarball that doesn't match its checksum: exit 4" "status $st; $out"
 
-# Windows says so, and installs nothing.
+# Windows points at install-autodoc.ps1, and installs nothing.
 fresh windows
 mkdir -p "$work/fakeuname"
 printf '#!/bin/sh\ncase "$1" in -s) echo MINGW64_NT-10.0 ;; -m) echo x86_64 ;; esac\n' >"$work/fakeuname/uname"
 chmod 0755 "$work/fakeuname/uname"
 out=$(env HOME="$H" PATH="$work/fakeuname:/usr/bin:/bin" sh "$scripts/install-autodoc.sh" --yes --base-url "file://$R" 2>&1); st=$?
-case $out in *"doesn't run on Windows yet"*) said=1 ;; *) said=0 ;; esac
-[ $st -eq 2 ] && [ $said -eq 1 ] && [ ! -e "$BIN" ] && ok "Windows: says the port is pending, installs nothing" || bad "Windows: says the port is pending, installs nothing" "status $st; $out"
+case $out in *"install-autodoc.ps1"*) said=1 ;; *) said=0 ;; esac
+[ $st -eq 2 ] && [ $said -eq 1 ] && [ ! -e "$BIN" ] && ok "Windows: points at install-autodoc.ps1, installs nothing" || bad "Windows: points at install-autodoc.ps1, installs nothing" "status $st; $out"
 
 echo "installer cells: PASS=$pass FAIL=$fail"
 exit "$fail"
