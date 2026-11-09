@@ -50,7 +50,8 @@ func rawDial(path string) (net.Conn, error) {
 }
 
 // A pipe whose DACL admits another user (here everyone, WD) is refused by Dial, before a byte: the
-// Windows form of a socket in a folder others can write. The user-only pipe is the control.
+// Windows form of a socket in a folder others can write. So is one with an entry of a kind the check
+// does not admit, or an unprotected list. The user-only pipe Listen makes is the control.
 func TestDialRefusesAPipeWithAWiderAccessList(t *testing.T) {
 	wide := testPipe()
 	ln, err := winio.ListenPipe(wide, &winio.PipeConfig{SecurityDescriptor: "D:P(A;;GA;;;WD)"})
@@ -73,6 +74,36 @@ func TestDialRefusesAPipeWithAWiderAccessList(t *testing.T) {
 			_ = c.Close()
 		}
 		t.Fatalf("Dial to a pipe everyone may open: %v, want an UnsafeDirError", err)
+	}
+
+	// an allowlist, not a read past what it does not know: this user's allow plus a conditional
+	// allow for everyone (XA, its condition true for every caller), and this user's allow alone
+	// but unprotected (no D:P), are both refused
+	me, err := ourSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, sddl := range map[string]string{
+		"a conditional allow for everyone": "D:P(A;;GA;;;" + me.String() + ")(XA;;GA;;;WD;(Member_of {SID(WD)}))",
+		"an unprotected access list":       "D:(A;;GA;;;" + me.String() + ")",
+	} {
+		path := testPipe()
+		l, err := winio.ListenPipe(path, &winio.PipeConfig{SecurityDescriptor: sddl})
+		if err != nil {
+			t.Fatalf("%s: making the pipe: %v", name, err)
+		}
+		go func() {
+			if c, err := l.Accept(); err == nil {
+				_ = c.Close()
+			}
+		}()
+		if c, err := Dial(context.Background(), path); !errors.As(err, &unsafe) {
+			if err == nil {
+				_ = c.Close()
+			}
+			t.Errorf("Dial to a pipe with %s: %v, want an UnsafeDirError", name, err)
+		}
+		_ = l.Close()
 	}
 
 	own, err := Listen(testPipe(), nil)
