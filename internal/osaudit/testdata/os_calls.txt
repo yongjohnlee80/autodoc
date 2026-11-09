@@ -57,7 +57,6 @@ core/crew/scheduler.go	syscall	ENOENT
 core/crew/wakeagy.go	syscall	ECONNREFUSED
 core/crew/wakeagy.go	syscall	RawConn
 core/crew/wakeclaude.go	unix-socket	DialContext("unix")
-core/crew/wakecodex.go	syscall	Stat_t
 core/crew/wakeopencode.go	unix-socket	DialContext("unix")
 core/fsbounds/guard.go	syscall	ENOTDIR
 core/fsbounds/links_other.go	os-file	unix

@@ -10,8 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/fileowner"
 )
 
 // CodexWaker wakes a Codex session through its app-server's persistent queue
@@ -77,7 +78,7 @@ func (w *CodexWaker) bound(server string) error {
 	if fi.Mode()&os.ModeSocket == 0 {
 		return fmt.Errorf("crew: codex's app-server %s is not a socket (%s)", server, fi.Mode().Type())
 	}
-	if err := w.ownedBy(fi); err != nil {
+	if err := fileowner.OwnedBy(server); err != nil {
 		return fmt.Errorf("crew: codex's app-server %s: %w", server, err)
 	}
 	dir := filepath.Dir(server)
@@ -88,19 +89,8 @@ func (w *CodexWaker) bound(server string) error {
 	if !di.IsDir() || di.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("crew: codex's socket folder %s is not a folder only its user can enter (%s)", dir, di.Mode())
 	}
-	if err := w.ownedBy(di); err != nil {
+	if err := fileowner.OwnedBy(dir); err != nil {
 		return fmt.Errorf("crew: codex's socket folder %s: %w", dir, err)
-	}
-	return nil
-}
-
-func (w *CodexWaker) ownedBy(fi os.FileInfo) error {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return errors.New("no owner on this platform")
-	}
-	if int(st.Uid) != w.uid {
-		return fmt.Errorf("owned by uid %d, not the daemon's %d", st.Uid, w.uid)
 	}
 	return nil
 }
