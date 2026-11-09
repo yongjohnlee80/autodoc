@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"syscall"
 )
@@ -102,11 +103,44 @@ func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	return c, nil
 }
 
-// Listener is ln that drops, without a byte, each connection Check refuses; refused, when not nil,
-// is told why. Accept returns only the connections of this user's processes, and ln's own errors.
-func Listener(ln net.Listener, refused func(error)) net.Listener {
+// Guard is ln that drops, without a byte, each connection Check refuses; refused, when not nil, is
+// told why. Accept returns only the connections of this user's processes, and ln's own errors. It is
+// for a listener bound elsewhere (the editor socket's); the daemon's is Listen's, guarded already.
+func Guard(ln net.Listener, refused func(error)) net.Listener {
 	return &listener{Listener: ln, refused: refused}
 }
+
+// Listener is the daemon's listener at its address (Listen): Accept returns only the connections of
+// this user's processes, and Remove takes the address away only while it is still this one's.
+type Listener struct {
+	net.Listener
+	path string
+	id   socketIdentity
+}
+
+// Listen binds the daemon's address at path: only in a folder no other user can write (CheckDir),
+// born private, taking over a crashed daemon's socket and never a live one's, and dropping another
+// user's connections (refused, when not nil, is told why). Closing it leaves the address: Remove
+// takes it away, once.
+func Listen(path string, refused func(error)) (*Listener, error) {
+	if err := CheckDir(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
+	ln, err := listen(path)
+	if err != nil {
+		return nil, err
+	}
+	id, err := ownSocket(ln, path)
+	if err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	return &Listener{Listener: Guard(ln, refused), path: path, id: id}, nil
+}
+
+// Remove takes the listener's address away while it is still the one this process bound, so a
+// daemon shutting down never removes a successor's.
+func (l *Listener) Remove() { removeIfStillOurs(l.path, l.id) }
 
 type listener struct {
 	net.Listener

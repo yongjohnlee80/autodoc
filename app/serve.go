@@ -139,10 +139,7 @@ func (d *process) bind() error {
 	if err := d.e.MakeDataDir(); err != nil {
 		return err
 	}
-	if err := ipc.CheckDir(filepath.Dir(sock)); err != nil {
-		return fmt.Errorf("bind %s: %w", sock, err)
-	}
-	ln, err := listen(sock)
+	ln, err := ipc.Listen(sock, func(err error) { logger.Warning(d.log, err, "refused a connection") })
 	if errors.Is(err, syscall.EADDRINUSE) {
 		probeCtx, cancel := context.WithTimeout(d.ctx, 3*time.Second)
 		info, perr := rpc.Probe(probeCtx, "unix", sock)
@@ -159,13 +156,8 @@ func (d *process) bind() error {
 	if err != nil {
 		return fmt.Errorf("bind %s: %w", sock, err)
 	}
-	id, err := ownSocket(ln, sock)
-	if err != nil {
-		_ = ln.Close()
-		return err
-	}
-	d.ln = ipc.Listener(ln, func(err error) { logger.Warning(d.log, err, "refused a connection") })
-	d.stops.push(func() { removeIfStillOurs(sock, id) })
+	d.ln = ln
+	d.stops.push(ln.Remove)
 	return nil
 }
 

@@ -1,4 +1,6 @@
-package app
+//go:build linux || darwin
+
+package ipc
 
 import (
 	"errors"

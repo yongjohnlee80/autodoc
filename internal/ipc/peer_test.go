@@ -65,7 +65,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 	raw, path := socketIn(t)
 	refused := make(chan error, 1)
 	accepted := make(chan net.Conn, 1)
-	ln := Listener(raw, func(err error) { refused <- err })
+	ln := Guard(raw, func(err error) { refused <- err })
 
 	restore := playAnotherUser(t)
 	wait := serve(ln, accepted)
@@ -93,7 +93,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 
 	restore() // the control: this user's connection is handed on
 	raw2, path2 := socketIn(t)
-	wait2 := serve(Listener(raw2, func(err error) { t.Errorf("this user's connection refused: %v", err) }), accepted)
+	wait2 := serve(Guard(raw2, func(err error) { t.Errorf("this user's connection refused: %v", err) }), accepted)
 	defer wait2()
 	c2, err := net.Dial("unix", path2)
 	if err != nil {
