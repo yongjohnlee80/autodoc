@@ -25,6 +25,7 @@ import (
 // terminal, the same build writes the terminal's: its GlobeMap and Mindmap in cells, never the
 // window's views.
 func TestTheGUIWritesTheRelationViews(t *testing.T) {
+	t.Parallel()
 	term := withRelationViews(layout, false)
 	if !bytes.Contains(term, []byte("CellGlobeMap {")) || !bytes.Contains(term, []byte("CellMindmap {")) ||
 		bytes.Contains(term, []byte("        GlobeMap {\n")) || bytes.Contains(term, []byte("        Mindmap {\n")) {
@@ -88,6 +89,7 @@ var globeView800 = globeViewState{size: gui.Size{W: 800, H: 600}, hover: -1}
 // ground, a stroke per edge class, a fill per document type, the rings. Names add one DrawText a
 // row of them, never one a name.
 func TestTheGlobeMapsPictureIsConstantOperations(t *testing.T) {
+	t.Parallel()
 	paths := 0
 	for _, n := range []int{12, 600} {
 		gl := settledGlobe(t, relMapOf(n))
@@ -123,6 +125,7 @@ func countOps(rc *gui.RecordingCanvas, op string) int {
 // most a row's worth of texts (the view's height over globeNameRow), and the hovered name one more.
 // The view's own paint is the stream's slot alone.
 func TestTheGlobeMapsNamesCostOneDrawTextARow(t *testing.T) {
+	t.Parallel()
 	maxRows := int(globeView800.size.H/globeNameRow) + 2
 	for _, docs := range []int{0, 50, globeLabelCap} {
 		gl := settledGlobe(t, relMapOf(max(docs, 1)))
@@ -152,6 +155,7 @@ func TestTheGlobeMapsNamesCostOneDrawTextARow(t *testing.T) {
 // proportion): zoomed in eightfold, the space between two documents grows eightfold and the dots
 // barely, so a cluster comes apart. Its paths are made again only when the zoom changes its step.
 func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
+	t.Parallel()
 	gl := settledGlobe(t, relMapOf(40))
 	l := defaultLook
 	d1 := dotsAt(globeDots{}, gl, l, nil, 1, 1)
@@ -188,6 +192,7 @@ func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 // Once globeLabelCap or fewer documents are in view, each one's name is set under its dot, in rows,
 // none running into the one before it in its row, and following the pan; more in view, none are.
 func TestTheGlobeMapNamesTheDocumentsInView(t *testing.T) {
+	t.Parallel()
 	gl := settledGlobe(t, relMapOf(globeLabelCap+50))
 	view := globeViewState{size: gui.Size{W: 800, H: 592}, hover: -1}
 	if rows := pictureOf(gl, view, globeDots{}).nameRows(view.size); len(rows) != 0 {
@@ -241,6 +246,7 @@ func TestTheGlobeMapNamesTheDocumentsInView(t *testing.T) {
 
 // A press finds the document under it, within a few pixels of its dot, and only that.
 func TestTheGlobeMapHitsTheDocumentUnderThePointer(t *testing.T) {
+	t.Parallel()
 	gl := settledGlobe(t, relMapOf(40))
 	shot := &globeShot{f: gl, zoom: 1}
 	for _, i := range []int{0, 17, 39} {
@@ -285,6 +291,7 @@ func (p heldPresenter) Push(gui.Size, func(gui.Canvas)) globeReceipt {
 // a receipt is in hand wait for it (two of them: no push until it is handled, then one, at the
 // newest). A hidden view (NotShown) holds the load until the view changes; a closed stream ends it.
 func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
+	t.Parallel()
 	m := relMapOf(30)
 	in := globeForceInput(m)
 	sim, err := graphlayout.NewSimulation(in, globeLimits)
@@ -404,6 +411,7 @@ func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
 // Every wait of a load ends with its context: before its first view, held on a hidden view, and
 // settled waiting for a view change.
 func TestTheGlobeMapsLoadEndsWhereverItWaits(t *testing.T) {
+	t.Parallel()
 	m := relMapOf(6)
 	for _, where := range []string{"the first view", "hidden", "settled"} {
 		in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1, Steps: 2}
@@ -477,6 +485,7 @@ func (p *gatedPublisher) picture(name string) func(gui.Canvas) {
 // finishes before the newer one can publish (pushes are one at a time), and once the newer has
 // begun nothing of the older's is published again.
 func TestTheGlobeMapsStreamPublishesTheNewestLoadOnly(t *testing.T) {
+	t.Parallel()
 	pub := &gatedPublisher{entered: make(chan string, 4), release: make(chan struct{})}
 	s := &globeStream{pub: pub}
 	a := s.begin()
@@ -537,6 +546,7 @@ func shifted(gl *globe, d float32) *globe {
 // another is pushed after it (S0 presented, S1 pushed, S2 pushed back to S0's places: S1 still
 // refuses). Presented, a picture retires every one before it. A resized view refuses too.
 func TestTheGlobeMapsPointerActsOnlyOnWhatTheScreenAgreesOn(t *testing.T) {
+	t.Parallel()
 	view := globeView800.size
 	gl := settledGlobe(t, relMapOf(40))
 	g, gen, s0 := onScreen(t, gl, view)
@@ -586,6 +596,7 @@ func TestTheGlobeMapsPointerActsOnlyOnWhatTheScreenAgreesOn(t *testing.T) {
 // A load's frames reach the loop only while it is the newest and the panel is open: a newer load
 // stops the older, whose frames never show; closing the panel stops the newest.
 func TestTheGlobeMapShowsOnlyItsNewestLoad(t *testing.T) {
+	t.Parallel()
 	a := &asyncCore{scriptedCore: newScripted("kb"), posted: make(chan func(), 64)}
 	sizes := []int{20, 30, 40}
 	a.answers["graph.map"] = func([]any) (any, error) {
@@ -635,6 +646,7 @@ func nodesOf(n int) [][4]any {
 // (docs/decisions/editor.md#dock-clicks-hide-and-show), and opens the document under it, reading
 // nothing itself; the page the click shows roots it again.
 func TestTheMindmapRootsAtThePageShown(t *testing.T) {
+	t.Parallel()
 	c := newScripted("kb")
 	c.answers["graph.map"] = func(p []any) (any, error) {
 		root := p[1].(map[string]any)["root"].(string)
@@ -689,6 +701,7 @@ func equalStrings(a, b []string) bool { return strings.Join(a, "\x00") == string
 // the page's document, one link out; d in the Mindmap shows two links out, and d again one. Each
 // closes back to the editor.
 func TestTheRelationViewsOpenInTheHost(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "[[c]]\n", "c.md", "ccc\n"}})
 	r := windowed(t, d)
 	r.waitListed(t, 3)
@@ -716,6 +729,7 @@ func TestTheRelationViewsOpenInTheHost(t *testing.T) {
 // takes the theme (it follows the terminals', the page's until another is chosen), and the Mindmap
 // lays its map out again.
 func TestTheRelationViewsFollowATheme(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
 	r.waitListed(t, 2)
@@ -768,6 +782,7 @@ func windowed(t *testing.T, d *daemon) *running {
 // a window, the same build has the window's two views and their three commands. Preferences'
 // GlobeMap… opens each one's settings.
 func TestEachRunWritesItsOwnRelationViews(t *testing.T) {
+	t.Parallel()
 	windowView := regexp.MustCompile(`(^|[^A-Za-z])(GlobeMap|Mindmap) \{`) // the window's, not the cells'
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	for _, gui := range []bool{false, true} {
@@ -806,6 +821,7 @@ func TestEachRunWritesItsOwnRelationViews(t *testing.T) {
 // pointer is lost (the window's focus gone, the panel closed), so a pointer coming back with no
 // button held hovers instead of panning. Every event goes through the App's own routing.
 func TestTheGlobeMapDragEndsWhereverItIsReleased(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
 	var g *globeMap
@@ -907,6 +923,7 @@ func (c *closeHost) RestoreKeyboardHome() error {
 // ones) lay out with every document and every link, the counts the one-reply map has, in the
 // panel's title.
 func TestTheGlobeMapReadsEveryPage(t *testing.T) {
+	t.Parallel()
 	tune(t).globeMapPage = 2
 	rel := func(to string) string { return "---\nrelated: [" + to + "]\n---\nx\n" }
 	d := startDaemon(t, map[string][]string{"kb": {

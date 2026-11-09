@@ -127,6 +127,7 @@ func (r *running) noticed(text string) bool {
 }
 
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	agent, report := fakeAgent(t)
 	// as a user may write a command: a variable set before it, its program's path quoted
@@ -198,6 +199,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 // Desktop drops are ordinary pastes from the GUI backend. The currently focused
 // agent terminal must receive the quoted paths unchanged, without a focus switch.
 func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
+	t.Parallel()
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
@@ -229,6 +231,7 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 // A profile whose program is not installed is refused before its shell runs (commandOnPath): its
 // tab says its command isn't a program on its PATH, a notice says it did not start, and nothing runs.
 func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
+	t.Parallel()
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitForText(t, `[terminal: its command "autodoc-no-such-agent" isn't a program on its`)
@@ -243,6 +246,7 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 // With no profile SPC g opens the profiles: the first added becomes the default, a name another has
 // is refused, an edit renames the default with it, and a removal leaves none. All of it is kept.
 func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
+	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitForText(t, "no profiles yet")
@@ -303,6 +307,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 }
 
 func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
 		prefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
 		prefAgentDefault:  "A", prefAgentDefaultCodename: "",
@@ -321,6 +326,7 @@ func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 }
 
 func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
 		prefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
 	}})
@@ -349,6 +355,7 @@ func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T)
 }
 
 func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
+	t.Parallel()
 	profiles := []agentProfile{{Name: "alpha", Command: "alpha", Codename: "alpha"}, {Name: "beta", Command: "beta", Codename: "beta"}, {Name: "gamma", Command: "gamma", Codename: "gamma"}}
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
 	count := func() int { return onLoop(r, func() int { return len(r.h.agents.profiles()) }) }
@@ -394,6 +401,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 // approved removing. Refuse that stale confirmation and keep the new command
 // and default, instead of treating a matching name as enough identity.
 func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
+	t.Parallel()
 	profile := agentProfile{Name: "beta", Command: "beta --old"}
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{profile}, "beta")
 	onLoop(r, func() bool {
@@ -419,6 +427,7 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 
 // Use starts another profile while the first keeps its own process and token.
 func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
+	t.Parallel()
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
@@ -486,6 +495,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 // The agent's panel is kept where its grip leaves it, for the place it opens from: the bottom until
 // the user chooses another.
 func TestTheAgentsPanelSizeIsKept(t *testing.T) {
+	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.panelResized("agent", 60, 70); return true })
 	r.waitWithin(t, "kept", daemonWait, func() bool {
@@ -513,6 +523,7 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 // The agent opens at the bottom by default; Preferences moves it, the choice is kept, and a size set
 // at one place does not follow it to another.
 func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
+	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "bottom" {
 		t.Fatalf("the agent opens at %q by default, want bottom", e)
@@ -547,6 +558,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 
 // {root} and {workspace} are one shell word each, whatever they hold.
 func TestAnAgentsCommandIsFilledInQuoted(t *testing.T) {
+	t.Parallel()
 	ws := wsInfo{name: "it's", root: "/a b/$HOME"}
 	got := fillAgentCommand("agent {root} --ws={workspace}", ws)
 	if want := `agent '/a b/$HOME' --ws='it'\''s'`; got != want {
@@ -557,6 +569,7 @@ func TestAnAgentsCommandIsFilledInQuoted(t *testing.T) {
 // A profile without a name or a command is dropped as the preference is read, and a preference
 // that is not JSON reads as none.
 func TestAgentProfilesReadOnlyTheWholeOnes(t *testing.T) {
+	t.Parallel()
 	got := agentProfilesOf(`[{"name":"a","command":"x"},{"name":" ","command":"y"},{"name":"b","command":""},{"name":"c","command":"z"}]`)
 	if len(got) != 2 || got[0].Name != "a" || got[1].Name != "c" {
 		t.Fatalf("read %v, want a and c", got)
@@ -573,6 +586,7 @@ func TestAgentProfilesReadOnlyTheWholeOnes(t *testing.T) {
 
 // With no config named, the agent's autodoc is the build alone, on the default config.
 func TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone(t *testing.T) {
+	t.Parallel()
 	if got, want := agentWrapper("/opt/auto doc", ""), "exec '/opt/auto doc' \"$@\"\n"; !strings.HasSuffix(got, want) || strings.Contains(got, "--config") {
 		t.Fatalf("the wrapper is\n%s\nwant it to end %q, with no --config", got, want)
 	}
@@ -580,6 +594,7 @@ func TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone(t *testing.T) {
 
 // SPC G opens Agent profiles, and the card names it beside SPC g, the agent.
 func TestSpaceShiftGOpensAgentProfiles(t *testing.T) {
+	t.Parallel()
 	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "G  agent profiles")
@@ -593,6 +608,7 @@ func TestSpaceShiftGOpensAgentProfiles(t *testing.T) {
 // A clean exit (the user quits the agent) closes its panel; a failure leaves it, with what the
 // agent printed (TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace exits with 3).
 func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
+	t.Parallel()
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
@@ -611,6 +627,7 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 // it: "exit 7" typed after starts its line, as the agent's own exit* match needs, so it exits 7 (F11's
 // bytes before it would make the line not match and the agent run on).
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
+	t.Parallel()
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
@@ -634,6 +651,7 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 // reaches no program, and back: "exit 6" typed after starts the agent's line, as its exit* match
 // needs, so it exits 6 (a w or a Ctrl+T sent to it would make the line not match).
 func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
+	t.Parallel()
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
@@ -655,6 +673,7 @@ func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 // Shift+Enter as CSI 13;2u, apart from Enter's \r. The fake agent asks as they do, then reports
 // the bytes the key sends it.
 func TestShiftEnterReachesAnAgentApartFromEnter(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	agent := filepath.Join(t.TempDir(), "kitty-agent")
 	script := `#!/bin/sh

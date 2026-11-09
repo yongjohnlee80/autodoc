@@ -65,6 +65,7 @@ func waitDisk(t *testing.T, r *running, abs, want string) {
 // says so, a save writes it, and a change on disk since it was read is a conflict that asks
 // (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -99,6 +100,7 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 // entering it when it is not the one in use
 // (docs/decisions/editor.md#files-outside-every-workspace).
 func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
+	t.Parallel()
 	r, kb, notes, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
 	r.waitOpen(t, "kb", "a.md")
@@ -113,6 +115,7 @@ func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 // it; the plugin feed sends workspace "" and its absolute path; Recent files lists it as in no
 // workspace and opens it again (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -141,6 +144,7 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 // outside every workspace (".md" added); one named in a workspace's root is that workspace's file;
 // one that exists is left as it is (docs/decisions/editor.md#files-outside-every-workspace).
 func TestNewFileInAnyFolder(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	fresh := filepath.Join(filepath.Dir(abs), "fresh", "idea")
 	r.keys(t, decltest.Ctrl('n'))
@@ -169,6 +173,7 @@ func TestNewFileInAnyFolder(t *testing.T) {
 // TestOpenFileDialogOpensTheFileChosen: SPC f lists the disk at the workspace's root, with the
 // preview, and Enter on a file opens it.
 func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
+	t.Parallel()
 	r, _, _, _ := runOutside(t)
 	r.leader(t, 'f')
 	r.s.WaitForText(t, "open a file")
@@ -180,6 +185,7 @@ func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
 // TestTheFileDialogsFollowALinkToAFolder: a link to a folder, absolute, lists as a folder in
 // Open file…, and Enter goes into it.
 func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	if err := os.Symlink(filepath.Dir(abs), filepath.Join(kb, "linked")); err != nil {
 		t.Fatal(err)
@@ -194,6 +200,7 @@ func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
 // TestARefusedFileVerbSaysTheDaemonIsRemote: the daemon refuses file.* to a peer not on its unix
 // socket; the TUI says why rather than echoing the refusal.
 func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
+	t.Parallel()
 	denied := &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "file.read is for local peers"}
 	if got := wireMessage(localOnly(denied)); !strings.Contains(got, "this AutoDoc is remote") {
 		t.Errorf("a refusal reads %q", got)
@@ -207,6 +214,7 @@ func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
 // TestReopeningTheOpenOutsideFileKeepsThePage: opening the file already open, unchanged, does not
 // read it again.
 func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -221,6 +229,7 @@ func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
 // TestAnOutsideFileGoneFromDiskIsClosedOnRecheck: a reconnect's recheck finds it deleted, and
 // closes it, saying it is gone from disk (not "from the workspace").
 func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -235,6 +244,7 @@ func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
 // TestTheDefaultAppOpensAnOutsideFileAtItsPath: Open with Default App hands the desktop the absolute path, and
 // says so when the desktop cannot open it.
 func TestTheDefaultAppOpensAnOutsideFileAtItsPath(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	opened := make(chan string, 2)
 	// set on the loop, read by the browser stub on openWithDefaultApp's worker: atomic
@@ -279,6 +289,7 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 // root holding a file, and the exclude pattern that keeps it out ("" when it is only not admitted);
 // none for a file under no root.
 func TestWhyAFileIsInNoWorkspace(t *testing.T) {
+	t.Parallel()
 	list := []wsInfo{
 		{name: "outer", root: "/src", exclude: []string{".git/**"}},
 		{name: "kb", root: "/src/kb", exclude: []string{".git/**", ".todo-list/**"}},
@@ -304,6 +315,7 @@ func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 // pattern, and offers that workspace's settings
 // (docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "# A\n")
 	if err := os.MkdirAll(filepath.Join(root, "drafts"), 0o755); err != nil {
 		t.Fatal(err)
@@ -346,6 +358,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 // writeFile): created from no version, read back with the version it wrote, a stale version a
 // conflict.
 func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	c := core{r.h}
 	p := filepath.Join(filepath.Dir(abs), ".autodoc", "graph.toml")

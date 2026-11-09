@@ -33,6 +33,7 @@ func bufferOn(r *running, p string) *openBuffer {
 // TestABufferIsShownAgainWithItsEdits: :b by name and by number shows a buffer, its unsaved edit
 // and modified state as they were; switching is not an edit, so the clean buffer stays clean.
 func TestABufferIsShownAgainWithItsEdits(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -65,6 +66,7 @@ func TestABufferIsShownAgainWithItsEdits(t *testing.T) {
 // TestAQuitAsksAboutEachModifiedBuffer: quitting with two modified buffers asks about each in turn,
 // shown as it is asked about; Stay on the second keeps the program running.
 func TestAQuitAsksAboutEachModifiedBuffer(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -94,6 +96,7 @@ func TestAQuitAsksAboutEachModifiedBuffer(t *testing.T) {
 // TestALoadLandsInItsBufferAfterASwitch: a slow read of b.md lands in b.md's buffer though the user
 // switched to a.md while it was read; a.md's text and page are untouched.
 func TestALoadLandsInItsBufferAfterASwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -125,6 +128,7 @@ func TestALoadLandsInItsBufferAfterASwitch(t *testing.T) {
 // TestASaveLandsInItsBufferAfterASwitch: a save of a.md answered after the user switched to b.md
 // marks a.md's buffer saved, and leaves b.md's alone.
 func TestASaveLandsInItsBufferAfterASwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -164,6 +168,7 @@ func TestASaveLandsInItsBufferAfterASwitch(t *testing.T) {
 // TestAScriptEditsABufferNotShown: autodoc.buffer(n) edits a buffer no widget shows, by the editor
 // functions a command uses; the buffer becomes modified, and the one shown is untouched.
 func TestAScriptEditsABufferNotShown(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := `autodoc.command{ name = "stamp", run = function(ed, args)
   local b = autodoc.buffer(tonumber(args[1]))
@@ -205,6 +210,7 @@ end }`
 // TestAForcedExitKeepsEveryModifiedBuffer: keepRecovery writes a copy of each modified buffer, a
 // file's and the draft's, and none of a clean one.
 func TestAForcedExitKeepsEveryModifiedBuffer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	h := &Host{recoveryDir: dir}
 	mk := func(n int, ws, p, text string, dirty bool) *openBuffer {
@@ -234,6 +240,7 @@ func TestAForcedExitKeepsEveryModifiedBuffer(t *testing.T) {
 // or not, and the one shown is untouched; editor.run runs a Lua command on the buffer's own editor;
 // editor.buffers lists them; an unknown number is refused, and so is one that is not a number.
 func TestAnAgentActsOnABufferNotShown(t *testing.T) {
+	t.Parallel()
 	sockDir, luaDir := t.TempDir(), t.TempDir()
 	src := `autodoc.command{ name = "stampit", run = function(ed) ed:insert_at(1, 1, "R") end }`
 	if err := os.WriteFile(filepath.Join(luaDir, "stampit.lua"), []byte(src), 0o600); err != nil {
@@ -370,6 +377,7 @@ func TestAnAgentActsOnABufferNotShown(t *testing.T) {
 // matches, and one matching two, or an unknown number, is refused; Tab lists the names. :bd takes no
 // name, and closes the shown buffer, a clean one unasked.
 func TestTheBuffersPickerAndB(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "notes.md", "nnn\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -439,6 +447,7 @@ func bufferOnLoop(r *running, p string) *openBuffer { return r.h.bufferOf(fileRe
 // file and opens it in a new buffer, the modified one left keeping its text; a name that exists is
 // asked again, with why.
 func TestCreatingAFileOpensItInABufferOfItsOwn(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -460,6 +469,7 @@ func TestCreatingAFileOpensItInABufferOfItsOwn(t *testing.T) {
 // TestADraftClosedWhileItIsNamedIsSavedStill: a draft named and closed (its edits discarded) while
 // its write is in flight is on disk once the write lands, and said so; no buffer opens for it.
 func TestADraftClosedWhileItIsNamedIsSavedStill(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
@@ -498,6 +508,7 @@ func TestADraftClosedWhileItIsNamedIsSavedStill(t *testing.T) {
 // draft buffer, shown, the file's buffer keeping its text; a file's kept text restored into its
 // buffer, clean and not shown, marks that buffer modified, the one shown untouched.
 func TestARestoreLandsInItsOwnBuffer(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -532,6 +543,7 @@ func TestARestoreLandsInItsOwnBuffer(t *testing.T) {
 // TestDeletingTheWorkspaceInUseAsksAboutItsBuffers: deleting the workspace in use asks about each
 // of its modified buffers; Stay keeps the workspace; Discard deletes it, and its buffers close.
 func TestDeletingTheWorkspaceInUseAsksAboutItsBuffers(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{
 		"alpha": fileDir(t, "a.md", "aaa\n", "b.md", "bbb\n"),
 		"beta":  fileDir(t, "c.md", "ccc\n"),
@@ -567,6 +579,7 @@ func TestDeletingTheWorkspaceInUseAsksAboutItsBuffers(t *testing.T) {
 // TestAForcedExitThatCannotKeepSaysWhichBuffers: with no recovery directory nothing is kept and
 // nothing fails; a directory that cannot be written fails each modified buffer, by name, all of them.
 func TestAForcedExitThatCannotKeepSaysWhichBuffers(t *testing.T) {
+	t.Parallel()
 	mk := func(n int, p, text string) *openBuffer {
 		b := &openBuffer{n: n, buf: editor.NewBuffer(editor.BufferText(text))}
 		b.file = openedFile{ws: "kb", path: p, open: p != "", dirty: true}
@@ -592,6 +605,7 @@ func TestAForcedExitThatCannotKeepSaysWhichBuffers(t *testing.T) {
 // restores both, each into a draft of its own; kept again, they replace their own copies, neither
 // overwriting the other nor adding a third.
 func TestEveryDraftKeepsItsOwnCopy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	h := &Host{recoveryDir: dir}
 	mk := func(n int, text string) *openBuffer {
@@ -650,6 +664,7 @@ func TestEveryDraftKeepsItsOwnCopy(t *testing.T) {
 // not lost to the file read back: the buffer is the file, holding the newer text, unsaved; the disk
 // holds what was written.
 func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
@@ -689,6 +704,7 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 // TestAQuitThatSavesADraftEditedMeanwhileAsksAgain: Save in the quit question names the draft; an
 // edit made while its write is in flight is not quit over: the question asks again.
 func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
@@ -733,6 +749,7 @@ func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
 // TestADerivedDocumentLoadedNotShownIsReadOnly: a PDF whose read lands after the user switched away
 // is read-only in its buffer at once: a script's edit of it is refused, before it is ever shown.
 func TestADerivedDocumentLoadedNotShownIsReadOnly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := `autodoc.command{ name = "stamp", run = function(ed, args)
   autodoc.buffer(tonumber(args[1])):insert_at(1, 1, "Z")
@@ -782,6 +799,7 @@ end }`
 // TestLaterAsksAboutTheNextCopy: Later on the first kept copy asks about the next: the question is
 // opened again on the turn after the one that closed it.
 func TestLaterAsksAboutTheNextCopy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	now := time.Now()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "b.md", Text: "b kept\n", Saved: now})

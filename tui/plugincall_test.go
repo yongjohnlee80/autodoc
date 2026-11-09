@@ -44,6 +44,7 @@ func results(t *testing.T, logs, name string) []string {
 // refused; an id declared that no entry has, unknown. Each from inside the plugin's own Command and
 // Key handlers, which wait for the answer without a deadlock; each answered once.
 func TestAPluginCallsTheCatalog(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin3(t, dir, "caller", "dialog", "caller", `calls = ["lua.mark", "lua.boom", "lua.nope"]
 [dialog]
@@ -144,6 +145,7 @@ func heldLoop(t *testing.T, r *running, run *pluginRun, command string, until fu
 // answered never. The waiting call gets its own answer, the only one with its number. A call with
 // no number is dropped, and a malformed one with a number refused.
 func TestACallReusingAWaitingNumberIsNeverAnswered(t *testing.T) {
+	t.Parallel()
 	r, logs, run := rawTUI(t, 3)
 	heldLoop(t, r, run, "dup", func(waiting, dupes, _ int) bool { return waiting == 3 && dupes == 1 })
 	waitSaid(t, logs, "raw", "result 9 ")
@@ -167,6 +169,7 @@ func TestACallReusingAWaitingNumberIsNeverAnswered(t *testing.T) {
 // calls waiting, a 65th, a new number, is answered refused busy and runs nothing; every call is
 // answered exactly once.
 func TestPastSixtyFourWaitingCallsTheHostIsBusy(t *testing.T) {
+	t.Parallel()
 	r, logs, run := rawTUI(t, 3)
 	heldLoop(t, r, run, "busy", func(waiting, _, busy int) bool { return waiting == plugin.MaxPendingCalls && busy == 6 })
 	r.s.WaitFor(t, "70 results", func(string) bool { return len(results(t, logs, "raw")) >= 70 })
@@ -195,6 +198,7 @@ func TestPastSixtyFourWaitingCallsTheHostIsBusy(t *testing.T) {
 // TestAProtocolTwoPluginsCallIsDropped: host.call is protocol 3's; a protocol-2 plugin's runs
 // nothing and is answered nothing, and the plugin runs on.
 func TestAProtocolTwoPluginsCallIsDropped(t *testing.T) {
+	t.Parallel()
 	r, logs, run := rawTUI(t, 2)
 	onLoop(r, func() bool { run.send(plugin.MethodCommand, plugin.CommandParams("once")); return true })
 	r.s.WaitFor(t, "the call dropped", func(string) bool {
@@ -215,6 +219,7 @@ func TestAProtocolTwoPluginsCallIsDropped(t *testing.T) {
 // AutoDoc refuses protocol 3; a later protocol keeps the calls. The install question lists the
 // calls.
 func TestProtocolThreesCalls(t *testing.T) {
+	t.Parallel()
 	const head = "name = \"p\"\nkind = \"dialog\"\ncommand = [\"x\"]\n"
 	for _, c := range []struct{ toml, reason string }{
 		{"protocol = 3\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
@@ -247,6 +252,7 @@ func TestProtocolThreesCalls(t *testing.T) {
 // with it, shown, holding its text and named by it, and is answered ok; one whose calls has it not is
 // refused, and no buffer is added.
 func TestAPluginOpensADraftWithBufferNew(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin3(t, dir, "drafter", "service", "rawcalls", "calls = [\"buffer.new\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
 	installPlugin3(t, dir, "nodraft", "service", "rawcalls", "calls = [\"lua.mark\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
@@ -297,6 +303,7 @@ func TestAPluginOpensADraftWithBufferNew(t *testing.T) {
 // Rendered view laid out again, answered ok: what it draws from beside the note changed, as a lab
 // note's cell outputs do after a run (docs/decisions/plugins.md#lab-notes).
 func TestAPluginRedrawsTheRenderedView(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin3(t, dir, "lab", "service", "rawcalls", "calls = [\"view.redraw\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
 	r, logs := callTUI(t, dir)

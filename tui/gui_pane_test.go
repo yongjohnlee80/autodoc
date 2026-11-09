@@ -52,6 +52,7 @@ func paneOps(r *running) []string {
 // previews do: the fence's diagram page is drawn by the browser and placed in the page as its
 // picture, not its code.
 func TestTheHTMLPaneDrawsDiagramsByMermaidJS(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var pages []string
 	r := runGUINote(t, fencedNote, func(h *Host) {
@@ -80,6 +81,7 @@ func TestTheHTMLPaneDrawsDiagramsByMermaidJS(t *testing.T) {
 // the page it renders keeps the fence's source bytes for following the cursor, and the diagram is
 // still a diagram, not its code. Painted as the window paints the pane, its shapes and edges are drawn.
 func TestTheHTMLPaneDrawsAFencedDiagram(t *testing.T) {
+	t.Parallel()
 	r := runGUINote(t, fencedNote, func(h *Host) { h.browserOverride = func() bool { return false } })
 	r.h.p.Post(func() { r.h.previewHTML() })
 	r.s.WaitFor(t, "the pane's page", func(string) bool { return r.paneSource() != "" })
@@ -97,6 +99,7 @@ func TestTheHTMLPaneDrawsAFencedDiagram(t *testing.T) {
 // In a GUI window View diagram draws the diagram by mermaid.js, as an image, as a terminal does:
 // Zoom in and out are there.
 func TestViewDiagramInTheGUIIsMermaidJSsImage(t *testing.T) {
+	t.Parallel()
 	calls := make(chan struct{}, 8)
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
@@ -124,6 +127,7 @@ func TestViewDiagramInTheGUIIsMermaidJSsImage(t *testing.T) {
 // Without a browser, View diagram in a GUI window draws the diagram natively, by golib's Mermaid,
 // saying why; a type golib does not draw is its source, saying both.
 func TestViewDiagramInTheGUIWithoutABrowser(t *testing.T) {
+	t.Parallel()
 	// a window confirms its images (gui's backend), as the test terminal does not
 	noBrowser := func(h *Host) {
 		h.browserOverride = func() bool { return false }
@@ -160,6 +164,7 @@ func TestViewDiagramInTheGUIWithoutABrowser(t *testing.T) {
 // File › Preview option's native engine: View diagram in a GUI window is drawn by golib's Mermaid
 // though a browser is found, the browser never asked; the Zoom buttons show, disabled.
 func TestTheNativeEngineDrawsViewDiagram(t *testing.T) {
+	t.Parallel()
 	calls := make(chan struct{}, 8)
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
@@ -203,6 +208,7 @@ func TestTheNativeEngineDrawsViewDiagram(t *testing.T) {
 
 // Under the native engine a type golib does not draw is drawn by mermaid.js, saying why.
 func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
+	t.Parallel()
 	r := runGUINote(t, "# P\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n", func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
@@ -223,6 +229,7 @@ func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
 // The open HTML pane follows File › Preview option: its diagram, mermaid.js's picture, is drawn
 // natively once the native engine is chosen, and is mermaid.js's again after.
 func TestTheHTMLPaneFollowsTheMermaidEngine(t *testing.T) {
+	t.Parallel()
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
@@ -246,6 +253,7 @@ func TestTheHTMLPaneFollowsTheMermaidEngine(t *testing.T) {
 // View diagram again, for the same or another diagram, drops the picture shown and shows the
 // spinner until the new one is drawn: the last diagram is never shown as the new one.
 func TestViewDiagramAgainDropsTheLastPicture(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
@@ -284,6 +292,7 @@ func TestViewDiagramAgainDropsTheLastPicture(t *testing.T) {
 // closed, or a newer preview asked for, on the same turn. An engine changed meanwhile draws it:
 // mermaid.js, not golib.
 func TestAWithdrawnNativeViewDiagramStaysWithdrawn(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		withdraw func(h *Host)
