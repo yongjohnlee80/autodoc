@@ -73,10 +73,8 @@ gui	explorer	host	Host.reg	field
 gui	explorer	host	Host.set	method
 gui	explorer	host	Host.tr	method
 gui	explorer	host	openedFile.title	method
-gui	explorer	host	registry.moved	method
 gui	explorer	host	untitled	const
 gui	explorer	page	Host.followCursorInPane	method
-gui	feature	host	resumeTab	func
 gui	page	host	Host	type
 gui	page	host	Host.authorityNow	method
 gui	page	host	Host.browser	field
@@ -203,7 +201,6 @@ gui	plugins	host	noticeReq	type
 gui	plugins	host	noticeReq.id	field
 gui	plugins	host	noticeReq.ongoing	field
 gui	plugins	host	noticeReq.text	field
-gui	plugins	host	panelRegistry.stage	method
 gui	plugins	host	prefPluginLetter	const
 gui	plugins	host	prefPluginPlace	const
 gui	plugins	host	prefPluginPrefix	const
@@ -236,6 +233,7 @@ gui	plugins	host	seams.registry	field
 gui	plugins	host	seams.resultsCopyCap	field
 gui	plugins	host	seams.resultsResident	field
 gui	plugins	host	seams.surfaceSinkOf	field
+gui	plugins	host	stagePanels	func
 gui	plugins	host	themeImport	var
 gui	plugins	host	toastPlugin	const
 gui	plugins	host	withRelationViews	func
@@ -463,10 +461,8 @@ term	explorer	host	Host.reg	field
 term	explorer	host	Host.set	method
 term	explorer	host	Host.tr	method
 term	explorer	host	openedFile.title	method
-term	explorer	host	registry.moved	method
 term	explorer	host	untitled	const
 term	explorer	page	Host.followCursorInPane	method
-term	feature	host	resumeTab	func
 term	page	host	Host	type
 term	page	host	Host.authorityNow	method
 term	page	host	Host.browser	field
@@ -585,7 +581,6 @@ term	plugins	host	noticeReq	type
 term	plugins	host	noticeReq.id	field
 term	plugins	host	noticeReq.ongoing	field
 term	plugins	host	noticeReq.text	field
-term	plugins	host	panelRegistry.stage	method
 term	plugins	host	prefPluginLetter	const
 term	plugins	host	prefPluginPlace	const
 term	plugins	host	prefPluginPrefix	const
@@ -618,6 +613,7 @@ term	plugins	host	seams.registry	field
 term	plugins	host	seams.resultsCopyCap	field
 term	plugins	host	seams.resultsResident	field
 term	plugins	host	seams.surfaceSinkOf	field
+term	plugins	host	stagePanels	func
 term	plugins	host	themeImport	var
 term	plugins	host	toastPlugin	const
 term	plugins	host	withRelationViews	func
