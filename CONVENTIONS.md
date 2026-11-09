@@ -105,12 +105,12 @@ A UI feature is a `Feature` ([architecture §4.2](docs/architecture.md#42-a-ui-f
 - **The screen is QML.** A feature's QML is a component in `tui/qml/dialogs` or `tui/qml/views`,
   declared once in `main.qml`; every QML file must load (`TestEveryQMLFileIsSound`).
 - **`App.*` commands are the whole surface QML may call** (`tui/commands.go`). A user-visible action
-  is also a catalog entry (`tui/builtins.go`, `tui/catalog.go`), whose `Run` calls the same function
+  is also a catalog entry (`tui/builtins.go`, `tui/feature/catalog.go`), whose `Run` calls the same function
   as its `App.*` twin. One action, one function.
   - Catalog ids are `<subject>.<action>`, lower-case and dotted. `lua.*` belongs to Lua and
     `plugin.<name>.*` to that plugin (`TestTheCatalogsNamespacesAreOwned`).
   - Every menu row and leader key is a catalog entry (`TestEveryMenuRowAndLeaderKeyIsACatalogEntry`).
-- **Keys are declared once, in `tui/keys.go`.** The key blocks in `main.qml`, the card views and
+- **Keys are declared once, in `tui/feature/keys.go`.** The key blocks in `main.qml`, the card views and
   `docs/keymap.md` are generated from it: run `go test ./tui -run TestKeysAreGenerated -update`.
   Every key is in the help (`TestEveryKeyIsInTheHelp`).
 - **One layout per kind of choice:** a list to filter and choose from is `Picker.qml` over a
@@ -202,7 +202,7 @@ when a generated file falls behind; the rest is held in review.
 
 | A change to… | Also updates |
 | --- | --- |
-| a key | `tui/keys.go`, then the generated `main.qml` blocks, card views and `docs/keymap.md`; the help |
+| a key | `tui/feature/keys.go`, then the generated `main.qml` blocks, card views and `docs/keymap.md`; the help |
 | a command or catalog entry | `tui/builtins.go` / the feature's `Catalog()`, the help (`tui/help.go`), all six catalogs |
 | any user-facing text | all six catalogs |
 | a verb, its params, results or errors | the contract, `Protocol`, `contracts.json` and the wire goldens, AGENTS.md and `contracts.lua` |

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -104,7 +105,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 		t.Fatalf("an ungranted run: %v %v, want needs terminal", a.res, a.re)
 	}
 	r.s.WaitForText(t, "let the agent zen use terminal?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	r.s.WaitFor(t, "the terminal grant kept", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["terminal"] })
 	})
@@ -113,7 +114,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	ch := run("echo no-$((40+1))")
 	r.s.WaitForText(t, "let the agent zen run this in AutoDoc's terminal?")
 	r.s.WaitForText(t, "echo no-$((40+1))")
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	if a := wait("a line not run", ch); a.re == nil || a.re.Code != codeEditorRefused || !strings.Contains(a.re.Message, "did not run") {
 		t.Fatalf("Don't run: %v %v, want refused", a.res, a.re)
 	}
@@ -124,7 +125,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	// Run: a tab of its own, named for the agent, that runs exactly the line the card showed
 	ch = run("echo ran-$((40+2)); exit 3")
 	r.s.WaitForText(t, "echo ran-$((40+2)); exit 3")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	a := wait("a line run", ch)
 	if a.re != nil || a.res["started"] != true || a.res["tab"] != "zen: run" || a.res["exit_by_mail"] != false {
 		t.Fatalf("Run: %v %v, want started in tab zen: run, no crew to mail its exit", a.res, a.re)
@@ -132,8 +133,8 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	r.s.WaitForText(t, "ran-42")
 	r.s.WaitFor(t, "its exit told to the user", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "The command the agent zen ran in the terminal exited 3") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "The command the agent zen ran in the terminal exited 3") {
 					return true
 				}
 			}
@@ -147,7 +148,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	// a second one gets a tab of its own
 	ch = run("echo second-run")
 	r.s.WaitForText(t, "echo second-run")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	if a := wait("a second line", ch); a.re != nil || a.res["tab"] != "zen: run 2" {
 		t.Fatalf("a second run: %v %v, want tab zen: run 2", a.res, a.re)
 	}
@@ -157,17 +158,17 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	r.s.WaitForText(t, "echo first-$((40+5))")
 	second := run("echo second-$((40+6))")
 	r.s.WaitFor(t, "the second's card queued", func(string) bool {
-		return onLoop(r, func() bool { return len(r.h.asker.waiting) == 1 })
+		return onLoop(r, func() bool { return len(r.h.asker.Waiting) == 1 })
 	})
 	if sc := r.s.String(); strings.Contains(sc, "echo second-$((40+6))") {
 		t.Fatalf("the second line's card replaced the first's:\n%s", sc)
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	if a := wait("the first of two", first); a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("the first of two, Don't run: %v %v, want refused", a.res, a.re)
 	}
 	r.s.WaitForText(t, "echo second-$((40+6))")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	if a := wait("the second of two", second); a.re != nil || a.res["started"] != true {
 		t.Fatalf("the second of two, Run: %v %v, want started", a.res, a.re)
 	}
@@ -180,11 +181,11 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	r.s.WaitForText(t, "echo armed-one")
 	two := run("echo armed-two")
 	r.s.WaitFor(t, "the second armed card queued", func(string) bool {
-		return onLoop(r, func() bool { return len(r.h.asker.waiting) == 1 })
+		return onLoop(r, func() bool { return len(r.h.asker.Waiting) == 1 })
 	})
 	time.Sleep(arm + 100*time.Millisecond) // the first card read
 	armedBefore := len(tabs())
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	if a := wait("the first armed line", one); a.re != nil || a.res["started"] != true {
 		t.Fatalf("the first armed line: %v %v, want started", a.res, a.re)
 	}
@@ -196,8 +197,8 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the too-soon notice", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "was answered before you could read it") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "was answered before you could read it") {
 					return true
 				}
 			}
@@ -211,19 +212,19 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	before := len(tabs())
 	ch = run("echo displaced-$((40+7))")
 	r.s.WaitForText(t, "echo displaced-$((40+7))")
-	onLoop(r, func() bool { r.h.ask(Question{Title: "another question", Yes: "&Yes", No: "&No"}); return true })
+	onLoop(r, func() bool { r.h.ask(feature.Question{Title: "another question", Yes: "&Yes", No: "&No"}); return true })
 	r.s.WaitForText(t, "another question")
 	select {
 	case a := <-ch:
 		t.Fatalf("a displaced card answered while the other question showed: %v %v", a.res, a.re)
 	default:
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true }) // the other question
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true }) // the other question
 	r.s.WaitForText(t, "echo displaced-$((40+7))")
 	if got := len(tabs()); got != before {
 		t.Fatalf("a displaced card's line ran before its Run: %d tabs, want %d", got, before)
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	if a := wait("a displaced card, then Don't run", ch); a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("a displaced card answered Don't run: %v %v, want refused", a.res, a.re)
 	}
@@ -278,7 +279,7 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 			}
 			onLoop(r, func() bool {
 				r.h.setLanguage(lang)
-				r.h.asker.askWhenFree(Question{
+				r.h.asker.AskWhenFree(feature.Question{
 					Title: r.h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", "zen"),
 					Text:  r.h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, folder),
 					Yes:   r.h.tr("autodoc.question.editorterminal.run"), No: r.h.tr("autodoc.question.editorterminal.dont_run"),
@@ -296,7 +297,7 @@ func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 				}
 				return strings.Contains(sc, yes) && strings.Contains(sc, no)
 			})
-			onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+			onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 		}
 	}
 }
@@ -334,7 +335,7 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	var outcomes []string
 	ask := func(line string) {
 		onLoop(r, func() bool {
-			r.h.asker.askWhenFree(Question{Title: "run " + line, Text: line, Arm: arm,
+			r.h.asker.AskWhenFree(feature.Question{Title: "run " + line, Text: line, Arm: arm,
 				OnTooSoon: func() { outcomes = append(outcomes, line+": too soon") },
 				OnYes:     func() { outcomes = append(outcomes, line+": run") },
 				OnCancel:  func() { outcomes = append(outcomes, line+": not run") }})
@@ -346,7 +347,7 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	r.s.WaitForText(t, "run first")
 	time.Sleep(arm + 100*time.Millisecond) // the first card read and armed
 	// the user presses Run twice, the second time before the next card has been on screen
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	got := onLoop(r, func() []string { return append([]string(nil), outcomes...) })
 	if strings.Join(got, "; ") != "first: run; second: too soon; second: not run" {
 		t.Fatalf("Run pressed twice: %q, want the first run and the second refused as too soon", got)
@@ -355,7 +356,7 @@ func TestARunTypedAheadNeverRunsTheNextLine(t *testing.T) {
 	ask("third")
 	r.s.WaitForText(t, "run third")
 	time.Sleep(arm + 100*time.Millisecond)
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	if got := onLoop(r, func() []string { return append([]string(nil), outcomes...) }); got[len(got)-1] != "third: run" {
 		t.Fatalf("an armed Run: %q, want third run", got)
 	}

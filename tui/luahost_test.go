@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -490,10 +491,10 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	one, _ := a.profile("one")
 	first, _ := a.startInstance(one)
 	var got []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "", func(err error) { got = append(got, err) }); !errors.Is(err, ErrAgentText) {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "", func(err error) { got = append(got, err) }); !errors.Is(err, ErrAgentText) {
 		t.Fatalf("empty text: %v", err)
 	}
-	if err := a.SendText(AgentRef{Codename: "one", Instance: first.token}, "line one\nline two", func(err error) { got = append(got, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one", Instance: first.token}, "line one\nline two", func(err error) { got = append(got, err) }); err != nil {
 		t.Fatal(err)
 	}
 	c.drainPosts()
@@ -501,7 +502,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":[bracketed]line one\nline two"}) {
 		t.Fatalf("a running agent: done %v, pastes %q", got, c.panel.pastes)
 	}
-	if err := a.SendText(AgentRef{Codename: "two"}, "for two", func(err error) { got = append(got, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "two"}, "for two", func(err error) { got = append(got, err) }); err != nil {
 		t.Fatal(err)
 	}
 	if len(c.questions) != 1 || !strings.Contains(c.questions[0].Text, "send this text") {

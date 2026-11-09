@@ -54,7 +54,7 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 		before(r)
 	}
 	m := onLoop(r, func() *cellMindmap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if m, ok := f.(*cellMindmap); ok {
 				return m
 			}
@@ -351,7 +351,7 @@ func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
 	r.waitWithin(t, "a in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "a" }) })
 	var m *cellMindmap
 	onLoop(r, func() bool {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if c, ok := f.(*cellMindmap); ok {
 				m = c
 			}

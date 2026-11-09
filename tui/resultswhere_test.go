@@ -61,7 +61,7 @@ func TestWhereFiltersTheViewThenTheSort(t *testing.T) {
 	if got := string(r.s.Backend.Clipboard()); got != kindsRowsTSV(3, 0, 2) {
 		t.Errorf("Copy of the filtered view:\n%q\nwant\n%q", got, kindsRowsTSV(3, 0, 2))
 	}
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "Export 3 rows, as shown (filtered from 5 loaded)")
@@ -133,7 +133,7 @@ func TestAWhereThatKeepsNothing(t *testing.T) {
 	if got := string(r.s.Backend.Clipboard()); got != before {
 		t.Errorf("Copy of the empty view put %q on the clipboard", got)
 	}
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "Export 0 rows, as shown (filtered from 5 loaded)")

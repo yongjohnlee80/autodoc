@@ -101,8 +101,8 @@ end }`)
 	resumed := func() int {
 		return onLoop(r, func() int {
 			n := 0
-			for _, it := range r.h.noticeLog.items {
-				if strings.Contains(it.text, "resume heron true nil") {
+			for _, it := range r.h.noticeLog.Items {
+				if strings.Contains(it.Text, "resume heron true nil") {
 					n++
 				}
 			}

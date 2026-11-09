@@ -399,7 +399,7 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 	if b, _ := os.ReadFile(path); string(b) != "old\n" {
 		t.Fatal("the file was written before the question was answered")
 	}
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the file replaced", func(string) bool { b, _ := os.ReadFile(path); return len(b) > 4 })
 	if records := readCSV(path); len(records) != loaded+resultsPage+1 {
 		t.Fatalf("the replaced file holds %d records", len(records))
@@ -437,7 +437,7 @@ func TestAFailedExportLeavesNothing(t *testing.T) {
 	r.s.WaitFor(t, "the replace question", func(string) bool {
 		return onLoop(r, func() bool { v, _ := r.h.p.Tree().Source("App.askTitle"); return v.Raw == "replace rows.csv?" })
 	})
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.waitNotice(t, "the results were not exported: ")
 	r.waitNotice(t, "; "+path+" not written")
 	if _, err := os.Stat(path + ".part"); !errors.Is(err, os.ErrNotExist) {
@@ -846,7 +846,7 @@ func resultsTUI(t *testing.T, dir string, workspaces map[string][]string, o daem
 // app runs one of the App.* commands, as the panel's buttons and the Go menu do.
 func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 	t.Helper()
-	if err := onLoop(r, func() error { return r.h.reg.handlers[name](args) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.reg.Handlers[name](args) }); err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 }
@@ -894,7 +894,7 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	r.s.WaitFor(t, "manual.pdf open, read-only", func(string) bool {
 		return onLoop(r, func() bool { return r.h.file.open && r.h.file.path == "manual.pdf" && r.h.core.ReadOnly() })
 	})
-	if err := onLoop(r, func() error { return r.h.cat.run("results.markdown", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.markdown", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	// the refusal is golib's ErrReadOnly, its words the sentinel's own whatever its category says
@@ -922,7 +922,7 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	// the page that has the keyboard covers the panel: the first toggle brings it to the front, the
 	// second closes it (docs/decisions/editor.md#a-toggle-raises-a-covered-panel)
 	for i := range 2 {
-		if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run("results.toggle", nil) }); err != nil {
 			t.Fatal(err)
 		}
 		if i == 0 {
@@ -970,7 +970,7 @@ func TestQuittingStopsAnExport(t *testing.T) {
 		t.Fatal("the program did not stop")
 	}
 	close(release)    // the writer waits for its next step
-	r.h.reg.stopped() // what Run does once the loop has ended: each feature stops what it started
+	r.h.reg.Stopped() // what Run does once the loop has ended: each feature stops what it started
 	_, partErr := os.Stat(path + ".part")
 	_, pathErr := os.Stat(path)
 	if !errors.Is(partErr, os.ErrNotExist) || !errors.Is(pathErr, os.ErrNotExist) {

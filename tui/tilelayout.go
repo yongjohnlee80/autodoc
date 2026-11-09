@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -69,25 +70,25 @@ func tileWindowOf(node string) (tileWindow, bool) {
 }
 
 // tiles is the base's Layout: the windows' tiling preferences, and what keeps them.
-type tiles struct{ c Core }
+type tiles struct{ c feature.Core }
 
-func newTiles(c Core) *tiles { return &tiles{c: c} }
+func newTiles(c feature.Core) *tiles { return &tiles{c: c} }
 
 func (*tiles) Name() string { return "tiles" }
 
 // State is none of its own: the rows show the preferences (App.<id>Tiled, TileEdge and TileSize).
 func (*tiles) State() map[string]any { return map[string]any{} }
 
-func (t *tiles) Commands() map[string]Command {
-	return map[string]Command{
+func (t *tiles) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
 		// the TileManager's tileChanged: a completed operation on a member's tile
 		"App.tileChanged": {
-			Args: []qml.SpecValueKind{argStr, argStr, argStr, argNum, qml.SpecValueBool},
+			Args: []qml.SpecValueKind{feature.ArgStr, feature.ArgStr, feature.ArgStr, feature.ArgNum, qml.SpecValueBool},
 			What: "a tile's key, its operation, edge and size, and whether it is tiled",
 			Run: func(a []qml.SpecValue) error {
 				size, err := strconv.ParseFloat(a[3].Raw, 64)
 				if err != nil {
-					return argError("takes a size, not " + a[3].Raw)
+					return feature.ArgError("takes a size, not " + a[3].Raw)
 				}
 				t.tileChanged(a[0].Raw, a[1].Raw, size)
 				return nil
@@ -97,30 +98,30 @@ func (t *tiles) Commands() map[string]Command {
 }
 
 // Prefs are three per window: its Layout, and for a panel its tile's edge and size.
-func (*tiles) Prefs() []PrefSpec {
-	var rows []PrefSpec
+func (*tiles) Prefs() []feature.PrefSpec {
+	var rows []feature.PrefSpec
 	for _, w := range tileWindows {
 		def := layoutFloat
 		if w.tiled {
 			def = layoutTiled
 		}
-		rows = append(rows, ValuePref(layoutKey(w.id), def, []string{layoutTiled, layoutFloat}).
-			shows(func(p PrefsView) map[string]any {
+		rows = append(rows, feature.ValuePref(layoutKey(w.id), def, []string{layoutTiled, layoutFloat}).
+			Shows(func(p feature.PrefsView) map[string]any {
 				return map[string]any{"App." + w.id + "Tiled": p.Value(layoutKey(w.id)) == layoutTiled}
 			}))
 		if w.edge == "" {
 			continue // the page is the fill member: the rest of the base, wherever the tiles are
 		}
-		rows = append(rows, ValuePref(tileEdgeKey(w.id), w.edge, edges).
-			shows(func(p PrefsView) map[string]any {
+		rows = append(rows, feature.ValuePref(tileEdgeKey(w.id), w.edge, feature.Edges).
+			Shows(func(p feature.PrefsView) map[string]any {
 				return map[string]any{"App." + w.id + "TileEdge": p.Value(tileEdgeKey(w.id))}
 			}))
-		size := ValuePref(tileSizeKey(w.id), strconv.Itoa(w.size), nil).
-			shows(func(p PrefsView) map[string]any {
+		size := feature.ValuePref(tileSizeKey(w.id), strconv.Itoa(w.size), nil).
+			Shows(func(p feature.PrefsView) map[string]any {
 				n, _ := strconv.Atoi(p.Value(tileSizeKey(w.id)))
 				return map[string]any{"App." + w.id + "TileSize": n}
 			})
-		size.valid = func(v string) bool {
+		size.Valid = func(v string) bool {
 			n, err := strconv.Atoi(v)
 			return err == nil && n >= minTileSize && n <= maxTileSize
 		}
@@ -157,7 +158,7 @@ type rowMaker func(id, label string, run func()) widgetcore.MenuItemModel
 
 // layoutHost is what Layout › needs of its host: the preferences, and setting one through its row.
 type layoutHost interface {
-	Prefs() PrefsView
+	Prefs() feature.PrefsView
 	SetPref(name, value string)
 }
 
@@ -170,7 +171,7 @@ func layoutRows(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
 	}
 	sub := widgetcore.NewSubmenu("layout", "Layout", choices)
 	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("L&ayout") // never h, j, k or l: they move in the menu
-	return []widgetcore.MenuItemModel{withLabelMessage(sub, "L&ayout")}
+	return []widgetcore.MenuItemModel{feature.WithLabelMessage(sub, "L&ayout")}
 }
 
 // tileEdgeRows are Layout › Tiled ›'s rows: the edges a panel's tile docks at, each with its label.
@@ -212,7 +213,7 @@ func layoutChoices(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
 	}
 	sub := widgetcore.NewSubmenu("layout.tiled", "Tiled", edges)
 	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("&Tiled")
-	return []widgetcore.MenuItemModel{withLabelMessage(sub, "&Tiled"), float}
+	return []widgetcore.MenuItemModel{feature.WithLabelMessage(sub, "&Tiled"), float}
 }
 
 // tileWindowByID is the window id, or false.
@@ -229,7 +230,7 @@ func tabsRowOf(id, label string, run func()) widgetcore.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
 	row := widgetcore.NewCommand(widgetcore.ItemID(id), text, widgetcore.TabsMenuAction{ID: tuicore.ActionID(id), Run: func(int) { run() }})
 	row.Hotkey, row.HotkeyIdx = key, at
-	return withLabelMessage(row, label)
+	return feature.WithLabelMessage(row, label)
 }
 
 // tabViewMenus are the panels whose menu is their TabView's: its view, and the window whose
@@ -265,11 +266,11 @@ func tileWindowIDs() []string {
 // layoutEntries are :layout [window]: the window's Layout, Tiled and Float, in a menu over the page
 // (the editor's alone, which has no strip in the terminal). Tab completes the windows; one that is
 // none says which are.
-func (h *Host) layoutEntries() []Entry {
-	return []Entry{{ID: "window.layout", Title: "a window's layout", Verb: "layout", Args: "[window]",
+func (h *Host) layoutEntries() []feature.Entry {
+	return []feature.Entry{{ID: "window.layout", Title: "a window's layout", Verb: "layout", Args: "[window]",
 		Help:     "Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows",
 		Complete: func(editor.CompleteContext) []string { return tileWindowIDs() },
-		Run: func(x Invocation) error {
+		Run: func(x feature.Invocation) error {
 			id := strings.TrimSpace(x.Line)
 			if id == "" {
 				id = "editor"

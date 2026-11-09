@@ -6,6 +6,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // NAVIGATION — Vim's jump list across the documents (golib's widget.JumpList, Ctrl+O back and
@@ -18,12 +19,12 @@ import (
 // as it was. SPC b b goes back to the nearest place in another document, over the same list.
 
 // docKey is a document as the jump list knows it.
-func docKey(r fileRef) string { return r.ws + "\x00" + r.path }
+func docKey(r feature.FileRef) string { return r.WS + "\x00" + r.Path }
 
 // refOf is the document a jump list's key names.
-func refOf(doc string) fileRef {
+func refOf(doc string) feature.FileRef {
 	ws, p, _ := strings.Cut(doc, "\x00")
-	return fileRef{ws, p}
+	return feature.FileRef{WS: ws, Path: p}
 }
 
 // landing is where the cursor goes when an open is shown: a byte offset in its text (a search
@@ -47,7 +48,7 @@ func (h *Host) jumpTo(step editor.JumpStep) {
 
 // land puts the cursor where land says, on ref just shown (its text content): a jump step is
 // committed first, and lands only if the list takes it (it moved since: nothing changes).
-func (h *Host) land(land *landing, ref fileRef, content string) {
+func (h *Host) land(land *landing, ref feature.FileRef, content string) {
 	switch {
 	case land == nil, land.step == nil && land.at < 0:
 	case land.step != nil:
@@ -57,18 +58,18 @@ func (h *Host) land(land *landing, ref fileRef, content string) {
 		setEditorView(h.editor, land.step.To.View)
 		h.core.SetLine(land.step.To.Line, land.step.To.Col)
 	default:
-		h.core.SetCursorPosition(cursorAt(content, min(max(land.at, 0), len(content))))
+		h.core.SetCursorPosition(feature.CursorAt(content, min(max(land.at, 0), len(content))))
 	}
 }
 
 // missedLanding is an open whose read failed: a jump's document gone for good leaves the list, and
 // the user is told; any other failure leaves the list as it was.
 func (h *Host) missedLanding(land *landing, err error) {
-	if land == nil || land.step == nil || code(err) != rpc.CodeNotFound {
+	if land == nil || land.step == nil || feature.Code(err) != rpc.CodeNotFound {
 		return
 	}
 	if h.jumps.Drop(*land.step) {
-		h.notify(h.trf("autodoc.notice.navigation.is_gone_it_left_the_jump_list_ctrl_o_again_goes", refOf(land.step.To.Doc).path))
+		h.notify(h.trf("autodoc.notice.navigation.is_gone_it_left_the_jump_list_ctrl_o_again_goes", refOf(land.step.To.Doc).Path))
 	}
 }
 

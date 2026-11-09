@@ -79,9 +79,9 @@ func TestGoToLinksFailureIsTheDaemonsWords(t *testing.T) {
 	var got string
 	r.s.WaitFor(t, "go to link's failure", func(string) bool {
 		got = onLoop(r, func() string {
-			for _, n := range r.h.noticeLog.items {
-				if strings.HasPrefix(n.text, "go to link: ") {
-					return n.text
+			for _, n := range r.h.noticeLog.Items {
+				if strings.HasPrefix(n.Text, "go to link: ") {
+					return n.Text
 				}
 			}
 			return ""

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -140,7 +141,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 	onLoop(first, func() bool { first.h.setLanguage("ko_KR"); return true }) // Options › Language
 	first.s.WaitFor(t, "the language stored", func(string) bool {
 		res, err := first.h.call(context.Background(), "preference.list")
-		return err == nil && asMap(res)[prefLanguage] == "ko_KR"
+		return err == nil && feature.AsMap(res)[prefLanguage] == "ko_KR"
 	})
 
 	dir := t.TempDir()
@@ -320,8 +321,8 @@ func TestAFindOnlyTheSourceHasIsFoundInTheRenderedView(t *testing.T) {
 			onLoop(r, func() int { return r.h.find.total }) == 1
 	})
 	moved := onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, "is not on the page") {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, "is not on the page") {
 				return true
 			}
 		}

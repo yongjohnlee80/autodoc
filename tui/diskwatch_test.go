@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
@@ -51,7 +52,7 @@ func rewrite(t *testing.T, root, p, text string) {
 // diskOf is p's buffer's disk state, read on the loop.
 func diskOf(r *running, p string) diskState {
 	return onLoop(r, func() diskState {
-		if b := r.h.bufferOf(fileRef{"alpha", p}); b != nil {
+		if b := r.h.bufferOf(feature.FileRef{WS: "alpha", Path: p}); b != nil {
 			return b.file.disk
 		}
 		return diskSame
@@ -201,7 +202,7 @@ func TestABackgroundBufferFollowsTheDisk(t *testing.T) {
 
 // bufferOn2 is p's buffer in alpha.
 func bufferOn2(r *running, p string) *openBuffer {
-	return onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"alpha", p}) })
+	return onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "alpha", Path: p}) })
 }
 
 // TestAskFirstBadgesACleanFile: with tui.disk_reload = ask, a clean file changed on disk is badged
@@ -429,7 +430,7 @@ func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {
 	r.waitOpen(t, "", abs)
 	outside := func() diskState {
 		return onLoop(r, func() diskState {
-			if b := r.h.bufferOf(fileRef{"", abs}); b != nil {
+			if b := r.h.bufferOf(feature.FileRef{WS: "", Path: abs}); b != nil {
 				return b.file.disk
 			}
 			return diskSame

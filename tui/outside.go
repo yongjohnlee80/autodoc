@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // FILES ANYWHERE — File › Open file… (SPC f) and File › New file… (Ctrl+N, SPC n), the desktop's
@@ -27,7 +28,7 @@ var errRemote = &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "local
 // localOnly is err, or errRemote when the daemon refused a file.* verb to this peer. A gated
 // script's call refused past its bounds is access denied too, and says so itself: it is kept.
 func localOnly(err error) error {
-	if code(err) == golibrpc.CodeAccessDenied && !strings.HasSuffix(wireMessage(err), fsbounds.ErrRefused.Error()) {
+	if feature.Code(err) == golibrpc.CodeAccessDenied && !strings.HasSuffix(feature.WireMessage(err), fsbounds.ErrRefused.Error()) {
 		return errRemote
 	}
 	return err
@@ -103,8 +104,8 @@ func (h *Host) locate(ctx context.Context, abs string) located {
 	if err != nil {
 		return located{err: localOnly(err)}
 	}
-	m := asMap(res)
-	return located{ws: str(m, "workspace"), path: str(m, "path")}
+	m := feature.AsMap(res)
+	return located{ws: feature.Str(m, "workspace"), path: feature.Str(m, "path")}
 }
 
 // openAbsolute opens the file at abs, chosen in the file dialog: as its workspace's file when one
@@ -122,7 +123,7 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 		return
 	}
 	abs = filepath.Clean(abs)
-	tk := h.ticket(nil, TicketWorkspace)
+	tk := h.ticket(nil, feature.TicketWorkspace)
 	do(h, func(ctx context.Context) located {
 		if a.gated() {
 			res, err := h.call(withAuthority(ctx, a), "file.locate", abs)
@@ -145,7 +146,7 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 			h.openIn(l.ws, l.path)
 		default:
 			// said once the open goes ahead: over unsaved changes, Stay opens nothing to explain
-			h.openRef(fileRef{"", abs}, true, func() { h.sayWhyOutside(abs) })
+			h.openRef(feature.FileRef{WS: "", Path: abs}, true, func() { h.sayWhyOutside(abs) })
 		}
 	})
 }
@@ -184,7 +185,7 @@ func (h *Host) sayWhyOutside(abs string) {
 	if !ok || pattern == "" {
 		return
 	}
-	h.ask(Question{Title: h.trf("autodoc.question.outside.in_no_workspace_open_s_settings", w.name),
+	h.ask(feature.Question{Title: h.trf("autodoc.question.outside.in_no_workspace_open_s_settings", w.name),
 		Text: h.trf("autodoc.question.outside.is_under_workspace_s_root_but_its_exclude_patter", abs, w.name, pattern), Yes: h.tr("autodoc.question.outside.open_the_settings"), No: h.tr("autodoc.question.outside.not_now"),
 		OnYes: func() { h.openSettings(w.name, 0) }})
 }
@@ -201,7 +202,7 @@ func (h *Host) createAbsolute(abs string) {
 	if filepath.Ext(abs) == "" {
 		abs += ".md"
 	}
-	tk := h.ticket(nil, TicketWorkspace)
+	tk := h.ticket(nil, feature.TicketWorkspace)
 	raw := kind.RawText(abs)
 	do(h, func(ctx context.Context) created {
 		return h.writeNew(ctx, "", abs, "", []byte{}) // any path: File › New file…'s own rules
@@ -210,14 +211,14 @@ func (h *Host) createAbsolute(abs string) {
 			return
 		}
 		switch {
-		case code(a.err) == rpc.CodeConflict:
+		case feature.Code(a.err) == rpc.CodeConflict:
 			h.notify(h.trf("autodoc.notice.outside.exists_file_open_file_opens_it", abs))
 			return
 		case a.err != nil:
 			h.failed("create "+abs, a.err)
 			return
 		}
-		h.openRefAs(fileRef{a.at.ws, a.at.path}, true, nil, &raw, nil, false)
+		h.openRefAs(feature.FileRef{WS: a.at.ws, Path: a.at.path}, true, nil, &raw, nil, false)
 		if a.at.ws == "" {
 			return
 		}

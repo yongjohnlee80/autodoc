@@ -8,6 +8,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // SETTING UP AN AGENT — the first run's card (docs/decisions/crew.md#first-run-agent-setup): when
@@ -41,7 +42,7 @@ const prefAgentSetup = "tui.agent.setup"
 
 // agentSetupPending is the first-run card's condition, read in one place: the setup never answered,
 // and no profile. A user with a profile is never asked.
-func agentSetupPending(s *seams, p PrefsView) bool {
+func agentSetupPending(s *seams, p feature.PrefsView) bool {
 	return s.offerAgentSetup && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
 }
 
@@ -67,9 +68,9 @@ func (a *agents) openAgentSetup() {
 	}
 	found := detectAgentCLIs(look)
 	a.setupFound = found
-	rows := make([]rowOf, len(found))
+	rows := make([]feature.RowOf, len(found))
 	for i, c := range found {
-		rows[i] = rowOf{"key": c.command, "label": c.name + " (" + c.command + ")"}
+		rows[i] = feature.RowOf{"key": c.command, "label": c.name + " (" + c.command + ")"}
 	}
 	a.setupList().Reset(rows)
 	a.c.Set("App.agentSetupIndex", -1) // moved away first, so the same row twice still moves it

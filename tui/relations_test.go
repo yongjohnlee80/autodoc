@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -235,8 +236,8 @@ func TestRelationsEdges(t *testing.T) {
 
 	// the page itself on top (old.md, then doc.md): back goes to old.md, past it
 	r.h.p.Post(func() {
-		r.h.jumps.Push(editor.JumpPos{Doc: docKey(fileRef{"kb", "old.md"})})
-		r.h.jumps.Push(editor.JumpPos{Doc: docKey(fileRef{"kb", "doc.md"}), Line: 1})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(feature.FileRef{WS: "kb", Path: "old.md"})})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(feature.FileRef{WS: "kb", Path: "doc.md"}), Line: 1})
 		r.h.goBack()
 	})
 	r.waitFile(t, "old.md")

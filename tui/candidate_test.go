@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -391,8 +392,8 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 
 // The audit picker lists the default agent first.
 func TestDefaultFirst(t *testing.T) {
-	es := []AgentEntry{{Ref: AgentRef{Codename: "a"}}, {Ref: AgentRef{Codename: "b"}}, {Ref: AgentRef{Codename: "c"}}}
-	code := func(es []AgentEntry) (out []string) {
+	es := []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "a"}}, {Ref: feature.AgentRef{Codename: "b"}}, {Ref: feature.AgentRef{Codename: "c"}}}
+	code := func(es []feature.AgentEntry) (out []string) {
 		for _, e := range es {
 			out = append(out, e.Ref.Codename)
 		}
@@ -454,7 +455,7 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + namedPluginRepo(t, "gamma", "true")) })
 	r.question(t)
 	// taken down, not covered: the generic card's question was closed (a larger card would hide its text)
-	r.s.WaitFor(t, "the Lua card down", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.pending }) })
+	r.s.WaitFor(t, "the Lua card down", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.Pending }) })
 	if b := look("lua/beta"); !b.live || b.state != opSuspended || gone(b.stage) {
 		t.Fatalf("Lua beta, replaced by a plugin's card: %+v", b)
 	}
@@ -487,7 +488,7 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 // handingCore is a scripted Core whose agents take every task handed to them.
 type handingCore struct{ *scriptedCore }
 
-func (handingCore) HandTask(AgentRef, TaskRef, string, func(error)) error { return nil }
+func (handingCore) HandTask(feature.AgentRef, feature.TaskRef, string, func(error)) error { return nil }
 
 // scriptedCandidate is a live plugin candidate over a real, pristine stage, its card shown counted,
 // on a scripted Core whose background answers wait until delivered and whose agents take tasks.
@@ -510,7 +511,7 @@ func scriptedCandidate(t *testing.T) (*scriptedCore, *candidates, *candidate, *i
 func TestASecondLuaCardKeepsTheFirstCandidate(t *testing.T) {
 	s := newScripted("kb")
 	cs := newCandidates(s)
-	h := &Host{asker: newAsker(s), cands: cs}
+	h := &Host{asker: feature.NewAsker(s), cands: cs}
 	first := &candidate{kind: "lua", name: "alpha", commit: strings.Repeat("1", 40), stage: t.TempDir(), pkg: packageManifest{Name: "alpha"}}
 	second := &candidate{kind: "lua", name: "beta", commit: first.commit, stage: t.TempDir(), pkg: packageManifest{Name: "beta"}}
 	for _, c := range []*candidate{first, second} {
@@ -531,7 +532,7 @@ func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
 	s, cs, c, shown := scriptedCandidate(t)
 	defer cs.Stopped()
 	cs.auditing = c
-	cs.auditWith(AgentEntry{Name: "Scribe", Ref: AgentRef{Codename: "scribe"}})
+	cs.auditWith(feature.AgentEntry{Name: "Scribe", Ref: feature.AgentRef{Codename: "scribe"}})
 	cs.reopen(c) // the toast of the audit before
 	if cs.claim(c) || cs.cancel(c, "") || *shown != 0 || c.state != opCopying {
 		t.Fatalf("while copying: claimed or cancelled or reopened (state %d, shown %d)", c.state, *shown)
@@ -557,7 +558,7 @@ func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 	root := t.TempDir()
 	c.env = procenv.Env(nil).With("TMPDIR=" + root) // the environment it was staged in
 	cs.auditing = c
-	cs.auditWith(AgentEntry{})
+	cs.auditWith(feature.AgentEntry{})
 	cs.end(c, "cancelled")
 	s.deliver(0, 1) // the end's removal, then the copy's answer
 	if copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(copies) != 0 || c.state != opEnded {
@@ -574,7 +575,7 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	_, cs, c, _ := scriptedCandidate(t)
 	c.env = env // the environment it was staged in
 	cs.auditing = c
-	cs.auditWith(AgentEntry{}) // the copy is made; its answer is held, never delivered
+	cs.auditWith(feature.AgentEntry{}) // the copy is made; its answer is held, never delivered
 	copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*"))
 	if len(copies) != 1 {
 		t.Fatalf("the copy: %v", copies)

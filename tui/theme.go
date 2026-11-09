@@ -10,6 +10,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
@@ -34,13 +35,13 @@ func themeOf(src []byte) string {
 func (h *Host) builtinThemeRows() *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label", "checked")
 	labels := themes.MenuLabels() // golib's order, its five first, and its words with their access keys
-	rows := make([]rowOf, 0, len(labels))
+	rows := make([]feature.RowOf, 0, len(labels))
 	for _, l := range labels {
 		var label any = l.Name
 		if l.Text != l.Name { // golib has words for it: in the UI's language (language_catalog_test.go holds it)
 			label = tuicore.Msg("autodoc.theme." + l.Name)
 		}
-		rows = append(rows, rowOf{"key": l.Name, "label": label, "checked": l.Name == h.theme})
+		rows = append(rows, feature.RowOf{"key": l.Name, "label": label, "checked": l.Name == h.theme})
 	}
 	m.Reset(rows)
 	return m
@@ -83,7 +84,7 @@ func (h *Host) switchTheme(name string) {
 		h.layoutSrc, h.layoutBase, h.theme = next, nextBase, name
 		h.set("App.userThemes", h.userThemeRows())
 		h.set("App.builtinThemes", h.builtinThemeRows())
-		h.reg.themeChanged()
+		h.reg.ThemeChanged()
 		h.say(h.trf("autodoc.notice.theme.theme", name))
 	})
 }
@@ -127,7 +128,7 @@ func (h *Host) themeValues(name string) (map[string]string, error) {
 }
 func (h *Host) userThemeRows() *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label", "enabled", "checked")
-	var rows []rowOf
+	var rows []feature.RowOf
 	for _, n := range h.themeNames() {
 		if slices.Contains(themeNames, n) {
 			continue
@@ -137,7 +138,7 @@ func (h *Host) userThemeRows() *tuidecl.ListModel {
 		if err != nil {
 			label += " — invalid"
 		}
-		rows = append(rows, rowOf{"key": n, "label": label, "enabled": err == nil, "checked": n == h.theme})
+		rows = append(rows, feature.RowOf{"key": n, "label": label, "enabled": err == nil, "checked": n == h.theme})
 	}
 	m.Reset(rows)
 	return m
@@ -168,7 +169,7 @@ func (h *Host) reloaded() {
 // keysChanged is the App's key map installed or replaced: each card and help name the keys as it binds
 // them.
 func (h *Host) keysChanged() {
-	h.keys.live = h.p.App().Keymap()
+	h.keys.Live = h.p.App().Keymap()
 	for name, text := range h.cardState() {
 		h.set(name, text)
 	}
@@ -186,5 +187,5 @@ func (h *Host) themesReloaded() {
 			return
 		}
 	}
-	h.reg.themeChanged()
+	h.reg.ThemeChanged()
 }

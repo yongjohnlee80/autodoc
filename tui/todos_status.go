@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -25,40 +26,40 @@ type todoStatusing struct {
 }
 
 // newStatusPick is the picker of the statuses that s opens.
-func newStatusPick(t *todos) *pick[todoStatusChoice] {
-	return &pick[todoStatusChoice]{c: t.c, dialog: "todoStatusPicker", name: "todoStatus",
-		list:   newRows(tuidecl.NewListModel("key", "status"), statusRowOf),
-		field:  "App.todoStatusField",
-		status: "App.todoStatusList", noun: "statuses",
-		match: func(c todoStatusChoice) string { return c.status },
-		preview: func(c todoStatusChoice) func(context.Context) answerOf[pane] {
+func newStatusPick(t *todos) *feature.Pick[todoStatusChoice] {
+	return &feature.Pick[todoStatusChoice]{Core: t.c, Dialog: "todoStatusPicker", Name: "todoStatus",
+		List:   feature.NewRows(tuidecl.NewListModel("key", "status"), statusRowOf),
+		Field:  "App.todoStatusField",
+		Status: "App.todoStatusList", Noun: "statuses",
+		Match: func(c todoStatusChoice) string { return c.status },
+		Preview: func(c todoStatusChoice) func(context.Context) feature.AnswerOf[feature.Pane] {
 			pn := t.statusPane(c)
-			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
+			return func(context.Context) feature.AnswerOf[feature.Pane] { return feature.AnswerOf[feature.Pane]{Value: pn} }
 		},
-		choose: t.statusChosen,
-		cancel: func() { t.statusing = nil }}
+		Choose: t.statusChosen,
+		Cancel: func() { t.statusing = nil }}
 }
 
 // statusRowOf is a status as the picker lists it: the task's own marked ●.
-func statusRowOf(_ int, c todoStatusChoice) rowOf {
+func statusRowOf(_ int, c todoStatusChoice) feature.RowOf {
 	mark := "  "
 	if c.current {
 		mark = "● "
 	}
-	return rowOf{"key": c.status, "status": mark + c.status}
+	return feature.RowOf{"key": c.status, "status": mark + c.status}
 }
 
 // statusPane is what choosing c does to the task the picker is for, under the task's title: short
 // lines, as the preview does not wrap.
-func (t *todos) statusPane(c todoStatusChoice) pane {
+func (t *todos) statusPane(c todoStatusChoice) feature.Pane {
 	if t.statusing == nil {
-		return pane{}
+		return feature.Pane{}
 	}
-	title := str(t.statusing.task, "title")
+	title := feature.Str(t.statusing.task, "title")
 	if c.current {
-		return pane{title: title, text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Tr("autodoc.text.todos_status.its_status_now_choosing_it_changes_nothing"))}
+		return feature.Pane{Title: title, Text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Tr("autodoc.text.todos_status.its_status_now_choosing_it_changes_nothing"))}
 	}
-	return pane{title: title, text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Trf("autodoc.text.todos_status.from_to", str(t.statusing.task, "status"), c.status))}
+	return feature.Pane{Title: title, Text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Trf("autodoc.text.todos_status.from_to", feature.Str(t.statusing.task, "status"), c.status))}
 }
 
 // chooseStatus is s: the task under the cursor, in a store taking writes here, offered every
@@ -70,13 +71,13 @@ func (t *todos) chooseStatus() {
 		return
 	}
 	t.statusing = &todoStatusing{store: s, task: x}
-	now := str(x, "status")
+	now := feature.Str(x, "status")
 	choices := make([]todoStatusChoice, len(todoStatuses))
 	for i, st := range todoStatuses {
 		choices[i] = todoStatusChoice{status: st, current: st == now}
 	}
-	t.statusPick.setAll(choices)
-	t.statusPick.open()
+	t.statusPick.SetAll(choices)
+	t.statusPick.Open()
 }
 
 // statusChosen is a status chosen: the task moves there, unless it is there already.

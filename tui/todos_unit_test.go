@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -21,20 +22,20 @@ type scriptedCore struct {
 	calls   []string
 	set     map[string]any
 	opened  []string
-	asked   []Question
+	asked   []feature.Question
 	closed  []string
 	files   []string
 	hidden  []string // HidePanel's
 	notes   []string
 	failed  []string
-	views   []string    // the view methods called, "id.method"
-	listing FileList    // what Files answers
-	spaces  []Workspace // what Workspaces answers
-	page    Page        // what Page answers
-	crumbs  []string    // the breadcrumb last put on the frame
-	focused bool        // what HasFocus answers
-	viewErr error       // what View answers
-	shown   bool        // what PanelShown answers
+	views   []string            // the view methods called, "id.method"
+	listing feature.FileList    // what Files answers
+	spaces  []feature.Workspace // what Workspaces answers
+	page    feature.Page        // what Page answers
+	crumbs  []string            // the breadcrumb last put on the frame
+	focused bool                // what HasFocus answers
+	viewErr error               // what View answers
+	shown   bool                // what PanelShown answers
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -44,16 +45,18 @@ func newScripted(ws string) *scriptedCore {
 	return &scriptedCore{ws: ws, answers: map[string]func([]any) (any, error){}, set: map[string]any{}}
 }
 
-func (s *scriptedCore) Set(name string, v any)   { s.set[name] = v }
-func (*scriptedCore) AgentEntries() []AgentEntry { return nil }
-func (*scriptedCore) HandTask(AgentRef, TaskRef, string, func(error)) error {
+func (s *scriptedCore) Set(name string, v any)           { s.set[name] = v }
+func (*scriptedCore) AgentEntries() []feature.AgentEntry { return nil }
+func (*scriptedCore) HandTask(feature.AgentRef, feature.TaskRef, string, func(error)) error {
 	return ErrAgentUnavailable
 }
-func (*scriptedCore) SendText(AgentRef, string, func(error)) error { return ErrAgentUnavailable }
-func (s *scriptedCore) Open(id string)                             { s.opened = append(s.opened, id) }
-func (s *scriptedCore) Close(id string)                            { s.closed = append(s.closed, id) }
-func (s *scriptedCore) Notify(msg string)                          { s.notes = append(s.notes, msg) }
-func (*scriptedCore) Tr(id string) string                          { return englishText(id) }
+func (*scriptedCore) SendText(feature.AgentRef, string, func(error)) error {
+	return ErrAgentUnavailable
+}
+func (s *scriptedCore) Open(id string)    { s.opened = append(s.opened, id) }
+func (s *scriptedCore) Close(id string)   { s.closed = append(s.closed, id) }
+func (s *scriptedCore) Notify(msg string) { s.notes = append(s.notes, msg) }
+func (*scriptedCore) Tr(id string) string { return englishText(id) }
 func (f *scriptedCore) Trf(id string, args ...any) string {
 	return (&Host{}).trf(id, args...)
 }
@@ -64,24 +67,24 @@ func (s *scriptedCore) WidgetsChanged()                            {}
 func (s *scriptedCore) HidePanel(id string)                        { s.hidden = append(s.hidden, id) }
 
 // Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
-func (s *scriptedCore) Ask(q Question) Asked {
+func (s *scriptedCore) Ask(q feature.Question) feature.Asked {
 	s.asked = append(s.asked, q)
-	return Asked{}
+	return feature.Asked{}
 }
 
 // yes answers the latest question Yes.
-func (s *scriptedCore) yes()                       { s.asked[len(s.asked)-1].OnYes() }
-func (s *scriptedCore) Workspace() string          { return s.ws }
-func (s *scriptedCore) Prefs() PrefsView           { return prefs{} }
-func (s *scriptedCore) Env() procenv.Env           { return nil } // the process's own
-func (s *scriptedCore) OpenFile(abs string)        { s.files = append(s.files, abs) }
-func (s *scriptedCore) OpenRef(ws, path string)    { s.files = append(s.files, ws+":"+path) }
-func (s *scriptedCore) OpenAbsolute(abs string)    { s.files = append(s.files, ":"+abs) }
-func (s *scriptedCore) Say(msg string)             { s.notes = append(s.notes, msg) }
-func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
-func (s *scriptedCore) Files() FileList            { return s.listing }
-func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
-func (s *scriptedCore) HasFocus(string) bool       { return s.focused }
+func (s *scriptedCore) yes()                            { s.asked[len(s.asked)-1].OnYes() }
+func (s *scriptedCore) Workspace() string               { return s.ws }
+func (s *scriptedCore) Prefs() feature.PrefsView        { return prefs{} }
+func (s *scriptedCore) Env() procenv.Env                { return nil } // the process's own
+func (s *scriptedCore) OpenFile(abs string)             { s.files = append(s.files, abs) }
+func (s *scriptedCore) OpenRef(ws, path string)         { s.files = append(s.files, ws+":"+path) }
+func (s *scriptedCore) OpenAbsolute(abs string)         { s.files = append(s.files, ":"+abs) }
+func (s *scriptedCore) Say(msg string)                  { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) SetPref(name, value string)      { s.set[name] = value }
+func (s *scriptedCore) Files() feature.FileList         { return s.listing }
+func (s *scriptedCore) Workspaces() []feature.Workspace { return s.spaces }
+func (s *scriptedCore) HasFocus(string) bool            { return s.focused }
 func (s *scriptedCore) SearchModelsChanged(ranker bool) {
 	s.views = append(s.views, fmt.Sprint("search.changed ranker=", ranker))
 }
@@ -91,7 +94,7 @@ func (s *scriptedCore) PanelShown(string) bool { return s.shown }
 func (s *scriptedCore) TogglePanelTab(id string, tab int) {
 	s.views = append(s.views, fmt.Sprintf("%s.toggle(%d)", id, tab))
 }
-func (s *scriptedCore) Page() Page            { return s.page }
+func (s *scriptedCore) Page() feature.Page    { return s.page }
 func (s *scriptedCore) Crumbs(parts []string) { s.crumbs = parts }
 func (s *scriptedCore) GoToLine(line int) {
 	s.views = append(s.views, fmt.Sprint("editor.line ", line))
@@ -105,13 +108,13 @@ func (s *scriptedCore) Failed(what string, err error) {
 }
 
 // Ticket is the host's latest-wins rule over the sequence (there is no connection to move).
-func (s *scriptedCore) Ticket(seq *uint64, _ TicketScope) Ticket {
+func (s *scriptedCore) Ticket(seq *uint64, _ feature.TicketScope) feature.Ticket {
 	if seq == nil {
-		return Ticket{}
+		return feature.Ticket{}
 	}
 	*seq++
 	n := *seq
-	return Ticket{current: func() bool { return *seq == n }}
+	return feature.NewTicket(func() bool { return *seq == n })
 }
 
 func (s *scriptedCore) Go(fn func(context.Context) any, then func(any)) {
@@ -419,7 +422,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	}
 	s.yes()
 	v.chooseStatus()
-	v.statusPick.accept(1, "") // in-progress
+	v.statusPick.Accept(1, "") // in-progress
 	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 in-progress]"} {
 		if !s.called(want) {
 			t.Errorf("no %s: %v", want, s.calls)

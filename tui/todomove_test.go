@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // todomove_test.go: an open task follows its file when the daemon moves it to another status's
@@ -53,7 +54,7 @@ func waitNoticed(t *testing.T, r *running, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notice "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return strings.Contains(n.text, text) })
+			return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return strings.Contains(n.Text, text) })
 		})
 	})
 }
@@ -88,7 +89,7 @@ func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
 	if line := onLoop(r, func() string { return r.h.core.Lines()[r.h.core.Cursor().Line] }); !strings.Contains(line, "HAND-EDIT FREELY") {
 		t.Errorf("the cursor is on %q, want the line it was on", line)
 	}
-	if b := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"alpha", from}) }); b != nil {
+	if b := onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "alpha", Path: from}) }); b != nil {
 		t.Errorf("a buffer is still on the old path %s", from)
 	}
 	waitNoticed(t, r, from+" moved to "+to)
@@ -172,7 +173,7 @@ func TestARemovedTasksCleanBufferCloses(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "no buffer on "+from, func(string) bool {
-		return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"alpha", from}) == nil })
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "alpha", Path: from}) == nil })
 	})
 	waitNoticed(t, r, "task was removed")
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
@@ -206,10 +207,10 @@ func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
 		t.Fatalf("the save wrote the removed task back: %v", err)
 	}
-	notices := onLoop(r, func() int { return len(r.h.noticeLog.items) })
+	notices := onLoop(r, func() int { return len(r.h.noticeLog.Items) })
 	onLoop(r, func() bool { r.h.diskSoon(r.h.active); return true })
 	time.Sleep(4 * diskWait) // NOTE: absence: no event says a check found nothing to say
-	if n := onLoop(r, func() int { return len(r.h.noticeLog.items) }); n != notices {
+	if n := onLoop(r, func() int { return len(r.h.noticeLog.Items) }); n != notices {
 		t.Errorf("a later check said %d notices more, want none", n-notices)
 	}
 }

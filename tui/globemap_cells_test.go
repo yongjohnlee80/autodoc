@@ -126,7 +126,7 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 		t.Fatal("a terminal's Relations menu has no GlobeMap item")
 	}
 	g := onLoop(r, func() *cellGlobeMap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if g, ok := f.(*cellGlobeMap); ok {
 				return g
 			}
@@ -200,7 +200,7 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 		t.Fatal("a terminal's Relations menu has no GlobeMap settings… item")
 	}
 	g := onLoop(r, func() *cellGlobeMap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if g, ok := f.(*cellGlobeMap); ok {
 				return g
 			}
@@ -344,7 +344,7 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
 	r.waitAttached(t, "a")
 	g := onLoop(r, func() *cellGlobeMap {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if c, ok := f.(*cellGlobeMap); ok {
 				return c
 			}

@@ -1,11 +1,12 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
-// THE AGENTS' STRIP (tabmenus.go): each agent's tab is named by its codename. + offers the
+// THE AGENTS' STRIP (feature/tabmenus.go): each agent's tab is named by its codename. + offers the
 // profiles: a running one goes to its tab, a stopped one starts in one. A tab's menu goes to
 // another tab, restarts or closes its agent (asking first while it runs), or opens the profiles.
 // Closing the last tab leaves the panel open on its empty text.
@@ -18,7 +19,7 @@ func (a *agents) addRows() []widgetcore.MenuItemModel {
 		if instance := a.instances[code]; instance != nil && instance.running {
 			label += " ▶"
 		}
-		rows = append(rows, tabMenuRow("agents.add."+code, label, func(terminal.TerminalTabID) {
+		rows = append(rows, feature.TabMenuRow("agents.add."+code, label, func(terminal.TerminalTabID) {
 			if p, ok := a.profile(code); ok {
 				a.useProfile(p)
 			} else {
@@ -39,25 +40,25 @@ func (a *agents) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemModel {
 	if err != nil {
 		return nil
 	}
-	rows := append(layoutRows(a.c, "agent", tabRowOf), goToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, a.goToTab))
+	rows := append(layoutRows(a.c, "agent", feature.TabRowOf), feature.GoToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, a.goToTab))
 	if instance := a.instanceOn(panel, id); instance != nil {
 		code := instance.profile.Codename
-		restart := tabMenuRow("agents.restart", "Restart", func(terminal.TerminalTabID) { a.restartAgent(code) })
-		closing := tabMenuRow("agents.close", "Close", func(terminal.TerminalTabID) { a.closeAgent(code) })
+		restart := feature.TabMenuRow("agents.restart", "Restart", func(terminal.TerminalTabID) { a.restartAgent(code) })
+		closing := feature.TabMenuRow("agents.close", "Close", func(terminal.TerminalTabID) { a.closeAgent(code) })
 		restart.Enabled, closing.Enabled = !instance.closing, !instance.closing
 		rows = append(rows, restart, closing)
 	}
 	rows = append(rows, widgetcore.NewSeparator("agents.tab.profiles"), a.profilesRow())
 	// Hide is SPC g's own toggle (agent.toggle): the panel closed, every agent running on
-	return append(rows, panelRows(a.c, "agent", panel, id, a.toggleAgent)...)
+	return append(rows, feature.PanelRows(a.c, "agent", panel, id, a.toggleAgent)...)
 }
 
 func (a *agents) profilesRow() widgetcore.MenuItemModel {
-	return tabMenuRow("agents.profiles", "Profiles…", func(terminal.TerminalTabID) { a.openAgentProfiles() })
+	return feature.TabMenuRow("agents.profiles", "Profiles…", func(terminal.TerminalTabID) { a.openAgentProfiles() })
 }
 
 // instanceOn is the agent whose tab id is on panel, nil for none.
-func (a *agents) instanceOn(panel TerminalPanel, id terminal.TerminalTabID) *agentInstance {
+func (a *agents) instanceOn(panel feature.TerminalPanel, id terminal.TerminalTabID) *agentInstance {
 	for _, instance := range a.instances {
 		if instance.tab == id && instance.owner != nil && instance.owner.SameOwner(panel) {
 			return instance
@@ -112,7 +113,7 @@ func (a *agents) restartAgent(code string) {
 		again()
 		return
 	}
-	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.restart_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.restart_its_process_is_stopped_and_the_agent_sta", p.Name),
+	a.c.Ask(feature.Question{Title: a.c.Tr("autodoc.question.agenttabs.restart_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.restart_its_process_is_stopped_and_the_agent_sta", p.Name),
 		Yes: a.c.Tr("autodoc.question.agenttabs.yes_restart_it"), OnYes: again})
 }
 
@@ -135,7 +136,7 @@ func (a *agents) closeAgent(code string) {
 		closeIt()
 		return
 	}
-	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.close_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.close_its_process_is_stopped", instance.profile.Name),
+	a.c.Ask(feature.Question{Title: a.c.Tr("autodoc.question.agenttabs.close_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.close_its_process_is_stopped", instance.profile.Name),
 		Yes: a.c.Tr("autodoc.question.agenttabs.yes_close_it"), OnYes: closeIt})
 }
 
@@ -164,7 +165,7 @@ func (a *agents) stopAllAgents() {
 		stopAll()
 		return
 	}
-	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.stop_the_agents_and_close_the_panel"),
+	a.c.Ask(feature.Question{Title: a.c.Tr("autodoc.question.agenttabs.stop_the_agents_and_close_the_panel"),
 		Text: a.c.Trf("autodoc.question.agenttabs.stop_every_agent_running_here", running),
 		Yes:  a.c.Tr("autodoc.question.agenttabs.yes_stop_them"), OnYes: stopAll})
 }
@@ -176,9 +177,9 @@ func (a *agents) stopAllAgents() {
 const agentsCard = "agentsCard"
 
 // Keys are SPC a, and the card it opens.
-func (*agents) Keys() []Key {
-	return []Key{
-		{Card: leader, Seq: "a", Show: "a", Does: "agents…", Opens: agentsCard, Group: groupAgents},
+func (*agents) Keys() []feature.Key {
+	return []feature.Key{
+		{Card: feature.Leader, Seq: "a", Show: "a", Does: "agents…", Opens: agentsCard, Group: feature.GroupAgents},
 		{Card: agentsCard, Seq: "b", Show: "b", Does: "send the page to an agent", Run: `App.run("lua.agent-buffer")`},
 		{Card: agentsCard, Seq: "f", Show: "f", Does: "send the selection or the clipboard", Run: `App.run("lua.agent-forward")`},
 		{Card: agentsCard, Seq: "g", Show: "g", Does: "the agent panel", Run: "App.toggleAgent()"},
@@ -187,6 +188,6 @@ func (*agents) Keys() []Key {
 }
 
 // Cards are the agents' card, Backspace returning to SPC's.
-func (*agents) Cards() []Card {
-	return []Card{{ID: agentsCard, View: "AgentsCard", Title: "SPC a — agents", Back: leader, Help: "THE AGENTS CARD (SPC a)"}}
+func (*agents) Cards() []feature.Card {
+	return []feature.Card{{ID: agentsCard, View: "AgentsCard", Title: "SPC a — agents", Back: feature.Leader, Help: "THE AGENTS CARD (SPC a)"}}
 }

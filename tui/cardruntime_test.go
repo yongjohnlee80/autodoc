@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/decl"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
@@ -208,9 +209,9 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
-	none := onLoop(r, func() Feature {
-		for _, f := range r.h.reg.features {
-			if _, ok := f.(Panel); !ok {
+	none := onLoop(r, func() feature.Feature {
+		for _, f := range r.h.reg.Features {
+			if _, ok := f.(feature.Panel); !ok {
 				return f
 			}
 		}
@@ -220,9 +221,9 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 		t.Fatal("every feature contributes panels: this cell needs one that does not")
 	}
 	onLoop(r, func() any {
-		reg := r.h.reg.panels
-		before, host := slices.Clone(reg.specs), reg.hosts[resultsPanel]
-		dup := append(r.h.plugins.Panels(), PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(PrefsView) string { return "left" }})
+		reg := r.h.reg.Panels
+		before, host := slices.Clone(reg.Specs), reg.Hosts[resultsPanel]
+		dup := append(r.h.plugins.Panels(), feature.PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(feature.PrefsView) string { return "left" }})
 		if _, _, err := stagePanels(reg, core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
 			t.Errorf("a panel id two features claim: %v", err)
 		}
@@ -232,20 +233,20 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 		if _, _, err := stagePanels(reg, core{r.h}, none, nil); err == nil || !strings.Contains(err.Error(), "contributes no panels") {
 			t.Errorf("a feature contributing no panels: %v, want refused", err)
 		}
-		own := slices.DeleteFunc(r.h.plugins.Panels(), func(s PanelSpec) bool { return s.ID == cardPanelID("card") })
+		own := slices.DeleteFunc(r.h.plugins.Panels(), func(s feature.PanelSpec) bool { return s.ID == cardPanelID("card") })
 		specs, commit, err := stagePanels(reg, core{r.h}, r.h.plugins, own)
 		if err != nil {
 			t.Error(err)
 			return nil
 		}
-		if !slices.EqualFunc(reg.specs, before, func(a, b PanelSpec) bool { return a.ID == b.ID }) || reg.hosts[resultsPanel] != host {
+		if !slices.EqualFunc(reg.Specs, before, func(a, b feature.PanelSpec) bool { return a.ID == b.ID }) || reg.Hosts[resultsPanel] != host {
 			t.Error("staging changed the registry")
 		}
 		commit()
-		if len(reg.specs) != len(specs) || findPanel(reg.specs, cardPanelID("card")) != nil || reg.hosts[resultsPanel] == host {
+		if len(reg.Specs) != len(specs) || feature.FindPanel(reg.Specs, cardPanelID("card")) != nil || reg.Hosts[resultsPanel] == host {
 			t.Error("the commit did not swap the plugins' panels and rebuild their host")
 		}
-		if _, ok := reg.hosts[cardPanelID("card")]; ok {
+		if _, ok := reg.Hosts[cardPanelID("card")]; ok {
 			t.Error("the commit kept the dropped card's host")
 		}
 		return nil
@@ -259,7 +260,7 @@ func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
-	host, cards := loopPair(r, func() (PanelHost, int) { return r.h.reg.panels.hosts[resultsPanel], len(r.h.plugins.cardOrder) })
+	host, cards := loopPair(r, func() (feature.PanelHost, int) { return r.h.reg.Panels.Hosts[resultsPanel], len(r.h.plugins.cardOrder) })
 	onLoop(r, func() any {
 		r.h.reloadCards = func([]byte, map[string]any) (decl.Result, error) {
 			return decl.Result{}, errors.New("refused for the test")
@@ -273,7 +274,7 @@ func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
 	type after struct{ spec, set, sameHost, n bool }
 	a := onLoop(r, func() after {
 		_, inSet := r.h.plugins.cards["card"]
-		return after{r.h.panelSpec(id) != nil, inSet, r.h.reg.panels.hosts[resultsPanel] == host, len(r.h.plugins.cardOrder) == cards}
+		return after{r.h.panelSpec(id) != nil, inSet, r.h.reg.Panels.Hosts[resultsPanel] == host, len(r.h.plugins.cardOrder) == cards}
 	})
 	spec, set, sameHost, n := a.spec, a.set, a.sameHost, a.n
 	if spec || set || !sameHost || !n {

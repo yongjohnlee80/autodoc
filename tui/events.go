@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // PEER CHANGES — what other clients of the daemon changed
@@ -59,7 +60,7 @@ func (h *Host) pollEvents(gen uint64) {
 			if err != nil {
 				return answer{err: err}
 			}
-			return answer{cursor: num(asMap(res), "cursor"), err: errEventsExpired}
+			return answer{cursor: feature.Num(feature.AsMap(res), "cursor"), err: errEventsExpired}
 		}
 		if errors.As(err, &re) && re.Code == rpc.CodeUnsupported {
 			return answer{err: errNoEventLog}
@@ -67,13 +68,13 @@ func (h *Host) pollEvents(gen uint64) {
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
-		a := answer{cursor: num(m, "cursor")}
+		m := feature.AsMap(res)
+		a := answer{cursor: feature.Num(m, "cursor")}
 		a.more, _ = m["more"].(bool)
-		for _, e := range asList(m["events"]) {
-			em := asMap(e)
-			a.events = append(a.events, peerEvent{seq: num(em, "seq"), kind: str(em, "kind"), workspace: str(em, "workspace"),
-				client: str(em, "client"), detail: str(em, "detail")})
+		for _, e := range feature.AsList(m["events"]) {
+			em := feature.AsMap(e)
+			a.events = append(a.events, peerEvent{seq: feature.Num(em, "seq"), kind: feature.Str(em, "kind"), workspace: feature.Str(em, "workspace"),
+				client: feature.Str(em, "client"), detail: feature.Str(em, "detail")})
 		}
 		return a
 	}, func(a answer) {
@@ -139,7 +140,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 		if e.client == self && self != "" {
 			continue // this TUI's own change: it already knows
 		}
-		if h.reg.event(e.kind, e.workspace, e.detail) {
+		if h.reg.Event(e.kind, e.workspace, e.detail) {
 			continue // a feature's own kind: the feature tells of it
 		}
 		by := h.tr("autodoc.notice.events.by_another_client")

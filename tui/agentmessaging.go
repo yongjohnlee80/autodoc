@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
@@ -66,13 +67,13 @@ var errHandedOver = errors.New("the doorbell didn't ring: the window's fallback 
 // agentDoorbell rings an agent through its CLI's own channel. answer is called once, on the loop:
 // rang, or why not.
 type agentDoorbell interface {
-	ring(to AgentRef, m AgentMessage, answer func(rang bool, err error))
+	ring(to feature.AgentRef, m AgentMessage, answer func(rang bool, err error))
 }
 
 // crewDoorbell is the crew's doorbell: inbox.send with fire, from the window that holds the scope.
 type crewDoorbell struct{ crew *crewHost }
 
-func (d crewDoorbell) ring(to AgentRef, m AgentMessage, answer func(rang bool, err error)) {
+func (d crewDoorbell) ring(to feature.AgentRef, m AgentMessage, answer func(rang bool, err error)) {
 	d.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) {
 		if errors.Is(err, errHandedOver) { // the fallback job delivers it: the send is done, typing nothing
 			answer(true, nil)
@@ -93,7 +94,7 @@ const submitDelay = 60 * time.Millisecond
 // first receive. An immediate error rejects it without calling done; accepted,
 // done is called once on the UI loop: nil when it reached the agent (rang, or typed and sent),
 // ErrAgentTypedNotSent when it was typed but left for the user's Enter, else why it didn't.
-func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) error {
+func (a *agents) sendMessage(to feature.AgentRef, m AgentMessage, done func(error)) error {
 	text := m.text()
 	check := func() error {
 		if text == "" || len(text) > terminal.TerminalInputLimit {
@@ -120,7 +121,7 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 			})
 		}
 	}
-	return a.deliver(to, check, what, o, func(panel TerminalPanel, tab terminal.TerminalTabID) error {
+	return a.deliver(to, check, what, o, func(panel feature.TerminalPanel, tab terminal.TerminalTabID) error {
 		return panel.SendBracketedPaste(tab, text)
 	}, done)
 }
@@ -131,8 +132,8 @@ func (a *agents) sendMessage(to AgentRef, m AgentMessage, done func(error)) erro
 // (still: not finished, the same workspace, instance and tab) into an agent whose prompts are
 // reported and that shows none; otherwise the message stays typed, a notice says why, and the
 // delivery finishes ErrAgentTypedNotSent (or stale, pressing nothing).
-func (a *agents) submitter(to AgentRef, refused func() error) func(TerminalPanel, terminal.TerminalTabID, func() error, func(error)) {
-	return func(panel TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error)) {
+func (a *agents) submitter(to feature.AgentRef, refused func() error) func(feature.TerminalPanel, terminal.TerminalTabID, func() error, func(error)) {
+	return func(panel feature.TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error)) {
 		if err := refused(); err != nil { // typed now: the doorbell's refusal is told with it
 			a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.doorbell_not_fired_typed", to.Codename, err.Error()))
 		}
@@ -193,7 +194,7 @@ func (a *agents) kindOf(codename string) string {
 // (crewHost.takeJob): pasted, then Enter only where the agent's prompts are reported and none
 // shows. done hears nil (sent), ErrAgentTypedNotSent, or why nothing was typed.
 func (a *agents) deliverFallback(codename, text string, done func(error)) {
-	to := AgentRef{Codename: codename}
+	to := feature.AgentRef{Codename: codename}
 	check := func() error {
 		if text == "" || len(text) > terminal.TerminalInputLimit {
 			return ErrAgentText
@@ -201,7 +202,7 @@ func (a *agents) deliverFallback(codename, text string, done func(error)) {
 		return nil
 	}
 	o := deliverOpts{submit: a.submitter(to, func() error { return nil })}
-	if err := a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), o, func(panel TerminalPanel, tab terminal.TerminalTabID) error {
+	if err := a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), o, func(panel feature.TerminalPanel, tab terminal.TerminalTabID) error {
 		return panel.SendBracketedPaste(tab, text)
 	}, done); err != nil {
 		done(err)
@@ -210,7 +211,7 @@ func (a *agents) deliverFallback(codename, text string, done func(error)) {
 
 // taskMessage is a task as a request: its title in the subject, its file, id and the instruction
 // in the body.
-func taskMessage(task TaskRef, instruction string) AgentMessage {
+func taskMessage(task feature.TaskRef, instruction string) AgentMessage {
 	return AgentMessage{Kind: MessageRequest, Subject: "Task: " + task.Title,
 		Body: fmt.Sprintf("File: %s\nID: %s\nInstruction: %s", task.Path, task.ID, instruction)}
 }

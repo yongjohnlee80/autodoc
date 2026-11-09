@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"testing"
 )
@@ -15,7 +16,7 @@ func TestTheMenuBarAndTheStatusLineShowByDefault(t *testing.T) {
 			t.Errorf("gui %v: a new user's menu bar hidden %v, status line shown %v; want shown, shown", gui, p.menuHidden, p.statusOn)
 		}
 		var p prefs
-		ReadRows(&p, map[string]any{prefMenuHide: "true", prefStatus: "false"}, legacyPrefRows(nil, gui))
+		feature.ReadRows(&p, map[string]any{prefMenuHide: "true", prefStatus: "false"}, legacyPrefRows(nil, gui))
 		if !p.menuHidden || p.statusOn {
 			t.Errorf("gui %v: stored autohide true and status false read as hidden %v, shown %v", gui, p.menuHidden, p.statusOn)
 		}

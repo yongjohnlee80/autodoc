@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
@@ -199,7 +200,7 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	onLoop(r, func() bool { g.sendView(gui.Size{W: 800, H: 600}, true); return true })
 	r.s.WaitFor(t, "the settled notice", func(string) bool { // its progress toast ends saying so, kept
 		return onLoop(r, func() bool {
-			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "GlobeMap: kb settled · 2 documents, 0 links" })
+			return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return n.Text == "GlobeMap: kb settled · 2 documents, 0 links" })
 		})
 	})
 	onLoop(r, func() bool { r.h.choosePrefNamed(prefGlobeFilter, 1); return true })

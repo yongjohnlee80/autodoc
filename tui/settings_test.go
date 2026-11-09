@@ -584,7 +584,7 @@ func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
 	r.s.WaitFor(t, "the page shown and the language applied", func(string) bool {
-		return onLoop(r, func() bool { return r.h.reg.pageShown && r.h.language != "" })
+		return onLoop(r, func() bool { return r.h.reg.PageShown && r.h.language != "" })
 	})
 	r.h.p.Post(func() { r.h.rel.load("gone", "a.md") })
 	r.waitNoticed(t, "links: no such workspace")

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"embed"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 )
 
@@ -12,9 +13,9 @@ import (
 
 // cellRelationViews are a terminal's relation views, one graph store for both: the GlobeMap and
 // the Mindmap, in cells.
-func cellRelationViews(h *Host) []Feature {
+func cellRelationViews(h *Host) []feature.Feature {
 	store := newGraphStore(core{h}, core{h}, h.graphUserFile)
-	return []Feature{newCellGlobeMap(core{h}, store, h.seams.globeMapPage), newCellMindmap(core{h}, store)}
+	return []feature.Feature{newCellGlobeMap(core{h}, store, h.seams.globeMapPage), newCellMindmap(core{h}, store)}
 }
 
 // cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.

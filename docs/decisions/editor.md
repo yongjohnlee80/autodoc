@@ -116,7 +116,7 @@ line and shows its values as a notice.
 - Closing is safe from any goroutine, and a closed shell's queued chunk runs nothing. `:lua-reload`
   moves an open shell onto the new engine.
 
-In the code: `tui/luashell.go`, `tui/terminalpanel.go`, `tui/scripting.go`
+In the code: `tui/luashell.go`, `tui/feature/terminalpanel.go`, `tui/scripting.go`
 
 ## The shell's environment
 
@@ -320,7 +320,7 @@ the text, and its find and links worked on what the page showed. The editor repl
 the renderer drew tables, Mermaid, Vega-Lite and images, so no reader lost a table or a chart in
 between.
 
-In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`
+In the code: `tui/notepage.go`, `tui/feature/feature.go`, `tui/find.go`, `tui/golink.go`
 
 ## The table's clipboard, menu and row numbers
 
@@ -479,7 +479,7 @@ English and the store keeps it.
 - Tests gate it: every id used is in the English catalog, every shipped language covers every id,
   the library's checks find no wrong mnemonic or collision, and a switch relabels an open dialog.
 
-In the code: `tui/language.go`, `tui/feature.go`, `tui/tutorial.go`, `tui/qml/i18n/`
+In the code: `tui/language.go`, `tui/feature/feature.go`, `tui/tutorial.go`, `tui/qml/i18n/`
 
 ## The documentation site
 
@@ -534,7 +534,7 @@ Nothing imports the host. Until the files move, each file's group is set by its 
 
 The whole-program tests stay in `tui`: they drive the host and read its state, which an external test package can't see.
 
-In the code: `internal/tuiaudit/tui_coupling_test.go`, `internal/tuiaudit/testdata/tui_coupling.txt`, `tui/feature.go`
+In the code: `internal/tuiaudit/tui_coupling_test.go`, `internal/tuiaudit/testdata/tui_coupling.txt`, `tui/feature/feature.go`
 
 ## Line endings
 

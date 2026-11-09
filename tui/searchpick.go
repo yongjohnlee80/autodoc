@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -32,7 +33,7 @@ func (h *Host) searchLive(q string) {
 		h.searchCancel()
 		h.searchCancel = nil
 	}
-	tk, ws := h.ticket(&h.searchSeq, TicketWorkspace), h.ws
+	tk, ws := h.ticket(&h.searchSeq, feature.TicketWorkspace), h.ws
 	h.marks.Store(termsOf(q))
 	h.set("App.searchStatus", "")
 	if q == "" {
@@ -41,7 +42,7 @@ func (h *Host) searchLive(q string) {
 			h.notifyDone(toastSearchWait, h.tr("autodoc.notice.searchpick.search_cleared"))
 			h.searchWaitToast = false
 		}
-		h.searchPick.show(nil)
+		h.searchPick.Show(nil)
 		h.set("App.hitsTitle", h.tr("autodoc.text.searchpick.hits"))
 		return
 	}
@@ -69,19 +70,19 @@ func (h *Host) searchLive(q string) {
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
+		m := feature.AsMap(res)
 		var out []hit
-		for _, x := range asList(m["hits"]) {
-			hm := asMap(x)
+		for _, x := range feature.AsList(m["hits"]) {
+			hm := feature.AsMap(x)
 			start, _ := hm["byte_start"].(int64)
 			rel, _ := hm["relevance"].(float64)
-			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel,
-				hold: str(hm, "hold")})
+			out = append(out, hit{path: feature.Str(hm, "path"), breadcrumb: feature.Str(hm, "breadcrumb"), byteStart: int(start), relevance: rel,
+				hold: feature.Str(hm, "hold")})
 		}
-		rk := asMap(m["rank"])
-		a := answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), rank: rk}
-		if str(rk, "state") == "ready" {
-			a.rankedBy = str(rk, "model")
+		rk := feature.AsMap(m["rank"])
+		a := answer{hits: out, mode: feature.Str(m, "mode_used"), semantic: feature.Str(m, "semantic"), rank: rk}
+		if feature.Str(rk, "state") == "ready" {
+			a.rankedBy = feature.Str(rk, "model")
 		}
 		return a
 	}, func(a answer) {
@@ -96,9 +97,9 @@ func (h *Host) searchLive(q string) {
 				h.notifyDone(toastSearchWait, h.tr("autodoc.notice.searchpick.search_did_not_complete"))
 				h.searchWaitToast = false
 			}
-			h.searchPick.show(nil)
-			h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_2", wireMessage(a.err)))
-			msg := h.trf("autodoc.notice.searchpick.search_in_is_unavailable", ws, wireMessage(a.err))
+			h.searchPick.Show(nil)
+			h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_2", feature.WireMessage(a.err)))
+			msg := h.trf("autodoc.notice.searchpick.search_in_is_unavailable", ws, feature.WireMessage(a.err))
 			if msg != h.lastSearchError {
 				h.notify(msg)
 				h.lastSearchError = msg
@@ -134,7 +135,7 @@ func (h *Host) searchLive(q string) {
 		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), ranked, a.mode, a.semantic))
 		// no provider (the wire's semantic "off"): the picker offers one action into the setup
 		h.set("App.searchSetupShown", a.semantic == "off")
-		h.searchPick.show(a.hits) // the hits, the first previewed
+		h.searchPick.Show(a.hits) // the hits, the first previewed
 	})
 }
 
@@ -166,7 +167,7 @@ const searchWaitFrames = 16
 // answered: a spinner and one of searchWaits, changing every few seconds. It starts after
 // searchWaitDelay and stops when the search answers, is replaced, cleared or closed (each blanks
 // the line).
-func (h *Host) searchWaitLine(tk Ticket, n uint64) {
+func (h *Host) searchWaitLine(tk feature.Ticket, n uint64) {
 	frame := int(n) * searchWaitFrames // a different message first, search to search
 	waiting := func() bool { return tk.Current() && h.searchCancel != nil }
 	var turn func()
@@ -241,24 +242,24 @@ func (h *Host) refreshSearch() {
 }
 
 // newSearchPick is the search's picker: its hits are what the daemon found for the words typed.
-func (h *Host) newSearchPick() *pick[hit] {
-	return &pick[hit]{c: core{h}, dialog: "searchPicker", name: "search",
-		list:  newRows(tuidecl.NewListModel("key", "hit", "path", "section"), func(i int, x hit) rowOf { return hitRowOf(h.tr, i, x) }),
-		query: h.searchLive,
-		preview: func(x hit) func(context.Context) answerOf[pane] {
+func (h *Host) newSearchPick() *feature.Pick[hit] {
+	return &feature.Pick[hit]{Core: core{h}, Dialog: "searchPicker", Name: "search",
+		List:  feature.NewRows(tuidecl.NewListModel("key", "hit", "path", "section"), func(i int, x hit) feature.RowOf { return hitRowOf(h.tr, i, x) }),
+		Query: h.searchLive,
+		Preview: func(x hit) func(context.Context) feature.AnswerOf[feature.Pane] {
 			return h.readPreview(x.path, x.byteStart, x.hold != "")
 		},
 		// a hit read as Markdown offers its Rendered view
-		shown:  func(x hit, a answerOf[pane]) { h.previewRendered(x.path, a.err == nil) },
-		scope:  TicketWorkspace,
-		choose: h.openHit,
-		cancel: h.searchClosed}
+		Shown:  func(x hit, a feature.AnswerOf[feature.Pane]) { h.previewRendered(x.path, a.Err() == nil) },
+		Scope:  feature.TicketWorkspace,
+		Choose: h.openHit,
+		Cancel: h.searchClosed}
 }
 
 // openHit opens the file of hit x at its section: the picker has closed.
 func (h *Host) openHit(x hit) {
 	h.searchClosed()
-	h.openRefTo(fileRef{h.ws, x.path}, true, nil, &landing{at: x.byteStart}) // at its section
+	h.openRefTo(feature.FileRef{WS: h.ws, Path: x.path}, true, nil, &landing{at: x.byteStart}) // at its section
 	switch x.hold {
 	case "stale":
 		h.notify(h.trf("autodoc.notice.searchpick.changed_since_this_backend_s_build_indexed_it_th", x.path))
@@ -277,8 +278,8 @@ func (h *Host) previewRendered(p string, read bool) {
 }
 
 // hitRows are the hit list's rows, in tr's language.
-func hitRows(tr func(string) string, hits []hit) []rowOf {
-	rows := make([]rowOf, len(hits))
+func hitRows(tr func(string) string, hits []hit) []feature.RowOf {
+	rows := make([]feature.RowOf, len(hits))
 	for i, x := range hits {
 		rows[i] = hitRowOf(tr, i, x)
 	}
@@ -286,10 +287,10 @@ func hitRows(tr func(string) string, hits []hit) []rowOf {
 }
 
 // hitRowOf is hit i's row, in tr's language: a held document's hit says so after its section.
-func hitRowOf(tr func(string) string, i int, x hit) rowOf {
+func hitRowOf(tr func(string) string, i int, x hit) feature.RowOf {
 	section := x.breadcrumb
 	if l := holdLabel(tr, x.hold); l != "" {
 		section += " · " + l
 	}
-	return rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}
+	return feature.RowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}
 }

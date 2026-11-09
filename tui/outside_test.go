@@ -17,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // outside_test.go: files outside every workspace
@@ -195,7 +196,7 @@ func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
 // socket; the TUI says why rather than echoing the refusal.
 func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
 	denied := &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "file.read is for local peers"}
-	if got := wireMessage(localOnly(denied)); !strings.Contains(got, "this AutoDoc is remote") {
+	if got := feature.WireMessage(localOnly(denied)); !strings.Contains(got, "this AutoDoc is remote") {
 		t.Errorf("a refusal reads %q", got)
 	}
 	other := &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: "bad"}
@@ -265,8 +266,8 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notice "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if n.text == text {
+			for _, n := range r.h.noticeLog.Items {
+				if n.Text == text {
 					return true
 				}
 			}
@@ -337,7 +338,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	if strings.Contains(r.s.String(), "unsaved file") {
 		t.Fatal("opening the excluded file asked about a.md's unsaved changes")
 	}
-	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"kb", "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
+	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
 		t.Fatal("a.md's buffer lost its unsaved edit")
 	}
 }
@@ -358,10 +359,10 @@ func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
 	if err != nil || string(b) != "one\n" || v != v1 {
 		t.Fatalf("read back %q, %q, %v; want one, %q", b, v, err, v1)
 	}
-	if _, err := c.WriteAbsolute(ctx, p, []byte("two\n"), "stale"); code(err) != rpc.CodeConflict {
+	if _, err := c.WriteAbsolute(ctx, p, []byte("two\n"), "stale"); feature.Code(err) != rpc.CodeConflict {
 		t.Errorf("a stale version: %v; want a conflict", err)
 	}
-	if _, _, err := c.ReadAbsolute(ctx, filepath.Join(filepath.Dir(abs), "none.toml")); code(err) != rpc.CodeNotFound {
+	if _, _, err := c.ReadAbsolute(ctx, filepath.Join(filepath.Dir(abs), "none.toml")); feature.Code(err) != rpc.CodeNotFound {
 		t.Errorf("no file: %v; want not found", err)
 	}
 	// the theme choices a chooser offers: its own first, then every theme the window can wear
