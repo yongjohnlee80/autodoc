@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -163,7 +163,7 @@ end }
 // A command run inside another (ed:run) keeps the outer one's deadline after it returns: a runaway
 // outer command is still stopped.
 func TestAnInnerCommandRestoresTheOuterDeadline(t *testing.T) {
-	core := widget.NewEditorCore(widget.CoreInitialText(""))
+	core := editor.NewEditorCore(editor.CoreInitialText(""))
 	e := New(core, WithTimeout(200*time.Millisecond))
 	defer e.Close()
 	if err := e.Load("n.lua", []byte(`
