@@ -27,3 +27,10 @@ func detached(t *testing.T, fact string) bool {
 	}
 	return fact != strconv.Itoa(mine) && fact != "" && fact[0] != 'e'
 }
+
+// Unix has no console to give up.
+func TestReleasingTheConsoleDoesNothingOnUnix(t *testing.T) {
+	if ReleaseConsoleIfAlone() {
+		t.Error("ReleaseConsoleIfAlone reported a console given up on Unix")
+	}
+}

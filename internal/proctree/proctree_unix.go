@@ -27,3 +27,6 @@ func alive(pid int) bool {
 
 // replace is exec.
 func replace(path string, args, env []string) error { return syscall.Exec(path, args, env) }
+
+// releaseConsoleIfAlone has no console to give up.
+func releaseConsoleIfAlone() bool { return false }
