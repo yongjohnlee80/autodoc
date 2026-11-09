@@ -51,11 +51,11 @@ func (s *startup) Started() {
 	switch {
 	case vimQuestionPending(s.seams, p): // a true first run's first card, the agent setup's after it (vimquestion.go)
 		s.c.Open("vimQuestion")
-	case p.aboutAtStart && !agentSetupPending(s.seams, p): // the setup card is that run's first card (agentsetup.go)
+	case p.Value(prefAboutAt) == "true" && !agentSetupPending(s.seams, p): // the setup card is that run's first card (agentsetup.go)
 		s.c.Open("about")
 	}
 	cur, ok := releaseVersion(s.version)
-	if !p.updateCheck || !ok {
+	if p.Value(prefUpdates) != "true" || !ok {
 		return
 	}
 	s.c.Go(func(ctx context.Context) any {

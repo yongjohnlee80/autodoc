@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 )
 
 // PREFERENCE ROWS — one row per preference: its name in the store, the values it takes and its
@@ -12,9 +11,39 @@ import (
 // chooser for it. Reading the store (prefsFor), the dialog's choosers (their index sources and
 // set commands) and the write to the store all go by the rows, so a preference is declared once.
 //
-// A feature declares its own rows (the Prefs capability), each a ValuePref read with
-// prefs.Value. Composite preferences — a plugin's placement and keys, the panels' geometry, the
-// agents, the recent files, the search's stages — keep readers of their own.
+// A feature declares its own rows (the Prefs capability), each a ValuePref, and reads any row by
+// its name through PrefsView.Value. Composite preferences — a plugin's placement and keys, the
+// panels' geometry, the agents, the recent files, the search's stages — keep readers of their own.
+
+// PrefsView is the preferences as a feature reads them: any row's value by its name, and a panel's
+// size and length at an edge. Nothing else of the host's preferences is the kit's to name; a
+// feature that needs more reads it through its own Host interface.
+type PrefsView interface {
+	Value(name string) string
+	PanelGeometry(id, edge string) (size, length int)
+}
+
+// PrefsWriter is the preferences a row's value is read into: the host's own, which keeps each
+// row's value where its binding says (PrefBinding). A feature never holds one: Core.Prefs is a
+// PrefsView, a snapshot.
+type PrefsWriter interface {
+	PrefsView
+	SetValue(name, v string) // a ValuePref's value, by its name
+}
+
+// PrefBinding is where a row's value lives and how it is checked: the host's bindings of its own
+// rows to its preferences' fields (BoundPref). ValuePref binds a feature's row by its name.
+type PrefBinding struct {
+	Valid func(v string) bool           // a stored value the TUI can use; nil: one of the row's Choices
+	Read  func(p PrefsWriter, v string) // a usable value into p
+	Value func(p PrefsView) string      // p's value, as stored
+	Reset func(p PrefsWriter)           // the default into p
+}
+
+// BoundPref is the row name, one of choices (nil when Valid says what it takes), kept where b says.
+func BoundPref(name string, choices []string, b PrefBinding) PrefSpec {
+	return PrefSpec{Name: name, Choices: choices, valid: b.Valid, read: b.Read, value: b.Value, reset: b.Reset}
+}
 
 // PrefSpec is one preference.
 type PrefSpec struct {
@@ -23,14 +52,15 @@ type PrefSpec struct {
 	Index   string   // the App.* source a chooser reads: the value's row; "" for no chooser
 	Set     string   // the App.* command a chooser calls with a row; "" for none
 	// State is what the document reads of the value, beyond the chooser's row; nil for nothing.
-	State func(p prefs) map[string]any
+	State func(p PrefsView) map[string]any
 	// Changed runs after the user chose a new value (a panel docks again, a notice); nil for nothing.
-	Changed func(p prefs)
+	Changed func(p PrefsView)
 
-	valid func(v string) bool      // a stored value the TUI can use; nil: one of Choices
-	read  func(p *prefs, v string) // a usable value into p
-	value func(p prefs) string     // p's value, as stored
-	reset func(p *prefs)           // the default into p
+	valid  func(v string) bool           // a stored value the TUI can use; nil: one of Choices
+	read   func(p PrefsWriter, v string) // a usable value into p
+	value  func(p PrefsView) string      // p's value, as stored
+	reset  func(p PrefsWriter)           // the default into p
+	byName bool                          // a ValuePref: its value is kept by its name, not in a field
 }
 
 // Prefs is a feature that declares preferences of its own.
@@ -45,68 +75,34 @@ func (s PrefSpec) admits(v string) bool {
 }
 
 // row is the chooser's row of p's value: its place in Choices, the first row for one not there.
-func (s PrefSpec) row(p prefs) int { return max(slices.Index(s.Choices, s.value(p)), 0) }
+func (s PrefSpec) row(p PrefsView) int { return max(slices.Index(s.Choices, s.value(p)), 0) }
 
 // chooser gives the row the Preferences dialog's chooser: the source it reads and the command it calls.
 func (s PrefSpec) chooser(index, set string) PrefSpec { s.Index, s.Set = index, set; return s }
 
 // shows gives the row what the document reads of its value.
-func (s PrefSpec) shows(state func(p prefs) map[string]any) PrefSpec { s.State = state; return s }
+func (s PrefSpec) shows(state func(p PrefsView) map[string]any) PrefSpec { s.State = state; return s }
 
 // then gives the row what follows a change the user makes.
-func (s PrefSpec) then(changed func(p prefs)) PrefSpec { s.Changed = changed; return s }
-
-// boolPref is a yes-or-no preference kept as "true" or "false", yes first in its chooser.
-func boolPref(name string, def bool, field func(*prefs) *bool) PrefSpec {
-	return PrefSpec{Name: name, Choices: []string{"true", "false"},
-		read:  func(p *prefs, v string) { *field(p) = v == "true" },
-		value: func(p prefs) string { return strconv.FormatBool(*field(&p)) },
-		reset: func(p *prefs) { *field(p) = def }}
-}
-
-// choicePref is one of a list of names.
-func choicePref(name, def string, choices []string, field func(*prefs) *string) PrefSpec {
-	return PrefSpec{Name: name, Choices: choices,
-		read:  func(p *prefs, v string) { *field(p) = v },
-		value: func(p prefs) string { return *field(&p) },
-		reset: func(p *prefs) { *field(p) = def }}
-}
-
-// intPref is a whole number from lo to hi. Its chooser, when it has one, offers each of them.
-func intPref(name string, def, lo, hi int, field func(*prefs) *int) PrefSpec {
-	return PrefSpec{Name: name,
-		valid: func(v string) bool { n, err := strconv.Atoi(v); return err == nil && n >= lo && n <= hi },
-		read:  func(p *prefs, v string) { *field(p), _ = strconv.Atoi(v) },
-		value: func(p prefs) string { return strconv.Itoa(*field(&p)) },
-		reset: func(p *prefs) { *field(p) = def }}
-}
+func (s PrefSpec) then(changed func(p PrefsView)) PrefSpec { s.Changed = changed; return s }
 
 // ValuePref is a feature's own preference, one of choices (any value but "" when choices is nil),
-// read with prefs.Value.
+// read with PrefsView.Value.
 func ValuePref(name, def string, choices []string) PrefSpec {
-	s := PrefSpec{Name: name, Choices: choices,
-		read: func(p *prefs, v string) {
-			p.values = maps.Clone(p.values) // a prefs is a value: its copies never share a change
-			if p.values == nil {
-				p.values = map[string]string{}
-			}
-			p.values[name] = v
-		},
-		value: func(p prefs) string { return p.Value(name) },
+	s := PrefSpec{Name: name, Choices: choices, byName: true,
+		read:  func(p PrefsWriter, v string) { p.SetValue(name, v) },
+		value: func(p PrefsView) string { return p.Value(name) },
 	}
-	s.reset = func(p *prefs) { s.read(p, def) }
+	s.reset = func(p PrefsWriter) { s.read(p, def) }
 	if choices == nil {
 		s.valid = func(v string) bool { return v != "" }
 	}
 	return s
 }
 
-// Value is a feature's preference (ValuePref), by its name.
-func (p prefs) Value(name string) string { return p.values[name] }
-
 // readRows reads the store's values into p, over the rows' defaults; a value the TUI cannot use
 // is the default's.
-func readRows(p *prefs, m map[string]any, rows []PrefSpec) {
+func readRows(p PrefsWriter, m map[string]any, rows []PrefSpec) {
 	for _, s := range rows {
 		s.reset(p)
 		if v, ok := m[s.Name].(string); ok && v != "" && s.admits(v) {
@@ -116,7 +112,7 @@ func readRows(p *prefs, m map[string]any, rows []PrefSpec) {
 }
 
 // rowState is what the document reads of the rows' values: each chooser's row, and each row's own.
-func rowState(p prefs, rows []PrefSpec) map[string]any {
+func rowState(p PrefsView, rows []PrefSpec) map[string]any {
 	m := map[string]any{}
 	for _, s := range rows {
 		if s.Index != "" {

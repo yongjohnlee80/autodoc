@@ -50,11 +50,6 @@ var fontSizes = []int{10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24}
 
 const defaultFontSize = 14
 
-// agentScales are the agent and terminal panels' text sizes, in percent of the window's text: the
-// Fonts dialog offers them, and each panel's Text size menu steps through them. defaultAgentScale
-// is slightly smaller than the editor's.
-var agentScales = percents(50, 150, 10)
-
 const defaultAgentScale = 90
 
 // nearestAgentScale is the step n is nearest, the larger of two as near, so a choice stored between

@@ -111,7 +111,7 @@ func (w *inboxWindow) NotifyOngoingClick(id, msg string, onClick func()) {
 }
 func (w *inboxWindow) NotifyDone(id, msg string) { delete(w.shown, id); w.ended[id] = msg }
 func (w *inboxWindow) Set(key string, v any)     { w.set[key] = v }
-func (w *inboxWindow) Prefs() prefs              { return w.prefs }
+func (w *inboxWindow) Prefs() PrefsView          { return w.prefs }
 func (w *inboxWindow) SetText(id, text string)   { w.texts[id] = text }
 func (w *inboxWindow) Bell()                     { w.bells++ }
 func (w *inboxWindow) Ask(q Question) Asked      { w.asked = append(w.asked, q); return Asked{} }

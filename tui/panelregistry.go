@@ -132,7 +132,7 @@ type PanelSpec struct {
 	Priority int
 	// Edge is the edge it opens from now, the place its dragged size and length are kept at; a panel
 	// with Places has one.
-	Edge func(p prefs) string
+	Edge func(p PrefsView) string
 	// Places are the edges whose dragged size and length preferences keep; nil: it sizes itself.
 	Places []string
 	// Size and Length are the percent bounds a kept size or length stays within, and Default is
@@ -172,7 +172,7 @@ func (s PanelSpec) geometry() panelgeometry.Spec {
 
 // These fresh descriptors are also the schema for standalone preference
 // readers. They have no runtime hooks, feature instances or package state.
-func sidePanelSpec(id, view string, priority int, edge func(prefs) string) PanelSpec {
+func sidePanelSpec(id, view string, priority int, edge func(PrefsView) string) PanelSpec {
 	return PanelSpec{ID: id, View: view, Priority: priority, Edge: edge, Places: slices.Clone(edges),
 		Keyboard: true, Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault}
 }
@@ -181,7 +181,7 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 // and the page's links (relationsView). The links' own panel, with its tui.links.* preferences,
 // became its tab (migrateLinksPanel).
 func explorerPanelSpec() PanelSpec {
-	s := sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
+	s := sidePanelSpec("explorer", "explorerTree", 10, func(p PrefsView) string { return p.Value(prefExplorer) })
 	s.Icon, s.Default = "☰", explorerDefault
 	return s
 }
@@ -207,3 +207,9 @@ func panelLength(edge string) int {
 	}
 	return 85
 }
+
+// edges are the four a panel opens from, in the order the Preferences dialog offers them.
+var edges = []string{"left", "right", "top", "bottom"}
+
+// prefExplorer is the explorer's edge, with its Links tab (migrateLinksPanel).
+const prefExplorer = "tui.explorer.edge"

@@ -40,7 +40,7 @@ func (x *crewInbox) Catalog() []Entry {
 
 // toggleBell turns the bell on or off, and says which.
 func (x *crewInbox) toggleBell() {
-	on := !x.c.Prefs().agentBell
+	on := x.c.Prefs().Value(prefAgentBell) != "true"
 	x.c.SetPref(prefAgentBell, strconv.FormatBool(on))
 	if on {
 		x.c.Notify(x.c.Tr("autodoc.crew.bell_on"))
@@ -51,7 +51,7 @@ func (x *crewInbox) toggleBell() {
 
 // ring rings the bell, while it is on and the last ring is crewBellEvery past.
 func (x *crewInbox) ring() {
-	if !x.c.Prefs().agentBell {
+	if x.c.Prefs().Value(prefAgentBell) != "true" {
 		return
 	}
 	now := x.now()

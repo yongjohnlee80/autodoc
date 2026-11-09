@@ -231,7 +231,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if existing := a.instances[p.Codename]; existing != nil && existing.closing {
 		return nil, ErrAgentUnavailable
 	}
-	ws, ok := a.c.ActiveWorkspace()
+	ws, ok := a.c.ActiveWorkspaceInfo()
 	if !ok {
 		return nil, ErrAgentUnavailable
 	}
@@ -881,7 +881,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 	if !ok {
 		return ErrAgentUnavailable
 	}
-	ws, ok := a.c.ActiveWorkspace()
+	ws, ok := a.c.ActiveWorkspaceInfo()
 	if !ok {
 		return ErrAgentUnavailable
 	}
@@ -906,7 +906,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		if a.stopping {
 			return ErrAgentShuttingDown
 		}
-		currentWS, exists := a.c.ActiveWorkspace()
+		currentWS, exists := a.c.ActiveWorkspaceInfo()
 		if !exists || !ticket.Current() || currentWS.name != ws.name || currentWS.root != ws.root {
 			return ErrAgentStale
 		}
@@ -1162,4 +1162,17 @@ func agentEnviron(env procenv.Env, instance *agentInstance) []string {
 		}
 	}
 	return environ
+}
+
+// agentHost adds only the services needed to configure an agent terminal and
+// populate its profile form. Agent-specific state remains in the agents feature.
+type agentHost interface {
+	PanelHost
+	// SetFormText resets edited form text even if its source value is unchanged.
+	SetFormText(name, value string)
+	ConfigureTerminal(id, command, dir string, args ...string) error
+	DaemonAddress() string
+	// ActiveWorkspaceInfo is the workspace in use, all the agents read of it (its id, its folder
+	// settings); PanelHost's ActiveWorkspace is the kit's Workspace.
+	ActiveWorkspaceInfo() (wsInfo, bool)
 }

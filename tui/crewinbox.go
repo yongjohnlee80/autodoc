@@ -52,7 +52,7 @@ type crewInboxCore interface {
 	Set(key string, v any)
 	Open(id string)
 	Close(id string)
-	Prefs() prefs
+	Prefs() PrefsView
 	SetPref(name, value string)
 	Bell()
 	// Ask asks the user a question: a dismiss is asked first

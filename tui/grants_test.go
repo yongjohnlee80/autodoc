@@ -25,7 +25,7 @@ type grantsWindow struct {
 	notices []string
 }
 
-func (w *grantsWindow) Prefs() prefs                      { return prefs{luaGrants: w.grants} }
+func (w *grantsWindow) Prefs() PrefsView                  { return prefs{luaGrants: w.grants} }
 func (w *grantsWindow) Set(name string, v any)            { w.state[name] = v }
 func (w *grantsWindow) Open(id string)                    { w.opened = append(w.opened, id) }
 func (w *grantsWindow) Focus(id string)                   { w.focused = id }

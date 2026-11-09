@@ -222,7 +222,7 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 	onLoop(r, func() any {
 		reg := r.h.reg.panels
 		before, host := slices.Clone(reg.specs), reg.hosts[resultsPanel]
-		dup := append(r.h.plugins.Panels(), PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(prefs) string { return "left" }})
+		dup := append(r.h.plugins.Panels(), PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(PrefsView) string { return "left" }})
 		if _, _, err := reg.stage(core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
 			t.Errorf("a panel id two features claim: %v", err)
 		}

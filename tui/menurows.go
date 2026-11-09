@@ -2,16 +2,11 @@ package tui
 
 import (
 	"cmp"
-	"fmt"
 	"path"
 	"slices"
 	"strconv"
 	"time"
 
-	tuicore "github.com/yongjohnlee80/golib/tui"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
-	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -149,146 +144,5 @@ func matches(globs []string, name string) bool {
 	return false
 }
 
-// rowsShown is a menu's rows as it opens: each row that shows, with its title, in serial order.
-// An error, or the budget running out, leaves that row out; said is the open's one notice, "" for
-// none.
-func (m *menuRows) rowsShown(s *scripting, where string, ctx menuCtx) (shown []shownRow, said string) {
-	end := time.Now().Add(menuBudget)
-	var first error
-	skipped := 0
-	// the rows as the open began: a when or a title may add, remove or replace rows as it runs, and
-	// a row one took out (or put another in place of) doesn't show this time, nor run its own
-	for _, r := range slices.Clone(m.rows) {
-		if !slices.Contains(m.rows, r) || r.where != where || !matches(r.files, path.Base(ctx.path)) {
-			continue
-		}
-		if (r.when != nil || (r.titleFn != nil && r.pushed == nil)) && !time.Now().Before(end) {
-			skipped++
-			continue
-		}
-		if r.when != nil {
-			v, err := s.rowAnswer(end, r, "when", r.when, ctx)
-			if err != nil {
-				first = cmp.Or(first, err)
-				continue
-			}
-			if !lua.LVAsBool(v) {
-				continue
-			}
-			if !slices.Contains(m.rows, r) {
-				continue // its own when took it out, or put another in its place: its title never runs
-			}
-		}
-		title := r.title
-		switch {
-		case r.pushed != nil:
-			title = *r.pushed
-		case r.titleFn != nil:
-			v, err := s.rowAnswer(end, r, "title", r.titleFn, ctx)
-			if err == nil {
-				if t, ok := v.(lua.LString); ok && t != "" {
-					title = string(t)
-				} else {
-					err = fmt.Errorf("%s's title: answered a %s, not a string", r.name(), v.Type())
-				}
-			}
-			if err != nil {
-				first = cmp.Or(first, err)
-				continue
-			}
-		}
-		shown = append(shown, shownRow{r, title})
-	}
-	// a row withdrawn by its own when or title, or by a later row's, after it was reached
-	shown = slices.DeleteFunc(shown, func(x shownRow) bool { return !slices.Contains(m.rows, x.r) })
-	switch {
-	case first != nil:
-		said = first.Error()
-	case skipped > 0:
-		said = s.c.Trf("autodoc.notice.menurows.menu_rows_left_out_their_scripts_took_longer_tha", skipped, menuBudget)
-	}
-	return shown, said
-}
-
-// shownRow is a row as one open shows it.
-type shownRow struct {
-	r     *addedRow
-	title string
-}
-
 // name is a row as its errors name it.
 func (r *addedRow) name() string { return cmp.Or(r.id, "menu row "+strconv.Itoa(r.serial)) }
-
-// editorItems are the right-click menu's rows for ctx, after a separator; none without one. A
-// script's words are its own: a row's label is only its & parsed, never a catalog translation.
-func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widgetcore.MenuItemModel {
-	shown, said := m.rowsShown(s, "editor", ctx)
-	if said != "" {
-		s.c.Notify(said)
-	}
-	if len(shown) == 0 {
-		return nil
-	}
-	items := []widgetcore.MenuItemModel{widgetcore.NewSeparator("menu.sep")}
-	at := map[string]int{} // a submenu's place in items
-	for _, x := range shown {
-		r := x.r
-		label, key, idx := tuicore.ParseMnemonic(x.title)
-		item := widgetcore.NewCommand(widgetcore.ItemID("menu.row."+strconv.Itoa(r.serial)), label,
-			editor.CoreMenuAction{ID: tuicore.ActionID("menu.row." + strconv.Itoa(r.serial)), Run: func(*editor.EditorCore) { r.run() }})
-		item.Hotkey, item.HotkeyIdx, item.Enabled = key, idx, !r.disabled
-		if r.menu == "" {
-			items = append(items, item)
-			continue
-		}
-		i, ok := at[r.menu]
-		if !ok {
-			sub := widgetcore.NewSubmenu(widgetcore.ItemID("menu.group."+strconv.Itoa(m.group(r.menu))), r.menu, nil)
-			sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic(r.menu)
-			items = append(items, sub)
-			i = len(items) - 1
-			at[r.menu] = i
-		}
-		items[i].Children = append(items[i].Children, item)
-	}
-	return items
-}
-
-// pluginsMenuRows are the Plugins menu's rows of scripts, as App.luaMenus lists them: each row,
-// or a submenu of them, in serial order.
-func (m *menuRows) pluginsMenuRows(s *scripting) []tuidecl.Row {
-	shown, _ := m.rowsShown(s, "plugins", menuCtx{})
-	var rows []tuidecl.Row
-	subs := map[string]*tuidecl.ListModel{}
-	var subRows = map[string][]tuidecl.Row{}
-	for _, x := range shown {
-		row := tuidecl.Row{"kind": "item", "label": x.title, "target": strconv.Itoa(x.r.serial), "enabled": !x.r.disabled}
-		if x.r.menu == "" {
-			rows = append(rows, row)
-			continue
-		}
-		if _, ok := subs[x.r.menu]; !ok {
-			subs[x.r.menu] = tuidecl.NewListModel("label", "target", "enabled")
-			rows = append(rows, tuidecl.Row{"kind": "submenu", "label": x.r.menu, "rows": subs[x.r.menu], "target": "", "enabled": true})
-		}
-		subRows[x.r.menu] = append(subRows[x.r.menu], row)
-	}
-	for name, l := range subs {
-		l.Reset(subRows[name])
-	}
-	return rows
-}
-
-// rowAnswer is a row's when or title, answered by the engine before end.
-func (s *scripting) rowAnswer(end time.Time, r *addedRow, part string, fn *lua.LFunction, ctx menuCtx) (lua.LValue, error) {
-	if s.eng == nil {
-		return lua.LNil, fmt.Errorf("%s's %s: no scripts are running", r.name(), part)
-	}
-	L := s.eng.L
-	t := L.CreateTable(0, 4)
-	L.SetField(t, "path", lua.LString(ctx.path))
-	L.SetField(t, "workspace", lua.LString(ctx.workspace))
-	L.SetField(t, "kind", lua.LString(ctx.kind))
-	L.SetField(t, "selection", lua.LBool(ctx.selection))
-	return s.eng.Answer(end, r.name()+"'s "+part, fn, t)
-}

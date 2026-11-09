@@ -140,7 +140,7 @@ func (*cellGlobeMap) Name() string { return "globemap" }
 
 func (g *cellGlobeMap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
-		Edge: func(prefs) string { return "center" },
+		Edge: func(PrefsView) string { return "center" },
 		Opened: func(PanelHost) {
 			g.open, g.filter = true, globeFilterPref(g.c) // it opens following the links its settings choose
 			g.load()
@@ -155,9 +155,9 @@ func (g *cellGlobeMap) Panels() []PanelSpec {
 func (g *cellGlobeMap) Prefs() []PrefSpec {
 	return []PrefSpec{
 		ValuePref(prefGlobeNames, "true", []string{"true", "false"}).chooser("App.globeNamesIndex", "App.setGlobeNames").
-			then(func(prefs) { g.dirty() }),
+			then(func(PrefsView) { g.dirty() }),
 		ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).chooser("App.globeFilterIndex", "App.setGlobeFilter").
-			then(func(prefs) { g.filterChosen() }),
+			then(func(PrefsView) { g.filterChosen() }),
 	}
 }
 

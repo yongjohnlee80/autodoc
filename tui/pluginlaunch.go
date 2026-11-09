@@ -37,7 +37,7 @@ func launchHolder(name string) string { return "plugin:" + name }
 func (pl *plugins) Prefs() []PrefSpec {
 	return []PrefSpec{ValuePref(prefPluginLaunchDeclined, "[]", nil),
 		ValuePref(prefPluginPixels, "true", []string{"true", "false"}).chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex").
-			then(func(prefs) { pl.repaintCards() })}
+			then(func(PrefsView) { pl.repaintCards() })}
 }
 
 // LaunchConsent is launchConsent, for the plugins (pluginHost).

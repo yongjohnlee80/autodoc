@@ -41,7 +41,7 @@ const prefAgentSetup = "tui.agent.setup"
 
 // agentSetupPending is the first-run card's condition, read in one place: the setup never answered,
 // and no profile. A user with a profile is never asked.
-func agentSetupPending(s *seams, p prefs) bool {
+func agentSetupPending(s *seams, p PrefsView) bool {
 	return s.offerAgentSetup && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
 }
 

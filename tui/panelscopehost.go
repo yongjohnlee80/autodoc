@@ -36,7 +36,7 @@ func (s *scopedPanelHost) Trf(id string, args ...any) string {
 
 func (s *scopedPanelHost) Ask(q Question) Asked { return s.core.Ask(q) }
 
-func (s *scopedPanelHost) Prefs() prefs { return s.core.Prefs() }
+func (s *scopedPanelHost) Prefs() PrefsView { return s.core.Prefs() }
 
 func (s *scopedPanelHost) Keep(err error) { s.core.Keep(err) }
 
@@ -52,7 +52,10 @@ func (s *scopedPanelHost) DockPanel(id string) { s.core.DockPanel(id) }
 
 func (s *scopedPanelHost) SetPref(name, value string) { s.core.SetPref(name, value) }
 
-func (s *scopedPanelHost) ActiveWorkspace() (wsInfo, bool) { return s.core.ActiveWorkspace() }
+func (s *scopedPanelHost) ActiveWorkspace() (Workspace, bool) { return s.core.ActiveWorkspace() }
+func (s *scopedPanelHost) ActiveWorkspaceInfo() (wsInfo, bool) {
+	return s.core.ActiveWorkspaceInfo()
+}
 
 func (s *scopedPanelHost) SetFormText(name, value string) { s.core.SetFormText(name, value) }
 
