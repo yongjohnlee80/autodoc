@@ -32,7 +32,9 @@ function Die([int]$code, [string]$m) { [Console]::Error.WriteLine("update: $m");
 
 function RecordValue([string]$Key) {
 	if (-not (Test-Path -LiteralPath $Record)) { return "" }
-	foreach ($line in Get-Content -LiteralPath $Record) {
+	# the record is UTF-8 (WriteRecord, update.ps1's installer): Windows PowerShell 5.1 would read a
+	# BOM-less file in the ANSI code page, and a non-ASCII path would come back garbled
+	foreach ($line in Get-Content -LiteralPath $Record -Encoding UTF8) {
 		if ($line -match "^$Key\s*=\s*`"(.*)`"\s*$") { return $Matches[1].Replace("\\", "\") }
 	}
 	return ""
@@ -78,7 +80,7 @@ try {
 	$got = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLower()
 	if ($want -eq "" -or $want -ne $got) { Die 3 "install-autodoc.ps1 doesn't match its checksum: nothing changed" }
 
-	Say "Updating AutoDoc $current to $latest…"
+	Say "Updating AutoDoc $current to $latest..."
 	$prefix = if ($bin -ne "") { Split-Path -Parent $bin } else { "" }
 	$argv = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $installer, "-Version", $latest, "-BaseUrl", $BaseUrl)
 	if ($prefix -ne "") { $argv += @("-Prefix", $prefix) }

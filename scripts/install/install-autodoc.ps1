@@ -90,7 +90,9 @@ function VersionOf([string]$Exe) {
 # RecordValue is a key's value from the install record, "" when there's none.
 function RecordValue([string]$Key) {
 	if (-not (Test-Path -LiteralPath $Record)) { return "" }
-	foreach ($line in Get-Content -LiteralPath $Record) {
+	# the record is UTF-8 (WriteRecord, update.ps1's installer): Windows PowerShell 5.1 would read a
+	# BOM-less file in the ANSI code page, and a non-ASCII path would come back garbled
+	foreach ($line in Get-Content -LiteralPath $Record -Encoding UTF8) {
 		if ($line -match "^$Key\s*=\s*`"(.*)`"\s*$") { return $Matches[1].Replace("\\", "\") }
 	}
 	return ""
@@ -147,7 +149,7 @@ function Shortcut {
 	return $lnk
 }
 
-# ── main ──────────────────────────────────────────────────────────────────────────────────────
+# --- main ---
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) { "AMD64" { "amd64" } "ARM64" { "arm64" } default { $env:PROCESSOR_ARCHITECTURE.ToLower() } }
 if ($arch -ne "amd64") { Die 2 "AutoDoc has no Windows build for $arch yet: windows-amd64 is the first." }
 
