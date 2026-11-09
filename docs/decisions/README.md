@@ -207,6 +207,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Six languages](editor.md#six-languages)
 - [The documentation site](editor.md#the-documentation-site)
 - [Charts drawn as SVG](editor.md#charts-drawn-as-svg)
+- [The tui package's feature map](editor.md#the-tui-packages-feature-map)
 
 ## [Neovim](neovim.md)
 
