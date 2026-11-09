@@ -11,7 +11,6 @@ package procenv
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -64,31 +63,20 @@ func (e Env) With(set ...string) Env {
 	return out
 }
 
-// LookPath finds the program name on e's PATH, as exec.LookPath does on the process's (which it
-// is, for e nil): a name holding a path separator is taken as it is; a match found through a
-// relative PATH entry is returned with exec.ErrDot, as exec refuses it.
+// LookPath finds the program name as exec.LookPath does, reading e's variables instead of the
+// process's (and is exec.LookPath, for e nil): PATH, and on Windows PATHEXT and
+// NoDefaultCurrentDirectoryInExePath. A match found through a relative PATH entry, or Windows'
+// implicit current folder, is returned with exec.ErrDot, as exec refuses it. How a name holding a
+// path is taken, and how a folder holds a program, is the OS's: lookPath.
 func LookPath(e Env, name string) (string, error) {
 	if e == nil {
 		return exec.LookPath(name)
 	}
-	if hasSeparator(name) {
-		if err := runnable(name); err != nil {
-			return "", &exec.Error{Name: name, Err: err}
-		}
-		return name, nil
+	switch name {
+	case "", ".", "..": // exec.LookPath refuses these on every OS before it looks
+		return "", &exec.Error{Name: name, Err: exec.ErrNotFound}
 	}
-	for _, dir := range filepath.SplitList(e.Get("PATH")) {
-		if dir == "" {
-			dir = "." // an empty entry is the current folder
-		}
-		if path, ok := lookIn(e, dir, name); ok {
-			if !filepath.IsAbs(path) {
-				return path, &exec.Error{Name: name, Err: exec.ErrDot}
-			}
-			return path, nil
-		}
-	}
-	return "", &exec.Error{Name: name, Err: exec.ErrNotFound}
+	return lookPath(e, name)
 }
 
 // Resolve is name found on e's PATH, for exec.Command, which finds a bare name on the process's
