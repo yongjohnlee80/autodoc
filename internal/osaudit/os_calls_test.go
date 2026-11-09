@@ -49,11 +49,21 @@ var osNames = map[string]bool{
 	"plan9": true, "solaris": true, "wasip1": true, "windows": true, "zos": true, "unix": true,
 }
 
-// netUnixCalls are net's functions and methods that take a network name: a "unix" (or
-// "unixgram", "unixpacket") given to one is a Unix socket.
-var netUnixCalls = map[string]bool{
-	"Dial": true, "DialTimeout": true, "Listen": true, "ListenPacket": true, "DialContext": true,
-	"ResolveUnixAddr": true, "DialUnix": true, "ListenUnix": true, "ListenUnixgram": true,
+// netFuncs are net's functions that take a network name, by the index of that argument; netMethods
+// are a Dialer's and a ListenConfig's methods that do (DialContext and ListenConfig's Listen and
+// ListenPacket take a context first). A Unix network (unixNetworks) given to one is a Unix socket.
+var (
+	netFuncs = map[string]int{
+		"Dial": 0, "DialTimeout": 0, "Listen": 0, "ListenPacket": 0, "ResolveUnixAddr": 0,
+		"DialUnix": 0, "ListenUnix": 0, "ListenUnixgram": 0,
+	}
+	netMethods   = map[string]int{"Dial": 0, "DialContext": 1, "Listen": 1, "ListenPacket": 1}
+	unixNetworks = map[string]bool{"unix": true, "unixgram": true, "unixpacket": true}
+)
+
+// auditedPackages are the packages whose names the guard reads: a dot import of one would hide them.
+var auditedPackages = map[string]bool{
+	"syscall": true, "runtime": true, "net": true, "golang.org/x/sys/unix": true, "golang.org/x/sys/windows": true,
 }
 
 // use is one thing a file does that only its OS can.
@@ -168,7 +178,7 @@ func fileUses(rel string, src []byte) ([]use, error) {
 			break
 		}
 		for _, c := range cg.List {
-			if !constraint.IsGoBuild(c.Text) {
+			if !constraint.IsGoBuild(c.Text) && !constraint.IsPlusBuild(c.Text) { // //go:build, or the older // +build
 				continue
 			}
 			expr, err := constraint.Parse(c.Text)
@@ -196,7 +206,51 @@ func fileUses(rel string, src []byte) ([]use, error) {
 		if imp.Name != nil {
 			local = imp.Name.Name
 		}
+		if local == "." && auditedPackages[path] { // its names would be bare identifiers, unseen
+			add("import", ". "+path)
+		}
 		names[local] = path
+	}
+	// the file's string constants, so a network named by one is read as its value
+	consts := map[string]ast.Expr{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		if gd, ok := n.(*ast.GenDecl); ok && gd.Tok == token.CONST {
+			for _, sp := range gd.Specs {
+				vs := sp.(*ast.ValueSpec)
+				for i, id := range vs.Names {
+					if i < len(vs.Values) {
+						consts[id.Name] = vs.Values[i]
+					}
+				}
+			}
+		}
+		return true
+	})
+	var strValue func(e ast.Expr, depth int) (string, bool)
+	strValue = func(e ast.Expr, depth int) (string, bool) {
+		if depth > 8 {
+			return "", false
+		}
+		switch x := e.(type) {
+		case *ast.BasicLit:
+			if x.Kind == token.STRING {
+				v, err := strconv.Unquote(x.Value)
+				return v, err == nil
+			}
+		case *ast.ParenExpr:
+			return strValue(x.X, depth+1)
+		case *ast.Ident:
+			if v, ok := consts[x.Name]; ok {
+				return strValue(v, depth+1)
+			}
+		case *ast.BinaryExpr:
+			if x.Op == token.ADD {
+				a, ok1 := strValue(x.X, depth+1)
+				b, ok2 := strValue(x.Y, depth+1)
+				return a + b, ok1 && ok2
+			}
+		}
+		return "", false
 	}
 	pkgOf := func(e ast.Expr) string {
 		if id, ok := e.(*ast.Ident); ok {
@@ -223,22 +277,22 @@ func fileUses(rel string, src []byte) ([]use, error) {
 				}
 			}
 		case *ast.CallExpr:
-			name := ""
-			switch fn := n.Fun.(type) {
-			case *ast.SelectorExpr:
-				if pkgOf(fn.X) == "net" || !isPkg(fn.X, names) { // net.Dial, or a Dialer's/ListenConfig's method
-					name = fn.Sel.Name
-				}
-			}
-			if !netUnixCalls[name] {
+			fn, ok := n.Fun.(*ast.SelectorExpr)
+			if !ok {
 				return true
 			}
-			for _, a := range n.Args {
-				if lit, ok := a.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					if v, _ := strconv.Unquote(lit.Value); strings.HasPrefix(v, "unix") {
-						add("unix-socket", name+"("+strconv.Quote(v)+")")
-					}
-				}
+			at, found := -1, false
+			switch {
+			case pkgOf(fn.X) == "net": // net.Dial
+				at, found = netFuncs[fn.Sel.Name]
+			case !isPkg(fn.X, names): // a Dialer's or a ListenConfig's method
+				at, found = netMethods[fn.Sel.Name]
+			}
+			if !found || at >= len(n.Args) {
+				return true
+			}
+			if v, ok := strValue(n.Args[at], 0); ok && unixNetworks[v] { // the network alone, never the address
+				add("unix-socket", fn.Sel.Name+"("+strconv.Quote(v)+")")
 			}
 		}
 		return true
@@ -389,6 +443,26 @@ func f(d *net.Dialer, cmd *exec.Cmd) {
 	}
 	if got, _ := fileUses("pkg/p/q.go", []byte("package p\n\nimport \"os/exec\"\n\nvar _ = &exec.Cmd{SysProcAttr: nil}\n")); len(got) != 1 || got[0].name != "SysProcAttr" {
 		t.Errorf("a Cmd literal's SysProcAttr: %v, want syscall SysProcAttr", got)
+	}
+	for _, tc := range []struct{ name, src, want string }{
+		{"a network named by a constant", "package p\n\nimport \"net\"\n\nconst network = \"unix\"\n\nfunc f() { _, _ = net.Dial((network), \"/s\") }\n", `unix-socket Dial("unix")`},
+		{"a network made of constants", "package p\n\nimport \"net\"\n\nconst u = \"un\"\n\nfunc f() { _, _ = net.Listen(u+\"ixgram\", \"/s\") }\n", `unix-socket Listen("unixgram")`},
+		{"a dot-imported syscall", "package p\n\nimport . \"syscall\"\n\nfunc f() { _ = Kill(1, SIGTERM) }\n", "import . syscall"},
+		{"an older build constraint", "// +build linux\n\npackage p\n", "os-file linux"},
+	} {
+		got, err := fileUses("pkg/p/p.go", []byte(tc.src))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if len(got) != 1 || got[0].kind+" "+got[0].name != tc.want {
+			t.Errorf("%s: %v, want %s alone", tc.name, got, tc.want)
+		}
+	}
+	if got, _ := fileUses("pkg/p/p.go", []byte("package p\n\nimport \"net\"\n\nfunc f(d *net.Dialer) {\n\t_, _ = net.Dial(\"tcp\", \"unix.example:80\")\n\t_, _ = d.DialContext(nil, \"tcp\", \"unix\")\n}\n")); len(got) != 0 {
+		t.Errorf("a TCP dial to a host named unix…: %v, want nothing (the address is not the network)", got)
+	}
+	if got, _ := fileUses("pkg/p/p.go", []byte("//go:build linux\n// +build linux\n\npackage p\n")); len(got) != 1 {
+		t.Errorf("both constraint spellings: %v, want one os-file linux", got)
 	}
 	if got, _ := fileUses("pkg/p/proc_windows.go", []byte("package p\n")); len(got) != 1 || got[0].kind != "os-file" || got[0].name != "windows" {
 		t.Errorf("a _windows.go file: %v, want one os-file windows", got)
