@@ -12,12 +12,6 @@ import (
 // widgets_test.go: :go, the Go-to picker and F6
 // (docs/decisions/editor.md#going-to-a-widget-by-name).
 
-func (r *running) focusedOn(id string) bool { return onLoop(r, func() bool { return r.h.within(id) }) }
-
-func (r *running) panelIsOpen(id string) bool {
-	return onLoop(r, func() bool { return r.h.panelOpen[id] })
-}
-
 func (r *running) widgetNames() []string {
 	return onLoop(r, func() []string {
 		var out []string

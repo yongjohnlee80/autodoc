@@ -428,21 +428,6 @@ func environMap(environ []string) map[string]string {
 	return out
 }
 
-// fakeTerminal is an agent CLI's process: Wait returns once ended, Close records the terminal closed.
-type fakeTerminal struct {
-	terminal.TerminalProcess
-	ended  chan struct{}
-	closed chan struct{}
-	once   sync.Once
-}
-
-func newFakeTerminal() *fakeTerminal {
-	return &fakeTerminal{ended: make(chan struct{}), closed: make(chan struct{})}
-}
-func (f *fakeTerminal) Close() error          { f.once.Do(func() { close(f.closed) }); return nil }
-func (f *fakeTerminal) Wait() (int, error)    { <-f.ended; return 0, nil }
-func (f *fakeTerminal) Resize(_, _ int) error { return nil }
-
 // TestTheServerAndItsCLIEndTogether: bound to its CLI, the server is stopped when the CLI ends, and
 // its own end closes the CLI's terminal (so the CLI, and its session, end): no TUI is left on a
 // dead --remote, and no server outlives its CLI (the mutants: either side's end not passed on).

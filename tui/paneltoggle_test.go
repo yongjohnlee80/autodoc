@@ -9,11 +9,6 @@ import (
 // paneltoggle_test.go: a panel's toggle decides by whether the panel is seen whole, never by where
 // the keyboard is (docs/decisions/editor.md#a-toggle-raises-a-covered-panel).
 
-// covered is whether panel id is open but covered by a window or panel over it; read on the loop.
-func (r *running) covered(id string) bool {
-	return onLoop(r, func() bool { return r.h.panelCovered(id) })
-}
-
 // The todos open, the keyboard goes to the page, and the page, raised as the keyboard enters it,
 // lies over them. SPC x once brings the todos to the front with the keyboard, open; once more
 // closes them.
