@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -164,7 +165,7 @@ end }
 // from outside ':' edits the attached editor.
 func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	_, r := luaTUI(t, "a\n", map[string]string{"run.lua": runit})
-	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("lua.mark") }); e == nil || e.Source != SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
+	if e := onLoop(r, func() *feature.Entry { return r.h.cat.Lookup("lua.mark") }); e == nil || e.Source != feature.SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
 		t.Fatalf("the Lua command's entry: %+v", e)
 	}
 	for line, want := range map[string]string{
@@ -179,14 +180,14 @@ func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	}
 	r.waitPage(t, "<3 4")
 	// a Lua entry run as a key or a plugin runs it, off the prompt: the attached editor
-	if err := onLoop(r, func() error { return r.h.cat.run("lua.mark", []string{"by", "id"}) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("lua.mark", []string{"by", "id"}) }); err != nil {
 		t.Fatal(err)
 	}
 	r.waitPage(t, "<by id")
 	// a built-in, then a feature's (each takes the keyboard, so runit is run by its id)
 	// the todos' panel opens at the right, beside the explorer
 	for _, c := range []struct{ id, want string }{{"explorer.toggle", "┌ explorer"}, {"todos.open", "┌ todos"}} {
-		if err := onLoop(r, func() error { return r.h.cat.run("lua.runit", []string{c.id}) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run("lua.runit", []string{c.id}) }); err != nil {
 			t.Fatal(err)
 		}
 		r.s.WaitForText(t, c.want)
@@ -219,7 +220,7 @@ autodoc.command{ name = "term", run = function(ed) ed:insert("lua term;") end }
 	if r.termShown() {
 		t.Fatal(":term opened the terminal")
 	}
-	if err := onLoop(r, func() error { return r.h.cat.run("find.term", []string{"two"}) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("find.term", []string{"two"}) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, `finding "two"`)

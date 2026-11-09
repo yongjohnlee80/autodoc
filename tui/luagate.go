@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // GATED LUA SCRIPTS' GRANTS (docs/decisions/contract.md#grants-are-remembered-as-a-yes): a gated
@@ -55,7 +56,7 @@ func (h *Host) askLuaGrants() {
 	if !h.luaPrefsRead || h.luaAsking {
 		return
 	}
-	if h.asker.pending {
+	if h.asker.Pending {
 		return // another card is open: a grant waits its turn rather than replace it (onIdle resumes)
 	}
 	for len(h.luaAsks) > 0 {
@@ -78,7 +79,7 @@ func (h *Host) askLuaGrants() {
 		} else if name, ok := strings.CutPrefix(a.script, "agent:"); ok { // the editor socket's (editorsocket.go ungranted)
 			who = h.trf("autodoc.question.luagate.the_agent", name)
 		}
-		h.ask(Question{
+		h.ask(feature.Question{
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
 			Text:  luaGrantText(h.trf, open),
 			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),

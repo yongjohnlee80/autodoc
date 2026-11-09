@@ -83,7 +83,7 @@ those are now.
 Every key AutoDoc itself binds, with its default keys. A key on a card is pressed after the key that
 opens the card (SPC, then the card's key).
 
-<!-- the commands: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) -->
+<!-- the commands: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) -->
 | id | scope | keys |
 | --- | --- | --- |
 | `autodoc.window.open.leader` | `global` | Space Ctrl+Space |

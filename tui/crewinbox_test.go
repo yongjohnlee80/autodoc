@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // inboxWindow is a window's crewInboxCore over a scripted daemon: each inbox.watch takes the next
@@ -30,16 +31,16 @@ type inboxWindow struct {
 	notes  []string
 	shown  map[string]string // the ongoing toasts, by id
 	clicks map[string]func()
-	ended  map[string]string // the ended toasts' last messages, by id
-	raised []string          // the sessions raise was asked for
-	here   map[string]bool   // the sessions whose agents are this window's
-	set    map[string]any    // the state set
-	prefs  prefs             // the preferences, as SetPref leaves them
-	texts  map[string]string // each text area's text, as SetText leaves it
-	bells  int               // the rings
-	asked  []Question        // the questions asked, in order: a cell answers them
-	opened []string          // the dialogs opened, in order
-	closed []string          // the dialogs closed, in order
+	ended  map[string]string  // the ended toasts' last messages, by id
+	raised []string           // the sessions raise was asked for
+	here   map[string]bool    // the sessions whose agents are this window's
+	set    map[string]any     // the state set
+	prefs  prefs              // the preferences, as SetPref leaves them
+	texts  map[string]string  // each text area's text, as SetText leaves it
+	bells  int                // the rings
+	asked  []feature.Question // the questions asked, in order: a cell answers them
+	opened []string           // the dialogs opened, in order
+	closed []string           // the dialogs closed, in order
 	// verbs is each other verb called, its name then its params; verbAnswers the answers they take,
 	// by verb, in order (an error, or nil for success); none left is success
 	verbs       [][]any
@@ -111,10 +112,13 @@ func (w *inboxWindow) NotifyOngoingClick(id, msg string, onClick func()) {
 }
 func (w *inboxWindow) NotifyDone(id, msg string) { delete(w.shown, id); w.ended[id] = msg }
 func (w *inboxWindow) Set(key string, v any)     { w.set[key] = v }
-func (w *inboxWindow) Prefs() PrefsView          { return w.prefs }
+func (w *inboxWindow) Prefs() feature.PrefsView  { return w.prefs }
 func (w *inboxWindow) SetText(id, text string)   { w.texts[id] = text }
 func (w *inboxWindow) Bell()                     { w.bells++ }
-func (w *inboxWindow) Ask(q Question) Asked      { w.asked = append(w.asked, q); return Asked{} }
+func (w *inboxWindow) Ask(q feature.Question) feature.Asked {
+	w.asked = append(w.asked, q)
+	return feature.Asked{}
+}
 func (w *inboxWindow) SetPref(name, value string) {
 	if name == prefAgentBell {
 		w.prefs.agentBell = value == "true"
@@ -644,11 +648,11 @@ func TestTheAgentBellToggles(t *testing.T) {
 	if len(cmds) != 1 || cmds[0].Verb != "agent-bell" {
 		t.Fatalf("the catalog %+v, want :agent-bell", cmds)
 	}
-	_ = cmds[0].Run(Invocation{})
+	_ = cmds[0].Run(feature.Invocation{})
 	if !w.prefs.agentBell || len(w.notes) != 1 || !strings.Contains(w.notes[0], "is on") {
 		t.Fatalf("after one toggle: on %v, notes %v", w.prefs.agentBell, w.notes)
 	}
-	_ = cmds[0].Run(Invocation{})
+	_ = cmds[0].Run(feature.Invocation{})
 	if w.prefs.agentBell || !strings.Contains(w.notes[1], "is off") {
 		t.Fatalf("after two toggles: on %v, notes %v", w.prefs.agentBell, w.notes)
 	}

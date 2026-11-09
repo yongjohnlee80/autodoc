@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -51,11 +52,11 @@ func TestAFailingCommandIsContainedLoggedAndSaid(t *testing.T) {
 	r.typeInEditor(t, "SENTINEL-typed-7731")
 	onLoop(r, func() error {
 		// its panic's own message carries what a command might well have: the page's text
-		return r.h.cat.add(Entry{ID: "lua.boom", Source: SourceLua, Title: "boom", Run: func(Invocation) error {
+		return r.h.cat.Add(feature.Entry{ID: "lua.boom", Source: feature.SourceLua, Title: "boom", Run: func(feature.Invocation) error {
 			panic("could not parse: " + r.h.core.Value())
 		}})
 	})
-	r.h.p.Post(func() { _ = r.h.cat.run("lua.boom", nil) }) // an Update: golib's boundary
+	r.h.p.Post(func() { _ = r.h.cat.Run("lua.boom", nil) }) // an Update: golib's boundary
 	r.s.WaitFor(t, "the notice", func(string) bool {
 		return r.noticed("lua.boom failed: a string (its message withheld: it may hold the page's text or what was typed) — details in " + dir)
 	})
@@ -73,13 +74,13 @@ func TestAFailingCommandIsContainedLoggedAndSaid(t *testing.T) {
 	}
 	// the Go runtime's own message is kept: numbers and fixed words
 	onLoop(r, func() error {
-		return r.h.cat.add(Entry{ID: "lua.index", Source: SourceLua, Title: "index", Run: func(Invocation) error {
+		return r.h.cat.Add(feature.Entry{ID: "lua.index", Source: feature.SourceLua, Title: "index", Run: func(feature.Invocation) error {
 			var xs []int
 			_ = xs[len(r.h.core.Value())]
 			return nil
 		}})
 	})
-	r.h.p.Post(func() { _ = r.h.cat.run("lua.index", nil) })
+	r.h.p.Post(func() { _ = r.h.cat.Run("lua.index", nil) })
 	r.s.WaitFor(t, "the runtime's notice", func(string) bool { return r.noticed("lua.index failed: runtime error: index out of range") })
 	r.typeInEditor(t, "STILL-TYPING")
 	r.s.WaitForText(t, "STILL-TYPING")
@@ -93,13 +94,13 @@ func TestAnAppCommandsPanicIsNamed(t *testing.T) {
 		fn()
 		return nil
 	}
-	cmd := Command{Run: func([]qml.SpecValue) error { panic("bad") }}
-	rec := recovered(func() { _ = cmd.handler("App.boom")(nil) })
-	if p, ok := rec.(namedPanic); !ok || p.name != "App.boom" || p.value != "bad" {
+	cmd := feature.Command{Run: func([]qml.SpecValue) error { panic("bad") }}
+	rec := recovered(func() { _ = cmd.Handler("App.boom")(nil) })
+	if p, ok := rec.(feature.NamedPanic); !ok || p.Name != "App.boom" || p.Value != "bad" {
 		t.Fatalf("recovered %#v", rec)
 	}
-	inner := Command{Run: func([]qml.SpecValue) error { panic(namedPanic{name: "lua.inner", value: "deep"}) }}
-	if p := recovered(func() { _ = inner.handler("App.outer")(nil) }).(namedPanic); p.name != "lua.inner" {
+	inner := feature.Command{Run: func([]qml.SpecValue) error { panic(feature.NamedPanic{Name: "lua.inner", Value: "deep"}) }}
+	if p := recovered(func() { _ = inner.Handler("App.outer")(nil) }).(feature.NamedPanic); p.Name != "lua.inner" {
 		t.Errorf("the outer name replaced the inner: %#v", p)
 	}
 }
@@ -113,7 +114,7 @@ func TestAFatalPanicKeepsTheDraftAndReports(t *testing.T) {
 	b := &openBuffer{n: 1}
 	b.file.dirty = true // and no editor buffer: keeping the text panics
 	h.buffers, h.active, h.file = []*openBuffer{b}, b, &b.file
-	err := h.ended(errors.Join(errors.New("ran"), &tuicore.PanicError{Value: namedPanic{name: "App.render", value: "bad frame"}, Stack: []byte("goroutine 1 [running]:\nRender()")}))
+	err := h.ended(errors.Join(errors.New("ran"), &tuicore.PanicError{Value: feature.NamedPanic{Name: "App.render", Value: "bad frame"}, Stack: []byte("goroutine 1 [running]:\nRender()")}))
 	if err == nil || !strings.Contains(err.Error(), "keeping the unsaved text panicked") {
 		t.Errorf("ended = %v", err)
 	}
@@ -146,11 +147,11 @@ func TestCrashLogsKeepTheNewest(t *testing.T) {
 	if len(logs) != crashKeep || filepath.Base(logs[0]) != "2026d.log" {
 		t.Errorf("kept %d, the oldest %s", len(logs), filepath.Base(logs[0]))
 	}
-	if got := panicText(errors.New("SENTINEL")); strings.Contains(got, "SENTINEL") || !strings.Contains(got, "*errors.errorString") {
+	if got := feature.PanicText(errors.New("SENTINEL")); strings.Contains(got, "SENTINEL") || !strings.Contains(got, "*errors.errorString") {
 		t.Errorf("an error's message said: %q", got)
 	}
 	// a runtime.Error of a type of its own is not the runtime's: its text is withheld too
-	if got := panicText(fakeRuntimeError("SENTINEL page text")); strings.Contains(got, "SENTINEL") {
+	if got := feature.PanicText(fakeRuntimeError("SENTINEL page text")); strings.Contains(got, "SENTINEL") {
 		t.Errorf("a look-alike runtime.Error's message said: %q", got)
 	}
 	// the runtime's own, a failed type assertion among them, keep theirs
@@ -160,7 +161,7 @@ func TestCrashLogsKeepTheNewest(t *testing.T) {
 		var v any = "x"
 		_ = v.(int)
 	}()
-	if got := panicText(assert); !strings.Contains(got, "interface conversion") {
+	if got := feature.PanicText(assert); !strings.Contains(got, "interface conversion") {
 		t.Errorf("the runtime's type assertion said: %q", got)
 	}
 }
@@ -201,15 +202,15 @@ func TestABackgroundPanicReachesItsCaller(t *testing.T) {
 	}
 	got := make(chan any, 5)
 	r.h.p.Post(func() {
-		do(r.h, func(context.Context) answerOf[int] { panic("answer job") }, func(a answerOf[int]) { got <- a.err })
+		do(r.h, func(context.Context) feature.AnswerOf[int] { panic("answer job") }, func(a feature.AnswerOf[int]) { got <- a.Err() })
 		core{r.h}.Go(func(context.Context) any { panic("core job") }, func(v any) { got <- v })
 		do(r.h, func(context.Context) opened { panic("open job") }, func(a opened) { got <- a.err })
-		coreDo(core{r.h}, func(context.Context) cloned { panic("clone job") }, func(c cloned) { got <- c.err })
+		feature.CoreDo(core{r.h}, func(context.Context) cloned { panic("clone job") }, func(c cloned) { got <- c.err })
 		do(r.h, func(context.Context) error { panic("error job") }, func(err error) { got <- err })
 	})
 	for range 5 {
 		v := <-got
-		var ep errPanicked
+		var ep feature.ErrPanicked
 		if err, ok := v.(error); !ok || !errors.As(err, &ep) || !strings.Contains(err.Error(), "it panicked: a string") {
 			t.Errorf("the caller was handed %#v", v)
 		}
@@ -219,10 +220,10 @@ func TestABackgroundPanicReachesItsCaller(t *testing.T) {
 	}
 	// an answer with no err field cannot carry the failure: failed says so (the static test keeps
 	// every do and coreDo from answering in one)
-	if _, ok := failed[struct{ v int }](errors.New("x")); ok {
+	if _, ok := feature.Failed[struct{ v int }](errors.New("x")); ok {
 		t.Error("failed filled an answer with no err field")
 	}
-	if _, ok := failed[bool](errors.New("x")); ok {
+	if _, ok := feature.Failed[bool](errors.New("x")); ok {
 		t.Error("failed filled a bool")
 	}
 }
@@ -283,7 +284,7 @@ func TestCoreDoSaysAFailureItsAnswerCannotCarry(t *testing.T) {
 	r, _ := crashTUI(t)
 	called := make(chan bool, 1)
 	r.h.p.Post(func() {
-		coreDo(core{r.h}, func(context.Context) bool { panic("a flag job") }, func(bool) { called <- true })
+		feature.CoreDo(core{r.h}, func(context.Context) bool { panic("a flag job") }, func(bool) { called <- true })
 	})
 	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("a background job failed: it panicked: a string") })
 	select {

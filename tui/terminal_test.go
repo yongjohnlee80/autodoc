@@ -242,8 +242,8 @@ func TestTheTerminalClosesWhenItsShellExits(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	exitNoticed := func(code string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "shell exited ("+code+")") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "shell exited ("+code+")") {
 					return true
 				}
 			}
@@ -344,8 +344,8 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the failure noticed", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "could not start") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "could not start") {
 					return true
 				}
 			}

@@ -84,8 +84,8 @@ func (pl *plugins) feedDocuments() {
 func (pl *plugins) document() plugin.Document {
 	p := pl.c.Page()
 	d := plugin.Document{Workspace: pl.c.Workspace(), Version: p.Version, Text: string(p.Text)}
-	if p.Ref.path != "" {
-		d.Workspace, d.Path = p.Ref.ws, p.Ref.path // "" and absolute for a file outside every workspace
+	if p.Ref.Path != "" {
+		d.Workspace, d.Path = p.Ref.WS, p.Ref.Path // "" and absolute for a file outside every workspace
 		if d.Workspace != "" {
 			d.Root = pl.c.RootOf(d.Workspace) // so a plugin finds the note on disk (Document.File)
 		}

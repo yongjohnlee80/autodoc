@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
@@ -37,24 +38,24 @@ func (h *crewHost) offerOrphans() {
 			return err
 		}
 		var out []crewOrphan
-		for _, o := range asList(v) {
-			m := asMap(o)
-			if s := str(m, "scope"); s != "" && s != own {
+		for _, o := range feature.AsList(v) {
+			m := feature.AsMap(o)
+			if s := feature.Str(m, "scope"); s != "" && s != own {
 				var ps []string
-				for _, p := range asList(m["profiles"]) {
+				for _, p := range feature.AsList(m["profiles"]) {
 					if s, ok := p.(string); ok {
 						ps = append(ps, s)
 					}
 				}
-				out = append(out, crewOrphan{scope: s, profiles: ps, unread: int(num(m, "unread"))})
+				out = append(out, crewOrphan{scope: s, profiles: ps, unread: int(feature.Num(m, "unread"))})
 			}
 		}
 		return out
 	}, func(v any) {
 		orphans, ok := v.([]crewOrphan)
 		if !ok {
-			if err, _ := v.(error); err != nil && code(err) != golibrpc.CodeMethodNotFound {
-				h.c.Notify(h.c.Trf("autodoc.crew.orphans_unlisted", wireMessage(err)))
+			if err, _ := v.(error); err != nil && feature.Code(err) != golibrpc.CodeMethodNotFound {
+				h.c.Notify(h.c.Trf("autodoc.crew.orphans_unlisted", feature.WireMessage(err)))
 			}
 			return
 		}
@@ -66,7 +67,7 @@ func (h *crewHost) offerOrphans() {
 
 // offer offers o once the card is free.
 func (h *crewHost) offer(o crewOrphan) {
-	h.c.AskWhenFree(Question{
+	h.c.AskWhenFree(feature.Question{
 		Title:   h.c.Tr("autodoc.crew.orphan_title"),
 		Text:    h.c.Trf("autodoc.crew.orphan_text", o.unread, strings.Join(o.profiles, ", "), o.scope),
 		Yes:     h.c.Tr("autodoc.crew.orphan_adopt"),
@@ -91,7 +92,7 @@ func (h *crewHost) settleOrphan(o crewOrphan, verb string) {
 		err, _ := v.(error)
 		switch {
 		case v != nil:
-			h.c.Notify(h.c.Trf("autodoc.crew.orphan_not_settled", o.scope, wireMessage(err)))
+			h.c.Notify(h.c.Trf("autodoc.crew.orphan_not_settled", o.scope, feature.WireMessage(err)))
 		case verb == "crew.adopt":
 			h.c.Notify(h.c.Trf("autodoc.crew.adopted", o.unread, strings.Join(o.profiles, ", ")))
 		default:

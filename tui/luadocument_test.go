@@ -48,8 +48,8 @@ func TestLuaSeesTheDocument(t *testing.T) {
 	r.mustRun(t, "doc")
 	r.waitNotice(t, "/the frontmatter is not YAML: ")
 	if !onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.HasPrefix(n.text, "doc: notes/a.md/kb/markdown/nil/nil/nil/nil/nil/nil/the frontmatter is not YAML") {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.HasPrefix(n.Text, "doc: notes/a.md/kb/markdown/nil/nil/nil/nil/nil/nil/the frontmatter is not YAML") {
 				return true
 			}
 		}
@@ -77,9 +77,9 @@ end }`)
 	r.mustRun(t, "cmds")
 	r.waitNotice(t, "cmds: ;")
 	list := onLoop(r, func() string {
-		for _, n := range r.h.noticeLog.items {
-			if strings.HasPrefix(n.text, "cmds: ;") {
-				return n.text
+		for _, n := range r.h.noticeLog.Items {
+			if strings.HasPrefix(n.Text, "cmds: ;") {
+				return n.Text
 			}
 		}
 		return ""

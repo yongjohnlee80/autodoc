@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // CONNECTING — once when the program starts, and again whenever the connection ends.
@@ -39,7 +40,7 @@ func (h *Host) start() {
 				// the older backend stopped, and the installed one did not come up: the recovery stays
 				// in its dialog, with the reason, and Restart Now tries the start again
 				// (docs/decisions/search.md#protocol-mismatch-recovery)
-				h.set("App.mismatchQuestion", h.trf("autodoc.text.session.the_installed_backend_did_not_start_restart_now", wireMessage(err)))
+				h.set("App.mismatchQuestion", h.trf("autodoc.text.session.the_installed_backend_did_not_start_restart_now", feature.WireMessage(err)))
 				h.set("App.canRestartMismatch", h.session.CanSpawn())
 				if !h.mismatchOpen {
 					h.open("mismatch")
@@ -69,7 +70,7 @@ func (h *Host) start() {
 		h.followEvents()
 		h.watch()
 		h.p.Post(h.offerRecovery) // once a start: unsaved work kept when AutoDoc last ended
-		h.reg.connected()
+		h.reg.Connected()
 	})
 }
 
@@ -77,17 +78,17 @@ func (h *Host) start() {
 // of the old connection is dropped when it answers.
 func (h *Host) watch() {
 	done, gen := h.session.Done(), h.session.Gen()
-	do(h, func(ctx context.Context) answerOf[bool] {
+	do(h, func(ctx context.Context) feature.AnswerOf[bool] {
 		select {
 		case <-done:
-			return answered(true, nil)
+			return feature.Answered(true, nil)
 		case <-ctx.Done():
-			return answered(false, nil)
+			return feature.Answered(false, nil)
 		}
-	}, func(a answerOf[bool]) {
+	}, func(a feature.AnswerOf[bool]) {
 		// the watch failing (it panicked) is the connection's watch gone: connected again, as when
 		// the connection ends, rather than never watched again
-		ended := a.v || a.err != nil
+		ended := a.Value || a.Err() != nil
 		if !ended || h.session.Gen() != gen {
 			return
 		}
@@ -97,8 +98,8 @@ func (h *Host) watch() {
 			// a restart: the old daemon lets go of its workspaces after its socket, so the new one
 			// starts once the old process is gone, or it would find them busy
 			h.notifyOngoing(toastConnection, h.tr("autodoc.notice.session.restarting_the_backend_waiting_for_the_old_one_t"))
-			do(h, func(ctx context.Context) answerOf[bool] { return answered(h.awaitExit(ctx, pid), nil) }, func(a answerOf[bool]) {
-				if !a.v { // not seen to stop, or the wait failed: reconnected anyway
+			do(h, func(ctx context.Context) feature.AnswerOf[bool] { return feature.Answered(h.awaitExit(ctx, pid), nil) }, func(a feature.AnswerOf[bool]) {
+				if !a.Value { // not seen to stop, or the wait failed: reconnected anyway
 					h.notify(h.trf("autodoc.notice.session.the_old_backend_pid_has_not_stopped_after_reconn", pid, restartWait))
 				}
 				h.start()
@@ -134,5 +135,5 @@ func (h *Host) call(ctx context.Context, method string, params ...any) (any, err
 
 // failed shows a failed call on the status line.
 func (h *Host) failed(what string, err error) {
-	h.notify(h.trf("autodoc.notice.session.text", what, wireMessage(err)))
+	h.notify(h.trf("autodoc.notice.session.text", what, feature.WireMessage(err)))
 }

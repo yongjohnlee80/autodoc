@@ -444,7 +444,7 @@ func markdownNames(text string) []string {
 func TestTheExportDialogSaysWhatItTakes(t *testing.T) {
 	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "Export 5 loaded rows, as shown")
@@ -460,12 +460,12 @@ func TestTheExportDialogSaysWhatItTakes(t *testing.T) {
 	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
 	r.waitNotice(t, "5 rows exported to "+path+".json")
 
-	if err := onLoop(r, func() error { return r.h.cat.run("results.csv", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.csv", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "results.csv on CSV", func(string) bool { return r.source("App.exportFormatIndex") == "0" })
 	onLoop(r, func() bool { r.h.closeDialog("exportResults"); r.h.plugins.exportFormatChosen(1); return true })
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "results.export on the last choice", func(string) bool { return r.source("App.exportFormatIndex") == "1" })

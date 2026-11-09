@@ -1,8 +1,8 @@
 package tui
 
-// THE HOST'S SIDE OF THE FEATURES (feature.go): how the host assembles its features and lends
+// THE HOST'S SIDE OF THE FEATURES (feature/feature.go): how the host assembles its features and lends
 // each the Core it reaches the host through (core{h}), and the host's own part of the program
-// (legacy). The features' side, what they implement and what they may use, is feature.go's.
+// (legacy). The features' side, what they implement and what they may use, is feature/feature.go's.
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -21,15 +22,15 @@ import (
 
 // assembleFeatures is initial program construction, before views can run.
 // A failed schema or service binding must not publish the candidate registry.
-func (h *Host) assembleFeatures(fs ...Feature) error {
+func (h *Host) assembleFeatures(fs ...feature.Feature) error {
 	previous, defs := h.reg, h.prefs.panelDefs
-	r, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, fs...)
+	r, err := feature.NewRegistryWithPanels(func(specs []feature.PanelSpec) { h.prefs.panelDefs = specs }, fs...)
 	if err != nil {
 		h.prefs.panelDefs = defs
 		return err
 	}
 	h.reg = r
-	if err := bindPanels(r.panels, core{h}); err != nil {
+	if err := bindPanels(r.Panels, core{h}); err != nil {
 		h.reg, h.prefs.panelDefs = previous, defs
 		return err
 	}
@@ -37,10 +38,10 @@ func (h *Host) assembleFeatures(fs ...Feature) error {
 }
 
 // features are the program's parts, in the order the registry merges them.
-func (h *Host) features() []Feature {
-	h.asker = newAsker(core{h})
-	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
+func (h *Host) features() []feature.Feature {
+	h.asker = feature.NewAsker(core{h})
+	h.asker.OnIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
+	fs := []feature.Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
@@ -56,43 +57,43 @@ func (h *Host) features() []Feature {
 	// their choosers are one feature of their own
 	h.prefRows = nil
 	for _, f := range fs {
-		if p, ok := f.(Prefs); ok {
+		if p, ok := f.(feature.Prefs); ok {
 			h.prefRows = append(h.prefRows, p.Prefs()...)
 		}
 	}
 	for _, s := range h.prefRows {
-		if s.value(h.prefs) == "" { // a feature's own row: the host's defaults hold the rest
-			s.reset(&h.prefs)
+		if s.Value(h.prefs) == "" { // a feature's own row: the host's defaults hold the rest
+			s.Reset(&h.prefs)
 		}
 	}
-	h.keys = keyCatalog(fs)
-	h.keys.tr = h.trOr // the cards and help in the UI's language (language.go)
+	h.keys = feature.KeyCatalog(fs)
+	h.keys.Tr = h.trOr // the cards and help in the UI's language (language.go)
 	return append(fs, prefChoosers{h})
 }
 
 // legacy is the host as it is: everything not yet a feature of its own.
 type legacy struct{ h *Host }
 
-// HostOwned marks legacy as the host's own (feature.go).
+// HostOwned marks legacy as the host's own (feature/feature.go).
 func (legacy) HostOwned() {}
 
 func (legacy) Name() string { return "legacy" }
 
 func (l legacy) State() map[string]any { return l.h.state() }
 
-func (l legacy) Commands() map[string]Command { return l.h.commands() }
+func (l legacy) Commands() map[string]feature.Command { return l.h.commands() }
 
-func (l legacy) Prefs() []PrefSpec { return legacyPrefRows(l.h, l.h.gui) }
+func (l legacy) Prefs() []feature.PrefSpec { return legacyPrefRows(l.h, l.h.gui) }
 
 // Listed is the workspace's files listed again: File › Open and the draft's name list them.
 func (l legacy) Listed() {
-	l.h.openPick.setAll(l.h.files.Paths)
-	l.h.newPick.setAll(l.h.files.Paths)
+	l.h.openPick.SetAll(l.h.files.Paths)
+	l.h.newPick.SetAll(l.h.files.Paths)
 }
 
 // Picks are the host's own pickers.
-func (l legacy) Picks() map[string]picker {
-	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
+func (l legacy) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
 }
 
 // core is the host as a feature sees it.
@@ -116,13 +117,13 @@ func (c core) WidgetsChanged() { c.h.refreshDock() }
 
 func (c core) HidePanel(id string) { c.h.hidePanel(id); c.h.focusEditor() }
 
-func (c core) Ask(q Question) Asked { return c.h.ask(q) }
+func (c core) Ask(q feature.Question) feature.Asked { return c.h.ask(q) }
 
-func (c core) AskWhenFree(q Question) { c.h.asker.askWhenFree(q) }
+func (c core) AskWhenFree(q feature.Question) { c.h.asker.AskWhenFree(q) }
 
 func (c core) Workspace() string { return c.h.ws }
 
-func (c core) Prefs() PrefsView { return c.h.prefs }
+func (c core) Prefs() feature.PrefsView { return c.h.prefs }
 
 // Env is the program's environment as it is now (seams.go): a test may change it while the
 // program runs.
@@ -133,8 +134,8 @@ func (c core) Env() procenv.Env { return c.h.seams.env }
 func (h *Host) startupSeams() startupSeams {
 	return startupSeams{
 		latestURL:          h.seams.latestURL,
-		vimQuestionPending: func(p PrefsView) bool { return vimQuestionPending(&h.seams, p) },
-		agentSetupPending:  func(p PrefsView) bool { return agentSetupPending(&h.seams, p) },
+		vimQuestionPending: func(p feature.PrefsView) bool { return vimQuestionPending(&h.seams, p) },
+		agentSetupPending:  func(p feature.PrefsView) bool { return agentSetupPending(&h.seams, p) },
 	}
 }
 
@@ -166,7 +167,9 @@ func (c core) SetText(id, text string) {
 	ta.SetValue(text)
 }
 
-func (c core) Ticket(seq *uint64, scope TicketScope) Ticket { return c.h.ticket(seq, scope) }
+func (c core) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
+	return c.h.ticket(seq, scope)
+}
 
 func (c core) OpenRef(ws, path string) { c.h.openIn(ws, path) }
 
@@ -174,10 +177,10 @@ func (c core) OpenAbsolute(abs string) { c.h.openAbsolute(abs) }
 
 func (c core) Say(msg string) { c.h.say(msg) }
 
-func (c core) Files() FileList { return c.h.files }
+func (c core) Files() feature.FileList { return c.h.files }
 
-func (c core) Workspaces() []Workspace {
-	list := make([]Workspace, 0, c.h.workspaces.Len())
+func (c core) Workspaces() []feature.Workspace {
+	list := make([]feature.Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {
 		list = append(list, workspaceOf(w))
 	}
@@ -185,8 +188,8 @@ func (c core) Workspaces() []Workspace {
 }
 
 // workspaceOf is w as a feature reads it (Workspace).
-func workspaceOf(w wsInfo) Workspace {
-	return Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens}
+func workspaceOf(w wsInfo) feature.Workspace {
+	return feature.Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens}
 }
 
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
@@ -210,7 +213,7 @@ func (c core) HasFocus(id string) bool {
 	return ok && c.h.p.App().FocusWithin(comp)
 }
 
-func (c core) Page() Page { return c.h.pageNow() }
+func (c core) Page() feature.Page { return c.h.pageNow() }
 
 func (c core) Crumbs(parts []string) { c.h.crumbs = parts; c.h.showTitle() }
 
@@ -229,7 +232,7 @@ func (c core) SetPref(name, value string) {
 }
 
 // ticket is Core.Ticket, for the host's own answers too: every stale-answer guard is one.
-func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
+func (h *Host) ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
 	var n uint64
 	if seq != nil {
 		*seq++
@@ -238,21 +241,21 @@ func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
 	// the page is a buffer and its generation: buffers count their generations alike, so the same
 	// number in another buffer is another page
 	gen, epoch, file, page := h.session.Gen(), h.epoch, h.file.gen, h.active
-	return Ticket{current: func() bool {
-		if scope == TicketLocal {
+	return feature.NewTicket(func() bool {
+		if scope == feature.TicketLocal {
 			return seq == nil || *seq == n
 		}
 		if seq != nil && *seq != n || h.session.Gen() != gen {
 			return false
 		}
 		switch scope {
-		case TicketSession:
+		case feature.TicketSession:
 			return true
-		case TicketWorkspace:
+		case feature.TicketWorkspace:
 			return h.epoch == epoch
 		}
 		return h.epoch == epoch && h.active == page && h.file.gen == file
-	}}
+	})
 }
 
 func (c core) Keep(err error) { c.h.keep(err) }
@@ -271,7 +274,7 @@ func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 	c.h.keepPanelGeo(id, dimension, percent)
 }
 
-func (c core) ActiveWorkspace() (Workspace, bool) {
+func (c core) ActiveWorkspace() (feature.Workspace, bool) {
 	w, ok := c.h.activeWorkspaceInfo()
 	return workspaceOf(w), ok
 }
@@ -301,10 +304,10 @@ func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {
 }
 
 // ask is Core.Ask, for the host's own code that is not a feature yet.
-func (h *Host) ask(q Question) Asked { return h.asker.ask(q) }
+func (h *Host) ask(q feature.Question) feature.Asked { return h.asker.Ask(q) }
 
-// MenuRows is the menus' added rows, the scripts' and the plugins' (menurows.go).
-func (c core) MenuRows() *menuRows { return &c.h.luaFeature().rows }
+// MenuRows is the menus' added rows, the scripts' and the plugins' (feature/menurows.go).
+func (c core) MenuRows() *feature.MenuRows { return &c.h.luaFeature().rows }
 
 // BACKGROUND WORK — off the loop, and back onto it.
 //
@@ -335,8 +338,8 @@ func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 
 // The kit's values that come from the host's embedded files, set once as the package starts.
 func init() {
-	mainIDs = mainQMLIDs()
-	menuMessage = englishMenuMessage
+	feature.MainIDs = mainQMLIDs()
+	feature.MenuMessage = englishMenuMessage
 }
 
 // mainQMLIDs are the ids the embedded main.qml declares outside its generated cards (mainIDs).
@@ -346,7 +349,7 @@ func mainQMLIDs() map[string]bool {
 		panic("tui: embedded main.qml: " + err.Error())
 	}
 	s := string(src)
-	if a, b := strings.Index(s, cardsBegin), strings.Index(s, cardsEnd); a >= 0 && b > a {
+	if a, b := strings.Index(s, feature.CardsBegin), strings.Index(s, feature.CardsEnd); a >= 0 && b > a {
 		s = s[:a] + s[b:]
 	}
 	ids := map[string]bool{}

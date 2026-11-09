@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // SYSTEM › PROFILING — the window's own memory monitor and the daemon's (sys.profile), each started
@@ -17,7 +18,7 @@ import (
 const toastProfiling = "profiling"
 
 type profilingFeature struct {
-	c    Core
+	c    feature.Core
 	prof *profiling.Profiler                 // the window's monitor; nil: this program has none
 	open func(context.Context, string) error // the default app (a folder opens in the file manager)
 
@@ -28,7 +29,7 @@ type profilingFeature struct {
 	backendSeq      uint64 // sys.profile's answers: only the latest asked is applied (Ticket)
 }
 
-func newProfiling(c Core, prof *profiling.Profiler, open func(context.Context, string) error) *profilingFeature {
+func newProfiling(c feature.Core, prof *profiling.Profiler, open func(context.Context, string) error) *profilingFeature {
 	f := &profilingFeature{c: c, prof: prof, open: open}
 	if prof != nil {
 		f.window = prof.Dir() // --profile started it at launch
@@ -47,21 +48,21 @@ func (f *profilingFeature) State() map[string]any {
 	}
 }
 
-func (f *profilingFeature) Commands() map[string]Command {
-	return map[string]Command{
-		"App.toggleWindowProfiling":  none(f.toggleWindow),
-		"App.toggleBackendProfiling": none(f.toggleBackend),
-		"App.captureCPUProfile":      none(f.captureCPU),
-		"App.openProfileFolder":      none(f.openFolder),
+func (f *profilingFeature) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.toggleWindowProfiling":  feature.None(f.toggleWindow),
+		"App.toggleBackendProfiling": feature.None(f.toggleBackend),
+		"App.captureCPUProfile":      feature.None(f.captureCPU),
+		"App.openProfileFolder":      feature.None(f.openFolder),
 	}
 }
 
-func (f *profilingFeature) Catalog() []Entry {
-	return []Entry{
-		builtin("profiling.window", "profile the window", "App.toggleWindowProfiling()", f.toggleWindow),
-		builtin("profiling.backend", "profile the backend", "App.toggleBackendProfiling()", f.toggleBackend),
-		builtin("profiling.capture_cpu", "capture a CPU profile", "App.captureCPUProfile()", f.captureCPU),
-		builtin("profiling.open_folder", "open the profile folder", "App.openProfileFolder()", f.openFolder),
+func (f *profilingFeature) Catalog() []feature.Entry {
+	return []feature.Entry{
+		feature.Builtin("profiling.window", "profile the window", "App.toggleWindowProfiling()", f.toggleWindow),
+		feature.Builtin("profiling.backend", "profile the backend", "App.toggleBackendProfiling()", f.toggleBackend),
+		feature.Builtin("profiling.capture_cpu", "capture a CPU profile", "App.captureCPUProfile()", f.captureCPU),
+		feature.Builtin("profiling.open_folder", "open the profile folder", "App.openProfileFolder()", f.openFolder),
 	}
 }
 
@@ -76,7 +77,7 @@ func (f *profilingFeature) LanguageChanged() { f.publish() }
 // question was asked meanwhile (a toggle's): an old "off" never undoes a start. A daemon below
 // Protocol 32 answers nothing here; the item says why when it is used.
 func (f *profilingFeature) askBackend() {
-	t := f.c.Ticket(&f.backendSeq, TicketSession)
+	t := f.c.Ticket(&f.backendSeq, feature.TicketSession)
 	f.c.Go(func(ctx context.Context) any {
 		on, dir, err := backendProfile(ctx, f.c, "status")
 		return backendAnswer{on: on, dir: dir, err: err}
@@ -166,7 +167,7 @@ func (f *profilingFeature) toggleBackend() {
 		op = "stop"
 	}
 	was := f.backend
-	t := f.c.Ticket(&f.backendSeq, TicketSession)
+	t := f.c.Ticket(&f.backendSeq, feature.TicketSession)
 	f.c.Go(func(ctx context.Context) any {
 		on, dir, err := backendProfile(ctx, f.c, op)
 		return backendAnswer{on: on, dir: dir, err: err}
@@ -197,7 +198,7 @@ type backendAnswer struct {
 }
 
 // backendProfile calls sys.profile with op, and answers whether the daemon's monitor runs and where.
-func backendProfile(ctx context.Context, c Core, op string) (bool, string, error) {
+func backendProfile(ctx context.Context, c feature.Core, op string) (bool, string, error) {
 	res, err := c.Call(ctx, "sys.profile", op, "")
 	if err != nil {
 		return false, "", err

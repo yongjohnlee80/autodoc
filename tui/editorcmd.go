@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
@@ -11,7 +12,7 @@ import (
 //	w, wq, x   the editor's writeRequested(quit): writeFromEditor
 //	q, q!      the editor's quitRequested(force): quitFromEditor
 //
-// and AutoDoc's own commands composed into the editor's from the command catalog (catalog.go): its
+// and AutoDoc's own commands composed into the editor's from the command catalog (feature/catalog.go): its
 // own (editorEntries), each feature's, and the Lua ones (script.go).
 
 // writeFromEditor saves, as File › Save does, and quits once the file is written when quit (wq, x).
@@ -53,21 +54,21 @@ func (h *Host) openCommandLine() {
 	h.keep(h.p.Call("editor", "openCommandLine"))
 }
 
-// editorEntries are AutoDoc's verbs of the command line, as catalog entries (catalog.go): find and
+// editorEntries are AutoDoc's verbs of the command line, as catalog entries (feature/catalog.go): find and
 // nohl are the page's find (marked words, "finding …", n and N, as / is), so the prompt and / share
 // one find, and replace golib's own.
-func (h *Host) editorEntries() []Entry {
-	return []Entry{
+func (h *Host) editorEntries() []feature.Entry {
+	return []feature.Entry{
 		{ID: "find.term", Title: "find a term in the page", Verb: "find", Args: "<term>",
 			Help: "find term in the page; n and N go to the next and previous",
-			Run: func(x Invocation) error {
+			Run: func(x feature.Invocation) error {
 				if x.Line == "" {
 					return errors.New("find: what? find <term>")
 				}
 				h.findInPage(x.Line)
 				return nil
 			}},
-		{ID: "find.clear", Title: "clear the find", Verb: "nohl", Help: "clear the find", Run: func(Invocation) error {
+		{ID: "find.clear", Title: "clear the find", Verb: "nohl", Help: "clear the find", Run: func(feature.Invocation) error {
 			h.core.SetFind("", editor.FindOptions{})
 			h.clearFind()
 			return nil

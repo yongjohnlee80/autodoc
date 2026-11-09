@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuibraille "github.com/yongjohnlee80/golib/tui/braille"
@@ -103,7 +104,7 @@ type cellGlobe struct {
 // cellGlobeMap is the GlobeMap feature in cells: its builds, fenced (load), the selection and the
 // view's place and zoom over the layout.
 type cellGlobeMap struct {
-	c         Core
+	c         feature.Core
 	page      int // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	seq       uint64
 	open      bool
@@ -125,7 +126,7 @@ type cellGlobeMap struct {
 	opens     func(ws, path string) // Enter's and a press's: the panel hidden, the document opened
 }
 
-func newCellGlobeMap(c Core, store *graphStore, page int) *cellGlobeMap {
+func newCellGlobeMap(c feature.Core, store *graphStore, page int) *cellGlobeMap {
 	g := &cellGlobeMap{c: c, page: page, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
 	g.editor = &groupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.ground }}
@@ -138,26 +139,26 @@ func newCellGlobeMap(c Core, store *graphStore, page int) *cellGlobeMap {
 
 func (*cellGlobeMap) Name() string { return "globemap" }
 
-func (g *cellGlobeMap) Panels() []PanelSpec {
-	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
-		Edge: func(PrefsView) string { return "center" },
-		Opened: func(PanelHost) {
+func (g *cellGlobeMap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
+		Edge: func(feature.PrefsView) string { return "center" },
+		Opened: func(feature.PanelHost) {
 			g.open, g.filter = true, globeFilterPref(g.c) // it opens following the links its settings choose
 			g.load()
 		},
-		Closed: func(c PanelHost) {
+		Closed: func(c feature.PanelHost) {
 			g.open = false
 			g.seq++ // a build under way is dropped
 			c.Keep(c.RestoreKeyboardHome())
 		}}}
 }
 
-func (g *cellGlobeMap) Prefs() []PrefSpec {
-	return []PrefSpec{
-		ValuePref(prefGlobeNames, "true", []string{"true", "false"}).chooser("App.globeNamesIndex", "App.setGlobeNames").
-			then(func(PrefsView) { g.dirty() }),
-		ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).chooser("App.globeFilterIndex", "App.setGlobeFilter").
-			then(func(PrefsView) { g.filterChosen() }),
+func (g *cellGlobeMap) Prefs() []feature.PrefSpec {
+	return []feature.PrefSpec{
+		feature.ValuePref(prefGlobeNames, "true", []string{"true", "false"}).Chooser("App.globeNamesIndex", "App.setGlobeNames").
+			Then(func(feature.PrefsView) { g.dirty() }),
+		feature.ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).Chooser("App.globeFilterIndex", "App.setGlobeFilter").
+			Then(func(feature.PrefsView) { g.filterChosen() }),
 	}
 }
 
@@ -191,19 +192,19 @@ func (g *cellGlobeMap) State() map[string]any {
 
 // Commands are the map's and its settings' (App.openGlobeSettings is the host's in every build,
 // which opens these: relationviews_tui.go, globesettings_gui.go).
-func (g *cellGlobeMap) Commands() map[string]Command {
+func (g *cellGlobeMap) Commands() map[string]feature.Command {
 	c := g.editor.commands()
-	c["App.toggleGlobeMap"] = none(g.toggle)
+	c["App.toggleGlobeMap"] = feature.None(g.toggle)
 	for _, name := range []string{"App.setGlobeTheme", "App.setGlobeDots", "App.setGlobeSpeed"} {
-		c[name] = oneNumber("a row", func(int) {}) // a window's alone: its row hides here
+		c[name] = feature.OneNumber("a row", func(int) {}) // a window's alone: its row hides here
 	}
-	c["App.setGlobeColour"] = twoStrings("a colour's key and #rrggbb", func(string, string) {})
+	c["App.setGlobeColour"] = feature.TwoStrings("a colour's key and #rrggbb", func(string, string) {})
 	return c
 }
 
-func (g *cellGlobeMap) Catalog() []Entry {
-	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
-		builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
+func (g *cellGlobeMap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
+		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
 }
 
 // openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap…: the workspace's
@@ -255,7 +256,7 @@ func (g *cellGlobeMap) LanguageChanged() {
 // closing came first.
 func (g *cellGlobeMap) load() {
 	ws, filter := g.c.Workspace(), g.filter
-	tk := g.c.Ticket(&g.seq, TicketWorkspace)
+	tk := g.c.Ticket(&g.seq, feature.TicketWorkspace)
 	if ws == "" {
 		g.cur, g.status = nil, "autodoc.text.globemap_gui.no_workspace_enter_one_to_see_its_map"
 		g.title()

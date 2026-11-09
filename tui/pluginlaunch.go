@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 )
 
@@ -34,10 +35,10 @@ func launchHolder(name string) string { return "plugin:" + name }
 
 // Prefs is the refused plugins' list, as the store keeps it (no chooser: the question sets it), and
 // whether a plugin's pixel surface shows in a terminal (pluginsurface_cells.go): on by default.
-func (pl *plugins) Prefs() []PrefSpec {
-	return []PrefSpec{ValuePref(prefPluginLaunchDeclined, "[]", nil),
-		ValuePref(prefPluginPixels, "true", []string{"true", "false"}).chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex").
-			then(func(PrefsView) { pl.repaintCards() })}
+func (pl *plugins) Prefs() []feature.PrefSpec {
+	return []feature.PrefSpec{feature.ValuePref(prefPluginLaunchDeclined, "[]", nil),
+		feature.ValuePref(prefPluginPixels, "true", []string{"true", "false"}).Chooser("App.pluginPixelsIndex", "App.setPluginPixelsIndex").
+			Then(func(feature.PrefsView) { pl.repaintCards() })}
 }
 
 // LaunchConsent is launchConsent, for the plugins (pluginHost).
@@ -81,7 +82,7 @@ func (h *Host) askLaunch(a launchAsk) {
 	}
 	h.launchAsking[a.name] = true
 	done := func() { delete(h.launchAsking, a.name) }
-	h.asker.askWhenFree(Question{
+	h.asker.AskWhenFree(feature.Question{
 		Title: h.trf("autodoc.question.pluginlaunch.start_the_plugin_with_autodoc", a.title),
 		Text:  h.trf("autodoc.question.pluginlaunch.it_is_a_program_of_its_own", a.name),
 		Yes:   h.tr("autodoc.question.pluginlaunch.yes_start_it"),

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -17,7 +18,7 @@ func TestAskRealDialogCancellationAndShutdownCompleteBeforeOwnerUnmount(t *testi
 			var calls atomic.Int32
 			live := make(chan bool, 2)
 			onLoop(r, func() bool {
-				r.h.ask(Question{Title: "test cancellation?", OnYes: func() { t.Error("cancellation test accepted") }, OnCancel: func() {
+				r.h.ask(feature.Question{Title: "test cancellation?", OnYes: func() { t.Error("cancellation test accepted") }, OnCancel: func() {
 					calls.Add(1)
 					view, found := r.h.p.Find("editor")
 					ctx, ok := view.(interface{ Context() *tuicore.Context })
@@ -54,7 +55,7 @@ func TestAskRealDialogCancellationAndShutdownCompleteBeforeOwnerUnmount(t *testi
 				t.Fatal("cancel did not complete")
 			}
 			if ending != "shutdown" {
-				onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); r.h.p.Quit(); return true })
+				onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); r.h.p.Quit(); return true })
 			}
 			select {
 			case <-r.s.Quit():
@@ -72,28 +73,28 @@ func TestAskCancellationEndingsAreOnceAndExclusiveWithYes(t *testing.T) {
 	for _, ending := range []string{"no", "escape", "close", "replacement", "shutdown", "yes"} {
 		t.Run(ending, func(t *testing.T) {
 			s := newScripted("kb")
-			a := newAsker(s)
+			a := feature.NewAsker(s)
 			yes, cancel := 0, 0
-			asked := a.ask(Question{Text: "original", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }})
+			asked := a.Ask(feature.Question{Text: "original", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }})
 			switch ending {
 			case "no", "escape":
-				a.rejected()
-				a.closed()
+				a.Rejected()
+				a.Closed()
 			case "close":
-				a.closed()
+				a.Closed()
 			case "replacement":
-				a.ask(Question{Text: "replacement"})
+				a.Ask(feature.Question{Text: "replacement"})
 			case "shutdown":
 				a.Stopping()
 				a.Stopped()
 				a.Stopped()
 			case "yes":
-				a.accepted()
-				a.closed()
+				a.Accepted()
+				a.Closed()
 			}
-			a.rejected()
-			a.closed()
-			a.accepted()
+			a.Rejected()
+			a.Closed()
+			a.Accepted()
 			a.Stopped()
 			wantYes, wantCancel := 0, 1
 			if ending == "yes" {
@@ -111,12 +112,12 @@ func TestAskCancellationEndingsAreOnceAndExclusiveWithYes(t *testing.T) {
 }
 
 func TestAskReplacementCancellationKeepsReentrantNewestQuestion(t *testing.T) {
-	a := newAsker(newScripted("kb"))
+	a := feature.NewAsker(newScripted("kb"))
 	oldCancel, displacedCancel, newestYes := 0, 0, 0
-	a.ask(Question{OnCancel: func() { oldCancel++; a.ask(Question{OnYes: func() { newestYes++ }}) }})
-	a.ask(Question{OnCancel: func() { displacedCancel++ }})
-	a.accepted()
-	a.closed()
+	a.Ask(feature.Question{OnCancel: func() { oldCancel++; a.Ask(feature.Question{OnYes: func() { newestYes++ }}) }})
+	a.Ask(feature.Question{OnCancel: func() { displacedCancel++ }})
+	a.Accepted()
+	a.Closed()
 	a.Stopped()
 	if oldCancel != 1 || displacedCancel != 1 || newestYes != 1 {
 		t.Fatalf("reentrant replacement: old=%d displaced=%d newestYes=%d", oldCancel, displacedCancel, newestYes)
@@ -126,18 +127,18 @@ func TestAskReplacementCancellationKeepsReentrantNewestQuestion(t *testing.T) {
 func TestAskAnsweredClosedNotificationDoesNotCancelNewQuestion(t *testing.T) {
 	for _, answer := range []string{"yes", "no"} {
 		t.Run(answer, func(t *testing.T) {
-			a := newAsker(newScripted("kb"))
+			a := feature.NewAsker(newScripted("kb"))
 			newYes, newCancel := 0, 0
-			next := func() { a.ask(Question{OnYes: func() { newYes++ }, OnCancel: func() { newCancel++ }}) }
-			a.ask(Question{OnYes: next, OnCancel: next})
+			next := func() { a.Ask(feature.Question{OnYes: func() { newYes++ }, OnCancel: func() { newCancel++ }}) }
+			a.Ask(feature.Question{OnYes: next, OnCancel: next})
 			if answer == "yes" {
-				a.accepted()
+				a.Accepted()
 			} else {
-				a.rejected()
+				a.Rejected()
 			}
-			a.closed() // notification for the OLD answered dialog
-			a.accepted()
-			a.closed()
+			a.Closed() // notification for the OLD answered dialog
+			a.Accepted()
+			a.Closed()
 			a.Stopped()
 			if newYes != 1 || newCancel != 0 {
 				t.Fatalf("old closed cancelled new question: yes=%d cancel=%d", newYes, newCancel)
@@ -148,14 +149,14 @@ func TestAskAnsweredClosedNotificationDoesNotCancelNewQuestion(t *testing.T) {
 
 func TestAskStoppedCancelsPendingAndRefusesToOpenAgain(t *testing.T) {
 	s := newScripted("kb")
-	a := newAsker(s)
+	a := feature.NewAsker(s)
 	cancel := 0
-	a.ask(Question{OnCancel: func() { cancel++ }})
+	a.Ask(feature.Question{OnCancel: func() { cancel++ }})
 	a.Stopped()
 	a.Stopped()
 	opened := len(s.opened)
-	a.ask(Question{OnCancel: func() { cancel++ }, OnYes: func() { t.Error("stopped question accepted") }})
-	a.accepted()
+	a.Ask(feature.Question{OnCancel: func() { cancel++ }, OnYes: func() { t.Error("stopped question accepted") }})
+	a.Accepted()
 	if cancel != 2 || len(s.opened) != opened {
 		t.Fatalf("stopped ask: cancelled=%d opened=%d want %d", cancel, len(s.opened), opened)
 	}
@@ -165,12 +166,12 @@ func TestAskStoppedCancelsPendingAndRefusesToOpenAgain(t *testing.T) {
 // and only the question still asked can have its text rewritten.
 func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 	s := newScripted("kb")
-	a := newAsker(s)
+	a := feature.NewAsker(s)
 	if st := a.State(); st["App.askYes"] != "&Yes" || st["App.askNo"] != "&No" {
 		t.Fatalf("first labels %v", st)
 	}
 	ran := 0
-	asked := a.ask(Question{Title: "remove the thing?", Text: "counting…", Yes: "&Yes, remove it", OnYes: func() { ran++ }})
+	asked := a.Ask(feature.Question{Title: "remove the thing?", Text: "counting…", Yes: "&Yes, remove it", OnYes: func() { ran++ }})
 	if s.opened[len(s.opened)-1] != "confirm" || s.set["App.askTitle"] != "remove the thing?" ||
 		s.set["App.askYes"] != "&Yes, remove it" || s.set["App.askNo"] != "&No" {
 		t.Fatalf("the card: opened %v, set %v", s.opened, s.set)
@@ -189,8 +190,8 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 		t.Errorf("Say after the answer rewrote the text: %v", s.set["App.askText"])
 	}
 
-	first := a.ask(Question{Title: "one?", OnYes: func() { ran += 10 }})
-	a.ask(Question{Title: "two?", OnYes: func() { ran += 100 }})
+	first := a.Ask(feature.Question{Title: "one?", OnYes: func() { ran += 10 }})
+	a.Ask(feature.Question{Title: "two?", OnYes: func() { ran += 100 }})
 	first.Say("stale")
 	if s.set["App.askText"] == "stale" {
 		t.Error("an older question's Say rewrote the newer one")
@@ -200,13 +201,13 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 		t.Errorf("Yes on the newer question: ran %d, want 101 (only the newer one's OnYes)", ran)
 	}
 
-	a.ask(Question{Title: "three?", OnYes: func() { ran += 1000 }})
+	a.Ask(feature.Question{Title: "three?", OnYes: func() { ran += 1000 }})
 	a.Commands()["App.askRejected"].Run(nil)
 	a.Commands()["App.askAccepted"].Run(nil)
 	if ran != 101 {
 		t.Errorf("No, then a stray accept: ran %d, want 101", ran)
 	}
-	Asked{}.Say("no-op") // a zero Asked, as a test's Core returns, says nothing
+	feature.Asked{}.Say("no-op") // a zero Asked, as a test's Core returns, says nothing
 }
 
 // A question's third button (Question.Other) shows only when asked for. Chosen, it runs OnOther
@@ -214,29 +215,29 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 // what was asked lives on (a candidate's Audit…).
 func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
 	s := newScripted("kb")
-	a := newAsker(s)
+	a := feature.NewAsker(s)
 	if st := a.State(); st["App.askOther"] != "" || st["App.askOtherShown"] != false {
 		t.Fatalf("first state %v", st)
 	}
 	yes, cancel, other := 0, 0, 0
-	a.ask(Question{Title: "install?", Other: "&Audit…", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }, OnOther: func() { other++ }})
+	a.Ask(feature.Question{Title: "install?", Other: "&Audit…", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }, OnOther: func() { other++ }})
 	if s.set["App.askOther"] != "&Audit…" || s.set["App.askOtherShown"] != true {
 		t.Fatalf("the third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
 	}
 	a.Commands()["App.askOtherChosen"].Run(nil)
 	a.Commands()["App.askOtherChosen"].Run(nil)
-	a.closed() // the card's closed notification after the button
-	a.accepted()
+	a.Closed() // the card's closed notification after the button
+	a.Accepted()
 	if other != 1 || yes != 0 || cancel != 0 {
 		t.Fatalf("other %d, yes %d, cancel %d; want 1, 0, 0", other, yes, cancel)
 	}
 
-	a.ask(Question{Title: "remove?", OnCancel: func() { cancel++ }})
+	a.Ask(feature.Question{Title: "remove?", OnCancel: func() { cancel++ }})
 	if s.set["App.askOther"] != "" || s.set["App.askOtherShown"] != false {
 		t.Fatalf("a question without one shows a third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
 	}
-	a.otherChosen() // a card without one: nothing is chosen, and the question is still asked
-	a.rejected()
+	a.OtherChosen() // a card without one: nothing is chosen, and the question is still asked
+	a.Rejected()
 	if cancel != 1 || other != 1 {
 		t.Fatalf("cancel %d, other %d; want 1, 1", cancel, other)
 	}
@@ -247,43 +248,43 @@ func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
 // wait without running its callbacks, and it is shown again once that one is answered; a stopping
 // host cancels what still waits.
 func TestAQuestionAskedWhenFreeWaitsAndYields(t *testing.T) {
-	a := newAsker(newScripted("kb"))
+	a := feature.NewAsker(newScripted("kb"))
 	var got []string
-	q := func(name string) Question {
-		return Question{Title: name, OnYes: func() { got = append(got, name+":yes") }, OnCancel: func() { got = append(got, name+":cancel") }}
+	q := func(name string) feature.Question {
+		return feature.Question{Title: name, OnYes: func() { got = append(got, name+":yes") }, OnCancel: func() { got = append(got, name+":cancel") }}
 	}
 	shown := func() string {
-		if !a.pending {
+		if !a.Pending {
 			return ""
 		}
-		return a.current.Title
+		return a.Current.Title
 	}
-	a.ask(q("user"))
-	a.askWhenFree(q("one"))
-	a.askWhenFree(q("two"))
+	a.Ask(q("user"))
+	a.AskWhenFree(q("one"))
+	a.AskWhenFree(q("two"))
 	if shown() != "user" {
 		t.Fatalf("shown %q while the user's question is open", shown())
 	}
-	a.accepted()
-	a.closed()
+	a.Accepted()
+	a.Closed()
 	if shown() != "one" {
 		t.Fatalf("after the user's answer: shown %q, want one", shown())
 	}
-	a.ask(q("other"))
+	a.Ask(q("other"))
 	if shown() != "other" || len(got) != 1 {
 		t.Fatalf("a question over one: shown %q, %v; want other shown, one's callbacks not run", shown(), got)
 	}
-	a.rejected()
-	a.closed()
+	a.Rejected()
+	a.Closed()
 	if shown() != "one" {
 		t.Fatalf("after other's answer: shown %q, want one again", shown())
 	}
-	a.accepted()
-	a.closed()
+	a.Accepted()
+	a.Closed()
 	if shown() != "two" {
 		t.Fatalf("after one: shown %q, want two", shown())
 	}
-	a.askWhenFree(q("three"))
+	a.AskWhenFree(q("three"))
 	a.Stopped()
 	if want := []string{"user:yes", "other:cancel", "one:yes", "two:cancel", "three:cancel"}; !slices.Equal(got, want) {
 		t.Fatalf("callbacks %v, want %v", got, want)
@@ -295,18 +296,18 @@ func TestAQuestionAskedWhenFreeWaitsAndYields(t *testing.T) {
 // once only, and its OnYes never; one without an OnCancel is dropped as quietly.
 func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
 	s := newScripted("kb")
-	a := newAsker(s)
+	a := feature.NewAsker(s)
 	a.Stopped()
 	cancel := 0
-	a.askWhenFree(Question{Title: "late", OnCancel: func() { cancel++ }, OnYes: func() { t.Error("a stopped host's question accepted") }})
+	a.AskWhenFree(feature.Question{Title: "late", OnCancel: func() { cancel++ }, OnYes: func() { t.Error("a stopped host's question accepted") }})
 	if cancel != 1 {
 		t.Fatalf("asked when free of a stopped host: cancelled %d times, want once at once", cancel)
 	}
-	a.askWhenFree(Question{Title: "quiet"}) // no OnCancel: nothing to run, nothing to panic on
-	a.accepted()
+	a.AskWhenFree(feature.Question{Title: "quiet"}) // no OnCancel: nothing to run, nothing to panic on
+	a.Accepted()
 	a.Stopped()
-	if _, set := s.set["App.askTitle"]; set || len(s.opened) != 0 || a.pending || len(a.waiting) != 0 {
-		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.opened, a.pending, len(a.waiting))
+	if _, set := s.set["App.askTitle"]; set || len(s.opened) != 0 || a.Pending || len(a.Waiting) != 0 {
+		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.opened, a.Pending, len(a.Waiting))
 	}
 	if cancel != 1 {
 		t.Fatalf("the stopped host's question cancelled %d times, want once", cancel)
@@ -320,25 +321,25 @@ func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
 func TestAskOnNoIsTheCardsOwnNoAlone(t *testing.T) {
 	for _, ending := range []string{"no", "close", "replacement", "shutdown", "yes"} {
 		t.Run(ending, func(t *testing.T) {
-			a := newAsker(newScripted("kb"))
+			a := feature.NewAsker(newScripted("kb"))
 			var order []string
-			a.ask(Question{Text: "start it?", OnYes: func() { order = append(order, "yes") },
+			a.Ask(feature.Question{Text: "start it?", OnYes: func() { order = append(order, "yes") },
 				OnNo: func() { order = append(order, "no") }, OnCancel: func() { order = append(order, "cancel") }})
 			switch ending {
 			case "no":
-				a.rejected()
-				a.closed() // the card's closed notification after the button
+				a.Rejected()
+				a.Closed() // the card's closed notification after the button
 			case "close":
-				a.closed()
+				a.Closed()
 			case "replacement":
-				a.ask(Question{Text: "another"})
+				a.Ask(feature.Question{Text: "another"})
 			case "shutdown":
 				a.Stopping()
 			case "yes":
-				a.accepted()
-				a.closed()
+				a.Accepted()
+				a.Closed()
 			}
-			a.rejected() // answered already: nothing more
+			a.Rejected() // answered already: nothing more
 			want := map[string][]string{"no": {"no", "cancel"}, "close": {"cancel"}, "replacement": {"cancel"},
 				"shutdown": {"cancel"}, "yes": {"yes"}}[ending]
 			if !slices.Equal(order, want) {

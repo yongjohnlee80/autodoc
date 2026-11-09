@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -55,11 +56,11 @@ const defaultAgentScale = 90
 // nearestAgentScale is the step n is nearest, the larger of two as near, so a choice stored between
 // steps (an older 75 or 85) keeps about its size; 0 (the default) for n outside the steps' range.
 func nearestAgentScale(n int) int {
-	lo, hi := agentScales[0], agentScales[len(agentScales)-1]
+	lo, hi := feature.AgentScales[0], feature.AgentScales[len(feature.AgentScales)-1]
 	if n < lo || n > hi {
 		return 0
 	}
-	step := agentScales[1] - lo
+	step := feature.AgentScales[1] - lo
 	return lo + (n-lo+step/2)/step*step
 }
 
@@ -100,7 +101,7 @@ func fontState(p prefs) map[string]any {
 	}
 	st["App.fontSizeIndex"] = max(slices.Index(fontSizes, size), 0)
 	st["App.zoomIndex"] = max(slices.Index(zoomSteps, zoomOf(p)), 0)
-	st["App.agentScaleIndex"] = max(slices.Index(agentScales, agentScaleOf(p)), 0)
+	st["App.agentScaleIndex"] = max(slices.Index(feature.AgentScales, agentScaleOf(p)), 0)
 	return st
 }
 
@@ -200,14 +201,14 @@ func fontModel() *tuidecl.ListModel {
 }
 
 // fontRows are a family chooser's rows: the default first, then each family.
-func fontRows(families []string) []rowOf {
-	rows := make([]rowOf, len(families))
+func fontRows(families []string) []feature.RowOf {
+	rows := make([]feature.RowOf, len(families))
 	for i, f := range families {
 		label := f
 		if f == "" {
 			label = "(the default)"
 		}
-		rows[i] = rowOf{"key": strconv.Itoa(i), "label": label}
+		rows[i] = feature.RowOf{"key": strconv.Itoa(i), "label": label}
 	}
 	return rows
 }
@@ -231,7 +232,7 @@ func termFontModel() *tuidecl.ListModel {
 }
 
 // termFontRows are its rows: the cell font's first, then each monospace family.
-func termFontRows(families []string) []rowOf {
+func termFontRows(families []string) []feature.RowOf {
 	rows := fontRows(families)
 	if len(rows) > 0 {
 		rows[0]["label"] = "(the cell font's)"
@@ -255,8 +256,8 @@ func (h *Host) setProseFontIndex(i int) {
 
 // setAgentScaleIndex is the Fonts dialog's shells text row: a share of the window's text.
 func (h *Host) setAgentScaleIndex(i int) {
-	if i >= 0 && i < len(agentScales) {
-		n := agentScales[i]
+	if i >= 0 && i < len(feature.AgentScales) {
+		n := feature.AgentScales[i]
 		h.setPref(prefAgentScale, strconv.Itoa(n), func(p *prefs) { p.agentScale = n })
 	}
 }
@@ -264,7 +265,7 @@ func (h *Host) setAgentScaleIndex(i int) {
 // stepAgentScale is a panel's Text size › Smaller (-1) or Larger (+1): the next step, stopping at
 // the ends.
 func (h *Host) stepAgentScale(dir int) {
-	h.setAgentScaleIndex(slices.Index(agentScales, agentScaleOf(h.prefs)) + dir)
+	h.setAgentScaleIndex(slices.Index(feature.AgentScales, agentScaleOf(h.prefs)) + dir)
 }
 
 func (h *Host) setFontSizeIndex(i int) {
@@ -367,7 +368,7 @@ func (h *Host) zoomMenu() widgetcore.MenuItemModel {
 	}
 	zoom := widgetcore.NewSubmenu("autodoc.zoom", "Zoom", rows)
 	zoom.Label, zoom.Hotkey, zoom.HotkeyIdx = tuicore.ParseMnemonic("&Zoom")
-	zoom = withLabelMessage(zoom, "&Zoom")
+	zoom = feature.WithLabelMessage(zoom, "&Zoom")
 	return zoom
 }
 
@@ -394,7 +395,7 @@ func menuCommand(id widgetcore.ItemID, text string, action tuicore.Action) widge
 	label, key, at := tuicore.ParseMnemonic(text)
 	row := widgetcore.NewCommand(id, label, action)
 	row.Hotkey, row.HotkeyIdx = key, at
-	return withLabelMessage(row, text)
+	return feature.WithLabelMessage(row, text)
 }
 
 // coreRowOf is a row of an EditorMenu (a table's or the page's) as a rowMaker (Layout ›).

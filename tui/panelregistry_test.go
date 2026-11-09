@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"reflect"
 	"strings"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 type panelFixture struct {
 	name       string
-	specs      []PanelSpec
+	specs      []feature.PanelSpec
 	stateCalls int
 }
 
@@ -17,11 +18,11 @@ func (f *panelFixture) State() map[string]any {
 	f.stateCalls++
 	return map[string]any{"App." + f.name + "Value": f.name}
 }
-func (*panelFixture) Commands() map[string]Command { return nil }
-func (f *panelFixture) Panels() []PanelSpec        { return f.specs }
+func (*panelFixture) Commands() map[string]feature.Command { return nil }
+func (f *panelFixture) Panels() []feature.PanelSpec        { return f.specs }
 
-func fixturePanel() PanelSpec {
-	return PanelSpec{ID: "custom", View: "customView", Edge: func(PrefsView) string { return "left" },
+func fixturePanel() feature.PanelSpec {
+	return feature.PanelSpec{ID: "custom", View: "customView", Edge: func(feature.PrefsView) string { return "left" },
 		Places: []string{"left"}, Size: [2]int{10, 90}, Length: [2]int{10, 100},
 		Default: func(string) (int, int) { return 30, 70 }}
 }
@@ -29,15 +30,15 @@ func fixturePanel() PanelSpec {
 func TestPanelRegistriesSnapshotEachProgramAndBindItsHooks(t *testing.T) {
 	left, right := 0, 0
 	a, b := fixturePanel(), fixturePanel()
-	a.Open = func(PanelHost) { left++ }
-	b.Open = func(PanelHost) { right++ }
-	f := &panelFixture{name: "first", specs: []PanelSpec{a}}
-	g := &panelFixture{name: "second", specs: []PanelSpec{b}}
-	r1, err := newRegistry(f)
+	a.Open = func(feature.PanelHost) { left++ }
+	b.Open = func(feature.PanelHost) { right++ }
+	f := &panelFixture{name: "first", specs: []feature.PanelSpec{a}}
+	g := &panelFixture{name: "second", specs: []feature.PanelSpec{b}}
+	r1, err := feature.NewRegistry(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := newRegistry(g)
+	r2, err := feature.NewRegistry(g)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,18 +47,18 @@ func TestPanelRegistriesSnapshotEachProgramAndBindItsHooks(t *testing.T) {
 	}
 	f.specs[0].ID = "changed"
 	f.specs[0].Places[0] = "right"
-	if r1.panels.specs[0].ID != "custom" || r1.panels.specs[0].Places[0] != "left" {
+	if r1.Panels.Specs[0].ID != "custom" || r1.Panels.Specs[0].Places[0] != "left" {
 		t.Fatal("mutating the contributor changed the program's snapshot")
 	}
-	r1.panels.specs[0].Open(nil)
+	r1.Panels.Specs[0].Open(nil)
 	if left != 1 || right != 0 {
 		t.Fatalf("first program invoked another program's hook: %d, %d", left, right)
 	}
-	r2.panels.specs[0].Open(nil)
+	r2.Panels.Specs[0].Open(nil)
 	if left != 1 || right != 1 {
 		t.Fatalf("program hooks share runtime state: %d, %d", left, right)
 	}
-	if _, ok := r1.state["App.secondValue"]; ok {
+	if _, ok := r1.State["App.secondValue"]; ok {
 		t.Fatal("second program's source leaked into the first")
 	}
 }
@@ -65,58 +66,58 @@ func TestPanelRegistriesSnapshotEachProgramAndBindItsHooks(t *testing.T) {
 func TestPanelRegistryRejectsAmbiguousOrInvalidContributions(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		edit func(*PanelSpec)
+		edit func(*feature.PanelSpec)
 		want string
 	}{
-		{"id", func(s *PanelSpec) { s.ID = "" }, "without an id"},
-		{"view", func(s *PanelSpec) { s.View = "" }, "without an id"},
-		{"edge", func(s *PanelSpec) { s.Edge = nil }, "no edge"}, // a panel whose size is kept has an edge to keep it at
-		{"default", func(s *PanelSpec) { s.Default = nil }, "invalid geometry"},
-		{"size bounds", func(s *PanelSpec) { s.Size = [2]int{90, 10} }, "invalid geometry"},
-		{"length bounds", func(s *PanelSpec) { s.Length = [2]int{10, 101} }, "invalid geometry"},
-		{"empty place", func(s *PanelSpec) { s.Places = []string{""} }, "empty or repeated"},
-		{"repeated place", func(s *PanelSpec) { s.Places = []string{"left", "left"} }, "empty or repeated"},
-		{"default bounds", func(s *PanelSpec) { s.Default = func(string) (int, int) { return 1, 70 } }, "outside its bounds"},
+		{"id", func(s *feature.PanelSpec) { s.ID = "" }, "without an id"},
+		{"view", func(s *feature.PanelSpec) { s.View = "" }, "without an id"},
+		{"edge", func(s *feature.PanelSpec) { s.Edge = nil }, "no edge"}, // a panel whose size is kept has an edge to keep it at
+		{"default", func(s *feature.PanelSpec) { s.Default = nil }, "invalid geometry"},
+		{"size bounds", func(s *feature.PanelSpec) { s.Size = [2]int{90, 10} }, "invalid geometry"},
+		{"length bounds", func(s *feature.PanelSpec) { s.Length = [2]int{10, 101} }, "invalid geometry"},
+		{"empty place", func(s *feature.PanelSpec) { s.Places = []string{""} }, "empty or repeated"},
+		{"repeated place", func(s *feature.PanelSpec) { s.Places = []string{"left", "left"} }, "empty or repeated"},
+		{"default bounds", func(s *feature.PanelSpec) { s.Default = func(string) (int, int) { return 1, 70 } }, "outside its bounds"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := fixturePanel()
 			tc.edit(&s)
-			if _, err := newRegistry(&panelFixture{name: "bad", specs: []PanelSpec{s}}); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := feature.NewRegistry(&panelFixture{name: "bad", specs: []feature.PanelSpec{s}}); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("invalid contribution: %v, want %q", err, tc.want)
 			}
 		})
 	}
-	sized := PanelSpec{ID: "self", View: "selfView"} // no Places: it sizes itself, and needs no edge
-	if _, err := newRegistry(&panelFixture{name: "self", specs: []PanelSpec{sized}}); err != nil {
+	sized := feature.PanelSpec{ID: "self", View: "selfView"} // no Places: it sizes itself, and needs no edge
+	if _, err := feature.NewRegistry(&panelFixture{name: "self", specs: []feature.PanelSpec{sized}}); err != nil {
 		t.Fatalf("a panel that sizes itself, with no edge, was refused: %v", err)
 	}
 	a, b := fixturePanel(), fixturePanel()
-	if _, err := newRegistry(&panelFixture{name: "one", specs: []PanelSpec{a}}, &panelFixture{name: "two", specs: []PanelSpec{b}}); err == nil || !strings.Contains(err.Error(), "panel custom is both") {
+	if _, err := feature.NewRegistry(&panelFixture{name: "one", specs: []feature.PanelSpec{a}}, &panelFixture{name: "two", specs: []feature.PanelSpec{b}}); err == nil || !strings.Contains(err.Error(), "panel custom is both") {
 		t.Fatalf("duplicate panel was accepted: %v", err)
 	}
 	b.ID = "other"
-	if _, err := newRegistry(&panelFixture{name: "one", specs: []PanelSpec{a}}, &panelFixture{name: "two", specs: []PanelSpec{b}}); err == nil || !strings.Contains(err.Error(), "panel view") {
+	if _, err := feature.NewRegistry(&panelFixture{name: "one", specs: []feature.PanelSpec{a}}, &panelFixture{name: "two", specs: []feature.PanelSpec{b}}); err == nil || !strings.Contains(err.Error(), "panel view") {
 		t.Fatalf("shared panel view was accepted: %v", err)
 	}
 }
 
 func TestFeaturePanelSchemaControlsPreferenceReadback(t *testing.T) {
-	f := &panelFixture{name: "custom", specs: []PanelSpec{fixturePanel()}}
-	r, err := newRegistry(f)
+	f := &panelFixture{name: "custom", specs: []feature.PanelSpec{fixturePanel()}}
+	r, err := feature.NewRegistry(f)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := prefsForPanels(map[string]any{
 		"tui.custom.left.size": "45", "tui.custom.left.length": "60",
 		"tui.custom.float": "10,20,30,40",
-	}, false, r.panels.specs)
+	}, false, r.Panels.Specs)
 	if size, length := p.panelGeometry("custom", "left"); size != 45 || length != 60 {
 		t.Fatalf("contributed panel's preferences were ignored: %d × %d", size, length)
 	}
 	if size, length := p.panelGeometry("missing", "left"); size != 0 || length != 0 {
 		t.Fatalf("unknown panel got geometry: %d × %d", size, length)
 	}
-	st := floatState(p.panelFloat, r.panels.specs)
+	st := floatState(p.panelFloat, r.Panels.Specs)
 	if st["App.customFloating"] != true || st["App.customX"] != float64(10) {
 		t.Fatalf("contributed panel's float was ignored: %v", st)
 	}
@@ -126,7 +127,7 @@ func TestFeaturePanelSchemaControlsPreferenceReadback(t *testing.T) {
 }
 
 func TestDynamicPanelGeometryRejectsInvalidWrites(t *testing.T) {
-	r, err := newRegistry(&panelFixture{name: "custom", specs: []PanelSpec{fixturePanel()}})
+	r, err := feature.NewRegistry(&panelFixture{name: "custom", specs: []feature.PanelSpec{fixturePanel()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +155,7 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 	defer b.cancel()
 	a.options(Options{})
 	b.options(Options{})
-	if a.reg.panels == b.reg.panels || a.agents.agentRows == b.agents.agentRows {
+	if a.reg.Panels == b.reg.Panels || a.agents.agentRows == b.agents.agentRows {
 		t.Fatal("programs share a panel registry or agent model")
 	}
 	a.terminals.restore = false
@@ -166,7 +167,7 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 		if _, exists := a.state()[name]; exists {
 			t.Errorf("legacy still owns feature source %s", name)
 		}
-		if _, exists := a.reg.state[name]; !exists {
+		if _, exists := a.reg.State[name]; !exists {
 			t.Errorf("feature source %s missing from program", name)
 		}
 	}
@@ -174,7 +175,7 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 		if _, exists := a.commands()[name]; exists {
 			t.Errorf("legacy still owns feature command %s", name)
 		}
-		if _, exists := a.reg.handlers[name]; !exists {
+		if _, exists := a.reg.Handlers[name]; !exists {
 			t.Errorf("feature command %s missing from program", name)
 		}
 	}
@@ -194,11 +195,11 @@ func TestConfigureTerminalRefusesMissingAndOtherViews(t *testing.T) {
 }
 
 func TestEmptyProgramPanelSchemaStaysEmpty(t *testing.T) {
-	r, err := newRegistry()
+	r, err := feature.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := prefsForPanels(map[string]any{"tui.terminal.bottom.size": "50"}, false, r.panels.specs)
+	p := prefsForPanels(map[string]any{"tui.terminal.bottom.size": "50"}, false, r.Panels.Specs)
 	if len(p.geometrySpecs()) != 0 || len(p.panelGeo) != 0 {
 		t.Fatal("a program with no contributed panels inherited the standalone built-ins")
 	}
@@ -212,14 +213,14 @@ func TestPanelPriorityTiesKeepFeatureContributionOrder(t *testing.T) {
 	a.ID, a.View, a.Priority = "third", "thirdView", 20
 	b.ID, b.View, b.Priority = "first", "firstView", 10
 	c.ID, c.View, c.Priority = "second", "secondView", 10
-	r, err := newPanelRegistry([]Feature{
-		&panelFixture{name: "earlier", specs: []PanelSpec{a, b}},
-		&panelFixture{name: "later", specs: []PanelSpec{c}},
+	r, err := feature.NewPanelRegistry([]feature.Feature{
+		&panelFixture{name: "earlier", specs: []feature.PanelSpec{a, b}},
+		&panelFixture{name: "later", specs: []feature.PanelSpec{c}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{r.specs[0].ID, r.specs[1].ID, r.specs[2].ID}
+	got := []string{r.Specs[0].ID, r.Specs[1].ID, r.Specs[2].ID}
 	if !reflect.DeepEqual(got, []string{"first", "second", "third"}) {
 		t.Fatalf("priority/tie order = %v", got)
 	}

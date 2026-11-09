@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
 	"slices"
 )
@@ -12,13 +13,13 @@ import (
 // its groups (groups.go), each a query, a colour and an outline, kept in the workspace's graph file
 // and edited in the same dialog (groupeditor_gui.go).
 
-func (m *mindmap) Prefs() []PrefSpec {
+func (m *mindmap) Prefs() []feature.PrefSpec {
 	names, _ := viewThemeChoices(m.c)
-	return []PrefSpec{
-		ValuePref(prefMindTheme, "page", nil).shows(func(p PrefsView) map[string]any {
+	return []feature.PrefSpec{
+		feature.ValuePref(prefMindTheme, "page", nil).Shows(func(p feature.PrefsView) map[string]any {
 			return map[string]any{"App.mindThemeIndex": max(slices.Index(names, p.Value(prefMindTheme)), 0)}
-		}).then(func(PrefsView) { m.relayout() }),
-		ValuePref(prefMindDepth, "1", []string{"1", "2"}).chooser("App.mindDepthIndex", "App.setMindDepth"),
+		}).Then(func(feature.PrefsView) { m.relayout() }),
+		feature.ValuePref(prefMindDepth, "1", []string{"1", "2"}).Chooser("App.mindDepthIndex", "App.setMindDepth"),
 	}
 }
 
@@ -64,7 +65,7 @@ func (m *mindmap) openSettings() {
 		return
 	}
 	var types []string
-	if m.cur != nil && m.cur.root.ws == ws {
+	if m.cur != nil && m.cur.root.WS == ws {
 		types = m.cur.m.Types
 	}
 	m.editor.loadingFor(ws) // not the last workspace's groups while ws's are read
@@ -89,9 +90,9 @@ func (m *mindmap) settingsState() map[string]any {
 	return st
 }
 
-func (m *mindmap) settingsCommands() map[string]Command {
+func (m *mindmap) settingsCommands() map[string]feature.Command {
 	c := m.editor.commands()
-	c["App.openMindmapSettings"] = none(m.openSettings)
-	c["App.setMindTheme"] = oneNumber("a row", m.setTheme)
+	c["App.openMindmapSettings"] = feature.None(m.openSettings)
+	c["App.setMindTheme"] = feature.OneNumber("a row", m.setTheme)
 	return c
 }

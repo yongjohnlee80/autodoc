@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -102,7 +103,10 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 
 	// the explorer's drawer, at the right edge, opens on its Links tab with the keyboard: the card,
 	// the window's, is under it, and back once the page has the keyboard again
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "right")); return true })
+	onLoop(r, func() bool {
+		r.h.choosePrefNamed(feature.PrefExplorer, slices.Index(feature.Edges, "right"))
+		return true
+	})
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (1)")
 	r.s.WaitFor(t, "the drawer drawn over the card's right end", func(string) bool {
