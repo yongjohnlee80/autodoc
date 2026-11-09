@@ -51,7 +51,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 		peer("jarvis", "autovim:plugins", "plugins", true, ""),
 		peer("zen", "autovim:plugins", "plugins", false, "no_endpoint"),
 		peer("zen", "autovim:mcat", "mcat", true, ""))
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -73,7 +73,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 	}
 
 	none, _ := newPeerCore("", peer("jarvis", "autovim:plugins", "plugins", true, ""))
-	w := newTodos(none, nil)
+	w := newTodos(none)
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
@@ -89,7 +89,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 // the same send). Nothing is handed to the window's own agents, and the notice says it was sent.
 func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	c, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -125,7 +125,7 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 // A send refused leaves the task assigned and says why.
 func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("lector", "autovim:plugins", "plugins", false, "no_endpoint"))
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -142,7 +142,7 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 
 	r, _ := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	r.sendErr = errors.New("mail.no_recipient")
-	w := newTodos(r, nil)
+	w := newTodos(r)
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
@@ -206,7 +206,7 @@ func (c *slowPeerCore) peerAgents(then func([]AgentEntry)) {
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 	pc, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	c := &slowPeerCore{peerCore: pc}
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -37,6 +38,7 @@ func (s *scopedPanelHost) Trf(id string, args ...any) string {
 func (s *scopedPanelHost) Ask(q Question) Asked { return s.core.Ask(q) }
 
 func (s *scopedPanelHost) Prefs() PrefsView { return s.core.Prefs() }
+func (s *scopedPanelHost) Env() procenv.Env { return s.core.Env() }
 
 func (s *scopedPanelHost) Keep(err error) { s.core.Keep(err) }
 

@@ -25,14 +25,22 @@ type release struct {
 // startup is the feature that runs once the program has started.
 type startup struct {
 	c        Core
-	seams    *seams // its host's (seams.go)
+	seams    startupSeams
 	version  string
 	latest   func(ctx context.Context) (release, error) // the latest release; tests answer it
 	exe      func() (string, error)                     // this program's path, for how to update
 	scripted func() bool                                // install-autodoc.sh installed it: About's Update updates it
 }
 
-func newStartup(c Core, s *seams, version string, scripted func() bool) *startup {
+// startupSeams is what startup takes of its host: where the latest release is asked for, and
+// whether a first run's Vim question and agent setup are still to come (vimquestion.go,
+// agentsetup.go), read as the program starts.
+type startupSeams struct {
+	latestURL                             string
+	vimQuestionPending, agentSetupPending func(PrefsView) bool
+}
+
+func newStartup(c Core, s startupSeams, version string, scripted func() bool) *startup {
 	url := s.latestURL
 	latest := func(ctx context.Context) (release, error) { return latestRelease(ctx, url) }
 	return &startup{c: c, seams: s, version: version, latest: latest, exe: os.Executable, scripted: scripted}
@@ -49,9 +57,9 @@ func (*startup) Commands() map[string]Command { return nil }
 func (s *startup) Started() {
 	p := s.c.Prefs()
 	switch {
-	case vimQuestionPending(s.seams, p): // a true first run's first card, the agent setup's after it (vimquestion.go)
+	case s.seams.vimQuestionPending(p): // a true first run's first card, the agent setup's after it (vimquestion.go)
 		s.c.Open("vimQuestion")
-	case p.Value(prefAboutAt) == "true" && !agentSetupPending(s.seams, p): // the setup card is that run's first card (agentsetup.go)
+	case p.Value(prefAboutAt) == "true" && !s.seams.agentSetupPending(p): // the setup card is that run's first card (agentsetup.go)
 		s.c.Open("about")
 	}
 	cur, ok := releaseVersion(s.version)

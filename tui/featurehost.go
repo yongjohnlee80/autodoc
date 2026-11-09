@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -39,7 +40,7 @@ func (h *Host) assembleFeatures(fs ...Feature) error {
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, &h.seams, h.aboutInfo.Version, h.canUpdate), newTodos(core{h}, &h.seams), h.luaFeature()}
+	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
@@ -121,6 +122,20 @@ func (c core) AskWhenFree(q Question) { c.h.asker.askWhenFree(q) }
 func (c core) Workspace() string { return c.h.ws }
 
 func (c core) Prefs() PrefsView { return c.h.prefs }
+
+// Env is the program's environment as it is now (seams.go): a test may change it while the
+// program runs.
+func (c core) Env() procenv.Env { return c.h.seams.env }
+
+// startupSeams is startup's part of the program's seams: the latest release's address, and the
+// first run's two questions, read from the seams when startup asks.
+func (h *Host) startupSeams() startupSeams {
+	return startupSeams{
+		latestURL:          h.seams.latestURL,
+		vimQuestionPending: func(p PrefsView) bool { return vimQuestionPending(&h.seams, p) },
+		agentSetupPending:  func(p PrefsView) bool { return agentSetupPending(&h.seams, p) },
+	}
+}
 
 func (c core) OpenFile(abs string) { c.h.openAbsolute(abs) }
 

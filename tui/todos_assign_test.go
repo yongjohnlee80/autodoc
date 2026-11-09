@@ -277,7 +277,7 @@ func assigningStore(entries ...AgentEntry) (*agentCore, *[][]any) {
 // the file, not open/, where the row had it. The current incarnation is HandTask's to resolve.
 func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -336,7 +336,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 // written.
 func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	v.showTab(1) // In progress: no task under the cursor
 	v.assign()
@@ -352,7 +352,7 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	}
 
 	none, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "gone"}, Closing: true})
-	v = newTodos(none, nil)
+	v = newTodos(none)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -362,7 +362,7 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	}
 
 	ro := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"}}}
-	v = newTodos(ro, nil)
+	v = newTodos(ro)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -378,7 +378,7 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 	for _, switched := range []bool{false, true} {
 		c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-		v := newTodos(c, nil)
+		v := newTodos(c)
 		v.list()
 		onTask(t, v, "open")
 		v.assign()
@@ -408,7 +408,7 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 // compared by value, was dropped: no follow, no read.
 func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -463,7 +463,7 @@ func TestTodosAssignCarriesTheWindowsScope(t *testing.T) {
 	for _, scope := range []string{"autodoc:0123456789abcdef", ""} {
 		ac, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 		c := &scopedAgentCore{agentCore: ac, scope: scope}
-		v := newTodos(c, nil)
+		v := newTodos(c)
 		v.list()
 		onTask(t, v, "open")
 		v.assign()

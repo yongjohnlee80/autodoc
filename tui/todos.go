@@ -127,8 +127,7 @@ func storeRoot(path string) string {
 
 // todos is the feature.
 type todos struct {
-	c     Core
-	seams *seams // the program's (Host.seams); nil, defaultSeams (a cell's own todos)
+	c Core
 	// stores are the dropdown's, in its order; cur is the one shown
 	stores    []*todoStore
 	storeRows *rows[*todoStore]
@@ -176,12 +175,8 @@ type todos struct {
 	varEditing *todoVarEdit
 }
 
-func newTodos(c Core, s *seams) *todos {
-	if s == nil {
-		s = &seams{}
-		*s = defaultSeams
-	}
-	t := &todos{c: c, seams: s, detail: true, malformed: map[string]int{}, storeIndex: -2,
+func newTodos(c Core) *todos {
+	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -2,
 		storeRows: newRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) rowOf {
 			return rowOf{"key": s.id, "label": s.title()}
 		}),
@@ -888,7 +883,7 @@ func (t *todos) showDetail() {
 	s, x := t.cursor()
 	heading := "todos"
 	if s != nil && s.path != "" {
-		heading += " · " + tildePath(t.seams.env, s.path)
+		heading += " · " + tildePath(t.c.Env(), s.path)
 	}
 	t.c.Set("App.todosTitle", heading)
 	if v := t.varAt(t.varCursor); t.tab == varsTab && v != nil {
@@ -1126,9 +1121,9 @@ func (t *todos) labelSet(text string) {
 	text = strings.TrimSpace(text)
 	t.call("preference.set", []any{s.labelKey(), text}, nil, func(any) {
 		if text == "" {
-			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_shows_as_again", tildePath(t.seams.env, s.path), s.name))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_shows_as_again", tildePath(t.c.Env(), s.path), s.name))
 		} else {
-			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_labelled", tildePath(t.seams.env, s.path), text))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_labelled", tildePath(t.c.Env(), s.path), text))
 		}
 		t.list()
 	})
@@ -1192,7 +1187,7 @@ func (t *todos) folderChosen(dir string) {
 				t.want = "root:" + dir
 				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), released: asMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
-					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.seams.env, dir)))
+					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
 					t.list()
 					return
 				}
