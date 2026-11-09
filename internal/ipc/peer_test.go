@@ -1,11 +1,14 @@
 package ipc
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"testing"
 	"time"
@@ -142,4 +145,94 @@ func TestPeerPIDNamesTheProcessAtTheOtherEnd(t *testing.T) {
 	if _, err := PeerPID(a); err == nil {
 		t.Error("PeerPID of a pipe answered a process, rather than refusing")
 	}
+}
+
+// PeerPID names the process at the OTHER end, not this one: this test binary, run again as a helper
+// in a process of its own, is named by its pid at the daemon's end when it dials, and at a client's
+// end when it serves. (Both ends in one process could not tell a peer's pid from this process's.)
+func TestPeerPIDNamesAnotherProcess(t *testing.T) {
+	if addr := os.Getenv("IPC_PEER_HELPER"); addr != "" {
+		peerHelper(os.Getenv("IPC_PEER_HELPER_ROLE"), addr)
+		return
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("no peer process record on " + runtime.GOOS)
+	}
+	helper := func(role, addr string) (*exec.Cmd, *bufio.Reader, io.WriteCloser) {
+		t.Helper()
+		cmd := exec.Command(os.Args[0], "-test.run=^TestPeerPIDNamesAnotherProcess$")
+		cmd.Env = append(os.Environ(), "IPC_PEER_HELPER="+addr, "IPC_PEER_HELPER_ROLE="+role)
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in, err := cmd.StdinPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = in.Close(); _ = cmd.Wait() })
+		return cmd, bufio.NewReader(out), in
+	}
+	ready := func(r *bufio.Reader, want string) {
+		t.Helper()
+		if line, err := r.ReadString('\n'); err != nil || line != want+"\n" {
+			t.Fatalf("the helper said %q, %v; want %s", line, err, want)
+		}
+	}
+
+	// the daemon's end: a client in another process
+	ln, addr := socketIn(t)
+	defer ln.Close()
+	client, out, _ := helper("dial", addr)
+	server, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	ready(out, "dialled")
+	if pid, err := PeerPID(server); err != nil || pid != client.Process.Pid || pid == os.Getpid() {
+		t.Errorf("PeerPID at the daemon's end: %d, %v; want the client's process, %d (this one is %d)", pid, err, client.Process.Pid, os.Getpid())
+	}
+
+	// a client's end: a server in another process
+	addr2 := freshAddr(t)
+	srv, out2, _ := helper("serve", addr2)
+	ready(out2, "listening")
+	c, err := rawDial(addr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if pid, err := PeerPID(c); err != nil || pid != srv.Process.Pid || pid == os.Getpid() {
+		t.Errorf("PeerPID at a client's end: %d, %v; want the server's process, %d (this one is %d)", pid, err, srv.Process.Pid, os.Getpid())
+	}
+}
+
+// peerHelper is TestPeerPIDNamesAnotherProcess's other process: it dials addr, or serves at it and
+// accepts once, says so, and holds the connection until its stdin closes.
+func peerHelper(role, addr string) {
+	var c net.Conn
+	switch role {
+	case "dial":
+		var err error
+		if c, err = rawDial(addr); err != nil {
+			os.Exit(2)
+		}
+		fmt.Println("dialled")
+	case "serve":
+		ln, err := rawListen(addr)
+		if err != nil {
+			os.Exit(2)
+		}
+		fmt.Println("listening")
+		if c, err = ln.Accept(); err != nil {
+			os.Exit(2)
+		}
+	}
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	_ = c.Close()
+	os.Exit(0)
 }

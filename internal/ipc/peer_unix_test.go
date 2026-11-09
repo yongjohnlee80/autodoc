@@ -28,6 +28,20 @@ func socketIn(t *testing.T) (net.Listener, string) {
 	return ln, path
 }
 
+// freshAddr is a socket path in a fresh short directory of this test's, nothing bound at it.
+func freshAddr(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "pc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, "s.sock")
+}
+
+// rawListen listens on the socket at path, unguarded.
+func rawListen(path string) (net.Listener, error) { return net.Listen("unix", path) }
+
 // rawDial connects to the socket at path without Dial's check, as a client of any kind can.
 func rawDial(path string) (net.Conn, error) { return net.Dial("unix", path) }
 
