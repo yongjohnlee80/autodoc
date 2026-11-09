@@ -247,27 +247,6 @@ func (p *pick[T]) dismiss() {
 
 // The preview of a workspace's file, which the file pickers and the search share.
 
-// readPreview is the work that reads file p of the workspace for a picker's preview, the cursor at
-// byte at: through the daemon, off the loop. held is a hit of a document another backend's build
-// indexed, which says so when this one cannot read it.
-func (h *Host) readPreview(p string, at int, held bool) func(context.Context) answerOf[pane] {
-	ws := h.ws
-	heldWhy := h.tr("autodoc.text.pick.held_this_backend_s_build_does_not_read_this_fil") // on the loop
-	return func(ctx context.Context) answerOf[pane] {
-		res, err := h.call(ctx, "doc.read", ws, p)
-		if err != nil {
-			why := wireMessage(err)
-			if held {
-				// a held hit this backend cannot read (a PDF under a community build): say why
-				why = strings.ReplaceAll(heldWhy, "%1", why)
-			}
-			return answerOf[pane]{v: pane{title: p + " · " + why}, err: err}
-		}
-		b, _ := asMap(res)["content"].([]byte)
-		return answerOf[pane]{v: pane{title: p, text: string(b), at: at}}
-	}
-}
-
 // picker is a pick of any item, as the App.pick* commands reach it by its name.
 type picker interface {
 	filter(text string)

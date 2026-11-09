@@ -298,16 +298,6 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	return p
 }
 
-// panelLength is a side panel's share of the Window along its edge, centred: a panel at the left
-// or right takes 85% of the rows, one at the top or bottom 80% of the columns, so the page shows
-// around it rather than the panel filling the edge end to end.
-func panelLength(edge string) int {
-	if edge == "top" || edge == "bottom" {
-		return 80
-	}
-	return 85
-}
-
 // prefState is what the document reads of the composite preferences: the panels', the agents',
 // the fonts'. The rows' are rowState's (prefspec.go); the status line's is statusShown's.
 func prefState(p prefs) map[string]any {
@@ -647,4 +637,70 @@ func indexOf(list []string, s string) int {
 		}
 	}
 	return 0
+}
+
+// prefChoosers is the feature the preferences' choosers belong to: every row's index source and
+// set command, the host's own rows and the features'.
+type prefChoosers struct{ h *Host }
+
+func (prefChoosers) Name() string { return "preferences" }
+
+func (c prefChoosers) State() map[string]any { return rowState(c.h.prefs, c.h.prefRows) }
+
+func (c prefChoosers) Commands() map[string]Command {
+	m := map[string]Command{}
+	for _, s := range c.h.prefRows {
+		if s.Set != "" {
+			m[s.Set] = oneNumber("a row", func(i int) { c.h.choosePref(s, i) })
+		}
+	}
+	return m
+}
+
+// choosePref is a chooser's row i chosen: the row's value, on screen and kept, then what follows
+// a change of it. The value in effect is kept too, when chosen: it may be a default the store does
+// not hold, and the user who chose it keeps it when the default changes. A row out of range
+// changes nothing.
+func (h *Host) choosePref(s PrefSpec, i int) {
+	if i < 0 || i >= len(s.Choices) {
+		return
+	}
+	v := s.Choices[i]
+	changed := v != s.value(h.prefs)
+	h.setPref(s.Name, v, func(p *prefs) { s.read(p, v) })
+	if changed && s.Changed != nil {
+		s.Changed(h.prefs)
+	}
+}
+
+// setRowPref sets row's preference to v through the row alone (Core.SetPref): read into the live
+// prefs, its chooser's row and its State published, its Changed run when v changed, then stored in
+// order. A row
+// that a feature's code sets (the recent files on every open) does not re-apply every preference,
+// as a choice in the dialog does (choosePref).
+func (h *Host) setRowPref(row PrefSpec, v string) {
+	changed := v != row.value(h.prefs)
+	p := h.prefs
+	row.read(&p, v)
+	h.prefs = p
+	if st := rowState(p, []PrefSpec{row}); len(st) > 0 {
+		h.keep(h.p.SetMany(st)) // the chooser's row (Index) and the row's State
+	}
+	if changed && row.Changed != nil {
+		row.Changed(p)
+	}
+	if changed {
+		h.reg.prefSet(row.Name)
+	}
+	h.storePref(row.Name, v)
+}
+
+// choosePrefNamed is choosePref by the preference's name: the menu's and the tests' way to a row.
+func (h *Host) choosePrefNamed(name string, i int) {
+	for _, s := range h.prefRows {
+		if s.Name == name {
+			h.choosePref(s, i)
+			return
+		}
+	}
 }

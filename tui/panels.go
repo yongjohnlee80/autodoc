@@ -5,7 +5,6 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -16,63 +15,6 @@ import (
 // beneath never moving. Ctrl+h/j/k/l
 // move between the page and the panels open at those edges, in Normal mode only: in Insert mode
 // they are the editor's.
-
-// PanelSpec is one drawer over the page: everything the host's panel code asks of it, in one place,
-// so a list of panels cannot disagree with another.
-type PanelSpec struct {
-	ID   string // the Drawer's id in the document
-	View string // what in it takes the keyboard
-	// Focus is what in it takes the keyboard now, where that changes: a tabbed panel's tab shown.
-	// nil: View.
-	Focus func() string
-	// Tab and ShowTab are a tabbed panel's tab shown and the way to show another, its view given the
-	// keyboard (togglePanelTab); nil: it has no tabs.
-	Tab     func() int
-	ShowTab func(tab int)
-	// GoTabs are :go names of its tabs, by tab, "" for none: the explorer's Links tab keeps the name
-	// its own drawer had, relations (widgets.go).
-	GoTabs []string
-	// Priority orders focus targets across features; ties keep contribution order.
-	Priority int
-	// Edge is the edge it opens from now, the place its dragged size and length are kept at; a panel
-	// with Places has one.
-	Edge func(p prefs) string
-	// Places are the edges whose dragged size and length preferences keep; nil: it sizes itself.
-	Places []string
-	// Size and Length are the percent bounds a kept size or length stays within, and Default is
-	// the geometry at a place before the user sets one. A panel with Places has both.
-	Size, Length [2]int
-	Default      func(edge string) (size, length int)
-	// Keyboard: the terminal hands the keyboard back to it.
-	Keyboard bool
-	// Open and Close are the panel's own way of opening and closing, where it has one; nil, and
-	// the drawer opens and its view takes the keyboard (openDrawer), or the drawer closes. A
-	// bespoke Open opens the drawer itself when its way decides to (the agent's opens only when
-	// an agent starts).
-	Open, Close func(PanelHost)
-	// Opened and Closed follow the drawer, however it was opened or closed (Escape inside one
-	// closes it): what it shows and where the keyboard goes. nil Closed: the editor.
-	Opened, Closed func(PanelHost)
-	// Icon is the panel's dock icon: one cell, East Asian Width neutral (dock.go)
-	Icon string
-	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
-	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
-	Alive func() bool
-}
-
-// focusView is what in s takes the keyboard now.
-func (s PanelSpec) focusView() string {
-	if s.Focus != nil {
-		return s.Focus()
-	}
-	return s.View
-}
-
-// geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
-// bounds (tui/panelgeometry, docs/decisions/plugins.md#shared-panels-and-their-geometry).
-func (s PanelSpec) geometry() panelgeometry.Spec {
-	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
-}
 
 // panelSpecs are this program's snapshotted Feature contributions.
 func (h *Host) panelSpecs() []PanelSpec {
@@ -386,4 +328,21 @@ func nextWindow(shown []placedWindow, from int, step tuicore.Point) (placedWindo
 		}
 	}
 	return best, found
+}
+
+func legacyPanelSpecs() []PanelSpec {
+	return []PanelSpec{
+		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙"},
+	}
+}
+
+func defaultPanelSpecs() []PanelSpec {
+	return []PanelSpec{
+		explorerPanelSpec(),
+		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
+	}
+}
+
+func (l legacy) Panels() []PanelSpec {
+	return legacyPanelSpecs()
 }

@@ -22,30 +22,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// AgentRef identifies a profile and, optionally, its exact running incarnation.
-// An empty Instance resolves the current incarnation at acceptance.
-type AgentRef struct{ Codename, Instance string }
-
-// TaskRef is a detached task identity; Path is the absolute task-file path.
-type TaskRef struct{ Title, Path, ID string }
-
-// AgentEntry is a value snapshot. Labels may repeat; Ref never routes by label.
-type AgentEntry struct {
-	Ref                      AgentRef
-	Name, Command            string
-	Running, Closing, Orphan bool
-	// Peer is another host's crew agent (todos' A lists them beside the window's own): nil for the
-	// window's own agents.
-	Peer *PeerAgent
-}
-
-// PeerAgent is another host's live crew agent, as crew.list gives it: its scope (its address is
-// codename@scope), the project it is labelled by, and whether a wake reaches it now (why not).
-type PeerAgent struct {
-	Scope, Project, Why string
-	Reachable           bool
-}
-
 var (
 	ErrAgentStale       = errs.Sentinel(errs.ErrPrecondition, "agent instance is stale")
 	ErrAgentUnavailable = errs.Sentinel(errs.ErrPrecondition, "agent is unavailable")

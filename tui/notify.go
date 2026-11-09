@@ -21,9 +21,6 @@ import (
 // finished toast stays toastSeconds (Preferences: 1 to 10, default 3), in the corner the
 // preferences name (default the bottom right, over the status line).
 
-// maxNotices bounds the history.
-const maxNotices = 500
-
 // The toasts' IDs for the ongoing ones, each updated in place.
 const (
 	toastProgress   = "progress"    // indexing and embedding
@@ -33,11 +30,6 @@ const (
 	toastSemantic   = "semantic"    // model switch: lexical until the new model fills
 	toastSearchWait = "search-wait" // an open search waiting on embedding work
 )
-
-type notice struct {
-	at   time.Time
-	text string
-}
 
 // attachToasts puts the toasts over the page, once the Window is mounted.
 func (h *Host) attachToasts() {

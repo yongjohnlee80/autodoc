@@ -9,11 +9,6 @@ import (
 // here; a feature of its own declares its own (todos.go). Each Run calls the same function as the
 // App.* command its Twin names, so a menu row, a key, ':' and autodoc.run do one thing.
 
-// builtin is an entry that runs fn, the function its twin's App.* command runs.
-func builtin(id, title, twin string, fn func()) Entry {
-	return Entry{ID: id, Title: title, Help: title, Twin: twin, Run: func(Invocation) error { fn(); return nil }}
-}
-
 // userOnly is e, the user's to run (Entry.UserOnly).
 func userOnly(e Entry) Entry { e.UserOnly = true; return e }
 

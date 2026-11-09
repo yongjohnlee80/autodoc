@@ -6,9 +6,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/golib/decl"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // FEATURES — what the program is made of, each contributing its own state and commands.
@@ -16,7 +15,11 @@ import (
 // A feature is one file's worth of the program: the App.* sources it publishes and the commands the
 // document may invoke. The registry merges them into the program's Sources and Handlers, refusing a
 // name two features both claim (golib would let the later one win without a word). Today's host is
-// one feature, legacy; features move out of it one at a time.
+// one feature, legacy (featurehost.go); features move out of it one at a time.
+
+// hostOwn is the host's own part of the program (featurehost.go's legacy), which the catalog lists
+// as built in, until each of its parts moves into a feature.
+type hostOwn interface{ hostOwn() }
 
 // Feature is one part of the program.
 type Feature interface {
@@ -118,7 +121,7 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 			continue
 		}
 		src := SourceFeature
-		if _, ok := f.(legacy); ok {
+		if _, ok := f.(hostOwn); ok {
 			src = SourceBuiltin // the host's own, until each moves into a feature
 		}
 		for _, e := range c.Catalog() {
@@ -264,23 +267,6 @@ func (r *registry) preferencesChanged() {
 	}
 }
 
-// assembleFeatures is initial program construction, before views can run.
-// A failed schema or service binding must not publish the candidate registry.
-func (h *Host) assembleFeatures(fs ...Feature) error {
-	previous, defs := h.reg, h.prefs.panelDefs
-	r, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, fs...)
-	if err != nil {
-		h.prefs.panelDefs = defs
-		return err
-	}
-	h.reg = r
-	if err := r.panels.bind(core{h}); err != nil {
-		h.reg, h.prefs.panelDefs = previous, defs
-		return err
-	}
-	return nil
-}
-
 // connected tells the features that hear connections.
 func (r *registry) connected() {
 	if r == nil {
@@ -334,59 +320,6 @@ func (r *registry) event(kind, workspace, detail string) bool {
 		}
 	}
 	return heard
-}
-
-// features are the program's parts, in the order the registry merges them.
-func (h *Host) features() []Feature {
-	h.asker = newAsker(core{h})
-	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, &h.seams, h.aboutInfo.Version, h.canUpdate), newTodos(core{h}, &h.seams), h.luaFeature()}
-	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
-	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
-	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
-	fs = append(fs, newCardPage(h))                                                                                            // a card's Rendered view on a terminal (cardpage.go)
-	fs = append(fs, &htmlPaneCells{h: h})                                                                                      // the HTML preview pane on a terminal (htmlpane_cells.go)
-	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
-	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
-	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)
-	fs = append(fs, h.inboxView)                                                                                               // SPC a i, :inbox (crewinboxview.go)
-	fs = append(fs, h.grantsView)                                                                                              // Go › Agent permissions, :permissions (grants.go)
-	fs = append(fs, h.moreFeatures...)
-	// the preferences every feature declares, read over their defaults until the store's arrive;
-	// their choosers are one feature of their own
-	h.prefRows = nil
-	for _, f := range fs {
-		if p, ok := f.(Prefs); ok {
-			h.prefRows = append(h.prefRows, p.Prefs()...)
-		}
-	}
-	for _, s := range h.prefRows {
-		if s.value(h.prefs) == "" { // a feature's own row: the host's defaults hold the rest
-			s.reset(&h.prefs)
-		}
-	}
-	h.keys = keyCatalog(fs)
-	h.keys.tr = h.trOr // the cards and help in the UI's language (language.go)
-	return append(fs, prefChoosers{h})
-}
-
-// legacy is the host as it is: everything not yet a feature of its own.
-type legacy struct{ h *Host }
-
-func (legacy) Name() string                   { return "legacy" }
-func (l legacy) State() map[string]any        { return l.h.state() }
-func (l legacy) Commands() map[string]Command { return l.h.commands() }
-func (l legacy) Prefs() []PrefSpec            { return legacyPrefRows(l.h, l.h.gui) }
-
-// Listed is the workspace's files listed again: File › Open and the draft's name list them.
-func (l legacy) Listed() {
-	l.h.openPick.setAll(l.h.files.Paths)
-	l.h.newPick.setAll(l.h.files.Paths)
-}
-
-// Picks are the host's own pickers.
-func (l legacy) Picks() map[string]picker {
-	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
 }
 
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
@@ -520,110 +453,70 @@ type Ticket struct{ current func() bool }
 // Ticket is always current.
 func (t Ticket) Current() bool { return t.current == nil || t.current() }
 
-// core is the host as a feature sees it.
-type core struct{ h *Host }
-
-func (c core) Set(name string, v any) { c.h.set(name, v) }
-func (c core) Open(id string)         { c.h.open(id) }
-func (c core) Close(id string)        { c.h.closeDialog(id) }
-func (c core) Notify(msg string)      { c.h.notify(msg) }
-func (c core) Tr(id string) string    { return c.h.tr(id) }
-func (c core) Trf(id string, args ...any) string {
-	return c.h.trf(id, args...)
-}
-func (c core) WidgetsChanged()               { c.h.refreshDock() }
-func (c core) HidePanel(id string)           { c.h.hidePanel(id); c.h.focusEditor() }
-func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
-func (c core) AskWhenFree(q Question)        { c.h.asker.askWhenFree(q) }
-func (c core) Workspace() string             { return c.h.ws }
-func (c core) Prefs() prefs                  { return c.h.prefs }
-func (c core) OpenFile(abs string)           { c.h.openAbsolute(abs) }
-func (c core) Failed(what string, err error) { c.h.failed(what, err) }
-func (c core) Focus(id string)               { c.h.keep(c.h.p.Call(id, "forceActiveFocus")) }
-func (c core) Call(ctx context.Context, verb string, params ...any) (any, error) {
-	return c.h.call(ctx, verb, params...) // the one send path: a gated authority on ctx is bounded there
-}
-func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
-func (c core) Bell()                                           { c.h.ringBell() }
-
-// SetText sets the text of the layout's text area id (an id inside a component's instance is
-// scoped: crewreply.go's crewReplyText). A layout without it is said, never passed over.
-func (c core) SetText(id, text string) {
-	if c.h.p == nil {
-		return
-	}
-	ta, ok := tuidecl.FindAs[*widgetcore.TextArea](c.h.p, id)
-	if !ok {
-		c.h.keep(fmt.Errorf("the layout has no text area %q", id))
-		return
-	}
-	ta.SetValue(text)
-}
-func (c core) Ticket(seq *uint64, scope TicketScope) Ticket { return c.h.ticket(seq, scope) }
-func (c core) OpenRef(ws, path string)                      { c.h.openIn(ws, path) }
-func (c core) OpenAbsolute(abs string)                      { c.h.openAbsolute(abs) }
-func (c core) Say(msg string)                               { c.h.say(msg) }
-func (c core) Files() FileList                              { return c.h.files }
-func (c core) Workspaces() []Workspace {
-	list := make([]Workspace, 0, c.h.workspaces.Len())
-	for _, w := range c.h.workspaces.All() {
-		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens})
-	}
-	return list
-}
-func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
-func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
-func (c core) TogglePanelTab(id string, tab int)         { c.h.togglePanelTab(id, tab) }
-func (c core) SearchModelsChanged(ranker bool) {
-	if ranker {
-		c.h.loadStageRanker(true) // which searches again, once
-		return
-	}
-	c.h.refreshSearch()
-}
-func (c core) Post(fn func()) { c.h.p.Post(fn) }
-func (c core) HasFocus(id string) bool {
-	comp, ok := c.h.p.Find(id)
-	return ok && c.h.p.App().FocusWithin(comp)
-}
-func (c core) Page() Page            { return c.h.pageNow() }
-func (c core) Crumbs(parts []string) { c.h.crumbs = parts; c.h.showTitle() }
-func (c core) GoToLine(line int) {
-	c.h.core.SetLine(line, 0)
-	c.h.keep(c.h.p.Call("editor", "forceActiveFocus"))
-}
-func (c core) SetPref(name, value string) {
-	for _, row := range c.h.prefRows {
-		if row.Name == name {
-			c.h.setRowPref(row, value)
-			return
-		}
-	}
+// FindPane is a pane / searches: what find calls it, the view whose keyboard makes it the pane
+// searched, and its rows as they are now. Name and View are declarations, the same whenever read: a
+// panel's View is its own PanelSpec's, never one looked up.
+type FindPane struct {
+	Name string // "explorer": "find in the explorer", "n and N find again in the explorer"
+	View string // / searches the pane whose view has the keyboard
+	// Scope is the pane's keyScope (keys.go), where it answers / n N itself; "" for none, and the
+	// Window's / n N, which say where to put the keyboard, answer there
+	Scope string
+	// Rows are the pane's rows as it shows them, the row under its cursor (-1 for none), and how to put
+	// the cursor on row i, the match at col (grapheme columns). The move is bound to this same snapshot,
+	// so a pane whose rows are not plain indexes (the explorer's tree) moves to the row it listed.
+	Rows func() (rows []string, cursor int, moveTo func(row, col int) error)
 }
 
-// ticket is Core.Ticket, for the host's own answers too: every stale-answer guard is one.
-func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
-	var n uint64
-	if seq != nil {
-		*seq++
-		n = *seq
-	}
-	// the page is a buffer and its generation: buffers count their generations alike, so the same
-	// number in another buffer is another page
-	gen, epoch, file, page := h.session.Gen(), h.epoch, h.file.gen, h.active
-	return Ticket{current: func() bool {
-		if scope == TicketLocal {
-			return seq == nil || *seq == n
-		}
-		if seq != nil && *seq != n || h.session.Gen() != gen {
-			return false
-		}
-		switch scope {
-		case TicketSession:
-			return true
-		case TicketWorkspace:
-			return h.epoch == epoch
-		}
-		return h.epoch == epoch && h.active == page && h.file.gen == file
-	}}
+// Findable is a feature whose pane / searches. The registry takes the panes in the features' order,
+// the page first (the host's own).
+type Findable interface{ FindPane() FindPane }
+
+// FileList is the current workspace's files, as last listed: replaced whole on each listing, so a
+// reader may keep it, and never changes it.
+type FileList struct {
+	Paths  []string // nil until the first listing of the workspace in use answers
+	Loaded bool     // a listing has answered since the workspace was entered
+	Gen    uint64   // moves on each listing, and on entering a workspace
 }
+
+// Page is what the editor shows: a file, or the draft (Ref zero). Text is one snapshot, handed to
+// every watcher as it is: a reader never changes it.
+type Page struct {
+	Ref     fileRef
+	Kind    kind.Kind // how its text is read: derived, raw and the daemon's registrations applied
+	Text    []byte
+	Outside bool // a file in no workspace
+	// Line and At are the cursor when Text was taken: its line (0-based) and byte offset in Text
+	Line, At int
+	// Version is the page's edit count when Text was taken: it rises with every edit and with every
+	// page shown (a note opened or closed, a file kept as the draft), never with a cursor move
+	Version int
+}
+
+// AgentRef identifies a profile and, optionally, its exact running incarnation.
+// An empty Instance resolves the current incarnation at acceptance.
+type AgentRef struct{ Codename, Instance string }
+
+// TaskRef is a detached task identity; Path is the absolute task-file path.
+type TaskRef struct{ Title, Path, ID string }
+
+// AgentEntry is a value snapshot. Labels may repeat; Ref never routes by label.
+type AgentEntry struct {
+	Ref                      AgentRef
+	Name, Command            string
+	Running, Closing, Orphan bool
+	// Peer is another host's crew agent (todos' A lists them beside the window's own): nil for the
+	// window's own agents.
+	Peer *PeerAgent
+}
+
+// PeerAgent is another host's live crew agent, as crew.list gives it: its scope (its address is
+// codename@scope), the project it is labelled by, and whether a wake reaches it now (why not).
+type PeerAgent struct {
+	Scope, Project, Why string
+	Reachable           bool
+}
+
+// fileRef is a document opened: its workspace ("" outside every one) and its path.
+type fileRef struct{ ws, path string }

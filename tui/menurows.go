@@ -106,9 +106,6 @@ func (m *menuRows) find(owner string, source rowSource, id string) *addedRow {
 	return nil
 }
 
-// MenuRows is the menus' added rows, the scripts' and the plugins' (menurows.go).
-func (c core) MenuRows() *menuRows { return &c.h.luaFeature().rows }
-
 // bySerial is the row with serial n.
 func (m *menuRows) bySerial(n int) *addedRow {
 	for _, r := range m.rows {
@@ -294,17 +291,4 @@ func (s *scripting) rowAnswer(end time.Time, r *addedRow, part string, fn *lua.L
 	L.SetField(t, "kind", lua.LString(ctx.kind))
 	L.SetField(t, "selection", lua.LBool(ctx.selection))
 	return s.eng.Answer(end, r.name()+"'s "+part, fn, t)
-}
-
-// menuCtxOf is the open file's context for the right-click menu opening on c.
-func (h *Host) menuCtxOf(c *editor.EditorCore) menuCtx {
-	var ctx menuCtx
-	if h.file != nil {
-		ctx.path, ctx.workspace = h.file.path, h.file.ws
-	}
-	if ctx.path != "" {
-		ctx.kind = h.resolver().Of(ctx.path).String()
-	}
-	_, ctx.selection = c.Selection()
-	return ctx
 }

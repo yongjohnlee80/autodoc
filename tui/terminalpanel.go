@@ -2,11 +2,8 @@ package tui
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -116,35 +113,4 @@ func (p terminalPanel) Actions(add func(), menu func(terminal.TerminalTabID)) {
 func (p terminalPanel) Menus(add func() []widgetcore.MenuItemModel, tab func(terminal.TerminalTabID) []widgetcore.MenuItemModel) {
 	p.tabs.SetAddMenu(add)
 	p.tabs.SetMenu(tab)
-}
-
-// Terminals resolves only a parent registered by this contributor. A fresh
-// lookup is required after reload; a rebuilt parent has different runtime IDs.
-func (s *scopedPanelHost) Terminals(id string) (TerminalPanel, error) {
-	if err := s.owns(id); err != nil {
-		return nil, err
-	}
-	if err := s.ready(); err != nil {
-		return nil, err
-	}
-	c, found := s.core.h.p.Find(id)
-	if !found {
-		return nil, fmt.Errorf("terminal panel %q is absent: %w", id, errs.ErrPrecondition)
-	}
-	tabs, ok := tuidecl.TerminalTabsOf(c)
-	if !ok {
-		return nil, fmt.Errorf("view %q is not TerminalTabs: %w", id, errs.ErrPrecondition)
-	}
-	return terminalPanel{tabs: tabs}, nil
-}
-
-func (s *scopedPanelHost) Post(fn func())                   { s.core.Post(fn) }
-func (s *scopedPanelHost) After(d time.Duration, fn func()) { s.core.After(d, fn) }
-
-// The agents feature asserts its host is an agentRuntimeHost at run time; this makes a method the
-// scoped host lacks a build error instead of agents that never start.
-var _ agentRuntimeHost = (*scopedPanelHost)(nil)
-
-func (s *scopedPanelHost) Ticket(seq *uint64, scope TicketScope) Ticket {
-	return s.core.Ticket(seq, scope)
 }

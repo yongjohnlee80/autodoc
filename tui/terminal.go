@@ -718,3 +718,9 @@ func (t *terminals) shellExited(id terminal.TerminalTabID, code int) {
 		t.c.TogglePanel("terminal")
 	}
 }
+
+func terminalPanelSpec() PanelSpec {
+	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
+		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
+		Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault}
+}

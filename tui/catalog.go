@@ -382,3 +382,8 @@ func (c *catalog) userOnly(e *Entry) error {
 	}
 	return fmt.Errorf("%s is the user's to run: a script may not", e.ID)
 }
+
+// builtin is an entry that runs fn, the function its twin's App.* command runs.
+func builtin(id, title, twin string, fn func()) Entry {
+	return Entry{ID: id, Title: title, Help: title, Twin: twin, Run: func(Invocation) error { fn(); return nil }}
+}

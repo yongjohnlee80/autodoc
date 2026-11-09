@@ -19,18 +19,6 @@ func (p prefs) geometrySpecs() []PanelSpec {
 // in panelFloat (panelfloat.go). Each panel's defaults and
 // bounds are its spec's (panels.go); the HTML pane sizes itself and keeps none.
 
-// sidePanelMin is the explorer's and the relations' smallest size across their edge, in percent: their
-// trees stay readable.
-const sidePanelMin = 15
-
-// sideDefault is the explorer's and the relations' size and length before the user drags them: a
-// third across, and 85% along a side or 80% along the top or bottom.
-func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
-
-// explorerDefault is the explorer's size and length before the user drags it: 35% across, so its
-// tabs have room, and its length a side panel's.
-func explorerDefault(edge string) (size, length int) { return 35, panelLength(edge) }
-
 // panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
 func (p prefs) panelGeometry(id, edge string) (size, length int) {
 	s := findPanel(p.geometrySpecs(), id)

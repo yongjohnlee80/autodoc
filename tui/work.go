@@ -2,35 +2,9 @@ package tui
 
 import (
 	"context"
-	"runtime/debug"
+	"reflect"
+	"unsafe"
 )
-
-// BACKGROUND WORK — off the loop, and back onto it.
-//
-// Nothing that talks to the daemon runs on the UI loop. do runs fn on its own goroutine under the
-// host's context and applies its result on the loop with then. The result says which generation it
-// was issued under; then decides whether it still applies. A late answer to a question nobody is
-// asking any more is dropped there, never here.
-func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
-	ctx := h.ctx
-	go func() {
-		// a panic here is on a goroutine of its own, where no loop boundary reaches: kept, said, and
-		// handed to then as the failure it is where its answer can carry one (crash.go)
-		defer func() {
-			if rec := recover(); rec != nil {
-				stack := debug.Stack()
-				if ctx.Err() == nil {
-					h.p.Post(func() { backgroundPanicked(h, rec, stack, then) })
-				}
-			}
-		}()
-		v := fn(ctx)
-		if ctx.Err() != nil {
-			return // the program stopped; nobody is waiting
-		}
-		h.p.Post(func() { then(v) })
-	}()
-}
 
 // coreDo is do for a feature, through its Core: fn off the loop, then on it with fn's result, typed.
 func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
@@ -59,3 +33,30 @@ type answerOf[T any] struct {
 
 // answered is a value and its error as an answerOf.
 func answered[T any](v T, err error) answerOf[T] { return answerOf[T]{v: v, err: err} }
+
+// errPanicked is a background job's panic, as the error its caller is handed.
+type errPanicked struct {
+	value any
+	path  string
+}
+
+// failed is a background answer carrying err, the failure its job ended in: err itself where the
+// answer is an error or any (a Core.Go answer), else the answer's own err field (answerOf, and every
+// struct a job answers with: TestEveryBackgroundAnswerCanCarryAFailure holds each do and coreDo to
+// one). The field is unexported, set through its address; its type is checked first. ok is false
+// for an answer with none, which that test keeps from being written.
+func failed[T any](err error) (v T, ok bool) {
+	if t, isT := any(err).(T); isT {
+		return t, true
+	}
+	rv := reflect.ValueOf(&v).Elem()
+	if rv.Kind() != reflect.Struct {
+		return v, false
+	}
+	f := rv.FieldByName("err")
+	if !f.IsValid() || f.Type() != reflect.TypeFor[error]() {
+		return v, false
+	}
+	reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem().Set(reflect.ValueOf(&err).Elem())
+	return v, true
+}

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -42,27 +41,6 @@ const (
 
 // crashSeq counts this process's crash logs, for their names.
 var crashSeq atomic.Uint64
-
-// namedPanic is a panic and the command it came out of, named on its way up to golib's boundary.
-type namedPanic struct {
-	name  string
-	value any
-}
-
-func (p namedPanic) String() string { return fmt.Sprint(p.value) }
-
-// renamePanic, deferred in a command, names a panic coming out of it and raises it again, its stack
-// kept, for golib's boundary to contain or not: a command does not contain its own panics, since
-// only golib knows whether going on is safe (its tree part way through a change). The innermost
-// name stays: a catalog entry run by an App.* command is the entry's.
-func renamePanic(name string) {
-	if rec := recover(); rec != nil {
-		if _, named := rec.(namedPanic); !named {
-			rec = namedPanic{name: name, value: rec}
-		}
-		panic(rec)
-	}
-}
 
 // panicSource is what failed and the panic itself: the command named on the way up, or fallback.
 func panicSource(rec any, fallback string) (string, any) {
@@ -219,41 +197,6 @@ func runtimeAuthored(v any) bool {
 	return t != nil && t.PkgPath() == "runtime"
 }
 
-// errPanicked is a background job's panic, as the error its caller is handed.
-type errPanicked struct {
-	value any
-	path  string
-}
-
-func (e errPanicked) Error() string {
-	s := "it panicked: " + panicText(e.value)
-	if e.path != "" {
-		s += " — details in " + e.path
-	}
-	return s
-}
-
-// failed is a background answer carrying err, the failure its job ended in: err itself where the
-// answer is an error or any (a Core.Go answer), else the answer's own err field (answerOf, and every
-// struct a job answers with: TestEveryBackgroundAnswerCanCarryAFailure holds each do and coreDo to
-// one). The field is unexported, set through its address; its type is checked first. ok is false
-// for an answer with none, which that test keeps from being written.
-func failed[T any](err error) (v T, ok bool) {
-	if t, isT := any(err).(T); isT {
-		return t, true
-	}
-	rv := reflect.ValueOf(&v).Elem()
-	if rv.Kind() != reflect.Struct {
-		return v, false
-	}
-	f := rv.FieldByName("err")
-	if !f.IsValid() || f.Type() != reflect.TypeFor[error]() {
-		return v, false
-	}
-	reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem().Set(reflect.ValueOf(&err).Elem())
-	return v, true
-}
-
 // backgroundPanicked is a background job's panic, on the loop: logged, and its caller handed the
 // failure (failed), so whatever waits on the answer ends as on any failure.
 func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
@@ -264,4 +207,12 @@ func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 		return
 	}
 	h.notify(h.trf("autodoc.notice.crash.a_background_job_failed", err.Error()))
+}
+
+func (e errPanicked) Error() string {
+	s := "it panicked: " + panicText(e.value)
+	if e.path != "" {
+		s += " — details in " + e.path
+	}
+	return s
 }
