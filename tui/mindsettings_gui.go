@@ -15,9 +15,9 @@ import (
 func (m *mindmap) Prefs() []PrefSpec {
 	names, _ := viewThemeChoices(m.c)
 	return []PrefSpec{
-		ValuePref(prefMindTheme, "page", nil).shows(func(p prefs) map[string]any {
+		ValuePref(prefMindTheme, "page", nil).shows(func(p PrefsView) map[string]any {
 			return map[string]any{"App.mindThemeIndex": max(slices.Index(names, p.Value(prefMindTheme)), 0)}
-		}).then(func(prefs) { m.relayout() }),
+		}).then(func(PrefsView) { m.relayout() }),
 		ValuePref(prefMindDepth, "1", []string{"1", "2"}).chooser("App.mindDepthIndex", "App.setMindDepth"),
 	}
 }

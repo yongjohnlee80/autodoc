@@ -166,7 +166,7 @@ func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
 	name := c.name
 	return PanelSpec{ID: cardPanelID(name), View: cardViewID(name), Priority: priority, Icon: "⧉",
 		Alive:  func() bool { return pl.running[name] != nil }, // a hidden card's plugin runs on
-		Edge:   func(p prefs) string { return pl.cardEdgeIn(p, name) },
+		Edge:   func(p PrefsView) string { return pl.cardEdgeIn(p, name) },
 		Places: places, Size: [2]int{10, 90}, Length: [2]int{20, 100},
 		Default: func(edge string) (int, int) { return pl.cardDefault(name, edge) },
 		Opened:  func(PanelHost) { pl.cardOpened(name) },
@@ -185,10 +185,10 @@ func (pl *plugins) cardEntry(name string) pluginEntry {
 }
 
 // cardEdgeIn is the edge the card's panel opens at under p: its placement's.
-func (pl *plugins) cardEdgeIn(p prefs, name string) string {
+func (pl *plugins) cardEdgeIn(p PrefsView, name string) string {
 	e := pl.cardEntry(name)
 	place := e.m.Dialog.Placements[0]
-	if chosen := p.pluginPlace[name]; slices.Contains(e.m.Dialog.Placements, chosen) {
+	if chosen := asPrefs(p).pluginPlace[name]; slices.Contains(e.m.Dialog.Placements, chosen) {
 		place = chosen
 	}
 	return cardEdge(place)
@@ -226,7 +226,7 @@ func (pl *plugins) cardState() map[string]any {
 	for _, c := range pl.fixCards() {
 		id := cardPanelID(c.name)
 		edge := pl.cardEdgeIn(pl.c.Prefs(), c.name)
-		size, length := pl.c.Prefs().panelGeometry(id, edge)
+		size, length := pl.c.Prefs().PanelGeometry(id, edge)
 		st["App."+id+"Title"] = c.entry.label()
 		st["App."+id+"Edge"] = edge
 		st["App."+id+"Size"] = size
@@ -245,7 +245,7 @@ func (pl *plugins) syncCards() {
 func (pl *plugins) syncCard(name string) {
 	id := cardPanelID(name)
 	edge := pl.cardEdgeIn(pl.c.Prefs(), name)
-	size, length := pl.c.Prefs().panelGeometry(id, edge)
+	size, length := pl.c.Prefs().PanelGeometry(id, edge)
 	pl.c.Set("App."+id+"Edge", edge)
 	pl.c.Set("App."+id+"Size", size)
 	pl.c.Set("App."+id+"Length", length)

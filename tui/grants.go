@@ -19,7 +19,7 @@ import (
 
 // grantsCore is what Agent permissions needs of the program.
 type grantsCore interface {
-	Prefs() prefs
+	Prefs() PrefsView
 	Set(name string, v any)
 	Open(id string)
 	Focus(id string)
@@ -127,7 +127,7 @@ func holderRank(holder string) int {
 // list reads the grants again, the cursor kept on its row (else at the place it was), and says how
 // many there are.
 func (g *grantsView) list() {
-	items := grantRows(g.c.Prefs().luaGrants)
+	items := grantRows(g.c.Prefs().(prefs).luaGrants)
 	g.rows.Reset(items)
 	if i := slices.IndexFunc(items, func(r grantRow) bool { return r.key() == g.key }); g.key != "" && i >= 0 {
 		g.cursor = i

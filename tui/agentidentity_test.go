@@ -37,15 +37,16 @@ func newIdentityHost(raw string) *identityHost {
 		prefAgentProfiles: raw, prefAgentDefaultCodename: "",
 	}}, state: map[string]any{}}
 }
-func (c *identityHost) Prefs() prefs                    { return c.p }
-func (c *identityHost) SetPref(name, value string)      { c.p.values[name] = value }
-func (c *identityHost) Set(name string, value any)      { c.state[name] = value }
-func (c *identityHost) SetFormText(name, value string)  { c.Set(name, value) }
-func (*identityHost) Open(string)                       {}
-func (*identityHost) Close(string)                      {}
-func (*identityHost) Focus(string) error                { return nil }
-func (*identityHost) DaemonAddress() string             { return "unused" }
-func (c *identityHost) ActiveWorkspace() (wsInfo, bool) { return c.ws, c.ws.name != "" }
+func (c *identityHost) Prefs() PrefsView                    { return c.p }
+func (c *identityHost) SetPref(name, value string)          { c.p.values[name] = value }
+func (c *identityHost) Set(name string, value any)          { c.state[name] = value }
+func (c *identityHost) SetFormText(name, value string)      { c.Set(name, value) }
+func (*identityHost) Open(string)                           {}
+func (*identityHost) Close(string)                          {}
+func (*identityHost) Focus(string) error                    { return nil }
+func (*identityHost) DaemonAddress() string                 { return "unused" }
+func (c *identityHost) ActiveWorkspace() (Workspace, bool)  { return workspaceOf(c.ws), c.ws.name != "" }
+func (c *identityHost) ActiveWorkspaceInfo() (wsInfo, bool) { return c.ws, c.ws.name != "" }
 func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	if len(args) > 0 {
 		c.configuredCommand = args[len(args)-1]

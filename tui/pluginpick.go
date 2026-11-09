@@ -69,7 +69,7 @@ func (pl *plugins) bindPluginLetters() {
 	slices.SortFunc(rows, func(a, b pluginRow) int { return strings.Compare(a.key, b.key) })
 	for i := range rows {
 		r := &rows[i]
-		l := pl.c.Prefs().pluginLetter[r.key]
+		l := pl.c.Prefs().(prefs).pluginLetter[r.key]
 		switch {
 		case l == "":
 		case !pluginLetter(l):
@@ -244,8 +244,8 @@ func (pl *plugins) bindPluginLetter(key, k string) string {
 		return pl.c.Tr("autodoc.text.pluginpick.a_plugin_s_letter_is_a_letter_or_digit_again_for")
 	}
 	var was []string
-	for _, name := range slices.Sorted(maps.Keys(pl.c.Prefs().pluginLetter)) {
-		if name != key && pl.c.Prefs().pluginLetter[name] == k {
+	for _, name := range slices.Sorted(maps.Keys(pl.c.Prefs().(prefs).pluginLetter)) {
+		if name != key && pl.c.Prefs().(prefs).pluginLetter[name] == k {
 			pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+name+prefPluginLetter, ""))
 			was = append(was, pl.pluginTitle(name))
 		}

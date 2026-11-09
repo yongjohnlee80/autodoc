@@ -100,7 +100,7 @@ func (*cellMindmap) Name() string { return "mindmap" }
 
 func (m *cellMindmap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
-		Edge: func(prefs) string { return "center" },
+		Edge: func(PrefsView) string { return "center" },
 		Opened: func(PanelHost) {
 			m.open, m.depth = true, mindDepth(m.c) // it opens at the depth its settings choose
 			m.load()

@@ -12,7 +12,7 @@ type PanelHost interface {
 	Trf(id string, args ...any) string
 	Notify(msg string)
 	Ask(q Question) Asked
-	Prefs() prefs
+	Prefs() PrefsView
 	CallView(id, method string, args ...any) error
 	Keep(err error)
 	Focus(id string) error
@@ -30,17 +30,7 @@ type PanelHost interface {
 	DockPanel(id string)
 	SetPref(name, value string)
 	KeepPanelGeometry(id, dimension string, percent int)
-	ActiveWorkspace() (wsInfo, bool)
+	ActiveWorkspace() (Workspace, bool)
 	// WidgetsChanged: what of the panel runs on with its drawer closed changed (dock.go)
 	WidgetsChanged()
-}
-
-// agentHost adds only the services needed to configure an agent terminal and
-// populate its profile form. Agent-specific state remains in the agents feature.
-type agentHost interface {
-	PanelHost
-	// SetFormText resets edited form text even if its source value is unchanged.
-	SetFormText(name, value string)
-	ConfigureTerminal(id, command, dir string, args ...string) error
-	DaemonAddress() string
 }

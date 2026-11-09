@@ -525,7 +525,7 @@ func (*globeMap) Name() string { return "globemap" }
 
 func (g *globeMap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
-		Edge: func(prefs) string { return "center" },
+		Edge: func(PrefsView) string { return "center" },
 		Opened: func(PanelHost) {
 			g.open, g.filter = true, g.prefFilter() // it opens following the links its settings choose
 			g.load()

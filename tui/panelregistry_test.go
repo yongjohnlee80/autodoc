@@ -21,7 +21,7 @@ func (*panelFixture) Commands() map[string]Command { return nil }
 func (f *panelFixture) Panels() []PanelSpec        { return f.specs }
 
 func fixturePanel() PanelSpec {
-	return PanelSpec{ID: "custom", View: "customView", Edge: func(prefs) string { return "left" },
+	return PanelSpec{ID: "custom", View: "customView", Edge: func(PrefsView) string { return "left" },
 		Places: []string{"left"}, Size: [2]int{10, 90}, Length: [2]int{10, 100},
 		Default: func(string) (int, int) { return 30, 70 }}
 }

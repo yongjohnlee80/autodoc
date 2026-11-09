@@ -298,7 +298,7 @@ func (t *todos) Catalog() []Entry {
 // the side panels', and large until the user sizes it (todosDefault). It shares the left edge with
 // the explorer as two drawers do: each opens over the page, the later on top.
 func todosPanelSpec() PanelSpec {
-	s := sidePanelSpec("todos", "todoOpenTable", 60, func(p prefs) string { return p.todosEdge })
+	s := sidePanelSpec("todos", "todoOpenTable", 60, func(p PrefsView) string { return p.Value(prefTodosEdge) })
 	s.Icon = "✓"
 	s.Default = todosDefault
 	return s

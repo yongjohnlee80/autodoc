@@ -129,8 +129,9 @@ type catalog struct {
 	tr func(id, english string) string
 	// changed hears every add and remove: F1 is made from the catalog
 	changed func()
-	// who is who a run beginning now acts for (Host.authorityNow); nil runs everything as the user's
-	who func() authority
+	// gated is whether a run beginning now acts for a gated script, not the user (the host's
+	// authorityNow); nil runs everything as the user's
+	gated func() bool
 }
 
 func newCatalog() *catalog {
@@ -377,7 +378,7 @@ func (c *catalog) run(id string, args []string) error {
 // userOnly refuses a UserOnly entry to a run that a gated script's invocation makes: the one place
 // every route to an entry (':', a key, autodoc.run, a plugin's host.call) goes through.
 func (c *catalog) userOnly(e *Entry) error {
-	if !e.UserOnly || c.who == nil || !c.who().gated() {
+	if !e.UserOnly || c.gated == nil || !c.gated() {
 		return nil
 	}
 	return fmt.Errorf("%s is the user's to run: a script may not", e.ID)

@@ -130,3 +130,32 @@ func goToRows(panel TerminalPanel, label func(terminal.TerminalTab) string, pick
 	sub.Enabled = len(rows) > 0
 	return sub
 }
+
+// menuMessage is the catalog's message for a menu row's English label, when it has one: the host's
+// English catalog (featurehost.go), set as the package starts.
+var menuMessage func(label string) (tuicore.Message, bool)
+
+// withLabelMessage gives row its label's catalog message, so the menu shows it in the UI's
+// language; a label the catalog lacks stays as it is.
+func withLabelMessage(row widgetcore.MenuItemModel, label string) widgetcore.MenuItemModel {
+	if menuMessage != nil {
+		if id, ok := menuMessage(label); ok {
+			row.LabelMsg = id
+		}
+	}
+	return row
+}
+
+// agentScales are the agent and terminal panels' text sizes, in percent of the window's text: the
+// Fonts dialog offers them, and each panel's Text size menu steps through them. defaultAgentScale
+// is slightly smaller than the editor's.
+var agentScales = percents(50, 150, 10)
+
+// percents are lo to hi in steps of step.
+func percents(lo, hi, step int) []int {
+	var out []int
+	for p := lo; p <= hi; p += step {
+		out = append(out, p)
+	}
+	return out
+}

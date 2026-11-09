@@ -89,12 +89,13 @@ func terminalPrefRows(t *terminals) []PrefSpec {
 		names = t.themeNames()
 	}
 	theme := choicePref(prefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
-		shows(func(p prefs) map[string]any {
+		shows(func(v PrefsView) map[string]any {
+			p := asPrefs(v)
 			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.termTheme, "page")), 0)}
 		})
 	if t != nil {
-		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
-		theme = theme.then(func(prefs) { t.showLook() })
+		row = row.then(func(PrefsView) { t.c.DockPanel("terminal") })
+		theme = theme.then(func(PrefsView) { t.showLook() })
 	}
 	return []PrefSpec{row, theme, panelKeysRow()}
 }
@@ -109,7 +110,10 @@ const prefTermPanelKeys = "tui.terminal.panel_keys"
 // panelKeysRow is the preference: on by default; the menu's check follows it.
 func panelKeysRow() PrefSpec {
 	return boolPref(prefTermPanelKeys, true, func(p *prefs) *bool { return &p.termPanelKeys }).
-		shows(func(p prefs) map[string]any { return map[string]any{"App.terminalPanelKeys": p.termPanelKeys} })
+		shows(func(v PrefsView) map[string]any {
+			p := asPrefs(v)
+			return map[string]any{"App.terminalPanelKeys": p.termPanelKeys}
+		})
 }
 
 // THE TERMINALS' THEME — the colours the terminal's and the agents' shells are drawn in, on their
@@ -166,8 +170,8 @@ func themeChoices(c any, lead, leadLabels []string) (names, labels []string) {
 // termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's
 // text, background and cursor colours. One golib does not ship falls back to the page's, and a page
 // theme it does not ship (a layout of one's own) to its first.
-func termLook(p prefs, page string) map[string]any {
-	name := p.termTheme
+func termLook(p PrefsView, page string) map[string]any {
+	name := termThemeOf(p)
 	if name == "" || name == "page" || !isTheme(name) {
 		name = page
 	}
@@ -186,8 +190,8 @@ func termLook(p prefs, page string) map[string]any {
 // a page drawn in page: the one chosen, else the page's; one that can't be read falls back to the
 // page's. values reads a theme by name (the host's: golib's or the user's). false when neither reads.
 // The GlobeMap is drawn in it too (globemap_gui.go).
-func terminalThemeValues(p prefs, page string, values func(string) (map[string]string, error)) (map[string]string, bool) {
-	name := p.termTheme
+func terminalThemeValues(p PrefsView, page string, values func(string) (map[string]string, error)) (map[string]string, bool) {
+	name := termThemeOf(p)
 	if name == "" || name == "page" {
 		name = page
 	}
@@ -200,13 +204,21 @@ func terminalThemeValues(p prefs, page string, values func(string) (map[string]s
 	return nil, false
 }
 
+// termThemeOf is the terminals' theme as p holds it; "" with no preferences (a cell's own terminals).
+func termThemeOf(p PrefsView) string {
+	if p == nil {
+		return ""
+	}
+	return p.Value(prefTermTheme)
+}
+
 // lookState is the terminals' colours now.
 func (t *terminals) lookState() map[string]any {
 	page := ""
 	if c, ok := t.c.(interface{ PageTheme() string }); ok {
 		page = c.PageTheme()
 	}
-	var p prefs
+	var p PrefsView
 	if t.c != nil {
 		p = t.c.Prefs()
 	}
@@ -230,11 +242,11 @@ func (t *terminals) showLook() {
 // ThemeChanged is the page's theme switched (View › Theme): a terminal theme of the page's follows.
 func (t *terminals) ThemeChanged() { t.showLook() }
 
-func terminalPreferenceState(p prefs) map[string]any {
+func terminalPreferenceState(p PrefsView) map[string]any {
 	st := termState(p)
-	size, length := p.panelGeometry("terminal", p.termEdge)
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	maps.Copy(st, map[string]any{
-		"App.terminalEdgeIndex":   indexOf(termEdges, p.termEdge),
+		"App.terminalEdgeIndex":   indexOf(termEdges, p.Value(prefTermEdge)),
 		"App.terminalSizeIndex":   nearest(termSizes, size),
 		"App.terminalLengthIndex": nearest(termLengths, length),
 	})
@@ -301,15 +313,6 @@ func percentLabels(ps []int) []string {
 	return out
 }
 
-// percents are lo to hi in steps of step.
-func percents(lo, hi, step int) []int {
-	var out []int
-	for p := lo; p <= hi; p += step {
-		out = append(out, p)
-	}
-	return out
-}
-
 // termDefault is the terminal's size and length at a place before the user sets them: a third of
 // the Window's height at the top or bottom, two fifths of its width at a side, both the full
 // length; 70 by 70 centred.
@@ -324,10 +327,10 @@ func termDefault(edge string) (size, length int) {
 }
 
 // termState is what the document reads of the terminal's preferences.
-func termState(p prefs) map[string]any {
-	size, length := p.panelGeometry("terminal", p.termEdge)
+func termState(p PrefsView) map[string]any {
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	return map[string]any{
-		"App.terminalEdge":   p.termEdge,
+		"App.terminalEdge":   p.Value(prefTermEdge),
 		"App.terminalSize":   size,
 		"App.terminalLength": length,
 	}
@@ -336,8 +339,8 @@ func termState(p prefs) map[string]any {
 // syncTermDialog sets the Preferences dialog's terminal choosers.
 func (t *terminals) syncTermDialog() {
 	p := t.c.Prefs()
-	size, length := p.panelGeometry("terminal", p.termEdge)
-	t.c.Set("App.terminalEdgeIndex", indexOf(termEdges, p.termEdge))
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
+	t.c.Set("App.terminalEdgeIndex", indexOf(termEdges, p.Value(prefTermEdge)))
 	t.c.Set("App.terminalSizeIndex", nearest(termSizes, size))
 	t.c.Set("App.terminalLengthIndex", nearest(termLengths, length))
 }
@@ -482,7 +485,7 @@ func liveShell(panel TerminalPanel, prefer terminal.TerminalTabID) terminal.Term
 func (t *terminals) newShell() {
 	root := ""
 	if ws, ok := t.c.ActiveWorkspace(); ok {
-		root = ws.root
+		root = ws.Root
 	}
 	t.startTab(shellLabel, t.inOwnEnv(TerminalConfig{Dir: termDir(t.seams.env, root)}),
 		func(err error) string {
@@ -721,6 +724,6 @@ func (t *terminals) shellExited(id terminal.TerminalTabID, code int) {
 
 func terminalPanelSpec() PanelSpec {
 	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
-		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
+		Edge: func(p PrefsView) string { return p.Value(prefTermEdge) }, Places: slices.Clone(termEdges),
 		Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault}
 }

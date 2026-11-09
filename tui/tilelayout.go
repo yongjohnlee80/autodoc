@@ -105,18 +105,21 @@ func (*tiles) Prefs() []PrefSpec {
 			def = layoutTiled
 		}
 		rows = append(rows, ValuePref(layoutKey(w.id), def, []string{layoutTiled, layoutFloat}).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				return map[string]any{"App." + w.id + "Tiled": p.Value(layoutKey(w.id)) == layoutTiled}
 			}))
 		if w.edge == "" {
 			continue // the page is the fill member: the rest of the base, wherever the tiles are
 		}
 		rows = append(rows, ValuePref(tileEdgeKey(w.id), w.edge, edges).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				return map[string]any{"App." + w.id + "TileEdge": p.Value(tileEdgeKey(w.id))}
 			}))
 		size := ValuePref(tileSizeKey(w.id), strconv.Itoa(w.size), nil).
-			shows(func(p prefs) map[string]any {
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
 				n, _ := strconv.Atoi(p.Value(tileSizeKey(w.id)))
 				return map[string]any{"App." + w.id + "TileSize": n}
 			})
@@ -157,7 +160,7 @@ type rowMaker func(id, label string, run func()) widgetcore.MenuItemModel
 
 // layoutHost is what Layout › needs of its host: the preferences, and setting one through its row.
 type layoutHost interface {
-	Prefs() prefs
+	Prefs() PrefsView
 	SetPref(name, value string)
 }
 
