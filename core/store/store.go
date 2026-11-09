@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 
 	"github.com/yongjohnlee80/autodoc/core/clock"
+	"github.com/yongjohnlee80/autodoc/internal/filelock"
 	"github.com/yongjohnlee80/autodoc/sql/deployments"
 )
 
@@ -21,7 +22,7 @@ type Store struct {
 	path   string
 	w, r   dao.DataConn
 	wt, rt *tables
-	lease  *os.File
+	lease  filelock.Unlock
 	status deploy.Status
 	keys   *keyslot // the store's key, <store>.key (keyslot.go)
 	now    clock.Clock
@@ -58,7 +59,7 @@ func Open(ctx context.Context, path string, opts ...Option) (*Store, error) {
 	}
 	s, err := open(ctx, path, o.checkWait)
 	if err != nil {
-		_ = lease.Close()
+		_ = lease()
 		return nil, err
 	}
 	s.lease = lease
@@ -139,13 +140,13 @@ func OpenForCheck(ctx context.Context, path string) (*Store, error) {
 	dsn := "file:" + path + "?mode=ro&_pragma=busy_timeout(5000)"
 	w, err := sqlite.OpenHooked(ctx, "store-check-w:"+path, dsn, readOnly, sqlite.MaxOpenConns(1))
 	if err != nil {
-		_ = lease.Close()
+		_ = lease()
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
 	}
 	r, err := sqlite.OpenHooked(ctx, "store-check-r:"+path, dsn, readOnly, sqlite.MaxOpenConns(1))
 	if err != nil {
 		_ = w.Close()
-		_ = lease.Close()
+		_ = lease()
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
 	}
 	return &Store{path: path, w: w, r: r, wt: newTables(w), rt: newTables(r), lease: lease,
@@ -167,7 +168,7 @@ func (s *Store) Path() string { return s.path }
 func (s *Store) Close() error {
 	err := errors.Join(s.r.Close(), s.w.Close())
 	if s.lease != nil {
-		err = errors.Join(err, s.lease.Close())
+		err = errors.Join(err, s.lease())
 		s.lease = nil
 	}
 	return err
