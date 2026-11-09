@@ -25,17 +25,20 @@ func cache(env procenv.Env) (string, error) {
 	return "", errors.New("%LocalAppData% is not defined")
 }
 
-// temp is the folder GetTempPath names, in its order: %TMP%, %TEMP%, %USERPROFILE%, then the
-// Windows folder; with no trailing separator, as os.TempDir gives it.
+// temp is the folder GetTempPath names: the first of %TMP%, %TEMP% and %USERPROFILE% that is set at
+// all, even set empty (GetTempPath then names no folder), else the Windows folder; with no trailing
+// separator, as os.TempDir gives it.
 func temp(env procenv.Env) string {
-	dir := ""
-	for _, name := range []string{"TMP", "TEMP", "USERPROFILE", "SystemRoot"} {
-		if dir = env.Get(name); dir != "" {
+	dir, set := "", false
+	for _, name := range []string{"TMP", "TEMP", "USERPROFILE"} {
+		if dir, set = env.Lookup(name); set {
 			break
 		}
 	}
-	if dir == "" {
-		dir = `C:\Windows`
+	if !set {
+		if dir = env.Get("SystemRoot"); dir == "" {
+			dir = `C:\Windows`
+		}
 	}
 	if len(dir) > 3 { // a drive's root (C:\) keeps its separator
 		dir = strings.TrimRight(dir, `\`)
