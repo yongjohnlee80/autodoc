@@ -529,6 +529,7 @@ Nothing imports the host. Until the files move, each file's group is set by its 
 - It lists every name a group uses outside what it may use, in a ledger that may only shrink.
 - A new crossing fails until the code uses an allowed group, or the name moves.
 - A crossing that is gone fails until its row is removed.
+- A step of the split may add rows, named in its pull request with the step that removes them. The per-test seams are one: until each feature has its own, the features read the host's.
 - Empty is the destination. After the split, the same guard checks the imports instead.
 
 The whole-program tests stay in `tui`: they drive the host and read its state, which an external test package can't see.

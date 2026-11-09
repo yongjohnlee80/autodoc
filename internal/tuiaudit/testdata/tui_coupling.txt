@@ -1,10 +1,11 @@
-# tui's feature map: each name a group of tui's files uses and a group it may not use declares
+# tui's feature map: each name (not each use) a group of tui's files uses and a group it may not use declares
 # (docs/decisions/editor.md#the-tui-packages-feature-map; internal/tuiaudit/tui_coupling_test.go
 # assigns the groups by file name). Each would be an import cycle once the groups are packages.
 #
 #   build <TAB> using group <TAB> owning group <TAB> name <TAB> kind
 #
-# This list may only SHRINK. Empty is the destination. Each build's rows are checked by that
+# This list may only SHRINK, but for a step of the split that adds rows, named in its pull request
+# with the step that removes them. Empty is the destination. Each build's rows are checked by that
 # build's test run (the terminal build's, and -tags gui's).
 #
 # Regenerate one build's rows: AUTODOC_TUI_COUPLING_UPDATE=1 go test [-tags gui] ./internal/tuiaudit/
