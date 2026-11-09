@@ -253,7 +253,7 @@ func (r *pluginRun) show() {
 
 // placement is where e's dialog sits: the user's choice among its placements, or its first.
 func (pl *plugins) placement(e pluginEntry) string {
-	if p := pl.c.Prefs().(prefs).pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
+	if p := asPrefs(pl.c.Prefs()).pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
 		return p
 	}
 	return e.m.Dialog.Placements[0]
