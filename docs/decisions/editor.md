@@ -538,6 +538,6 @@ In the code: `internal/tuiaudit/tui_coupling_test.go`, `internal/tuiaudit/testda
 
 ## Line endings
 
-AutoDoc writes LF line breaks on every platform, Windows included: the editor holds a file's text with LF whatever the file has, as golib's text model reads CRLF and a lone CR as LF. The one exception is a file that already uses CRLF, where most of its line breaks are CRLF. It's written back with CRLF, so editing a Windows user's file changes the lines edited, not every line of it. A batch file (`.bat`, `.cmd`), which `cmd.exe` reads reliably only with CRLF, keeps its CRLF this way too. A file changed on disk while open is reloaded as the editor holds it, LF, with its line breaks noted again.
+AutoDoc writes LF line breaks on every platform, Windows included: the editor holds a file's text with LF whatever the file has, as golib's text model reads CRLF and a lone CR as LF. The one exception is a file that already uses CRLF, where most of its line breaks are CRLF. It's written back with CRLF, so editing a Windows user's file changes the lines edited, not every line of it; Save As carries it to the new name too. A file with as many LF as CRLF breaks is LF's, the default. A batch file (`.bat`, `.cmd`), which `cmd.exe` reads reliably only with CRLF, keeps its CRLF this way too. A file changed on disk while open is reloaded as the editor holds it, LF, with its line breaks noted again, so only its changed lines are replaced and the cursor stays on an unchanged one.
 
 In the code: `tui/lineendings.go`, `tui/files.go`, `tui/diskwatch.go`
