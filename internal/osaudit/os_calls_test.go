@@ -37,6 +37,7 @@ var seamPackages = []string{
 	"internal/filelock",  // an exclusive file lock
 	"internal/diskspace", // free disk space
 	"internal/fileid",    // a file's identity: its device and inode, or its volume and index
+	"internal/fileowner", // whether a file is this user's: its uid, or its owner SID
 	"internal/userdirs",  // the user's folders
 	"internal/usershell", // the default shell
 	"internal/procenv",   // the environment and the programs on its PATH
